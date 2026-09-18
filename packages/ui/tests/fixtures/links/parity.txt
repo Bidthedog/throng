@@ -1,0 +1,27 @@
+src/foo.ts
+./src/foo.ts
+src/foo.ts:42
+src/foo.ts:42:7
+src/foo.ts(42,7)
+/src/foo.ts
+D:\p\src\foo.ts
+D:/p/src/foo.ts
+D:\p\src\foo.ts:42:7
+/d/p/src/foo.ts
+/mnt/d/p/src/foo.ts
+~/p/src/foo.ts
+file:///D:/p/src/foo.ts
+FileSystem::D:\p\src\foo.ts
+Microsoft.PowerShell.Core\FileSystem::D:\p\src\foo.ts
+PS Microsoft.PowerShell.Core\FileSystem::D:\p\src> dir
+docs/a.md
+docs/a.md:3:5
+"docs/My File.md"
+README.md
+build.bat
+deploy.ps1
+file:///D:/p/docs
+C:\elsewhere\x.ts
+see https://example.com/docs for details
+https://host/src/foo.ts:42
+error at src/foo.ts:42:7 (see https://example.com/issue/1)

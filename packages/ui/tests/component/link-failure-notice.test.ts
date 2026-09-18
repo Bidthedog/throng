@@ -139,3 +139,53 @@ describe('exactly ONE notice per failed action', () => {
     expect(reportFailure).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 045 T152 — FR-124: a location that DID NOT ANSWER is its own condition, with its own wording.
+ *
+ * What the user sees today: Ctrl+click a path on a share that has gone offline, and — once T146
+ * bounds the check — the follow ends with the generic "That link could not be opened.", which names
+ * no cause and points at no remedy. The remedy for an unreachable location is to reconnect, not to
+ * re-create the file, so FR-124 requires a reason distinct from `gone` and a sentence that says the
+ * location did not answer. Still ONE notice (CLAUDE.md's *One condition, one notice*), shaped here so
+ * the terminal and the editor cannot word it differently.
+ */
+describe('T152 / FR-124 — an unreachable location raises one notice saying it did not answer', () => {
+  const unreachable = {
+    ok: false,
+    reason: 'unreachable',
+    path: '\\\\fileserver\\home\\notes.txt',
+  } as unknown as Extract<LinkActionOutcome, { ok: false }>;
+
+  it('names the path and says the location did not answer', () => {
+    const report = linkFailureReport(unreachable, { osName: 'windows' });
+
+    expect(report.subject).toBe('\\\\fileserver\\home\\notes.txt');
+    expect(report.reason).toBe('unreachable');
+    expect(report.message).toMatch(/did not answer|didn.t answer|not responding|not answering/i);
+    expect(report.detail).toContain('fileserver');
+    expect(report.message, 'say what is wrong, not what the user may not do').not.toMatch(
+      /cannot|can't|not allowed/i,
+    );
+  });
+
+  it('is worded differently from `gone` and from `refused`', () => {
+    const message = linkFailureReport(unreachable, { osName: 'windows' }).message;
+
+    expect(message).not.toBe(linkFailureReport(gone, { osName: 'windows' }).message);
+    expect(message).not.toBe(linkFailureReport(refused, { osName: 'windows' }).message);
+  });
+
+  it('raises exactly ONE notice when a follow ends unreachable, carrying that reason', async () => {
+    const reportFailure = vi.fn();
+    await performLinkTarget({
+      target: 'osExplorer',
+      link,
+      request,
+      deps: deps({ reportFailure, revealInOsExplorer: vi.fn(async () => unreachable) }),
+    });
+
+    expect(reportFailure).toHaveBeenCalledTimes(1);
+    expect(reportFailure).toHaveBeenCalledWith(unreachable);
+  });
+});

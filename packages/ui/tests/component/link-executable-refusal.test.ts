@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
-  DEFAULT_LINK_ACTIONS,
   createPreviewProviderRegistry,
   parsePreviewSettings,
-  type DefaultLinkAction,
   type LinkResolution,
   type LinkResolutionRequest,
+  type PreviewProviderRegistry,
+  type PreviewSettings,
   type ResolvedLink,
 } from '@throng/core';
 import { WindowsExecutableExtensions } from '@throng/platform-windows';
@@ -22,29 +22,24 @@ import { createFileLinkProvider } from '../../src/renderer/terminal/file-link-pr
 import { followLinkAtCaret, type EditorLinkDeps } from '../../src/renderer/editor/link-decorations.js';
 
 /**
- * 045 T106, FR-039 / SC-010 — **a click never runs an executable.**
+ * 045 T106 → T157, FR-039 / FR-111 / FR-114 / SC-010 — **a click never runs an executable.**
+ *
+ * ══ WHAT CHANGED (2026-09-18 supersessions, T157) ══
+ *
+ * FR-039's "perform Open in OS Explorer instead" now applies only OUTSIDE the project, where FR-110
+ * sends every file there anyway. An executable IN the project follows the click rule like any other
+ * in-project file: it opens in throng AS ITS TEXT (FR-114). What does not change is the property
+ * that matters — no gesture hands it to the OS to run (FR-111) — and the explicit *Open in OS Default
+ * Program* item still runs it.
+ *
+ * What the user sees today: Ctrl+click an in-project `build.bat` and Explorer opens with it selected,
+ * rather than the script opening in an editor where they can read it.
  *
  * ══ THE SET COMES FROM THE PORT, NOT FROM THIS FILE ══
  *
  * SC-010 asks that *every* extension the classification considers executable be unreachable by a
- * click at *every* setting. Written as a hand-copied list it goes stale the first time
- * `WindowsExecutableExtensions` adds one — which is exactly why `IExecutableExtensions` reports its
- * set (EX6). The loops below iterate `executableExtensions()`, so the criterion cannot drift from
- * the implementation it is about.
- *
- * ══ WHY THIS IS THE ONE RULE THAT CANNOT SHIP AND BE FIXED LATER ══
- *
- * The setting can NAME `osDefaultProgram`. A precedence that merely reordered the FALLBACK would let
- * that name through, and a Ctrl+click on a downloaded `setup.exe` would run it. So FR-039 is clause
- * one of `resolveDefaultLinkAction`, before anything reads the preference, and the three gestures
- * reach it because they route THROUGH that function rather than around it. There is no second
- * implementation here to keep in step.
- *
- * ══ AND THE ITEM THAT DOES RUN IT IS STILL THERE ══
- *
- * *Open in OS Default Program*, chosen explicitly from the menu, runs the file. The user reached
- * past Open Link and said exactly what they wanted; an item that silently refused would be a menu
- * row that does nothing. The refusal is about the GESTURE, not about the file.
+ * click. The loops iterate `executableExtensions()` (EX6), so the criterion cannot drift from the
+ * implementation it is about.
  */
 
 const EXECUTABLES = new WindowsExecutableExtensions(() => ({
@@ -57,15 +52,12 @@ const REGISTRY = createPreviewProviderRegistry([
 
 const ROOT = 'D:\\p';
 
-let live: LinkRoutingInputs;
+/** Only FR-051's two inputs; cast into `linkRouting` until T158 drops the retired field. */
+let live: { previewRegistry: PreviewProviderRegistry; previewSettings: PreviewSettings };
 const osCalls: string[] = [];
 
 beforeEach(() => {
-  live = {
-    defaultAction: 'throng',
-    previewRegistry: REGISTRY,
-    previewSettings: parsePreviewSettings({}, REGISTRY),
-  };
+  live = { previewRegistry: REGISTRY, previewSettings: parsePreviewSettings({}, REGISTRY) };
   osCalls.length = 0;
   (window as unknown as { throng: unknown }).throng = {
     links: {
@@ -94,7 +86,7 @@ function surface(): Surface {
       openInEditor: (l) => void performed.push(`editor:${l.path}`),
       openInPreview: (l) => void performed.push(`preview:${l.path}`),
       reportFailure: (outcome) => void performed.push(`failure:${outcome.reason}`),
-      ...linkRouting(() => live),
+      ...linkRouting(() => live as unknown as LinkRoutingInputs),
     },
   };
 }
@@ -184,57 +176,68 @@ const GESTURES = [
   ['Open Link menu item', menuOpenLink],
 ] as const;
 
-describe('SC-010 — no gesture runs an executable, at any setting', () => {
+describe('SC-010 / FR-111 — no gesture runs an executable', () => {
   it('the port reports a set to iterate at all', () => {
     expect(EXECUTABLES.length).toBeGreaterThan(10);
     expect(EXECUTABLES).toContain('.exe');
     expect(EXECUTABLES, 'a shortcut is launch-by-handler, and is in the set').toContain('.lnk');
   });
 
-  it('every reported extension reveals in OS Explorer instead of running', async () => {
+  it('FR-114: every reported extension IN the project opens in throng as its text — never revealed, never run', async () => {
+    const wrong: string[] = [];
+    for (const extension of EXECUTABLES) {
+      for (const [name, drive] of GESTURES) {
+        osCalls.length = 0;
+        const s = surface();
+        const text = `src/tool${extension}`;
+        const resolved = executableLink(extension);
+        await drive(resolved, text, s);
+        const outcome = [...s.performed, ...osCalls].join(',');
+        if (outcome !== `editor:${resolved.path}`) wrong.push(`${extension}/${name}: ${outcome || '(nothing)'}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('and an executable OUTSIDE the project is revealed in OS Explorer, never run', async () => {
+    const wrong: string[] = [];
+    for (const extension of EXECUTABLES) {
+      for (const [name, drive] of GESTURES) {
+        osCalls.length = 0;
+        const s = surface();
+        const text = `D:/downloads/setup${extension}`;
+        await drive(
+          { ...executableLink(extension), path: `D:\\downloads\\setup${extension}`, inProject: false },
+          text,
+          s,
+        );
+        const outcome = [...s.performed, ...osCalls].join(',');
+        if (outcome !== `osExplorer:${text}`) wrong.push(`${extension}/${name}: ${outcome || '(nothing)'}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('in neither case does any gesture reach the OS default program', async () => {
     const ran: string[] = [];
     for (const extension of EXECUTABLES) {
-      for (const setting of DEFAULT_LINK_ACTIONS) {
+      for (const inProject of [true, false]) {
         for (const [name, drive] of GESTURES) {
-          live = { ...live, defaultAction: setting };
           osCalls.length = 0;
           const s = surface();
-          const text = `src/tool${extension}`;
-          await drive(executableLink(extension), text, s);
-          const outcome = [...s.performed, ...osCalls];
-          if (outcome.join(',') !== `osExplorer:${text}`) {
-            ran.push(`${extension}/${setting}/${name}: ${outcome.join(',') || '(nothing)'}`);
-          }
+          const resolved = inProject
+            ? executableLink(extension)
+            : { ...executableLink(extension), path: `D:\\downloads\\setup${extension}`, inProject: false };
+          await drive(resolved, inProject ? `src/tool${extension}` : `D:/downloads/setup${extension}`, s);
+          if (osCalls.some((c) => c.startsWith('osDefaultProgram:'))) ran.push(`${extension}/${inProject ? 'in' : 'out'}/${name}`);
         }
       }
     }
     expect(ran).toEqual([]);
   });
-
-  it('including when the preference NAMES Open in OS Default Program', async () => {
-    live = { ...live, defaultAction: 'osDefaultProgram' satisfies DefaultLinkAction };
-    const s = surface();
-    await terminalCtrlClick(executableLink('.exe'), 'src/tool.exe', s);
-    expect(osCalls).toEqual(['osExplorer:src/tool.exe']);
-  });
-
-  it('and an executable OUTSIDE the project is revealed too, never run', async () => {
-    for (const setting of DEFAULT_LINK_ACTIONS) {
-      live = { ...live, defaultAction: setting };
-      osCalls.length = 0;
-      const s = surface();
-      await terminalCtrlClick(
-        { ...executableLink('.msi'), path: 'D:\\downloads\\setup.msi', inProject: false },
-        'D:/downloads/setup.msi',
-        s,
-      );
-      expect(osCalls, setting).toEqual(['osExplorer:D:/downloads/setup.msi']);
-      expect(s.performed, setting).toEqual([]);
-    }
-  });
 });
 
-describe('FR-053 — the explicit menu item still runs it', () => {
+describe('FR-111 — the explicit menu item still runs it', () => {
   it('every reported extension runs from *Open in OS Default Program*', async () => {
     const refused: string[] = [];
     for (const extension of EXECUTABLES) {

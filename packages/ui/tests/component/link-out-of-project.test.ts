@@ -3,15 +3,17 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
-  DEFAULT_LINK_ACTIONS,
   LINK_TARGETS,
   SHIPPED_PREVIEW_PROVIDERS,
   fileLinkMenuItems,
   previewSettingsDefaults,
   type LinkResolution,
   type LinkResolutionRequest,
+  type PreviewProviderRegistry,
+  type PreviewSettings,
   type ResolvedLink,
 } from '@throng/core';
+import { WindowsExecutableExtensions } from '@throng/platform-windows';
 import {
   followLink,
   linkRouting,
@@ -75,12 +77,15 @@ const OUTSIDE = [
   ['a panel with no owning project', (name: string) => `D:\\p\\${name.replace(/\//g, '\\')}`],
 ] as const;
 
-let live: LinkRoutingInputs;
+/**
+ * Only FR-051's two inputs — the *Default link action* is retired (FR-112, T157). Cast into
+ * `linkRouting` until T158 drops the field from its input type.
+ */
+let live: { previewRegistry: PreviewProviderRegistry; previewSettings: PreviewSettings };
 const osCalls: string[] = [];
 
 beforeEach(() => {
   live = {
-    defaultAction: 'throng',
     previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
     previewSettings: previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS),
   };
@@ -112,7 +117,7 @@ function surface(): Surface {
       openInEditor: (l) => void opened.push(`editor:${l.path}`),
       openInPreview: (l) => void opened.push(`preview:${l.path}`),
       reportFailure: () => {},
-      ...linkRouting(() => live),
+      ...linkRouting(() => live as unknown as LinkRoutingInputs),
     },
   };
 }
@@ -178,26 +183,141 @@ async function editorChord(resolved: ResolvedLink, text: string, s: Surface): Pr
 }
 
 describe('SC-007 — no gesture opens an out-of-project file in throng', () => {
-  it('across the fixture set, every setting, and both gestures', async () => {
+  // T157: the loop over *Default link action* values is gone with the setting (FR-112); the claim
+  // it made is unchanged and now holds by the click rule alone.
+  it('across the fixture set and both gestures', async () => {
     const offenders: string[] = [];
     for (const name of NAMES) {
       for (const [why, toPath] of OUTSIDE) {
-        for (const setting of DEFAULT_LINK_ACTIONS) {
-          for (const [gesture, drive] of [
-            ['Ctrl+click (terminal)', terminalCtrlClick],
-            ['Open Link chord (editor)', editorChord],
-          ] as const) {
-            live = { ...live, defaultAction: setting };
-            const s = surface();
-            await drive(outsideLink(toPath(name)), name, s);
-            if (s.opened.length > 0) {
-              offenders.push(`${name}/${why}/${setting}/${gesture}: ${s.opened.join(',')}`);
-            }
+        for (const [gesture, drive] of [
+          ['Ctrl+click (terminal)', terminalCtrlClick],
+          ['Open Link chord (editor)', editorChord],
+        ] as const) {
+          const s = surface();
+          await drive(outsideLink(toPath(name)), name, s);
+          if (s.opened.length > 0) {
+            offenders.push(`${name}/${why}/${gesture}: ${s.opened.join(',')}`);
           }
         }
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * T157 / FR-110 row three: an out-of-project file is SHOWN in OS Explorer — never handed to its
+   * default program. What the user sees today (O11): Ctrl+click an out-of-project `.txt` or `.md` and
+   * it opens in Notepad or whatever the OS associates, from a terminal and from an editor alike.
+   */
+  it('FR-110: every fixture, every way out of project, both gestures — exactly one reveal in OS Explorer', async () => {
+    const wrong: string[] = [];
+    for (const name of NAMES) {
+      for (const [why, toPath] of OUTSIDE) {
+        for (const [gesture, drive] of [
+          ['Ctrl+click (terminal)', terminalCtrlClick],
+          ['Open Link chord (editor)', editorChord],
+        ] as const) {
+          osCalls.length = 0;
+          const s = surface();
+          await drive(outsideLink(toPath(name)), name, s);
+          // A name the grammar does not treat as a path draws no link; nothing to click, nothing to judge.
+          if (s.opened.length === 0 && osCalls.length === 0) continue;
+          if (osCalls.join(',') !== 'osExplorer' || s.opened.length > 0) {
+            wrong.push(`${name}/${why}/${gesture}: ${[...s.opened, ...osCalls].join(',')}`);
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+  });
+});
+
+/**
+ * 045 T157 — SC-013 (FR-111): across every file type in the fixture and every extension the
+ * executable classification reports, in the project and outside it, `window.throng.links.open` — the
+ * one bridge call that hands a file to the OS default program — records ZERO calls from Ctrl+click,
+ * the Open Link chord or the plain Open Link item, in either panel type; and exactly ONE from each
+ * explicit *Open in OS Default Program*.
+ */
+describe('SC-013 — no gesture hands any file to the OS default program', () => {
+  const EXECUTABLES = new WindowsExecutableExtensions(() => ({
+    PATHEXT: '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC',
+  })).executableExtensions();
+
+  /** Every fixture name, plus a file per reported executable extension. */
+  const SUBJECTS = [...NAMES, ...EXECUTABLES.map((ext) => `bin/tool${ext}`)];
+
+  const linkFor = (name: string, inProject: boolean): ResolvedLink => ({
+    path: `${inProject ? 'D:\\p' : 'C:\\elsewhere'}\\${name.replace(/\//g, '\\')}`,
+    kind: 'file',
+    inProject,
+    executable: EXECUTABLES.some((ext) => name.toLowerCase().endsWith(ext)),
+    preview: /\.md$/i.test(name) ? 'enabled' : 'none',
+  });
+
+  /** A spy on the bridge's `open`, counting every call and nothing else. */
+  function spyOnOpen(): { calls: string[] } {
+    const calls: string[] = [];
+    const bridge = (window as unknown as { throng: { links: Record<string, unknown> } }).throng.links;
+    bridge.open = (request: LinkResolutionRequest) => {
+      calls.push(request.text);
+      return Promise.resolve({ ok: true as const });
+    };
+    return { calls };
+  }
+
+  async function menuOpenLink(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
+    let pending: Promise<void> = Promise.resolve();
+    const actions = fileLinkMenuActions({
+      link: resolved,
+      request: requestFor(text),
+      openLink: () => {
+        pending = followLink({ request: requestFor(text), resolve: answer(resolved), deps: s.deps });
+        return pending;
+      },
+      deps: { ...s.deps, ...osLinkActions() },
+    });
+    actions.find((a) => a.label === 'Open Link')?.onClick?.();
+    await pending;
+  }
+
+  it('zero `links.open` calls from every gesture and the plain Open Link item', async () => {
+    const spy = spyOnOpen();
+    const offenders: string[] = [];
+    for (const name of SUBJECTS) {
+      for (const inProject of [true, false]) {
+        for (const [gesture, drive] of [
+          ['Ctrl+click (terminal)', terminalCtrlClick],
+          ['Open Link chord (editor)', editorChord],
+          ['Open Link menu item', menuOpenLink],
+        ] as const) {
+          const before = spy.calls.length;
+          await drive(linkFor(name, inProject), name, surface());
+          if (spy.calls.length > before) offenders.push(`${name}/${inProject ? 'in' : 'out'}/${gesture}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('exactly one `links.open` call from each explicit *Open in OS Default Program*', async () => {
+    const spy = spyOnOpen();
+    const wrong: string[] = [];
+    for (const name of SUBJECTS) {
+      for (const inProject of [true, false]) {
+        const before = spy.calls.length;
+        const s = surface();
+        const row = fileLinkMenuActions({
+          link: linkFor(name, inProject),
+          request: requestFor(name),
+          openLink: () => {},
+          deps: { ...s.deps, ...osLinkActions() },
+        }).find((a) => a.label === 'Open in OS Default Program');
+        await row?.onClick?.();
+        if (spy.calls.length - before !== 1) wrong.push(`${name}/${inProject ? 'in' : 'out'}: ${spy.calls.length - before}`);
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 });
 

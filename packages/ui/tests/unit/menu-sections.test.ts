@@ -1495,6 +1495,53 @@ describe('045 — the file-link run is one contextual section (FR-031, Principle
   });
 });
 
+/**
+ * 045 T167 — the editor content menu over a WEB link (FR-103, S4; contracts/menus-and-gestures.md
+ * §7.2): Open Link (showing Ctrl+Enter) then Copy Link Address, one contextual section, then the
+ * ordinary menu.
+ *
+ * The argument is named `webLink`, the sibling of `fileLink`, carrying the address and the chord —
+ * T168 builds the run with `webLinkMenuActions` and may settle a different shape; if it does, it
+ * renames this one call and nothing else. Cast because `ContentMenuArgs` does not have it yet.
+ */
+describe('045 T167 — the editor content menu over a web link (FR-103, S4)', () => {
+  const editorMenuOverWebLink = (): MenuAction[] =>
+    editorContentMenu({
+      view: {} as EditorView,
+      panelId: 'p1',
+      viewId: 'v1',
+      lineEnding: () => 'lf',
+      wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+      gotoLine: { open: noop, chord: 'Ctrl+G' },
+      webLink: { uri: 'https://example.test/docs', chord: 'Ctrl+Enter', openLink: noop },
+    } as unknown as Parameters<typeof editorContentMenu>[0]);
+
+  it('leads with the web-link pair, divided once from the ordinary menu', () => {
+    expect(shapeOf(editorMenuOverWebLink())).toEqual([
+      'Open Link',
+      'Copy Link Address',
+      '—',
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      '—',
+      'Set Language…',
+      'Word Wrap ✓',
+    ]);
+  });
+
+  it('Open Link shows the chord; both rows are `contextual`', () => {
+    const [open, copy] = editorMenuOverWebLink();
+    expect(open?.shortcut).toBe('Ctrl+Enter');
+    expect([open?.section, copy?.section]).toEqual(['contextual', 'contextual']);
+  });
+});
+
 describe('the preview body menu over a link (044 FR-095)', () => {
   it('is Open Link then Copy Link Address, one section, no divider', () => {
     expect(shapeOf(previewLinkMenu())).toEqual(['Open Link', 'Copy Link Address']);

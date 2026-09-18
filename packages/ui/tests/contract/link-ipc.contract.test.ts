@@ -234,3 +234,56 @@ describe('throng:links:* \u2014 preload parity for window.throng.links', () => {
     expect(preload).toContain("ipcRenderer.send('throng:preview:openExternal'");
   });
 });
+
+/**
+ * 045 T147, FR-120 / FR-124 — `unreachable` crosses the wire unchanged.
+ *
+ * The sanitiser rebuilds REQUESTS; it has never touched a response, so no change is expected here
+ * (T148 runs only if this is red). What this pins is that a later tidy-up of the handlers — say, a
+ * response whitelist written on the request's model — cannot quietly strip the one field that tells
+ * a follow "the location did not answer" from "the file is gone", which are different notices with
+ * different remedies (FR-124).
+ */
+describe('throng:links:* — T147: reason ‘unreachable’ passes through all three channels', () => {
+  function unreachableService(): LinkIpcService {
+    return {
+      resolve: async () => ({ ok: false, reason: 'unreachable' }),
+      revealInFileManager: async () => ({ ok: false, reason: 'unreachable', path: '\\\\fileserver\\home\\a.txt' }),
+      openWithDefaultProgram: async () => ({ ok: false, reason: 'unreachable', path: '\\\\fileserver\\home\\a.txt' }),
+    };
+  }
+
+  it('resolve answers { ok: false, reason: ‘unreachable’ } exactly as the service did', async () => {
+    const ipc = fakeIpc();
+    registerLinkIpc(ipc, unreachableService());
+    await expect(ipc.handles.get('throng:links:resolve')!(event(1), REQUEST)).resolves.toEqual({
+      ok: false,
+      reason: 'unreachable',
+    });
+  });
+
+  it('reveal and open answer the unreachable outcome, path and all', async () => {
+    const ipc = fakeIpc();
+    registerLinkIpc(ipc, unreachableService());
+    for (const channel of ['throng:links:reveal', 'throng:links:open']) {
+      await expect(ipc.handles.get(channel)!(event(1), REQUEST), channel).resolves.toEqual({
+        ok: false,
+        reason: 'unreachable',
+        path: '\\\\fileserver\\home\\a.txt',
+      });
+    }
+  });
+
+  it('a malformed request still answers as before, never ‘unreachable’ (I1 – I6 unchanged)', async () => {
+    const ipc = fakeIpc();
+    registerLinkIpc(ipc, unreachableService());
+    await expect(ipc.handles.get('throng:links:resolve')!(event(1), { text: 'x' })).resolves.toEqual({ ok: false });
+    for (const channel of ['throng:links:reveal', 'throng:links:open']) {
+      await expect(ipc.handles.get(channel)!(event(1), { text: 'x' }), channel).resolves.toEqual({
+        ok: false,
+        reason: 'refused',
+        path: '',
+      });
+    }
+  });
+});

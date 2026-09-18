@@ -1,9 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
   DEFAULT_APP_SETTINGS,
   SHIPPED_PREVIEW_PROVIDERS,
   type AppSettings,
+  type IExecutableExtensions,
+  type IFileSystem,
+  type IPathForms,
   type LinkResolution,
   type LinkResolutionRequest,
   type ResolvedLink,
@@ -16,23 +19,26 @@ import {
 } from '../../src/renderer/links/link-actions.js';
 import { createFileLinkProvider } from '../../src/renderer/terminal/file-link-provider.js';
 import { followLinkAtCaret, type EditorLinkDeps } from '../../src/renderer/editor/link-decorations.js';
+import { FileLinkResolver, type FileLinkResolverDeps } from '../../src/main/file-link-resolver.js';
 
 /**
- * 045 T108, FR-050 / SC-008 — *Default link action* applies to the **next gesture**, in both panel
- * types, with nothing remounted.
+ * 045 T108 → T157, SC-008 (amended 2026-09-18) — **either detection switch, or the existence-check
+ * timeout**, applies to the next gesture in both panel types, with nothing remounted.
  *
- * ══ WHY THIS NEEDS A TEST OF ITS OWN ══
+ * ══ WHAT CHANGED ══
  *
- * Both surfaces build their link performers ONCE and hold them across the panel's whole life: the
- * terminal in a `useMemo` that the mount effect reads through a ref, the editor in a function the
- * CodeMirror extension closes over. Neither is rebuilt when a preference changes, and neither can be
- * — rebuilding the terminal's would tear down and re-attach a live shell.
+ * SC-008 used to be about *Default link action*. FR-112 retires that setting, so its half of this file
+ * is replaced by the settings that remain live: `editor.links.detectInTerminals`,
+ * `editor.links.detectInEditors` and `editor.links.existenceCheckTimeoutMs` (FR-120). FR-051's
+ * per-provider default open action is still read at the gesture and keeps its case.
  *
- * So a `defaultAction` VALUE on those deps is a value captured at mount, and a user who changes the
- * preference would keep the old behaviour until they closed the panel. `linkRouting` therefore takes
- * a READER and `followLink` consults it at the gesture. The assertions below change the settings
- * object *behind* deps that were built before the change, which is exactly the shape the running app
- * has.
+ * ══ WHY IT STILL NEEDS A TEST OF ITS OWN ══
+ *
+ * Both surfaces build their link plumbing ONCE and hold it across the panel's whole life — the
+ * terminal's provider is registered once against a live shell, the editor's deps are closed over by
+ * an installed extension, and main's resolver is constructed once at startup. A captured VALUE in any
+ * of them freezes the preference at whatever it was when the panel appeared. So every assertion
+ * below changes the settings object BEHIND plumbing that was built before the change.
  */
 
 const ROOT = 'D:\\p';
@@ -50,21 +56,17 @@ const answer = (): LinkResolution => ({ ok: true, link: resolved });
 
 /** The whole settings document, exactly as `useAppSettings()` hands it over. */
 let settings: AppSettings;
-let reads = 0;
 const osCalls: string[] = [];
 
-const routingInputs = (): LinkRoutingInputs => {
-  reads += 1;
-  return {
-    defaultAction: settings.editor.links.defaultAction,
+/** FR-051's two inputs — cast until T158 drops the retired `defaultAction` from the type. */
+const routingInputs = (): LinkRoutingInputs =>
+  ({
     previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
     previewSettings: settings.editor.previews,
-  };
-};
+  }) as unknown as LinkRoutingInputs;
 
 beforeEach(() => {
   settings = structuredClone(DEFAULT_APP_SETTINGS);
-  reads = 0;
   osCalls.length = 0;
   (window as unknown as { throng: unknown }).throng = {
     links: {
@@ -82,11 +84,11 @@ beforeEach(() => {
 
 interface Panel {
   readonly performed: string[];
-  /** Drive one gesture through this panel's plumbing, using the deps it built at mount. */
+  /** Drive one gesture through this panel's plumbing, using what it built at mount. */
   gesture(): Promise<void>;
 }
 
-/** A terminal panel, with its performers built ONCE — as `terminal-panel.tsx`'s `useMemo` does. */
+/** A terminal panel, its provider registered ONCE — as `use-terminal.ts` registers it. */
 function terminalPanel(): Panel {
   const performed: string[] = [];
   const deps: LinkFollowDeps = {
@@ -95,8 +97,10 @@ function terminalPanel(): Panel {
     reportFailure: (o) => void performed.push(`failure:${o.reason}`),
     ...linkRouting(routingInputs),
   };
+  let pending: Promise<void> = Promise.resolve();
   const provider = createFileLinkProvider({
-    detect: () => true,
+    // FR-060, read per row — the reader `terminal-panel.tsx` hands over.
+    detect: () => settings.editor.links.detectInTerminals,
     terminal: {
       buffer: { active: { getLine: () => ({ translateToString: () => 'see src/foo.ts here' }) } },
     },
@@ -107,7 +111,6 @@ function terminalPanel(): Panel {
       pending = followLink({ request, resolve: answer, deps });
     },
   });
-  let pending: Promise<void> = Promise.resolve();
   return {
     performed,
     async gesture() {
@@ -115,13 +118,13 @@ function terminalPanel(): Panel {
       provider.provideLinks(1, (provided) => {
         links = provided ?? [];
       });
-      links[0]!.activate({ ctrlKey: true, metaKey: false } as MouseEvent, 'src/foo.ts');
+      links[0]?.activate({ ctrlKey: true, metaKey: false } as MouseEvent, 'src/foo.ts');
       await pending;
     },
   };
 }
 
-/** An editor panel, with its performers built ONCE — as the link extension's deps are. */
+/** An editor panel, its deps built ONCE — as the link extension's are. */
 function editorPanel(): Panel {
   const performed: string[] = [];
   const deps: LinkFollowDeps = {
@@ -132,6 +135,7 @@ function editorPanel(): Panel {
   };
   let pending: Promise<void> = Promise.resolve();
   const editorDeps: EditorLinkDeps = {
+    detect: () => settings.editor.links.detectInEditors,
     site: () => ({ panelId: 'editor-1', originProjectId: 'project-1', baseDirectory: ROOT }),
     ask: answer,
     follow: (hit) => {
@@ -146,53 +150,34 @@ function editorPanel(): Panel {
   return {
     performed,
     async gesture() {
-      expect(followLinkAtCaret(view, editorDeps)).toBe(true);
+      followLinkAtCaret(view, editorDeps);
       await pending;
     },
   };
 }
 
-const PANELS = [
-  ['terminal', terminalPanel],
-  ['editor', editorPanel],
-] as const;
-
-describe('SC-008 — a preference change lands on the next gesture, in both panel types', () => {
-  it('with the panel’s performers built before the change', async () => {
-    for (const [name, build] of PANELS) {
-      settings = structuredClone(DEFAULT_APP_SETTINGS);
-      osCalls.length = 0;
-      const panel = build(); // mounted while the shipped value is in force
+describe('SC-008 — a detection switch lands on the next gesture, in both panel types', () => {
+  for (const [name, build, key] of [
+    ['terminal', terminalPanel, 'detectInTerminals'],
+    ['editor', editorPanel, 'detectInEditors'],
+  ] as const) {
+    it(`${name}: off, then on again, with the panel built before either change`, async () => {
+      const panel = build(); // mounted while the shipped value (on) is in force
 
       await panel.gesture();
-      expect(panel.performed, `${name}: the shipped value opens an editor`).toEqual([`editor:${TS}`]);
+      expect(panel.performed, `${name}: detection on follows the link`).toEqual([`editor:${TS}`]);
 
-      settings.editor.links.defaultAction = 'osExplorer';
+      settings.editor.links[key] = false;
       await panel.gesture();
-      expect(osCalls, `${name}: the change applied with nothing remounted`).toEqual([
-        'osExplorer:src/foo.ts',
-      ]);
-      expect(panel.performed, `${name}: and opened no second editor`).toEqual([`editor:${TS}`]);
+      expect(panel.performed, `${name}: off — the very next gesture finds no link`).toEqual([`editor:${TS}`]);
 
-      settings.editor.links.defaultAction = 'osDefaultProgram';
+      settings.editor.links[key] = true;
       await panel.gesture();
-      expect(osCalls, `${name}: and again, the very next gesture`).toEqual([
-        'osExplorer:src/foo.ts',
-        'osDefaultProgram:src/foo.ts',
-      ]);
-    }
-  });
+      expect(panel.performed, `${name}: on again, with nothing remounted`).toEqual([`editor:${TS}`, `editor:${TS}`]);
+    });
+  }
 
-  it('the preference is READ at the gesture, not once at mount', async () => {
-    reads = 0;
-    const panel = terminalPanel();
-    const atMount = reads;
-    await panel.gesture();
-    await panel.gesture();
-    expect(reads, 'each gesture consults the live settings').toBeGreaterThan(atMount + 1);
-  });
-
-  it('a provider’s own default open action is live too (FR-051)', async () => {
+  it('a provider\u2019s own default open action is live too (FR-051)', async () => {
     const markdown = SHIPPED_PREVIEW_PROVIDERS.forPath('a.md');
     expect(markdown, 'the shipped registry must still claim .md').toBeDefined();
     const mdLink: ResolvedLink = {
@@ -218,14 +203,63 @@ describe('SC-008 — a preference change lands on the next gesture, in both pane
     };
     const resolveMd = (): LinkResolution => ({ ok: true, link: mdLink });
 
+    settings.editor.previews.providers[markdown!.id]!.defaultOpenAction = 'editor';
     await followLink({ request, resolve: resolveMd, deps });
-    expect(performed, 'shipped: Markdown opens an editor').toEqual([`editor:${mdLink.path}`]);
-
     settings.editor.previews.providers[markdown!.id]!.defaultOpenAction = 'preview';
     await followLink({ request, resolve: resolveMd, deps });
-    expect(performed, 'and the change applies to the next gesture').toEqual([
-      `editor:${mdLink.path}`,
-      `preview:${mdLink.path}`,
-    ]);
+    expect(performed).toEqual([`editor:${mdLink.path}`, `preview:${mdLink.path}`]);
+  });
+});
+
+/**
+ * SC-008 (amended) — the existence-check TIMEOUT is read per check (FR-120; data-model §13.5's
+ * `readLinkSettings`, on the `readPreviewSettings` pattern). Main's resolver is built once at
+ * startup, so a value captured at construction would freeze it until restart.
+ *
+ * The stuck share is a `stat` that never settles; the clock is vitest's fake one.
+ */
+describe('SC-008 — the existence-check timeout applies to the next check, with no restart', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('2 s, then raised to 5 s behind the same resolver', async () => {
+    vi.useFakeTimers();
+    const neverSettles = (): Promise<never> => new Promise(() => {});
+    const deps = {
+      fs: { stat: neverSettles } as unknown as IFileSystem,
+      pathForms: {
+        homeDirectory: () => 'C:\\Users\\someone',
+        fromDriveForm: () => null,
+        fromFileUrl: () => null,
+        fromHomeForm: () => null,
+      } as unknown as IPathForms,
+      executables: { isExecutable: () => false } as unknown as IExecutableExtensions,
+      projectRootFor: () => ROOT,
+      previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
+      readPreviewSettings: () => settings.editor.previews,
+      readLinkSettings: () => settings.editor.links,
+    };
+    const resolver = new FileLinkResolver(deps as FileLinkResolverDeps);
+    const request = (text: string): LinkResolutionRequest => ({ text, kind: 'detectedPath', panelId: 'p1' });
+
+    const outcome = async (running: Promise<LinkResolution>, ms: number) => {
+      let got: LinkResolution | 'pending' = 'pending';
+      void running.then((r) => (got = r));
+      await vi.advanceTimersByTimeAsync(ms);
+      return got;
+    };
+
+    (settings.editor.links as unknown as Record<string, number>).existenceCheckTimeoutMs = 2000;
+    expect(await outcome(resolver.resolve(request('\\\\fileserver\\home\\a.txt')), 2000)).toEqual({
+      ok: false,
+      reason: 'unreachable',
+    });
+
+    // A different root, so FR-121's gate on the first one is not what answers.
+    (settings.editor.links as unknown as Record<string, number>).existenceCheckTimeoutMs = 5000;
+    const second = resolver.resolve(request('\\\\nas\\share\\b.txt'));
+    expect(await outcome(second, 2000), 'the raised timeout is in force for the very next check').toBe('pending');
+    expect(await outcome(second, 3000)).toEqual({ ok: false, reason: 'unreachable' });
   });
 });

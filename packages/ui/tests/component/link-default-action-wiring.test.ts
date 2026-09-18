@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
-  DEFAULT_LINK_ACTIONS,
   createPreviewProviderRegistry,
-  defaultOpenActionFor,
   parsePreviewSettings,
-  resolveDefaultLinkAction,
-  type DefaultLinkAction,
   type LinkResolution,
   type LinkResolutionRequest,
+  type PreviewProviderRegistry,
   type PreviewSettings,
   type ResolvedLink,
 } from '@throng/core';
@@ -28,30 +25,34 @@ import {
 } from '../../src/renderer/editor/link-decorations.js';
 
 /**
- * 045 T104, FR-050 – FR-054 — the *Default link action* preference, wired into both surfaces.
+ * 045 T157 (rewritten from T104, as the 2026-09-18 supersessions permit) — **the click rule**, wired
+ * into both surfaces (FR-110, FR-111, FR-114; FR-054's "same action for the same link").
  *
- * ══ THREE GESTURES, ONE DECISION ══
+ * ══ WHAT CHANGED, AND WHY THIS FILE WAS REWRITTEN RATHER THAN EXTENDED ══
  *
- * FR-054 puts Ctrl+click, the Open Link chord and the plain **Open Link** menu item on the same
- * answer for the same link. Each of the three arrives here through the plumbing it really uses — the
- * terminal's link provider's `activate`, the editor's caret chord, and the row `fileLinkMenuActions`
- * draws — and every one of them ends in `followLink`. The assertion is not "they agree by
- * inspection": it is that over every setting and every link shape the three record the SAME
- * destination, and that the destination is the one `resolveDefaultLinkAction` names.
+ * T104 drove every gesture over every value of *Default link action* (FR-050). FR-112 retires that
+ * setting: its five values, its reader and its fallback are gone, and the in-project half of its
+ * shipped value becomes the fixed rule FR-110 states. So the cross product over settings is replaced
+ * by the rule's own table, and the assertion that the preference is read at the gesture is replaced
+ * by one that NO link-specific preference is read at all.
  *
- * ══ THE PREFERENCE IS READ AT THE GESTURE, NOT AT MOUNT ══
+ * | The link resolves to        | What happens                                                      |
+ * |-----------------------------|-------------------------------------------------------------------|
+ * | a file in the project       | throng: Preview when that file's default open action is Preview   |
+ * |                             | and there is no position; otherwise an editor, at the position     |
+ * | an executable in the project| the same — it opens in throng as its text (FR-114)                |
+ * | a file outside the project  | Open in OS Explorer, the file selected                            |
+ * | a folder, in or out         | Open in OS Explorer                                               |
  *
- * `linkRouting` takes a READER. Both surfaces build their deps once — the terminal in a `useMemo`
- * the mount effect holds through a ref, the editor in a function the extension closes over — so a
- * captured value would freeze the preference at whatever it was when the panel appeared. SC-008
- * says a change applies to the next gesture, so the reader is consulted inside `followLink`.
+ * What the user sees today: an out-of-project file handed to its DEFAULT PROGRAM by a Ctrl+click
+ * (O11's probe, every flavour and the editor), and an in-project `.exe` or `.bat` revealed in Explorer
+ * instead of opened as text.
  *
- * ══ `previewIsDefault` IS THE CALLER'S SUM, NOT THE DECISION'S ══
+ * ══ FOUR GESTURES, TWO PANEL TYPES, ONE DECISION ══
  *
- * `core/src/links/default-action.ts` must not know the preview registry exists (044 FR-070), so the
- * renderer computes `defaultOpenActionFor(...) === 'preview'` and hands over a boolean. This file
- * proves the two halves meet: a provider set to Preview makes an in-project `.md` open its preview,
- * and the SAME file with a position opens an editor instead (FR-052).
+ * Each arrives through the plumbing it really uses — the terminal provider's `activate`, the editor's
+ * caret chord, the editor's pointer handlers, and the row `fileLinkMenuActions` draws for the plain
+ * Open Link item — and every one ends in `followLink`.
  */
 
 const REGISTRY = createPreviewProviderRegistry([
@@ -78,17 +79,17 @@ const link = (over: Partial<ResolvedLink> = {}): ResolvedLink => ({
 const mdLink = (over: Partial<ResolvedLink> = {}): ResolvedLink =>
   link({ path: MD, preview: 'enabled', ...over });
 
-/** What the preferences say RIGHT NOW. Mutated between gestures, never re-wired. */
-let live: LinkRoutingInputs;
+/**
+ * What the preferences say RIGHT NOW — only the two preview inputs FR-051 still reads. Mutated
+ * between gestures, never re-wired. Cast on the way into `linkRouting` because, until T158 lands,
+ * its input type still demands the retired `defaultAction`.
+ */
+let live: { previewRegistry: PreviewProviderRegistry; previewSettings: PreviewSettings };
 
 const osCalls: string[] = [];
 
 beforeEach(() => {
-  live = {
-    defaultAction: 'throng',
-    previewRegistry: REGISTRY,
-    previewSettings: previewSettings('editor'),
-  };
+  live = { previewRegistry: REGISTRY, previewSettings: previewSettings('editor') };
   osCalls.length = 0;
   (window as unknown as { throng: unknown }).throng = {
     links: {
@@ -120,15 +121,12 @@ function surface(): Surface {
         void performed.push(position ? `editor@${position.line}:${l.path}` : `editor:${l.path}`),
       openInPreview: (l) => void performed.push(`preview:${l.path}`),
       reportFailure: (outcome) => void performed.push(`failure:${outcome.reason}`),
-      ...linkRouting(() => live),
+      ...linkRouting(() => live as unknown as LinkRoutingInputs),
     },
   };
 }
 
-/**
- * The request a surface holds for a link, with the position already split off — which is what both
- * detection and the menu really carry (`LinkCandidate.text` never includes `:42`).
- */
+/** The request a surface holds, with the position already split off (`LinkCandidate.text`). */
 const requestFor = (text: string): LinkResolutionRequest => ({
   text: text.replace(/:\d+$/, ''),
   kind: 'detectedPath',
@@ -141,14 +139,16 @@ const answer =
   (resolved: ResolvedLink) =>
   (): LinkResolution => ({ ok: true, link: resolved });
 
-/* ── The three gestures, each through the plumbing it really uses ───────────────────────────── */
+/** `foo.ts:42` carries a position; the bare text does not. */
+function positionIn(text: string): { line: number } | undefined {
+  const match = /:(\d+)$/.exec(text);
+  return match ? { line: Number(match[1]) } : undefined;
+}
+
+/* ── The four gestures, each through the plumbing it really uses ───────────────────────────── */
 
 /** G1 in a terminal: the link provider's own `activate`, with Ctrl held. */
-async function terminalCtrlClick(
-  resolved: ResolvedLink,
-  text: string,
-  s: Surface,
-): Promise<string[]> {
+async function terminalCtrlClick(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
   const row = `see ${text} here`;
   let followed: Promise<void> = Promise.resolve();
   const provider = createFileLinkProvider({
@@ -173,41 +173,58 @@ async function terminalCtrlClick(
   expect(links, `the terminal provider drew no link for "${text}"`).toHaveLength(1);
   links[0]!.activate({ ctrlKey: true, metaKey: false } as MouseEvent, text);
   await followed;
-  return s.performed;
 }
 
-/** G8 in an editor: the Open Link chord, over the caret. */
-async function editorChord(resolved: ResolvedLink, text: string, s: Surface): Promise<string[]> {
-  const doc = `see ${text} here\n`;
-  const caret = doc.indexOf(text) + 2;
-  let followed: Promise<void> = Promise.resolve();
-  const deps: EditorLinkDeps = {
+function editorDeps(resolved: ResolvedLink, s: Surface, track: (p: Promise<void>) => void): EditorLinkDeps {
+  return {
     site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: ROOT }),
     ask: answer(resolved),
     follow: (hit) => {
-      followed = followLink({
-        request: hit.request,
-        ...(hit.position === undefined ? {} : { position: hit.position }),
-        resolve: answer(resolved),
-        deps: s.deps,
-      });
+      track(
+        followLink({
+          request: hit.request,
+          ...(hit.position === undefined ? {} : { position: hit.position }),
+          resolve: answer(resolved),
+          deps: s.deps,
+        }),
+      );
     },
   };
+}
+
+/** G8 in an editor: the Open Link chord, over the caret. */
+async function editorChord(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
+  const doc = `see ${text} here\n`;
+  let followed: Promise<void> = Promise.resolve();
+  const deps = editorDeps(resolved, s, (p) => (followed = p));
   const view = {
-    state: EditorState.create({ doc, selection: { anchor: caret } }),
+    state: EditorState.create({ doc, selection: { anchor: doc.indexOf(text) + 2 } }),
     visibleRanges: [{ from: 0, to: doc.length }],
   };
   expect(followLinkAtCaret(view, deps), `the chord did not claim "${text}"`).toBe(true);
   await followed;
-  return s.performed;
+}
+
+/** G1 in an editor: a Ctrl press and release over the link. */
+async function editorCtrlClick(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
+  const doc = `see ${text} here\n`;
+  let followed: Promise<void> = Promise.resolve();
+  const deps = editorDeps(resolved, s, (p) => (followed = p));
+  const view = {
+    state: EditorState.create({ doc }),
+    visibleRanges: [{ from: 0, to: doc.length }],
+    posAtCoords: () => doc.indexOf(text) + 2,
+    dispatch: () => {},
+  };
+  const handlers = createLinkPointerHandlers(deps);
+  const event = { button: 0, ctrlKey: true, metaKey: false, clientX: 10, clientY: 10 } as MouseEvent;
+  expect(handlers.mousedown(event, view), `the editor did not claim a Ctrl+click on "${text}"`).toBe(true);
+  handlers.mouseup(event, view);
+  await followed;
 }
 
 /** The plain **Open Link** row, which every surface points at its own default route. */
-async function menuOpenLink(
-  resolved: ResolvedLink,
-  text: string,
-  s: Surface,
-): Promise<string[]> {
+async function menuOpenLink(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
   const request = requestFor(text);
   const position = positionIn(text);
   let followed: Promise<void> = Promise.resolve();
@@ -230,17 +247,11 @@ async function menuOpenLink(
   expect(open, 'the menu offered no Open Link row').toBeDefined();
   open!.onClick?.();
   await followed;
-  return s.performed;
-}
-
-/** `foo.ts:42` carries a position; the bare text does not. */
-function positionIn(text: string): { line: number } | undefined {
-  const match = /:(\d+)$/.exec(text);
-  return match ? { line: Number(match[1]) } : undefined;
 }
 
 const GESTURES = [
   ['Ctrl+click (terminal)', terminalCtrlClick],
+  ['Ctrl+click (editor)', editorCtrlClick],
   ['Open Link chord (editor)', editorChord],
   ['Open Link menu item', menuOpenLink],
 ] as const;
@@ -248,112 +259,113 @@ const GESTURES = [
 /** What actually happened, whichever route it went out by. */
 const outcomeOf = (s: Surface): string[] => [...s.performed, ...osCalls];
 
-/* ── FR-054: the three never disagree ──────────────────────────────────────────────────────── */
+/* ── FR-110: the table, over every gesture ─────────────────────────────────────────────────── */
 
-describe('FR-054 — every gesture resolves the SAME default action', () => {
-  it('over every setting and every link shape', async () => {
-    const disagreements: string[] = [];
-    for (const setting of DEFAULT_LINK_ACTIONS) {
-      for (const shape of [
-        { text: 'src/foo.ts', resolved: link() },
-        { text: 'src/foo.ts:42', resolved: link() },
-        { text: 'docs/a.md', resolved: mdLink() },
-        { text: 'docs/a.md:42', resolved: mdLink() },
-        { text: 'src/tool.exe', resolved: link({ path: `${ROOT}\\src\\tool.exe`, executable: true }) },
-        { text: 'elsewhere/x.ts', resolved: link({ path: 'D:\\other\\x.ts', inProject: false }) },
-        // No FOLDER here: detection needs a plausible extension (`detect.ts` rule C), so a folder
-        // only ever reaches a terminal as an OSC 8 `file:` target. It has its own case below.
-      ]) {
-        for (const previews of ['editor', 'preview'] as const) {
-          const seen: string[] = [];
-          for (const [name, drive] of GESTURES) {
-            live = {
-              defaultAction: setting,
-              previewRegistry: REGISTRY,
-              previewSettings: previewSettings(previews),
-            };
-            osCalls.length = 0;
-            const s = surface();
-            await drive(shape.resolved, shape.text, s);
-            seen.push(`${name} => ${outcomeOf(s).join(',')}`);
-          }
-          const answers = new Set(seen.map((line) => line.split(' => ')[1]));
-          if (answers.size !== 1) {
-            disagreements.push(`${setting}/${shape.text}/${previews}: ${seen.join(' | ')}`);
-          }
-        }
-      }
-    }
-    expect(disagreements).toEqual([]);
-  });
+interface Row {
+  readonly name: string;
+  readonly text: string;
+  readonly resolved: ResolvedLink;
+  readonly previews: 'editor' | 'preview';
+  readonly expected: string;
+}
 
-  it('and the answer is the one `resolveDefaultLinkAction` names', async () => {
+const EXE = `${ROOT}\\src\\tool.exe`;
+const OUT_TS = 'C:\\elsewhere\\x.ts';
+const OUT_MD = 'C:\\elsewhere\\notes.md';
+
+const TABLE: readonly Row[] = [
+  { name: 'in-project file', text: 'src/foo.ts', resolved: link(), previews: 'editor', expected: `editor:${TS}` },
+  { name: 'in-project file, positioned', text: 'src/foo.ts:42', resolved: link(), previews: 'editor', expected: `editor@42:${TS}` },
+  { name: 'in-project .md, provider set to Preview', text: 'docs/a.md', resolved: mdLink(), previews: 'preview', expected: `preview:${MD}` },
+  { name: 'in-project .md, provider set to Editor', text: 'docs/a.md', resolved: mdLink(), previews: 'editor', expected: `editor:${MD}` },
+  { name: 'in-project .md, Preview, positioned (FR-052)', text: 'docs/a.md:42', resolved: mdLink(), previews: 'preview', expected: `editor@42:${MD}` },
+  { name: 'in-project .md, provider DISABLED', text: 'docs/a.md', resolved: mdLink({ preview: 'disabled' }), previews: 'preview', expected: `editor:${MD}` },
+  // FR-114: an executable IN the project opens in throng as its text — never revealed, never run.
+  { name: 'in-project executable (FR-114)', text: 'src/tool.exe', resolved: link({ path: EXE, executable: true }), previews: 'editor', expected: `editor:${EXE}` },
+  // FR-110 row three: a file outside the project is shown in OS Explorer — never its default program.
+  { name: 'out-of-project file', text: 'elsewhere/x.ts', resolved: link({ path: OUT_TS, inProject: false }), previews: 'editor', expected: 'osExplorer:elsewhere/x.ts' },
+  { name: 'out-of-project .md with Preview set', text: 'elsewhere/notes.md', resolved: mdLink({ path: OUT_MD, inProject: false }), previews: 'preview', expected: 'osExplorer:elsewhere/notes.md' },
+  { name: 'out-of-project executable', text: 'elsewhere/setup.exe', resolved: link({ path: 'C:\\elsewhere\\setup.exe', inProject: false, executable: true }), previews: 'editor', expected: 'osExplorer:elsewhere/setup.exe' },
+];
+
+describe('FR-110 — every gesture, in both panel types, performs the click rule', () => {
+  it('over every row of the table', async () => {
     const wrong: string[] = [];
-    for (const setting of DEFAULT_LINK_ACTIONS) {
-      for (const previews of ['editor', 'preview'] as const) {
-        for (const shape of [
-          { text: 'docs/a.md', resolved: mdLink() },
-          { text: 'docs/a.md:42', resolved: mdLink() },
-          { text: 'src/foo.ts', resolved: link() },
-        ]) {
-          live = {
-            defaultAction: setting,
-            previewRegistry: REGISTRY,
-            previewSettings: previewSettings(previews),
-          };
-          osCalls.length = 0;
-          const s = surface();
-          await terminalCtrlClick(shape.resolved, shape.text, s);
-          const expected = resolveDefaultLinkAction({
-            setting,
-            link: shape.resolved,
-            hasPosition: positionIn(shape.text) !== undefined,
-            previewIsDefault:
-              defaultOpenActionFor(REGISTRY, previewSettings(previews), shape.resolved.path) ===
-              'preview',
-          });
-          const actual = outcomeOf(s).join(',');
-          if (!actual.startsWith(expected)) {
-            wrong.push(`${setting}/${shape.text}/${previews}: ${expected} expected, got ${actual}`);
-          }
-        }
+    for (const row of TABLE) {
+      for (const [gesture, drive] of GESTURES) {
+        live = { previewRegistry: REGISTRY, previewSettings: previewSettings(row.previews) };
+        osCalls.length = 0;
+        const s = surface();
+        await drive(row.resolved, row.text, s);
+        const actual = outcomeOf(s).join(',');
+        if (actual !== row.expected) wrong.push(`${row.name} / ${gesture}: expected ${row.expected}, got ${actual || '(nothing)'}`);
       }
     }
     expect(wrong).toEqual([]);
   });
-});
 
-describe('FR-053 — a FOLDER has only the two OS destinations, at every setting', () => {
-  it('and reaches OS Explorer whichever of them the preference names', async () => {
-    const folder = link({ path: `${ROOT}\\packages\\core`, kind: 'folder' });
-    const request: LinkResolutionRequest = {
-      // A folder arrives as an OSC 8 target: detection needs an extension, so no folder is ever a
-      // DETECTED path (`detect.ts` rule C).
-      text: `file:///D:/p/packages/core`,
-      kind: 'fileHyperlink',
-      panelId: 'panel-1',
-      originProjectId: 'project-1',
-    };
-    for (const setting of DEFAULT_LINK_ACTIONS) {
-      live = { ...live, defaultAction: setting };
+  it('a FOLDER, in the project or not, goes to OS Explorer — never a throng destination', async () => {
+    for (const inProject of [true, false]) {
+      const folder = link({ path: `${ROOT}\\packages\\core`, kind: 'folder', inProject });
+      const request: LinkResolutionRequest = {
+        // A folder arrives as an OSC 8 target: detection needs an extension (`detect.ts` rule C).
+        text: 'file:///D:/p/packages/core',
+        kind: 'fileHyperlink',
+        panelId: 'panel-1',
+        originProjectId: 'project-1',
+      };
       osCalls.length = 0;
       const s = surface();
       await followLink({ request, resolve: answer(folder), deps: s.deps });
-      expect(s.performed, `${setting}: no throng destination for a folder`).toEqual([]);
-      expect(osCalls, setting).toEqual([`osExplorer:${request.text}`]);
+      expect(s.performed, `inProject=${inProject}`).toEqual([]);
+      expect(osCalls, `inProject=${inProject}`).toEqual([`osExplorer:${request.text}`]);
     }
+  });
+
+  it('FR-111: no gesture ever reaches `window.throng.links.open`, on any row', async () => {
+    const opened: string[] = [];
+    for (const row of TABLE) {
+      for (const [gesture, drive] of GESTURES) {
+        live = { previewRegistry: REGISTRY, previewSettings: previewSettings(row.previews) };
+        osCalls.length = 0;
+        const s = surface();
+        await drive(row.resolved, row.text, s);
+        if (osCalls.some((c) => c.startsWith('osDefaultProgram:'))) opened.push(`${row.name} / ${gesture}`);
+      }
+    }
+    expect(opened).toEqual([]);
   });
 });
 
-/* ── FR-051 / FR-052: `throng` means what throng would do, unless a position says otherwise ─── */
+/* ── FR-110 / FR-112: no link-specific preference is consulted ─────────────────────────────── */
 
-describe('FR-051 — *Open in throng* honours the file’s own default open action', () => {
+describe('FR-110 / FR-112 — the rule consults no link-specific preference', () => {
+  it('a surface still carrying a stale `defaultAction` reader is not steered by it', async () => {
+    // What a panel built before T158 would still hand over: a reader for the retired setting that
+    // answers `osDefaultProgram`. FR-112 says nothing reads it; FR-111 says no gesture could obey it.
+    const s = surface();
+    const stale = { ...s.deps, defaultAction: () => 'osDefaultProgram' } as LinkFollowDeps;
+    await followLink({ request: requestFor('src/foo.ts'), resolve: answer(link()), deps: stale });
+
+    expect(osCalls, 'the OS default program was reached through a retired setting').toEqual([]);
+    expect(s.performed).toEqual([`editor:${TS}`]);
+  });
+
+  it('nor by one answering `osExplorer`', async () => {
+    const s = surface();
+    const stale = { ...s.deps, defaultAction: () => 'osExplorer' } as LinkFollowDeps;
+    await followLink({ request: requestFor('src/foo.ts'), resolve: answer(link()), deps: stale });
+
+    expect(osCalls).toEqual([]);
+    expect(s.performed).toEqual([`editor:${TS}`]);
+  });
+});
+
+/* ── FR-051 / FR-052: unchanged, and still live ────────────────────────────────────────────── */
+
+describe('FR-051 — an in-project file honours its own default open action', () => {
   it('an in-project .md whose provider is set to Preview opens its PREVIEW', async () => {
-    live = {
-      defaultAction: 'throng',
-      previewRegistry: REGISTRY,
-      previewSettings: previewSettings('preview'),
-    };
+    live = { previewRegistry: REGISTRY, previewSettings: previewSettings('preview') };
     const s = surface();
     await terminalCtrlClick(mdLink(), 'docs/a.md', s);
     expect(s.performed).toEqual([`preview:${MD}`]);
@@ -365,114 +377,29 @@ describe('FR-051 — *Open in throng* honours the file’s own default open acti
     expect(s.performed).toEqual([`editor:${MD}`]);
   });
 
-  it('a DISABLED provider is not a preview destination, so the editor takes it', async () => {
-    live = {
-      defaultAction: 'throng',
-      previewRegistry: REGISTRY,
-      previewSettings: previewSettings('preview', false),
-    };
-    const s = surface();
-    // `preview: 'disabled'` is how main reports an off provider (FR-030).
-    await terminalCtrlClick(mdLink({ preview: 'disabled' }), 'docs/a.md', s);
-    expect(s.performed).toEqual([`editor:${MD}`]);
-  });
-
   it('a file NO provider claims is an editor, whatever the Markdown provider says', async () => {
-    live = {
-      defaultAction: 'throng',
-      previewRegistry: REGISTRY,
-      previewSettings: previewSettings('preview'),
-    };
+    live = { previewRegistry: REGISTRY, previewSettings: previewSettings('preview') };
     const s = surface();
     await terminalCtrlClick(link(), 'src/foo.ts', s);
     expect(s.performed).toEqual([`editor:${TS}`]);
   });
+
+  it('the provider\u2019s own setting is read at the gesture, with nothing re-wired', async () => {
+    const s = surface();
+    await terminalCtrlClick(mdLink(), 'docs/a.md', s);
+    live = { previewRegistry: REGISTRY, previewSettings: previewSettings('preview') };
+    await terminalCtrlClick(mdLink(), 'docs/a.md', s);
+    expect(s.performed).toEqual([`editor:${MD}`, `preview:${MD}`]);
+  });
 });
 
 describe('FR-052 — a position always opens an editor', () => {
-  it('even for a file whose default open action is Preview', async () => {
-    live = {
-      defaultAction: 'throng',
-      previewRegistry: REGISTRY,
-      previewSettings: previewSettings('preview'),
-    };
+  it('even for a file whose default open action is Preview, from every gesture', async () => {
+    live = { previewRegistry: REGISTRY, previewSettings: previewSettings('preview') };
     for (const [name, drive] of GESTURES) {
       const s = surface();
       await drive(mdLink(), 'docs/a.md:42', s);
       expect(s.performed, name).toEqual([`editor@42:${MD}`]);
     }
-  });
-});
-
-/* ── SC-008: the preference is read at the gesture ─────────────────────────────────────────── */
-
-describe('FR-050 — the LIVE preference decides, gesture by gesture', () => {
-  it('a change between two gestures changes the second one, with nothing re-wired', async () => {
-    const s = surface();
-    await terminalCtrlClick(link(), 'src/foo.ts', s);
-    expect(s.performed).toEqual([`editor:${TS}`]);
-
-    live = { ...live, defaultAction: 'osExplorer' };
-    osCalls.length = 0;
-    await terminalCtrlClick(link(), 'src/foo.ts', s);
-    expect(osCalls).toEqual(['osExplorer:src/foo.ts']);
-    expect(s.performed, 'the second gesture opened no editor').toEqual([`editor:${TS}`]);
-  });
-
-  it('every named setting performs itself when the link offers it', async () => {
-    const expected: Record<DefaultLinkAction, string> = {
-      throng: `editor:${MD}`,
-      editor: `editor:${MD}`,
-      preview: `preview:${MD}`,
-      osExplorer: 'osExplorer:docs/a.md',
-      osDefaultProgram: 'osDefaultProgram:docs/a.md',
-    };
-    for (const setting of DEFAULT_LINK_ACTIONS) {
-      live = {
-        defaultAction: setting,
-        previewRegistry: REGISTRY,
-        previewSettings: previewSettings('editor'),
-      };
-      osCalls.length = 0;
-      const s = surface();
-      await terminalCtrlClick(mdLink(), 'docs/a.md', s);
-      expect(outcomeOf(s), setting).toEqual([expected[setting]]);
-    }
-  });
-});
-
-/* ── The pointer half of the editor gesture takes the same route ───────────────────────────── */
-
-describe('FR-040 — the editor’s Ctrl+click reaches the same decision', () => {
-  it('a press and release over a link performs the preference’s destination', async () => {
-    live = { ...live, defaultAction: 'osDefaultProgram' };
-    const s = surface();
-    const doc = 'see src/foo.ts here\n';
-    let followed: Promise<void> = Promise.resolve();
-    const resolved = link();
-    const deps: EditorLinkDeps = {
-      site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: ROOT }),
-      ask: answer(resolved),
-      follow: (hit) => {
-        followed = followLink({
-          request: hit.request,
-          resolve: answer(resolved),
-          deps: s.deps,
-        });
-      },
-    };
-    const view = {
-      state: EditorState.create({ doc }),
-      visibleRanges: [{ from: 0, to: doc.length }],
-      posAtCoords: () => doc.indexOf('src/foo.ts') + 2,
-      dispatch: () => {},
-    };
-    const handlers = createLinkPointerHandlers(deps);
-    const event = { button: 0, ctrlKey: true, metaKey: false, clientX: 10, clientY: 10 } as MouseEvent;
-    handlers.mousedown(event, view);
-    handlers.mouseup(event, view);
-    await followed;
-
-    expect(osCalls).toEqual(['osDefaultProgram:src/foo.ts']);
   });
 });

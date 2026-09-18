@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LINK_CACHE_TTL_MS, MAX_LINK_CANDIDATES_PER_LINE } from '../../src/links/limits.js';
+import * as limits from '../../src/links/limits.js';
 import { detectPathCandidates } from '../../src/links/detect.js';
 
 /**
@@ -75,5 +76,39 @@ describe('MAX_LINK_CANDIDATES_PER_LINE — one line cannot make a hover expensiv
     const slashes = '/'.repeat(100_000);
     // One token, and one reading of it: the cap is not what saves this case, the grammar is.
     expect(detectPathCandidates(slashes, []).length).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * 045 T178 — LINK_IDLE_SCAN_MS, the quiet interval before the terminal's idle scan resolves the rows in
+ * view (FR-137; contract §7 P13). A named constant beside its two siblings, for their reason.
+ *
+ * It protects two things pulling in opposite directions. Too SHORT and a program that streams in
+ * bursts — a build printing a line every few tens of milliseconds, a `tail -f` — goes "quiet" between
+ * every burst, so the scan runs on what is effectively the output path, which FR-072 forbids. Too
+ * LONG and a user who stops output and looks for a link waits for the at-rest mark (FR-136) long
+ * enough to reach for the pointer anyway.
+ *
+ * Read through the module namespace so the file's existing cases keep running while the export is
+ * absent.
+ */
+describe('LINK_IDLE_SCAN_MS — the idle scan waits for quiet, and not for long (FR-137)', () => {
+  const idle = (limits as Record<string, unknown>).LINK_IDLE_SCAN_MS as number | undefined;
+
+  it('is exported from core/src/links/limits.ts as a whole number of milliseconds', () => {
+    expect(typeof idle, 'limits.ts exports LINK_IDLE_SCAN_MS').toBe('number');
+    expect(Number.isSafeInteger(idle)).toBe(true);
+  });
+
+  it('is longer than the gaps inside a burst of streamed output, so streaming never counts as quiet', () => {
+    expect(idle).toBeGreaterThanOrEqual(150);
+  });
+
+  it('is short enough that the at-rest mark arrives before the user reaches for the pointer', () => {
+    expect(idle).toBeLessThanOrEqual(1_000);
+  });
+
+  it('is well inside the cache TTL, so a scan’s answers are still fresh when a hover reads them', () => {
+    expect(idle).toBeLessThan(LINK_CACHE_TTL_MS);
   });
 });

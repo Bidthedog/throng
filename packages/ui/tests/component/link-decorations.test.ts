@@ -1,12 +1,20 @@
 import { EditorState } from '@codemirror/state';
-import { describe, expect, it, vi } from 'vitest';
+import { EditorView } from '@codemirror/view';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LinkResolution, LinkResolutionRequest, ResolvedLink } from '@throng/core';
 import {
   buildLinkDecorations,
   editorLinkExtension,
+  setLinkAnswerSubscriber,
   type EditorLinkDeps,
   type LinkScanView,
 } from '../../src/renderer/editor/link-decorations.js';
+import {
+  __resetLinkCacheForTests,
+  peekLink,
+  requestLink,
+  subscribeLinkCache,
+} from '../../src/renderer/links/link-cache.js';
 
 /**
  * 045 FR-002, FR-060, FR-070, FR-071, FR-073 — what an editor underlines (T089).
@@ -140,6 +148,194 @@ describe('the scan is bounded by the visible range (FR-073)', () => {
   it('decorates both when both are visible', () => {
     const { deps } = resolverFor({ 'src/foo.ts': link() });
     expect(marks(buildLinkDecorations(view(DOC), deps))).toHaveLength(2);
+  });
+});
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ * Mounted-view helpers for T151 and T180
+ * ════════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Both of these need a REAL `EditorView`: T151 because the question is whether an answer landing
+ * later repaints a view nobody is touching, and T180 because the affordance is the theme CodeMirror
+ * mounts. jsdom mounts a view (see `helpers/mount-editor.ts`'s header); what it cannot do is measure
+ * text, so the two Range methods CodeMirror's selection layer reaches for are stubbed, exactly as
+ * that helper does.
+ */
+function shimRangeGeometry(): void {
+  const proto = globalThis.Range?.prototype as unknown as Record<string, unknown> | undefined;
+  if (proto && typeof proto.getClientRects !== 'function') {
+    proto.getClientRects = () => ({ length: 0, item: () => null, [Symbol.iterator]: function* () {} });
+    proto.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
+  }
+}
+
+function mountView(doc: string, deps: EditorLinkDeps): { view: EditorView; parent: HTMLElement } {
+  shimRangeGeometry();
+  const parent = document.createElement('div');
+  document.body.appendChild(parent);
+  const view = new EditorView({
+    state: EditorState.create({ doc, extensions: [editorLinkExtension(deps)] }),
+    parent,
+  });
+  return { view, parent };
+}
+
+/** Every CSS rule CodeMirror mounted whose selector mentions `.cm-throng-link`, as `{ selector, body }`. */
+function linkRules(): { selector: string; body: string }[] {
+  const text = [...document.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
+  const rules: { selector: string; body: string }[] = [];
+  for (const chunk of text.split('}')) {
+    const open = chunk.indexOf('{');
+    if (open < 0) continue;
+    const selector = chunk.slice(0, open).trim();
+    if (!selector.includes('.cm-throng-link')) continue;
+    rules.push({ selector, body: chunk.slice(open + 1).trim() });
+  }
+  return rules;
+}
+
+/** The at-rest rule: `.cm-throng-link` with no pseudo-class and no qualifying modifier class. */
+function atRestRule(): { selector: string; body: string } | undefined {
+  return linkRules().find((r) => /\.cm-throng-link$/.test(r.selector.split(',')[0]!.trim()) && !r.selector.includes(':'));
+}
+
+/**
+ * 045 T151 — FR-123 in editors: a late answer redecorates with NO edit, scroll or pointer movement.
+ *
+ * Expected to PASS on first run: the plugin already subscribes to the cache and repaints when an
+ * answer lands. If it does, it is kept as a characterisation pin and no GREEN task follows (T151).
+ */
+describe('T151 / FR-123 — a late answer redecorates an untouched editor', () => {
+  afterEach(() => {
+    __resetLinkCacheForTests();
+    setLinkAnswerSubscriber(() => () => {});
+    Reflect.deleteProperty(window, 'throng');
+    document.body.innerHTML = '';
+  });
+
+  it('a path whose answer lands 3 s later becomes a link with nothing else happening', async () => {
+    vi.useFakeTimers();
+    try {
+      __resetLinkCacheForTests();
+      setLinkAnswerSubscriber(subscribeLinkCache);
+      Reflect.set(window, 'throng', {
+        links: {
+          // A slow share: the answer takes far longer than the first paint.
+          resolve: (request: LinkResolutionRequest): Promise<LinkResolution> =>
+            new Promise((resolve) =>
+              setTimeout(
+                () => resolve(request.text === 'src/foo.ts' ? { ok: true, link: link() } : { ok: false }),
+                3000,
+              ),
+            ),
+        },
+      });
+      const deps: EditorLinkDeps = {
+        site: () => site,
+        ask: (request) => {
+          const cached = peekLink(request);
+          if (cached === undefined) requestLink(request);
+          return cached;
+        },
+        follow: vi.fn(),
+      };
+      const { view, parent } = mountView('see src/foo.ts here', deps);
+      expect(parent.querySelectorAll('.cm-throng-link'), 'nothing is a link before the answer').toHaveLength(0);
+
+      // No dispatch, no scroll, no pointer: only time passes and the answer lands.
+      await vi.advanceTimersByTimeAsync(3000);
+
+      const marked = [...parent.querySelectorAll('.cm-throng-link')].map((el) => el.textContent);
+      expect(marked, 'the late answer must reach the view that asked').toEqual(['src/foo.ts']);
+      view.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+/**
+ * 045 T180 — FR-135, FR-136, FR-138: one affordance, marked at rest (second round).
+ *
+ * The colour assertions the file used to imply (the accent-coloured text of 045's first cut) are
+ * superseded as the second round permits: a link is marked with a DASHED underline in the
+ * `linkUnderline` token at rest and a SOLID one in `linkUnderlineHover` on hover, the text's own
+ * colour is left alone (FR-008; an editor's syntax colours must win), and the hand pointer appears
+ * only while the modifier is held, because that is the only time a click follows (FR-040).
+ *
+ * What the user sees today: link text recoloured in the accent, a solid underline at rest, and a
+ * hand pointer over every link whether or not a click would follow it — and a web URL in an editor
+ * not marked at all.
+ */
+describe('T180 / FR-135 – FR-138 — the editor’s link affordance', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('a resolved file link and a web link carry the SAME mark', () => {
+    const doc = 'see src/foo.ts and https://example.com/x here';
+    const { deps } = resolverFor({ 'src/foo.ts': link() });
+    const { view, parent } = mountView(doc, deps);
+
+    const marked = [...parent.querySelectorAll('.cm-throng-link')].map((el) => el.textContent);
+    expect(marked).toEqual(['src/foo.ts', 'https://example.com/x']);
+    view.destroy();
+  });
+
+  it('at rest: a DASHED underline in var(--throng-colour-linkUnderline)', () => {
+    const { deps } = resolverFor({ 'src/foo.ts': link() });
+    const { view } = mountView('see src/foo.ts here', deps);
+
+    const rule = atRestRule();
+    expect(rule, 'an at-rest rule for .cm-throng-link is mounted').toBeDefined();
+    expect(rule!.body).toMatch(/dashed/);
+    expect(rule!.body).toContain('var(--throng-colour-linkUnderline)');
+    view.destroy();
+  });
+
+  it('on hover: a SOLID underline in var(--throng-colour-linkUnderlineHover)', () => {
+    const { deps } = resolverFor({ 'src/foo.ts': link() });
+    const { view } = mountView('see src/foo.ts here', deps);
+
+    const hover = linkRules().find((r) => r.selector.includes(':hover'));
+    expect(hover, 'a hover rule for .cm-throng-link is mounted').toBeDefined();
+    expect(hover!.body).toMatch(/solid/);
+    expect(hover!.body).toContain('var(--throng-colour-linkUnderlineHover)');
+    view.destroy();
+  });
+
+  it('sets NO text colour, at rest or on hover (FR-135: the text’s own colour is unchanged)', () => {
+    const { deps } = resolverFor({ 'src/foo.ts': link() });
+    const { view } = mountView('see src/foo.ts here', deps);
+
+    for (const rule of linkRules()) {
+      // `text-decoration-color` is the underline and is expected; a bare `color` is the text.
+      expect(rule.body, rule.selector).not.toMatch(/(^|[;{\s])color\s*:/);
+    }
+    view.destroy();
+  });
+
+  it('the hand pointer is NOT part of the at-rest mark — it belongs to the modifier-held state only', () => {
+    const { deps } = resolverFor({ 'src/foo.ts': link() });
+    const { view } = mountView('see src/foo.ts here', deps);
+
+    const rule = atRestRule();
+    expect(rule, 'an at-rest rule for .cm-throng-link is mounted').toBeDefined();
+    expect(rule!.body, 'a pointer at rest says "click me" when a click would not follow').not.toMatch(
+      /cursor\s*:\s*pointer/,
+    );
+    const pointerRules = linkRules().filter((r) => /cursor\s*:\s*pointer/.test(r.body));
+    expect(
+      pointerRules.length,
+      'some rule, qualified by the modifier-held state, still gives the hand pointer',
+    ).toBeGreaterThan(0);
+    for (const r of pointerRules) {
+      expect(r.selector, 'the pointer rule is qualified by more than the link class').not.toMatch(
+        /^[^\s,]*\s*\.cm-throng-link$/,
+      );
+    }
+    view.destroy();
   });
 });
 
