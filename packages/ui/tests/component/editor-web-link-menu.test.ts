@@ -111,7 +111,8 @@ describe('§7.2 — over a web link, nothing selected, the menu LEADS with Open 
     await waitFor(() => expect(menuLabels().length).toBeGreaterThan(0));
 
     const shortcut = document.querySelector('[data-testid="menu-shortcut-Open Link"]');
-    expect(shortcut?.textContent).toBe('Ctrl+Enter');
+    // The menu draws every shortcut in brackets (`context-menu.tsx`), as `(Ctrl+X)` is for Cut.
+    expect(shortcut?.textContent).toBe('(Ctrl+Enter)');
   });
 
   it('Open Link opens the address once through the open-external seam', async () => {
