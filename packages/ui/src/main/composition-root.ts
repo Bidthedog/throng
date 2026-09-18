@@ -1,23 +1,30 @@
 import 'reflect-metadata';
 import { homedir } from 'node:os';
 import { Container } from 'inversify';
-import { app, clipboard as electronClipboard } from 'electron';
+import { app, clipboard as electronClipboard, shell } from 'electron';
 import type {
   IClipboard,
   IConfigSettings,
   IConfigStore,
+  IExecutableExtensions,
+  IFileSystem,
   IFileWatcher,
   IFontEnumeration,
   IForegroundHandoff,
+  IPathForms,
   IUiSettings,
   ShippedDefaults,
 } from '@throng/core';
 import { buildShippedDefaults, defaultPipeName, NoForegroundHandoff } from '@throng/core';
 import {
+  WindowsExecutableExtensions,
   WindowsFontEnumeration,
   NodeUserContext,
   WindowsForegroundHandoff,
+  WindowsPathForms,
 } from '@throng/platform-windows';
+import { NodeFileSystem } from './node-file-system.js';
+import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { UI_TYPES } from './tokens.js';
 import { ElectronClipboard } from './electron-clipboard.js';
 import { MemoryClipboard } from './memory-clipboard.js';
@@ -137,5 +144,40 @@ export function createUiContainer(): Container {
   container
     .bind<IFontEnumeration>(UI_TYPES.FontEnumeration)
     .toConstantValue(new WindowsFontEnumeration());
+  /*
+   * 045 (#394) — the two new path/extension seams, on the #199 pattern.
+   *
+   * Both answer questions `@throng/core` refuses to hold an opinion about: how this platform spells
+   * a drive form, a home folder and a `file:` URI, and which extensions it would EXECUTE. They are
+   * bound at this boundary because main is the process that asks them — the renderer has no
+   * filesystem and the daemon is not involved in a link at all.
+   */
+  container.bind<IPathForms>(UI_TYPES.PathForms).toConstantValue(new WindowsPathForms());
+  container
+    .bind<IExecutableExtensions>(UI_TYPES.ExecutableExtensions)
+    .toConstantValue(new WindowsExecutableExtensions());
+  /*
+   * The filesystem, bound at last.
+   *
+   * `NodeFileSystem` has been built by hand in `main.ts` since 004, with no token — one of the
+   * named items in 043's recorded Principle IX exception. 045 needs it in a second place
+   * (`FileLinkResolver`), and the choice was between a second `new` and a binding. A second `new`
+   * would mean two filesystems whose recycle-bin behaviour could drift apart, so it is a binding.
+   *
+   * Its two collaborators are why it was never bound before: both are Electron's or Windows's, and
+   * this is the file that is allowed to know that. Recycle-bin RESTORE is Windows-only (PowerShell
+   * `Shell.Application`); elsewhere the default rejecting implementation leaves delete-undo
+   * unavailable and it degrades cleanly rather than throwing at startup (024 US3).
+   */
+  container
+    .bind<IFileSystem>(UI_TYPES.FileSystem)
+    .toConstantValue(
+      new NodeFileSystem(
+        (p) => shell.trashItem(p),
+        process.platform === 'win32'
+          ? (originalPath) => restoreFromRecycleBin(originalPath)
+          : undefined,
+      ),
+    );
   return container;
 }

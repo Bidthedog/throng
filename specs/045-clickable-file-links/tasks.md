@@ -331,12 +331,12 @@ design exists to prevent.
   `explorer.exe <path>`, `rundll32.exe shell32.dll,ShellExec_RunDLL <path>`, gated on
   `shouldDeElevate(...)` (`packages/core/src/terminal/elevation.ts`). Depends on T054, T045.
   Satisfies FR-038.
-- [ ] T056 [P] RED integration (`@admin`) — settle **Open item O3** in
+- [x] T056 [P] RED integration (`@admin`) — settle **Open item O3** in
   `packages/platform-windows/tests/integration/explorer-select-path.integration.test.ts`: does
   `explorer.exe /select,<path>` behave identically to `shell.showItemInFolder` for a **UNC** path and
   for a path containing a **comma**? Record the answer in
   `specs/045-clickable-file-links/research.md` O3. Satisfies FR-035, FR-038.
-- [ ] T057 Bind `PathForms`, `ExecutableExtensions` and `FileSystem` in
+- [x] T057 Bind `PathForms`, `ExecutableExtensions` and `FileSystem` in
   `packages/ui/src/main/tokens.ts` and `packages/ui/src/main/composition-root.ts` on the `#199`
   pattern. Binding `IFileSystem` closes one named item of 043's recorded Principle IX exception
   (`new NodeFileSystem(...)` at `main.ts:1082`, no `UI_TYPES` entry today). Depends on T026, T030.
@@ -344,22 +344,22 @@ design exists to prevent.
 - [ ] T058 Construct `FileLinkResolver` beside its collaborators and call `registerLinkIpc` in
   `packages/ui/src/main/main.ts`. The construction site is `main.ts` rather than the container —
   043's recorded continuation, unchanged and unwidened. Depends on T057, T049.
-- [ ] T059 [P] RED unit(ui) `packages/ui/tests/unit/link-cache.test.ts` — `peekLink` returning
+- [x] T059 [P] RED unit(ui) `packages/ui/tests/unit/link-cache.test.ts` — `peekLink` returning
   `undefined` means **not a link** (FR-071's "treated as not a link until it answers");
   `requestLink` is fire-and-forget and fills the cache; a second peek for the same key issues no
   second request (FR-070); `invalidateLinksUnder` drops entries under a changed path so a file
   created later becomes a link on the next hover (FR-070, P6); and an entry older than
   `LINK_CACHE_TTL_MS` is re-requested. Satisfies FR-070, FR-071.
-- [ ] T060 Implement `packages/ui/src/renderer/links/link-cache.ts` — one module-level store per
+- [x] T060 Implement `packages/ui/src/renderer/links/link-cache.ts` — one module-level store per
   window on the `cwd-store.ts` pattern (`Map` + `useSyncExternalStore`, one shared bridge
   subscription), keyed `${kind}\u0000${text}\u0000${baseDirectory ?? ''}\u0000${panelId}`. It is
   **view state** and holds no content-shaping state (Principle XI). Depends on T059, T050.
   Satisfies FR-070, FR-071.
-- [ ] T061 [P] RED component `packages/ui/tests/component/link-actions-router.test.ts` — one router
+- [x] T061 [P] RED component `packages/ui/tests/component/link-actions-router.test.ts` — one router
   takes a `ResolvedLink` plus a `LinkTarget` and performs exactly that target, and nothing else: no
   target falls through to another, and `editor`/`preview` are unreachable for an out-of-project
   target. Satisfies FR-054, FR-055.
-- [ ] T062 Implement `packages/ui/src/renderer/links/link-actions.ts` — the one router both surfaces
+- [x] T062 Implement `packages/ui/src/renderer/links/link-actions.ts` — the one router both surfaces
   call. Depends on T061, T060. Satisfies FR-033 – FR-037, FR-054.
 
 **Checkpoint**: main can answer "what is this link, and may it be opened", the renderer can ask

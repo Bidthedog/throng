@@ -42,7 +42,7 @@ import {
   SHIPPED_PREVIEW_PROVIDERS,
   providersTurnedOff,
 } from '@throng/core';
-import type { IClipboard, IForegroundHandoff, IShellIntegration } from '@throng/core';
+import type { IClipboard, IFileSystem, IForegroundHandoff, IShellIntegration } from '@throng/core';
 import { createUiContainer, UI_TYPES } from './composition-root.js';
 import { appIcon } from './app-icon.js';
 import { registerOpenExternalIpc } from './external-url.js';
@@ -93,8 +93,6 @@ import { loadWindowState, saveWindowState } from './window-state.js';
 import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { WindowManager } from './window-manager.js';
-import { NodeFileSystem } from './node-file-system.js';
-import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { pickFolder } from './pick-folder.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
@@ -1079,14 +1077,12 @@ if (isPrimaryInstance)
   // only through these `files.*` channels. Recycle-Bin + reveal use Electron's
   // built-in `shell`; confinement to the active project root is enforced by the
   // service on resolved real paths (research D1/D5).
-  const fileSystem = new NodeFileSystem(
-    (p) => shell.trashItem(p),
-    // 024 US3: recycle-bin restore is Windows-only (PowerShell Shell.Application); elsewhere the
-    // default rejecting impl leaves delete-undo unavailable and it degrades cleanly.
-    process.platform === 'win32'
-      ? (originalPath) => restoreFromRecycleBin(originalPath)
-      : undefined,
-  );
+  // 045 (#394): from the container, not from a `new` here. `NodeFileSystem` was one of the named
+  // items in 043's recorded Principle IX exception; 045 needs the same filesystem in
+  // `FileLinkResolver`, and two `new`s would be two filesystems whose recycle-bin behaviour could
+  // drift apart. The construction and its Electron/Windows collaborators moved to
+  // `composition-root.ts`, which is the file allowed to know about them.
+  const fileSystem = container.get<IFileSystem>(UI_TYPES.FileSystem);
   // shellIntegration is built earlier (before the Preferences/About deps above), which is also
   // early enough for FilesService here.
   // Watch the active project's root and push change signals to every window so
