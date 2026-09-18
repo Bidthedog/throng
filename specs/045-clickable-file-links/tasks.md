@@ -827,7 +827,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   [research.md](./research.md) R17 – R20 and O7/O8, [data-model.md](./data-model.md) §13, all four
   contracts, [quickstart.md](./quickstart.md) §7, and this phase. **Done 2026-09-18.** Nothing was
   deleted; 024 is not edited (S4's note says why).
-- [ ] T134 [P] Extend `packages/ui/tests/fixtures/links/` for Phase 13: `parity.txt` — one line per
+- [x] T134 [P] Extend `packages/ui/tests/fixtures/links/` for Phase 13: `parity.txt` — one line per
   link kind × path form × position form in FR-100/FR-003/FR-004, including an out-of-project path, a
   folder, `https://host/src/foo.ts:42` (FR-009) and the PowerShell prompt form — and `deploy.ps1` and
   `build.bat` at the fixture root (FR-114). No UNC location can live in a fixture tree; T141 builds
@@ -835,17 +835,19 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 
 ### 13b. D1 — network paths cannot be followed [US9]
 
-- [ ] T135 [US9] RED unit(core) — **adopt** the untracked reproduction
+- [x] T135 [US9] RED unit(core) — **adopt** the untracked reproduction
   `packages/core/tests/unit/link-resolve-unc.test.ts` exactly as another session wrote it; do not
   rewrite it. Run it, observe the join cases fail and the absolute-path control pass, **show the
   output to the maintainer and touch no production code until they confirm it reproduces what they
   saw** (the replicating-bugs gate). Record the answer as O8 in [research.md](./research.md).
   Covers D1 against FR-003c, FR-022, FR-023, FR-024.
+  **Done 2026-09-18** — the maintainer confirmed the reproduction (O8 settled); the join fix is
+  contract R12, committed with the repro in `e1092d4c`.
 - [x] T136 [US9] GREEN — fix `join` in `packages/core/src/links/resolve.ts`: a base beginning with two
   separators keeps both, and its first two segments are a root `..` cannot pop (contract R12). Use
   the `UNC_FORM` shape the file already holds; name no OS (FR-026 — `links-no-os-names.test.ts` must
   stay green). Depends on T135 and the maintainer's confirmation. Makes T135's join cases green.
-- [ ] T137 [P] [US9] RED unit(core) `packages/core/tests/unit/link-membership.test.ts` — **M7**: a
+- [x] T137 [P] [US9] RED unit(core) `packages/core/tests/unit/link-membership.test.ts` — **M7**: a
   project rooted at `\\s\h\proj` contains `\\s\h\proj\src\x.ts` and `//s/h/proj/src/x.ts`, and not
   `\\s\h\proj-old\x.ts`; **M8**: `Z:\proj\x.ts` is not in a project rooted at `\\s\h\proj` (FR-106).
   If M7 passes on first run it is recorded as a characterisation pin and T138 is skipped.
@@ -855,7 +857,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `packages/core/tests/unit/path-id.test.ts`. Depends on T137.
   **Skipped 2026-09-18** — T137's M7/M8 passed on first run (`96b5baac`), so they stand as a
   characterisation pin and there is nothing to fix; no production file was touched.
-- [ ] T139 [P] [US9] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — **D12**:
+- [x] T139 [P] [US9] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — **D12**:
   `FileSystem::\\s\h\x`, `Microsoft.PowerShell.Core\FileSystem::C:\x\y.ts` and the whole prompt
   `PS Microsoft.PowerShell.Core\FileSystem::\\s\h\dir> ` each yield one candidate spanning the path
   alone; `std::vector`, `Foo::Bar`, `a::b` and `Other::C:\x` yield none; the SC-003 prose fixture
@@ -876,7 +878,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 
 ### 13c. Bounded existence checks [US9]
 
-- [ ] T143 [P] [US9] RED unit(core) — the `Editor · Links` block after the amendment, in
+- [x] T143 [P] [US9] RED unit(core) — the `Editor · Links` block after the amendment, in
   `packages/core/tests/unit/app-settings.links.test.ts` and
   `packages/core/tests/unit/settings-metadata-links.test.ts`: **no** `defaultAction` leaf, value
   array or descriptor (FR-112); `existenceCheckTimeoutMs` ships `2000`, is bounded `250`–`25000`,
@@ -890,7 +892,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `packages/core/src/config/settings-metadata.ts` (− the descriptor, with a retirement comment on the
   `explorer.openMode` pattern at `:353`; + the timeout descriptor, the three `Editor · Links`
   descriptors kept consecutive). Depends on T143. **Lands in one commit with T156 and T158.**
-- [ ] T145 [P] [US9] RED unit(ui) `packages/ui/tests/unit/file-link-resolver-network.test.ts` —
+- [x] T145 [P] [US9] RED unit(ui) `packages/ui/tests/unit/file-link-resolver-network.test.ts` —
   `FileLinkResolver` over a fake `IFileSystem` whose `stat` for one volume root never settles, with a
   fake clock: `resolve` answers `{ ok: false, reason: 'unreachable' }` at the timeout (P7); a second
   request under the same root answers at once and `stat` is **not** called again (P8); a request
@@ -903,12 +905,15 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   unions), `packages/core/src/links/limits.ts` (`MAX_TIMED_OUT_LINK_CHECKS = 2`, with its edge in
   `packages/core/tests/unit/link-guards.test.ts`), and the wiring in
   `packages/ui/src/main/main.ts`. Depends on T145, T144.
-- [ ] T147 [P] [US9] RED contract `packages/ui/tests/contract/link-ipc.contract.test.ts` — all three
+- [x] T147 [P] [US9] RED contract `packages/ui/tests/contract/link-ipc.contract.test.ts` — all three
   channels pass `reason: 'unreachable'` through unchanged, and a malformed request still answers as
   before (I1 – I6). Satisfies FR-120, FR-124.
-- [ ] T148 [US9] GREEN `packages/ui/src/main/link-ipc.ts` — only if T147 is red; the sanitiser touches
+- [x] T148 [US9] GREEN `packages/ui/src/main/link-ipc.ts` — only if T147 is red; the sanitiser touches
   requests, not responses, so no change is expected. Depends on T147.
-- [ ] T149 [P] [US9] RED unit(ui) `packages/ui/tests/unit/terminal-file-link-provider.test.ts` —
+  **Skipped 2026-09-18** — T147's pass-through cases passed on first run, so they stand as a
+  characterisation pin and `link-ipc.ts` was not touched for them (the `wslFlavour` whitelist is
+  T205/T206's, a different change).
+- [x] T149 [P] [US9] RED unit(ui) `packages/ui/tests/unit/terminal-file-link-provider.test.ts` —
   **FR-123**: a resolution that lands after the provider stopped waiting still yields that line's
   link with no `provideLinks` call for another line in between; the wait is governed by the
   existence-check timeout, not an independent constant. The FR-072 structural cases in the file
@@ -916,11 +921,11 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 - [x] T150 [US9] GREEN `packages/ui/src/renderer/terminal/file-link-provider.ts` (and
   `use-terminal.ts` if the chosen mechanism needs the terminal) — settle **O7** and record the
   mechanism in R19. Depends on T149, T144.
-- [ ] T151 [P] [US9] RED component `packages/ui/tests/component/link-decorations.test.ts` — FR-123 in
+- [x] T151 [P] [US9] RED component `packages/ui/tests/component/link-decorations.test.ts` — FR-123 in
   editors: a late answer redecorates with no edit, scroll or pointer movement. Expected to pass on
   first run (the cache subscription already redecorates); if it does, it is kept as a
   characterisation pin and **no GREEN task follows** — say so in the commit. Satisfies FR-123.
-- [ ] T152 [P] [US9] RED component `packages/ui/tests/component/link-failure-notice.test.ts` —
+- [x] T152 [P] [US9] RED component `packages/ui/tests/component/link-failure-notice.test.ts` —
   `unreachable` raises exactly **one** notice naming the path and saying it did not answer, worded
   differently from `gone`. Satisfies FR-124.
 - [x] T153 [US9] GREEN `packages/ui/src/renderer/links/link-actions.ts` — the notice for
@@ -931,7 +936,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 
 ### 13d. The click rule, and the default link action retired [US8]
 
-- [ ] T155 [P] [US8] RED unit(core) `packages/core/tests/unit/link-default-action.test.ts` —
+- [x] T155 [P] [US8] RED unit(core) `packages/core/tests/unit/link-default-action.test.ts` —
   rewritten (permitted by the 2026-09-18 supersessions): no `setting` argument; folder in/out →
   `osExplorer`; out-of-project file of every type → `osExplorer`; in-project file → `preview` when
   `previewIsDefault` with no position and an enabled provider, else `editor`; an in-project
@@ -940,7 +945,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 - [x] T156 [US8] GREEN `packages/core/src/links/default-action.ts` (`ClickTarget`, − `DefaultLinkAction`,
   − `DEFAULT_LINK_ACTIONS`, − the fallback) and `packages/core/src/index.ts` exports. Depends on T155.
   **One commit with T144 and T158.**
-- [ ] T157 [P] [US8] RED component — update, as the supersessions permit,
+- [x] T157 [P] [US8] RED component — update, as the supersessions permit,
   `packages/ui/tests/component/link-default-action-wiring.test.ts`,
   `packages/ui/tests/component/link-setting-live.test.ts` (SC-008 now the detection switches and the
   timeout), `packages/ui/tests/component/link-executable-refusal.test.ts` and
@@ -954,7 +959,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   from `LinkFollowDeps` and `linkRouting`), `packages/ui/src/renderer/terminal/terminal-panel.tsx`
   and `packages/ui/src/renderer/editor/use-editor.ts` (their callers). Depends on T157, T156.
   **One commit with T144 and T156.**
-- [ ] T159 [P] [US8] RED unit(core) `packages/core/tests/unit/link-hover-text.test.ts` — FR-105's
+- [x] T159 [P] [US8] RED unit(core) `packages/core/tests/unit/link-hover-text.test.ts` — FR-105's
   three wordings, and `Cmd` on macOS; and edit `packages/ui/tests/unit/terminal-hovered-link.test.ts`
   (permitted) so the terminal's file wording follows the click result while its web wording is
   byte-identical. Satisfies FR-105.
@@ -964,7 +969,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 
 ### 13e. Web links in editors, and parity by construction [US8]
 
-- [ ] T161 [P] [US8] RED unit(core) `packages/core/tests/unit/link-web-url.test.ts` — every case in
+- [x] T161 [P] [US8] RED unit(core) `packages/core/tests/unit/link-web-url.test.ts` — every case in
   `packages/ui/tests/unit/terminal-url.test.ts`, run against core's `WEB_URL_REGEX`, plus
   `detectWebLinks` spans and `scanLinkLine`: web spans and path candidates together, no path
   candidate overlapping a web span (D9 – D11). Satisfies FR-009, FR-102, FR-104.
@@ -974,7 +979,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   `packages/ui/src/renderer/terminal/file-link-provider.ts` takes its claims from `scanLinkLine`.
   `packages/ui/tests/unit/terminal-url.test.ts` **must pass unchanged** (D10). Depends on T161.
   **Lands before T163 – T168.**
-- [ ] T163 [P] [US8] RED unit(ui) `packages/ui/tests/unit/link-parity.test.ts` — **SC-012 / FR-104 /
+- [x] T163 [P] [US8] RED unit(ui) `packages/ui/tests/unit/link-parity.test.ts` — **SC-012 / FR-104 /
   FR-106**: every line of T134's `parity.txt` through the terminal provider (fake terminal, fake
   resolver) and through the editor's per-line span function yields identical spans, kinds and
   resolved targets; one in-project file spelled every FR-106 way opens in throng from both. If the
@@ -983,7 +988,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 - [x] T164 [US8] GREEN `packages/ui/src/renderer/editor/link-decorations.ts` — per-line spans from
   `scanLinkLine`; web spans decorated with no request to main; the decoration carries its kind
   (data-model §13.2). Depends on T163.
-- [ ] T165 [P] [US8] RED component `packages/ui/tests/component/editor-web-links.test.ts` — G11 – G14
+- [x] T165 [P] [US8] RED component `packages/ui/tests/component/editor-web-links.test.ts` — G11 – G14
   and G4/G9 with web links present: Ctrl+click opens once through `window.throng.openExternal`
   (`http`/`https` only; `javascript:` and `mailto:` text are not links); plain click places the caret;
   Ctrl+drag selects; Ctrl+click off any link adds a cursor; Ctrl+Enter with one caret inside opens,
@@ -994,7 +999,7 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
   the window chord recognise web spans) and `packages/ui/src/renderer/links/link-actions.ts` (one web
   route both surfaces call — the terminal's existing open-external call, moved, not copied).
   Depends on T165, T164.
-- [ ] T167 [P] [US8] RED component `packages/ui/tests/component/editor-web-link-menu.test.ts` — §7.2's
+- [x] T167 [P] [US8] RED component `packages/ui/tests/component/editor-web-link-menu.test.ts` — §7.2's
   run over a web link, with `Ctrl+Enter` shown; Copy Link Address copies the address as written; a
   selection gives the ordinary menu; a keyboard-opened menu composes from the caret. And a `shapeOf`
   pin for the editor menu over a web link in `packages/ui/tests/unit/menu-sections.test.ts`.
@@ -1007,22 +1012,27 @@ reading a setting that does not exist); **T162 lands before any of T163 – T168
 
 ### 13f. Documentation and closeout
 
-- [ ] T169 [P] Docs, in the same commits as the behaviour: `README.md` (*Highlights* — links in both
+- [x] T169 [P] Docs, in the same commits as the behaviour: `README.md` (*Highlights* — links in both
   panel types, the click rule; *Configuration* — the default link action gone, the existence-check
   timeout added), `docs/quick-start.md` (§3 terminal links on shares and the PowerShell form, §4 web
   links in editors, §7 *Make it yours* at `:603` and the menu note at `:227`, the *Keyboard
   reference*), and `CHANGELOG.md`'s `## Unreleased` 045 entry at `:51` **corrected** rather than a
   "removed" line added — the setting never reached a release. Satisfies FR-090 (amended).
+  **Done 2026-09-18 in `ac9d1329`**, with T195 and T221 — one docs commit after the behaviour rather
+  than one per behaviour commit, because the three rounds' behaviour landed in overlapping commits.
 - [ ] T170 Re-read `packages/ui/tests/e2e/e2e-budget.json` and
   `packages/ui/tests/e2e/parallel-plan.json`: `"total": 570` and no change; run
   `packages/ui/tests/unit/e2e-budget.test.ts`, `packages/ui/tests/unit/e2e-tags.test.ts` and the
   tier-plan guard. T125 (`terminal-modified-enter.e2e.ts:233` untouched) still holds. Depends on
   T133 – T169. Satisfies Principle V; R15.
-- [ ] T171 The maintainer confirms the **derived** decisions of the third 2026-09-18 session (R17's
+- [x] T171 The maintainer confirms the **derived** decisions of the third 2026-09-18 session (R17's
   retirement, FR-106's alias rule, FR-114's in-project executable, the `IExecutableExtensions`
   keep-or-retire question in plan item 6, and 044 FR-090e left alone), and the amended body of #394
   (drafted outside the repository) is posted. Nothing in 13c – 13e is blocked on it except by the
   maintainer's say-so.
+  **Confirmed by the maintainer 2026-09-18** (recorded in [spec.md](./spec.md), *Session 2026-09-18
+  (maintainer confirmation)*). The amended #394 body is drafted outside the repository; **posting it
+  is the coordinator's**, with T194 and T224, and is not claimed by this tick.
 - [ ] T172 Dispatch `npm run gate` against the amended branch and quote the run URL and SHA, exactly
   as T132 describes. Depends on everything above **and on Phase 14** (T173 – T196).
   *Amended 2026-09-18 (third round): and on Phase 15 (T197 – T224).*
@@ -1067,7 +1077,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   *Out of scope*; the corpus note in *Assumptions*), [plan.md](./plan.md),
   [research.md](./research.md) R21 – R23 and O9 – O11, [data-model.md](./data-model.md) §14, the
   contracts, [quickstart.md](./quickstart.md) §8 and this phase. **Done 2026-09-18.**
-- [ ] T174 [US1] RED — reproduce D2 **first**, at the lowest layer that shows it:
+- [x] T174 [US1] RED — reproduce D2 **first**, at the lowest layer that shows it:
   `packages/ui/tests/component/link-position-open.test.ts`. Use the maintainer's corpus line exactly
   (`test.md:3:5`). Cover a Markdown file whose provider is enabled and set to **Preview**, the same
   file with the default open action **Editor**, a `.ts` control, and each of those **with the file
@@ -1094,7 +1104,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 
 ### 14b. Wrapped links [US10] — closes #326
 
-- [ ] T176 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-file-link-provider.test.ts`
+- [x] T176 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-file-link-provider.test.ts`
   (single-row range assertions widened, as the second-round supersessions permit): a fake terminal
   whose rows carry `isWrapped`; a detected path, a web URL and a positioned path each wrapped across
   two and three rows yield **one** link whose range starts on the first row and ends on the last;
@@ -1107,7 +1117,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 
 ### 14c. One affordance, marked at rest [US10]
 
-- [ ] T178 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-link-idle-scan.test.ts` — with a
+- [x] T178 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-link-idle-scan.test.ts` — with a
   fake clock and a fake terminal: no `ask` while writes arrive; the scan starts only after
   `LINK_IDLE_SCAN_MS` of quiet; a write during the scan cancels it; only rows in the viewport are
   scanned, each within the per-line cap; answers land in the same cache hover reads. The edge of
@@ -1116,12 +1126,12 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 - [x] T179 [US10] GREEN `packages/ui/src/renderer/terminal/link-idle-scan.ts` (new),
   `packages/core/src/links/limits.ts` (`LINK_IDLE_SCAN_MS`), wiring in `use-terminal.ts`.
   Depends on T178, T177.
-- [ ] T180 [P] [US10] RED component `packages/ui/tests/component/link-decorations.test.ts` (colour
+- [x] T180 [P] [US10] RED component `packages/ui/tests/component/link-decorations.test.ts` (colour
   assertions changed as permitted): a resolved link and a web link in the editor carry the same mark;
   dashed underline from `var(--throng-colour-linkUnderline)` at rest, solid from
   `linkUnderlineHover` on hover; **no** text colour set; the hand pointer only while the modifier is
   held. Satisfies FR-135, FR-136, FR-138.
-- [ ] T181 [P] [US10] RED unit(core) `packages/core/tests/unit/theme-link-tokens.test.ts` —
+- [x] T181 [P] [US10] RED unit(core) `packages/core/tests/unit/theme-link-tokens.test.ts` —
   `linkUnderline` (parent `accent`) and `linkUnderlineHover` (parent `linkUnderline`) exist in every
   shipped theme's token set, each has exactly one descriptor, both sit in the **General** area
   (`assertThemeAreaGroups`, `assertEveryKeyDescribed`), and the shipped-defaults version test sees the
@@ -1135,7 +1145,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   dashed-at-rest / solid-on-hover states, or must throng's decoration draw it instead (FR-139)? A
   read of the pinned `@xterm/xterm` version's renderer options and a spike, recorded in R22. No
   production code.
-- [ ] T185 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-link-affordance.test.ts` — over a
+- [x] T185 [P] [US10] RED unit(ui) `packages/ui/tests/unit/terminal-link-affordance.test.ts` — over a
   fake terminal's decoration API: a mark is registered on **every** row of every resolved link, web
   link and OSC 8 link in view; the hover state spans all rows (FR-131); the pointer class is applied
   only with the modifier; marks are removed when a cached answer is invalidated. Satisfies FR-130,
@@ -1153,7 +1163,7 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 
 ### 14d. Every terminal flavour [US11]
 
-- [ ] T188 [P] [US11] RED unit(ui) — extend `packages/ui/tests/unit/terminal-link-base-directory.test.ts`:
+- [x] T188 [P] [US11] RED unit(ui) — extend `packages/ui/tests/unit/terminal-link-base-directory.test.ts`:
   for each built-in flavour id, with `terminals.shellIntegration` on and off, the link request's
   `baseDirectory` is the cwd store's value when `flavourReportsDirectory(id, enabled)` is true and is
   **absent** when it is false — never the launch directory (FR-142, FR-143); a user-defined WSL
@@ -1165,6 +1175,10 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
   WSL?", placed behind the platform abstraction beside the shell detection that already recognises
   WSL's `System32\bash.exe` (`packages/platform-windows/src/windows-shell-detection.ts`), with a
   contract case. 025's own callers of `flavourReportsDirectory` are left unchanged. Depends on T188.
+  *Deviation 2026-09-18 (`29b06f66`):* the WSL answer is `isWslExecutable` in
+  `packages/core/src/terminal/wsl-flavour.ts`, a pure function with unit cases, **not** a port behind
+  the platform abstraction — see [contracts/platform-ports.md](./contracts/platform-ports.md) §6.2,
+  [spec.md](./spec.md) FR-144's note and [plan.md](./plan.md) *Complexity Tracking — third round*.
 - [ ] T190 [P] [US11] RED integration
   `packages/platform-windows/tests/integration/terminal-link-flavours.integration.test.ts` — for each
   built-in flavour **installed on the machine**, and WSL where a distro is configured, spawn the real
@@ -1193,10 +1207,11 @@ because the affordance marks the multi-row ranges 14b produces; 14d (flavours) i
 - [ ] T194 [P] #326: the PR states **closes #326** (FR-130), and the issue is claimed and released
   through the `github-issue-state` skill. **The coordinator does this, not the spec** — recorded
   here so it is not forgotten.
-- [ ] T195 [P] Docs in the same commits as the behaviour: `README.md` and `docs/quick-start.md` —
+- [x] T195 [P] Docs in the same commits as the behaviour: `README.md` and `docs/quick-start.md` —
   links are marked at rest, wrapped links, the two link tokens in the theme editor, flavour behaviour
   (including WSL's project-root fallback); `CHANGELOG.md`'s unreleased 045 entry, including #326.
   Satisfies FR-090.
+  **Done 2026-09-18 in `ac9d1329`** (with T169 and T221).
 - [ ] T196 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T186: `"total": 570`, unchanged;
   run the budget, tag and tier-plan guards. Depends on T186.
 
@@ -1276,7 +1291,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15c. Paths containing spaces [US12]
 
-- [ ] T199 [P] [US12] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — **FR-150**: each
+- [x] T199 [P] [US12] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — **FR-150**: each
   anchored form followed by ` 1\test.md` / ` 1/test.md` / ` Files\x` yields its extended readings
   **longest first** and the unextended token last, each with FR-004's position readings (so
   `/mnt/d/a b/c.md:3` carries `:3`); a reading never extends into a word beginning an anchored form
@@ -1288,7 +1303,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 - [x] T200 [US12] GREEN `packages/core/src/links/detect.ts` (`emitReadings` gains the extension) and
   `packages/core/src/links/limits.ts` (`MAX_PATH_SPACE_WORDS`, Complexity Tracking third round).
   `links-no-os-names.test.ts` stays green. Depends on T199.
-- [ ] T201 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
+- [x] T201 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — over a real temp tree holding `with space/notes.md` (add it to `packages/ui/tests/fixtures/links/`,
   and a line per spaced form to T134's `parity.txt`): a drive path, a `/x/…` Git Bash form, a
   `/mnt/x/…` WSL form and a `file:` URI with `%20` each resolve to it; `see <root>\with space\notes.md
@@ -1302,7 +1317,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15d. Git Bash's own paths, and drive-qualified rooted paths [US12]
 
-- [ ] T203 [P] [US12] RED contract — extend `packages/core/src/testing/path-forms-contract.ts` and
+- [x] T203 [P] [US12] RED contract — extend `packages/core/src/testing/path-forms-contract.ts` and
   `packages/platform-windows/tests/contract/windows-path-forms.contract.test.ts` with the new
   `IPathForms` questions (names settled in T198): over an injected Git install root and mount table,
   `/usr/bin/bash.exe` → `<root>\usr\bin\bash.exe`, `/bin/x` → Git's `/usr/bin` mapping, `/etc/hosts`
@@ -1315,7 +1330,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `packages/platform-windows/src/windows-path-forms.ts` — the Git install root from the shell
   detection that already finds Git Bash (`packages/platform-windows/src/windows-shell-detection.ts`,
   005 FR-024), Git's `etc/fstab` and its default mounts read once and cached. Depends on T203.
-- [ ] T205 [P] [US12] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — FR-151's order
+- [x] T205 [P] [US12] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — FR-151's order
   for a non-drive leading-`/` path: project root, drive form, **mount table**, then the
   **drive-qualified** platform meaning (FR-152); with the context marking a WSL flavour, the mount-table
   and platform steps are absent; with no base directory and no project root, `/test.txt` yields `[]`;
@@ -1340,7 +1355,11 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   `terminal-panel.tsx` sending it.
   *Done 2026-09-18 (T189):* the terminal panel reads `isWslExecutable` for its flavour and every link
   request it sends carries `wslFlavour: true` for a WSL flavour (`TerminalLinkSite.wslFlavour`).
-- [ ] T207 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
+  *Settled 2026-09-18:* the two T205 cases held red on the `/test.txt` conflict were resolved for
+  R13 — the mount-table step is not gated on a base directory, only FR-152's platform step is — and
+  the maintainer accepted it with FR-151 (`e197681f`; spec *Session 2026-09-18 (maintainer
+  confirmation)*).
+- [x] T207 [P] [US12] RED integration `packages/ui/tests/integration/file-link-resolver.integration.test.ts`
   — against the **real** Git for Windows on the machine: `/usr/bin/bash.exe` and `/etc/hosts` resolve
   to files under the detected install, `/tmp` resolves to a folder; a WSL-flavour request for
   `/etc/hosts` does **not** resolve through Git. Skipped **with the reason printed** where Git for
@@ -1349,13 +1368,13 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15e. POSIX spellings inside `file:` URIs [US12]
 
-- [ ] T209 [P] [US12] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — **FR-153**, with
+- [x] T209 [P] [US12] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — **FR-153**, with
   a fake `IPathForms`: `file:///c/Windows/win.ini` yields the same list as `/c/Windows/win.ini`;
   `file:///mnt/c/Windows/win.ini` as `/mnt/c/…`; `file:///usr/bin/bash.exe` as `/usr/bin/bash.exe`;
   `file://localhost/C$/Windows/win.ini` ends with `\\localhost\C$\Windows\win.ini` after its local
   readings; `file:///C:/x`, `file://localhost/D:/x` and `file://server/share/x` are unchanged.
   Satisfies FR-153, FR-012.
-- [ ] T210 [P] [US12] RED contract — `packages/core/src/testing/path-forms-contract.ts` and
+- [x] T210 [P] [US12] RED contract — `packages/core/src/testing/path-forms-contract.ts` and
   `windows-path-forms.contract.test.ts`: whatever split T198 settles between the port and `resolve.ts`
   for "decoded path, and whether it is drive-qualified", answered totally; the existing `fromFileUrl`
   cases (`file://localhost/D:/x` = `file:///D:/x`, hosted ≠ hostless) stay exactly as they are.
@@ -1366,7 +1385,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15f. A hyperlink that goes nowhere looks like text [US12]
 
-- [ ] T212 [P] [US12] RED unit(ui) `packages/ui/tests/unit/terminal-link-affordance.test.ts` (T185's
+- [x] T212 [P] [US12] RED unit(ui) `packages/ui/tests/unit/terminal-link-affordance.test.ts` (T185's
   file, written to FR-154) and `packages/ui/tests/unit/terminal-link-activation.test.ts` — OSC 8 targets
   `notascheme:foo`, an empty target, `file:///C:/does/not/exist.txt` (resolver answers not found) and
   `file://nonexistent-host-xyz/share/file.txt` (resolver answers unreachable) register **no** mark, no
@@ -1386,7 +1405,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15g. D3 — an editor Ctrl+click on a link's first character misses it [US3, US8]
 
-- [ ] T215 [US3] RED — reproduce D3 **first**, at the lowest layer that shows it:
+- [x] T215 [US3] RED — reproduce D3 **first**, at the lowest layer that shows it:
   `packages/ui/tests/component/editor-link-gestures.test.ts`. Use the probe's two lines verbatim
   (`/c/Windows/win.ini` and the long `…Resources.dll` path at column 1), decorated as out-of-project
   links; Ctrl+mousedown on the **first character**, both cold and immediately after a Ctrl+click on the
@@ -1402,7 +1421,7 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
 
 ### 15h. D4 — FR-038's de-elevation is not wired into the app
 
-- [ ] T217 RED unit(ui) `packages/ui/tests/unit/shell-integration-wiring.test.ts` — reproduce D4
+- [x] T217 RED unit(ui) `packages/ui/tests/unit/shell-integration-wiring.test.ts` — reproduce D4
   first: the function the composition uses to build the app's `ElectronShellIntegration` (extracted
   from `packages/ui/src/main/main.ts:934` by T218 — until then the test asserts against main's source,
   structurally, on the `links-no-os-names.test.ts` pattern) supplies a de-elevating launcher and an
@@ -1430,16 +1449,21 @@ The four terminal flavours failed the **same** 30 rows (numbers are the corpus r
   mount table is **not** applied (FR-151), and Linux filesystem paths are recorded as not links —
   deferred to #13, never counted as a failure of this spec. Record the row in O11; a machine with no
   distro records **not run**. Satisfies FR-140, FR-145, SC-018.
-- [ ] T221 [P] Docs in the same commits as the behaviour: `README.md` and `docs/quick-start.md` — paths
+- [x] T221 [P] Docs in the same commits as the behaviour: `README.md` and `docs/quick-start.md` — paths
   with spaces, Git Bash paths (`/usr/…`, `/etc/…`, `/tmp`) and why WSL's Linux paths are not links yet,
   `file:` URIs in any spelling, and that a program's hyperlink to nothing is shown as plain text;
   `CHANGELOG.md`'s unreleased 045 entry. Satisfies FR-090.
+  **Done 2026-09-18 in `ac9d1329`** (with T169 and T195), plus a `CHANGELOG.md` *Changed* line for
+  the program's own SGR 4:5 dashed underline that O10's route no longer draws.
 - [ ] T222 Re-read `packages/ui/tests/e2e/e2e-budget.json` after T213: `"total": 570`, unchanged; run
   the budget, tag and tier-plan guards. Depends on T213.
-- [ ] T223 The maintainer confirms the **derived** decisions of the fifth session: FR-150's grammar
+- [x] T223 The maintainer confirms the **derived** decisions of the fifth session: FR-150's grammar
   (anchored forms only, longest existing reading, the word cap), FR-151 applying in editors and in
   non-Git-Bash flavours, FR-153's loopback reading, and FR-154's "no notice". Nothing in 15c – 15f is
   blocked on it except by the maintainer's say-so.
+  **Confirmed by the maintainer 2026-09-18** — all four, plus R12, the D1/D2/D3/D4 reproductions, and
+  D3's fix through the cache-expiry hypothesis; recorded in [spec.md](./spec.md), *Session
+  2026-09-18 (maintainer confirmation)*.
 - [ ] T224 [P] Record the deferred WSL Linux-path link mapping on issue #13 (a comment naming FR-151's
   WSL exclusion and plan *Complexity Tracking*, third round), through the `github-issues` skill. **The
   coordinator does this, not the spec.**

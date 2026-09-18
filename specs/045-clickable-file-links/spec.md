@@ -311,6 +311,46 @@ raised that no requirement answered:
   placed a caret in 2 of 27 attempts) and **D4** (FR-038 is not wired: `main.ts:934` constructs
   `ElectronShellIntegration` with no de-elevating launcher), each with a reproduce-first task.
 
+### Session 2026-09-18 (maintainer confirmation, and three decisions taken while building)
+
+- Q: Do the reproductions show what the maintainer saw? → A (maintainer): **yes** — D1 (the UNC
+  join, T135; research O8), D2 (T174), D3 (T215) and D4 (T217). D1's fix is contract R12: a base
+  beginning with two separators keeps both, and `..` stops at the server and share.
+- Q: Are the derived decisions accepted? → A (maintainer): **yes**, as written — the third session's
+  (R17's retirement of the default link action, FR-106's alias rule, FR-114's in-project executable,
+  `IExecutableExtensions` kept as SC-010/SC-013's oracle per plan item 6, 044 FR-090e left alone;
+  T171) and the fifth session's (FR-150's grammar — anchored forms only, longest existing reading, the
+  word cap; FR-151 in editors and every flavour but WSL; FR-153's loopback reading; FR-154's "no
+  notice"; T223).
+- Q: With no base directory and no project root, does `/test.txt` resolve to nothing (T205 as
+  first written)? → A (maintainer, accepted with FR-151): **no — Git's mount-table reading is still
+  tried.** FR-152 withholds only the **platform** step from a panel with neither anchor; the
+  mount-table step names an absolute place and needs no base (`e197681f`).
+- Q: Where was D3? → A: **the link cache's expiry**, a cause none of D3's three hypotheses named. A
+  decoration drawn from a cached answer outlived that answer's TTL; the Ctrl+click then asked the
+  cache again, got "not known", and fell through to CodeMirror's add-a-cursor. The fix (T216,
+  `63ac8912`): the scan keeps the answer it last drew when the cache says "not known" after its TTL,
+  and a follow uses the hit's resolved link rather than asking again, so an underlined link is always
+  followable; an `{ ok: false }` answer still clears it. Accepted by the maintainer.
+- Q: Why does FR-120's maximum read 25,000 ms, not the 30,000 first written? → A (taken while
+  building, `207a98b4`): **018 FR-035** requires a slider's step to be at least 1% of its range. At
+  a 250 ms step, 250 – 30,000 is 0.84%; 250 – 25,000 is 1.01%, keeps the shipped 2,000 on the grid
+  and the maximum reachable by drag. Twenty-five seconds is still far past any share that answers at
+  all. FR-120 was edited in place; this line is its reason.
+- Q: FR-121 caps the stuck checks process-wide *and* says a check under any other volume root is
+  unaffected. Which wins when the cap is reached? → A (taken while building, `c2d5c858`): **both,
+  split by kind of root.** A full stuck-root map answers `unreachable` at once only for a **network
+  (UNC)** root not already in it; a local drive root is never gated by a full map and is checked as
+  usual. As first built, two offline shares made every local link dead — the opposite of FR-121's
+  last sentence. data-model §13.5 records the rule.
+- Q: FR-144's note and T189 put "is this flavour WSL?" behind the platform abstraction. Is that where
+  it went? → A (taken while building, `29b06f66`): **no — a recorded deviation.** It is
+  `isWslExecutable` in `packages/core/src/terminal/wsl-flavour.ts`, a pure reading of an executable
+  path, because the renderer asks it at hover time and has no route to `platform-windows`. One answer
+  still serves FR-144 and FR-151. The reasoning is plan *Complexity Tracking — third round* and
+  [contracts/platform-ports.md](./contracts/platform-ports.md) §6.2; FR-144's text is left as it
+  stands, with a pointer.
+
 ---
 
 ## User Scenarios & Testing *(mandatory)*
@@ -1338,12 +1378,16 @@ matches what they saw (the replicating-bugs gate). The fix changes no requiremen
   answered by then MUST answer **unreachable**, which is not a link (FR-071 unchanged) and is
   distinct from "does not exist". The timeout is a setting because network latency is a property of
   the machine and its network, which Principle X requires to be overridable without code changes.
+  *Clarified 2026-09-18: the maximum was 30,000 ms as first written and is 25,000 so the 250 ms step
+  meets 018 FR-035's 1%-of-range rule (`207a98b4`).*
 - **FR-121**: An unreachable location MUST NOT be able to multiply its cost. While one check under a
   **volume root** is still outstanding past the timeout, every further check under that root MUST
   answer unreachable **at once, without touching the filesystem**; and the number of checks
   outstanding past the timeout across the whole process MUST be capped, so that filesystem work that
   has nothing to do with links — saving, reading, watching — is never starved by an offline share.
   A check under any other volume root MUST be unaffected.
+  *Clarified 2026-09-18 (`c2d5c858`): when the cap is reached, only a check under another **network**
+  root answers unreachable at once; a local drive root is never gated by the cap.*
 - **FR-122**: A volume root that timed out MUST be left alone for a back-off period (the link cache's
   TTL, FR-070), after which the next hover MUST try again, so a share that comes back online becomes
   linkable without a restart.
@@ -1486,6 +1530,9 @@ built-in flavour** — it runs as a user-defined flavour (025 FR-011).
   `System32\bash.exe` from Git Bash). Whether 025's *Reopen in the last directory* control should
   change for WSL too is **not** decided here — 045 changes only the link base, and the question is
   reported to the maintainer.
+  *Deviation 2026-09-18 (`29b06f66`): recognising WSL is `isWslExecutable` in `@throng/core`, not a
+  platform port — see Clarifications, Session 2026-09-18 (maintainer confirmation), and plan
+  Complexity Tracking, third round.*
 - **FR-145**: Evidence for FR-140 – FR-144 MUST be a **matrix** — every built-in flavour installed,
   plus WSL where configured, against these cells — so a run can be checked cell by cell:
 
@@ -1658,6 +1705,12 @@ own requirements changes for terminals.
   asserting `/test.txt` with no project root resolves to `['/test.txt']` (FR-152: with no base
   directory and no project root the platform step is not reached). Every other case in the file MUST
   stay.
+- *(third round, recorded after the fact 2026-09-18)* `packages/core/tests/unit/link-detect.test.ts`
+  — two pre-existing cases whose lines put prose after an anchored path (FR-003f's `file:` case and the
+  `C:\x\foo.ts:42:7` ambiguity case): FR-150 extends into the prose and offers the longer reading
+  first, so the first now expects that reading ahead of the old one and the second compares the last
+  two readings, in their old order (`e197681f`). This list did not name them; FR-150 is what changed
+  their answer.
 - *(third round)* `packages/ui/tests/unit/terminal-link-affordance.test.ts` (T185, not yet written)
   MUST be written to FR-154 from the start — "every … OSC 8 link in view" reads as every **followable**
   OSC 8 link.
