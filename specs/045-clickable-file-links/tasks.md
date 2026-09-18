@@ -93,7 +93,7 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
 
 ### 2a. The grammar and the decisions — `packages/core/src/links/`
 
-- [ ] T008 [P] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — D1–D8 of
+- [x] T008 [P] RED unit(core) `packages/core/tests/unit/link-detect.test.ts` — D1–D8 of
   [contracts/link-resolution.md](./contracts/link-resolution.md) §1: every form in FR-003a–f without
   markup; FR-004's three position forms with `text` never carrying the position; FR-005's trailing
   punctuation, unbalanced brackets and matching-quote rules; D2 (a span overlapping a `claimed`
@@ -101,46 +101,46 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
   `packages/ui/tests/fixtures/links/prose.txt` yields zero candidates**; and the ambiguity rule,
   `C:\x\foo.ts:42:7` yielding two candidates with the positioned reading FIRST. Satisfies FR-003,
   FR-004, FR-005, FR-009, FR-010, SC-003.
-- [ ] T009 Implement `packages/core/src/links/types.ts` (`LinkCandidate`, `LinkPosition`, `Span`,
+- [x] T009 Implement `packages/core/src/links/types.ts` (`LinkCandidate`, `LinkPosition`, `Span`,
   `LinkResolutionRequest`, `ResolvedLink`, `LinkResolution`) and
   `packages/core/src/links/detect.ts` (`detectPathCandidates`) to turn T008 green.
   Satisfies FR-003 – FR-005, FR-009, FR-020.
-- [ ] T010 [P] RED unit(core) `packages/core/tests/unit/link-classify.test.ts` —
+- [x] T010 [P] RED unit(core) `packages/core/tests/unit/link-classify.test.ts` —
   `classifyTerminalLinkTarget(uri)` answers `'web'` for `http(s)`, `'file'` for `file:`, `'inert'`
   for `javascript:`, `data:`, `mailto:` and any unknown scheme, case-insensitively on the scheme.
   Satisfies FR-009, FR-011, FR-013; R5.
-- [ ] T011 Implement `packages/core/src/links/classify.ts` — the ONE scheme gate that replaces the
+- [x] T011 Implement `packages/core/src/links/classify.ts` — the ONE scheme gate that replaces the
   three duplicated `^https?://` tests at `use-terminal.ts:29`, `:369` and
   `core/src/terminal/link-menu.ts` (site 1, `terminal-url.ts`'s `TERMINAL_URL_REGEX`, stays a text
   scanner and is NOT touched). Satisfies FR-009, FR-013; Principle VIII.
-- [ ] T012 [P] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — R1–R11 of
+- [x] T012 [P] RED unit(core) `packages/core/tests/unit/link-resolve.test.ts` — R1–R11 of
   [contracts/link-resolution.md](./contracts/link-resolution.md) §2 against a **fake `IPathForms`**
   and an injected `exists` predicate: ordered candidate paths, first-that-exists wins, R5's
   base-directory-before-project-root (US1 scenario 8), R6's **project-root-before-platform** for a
   leading `/` (#394's `/test.txt`), R7's positioned-reading-first ambiguity
   (`C:\x\foo.ts:42:7`), R8's `file:` decoding, R9's no-WSL-mapping, R10's untitled buffer, R11's
   `projectRoot === null`. Satisfies FR-020, FR-022 – FR-026, FR-012.
-- [ ] T013 Implement `packages/core/src/links/resolve.ts` (`resolveCandidate`) to turn T012 green.
+- [x] T013 Implement `packages/core/src/links/resolve.ts` (`resolveCandidate`) to turn T012 green.
   It returns an ordered list and touches no disk. Satisfies FR-020, FR-022 – FR-026.
-- [ ] T014 [P] RED unit(core) `packages/core/tests/unit/link-membership.test.ts` — M1–M6 of
+- [x] T014 [P] RED unit(core) `packages/core/tests/unit/link-membership.test.ts` — M1–M6 of
   [contracts/link-resolution.md](./contracts/link-resolution.md) §3: `inProject` from the **resolved**
   path (M1), the same answer for all five spellings of one file (M2, US1 scenario 3), a panel with no
   project judging everything outside (M3), a sub-workspace panel judging against `originProjectId`
   (M4), a symlink judged on the named location and not its destination (M5), and **M6 — the
   comparison is `isUnderPath` from `packages/core/src/fs/path-id.ts:97`, with no new normaliser
   written**. Satisfies FR-021; Principle VIII.
-- [ ] T015 Implement the membership decision in `packages/core/src/links/resolve.ts`, delegating to
+- [x] T015 Implement the membership decision in `packages/core/src/links/resolve.ts`, delegating to
   `isUnderPath`. Do not add a fourth near-copy — `path-id.ts`'s own docstring records three.
   Satisfies FR-021.
-- [ ] T016 [P] RED unit(core) `packages/core/tests/unit/link-targets.test.ts` — `linkTargetStates`
+- [x] T016 [P] RED unit(core) `packages/core/tests/unit/link-targets.test.ts` — `linkTargetStates`
   across the five link shapes SC-009 names (in-project file, in-project file with an enabled
   provider, in-project file with a **disabled** provider, out-of-project file, folder): `editor`
   offered only for an in-project file; `preview` offered/`disabled`/absent per
   [data-model.md](./data-model.md) §3; `osExplorer` always; `osDefaultProgram` absent for a folder;
   and `preview` the **only** target that can be `disabled`. Satisfies FR-030, SC-009.
-- [ ] T017 Implement `packages/core/src/links/targets.ts` (`LinkTarget`, `TargetState`,
+- [x] T017 Implement `packages/core/src/links/targets.ts` (`LinkTarget`, `TargetState`,
   `linkTargetStates`). Satisfies FR-030.
-- [ ] T018 [P] RED unit(core) `packages/core/tests/unit/link-default-action.test.ts` —
+- [x] T018 [P] RED unit(core) `packages/core/tests/unit/link-default-action.test.ts` —
   `resolveDefaultLinkAction` over setting × shape × position × executable, clause by clause:
   **FR-039 first and overriding everything** (`executable` → `osExplorer` at every setting);
   `'throng'` → `preview` only when `previewIsDefault` **and** `!hasPosition` (FR-051, FR-052);
@@ -148,15 +148,15 @@ mapping (FR-026, FR-039a). T022 fails the build on one.
   osExplorer`, with a `disabled` preview counting as not offered and an executable's fallback landing
   on `osExplorer`. Plus FR-055 as a consequence: no input reaches `editor` or `preview` for an
   out-of-project target. Satisfies FR-039, FR-050 – FR-055, SC-007.
-- [ ] T019 Implement `packages/core/src/links/default-action.ts` (`DefaultLinkAction`,
+- [x] T019 Implement `packages/core/src/links/default-action.ts` (`DefaultLinkAction`,
   `DEFAULT_LINK_ACTIONS`, `resolveDefaultLinkAction`). Satisfies FR-039, FR-050 – FR-055.
-- [ ] T020 [P] RED unit(core) `packages/core/tests/unit/link-menu.test.ts` — `fileLinkMenuItems`
+- [x] T020 [P] RED unit(core) `packages/core/tests/unit/link-menu.test.ts` — `fileLinkMenuItems`
   returns the FR-031 run in order (Open Link, each offered/disabled target in FR-030's order, Copy
   Link Address), every item in the `contextual` section, **and the chord present only when one is
   passed** — the terminal caller passes none (T002's amendment, R10b). A link that resolves to
   nothing contributes **no** items rather than six disabled ones. Satisfies FR-031, FR-013, FR-046.
-- [ ] T021 Implement `packages/core/src/links/menu.ts` (`fileLinkMenuItems`). Satisfies FR-031.
-- [ ] T022 [P] RED→GREEN unit(core) `packages/core/tests/unit/links-no-os-names.test.ts` — a source
+- [x] T021 Implement `packages/core/src/links/menu.ts` (`fileLinkMenuItems`). Satisfies FR-031.
+- [x] T022 [P] RED→GREEN unit(core) `packages/core/tests/unit/links-no-os-names.test.ts` — a source
   guard beside `packages/core/tests/unit/no-os-imports.test.ts`: no file under
   `packages/core/src/links/` contains `PATHEXT`, `.exe`, `.bat`, `.cmd`, `.ps1`, `.lnk`, `.msi`, a
   drive-letter mapping literal, or an `import` of `node:path`/`node:os`. Satisfies FR-026, FR-039a;

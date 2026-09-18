@@ -1003,3 +1003,20 @@ export {
   serialiseHistory,
 } from './navigation/history.js';
 export type { NavigationEntry, NavigationHistory } from './navigation/history.js';
+
+// 045 — clickable file links (#394 / #198). The grammar and every decision, pure and OS-free.
+// `core/src/links/**` names no operating system, extension or drive mapping; the OS facts arrive
+// through IPathForms and IExecutableExtensions, and `links-no-os-names.test.ts` fails the build on
+// one that leaks in.
+export type {
+  Span,
+  LinkPosition,
+  LinkCandidate,
+  LinkResolutionRequest,
+  ResolvedLink,
+  LinkResolution,
+  LinkActionOutcome,
+} from './links/types.js';
+export { detectPathCandidates } from './links/detect.js';
+export { classifyTerminalLinkTarget } from './links/classify.js';
+export type { TerminalLinkKind } from './links/classify.js';

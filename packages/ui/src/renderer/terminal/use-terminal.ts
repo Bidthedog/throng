@@ -26,7 +26,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
  */
 function openTerminalLink(event: MouseEvent, uri: string): void {
   if (!(event.ctrlKey || event.metaKey)) return;
-  if (!/^https?:\/\//i.test(uri)) return;
+  // 045 FR-009/FR-013: one scheme gate, shared with every other site that asks this question, so a
+  // scheme cannot be `web` here and something else a few lines away.
+  if (classifyTerminalLinkTarget(uri) !== 'web') return;
   window.throng?.openExternal?.(uri);
 }
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
@@ -35,6 +37,7 @@ import {
   type TerminalSearchDecorations,
 } from '../search/terminal-search.js';
 import type { FailureCause } from '@throng/core';
+import { classifyTerminalLinkTarget } from '@throng/core';
 import type { SearchCount } from '../search/search-model.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { TERMINAL_URL_REGEX } from './terminal-url.js';
