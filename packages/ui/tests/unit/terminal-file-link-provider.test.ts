@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_LINK_CANDIDATES_PER_LINE } from '@throng/core';
 import type { LinkResolution, LinkResolutionRequest, ResolvedLink } from '@throng/core';
-import { __resetLinkCacheForTests } from '../../src/renderer/links/link-cache.js';
+import { __resetLinkCacheForTests, invalidateLinksUnder } from '../../src/renderer/links/link-cache.js';
 import {
+  LINK_ANSWER_DEADLINE_MS,
   createFileLinkProvider,
   type LinkProviderTerminal,
   type ProvidedLink,
@@ -236,6 +237,116 @@ describe('the per-line candidate cap (FR-071)', () => {
 
     expect(asked.length).toBeLessThanOrEqual(MAX_LINK_CANDIDATES_PER_LINE);
     expect(asked.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the first hover on a line must not be thrown away (xterm caches the reply)', () => {
+  /*
+   * ══ THE DEFECT THIS PINS ══
+   *
+   * `Linkifier._askForLink` calls a provider ONCE per line and stores whatever comes back in
+   * `_activeProviderReplies`. Every further hover on that same line takes the `useLineCache` branch,
+   * which reads the stored reply and deliberately does NOT call the provider again — its own TODO
+   * says so. So a reply is not a first draft: it is the only answer xterm will ever have for that
+   * line until the pointer leaves it.
+   *
+   * The provider used to answer `undefined` the moment the cache missed, which is every first hover
+   * on a path. The resolution landed a few milliseconds later and nothing asked again, so the user
+   * moved onto a path, rested there, and saw no underline, no tooltip and a dead Ctrl+click — until
+   * they moved off the line and back onto it. The old header called this "a frame later"; there was
+   * no later.
+   *
+   * xterm supports the fix directly: the callback may be invoked asynchronously, and
+   * `_checkLinkProviderResult` runs against the position the ask was made at. So the provider holds
+   * the reply until its answers are in.
+   */
+  const replyOn = (
+    terminal: LinkProviderTerminal,
+    row: number,
+  ): Array<ProvidedLink[] | undefined> => {
+    const provider = createFileLinkProvider({
+      detect: () => true,
+      terminal,
+      site: () => SITE,
+      ask: askTerminalLink,
+      onHover: () => {},
+      follow: () => {},
+    });
+    const replies: Array<ProvidedLink[] | undefined> = [];
+    provider.provideLinks(row, (links) => replies.push(links));
+    return replies;
+  };
+
+  it('answers the one query xterm makes with the link, once the resolution lands', async () => {
+    const terminal = new FakeTerminal();
+    terminal.write('compiled src/foo.ts');
+    answers['src/foo.ts'] = { ok: true, link: FOO };
+
+    const replies = replyOn(terminal, 1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toHaveLength(1);
+    expect(replies[0]?.[0]?.text).toBe('src/foo.ts');
+  });
+
+  it('holds the reply back rather than answering "no links" while it is still asking', () => {
+    const terminal = new FakeTerminal();
+    terminal.write('compiled src/foo.ts');
+    answers['src/foo.ts'] = { ok: true, link: FOO };
+
+    // Synchronously, there is no answer yet — and crucially there is no REPLY yet either, because a
+    // reply of `undefined` is the one xterm would keep.
+    expect(replyOn(terminal, 1)).toEqual([]);
+  });
+
+  it('answers exactly once, and never a second time after that', async () => {
+    const terminal = new FakeTerminal();
+    terminal.write('compiled src/foo.ts and src/bar.ts');
+    answers['src/foo.ts'] = { ok: true, link: FOO };
+    answers['src/bar.ts'] = { ok: true, link: FOO };
+
+    const replies = replyOn(terminal, 1);
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    // A second answer landing must not produce a second reply: xterm would store it against
+    // whichever line it is looking at by then.
+    invalidateLinksUnder('D:\\p');
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toHaveLength(2);
+  });
+
+  it('answers straight away when every candidate is already resolved', async () => {
+    const terminal = new FakeTerminal();
+    terminal.write('compiled src/foo.ts');
+    answers['src/foo.ts'] = { ok: true, link: FOO };
+
+    replyOn(terminal, 1);
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+
+    // The second hover on a fresh line: nothing is pending, so nothing is deferred.
+    const replies = replyOn(terminal, 1);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toHaveLength(1);
+  });
+
+  it('still answers when the bridge never comes back, so xterm is never left waiting', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('window', { throng: {} }); // no links bridge at all: the request cannot be made
+      const terminal = new FakeTerminal();
+      terminal.write('compiled src/foo.ts');
+
+      const replies = replyOn(terminal, 1);
+      expect(replies).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(LINK_ANSWER_DEADLINE_MS);
+      expect(replies).toEqual([undefined]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

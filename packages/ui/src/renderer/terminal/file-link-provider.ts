@@ -8,6 +8,7 @@ import {
   type ResolvedLink,
   type Span,
 } from '@throng/core';
+import { subscribeLinkCache } from '../links/link-cache.js';
 import { TERMINAL_URL_REGEX } from './terminal-url.js';
 import { terminalLinkRequest, type TerminalLinkSite } from './terminal-link-activation.js';
 import type { HoveredLink } from './hovered-link.js';
@@ -22,12 +23,28 @@ import type { HoveredLink } from './hovered-link.js';
  * add a subscription this module conspicuously does not have. `terminal-file-link-provider.test.ts`
  * asserts exactly that, with a fake terminal that records every subscription made on it.
  *
- * ══ IT NEVER WAITS ══
+ * ══ IT DOES NOT BLOCK, BUT IT DOES HOLD ITS REPLY ══
  *
- * `ask` is synchronous and answers `undefined` for anything not already resolved (FR-071). A row of
- * fresh output therefore draws nothing on its first pass, fills the cache, and draws on the next —
- * which is a frame later for the row under the pointer, and invisible. Awaiting here would block the
- * pointer on a network share, which is the one thing FR-071 forbids outright.
+ * `ask` is synchronous and answers `undefined` for anything not already resolved (FR-071), so
+ * nothing here ever waits on a disk or a network share. What it does do is hold the REPLY TO XTERM
+ * until its answers are in, and that is not the same thing — no output, no keystroke, no pointer
+ * movement and no repaint is behind it; only one callback xterm is perfectly happy to receive late.
+ *
+ * It has to, because **xterm asks once per line and keeps the answer**. `Linkifier._askForLink`
+ * stores each provider's reply in `_activeProviderReplies`; every subsequent hover on that same line
+ * takes its `useLineCache` branch, which reads the stored reply and does not call the provider again
+ * (its own TODO says as much). A reply is therefore final for that line, not a first draft.
+ *
+ * This module used to answer `undefined` the instant the cache missed — which is every FIRST hover
+ * on a path, since that hover is what fires the request. The resolution landed milliseconds later
+ * and nothing asked again, so the user rested the pointer on a real path and got no underline, no
+ * tooltip and a dead Ctrl+click until they moved off the line and back. The comment that used to
+ * sit here called that "a frame later"; there was no later.
+ *
+ * A held reply is bounded by {@link LINK_ANSWER_DEADLINE_MS} and delivered exactly once. A reply
+ * superseded by a newer `provideLinks` call is DROPPED rather than delivered late: xterm replaces
+ * its reply map when the pointer changes line, so a stale answer would be filed against the line the
+ * pointer has moved to.
  *
  * ══ WHAT IT REFUSES ══
  *
@@ -94,9 +111,30 @@ export interface FileLinkProvider {
 /** A global copy of the addon's own pattern — the source of truth for where a url ends (FR-009). */
 const URL_SCANNER = new RegExp(TERMINAL_URL_REGEX.source, 'g');
 
+/**
+ * How long a held reply waits for its outstanding resolutions before answering with what it has.
+ *
+ * Not a performance budget — a resolution is a `stat` in the main process and answers in under a
+ * millisecond. It is the backstop for an answer that never arrives at all: a rejected invoke, a
+ * missing bridge, a path on a share that has gone away. Without it xterm would hold an empty slot
+ * for that line and `_removeIntersectingLinks` would never run on it.
+ *
+ * A second is far past anything healthy and still inside FR-071's own tolerance, which says a
+ * location that takes too long to answer is treated as not a link until it does.
+ */
+export const LINK_ANSWER_DEADLINE_MS = 1_000;
+
 export function createFileLinkProvider(deps: FileLinkProviderDeps): FileLinkProvider {
+  /*
+   * Which `provideLinks` call is current. xterm throws its reply map away and asks every provider
+   * again the moment the pointer changes line, so a held reply from the previous line must be
+   * dropped — delivered, it would be filed against the line the pointer is on now.
+   */
+  let generation = 0;
+
   return {
     provideLinks(bufferLineNumber, callback) {
+      const mine = (generation += 1);
       // FR-060, before the row is even read: with detection off there is no link to draw, no hover
       // to report and therefore no file-link items in the menu either — the whole surface goes,
       // rather than an underline being withheld from something a click could still follow.
@@ -121,18 +159,57 @@ export function createFileLinkProvider(deps: FileLinkProviderDeps): FileLinkProv
       }
 
       const site = deps.site();
-      const links: ProvidedLink[] = [];
-      const taken: Span[] = [];
-      for (const candidate of candidates) {
-        if (overlapsAny(candidate, taken)) continue; // R7: one reading of a span wins
-        const request = terminalLinkRequest({ text: candidate.text, kind: 'detectedPath', site });
-        const resolution = deps.ask(request);
-        if (resolution?.ok !== true) continue; // FR-006 / FR-071: not a link (yet)
-        taken.push({ start: candidate.start, end: candidate.end });
-        links.push(linkFor(candidate, bufferLineNumber, request, resolution.link, deps));
+      /*
+       * One pass over the row's candidates. Re-run from scratch whenever an answer lands, rather
+       * than patched: a span whose POSITIONED reading was still pending must be able to take the
+       * span back from the whole-token reading that resolved first (R7), and rebuilding is the only
+       * way that ordering survives an answer arriving out of order.
+       */
+      const sweep = (): { links: ProvidedLink[]; pending: number } => {
+        const links: ProvidedLink[] = [];
+        const taken: Span[] = [];
+        let pending = 0;
+        for (const candidate of candidates) {
+          if (overlapsAny(candidate, taken)) continue; // R7: one reading of a span wins
+          const request = terminalLinkRequest({ text: candidate.text, kind: 'detectedPath', site });
+          const resolution = deps.ask(request);
+          if (resolution === undefined) {
+            pending += 1; // asked, not yet answered — the span is not claimed either way
+            continue;
+          }
+          if (!resolution.ok) continue; // FR-006: a candidate that names nothing is not a link
+          taken.push({ start: candidate.start, end: candidate.end });
+          links.push(linkFor(candidate, bufferLineNumber, request, resolution.link, deps));
+        }
+        return { links, pending };
+      };
+
+      const first = sweep();
+      if (first.pending === 0) {
+        callback(first.links.length > 0 ? first.links : undefined);
+        return;
       }
 
-      callback(links.length > 0 ? links : undefined);
+      // Held. See the header: replying `undefined` here is the answer xterm would keep for the whole
+      // line, so the first hover on a path would never become a link.
+      let answered = false;
+      // Declared before the two it tears down, and called by neither of them before both exist:
+      // the timer fires on a later turn and the subscription on a resolution, which is a microtask
+      // away at the very soonest.
+      const answer = (links: ProvidedLink[]): void => {
+        if (answered) return; // exactly one reply per ask, whichever route gets here first
+        answered = true;
+        unsubscribe();
+        clearTimeout(deadline);
+        if (mine !== generation) return; // superseded: xterm has moved to another line
+        callback(links.length > 0 ? links : undefined);
+      };
+      const deadline = setTimeout(() => answer(sweep().links), LINK_ANSWER_DEADLINE_MS);
+      const unsubscribe = subscribeLinkCache(() => {
+        const next = sweep();
+        if (next.pending > 0) return; // still waiting on another candidate in the same row
+        answer(next.links);
+      });
     },
   };
 }
