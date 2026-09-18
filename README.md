@@ -105,12 +105,16 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Back and Forward, per panel** — every editor and preview panel keeps its own history of the
   files it has shown, with Back/Forward buttons at the top left of its title bar, `Alt+Left` /
   `Alt+Right`, and the mouse's own back/forward buttons. History persists across restarts.
-- **Clickable file links** — a path printed by a compiler or a test runner, and a hyperlink a program
-  emits, are both followable from a terminal or an editor with Ctrl+click, `Ctrl+Enter` or a menu
-  that offers every destination the link has. A path is only a link if the file is really there, a
-  `foo.ts:42` lands on line 42, and a click never runs an executable. Terminals throng starts
-  **advertise hyperlink support** (`FORCE_HYPERLINK=1`) so programs print real links, without ever
-  overriding a value you set yourself.
+- **Clickable links, the same in terminals and editors** — a path printed by a compiler or a test
+  runner, a hyperlink a program emits, and a web address are all followable from a terminal or an
+  editor with Ctrl+click, `Ctrl+Enter` or a menu that offers every destination the link has. A path
+  is only a link if the file is really there, in whatever spelling it was printed — with spaces, Git
+  Bash's `/usr`, `/etc` and `/tmp`, any `file:` URL, a network share — and a `foo.ts:42:7` lands on
+  line 42, column 7. **A click never runs anything and never opens a default program**: a file in the
+  project opens in throng, and anything else is shown in OS Explorer. Every link wears one look — a
+  dashed underline at rest, solid under the pointer — on every row of a link the terminal wrapped.
+  Terminals throng starts **advertise hyperlink support** (`FORCE_HYPERLINK=1`) so programs print
+  real links, without ever overriding a value you set yourself.
 
 This list is throng as it exists today. **What's planned lives in the
 [issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
@@ -238,15 +242,20 @@ chord, so a rebinding saved before this release still works. It stays dead in a 
 `Ctrl+Enter` reaches the shell — which is also why the terminal's Open Link menu item shows no
 shortcut.
 
-`editor.links.defaultAction` decides what a Ctrl+click, that chord and the
-menu's **Open Link** do, and takes one of five values: `throng` (as shipped — whatever throng would
-normally do with that file), `editor`, `preview`, `osExplorer` or `osDefaultProgram`. Two rules
-outrank it: a link carrying a **line and column** always opens an editor, because a preview cannot
-reveal one; and a click **never runs an executable, script, shortcut or installer**, which is
-revealed in OS Explorer instead — running one is only ever reached by choosing *Open in OS Default
-Program* from the menu. Two more switches live there, `editor.links.detectInEditors` and
+Where a Ctrl+click, that chord and the menu's **Open Link** go is fixed rather than a setting: a file
+in the project opens in throng — a preview or an editor, by that file type's **default open action**
+under Editor · Previews, and always an editor when the link names a line and column — while a folder,
+and anything outside the project, is shown in OS Explorer. A click **never runs a file and never
+opens one in its default program**; that is only ever reached by choosing *Open in OS Default
+Program* from the menu. (An `editor.links.defaultAction` left in `settings.json` by a pre-release
+build is ignored, and left out the next time throng writes the file.) `editor.links.existenceCheckTimeoutMs` (2,000 as
+shipped, 250 – 25,000) is how long throng waits for a file or network location to answer before
+treating a path as not a link for now — raise it for a slow share; it applies to the next check with
+no restart. Two switches live there too, `editor.links.detectInEditors` and
 `editor.links.detectInTerminals`, both on as shipped: each turns off throng's *detection* of paths in
-that panel type without touching a link a program declared. `terminals.advertiseHyperlinks` (under
+that panel type without touching a link a program declared or a web address. The link underline's two
+colours are the theme tokens **Link Underline** and **Link Hover Underline**, in the theme editor's
+General area, following the accent colour until set. `terminals.advertiseHyperlinks` (under
 **Terminal**, on as shipped) starts each terminal with `FORCE_HYPERLINK=1` so programs know they may
 print hyperlinks; a `FORCE_HYPERLINK` the launching environment already carries is never overridden
 in either direction, the setting applies to terminals started afterwards rather than to one already

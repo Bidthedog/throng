@@ -33,26 +33,46 @@ What changed in each release of throng, written for someone deciding whether to 
 - **Clickable file links** ([#394](https://github.com/Bidthedog/throng/issues/394),
   [#198](https://github.com/Bidthedog/throng/issues/198)): a file path printed in a terminal — by a
   compiler, a test runner, `git status` — is now a link, with no cooperation from the program.
-  Relative, Windows, UNC, `~`, `file://` and the Git Bash and WSL drive forms are all recognised, a
-  trailing `foo.ts:42`, `foo.ts:42:7` or `foo.ts(42,7)` opens the file at that line, and a relative
-  path is measured from the directory the shell is actually in. The same detection runs in editor
-  documents, where a relative path is measured from the open file's own folder first. **A path is
-  only a link if the file is really there**, so prose does not fill with underlines.
+  Relative, Windows, UNC (either slash), `~`, `file://` and the Git Bash and WSL drive forms are all
+  recognised, and so are paths with spaces in them (`C:\Program Files\…`), Git Bash's own `/usr`,
+  `/etc` and `/tmp`, a `file:` URL however its path is spelled (`file:///c/…` included), PowerShell's
+  `FileSystem::` form and relative names printed in a folder on a network share. A trailing
+  `foo.ts:42`, `foo.ts:42:7` or `foo.ts(42,7)` opens the file at that line and column — from a
+  terminal as from an editor, and in a tab that already holds the file — and a relative path is
+  measured from the directory the shell is actually in, or the project root where the shell cannot
+  report it. The same detection runs in editor documents, where a relative path is measured from the
+  open file's own folder first. **A path is only a link if the file is really there**, so prose does
+  not fill with underlines.
 - Hyperlinks a program emits are followable when they point at a **file or a folder**, not only at
-  a web page — the report this work started from.
+  a web page — the report this work started from. One that points nowhere — a missing file, a host
+  that does not answer, an unknown scheme — looks like plain text, and a Ctrl+click on it reaches the
+  program.
+- **A Ctrl+click never runs anything and never opens a file in its default program.** A file in the
+  project opens in throng — a preview or an editor by its type's default open action, and always an
+  editor when the link names a line and column — and a folder, or anything outside the project, is
+  shown in OS Explorer. Handing a file to its own program is the menu's *Open in OS Default Program*,
+  chosen on purpose; when throng runs as administrator, that program and OS Explorer start without
+  administrator rights.
 - **Ctrl+click** follows a link; **Ctrl+Enter** follows the one the caret is inside, in an editor as
   well as a preview (same command, same rebindable chord). In a terminal Ctrl+Enter still reaches the
   shell, so nothing was taken from a running program. A Ctrl+click on a link in a full-screen program
   that handles the mouse itself now opens the link **once** instead of twice.
+- **Web addresses are links in editors too**, followed and offered on the menu exactly as in a
+  terminal, and they keep working with *Detect file links in editors* off.
+- **One link look everywhere**: a dashed underline at rest, so what is clickable shows without
+  hovering, solid under the pointer, the text's own colour left alone, and a hand pointer only while
+  Ctrl is held. A link the terminal wrapped across rows is marked on every row and followable from
+  any of them. The two underline colours are theme tokens, **Link Underline** and **Link Hover
+  Underline**, following the accent colour until set.
 - **Right-click a link** for every destination it has: Open Link, Open in Editor, Open in Preview,
   Open in OS Explorer, Open in OS Default Program and Copy Link Address — the same run in a terminal
   and in an editor, with items that could never apply to that link simply absent. Copy Link Address
-  copies the resolved path with the position exactly as it was printed.
-- **Default link action** (Settings → Editor → Links) picks what Ctrl+click, the chord and Open Link
-  do: open in throng, an editor, a preview, OS Explorer or the OS's default program. Two rules
-  outrank it — a link naming a line and column always opens an editor, and **a click never runs an
-  executable, script, shortcut or installer**; it is shown in OS Explorer instead, and running it
-  stays a deliberate menu choice. Changing the setting applies to the next click, with no restart.
+  copies the resolved path with the position exactly as it was printed. Over a web address the menu
+  offers Open Link and Copy Link Address.
+- **Existence-check timeout** (Settings → Editor → Links; 2,000 ms as shipped, 250 – 25,000): how
+  long throng waits for a file or network location to answer before treating a path as not a link
+  for now. An offline share never holds anything else up, is left alone until it answers, and its
+  paths become links again on their own when it is back.
 - **Detect file links in editors** and **Detect file links in terminals** (both on as shipped) turn
   off throng's own detection per panel type. Neither touches a link a program declared, nor a web
   link.
@@ -68,10 +88,17 @@ What changed in each release of throng, written for someone deciding whether to 
   being deleted ([#387](https://github.com/Bidthedog/throng/issues/387)).
 - Deleting a folder you had collapsed in Files & Folders no longer raises "Couldn't list the contents
   of …" ([#386](https://github.com/Bidthedog/throng/issues/386)).
+- A terminal hyperlink that wraps onto more than one row is underlined along its whole length, on
+  every row, rather than only on the row under the pointer
+  ([#326](https://github.com/Bidthedog/throng/issues/326)).
 
 ### Changed
 - Updated the libraries throng is built on — among them Electron 43.7 and React 19 — clearing every
   known security advisory in them.
+- A program's own **dashed** underline (the `4:5` underline style) is no longer drawn inside a throng
+  terminal; the text shows without it. The terminal renderer gives that style and a link's underline
+  the same look and offers no way to tell them apart, and throng turns it off so every link has the
+  one look above.
 
 ## 1.0.0-alpha4 — 2026-09-17
 
