@@ -152,6 +152,7 @@ async function terminalCtrlClick(
   const row = `see ${text} here`;
   let followed: Promise<void> = Promise.resolve();
   const provider = createFileLinkProvider({
+    detect: () => true,
     terminal: { buffer: { active: { getLine: () => ({ translateToString: () => row }) } } },
     site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: ROOT }),
     ask: answer(resolved),

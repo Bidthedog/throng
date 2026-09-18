@@ -66,6 +66,17 @@ export interface EditorLinkHit {
 }
 
 export interface EditorLinkDeps {
+  /**
+   * FR-060 — `editor.links.detectInEditors`, read PER SCAN. Absent means on.
+   *
+   * The compartment above already removes the decoration plugin from a live view, which is the
+   * switch's structural half. This is the other half, and it is the one a user would notice: the
+   * pointer gestures and the Open Link chord are installed on the view itself, not in the
+   * compartment, so without a gate here a Ctrl+click would keep following a link that no longer
+   * underlines. It sits on the scan because everything — the marks, both gestures and the menu —
+   * asks {@link linkHitsBetween} what is there, so one gate closes all four at once.
+   */
+  detect?(): boolean;
   /** Read per scan, never captured: a Save As moves the base directory under a live view. */
   site(): EditorLinkSite;
   /** Peek the cache, and ask if the answer is not here yet. `undefined` means NOT a link. */
@@ -169,6 +180,9 @@ export function linkHitsBetween(
   to: number,
   deps: EditorLinkDeps,
 ): EditorLinkHit[] {
+  // FR-060. Everything that can act on a link in an editor comes through here, so an empty answer
+  // is the whole switch: no marks, no hit for a gesture to claim, nothing for the menu to offer.
+  if (deps.detect?.() === false) return [];
   const site = deps.site();
   const hits: EditorLinkHit[] = [];
   const claimed: never[] = [];

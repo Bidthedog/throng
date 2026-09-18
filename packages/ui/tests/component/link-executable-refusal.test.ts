@@ -123,6 +123,7 @@ const requestFor = (text: string): LinkResolutionRequest => ({
 async function terminalCtrlClick(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
   let followed: Promise<void> = Promise.resolve();
   const provider = createFileLinkProvider({
+    detect: () => true,
     terminal: { buffer: { active: { getLine: () => ({ translateToString: () => `run ${text}` }) } } },
     site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: ROOT }),
     ask: answer(resolved),

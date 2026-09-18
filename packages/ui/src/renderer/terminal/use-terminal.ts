@@ -206,6 +206,13 @@ export interface UseTerminalOptions {
    */
   linkActions?: TerminalLinkDeps;
   /**
+   * 045 FR-060 — `editor.links.detectInTerminals`, as a reader. Absent means on.
+   *
+   * A reader for the same reason `linkBaseDirectory` is one: the link provider is registered once,
+   * inside the mount effect, against a shell that must not be torn down to change a preference.
+   */
+  detectFileLinks?: () => boolean;
+  /**
    * True for a key that belongs to throng (find, scrollback navigation) rather than to
    * the shell. xterm would otherwise handle these itself and write them to the pty;
    * reserving them is what keeps them out of the running program (FR-010 / FR-014).
@@ -269,6 +276,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   // so rebinding a preference or re-rendering the panel can never tear a running terminal down.
   const linkCwdRef = useRef(opts.linkBaseDirectory);
   const linkActionsRef = useRef(opts.linkActions);
+  const detectLinksRef = useRef(opts.detectFileLinks);
   onExitRef.current = opts.onExit;
   onErrorRef.current = opts.onError;
   onStillStartingRef.current = opts.onStillStarting;
@@ -283,6 +291,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
   linkDelayRef.current = opts.linkHoverDelayMs;
   linkCwdRef.current = opts.linkBaseDirectory;
   linkActionsRef.current = opts.linkActions;
+  detectLinksRef.current = opts.detectFileLinks;
   // Read the active-panel predicate through a ref so the (async) attach focus below sees the CURRENT
   // active panel, not the one at mount time (issue 144).
   const isActiveRef = useRef(opts.isActive);
@@ -892,6 +901,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const fileLinks = term.registerLinkProvider(
       createFileLinkProvider({
         terminal: term,
+        // FR-060, read per row. An explicit `file:` hyperlink and a web url do not come through
+        // this provider at all, so the switch cannot reach them.
+        detect: () => detectLinksRef.current?.() ?? true,
         site: linkSite,
         ask: askTerminalLink,
         onHover: setHovered,

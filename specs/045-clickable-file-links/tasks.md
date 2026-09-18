@@ -647,14 +647,14 @@ the time to stream a large output with detection on and off.
 **Independent of Phases 4–8** in principle — [plan.md](./plan.md) *Sequencing* step 8 — but the
 switches have nothing to gate until the surfaces exist, so in practice T112 follows T071 and T091.
 
-- [ ] T112 [P] [US6] RED component
+- [x] T112 [P] [US6] RED component
   `packages/ui/tests/component/link-detection-switches.test.ts` — with
   `editor.links.detectInTerminals` off: detected paths in terminals are not underlined, Ctrl+click
   does nothing, and the menu has no file-link items — while **web links and explicit `file:`
   hyperlinks still work**. With `editor.links.detectInEditors` off: the same in editors, and
   Ctrl+click and Ctrl+Enter keep their ordinary editor meanings everywhere. Both live, with no
   restart. Satisfies FR-060, SC-008.
-- [ ] T113 [US6] Gate `provideLinks` in
+- [x] T113 [US6] Gate `provideLinks` in
   `packages/ui/src/renderer/terminal/file-link-provider.ts` on the terminal switch, and reconfigure
   the link compartment in `packages/ui/src/renderer/editor/use-editor.ts` on the editor switch. A
   switch **never** touches an explicit hyperlink. Depends on T112, T071, T091. Satisfies FR-060.
@@ -663,7 +663,7 @@ switches have nothing to gate until the surfaces exist, so in practice T112 foll
   off, expecting ≤ 5% — and the FR-073 visible-range scan cost on the largest fixture document,
   closing **Open item O6**. This is measured and annotated, never asserted: a wall-clock bound on a
   shared hosted runner is a flake by construction. Satisfies SC-004; FR-073.
-- [ ] T115 [P] [US6] Update `docs/quick-start.md` §7 — the two detection switches and exactly what
+- [x] T115 [P] [US6] Update `docs/quick-start.md` §7 — the two detection switches and exactly what
   each stops. Ships with this slice. Satisfies FR-090.
 
 **Checkpoint**: SC-004's structural half is already proved by T069; its wall-clock half is recorded.

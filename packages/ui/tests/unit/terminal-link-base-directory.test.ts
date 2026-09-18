@@ -111,6 +111,7 @@ describe('the provider re-reads it, so a `cd` changes what the next hover means'
 
     let cwd = 'D:\\p';
     const provider = createFileLinkProvider({
+      detect: () => true,
       terminal,
       site: () => ({ panelId: 'panel-1', originProjectId: 'project-1', baseDirectory: cwd }),
       ask: askTerminalLink,

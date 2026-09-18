@@ -141,6 +141,7 @@ const requestFor = (text: string): LinkResolutionRequest => ({
 async function terminalCtrlClick(resolved: ResolvedLink, text: string, s: Surface): Promise<void> {
   let pending: Promise<void> = Promise.resolve();
   const provider = createFileLinkProvider({
+    detect: () => true,
     terminal: { buffer: { active: { getLine: () => ({ translateToString: () => `at ${text}` }) } } },
     site: () => ({ panelId: 'panel-1', baseDirectory: 'D:\\p' }),
     ask: answer(resolved),

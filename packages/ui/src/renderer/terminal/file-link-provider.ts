@@ -64,6 +64,18 @@ export interface ProvidedLink {
 
 export interface FileLinkProviderDeps {
   readonly terminal: LinkProviderTerminal;
+  /**
+   * FR-060 — `editor.links.detectInTerminals`, read PER ROW.
+   *
+   * The whole switch, and the only place it belongs: this module is where throng GUESSES that a run
+   * of characters is a path, and that guess is the only thing the setting is about. A program's own
+   * OSC 8 target and a web url are declarations rather than guesses, so they go on working — and
+   * they go on working by construction, because nothing about them passes through here.
+   *
+   * A reader rather than a value because the provider is registered once against a live shell and
+   * cannot be re-registered without one; SC-008 requires the change to land on the next hover.
+   */
+  readonly detect: () => boolean;
   /** Re-read per row, so a `cd` between two hovers changes what a relative path means (FR-023). */
   readonly site: () => TerminalLinkSite;
   /** `askTerminalLink` — peek, and fire a request when the answer is not here yet. */
@@ -85,6 +97,13 @@ const URL_SCANNER = new RegExp(TERMINAL_URL_REGEX.source, 'g');
 export function createFileLinkProvider(deps: FileLinkProviderDeps): FileLinkProvider {
   return {
     provideLinks(bufferLineNumber, callback) {
+      // FR-060, before the row is even read: with detection off there is no link to draw, no hover
+      // to report and therefore no file-link items in the menu either — the whole surface goes,
+      // rather than an underline being withheld from something a click could still follow.
+      if (!deps.detect()) {
+        callback(undefined);
+        return;
+      }
       // xterm counts buffer lines from 1; the buffer API indexes from 0.
       const row = deps.terminal.buffer.active.getLine(bufferLineNumber - 1)?.translateToString(true);
       if (row === undefined || row.length === 0) {

@@ -96,6 +96,7 @@ function terminalPanel(): Panel {
     ...linkRouting(routingInputs),
   };
   const provider = createFileLinkProvider({
+    detect: () => true,
     terminal: {
       buffer: { active: { getLine: () => ({ translateToString: () => 'see src/foo.ts here' }) } },
     },

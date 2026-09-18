@@ -600,6 +600,13 @@ There is a reason, and it is a few paragraphs below.
   caret on line 42), and **a click never runs an executable, script, shortcut or installer** — it
   shows the file in OS Explorer instead. Running one stays on *Open in OS Default Program*, which
   you have to choose from the menu on purpose.
+  The same page holds two switches, both on as shipped: **Detect file paths in editors** and
+  **Detect file paths in terminals**. Each turns off throng's *guess* that a run of characters is a
+  path — no underline, no tooltip, no Ctrl+click, and no link items on the right-click menu, in that
+  panel type. Neither touches a link something **declared**: a program's own hyperlinks and web
+  links go on working in a terminal with detection off, and in an editor Ctrl+click goes back to
+  adding a cursor and Ctrl+Enter to inserting a blank line, everywhere. Both apply at once — nothing
+  reopens, and a running terminal keeps its scrollback.
 
 Every setting, binding and theme is a **human-editable file** under `%USERPROFILE%\.throng\`
 (`settings.json`, `keybindings.json`, `themes\<name>.json`, `icon-packs\<pack>\`) that **hot-reloads**

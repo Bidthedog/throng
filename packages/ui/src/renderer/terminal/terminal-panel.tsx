@@ -262,6 +262,9 @@ export function TerminalPanel({
     previewRegistry: previewProviders.registry,
     previewSettings: editorSettings.previews,
   };
+  /** FR-060, live for the same reason — the provider is registered once, against a live shell. */
+  const detectFileLinksRef = useRef(editorSettings.links.detectInTerminals);
+  detectFileLinksRef.current = editorSettings.links.detectInTerminals;
   const linkActions = useMemo<TerminalLinkDeps>(
     () => ({
       ...linkRouting(() => routingRef.current),
@@ -863,6 +866,9 @@ export function TerminalPanel({
     // a relative path a command printed almost always means the directory that command ran in.
     linkBaseDirectory: () => peekTerminalCwd(panel.id),
     linkActions,
+    // FR-060 — read through the routing ref, which this render has just refreshed, so the switch
+    // applies to the next hover without re-registering the provider against a live shell.
+    detectFileLinks: () => detectFileLinksRef.current,
     isActive: () => isActivePanelRef.current,
   });
 

@@ -79,6 +79,7 @@ const provideOn = (
   site: TerminalLinkSite = SITE,
 ): ProvidedLink[] | undefined => {
   const provider = createFileLinkProvider({
+    detect: () => true,
     terminal,
     site: () => site,
     ask: askTerminalLink,
@@ -116,6 +117,7 @@ describe('FR-072 — nothing on the output path asks about a file', () => {
   it('pushes 50,000 lines through the data path and asks the resolver exactly zero times', () => {
     const terminal = new FakeTerminal();
     createFileLinkProvider({
+      detect: () => true,
       terminal,
       site: () => SITE,
       ask: askTerminalLink,
@@ -131,6 +133,7 @@ describe('FR-072 — nothing on the output path asks about a file', () => {
   it('subscribes to nothing on the terminal — no onData, no onWriteParsed (Open item O1)', () => {
     const terminal = new FakeTerminal();
     createFileLinkProvider({
+      detect: () => true,
       terminal,
       site: () => SITE,
       ask: askTerminalLink,

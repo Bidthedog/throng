@@ -457,6 +457,10 @@ export function useEditor(params: UseEditorParams): void {
           ? { originProjectId: metaRef.current.ownerProjectId ?? panel.originProjectId }
           : {}),
       }),
+    // FR-060 — read from `metaRef`, which this render has just refreshed. The compartment below
+    // takes the decoration plugin out of a live view; this closes the gestures, which are installed
+    // on the view itself and would otherwise keep following a link that no longer underlines.
+    detect: () => metaRef.current.settings.links.detectInEditors,
     ask: askEditorLink,
     follow: (hit) => void followEditorLink(hit),
   };
@@ -535,6 +539,7 @@ export function useEditor(params: UseEditorParams): void {
    * links at whatever the file, the project and the settings were at mount.
    */
   const linkDeps = useRef<EditorLinkDeps>({
+    detect: () => linkDepsRef.current!.detect?.() ?? true,
     site: () => linkDepsRef.current!.site(),
     ask: (request) => linkDepsRef.current!.ask(request),
     follow: (hit) => linkDepsRef.current!.follow(hit),
