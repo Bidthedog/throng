@@ -1,6 +1,103 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.5.1 → 5.5.2
+Bump rationale: PATCH — the maintainer's decision of 2026-09-19 for PR #408: the link menu's copy
+                item is labelled "Copy Link to Clipboard", not "Copy Link Address". Checked
+                against the project's own test for the three sizes: the obligation is unchanged
+                (every link menu offers Open Link and an item that copies the link) and only the
+                label the rule names changes. No guarantee is withdrawn, so it is not MAJOR. It adds
+                no new constraint, only a new name for an existing one, so it is not MINOR either
+                (MINOR's "a new constraint that existing code fails" does not apply). The
+                shipped menus still use the old label; that is a gap in the code, recorded
+                below, not a change in what the rule asks for.
+
+Modified sections:
+  - Principle VI → "One gesture follows a link, everywhere": the menu-route sentence now names
+    **Copy Link to Clipboard**. The historical reports below keep the old label as it was then; they
+    are a record and are not rewritten.
+
+Added: nothing. Removed: nothing.
+
+Known code not yet matching the label (verified 2026-09-19, to be relabelled by spec 045 round four,
+FR-170 / its label supersession, in the same increment as the Link menu):
+  packages/core/src/links/menu.ts:80, packages/ui/src/renderer/links/link-menu-items.ts:105,
+  packages/ui/src/renderer/preview/content-menu.ts:109, and the matching `menu-item-Copy Link
+  Address` test ids and tests.
+
+Record update 2026-09-19 (spec 045 round four, T277/T278) — a record, not an amendment: all three
+sites above now read **Copy Link to Clipboard**. `menu.ts`'s copy item moved into `buildLinkMenu`
+(T275, T277); `link-menu-items.ts` is deleted; `preview/content-menu.ts`'s Contextual section (T277)
+is gone entirely, folded into the one Link menu every surface now shares. The gap this report
+recorded is closed.
+
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md      — no change needed (Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change needed (no menu label enumerated)
+  ✅ .specify/templates/tasks-template.md     — no change needed
+  ✅ .specify/extensions.yml                  — no before/after_constitution hooks registered.
+  ⚠ .claude/agents/throng-renderer-ui.md     — not edited here (constitution-only change); check it
+                                                for the old label when the code is relabelled
+  ⚠ specs/045-clickable-file-links/spec.md   — FR-170's label is superseded to match, in the same
+                                                amendment round; specs 024 and 044 are not edited
+                                                in place (045 records the supersession)
+  ⚠ README.md, docs/                          — any user-facing mention of the label changes with
+                                                the code (docs currency)
+
+Follow-up TODOs: none deferred beyond the relabelling above.
+
+---- previous report ----
+
+Version change: 5.5.0 → 5.5.1
+Bump rationale: PATCH. A factual correction to a recorded audit, on the project's own test for the
+                three bump sizes: the rule requires exactly what it required before, no surface
+                that conformed stops conforming, and no new obligation is created. What changes is
+                the statement of which surfaces currently satisfy it — the same shape as the
+                5.4.0 → 5.4.1 correction recorded below.
+
+Modified sections:
+  - Principle VI → "One gesture follows a link, everywhere", the *Known gaps* sentence. It named
+    TWO gaps and corrects TWO statements:
+      (a) "no surface yet implements Ctrl+Enter" — WRONG WHEN IT WAS WRITTEN, not merely overtaken.
+          Spec 044 shipped `preview.followLink` bound to Ctrl+Enter (core/src/config/keybindings.ts,
+          dispatched at renderer/preview/preview-commands.tsx) four days before this rule was
+          added on 2026-09-14, and the rule's own "Why now" paragraph cites 044 FR-094–FR-096 as
+          evidence for the rule while the gap list says nothing implements it. Saying so plainly is
+          the point of this amendment: the premise was stale before the feature that corrects it.
+      (b) editors do not implement it — TRUE UNTIL NOW, and false as of spec 045 FR-044/FR-045,
+          which widens the same command's scope to editors rather than adding a second one.
+    The About window's plain-click links remain a gap and stay named, re-verified on 2026-09-18.
+
+Added: nothing. Removed: nothing — one sentence of the gap list is restated, and the surviving gap
+       keeps its wording and its file reference.
+
+Why now: Incremental Delivery forbids amending ahead of the behaviour, so this lands in the same
+         change as the editor's Ctrl+Enter (045 US3) rather than before it.
+
+Verified against the code on 2026-09-18, not inferred from the specs:
+  (1) `preview.followLink` ships bound to Ctrl+Enter and its scope now contains `editor` and
+      `preview` (core/src/config/keybindings.ts); `COMMAND_SCOPES[...].has('terminal')` is still
+      false, so a shell keeps the chord (045 FR-046).
+  (2) The editor dispatches it at the window, in capture phase, and takes the key ONLY when a link
+      holds the caret (renderer/app.tsx); everywhere else CodeMirror's `defaultKeymap` still
+      inserts a blank line, which is this rule's "MUST NOT take Ctrl+Enter where no link holds
+      that position".
+  (3) `about/about-app.tsx` still follows its links on a plain click — the gap is real and stays.
+
+Templates requiring updates:
+  ✅ .specify/templates/plan-template.md      — no change needed (Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change needed (no UX rule enumerated)
+  ✅ .specify/templates/tasks-template.md     — no change needed
+  ✅ .claude/agents/throng-renderer-ui.md     — no change needed: it cites the rule and the
+                                                About-window gap, both of which survive this
+                                                correction unchanged
+  ⚠ specs/045-clickable-file-links/spec.md   — FR-091 is the requirement this amendment satisfies;
+                                                it already records both statements (amended T005)
+
+Follow-up TODOs: none deferred. The one surviving gap is tracked in the rule itself.
+
+---- previous report ----
+
 Version change: 5.4.1 → 5.5.0
 Bump rationale: MINOR, two rules added to an existing principle. Nothing is removed and no rule
                 is redefined; every surface that conformed before still conforms.
@@ -1660,15 +1757,18 @@ a caret or start a selection.
   keeps the chord (Principle IV, *Terminal keys belong to the terminal*).
 - A link MUST show on hover that it is actionable, and by which gesture, so a plain click
   that does nothing is never a dead end. A panel's context menu opened over a link MUST
-  offer **Open Link** and **Copy Link Address**, which is the menu route this principle
+  offer **Open Link** and **Copy Link to Clipboard**, which is the menu route this principle
   requires for every action.
 - This is an **end-state requirement** delivered incrementally under the Incremental
-  Delivery rule, binding on new work immediately. **Known gaps**, verified against the code
-  on 2026-09-14: the **About window** follows its licence, repository and third-party links
-  on a plain click (`about/about-app.tsx`), and **no surface yet implements Ctrl+Enter** —
-  a terminal link is reachable from the keyboard only through its context menu
-  (024 FR-019d). Terminals already conform on the pointer (024 FR-019c); spec 044
-  (FR-094–FR-096) and #394 add the first Ctrl+Enter.
+  Delivery rule, binding on new work immediately. **Known gap**, verified against the code
+  on 2026-09-18: the **About window** follows its licence, repository and third-party links
+  on a plain click (`about/about-app.tsx`). Ctrl+Enter is implemented: **previews** have
+  followed the focused link on it since 044 (`preview.followLink`, bound to Ctrl+Enter,
+  dispatched at `preview/preview-commands.tsx`), and **editors** follow a link the caret sits
+  inside since 045 (FR-044/FR-045, the same rebindable command, its scope widened to cover
+  both). Terminals conform on the pointer (024 FR-019c) and keep Ctrl+Enter for the shell
+  (045 FR-046), which is what this rule's own "MUST NOT take Ctrl+Enter where no link holds
+  that position" requires of them.
 
 **A preference picks the default; the menu offers every variant.** When a preference
 decides which variant an action performs — a copy format, where a file or a link opens —
@@ -2102,7 +2202,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-14
+**Version**: 5.5.2 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-19
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
