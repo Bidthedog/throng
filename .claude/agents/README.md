@@ -37,6 +37,8 @@ own context. Where they overlap, the skill wins:
   `branch-sync`, `github-issues`, `github-issue-state`.
 - Spec Kit commands → the `/speckit-*` skills. `throng-spec-governance` carries the judgement those
   commands assume, not a reimplementation of them.
+- Cutting a release → `throng-release`. `throng-build-release` owns why packaging is shaped the way
+  it is; the skill owns the order the steps run in and the gates each one has to clear.
 
 ## Maintaining them
 

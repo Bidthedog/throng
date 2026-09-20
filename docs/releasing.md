@@ -10,6 +10,11 @@ maintainers and contributors.
 > on a clean runner, and publishes the GitHub Release behind the `release` Environment's required reviewers.
 > A release is cut by pushing a `v*` tag on `master`.
 
+> **Running one.** This document explains *why* each gate exists. The step-by-step runbook — what to
+> edit, in what order, and what every past failure turned out to be — is the `throng-release` skill
+> at [`.claude/skills/throng-release/SKILL.md`](../.claude/skills/throng-release/SKILL.md). Change
+> the pipeline and both files move together.
+
 ## The shape of it
 
 ```
