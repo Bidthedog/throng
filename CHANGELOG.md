@@ -29,6 +29,88 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Clickable file links** ([#394](https://github.com/Bidthedog/throng/issues/394),
+  [#198](https://github.com/Bidthedog/throng/issues/198)): a file path printed in a terminal — by a
+  compiler, a test runner, `git status` — is now a link, with no cooperation from the program.
+  Relative, Windows, UNC (either slash), `~`, `file://` and the Git Bash and WSL drive forms are all
+  recognised, and so are paths with spaces in them (`C:\Program Files\…`), Git Bash's own `/usr`,
+  `/etc` and `/tmp`, a `file:` URL however its path is spelled (`file:///c/…` included), PowerShell's
+  `FileSystem::` form and relative names printed in a folder on a network share. A trailing
+  `foo.ts:42`, `foo.ts:42:7` or `foo.ts(42,7)` opens the file at that line and column — from a
+  terminal as from an editor, and in a tab that already holds the file — and a relative path is
+  measured from the directory the shell is actually in, or the project root where the shell cannot
+  report it. The same detection runs in editor documents, where a relative path is measured from the
+  open file's own folder first. **A link is recognised by its text alone**: throng never checks that
+  a path exists before underlining it, so drawing never waits on the disk or a network share, and a
+  broken link is underlined like any other. Prose stays clear by shape — `e.g.`, `1/2`, `1.2.3` and
+  host names are not paths — while any rooted path, `/help` included, is one.
+- **Paths with spaces** are links when they are enclosed in backticks, quotes, `()`, `<>`, `[]` or
+  `{}`, or when an unquoted path reaches a word ending in a slash or in a **known file extension**
+  (`\\share\path to file.xlsx`); otherwise a path ends at its first space. The known extensions are a
+  list you can edit — **File extensions that end a spaced path** under Settings → Editor → Links,
+  which arrives holding the ones throng ships with — applying to terminals and editors with no
+  restart. A shell **prompt** is the exception that needs no rule: `D:\git\my folder>` keeps its
+  space, because throng recognises the directory the terminal is actually in.
+- Hyperlinks a program emits are followable when they point at a **file or a folder**, not only at
+  a web page — the report this work started from. One with an empty target or a scheme throng does
+  not follow looks like plain text, and a Ctrl+click on it reaches the program.
+- **A Ctrl+click does what the link names, and never runs anything or opens a file in its default
+  program.** A web or `localhost` address opens in your browser. A file in the project, in any
+  spelling (`file:///…` included), opens in throng — a preview or an editor by its type's default
+  open action, and always an editor when the link names a line and column; if nothing is there, one
+  notice says it was not found. A folder, a network path, a `file:` URL or anything else on disk
+  opens in OS Explorer — a folder as itself, a file's folder with the file selected. A protocol on
+  the new **Allowed link protocols** list (Settings → Editor → Links; `mailto`, `tel` and `slack` as
+  shipped) goes to its OS handler, and schemes that can run code — `javascript`, `data`, `vbscript`,
+  `ms-msdt`, `search-ms` and their kind — are always refused. An **email address written on its own**,
+  with no `mailto:` in front of it, is a mail link too; with `mailto` off the list it is ordinary
+  text, and either way it is never mistaken for a file. Handing a file to its own program is
+  the Link menu's *Open in OS Default Program*, or *Open Program* for an executable, chosen on
+  purpose; when throng runs as administrator, that program and OS Explorer start without
+  administrator rights.
+- **Ctrl+click** follows a link; **Ctrl+Enter** follows the one the caret is inside, in an editor as
+  well as a preview (same command, same rebindable chord). In a terminal Ctrl+Enter still reaches the
+  shell, so nothing was taken from a running program. A Ctrl+click on a link in a full-screen program
+  that handles the mouse itself now opens the link **once** instead of twice.
+- **Web addresses are links in editors too**, followed and offered on the menu exactly as in a
+  terminal.
+- **One link look everywhere**: a dashed underline at rest, so what is clickable shows without
+  hovering, solid under the pointer, the text's own colour left alone, and the **hand pointer on
+  every link hover**, Ctrl held or not. The underline is faint at rest and solid under the pointer.
+  **Resting on a link shows its full address, and nothing else** — where a Ctrl+click would go is
+  explained by the hint below instead. The same address shows at the left of the panel's status bar
+  while the pointer is on it. Both name a location only when the link's text settles it: a rooted
+  path such as `/tmp` or `/etc/hosts` is shown as written, because the project's own folder is tried
+  before Git Bash's mount table and nothing is looked up until you follow it — so rather than name
+  the wrong place, throng names none. A link the terminal wrapped across rows is marked on
+  every row and followable from any of them. The two underline colours are theme tokens, **Link
+  Underline** and **Link Hover Underline**, following the accent colour until set.
+- **A plain click on a link** keeps its ordinary meaning and also shows a brief hint at the link's
+  bottom-right saying that Ctrl+click follows it and where it will go — the same hint in terminals,
+  editors and the Markdown preview, themed by **Link Hint Background**, **Link Hint Text** and **Link
+  Hint Border**.
+- **Terminal links are marked as the screen draws**, while output is still streaming and in
+  full-screen programs such as Claude Code, and none from one screen survive a switch to the other.
+- **One Link menu** on a right-click over a link, the same in terminals, editors and the Markdown
+  preview: Open Link, Open In ▸ New Editor / Active Editor / each open editor by name, Open Preview,
+  Open in OS Explorer, Open in OS Default Program (or Open Program for an executable) and Copy Link
+  to Clipboard, with items that could never apply to that link simply absent. It opens at once;
+  items that need the file light up when it is found, and stay greyed if it is not. Copy Link to
+  Clipboard copies the resolved path with the position exactly as it was printed. Over a web,
+  `localhost` or protocol address the menu offers Open Link and Copy Link to Clipboard.
+- **Link resolution timeout** (Settings → Editor → Links; 2,000 ms as shipped, 250 – 25,000): how
+  long, in total, a Ctrl+click on a network path — or opening its Link menu — waits for the location
+  to answer. Nothing is looked up before a link is drawn, and a share that has failed to answer is
+  left alone for a while rather than asked again on every click.
+- **Detect links in editors** and **Detect links in terminals** (both on as shipped) turn links off
+  entirely in that panel type — paths, web addresses, allowed protocols and the hyperlinks a program
+  declares for itself alike.
+- **Tell programs that links are supported** (Settings → Terminal, on as shipped) starts terminals
+  with `FORCE_HYPERLINK=1`, so tools that can print clickable links do. A `FORCE_HYPERLINK` you set
+  yourself is never overridden in either direction, and the setting applies to terminals started
+  afterwards rather than to one already running.
+
 ### Fixed
 - A folder a closed terminal started in — a git worktree, typically — can be deleted again while the
   project's other terminals stay open ([#385](https://github.com/Bidthedog/throng/issues/385)).
@@ -36,10 +118,17 @@ What changed in each release of throng, written for someone deciding whether to 
   being deleted ([#387](https://github.com/Bidthedog/throng/issues/387)).
 - Deleting a folder you had collapsed in Files & Folders no longer raises "Couldn't list the contents
   of …" ([#386](https://github.com/Bidthedog/throng/issues/386)).
+- A terminal hyperlink that wraps onto more than one row is underlined along its whole length, on
+  every row, rather than only on the row under the pointer
+  ([#326](https://github.com/Bidthedog/throng/issues/326)).
 
 ### Changed
 - Updated the libraries throng is built on — among them Electron 43.7 and React 19 — clearing every
   known security advisory in them.
+- A program's own **dashed** underline (the `4:5` underline style) is no longer drawn inside a throng
+  terminal; the text shows without it. The terminal renderer gives that style and a link's underline
+  the same look and offers no way to tell them apart, and throng turns it off so every link has the
+  one look above.
 
 ## 1.0.0-alpha4 — 2026-09-17
 

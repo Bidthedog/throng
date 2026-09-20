@@ -105,6 +105,23 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Back and Forward, per panel** — every editor and preview panel keeps its own history of the
   files it has shown, with Back/Forward buttons at the top left of its title bar, `Alt+Left` /
   `Alt+Right`, and the mouse's own back/forward buttons. History persists across restarts.
+- **Clickable links, the same in terminals, editors and previews** — a path printed by a compiler
+  or a test runner, a hyperlink a program emits, a web address and a `mailto:` are all followable
+  with Ctrl+click, `Ctrl+Enter` (editors and previews) or the one **Link menu**. A link is recognised
+  by its **text alone** — throng never checks that a path exists before underlining it, so a broken
+  link is underlined like any other — in whatever spelling it was printed: Git Bash's `/usr`, `/etc`
+  and `/tmp`, any `file:` URL, a network share, and a `foo.ts:42:7` that lands on line 42, column 7.
+  What a Ctrl+click does depends on what the link names: a web or `localhost` address opens in your
+  browser; a file in the project opens in throng (one that is not there raises one "not found"
+  notice); a network path, a `file:` URL or anything else on disk opens in OS Explorer — a folder as
+  itself, a file's folder with the file selected; and an allowed protocol (`mailto`, `tel`, `slack`
+  as shipped) goes to its handler. **A click never runs anything and never opens a default program**,
+  and schemes that run code are always refused. Every link shows a hand pointer, wears one look — a
+  dashed underline at rest, solid under the pointer — on every row of a link the terminal wrapped, and
+  shows its full target in the panel's status bar; terminal links are marked as the screen draws,
+  full-screen programs such as Claude Code included. Terminals throng starts **advertise hyperlink
+  support** (`FORCE_HYPERLINK=1`) so programs print real links, without ever overriding a value you
+  set yourself.
 
 This list is throng as it exists today. **What's planned lives in the
 [issue tracker](https://github.com/Bidthedog/throng/issues)**, grouped by
@@ -224,6 +241,45 @@ rendering it as Markdown). Turning a provider off closes its
 open previews and greys its other settings rather than hiding them. **`editor.navigation.historySize`**
 (under **Editor · Navigation**, 10 as shipped, 1–100) caps how many files each editor or preview
 panel's Back/Forward history remembers.
+
+**Clickable file links** are tuned by settings under **Editor · Links**, and by one key binding.
+The **Open Link** command (`preview.followLink`, `Ctrl+Enter` as shipped, rebindable in the Key
+Bindings editor) was a preview's; it is now live in **editors** as well, on the same id and the same
+chord, so a rebinding saved before this release still works. It stays dead in a **terminal**, where
+`Ctrl+Enter` reaches the shell — which is also why the terminal's Open Link menu item shows no
+shortcut.
+
+Where a Ctrl+click, that chord and the Link menu's **Open Link** go is fixed rather than a setting,
+and depends on what the link names: a web or loopback address opens in the system browser; a file in
+the project opens in throng — a preview or an editor, by that file type's **default open action**
+under Editor · Previews, and always an editor when the link names a line and column; a folder, a
+network path, a `file:` URL and anything else on disk is shown in OS Explorer; and an allowed protocol
+goes to its own handler. A click **never runs a file and never opens one in its default program**;
+that is only ever reached by choosing *Open in OS Default Program* or, for an executable, *Open
+Program* from the Link menu. (An `editor.links.defaultAction` left in `settings.json` by a pre-release
+build is ignored, and left out the next time throng writes the file.)
+
+Nothing checks that a link exists before it is drawn. `editor.links.existenceCheckTimeoutMs` (2,000 as
+shipped, 250 – 25,000) bounds the one check throng does make — when a link is Ctrl+clicked, or its
+Link menu opens, to find the file and tell a file from a folder — in total however many places it
+looks; raise it for a slow network share. It applies to the next check with no restart.
+`editor.links.protocolAllowlist` (`mailto`, `tel`, `slack` as shipped) names the schemes besides the
+web that are links and go to their OS handler; schemes that run code — `javascript`, `data`,
+`vbscript`, `ms-msdt`, `search-ms` and the like — are refused whatever it says. An email address
+written on its own is a `mailto:` link while that scheme is listed, and plain text when it is not —
+never a file either way. `editor.links.knownFileExtensions` is the list of extensions that let an
+unquoted path run across spaces; it arrives holding the ones throng ships with, and you add to and
+remove from it directly, so an empty list means none of them do. Two switches live there too,
+`editor.links.detectInEditors` and `editor.links.detectInTerminals`, both on as shipped: each turns
+off links entirely in that panel type — detected paths, web addresses, allowed protocols and the
+hyperlinks a program declares for itself alike. The link underline's two colours are the
+theme tokens **Link Underline** and **Link Hover Underline**, and the plain-click hint's are **Link
+Hint Background**, **Link Hint Text** and **Link Hint Border**, all in the theme editor's General
+area. `terminals.advertiseHyperlinks` (under
+**Terminal**, on as shipped) starts each terminal with `FORCE_HYPERLINK=1` so programs know they may
+print hyperlinks; a `FORCE_HYPERLINK` the launching environment already carries is never overridden
+in either direction, the setting applies to terminals started afterwards rather than to one already
+running, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`.
 
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
