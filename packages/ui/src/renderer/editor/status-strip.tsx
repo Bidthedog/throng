@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { formatGrouped, languageName } from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
+import { useEditorHoveredLink } from './editor-hovered-link-store.js';
+import { LinkTargetReadout } from '../common/link-target-readout.js';
+import { linkFirstReadingByName } from '../links/path-by-name.js';
 import { useDocumentMetrics, type DocumentMetrics } from './document-metrics-store.js';
 import {
   READOUT_LABELS,
@@ -334,6 +337,31 @@ export function StatusStrip({
   const metrics = useDocumentMetrics(wrapDocKey);
 
   /*
+   * 045 FR-167 — the hovered link's full target, read by name exactly as the tooltip and the hint
+   * are (`linkFirstReadingByName`, FR-167a): a drive form as the drive it names (FR-176), any other
+   * rooted path against the project root (FR-024), a relative one against the document's own folder,
+   * the text as written where there is nothing to read it against. An OSC 8-style declared target is
+   * not a thing an editor draws, so a web link's own URI stands for both readings at once.
+   *
+   * Review round four (editor L1): the base is the HIT's own `request.baseDirectory` — the folder of
+   * the document it was read from — and never the panel's current `filePath`. A Ctrl+click that loads
+   * a different file into the same panel leaves the pointer still, so the hit survives the swap;
+   * re-rooting it against the new file named a path that has never existed. `use-editor.ts` clears the
+   * hit on that swap as well, so this is the belt and that is the braces.
+   */
+  const hoveredLink = useEditorHoveredLink(panelId);
+  const linkReadout =
+    hoveredLink === null
+      ? null
+      : hoveredLink.kind === 'web'
+        ? hoveredLink.uri
+        : linkFirstReadingByName({
+            text: hoveredLink.request.text,
+            baseDirectory: hoveredLink.request.baseDirectory,
+            projectRoot,
+          });
+
+  /*
    * 040 US3 — the two readout preferences (FR-030, FR-031).
    *
    * TWO toggles for five figures, not five (FR-032): the caret's position is one answer, and the
@@ -542,6 +570,9 @@ export function StatusStrip({
             {r.text}
           </span>
         ))}
+        {/* 045 FR-167 — after the persistent readouts, so it never displaces them; unfitted, like the
+            preview's own (`preview-status-bar.tsx`), and clipped by the same CSS ellipsis rule. */}
+        <LinkTargetReadout testId={`editor-status-link-readout-${panelId}`} target={linkReadout} />
       </div>
       <div
         className="editor-status-strip__group editor-status-strip__group--controls"

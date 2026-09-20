@@ -30,6 +30,7 @@ export {
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
 } from './command-recipe.js';
+export { isWslExecutable } from './wsl-flavour.js';
 export {
   THRONG_TEST_SHELL_HISTORY,
   SHELL_HISTORY_OFF_SNIPPET,
@@ -39,7 +40,6 @@ export {
 } from './shell-history.js';
 export type { ShellHistorySuppression } from './shell-history.js';
 export { quoteDropPath, formatDroppedPaths } from './drop-paths.js';
-export { terminalLinkTarget } from './link-menu.js';
 export {
   resolveLaunchSpec,
   tokenizeParams,
@@ -54,7 +54,7 @@ export {
   terminalExitNotice,
 } from './lifecycle.js';
 export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
-export { sanitizeSpawnEnv } from './spawn-env.js';
+export { sanitizeSpawnEnv, hyperlinkAdvertisementEnv } from './spawn-env.js';
 export { canRunAsAdmin, shouldRespawnDaemonElevated, shouldDeElevate } from './elevation.js';
 export {
   KITTY_DISAMBIGUATE,

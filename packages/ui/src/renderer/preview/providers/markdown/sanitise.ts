@@ -64,7 +64,13 @@
  */
 import DOMPurify, { type Config, type WindowLike } from 'dompurify';
 import { classifyPreviewLink, resolvePreviewImage, type PreviewLink } from '@throng/core';
-import { LINK_ATTRIBUTE, TARGET_ATTRIBUTE, linkOf, serialiseLink, stripBidiControls } from '../../link-dom.js';
+import {
+  LINK_ATTRIBUTE,
+  TARGET_ATTRIBUTE,
+  linkOf,
+  serialiseLink,
+  stripBidiControls,
+} from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
 
 type Profile = Config & { RETURN_DOM_FRAGMENT: true };
@@ -91,8 +97,15 @@ export const PROFILE = Object.freeze({
 /** The attribute a blocked image is marked with, for the body to show its alternative text (FR-084). */
 export const BLOCKED_IMAGE_ATTRIBUTE = 'data-throng-alt';
 
-/** The gesture a link's title names (FR-094). */
-export const FOLLOW_HINT = 'Ctrl+click to follow';
+/*
+ * 045 FR-169a's note — a link's title carries NO gesture wording at all now.
+ *
+ * It was a fixed `FOLLOW_HINT` string here, then FR-168 made it `previewLinkHoverText`, worded by
+ * destination so the three surfaces could not disagree about what "Ctrl+Click" would do. Round five
+ * removed the wording from the hover entirely, in all three: the title is the target address and
+ * nothing else. The wording lives on, unchanged and still shared, in the plain-click hint — which is
+ * where it is actually read, because a hint is asked for and a tooltip is not.
+ */
 
 /** Sanitises markdown-it's HTML. Shaped to be the pipeline's injected `Sanitiser`. */
 export type MarkdownSanitiser = (html: string, context?: PipelineContext) => DocumentFragment;
@@ -152,7 +165,19 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     node.setAttribute('tabindex', '0');
     node.setAttribute('role', 'link');
     const target = displayTarget(link.kind === 'external' ? link.url : link.kind === 'outside' ? link.target : href);
-    node.setAttribute('title', `${target} — ${FOLLOW_HINT}`);
+    /*
+     * FR-169a (round five) — the title is the TARGET, and nothing else.
+     *
+     * ══ SUPERSEDES FR-168's "<target> — <wording>" ══
+     *
+     * Round four gave every surface a tooltip that named the gesture and its destination, worded by
+     * one shared function so the three could not disagree. Hands-on, that reads as noise over a link
+     * whose address is the thing you wanted to see. The gesture is still explained — by the
+     * plain-click hint, which is where the maintainer asked for it and which still uses
+     * `previewLinkHoverText`. The hover's only job is now to show the full address, untruncated,
+     * which is what a native `title` is for.
+     */
+    node.setAttribute('title', target);
     // FR-118 — the same text, for the status bar readout. Set after DOMPurify's checks, so never the document's.
     node.setAttribute(TARGET_ATTRIBUTE, target);
   };

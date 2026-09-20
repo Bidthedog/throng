@@ -54,6 +54,7 @@ import MarkdownIt from 'markdown-it';
 import type { Env, MarkdownIt as MarkdownItInstance, StateCore, Token } from 'markdown-it';
 import { isMap, isScalar, parseDocument, Scalar, type Node as YamlNode } from 'yaml';
 import { headingSlug, splitFrontMatter } from '@throng/core';
+import type { PreviewLinkWording } from '../../link-dom.js';
 
 /**
  * The document a render is FOR — what the sanitiser's link and image hooks resolve against
@@ -74,6 +75,13 @@ export interface RenderEnvironment {
    * no code block, never handed to markdown-it — and the body keeps its line offset. Omitted means shown.
    */
   readonly frontMatter?: boolean;
+  /**
+   * 045 FR-168 (review round four, editor M2) — how a link's title words its destination, for the
+   * sanitiser's `a` hook. The title is baked during the render pass, so the wording has to arrive
+   * with the render; the plain-click hint words itself at the click. Absent: every in-project file
+   * link reads as "open in throng preview".
+   */
+  readonly linkWording?: PreviewLinkWording;
 }
 
 /** What the pipeline knows about a render that the sanitiser's hooks need. */

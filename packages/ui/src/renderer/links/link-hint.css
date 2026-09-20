@@ -1,0 +1,29 @@
+/*
+ * 045 round four (FR-165 / FR-166) — the plain-click link hint.
+ *
+ * `position: fixed` and click-through by design (FR-165a): the click that raised it keeps its
+ * ordinary meaning and nothing behind it — a terminal's mouse-reporting program included — ever
+ * sees a hint it did not ask for. Registered in the floating-surfaces guard (FR-013): it is
+ * POSITIONED but never FLIPPED — `clampToViewport` (the link hint's own component) only ever
+ * slides it because FR-165c says staying on screen wins over not covering the link.
+ *
+ * Colours are theme tokens with their own descriptors (FR-165g): `linkHintBackground` /
+ * `linkHintText` / `linkHintBorder` each carve out a role a theme authored before the hint
+ * existed already sets (`surfaceActive` / `text` / `border`) so an old theme's hint reads like the
+ * rest of its chrome from the first render.
+ */
+.link-hint {
+  position: fixed;
+  z-index: 1000;
+  max-width: 360px;
+  padding: 4px 8px;
+  background: var(--throng-colour-linkHintBackground);
+  color: var(--throng-colour-linkHintText);
+  border: 1px solid var(--throng-colour-linkHintBorder);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+}

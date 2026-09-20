@@ -24,6 +24,26 @@ export class WindowsShellDetection implements IShellDetection {
   }
 
   async detectInstalledShells(): Promise<DetectedShell[]> {
+    return this.detect();
+  }
+
+  /**
+   * 045 FR-151: Git for Windows' install root — the folder whose `bin\bash.exe` this detection found
+   * as Git Bash — or `null` when Git Bash is not installed. Synchronous on purpose: the detection is
+   * synchronous underneath, and `WindowsPathForms` asks it lazily, from inside a pure lookup.
+   *
+   * A root that holds no `usr\bin` is not a Git install: the last-resort `bash.exe` on PATH can be
+   * WSL's `System32\bash.exe`, whose grandparent is the Windows folder, and mapping `/etc` there would
+   * be a confident wrong answer.
+   */
+  gitInstallRoot(): string | null {
+    const bash = this.detect().find((s) => s.id === 'git-bash')?.file;
+    if (bash === undefined) return null;
+    const root = path.dirname(path.dirname(bash));
+    return this.resolver.exists(path.join(root, 'usr', 'bin')) ? root : null;
+  }
+
+  private detect(): DetectedShell[] {
     if (this.cache) return this.cache;
     const detected: DetectedShell[] = [];
     for (const candidate of this.candidates()) {

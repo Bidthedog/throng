@@ -106,7 +106,7 @@ export type { IFileWatcher, Disposable, WatchOptions } from './abstractions/file
 
 // File Explorer tree (004): OS seams + pure domain.
 export type { IFileSystem, DirEntry } from './abstractions/file-system.js';
-export type { IShellIntegration } from './abstractions/shell-integration.js';
+export type { IShellIntegration, ShellActionResult } from './abstractions/shell-integration.js';
 export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, DragEffect, ClickAction, ExpandNode, TargetNode } from './explorer/index.js';
 
 // Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
@@ -192,6 +192,8 @@ export type {
   // 039 FR-020 (#293) — automatic vs manual terminal reload.
   TerminalReloadMode,
   EditorSettings,
+  // 045 FR-050/FR-060 (#394) — the `Editor · Links` block.
+  EditorLinkSettings,
   EditorNavigationSettings,
   EditorOpenOnClick,
   EditorOpenTarget,
@@ -650,6 +652,7 @@ export {
   BUILTIN_SHELL_INTEGRATION_ENV,
   flavourReportsDirectory,
   BUILTIN_SHELL_INTEGRATION,
+  isWslExecutable,
   THRONG_TEST_SHELL_HISTORY,
   SHELL_HISTORY_OFF_SNIPPET,
   SHELL_HISTORY_OFF_ENV,
@@ -683,7 +686,6 @@ export {
   MAX_CAPTURABLE_COMMAND_LENGTH,
   quoteDropPath,
   formatDroppedPaths,
-  terminalLinkTarget,
   resolveLaunchSpec,
   tokenizeParams,
   type LaunchSpec,
@@ -695,6 +697,9 @@ export {
   type ShellProbe,
   type ShellResolver,
   sanitizeSpawnEnv,
+  // 045 FR-080 – FR-080d (#394): what to add to a terminal's environment so programs know throng
+  // renders hyperlinks. At most one key, and it is FORCE_HYPERLINK.
+  hyperlinkAdvertisementEnv,
   canRunAsAdmin,
   shouldRespawnDaemonElevated,
   shouldDeElevate,
@@ -1003,3 +1008,69 @@ export {
   serialiseHistory,
 } from './navigation/history.js';
 export type { NavigationEntry, NavigationHistory } from './navigation/history.js';
+
+// 045 — clickable file links (#394 / #198). The grammar and every decision, pure and OS-free.
+// `core/src/links/**` names no operating system, extension or drive mapping; the OS facts arrive
+// through IPathForms and IExecutableExtensions, and `links-no-os-names.test.ts` fails the build on
+// one that leaks in.
+export type {
+  Span,
+  LinkPosition,
+  LinkCandidate,
+  LinkResolutionRequest,
+  ResolvedLink,
+  LinkResolution,
+  LinkActionOutcome,
+  LinkFollowOutcome,
+} from './links/types.js';
+export type { IPathForms } from './abstractions/path-forms.js';
+export type { IExecutableExtensions } from './abstractions/executable-extensions.js';
+export type { IRefusedUriSchemes } from './abstractions/refused-uri-schemes.js';
+export { detectPathCandidates, detectPathSpans } from './links/detect.js';
+export type { DetectOptions } from './links/detect.js';
+export {
+  KNOWN_FILE_EXTENSIONS,
+  REMOVE_ALL_SHIPPED,
+  knownFileExtensionsSet,
+  resolveKnownExtensions,
+} from './links/known-extensions.js';
+export type { KnownExtensionEdits } from './links/known-extensions.js';
+export {
+  LINK_HINT_MS,
+  LINK_MARK_THROTTLE_MS,
+  LINK_ROOT_BACKOFF_MS,
+  MAX_LINK_CANDIDATES_PER_LINE,
+  MAX_TIMED_OUT_LINK_CHECKS,
+} from './links/limits.js';
+export { resolveCandidate, isLinkInProject } from './links/resolve.js';
+export type { LinkResolutionContext } from './links/resolve.js';
+export { resolveDefaultLinkAction } from './links/default-action.js';
+export type { ClickTarget } from './links/default-action.js';
+export { linkHoverText, uriHoverDestination } from './links/hover-text.js';
+export type { LinkHoverDestination } from './links/hover-text.js';
+export { linkReadoutTarget } from './links/readout.js';
+export { WEB_URL_REGEX, detectWebLinks } from './links/web-url.js';
+export type { WebLinkSpan } from './links/web-url.js';
+export { scanLinkLine } from './links/scan-line.js';
+export type { ScannedLine, ScanOptions } from './links/scan-line.js';
+export {
+  DEFAULT_PROTOCOL_ALLOWLIST,
+  detectProtocolSpans,
+  normaliseProtocolScheme,
+  protocolAllowlistSet,
+} from './links/protocol-uri.js';
+export type { ProtocolLinkSpan } from './links/protocol-uri.js';
+export { CORE_REFUSED_URI_SCHEMES } from './links/refused-schemes.js';
+export { sanitiseLinkTarget } from './links/sanitise.js';
+export type { Sanitised } from './links/sanitise.js';
+export { resourceClass } from './links/resource-class.js';
+export type { ResourceClass } from './links/resource-class.js';
+export { buildLinkMenu } from './links/menu.js';
+export type {
+  LinkMenuApplicable,
+  LinkMenuContext,
+  LinkMenuItem,
+  LinkMenuItemId,
+  LinkTarget,
+  ResolvedTarget,
+} from './links/menu.js';

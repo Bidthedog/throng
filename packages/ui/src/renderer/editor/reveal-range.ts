@@ -67,6 +67,44 @@ export function headingRevealTarget(absPath: string, fragment: string | undefine
 }
 
 /**
+ * 045 FR-033 / FR-052 — where the caret goes when a link carrying a position opens an editor.
+ *
+ * ══ A RESOLVER, FOR THE SAME REASON AS THE HEADING ABOVE ══
+ *
+ * `src/foo.ts:42` names line 42 of a document nobody has read yet: the file may not be open, the
+ * panel may not exist, and its content arrives over the bridge a turn or two after the open. A
+ * document OFFSET therefore cannot be computed at the call site, only once the view holds the text —
+ * which is what {@link RevealResolver} is for.
+ *
+ * ══ AND IT CLAMPS RATHER THAN REFUSING ══
+ *
+ * The spec's *position beyond the file's end* edge case. A build log naming line 400 of a file since
+ * cut to 80 lines is STALE, not wrong: the user still wants the file. Refusing would either open
+ * nothing or raise a notice about a number they never typed, so the caret lands at the nearest valid
+ * position — the same answer `resolveGotoLine` gives a typed line number out of range.
+ *
+ * Line and column are both 1-BASED, as every form in FR-004 writes them.
+ */
+export function positionRevealTarget(line: number, column?: number): RevealResolver {
+  return {
+    resolve(doc) {
+      // Split on `\n` and let a trailing `\r` count as part of the line's text: the document
+      // arrives exactly as it sits on disk, and a CRLF file must not shift every offset by a line.
+      const lines = doc.split('\n');
+      const index = Math.min(Math.max(Math.trunc(line) || 1, 1), lines.length) - 1;
+
+      let start = 0;
+      for (let i = 0; i < index; i += 1) start += (lines[i]?.length ?? 0) + 1;
+
+      const width = lines[index]?.replace(/\r$/, '').length ?? 0;
+      const across = column === undefined ? 0 : Math.min(Math.max(Math.trunc(column) || 1, 1), width + 1) - 1;
+      const offset = start + across;
+      return { from: offset, to: offset };
+    },
+  };
+}
+
+/**
  * How long to keep looking, as a count and an interval.
  *
  * Two seconds in total at the defaults. Long enough for a panel to be created, mount and load a

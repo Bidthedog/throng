@@ -35,6 +35,7 @@
 import type { ReactElement } from 'react';
 import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
+import { LinkTargetReadout } from '../common/link-target-readout.js';
 import { SyncScrollButton } from './sync-scroll-button.js';
 import '../editor/editor.css';
 
@@ -71,14 +72,7 @@ export function PreviewStatusBar({
           bar draws its controls. Its one readout (FR-118) is clipped with an ellipsis (`preview.css`); the
           controls group is measured whole, so the button is never hidden by it. */}
       <div className="editor-status-strip__group editor-status-strip__group--readouts">
-        {readout ? (
-          <span
-            className="editor-status-strip__readout preview-status-bar__readout"
-            data-testid={`preview-status-readout-${panelId}`}
-          >
-            {readout}
-          </span>
-        ) : null}
+        <LinkTargetReadout testId={`preview-status-readout-${panelId}`} target={readout} />
       </div>
       <div
         className="editor-status-strip__group editor-status-strip__group--controls"

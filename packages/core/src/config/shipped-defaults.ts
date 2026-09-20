@@ -150,7 +150,35 @@ import { setAtPath } from './metadata.js';
 // already carry an 8 and would otherwise never receive the new token. Additive only: no value moves,
 // so there is no frozen version-8 record to guard against. The one new key binding the iteration adds
 // needs no bump, for the reason given above — `parseKeybindings` fills an absent action on every read.
-export const SHIPPED_DEFAULTS_VERSION = 9;
+//
+// Bumped by 045 (9 → 10): two colour tokens, `linkUnderline` and `linkUnderlineHover`, the underline
+// that marks a link in both panel types (FR-138). The 044 case again: additive only, every payload
+// arrives and no existing value moves, so there is no frozen version-9 record to guard against.
+// Without the bump an existing install's theme files never receive the tokens. The settings the same
+// release changes need none — `editor.links.existenceCheckTimeoutMs` is filled by the tolerant parse
+// on every read, and the retired `editor.links.defaultAction` is dropped by it (FR-113).
+//
+// Bumped again by 045's round four (10 → 11): three colour tokens, `linkHintBackground`,
+// `linkHintText` and `linkHintBorder` — the plain-click link hint's own surface, text and border
+// (FR-165g). Additive only, the same shape as the bump above: without it an existing install's theme
+// files never receive them and the hint would draw unstyled (`--throng-colour-linkHintBackground`
+// etc. simply absent, since `toCssVariables` only emits what a theme's OWN record carries plus the
+// built-in default, and an on-disk file frozen at version 10 carries neither).
+//
+// NOT bumped by 045's round five (#408), and the reason is worth recording, because the changes look
+// like the bumps above and are not. Round five inverted `editor.links.knownFileExtensions` from a
+// `{ added, removed }` delta into the one list a user edits, and retired `terminals.linkHoverDelayMs`
+// — two SETTINGS, no theme tokens. A settings change reaches an existing install through the tolerant
+// per-field parse on EVERY read, with no version gate: `knownFileExtensionsSetting` migrates the old
+// shape the first time it sees one, and a stray `linkHoverDelayMs` is simply not copied into the
+// rebuilt block. That is this file's own round-four ruling for `defaultAction` and
+// `existenceCheckTimeoutMs`, and it applies unchanged here.
+//
+// A bump to 12 was written and then reverted. It would have carried no payload — nothing waiting on
+// a theme file, no frozen record to guard a rewrite against — so every install would have paid an
+// upgrade pass to learn nothing. The version means "there is something here you have not got"; moving
+// it when there is not is how it stops meaning that.
+export const SHIPPED_DEFAULTS_VERSION = 11;
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`

@@ -419,6 +419,37 @@ declare global {
         writeRich: (entry: { text: string; html: string }) => Promise<void>;
         paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
       };
+      // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
+      // never a resolved path: main re-resolves, derives the owning project from `panelId`, and
+      // re-checks that the target still exists before acting (FR-037, I1/I2).
+      links?: {
+        resolve: (
+          req: import('@throng/core').LinkResolutionRequest,
+        ) => Promise<import('@throng/core').LinkResolution>;
+        /** FR-035 / FR-035a: a file is selected in its folder, a folder is opened. */
+        reveal: (
+          req: import('@throng/core').LinkResolutionRequest,
+        ) => Promise<import('@throng/core').LinkActionOutcome>;
+        /** FR-036: the OS's own application for the type. The only route that can run an executable. */
+        open: (
+          req: import('@throng/core').LinkResolutionRequest,
+        ) => Promise<import('@throng/core').LinkActionOutcome>;
+        /**
+         * 045 round four (data-model §16.18): a Ctrl+click, the chord and Open Link — ONE request, one
+         * bounded pass; main performs any reveal itself and answers what is left for the renderer to do.
+         */
+        follow: (
+          req: import('@throng/core').LinkResolutionRequest,
+        ) => Promise<import('@throng/core').LinkFollowOutcome>;
+      };
+      // 045 round four — web, loopback and allowlisted protocol links leave by `throng:linkUri:*`
+      // (plan twelfth pass). Main applies the link policy on every request.
+      linkUri?: {
+        /** `throng:linkUri:openExternal` — the OS handler for the URI's scheme, behind main's policy. */
+        openExternal: (url: string) => void;
+        /** `throng:linkUri:refusedSchemes` — the platform's refused schemes, lower-case, no colon. */
+        refusedSchemes: () => Promise<string[]>;
+      };
       // 044 — file previews (contracts/preview-ipc.md). Main's PreviewService owns every open preview;
       // this window is a viewer, identified as the sender of each call.
       preview?: {

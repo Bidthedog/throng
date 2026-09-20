@@ -14,7 +14,13 @@
  * Provider-neutral on purpose: the chrome imports this, and a later provider that draws links marks them
  * the same way.
  */
-import { headingSlug, type PreviewLink } from '@throng/core';
+import {
+  headingSlug,
+  linkHoverText,
+  uriHoverDestination,
+  type LinkHoverDestination,
+  type PreviewLink,
+} from '@throng/core';
 
 /**
  * Bidirectional formatting controls: the Arabic letter mark (U+061C), embeddings and overrides
@@ -57,6 +63,65 @@ export function linkTargetOf(target: EventTarget | Element | null): string | nul
 /** A link's classification, as the attribute holds it. */
 export function serialiseLink(link: PreviewLink): string {
   return JSON.stringify(link);
+}
+
+/**
+ * FR-168's note — the preview's tooltip is worded by the SAME `linkHoverText` the terminal and the
+ * editor use, so no surface can word one link differently (FR-104, FR-166). Unlike theirs, the
+ * destination is not judged by name: the preview keeps 044's own follow (S6), so what it words is
+ * exactly what THAT gesture does — an in-project file or a same-document heading opens in the
+ * preview; a link 044 FR-090e stops at the current file with a notice; `http(s)` leaves for the
+ * system browser; an allowlisted `mailto:` leaves for its own handler (044 FR-091, S6 addendum).
+ */
+export interface PreviewLinkWording {
+  /**
+   * Review round four (editor M2) — whether the preview would actually SHOW this target.
+   *
+   * `classifyPreviewLink` answers `kind: 'file'` for every in-project reference whatever its
+   * extension, and 044 FR-090d / `preview-service.ts` open one with no enabled provider in an
+   * EDITOR. Without this the tooltip promised "open in throng preview" for `[the entry
+   * point](src/main.ts)`, whose Ctrl+click opens an editor panel — FR-168's note requires the
+   * preview's wording to name what THAT surface's Ctrl+click does.
+   *
+   * Absent means the old reading, "every file link previews": a caller that cannot see the provider
+   * registry is not made to guess.
+   */
+  readonly previewable?: (absPath: string) => boolean;
+  /** 023 FR-025 / FR-026 — which editor an `openedInEditor` follow lands in. Absent: `lastActive`. */
+  readonly openTarget?: 'lastActive' | 'new';
+}
+
+export function previewLinkDestination(
+  link: Exclude<PreviewLink, { kind: 'inert' }>,
+  wording: PreviewLinkWording = {},
+): LinkHoverDestination {
+  switch (link.kind) {
+    case 'file':
+      return wording.previewable?.(link.absPath) === false
+        ? { kind: 'editor', openTarget: wording.openTarget ?? 'lastActive' }
+        : { kind: 'preview' };
+    case 'heading':
+      return { kind: 'heading' };
+    case 'outside':
+      return { kind: 'stays' };
+    // FR-168 / §9.4 — worded by its scheme, through the one function the editor and the terminal
+    // now ask as well, so `tel:` and `slack:` are not silently "system browser" here either.
+    case 'external':
+      return uriHoverDestination(link.url);
+  }
+}
+
+/**
+ * The gesture hint half of a link's title (FR-168's note). `chord` defaults to `Ctrl` — the preview
+ * never varies it by platform today, matching what it replaces (`FOLLOW_HINT`).
+ *
+ * Takes the FULL `PreviewLink` — including `inert`, which `linkOf()`'s return type admits even
+ * though `parseLink` never produces one — so a caller that has only checked "not null" (`linkOf`'s
+ * ordinary reading) never has to re-narrow. An inert link is never followable and never hinted: `''`,
+ * which every caller here already treats as "show nothing".
+ */
+export function previewLinkHoverText(link: PreviewLink, chord = 'Ctrl', wording: PreviewLinkWording = {}): string {
+  return link.kind === 'inert' ? '' : linkHoverText(previewLinkDestination(link, wording), chord);
 }
 
 function parseLink(raw: string): PreviewLink | null {

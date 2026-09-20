@@ -11,6 +11,8 @@ import {
 } from '@throng/core';
 import { currentScope, resolveScoped, type ScopeInput } from './keybindings/scope.js';
 import { EditorChrome } from './editor/editor-chrome.js';
+import { getEditorView } from './editor/editor-views.js';
+import { followLinkInPanel } from './editor/link-decorations.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
 import { TransientScrim } from './common/transient-scrim.js';
 import { requestQuickOpen, setNavigationModal } from './navigate/navigation-store.js';
@@ -552,6 +554,52 @@ export function KeybindingsHandler({
     // handlers, so move-focus/zoom chords are intercepted even inside a terminal.
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [keybindings]);
+
+  /*
+   * 045 FR-044, FR-045 — the Open Link chord over the active EDITOR.
+   *
+   * ══ WHY IT IS A LISTENER OF ITS OWN, AND NOT A `WINDOW_HANDLED_ACTIONS` CASE ══
+   *
+   * The dispatcher above calls `preventDefault()` and `stopPropagation()` for EVERY action in its
+   * allowlist, before the switch. That is right for a window chord — it is the whole reason
+   * `Ctrl+Alt+Left` does not also reach Git Bash — and it is exactly wrong here. FR-044 keeps
+   * Ctrl+Enter's editor meaning everywhere but inside a link, and that meaning is CodeMirror's own
+   * `insertBlankLine` in `defaultKeymap`: swallowing the key unconditionally would delete it.
+   *
+   * So the key is taken ONLY when a link was actually followed. Capture phase all the same, because
+   * `defaultKeymap` claims `Mod-Enter` inside the view and a bubble-phase listener would arrive
+   * after the blank line had already been inserted — which is why `preview-commands.tsx`, which owns
+   * this command's PREVIEW scope in the bubble phase, cannot host the editor scope too.
+   *
+   * `editorCommandKeymap` deliberately leaves the chord unbound and must stay that way: a keymap
+   * entry at `Prec.highest` would claim the key inside the view and make the scope gate unreachable
+   * — the trap 033's Go To Line comment records one screen above.
+   */
+  useEffect(() => {
+    const onFollowLink = (e: KeyboardEvent): void => {
+      if (e.defaultPrevented) return;
+      const layout = wsRef.current.layout;
+      const scope: ScopeInput = { tabs: layout?.tabs, activeTabId: layout?.activeTabId ?? null };
+      const action = resolveScoped(
+        keybindings,
+        { key: chordKey(e), ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey },
+        scope,
+      );
+      if (action !== 'preview.followLink') return;
+      // The scope gate, stated here as well as declared in `COMMAND_SCOPES`, for Go To Line's
+      // reason: `resolveScoped` answers "is this chord live?", this answers "on what?". A preview
+      // panel's copy of the command is `preview-commands.tsx`'s, and FR-046 gives a terminal none.
+      const tab = layout?.tabs.find((t) => t.id === layout.activeTabId);
+      const target = tab ? effectiveActivePanelId(tab) : undefined;
+      if (!target || currentScope(scope) !== 'editor') return;
+      if (followLinkInPanel(target, getEditorView(target))) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', onFollowLink, true);
+    return () => window.removeEventListener('keydown', onFollowLink, true);
   }, [keybindings]);
   return null;
 }

@@ -273,13 +273,19 @@ export async function openFileInPanel(
   tabId: string,
   panelId: string,
   absPath: string,
+  /**
+   * 045 FR-170 row 2 — the place to reveal once the file is in THIS panel: a Link menu's
+   * Open In ▸ <editor name> carries the link's line and column (FR-052). Revealed only when the load
+   * ran here; an already-open file is focused where it is, as a drop always has been.
+   */
+  range?: RevealTarget,
 ): Promise<void> {
   if (!getEditorActions(panelId)) {
     // The panel is not an editor yet (or its view has gone). Fall back to the tab-level route rather
     // than dropping the file on the floor. That route takes the same one-buffer decision first — an
     // already-open file is focused and a refused one creates no panel (041 FR-013) — so nothing here
     // needs to ask main before handing over.
-    await openFileInTab(ws, tabId, absPath);
+    await openFileInTab(ws, tabId, absPath, 'lastActive', range);
     return;
   }
 
@@ -287,12 +293,15 @@ export async function openFileInPanel(
   // one notice and nothing opened (041 FR-013); a dirty target → the four-choice prompt (US9), because
   // dropping a file onto unsaved work must not discard it just because the gesture was a drag. The drop
   // activates the panel it landed on, once the load is decided.
-  await openIntoEditorPanel(ws, panelId, absPath, { kind: 'open' }, {
+  const outcome = await openIntoEditorPanel(ws, panelId, absPath, { kind: 'open' }, {
     beforeLoad: () => {
+      // A drop's panel is always in the tab on screen; a Link menu's named editor may not be.
+      if (ws.layout?.activeTabId !== tabId) ws.setActiveTab(tabId);
       ws.setActivePanel(tabId, panelId);
       setLastActiveEditor(tabId, panelId);
     },
   });
+  if (outcome === 'loaded') void revealRange(panelId, range);
 }
 
 /**

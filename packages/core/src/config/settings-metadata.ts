@@ -613,6 +613,99 @@ export const SETTINGS_METADATA: MetadataRegistry = [
    */
   ...previewSettingsDescriptors(SHIPPED_PREVIEW_PROVIDERS),
 
+  /*
+   * Links (045, FR-061 — #394).
+   *
+   * Five together under `Editor · Links` (the two detection switches, the resolution timeout, the
+   * protocol allowlist and the known-extensions list), because FR-061 requires the link settings "in
+   * one place". One more link setting, `terminals.advertiseHyperlinks`, deliberately sits in the flat
+   * Terminal group instead: it changes what a terminal is STARTED with, which is a property of the
+   * terminal rather than of links.
+   *
+   * These five are declared CONSECUTIVELY on purpose. `groupDescriptors` buckets by group then
+   * subgroup in declaration order, so a descriptor pushed in between them would split the section
+   * in the editor without any test of the values noticing.
+   *
+   * 045 FR-112 (2026-09-18): `editor.links.defaultAction` was DELETED here and in app-settings.ts,
+   * on the `explorer.openMode` pattern above. The click rule (FR-110) fixes what a click does, so
+   * the setting had nothing left to choose; a persisted value is dropped by the tolerant parse and
+   * the next write leaves it out (FR-113, 019 FR-023's mechanism).
+   */
+  {
+    // Round five (#408): the switch used to govern a DETECTED path only — web links, allowlisted
+    // protocol links and OSC 8 hyperlinks kept working regardless. The maintainer's reading of
+    // FR-060 is the opposite: ON shows every kind of link, OFF shows none. The mechanics that make
+    // this true belong to the renderer; this descriptor states what the switch now means.
+    key: 'editor.links.detectInEditors',
+    label: 'Detect links in editors',
+    description:
+      'Show links in editor documents — paths throng recognises by their shape, web links, allowlisted protocol links, and hyperlinks a program declared. Off, none of them are shown, and Ctrl+click and Ctrl+Enter keep their ordinary editor meanings everywhere.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+  {
+    key: 'editor.links.detectInTerminals',
+    label: 'Detect links in terminals',
+    description:
+      'Show links in terminal output — paths throng recognises by their shape, web links, allowlisted protocol links, and hyperlinks a program declared. Off, none of them are shown; Ctrl+click then does nothing where a link used to be.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'toggle',
+  },
+  {
+    // Round five (#408): the old label said "Existence-check timeout", which stopped being true in
+    // round four — nothing checks existence before drawing a link any more (FR-155). What this
+    // bounds is RESOLUTION, at the moment a link is followed or its Link menu opens, across every
+    // reading tried; `packages/ui/src/main/file-link-resolver.ts` still reads it for exactly that.
+    // The KEY is deliberately unchanged (`existenceCheckTimeoutMs`), because renaming it would drop
+    // every persisted value.
+    //
+    // The old label is quoted above as bare prose, with no preposition ahead of it, deliberately.
+    // `packaged-runtime-deps.test.ts` scans this file with a regex that cannot tell a doc comment
+    // apart from code, and it reads any of `import`, `require` or the preposition just used,
+    // followed by a quoted string, as a dependency — so the natural phrasing declares an npm package
+    // named after the old label and fails the build. That test's own header records the same trap,
+    // which arrived in #369; writing this comment cost one more red run before the penny dropped.
+    key: 'editor.links.existenceCheckTimeoutMs',
+    label: 'Link resolution timeout',
+    description:
+      'How long throng waits, in milliseconds, for a link to resolve when you follow it or open its Link menu — in total, however many places it looks. Raise it for a slow network share. It applies to the next check, with no restart.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'slider',
+    min: 250,
+    max: 25_000,
+    step: 250,
+  },
+  {
+    // 045 FR-159 — stored as the whole list, so a release never widens it for the user (R28).
+    key: 'editor.links.protocolAllowlist',
+    label: 'Allowed link protocols',
+    description:
+      'URI schemes, besides web links, that are drawn as links and followed with their handler, in terminals and editors alike — for example mailto, tel or slack. Enter a name with or without its colon; case does not matter. Schemes that run code are never links, even if listed here.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'array',
+    itemControl: 'text',
+    clearable: true, // empty = no protocol links, only web and file links
+  },
+  {
+    // Round five (#408): INVERTED from round four's `{ added, removed }` delta into the one list a
+    // user actually edits — shipped as the real extensions (`KNOWN_FILE_EXTENSIONS`), shown and
+    // edited as an ordinary array. Short description on purpose: the array control already shows the
+    // list, so repeating it in prose is the duplication the maintainer asked to remove.
+    key: 'editor.links.knownFileExtensions',
+    label: 'File extensions that end a spaced path',
+    description:
+      'File extensions that end a path containing spaces when it is not quoted, in terminals and editors alike. Add or remove entries; each is taken with or without its leading dot, and without case.',
+    group: 'Editor',
+    subgroup: 'Links',
+    control: 'array',
+    itemControl: 'text',
+    clearable: true, // empty = no extension ever ends a spaced path
+  },
+
   // Navigation (033, FR-069b). Its own group because these govern the Quick Open and Go To Line
   // modals, not an editor panel — the distinction the user reads them by.
   {
@@ -740,16 +833,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     max: 5000,
     step: 250,
   },
+  // `terminals.linkHoverDelayMs` — RETIRED (round five, #408). The terminal's custom hover tooltip
+  // is replaced by a native HTML `title`, whose delay belongs to the OS and cannot be configured; no
+  // descriptor for it exists any more. See `TerminalSettings`'s doc comment in `app-settings.ts`.
   {
-    key: 'terminals.linkHoverDelayMs',
-    label: 'Link hover tooltip delay',
+    key: 'terminals.advertiseHyperlinks',
+    label: 'Tell programs that links are supported',
     description:
-      'How long to rest the pointer on a terminal link before the “Ctrl+Click to open” tooltip appears, in milliseconds. 0 shows it instantly.',
+      'Start terminal programs with FORCE_HYPERLINK=1, so tools that can emit clickable links — Claude Code among them — do. This applies to terminals started afterwards and does not change one that is already running, because a program’s environment is fixed when it starts. A FORCE_HYPERLINK you have set yourself is never overridden, in either direction. Turning this off does not stop throng recognising paths a program prints as plain text.',
     group: 'Terminal',
-    control: 'slider',
-    min: 0,
-    max: 2000,
-    step: 50,
+    control: 'toggle',
   },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE

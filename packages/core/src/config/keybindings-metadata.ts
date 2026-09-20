@@ -165,11 +165,16 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   ),
   // "Open Link", not "Follow link": the same words as the preview body menu item this accelerates
   // (FR-095), so the key binder and the menu name one command once.
+  //
+  // 045 FR-062 (#394): it no longer says "Live in a preview only" — the command is live in editors
+  // too, and the description was the only place that claim was written down. The Scope column is
+  // derived from COMMAND_SCOPES by `chord()` and needs no edit here. In a TERMINAL it stays dead
+  // (FR-046), which is why the sentence names the two surfaces rather than saying "everywhere".
   chord(
     'preview.followLink',
     'Navigate',
     'Open Link',
-    'Open the focused link in a preview, exactly as Ctrl+click does. Live in a preview only.',
+    'Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor’s own meaning. Not live in a terminal, where Ctrl+Enter reaches the program.',
   ),
 
   // File Explorer (resolved while the File Explorer pane has focus)

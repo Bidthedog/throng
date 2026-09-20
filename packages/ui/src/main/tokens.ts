@@ -22,4 +22,20 @@ export const UI_TYPES = {
   // Bound at this boundary because the permission may only be granted by the process that owns the
   // foreground, which is the one that owns the window — this one.
   ForegroundHandoff: Symbol.for('throng:IForegroundHandoff'),
+  /*
+   * 045 (#394) — the two path/extension seams a file link needs, and the filesystem it walks.
+   *
+   * `PathForms` and `ExecutableExtensions` are new, and bound here for the #199 reason: the
+   * questions they answer are the OS's, and main is the process that asks them.
+   *
+   * `FileSystem` is NOT new — `NodeFileSystem` has been constructed by hand in `main.ts` since 004,
+   * with no token at all. 043 recorded that as a named Principle IX exception; binding it here
+   * closes that item rather than adding a third construction site for it.
+   */
+  PathForms: Symbol.for('throng:IPathForms'),
+  ExecutableExtensions: Symbol.for('throng:IExecutableExtensions'),
+  // 045 FR-159 (round four): the platform's half of the refused URI schemes, read by the two
+  // `throng:linkUri:*` handlers (contracts platform-ports.md §7.1).
+  RefusedUriSchemes: Symbol.for('throng:IRefusedUriSchemes'),
+  FileSystem: Symbol.for('throng:IFileSystem'),
 } as const;

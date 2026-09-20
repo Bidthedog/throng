@@ -1,5 +1,5 @@
 /**
- * The preview panel's BODY menu (044, FR-015b, FR-035, FR-035c, FR-095, FR-096d;
+ * The preview panel's BODY menu (044, FR-015b, FR-035, FR-035c, FR-096d; 045 FR-169 – FR-171, S6;
  * contracts/menus-and-controls.md §4).
  *
  * A builder, not a component, for the reason `terminal-content-menu.ts` gives: a menu assembled inside a
@@ -7,15 +7,19 @@
  *
  * | Section    | Items                                                               | When                                   |
  * |------------|---------------------------------------------------------------------|----------------------------------------|
- * | Contextual | Open Link *(its chord)* · Copy Link Address                         | over a followable link, nothing selected |
  * | Content    | Copy · Copy as Rich Text · Copy as Plain Text · Select All          | the provider draws selectable text     |
  * | Navigate   | Open in Editor / Go to Editor                                       | a text provider (never binary, FR-015e) |
  * | View & state | Synchronise Scrolling *(its chord)*, checked while on             | a text provider, whatever is under the pointer (FR-122b) |
  *
- * **Contextual.** 024 US7's labels and the terminal link menu's icons (Open Link has none: no open/link
- * token exists; Copy Link Address is a copy). With text selected the ordinary menu wins even over a link,
- * and over an inert link (FR-091's "any other link") the section is absent, because nothing would follow
- * it.
+ * ══ THIS MENU NO LONGER CARRIES ANY LINK ROW (045 round four, FR-169 – FR-171) ══
+ *
+ * 024 and 044 had the link run (Open Link, Copy Link to Clipboard) LEAD this menu whenever the
+ * pointer sat on a link. FR-169 supersedes that: a right-click (or `menu.open`) over a link with no
+ * selection now opens the ONE Link menu (`preview/preview-link-menu.ts`, built from core's
+ * `buildLinkMenu`, the same path a terminal and an editor use) **instead of** this menu entirely —
+ * never both, never one leading the other. The call site (`preview-panel.tsx`) decides which menu to
+ * open; this builder only ever draws the ordinary one, exactly as `terminal-content-menu.ts` and
+ * `editor/content-menu.ts` do.
  *
  * **Content.** Copy uses the `editor.previews.copyFormat` setting; Copy as Rich Text and Copy as Plain Text
  * each copy in their named format whatever the setting — a default action with its explicit alternatives
@@ -28,13 +32,6 @@
  */
 import type { PreviewCopyFormat, PreviewLink } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
-
-export interface PreviewContentMenuActions {
-  /** Follow the link, exactly as Ctrl+click does (FR-090, FR-094). */
-  openLink: (link: PreviewLink) => void;
-  /** Put {@link linkAddress} on the clipboard. */
-  copyLinkAddress: (link: PreviewLink) => void;
-}
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -54,13 +51,8 @@ export interface PreviewEditorRouteItem {
 }
 
 export interface PreviewContentMenuArgs {
-  /** The link under the pointer, or the focused link for Shift+F10 / the menu key; `null` for neither. */
-  link: PreviewLink | null;
   /** Whether the body's selection was collapsed when the menu was asked for. */
   selectionEmpty: boolean;
-  /** The chord `preview.followLink` is bound to now, or `undefined` when it is unbound. */
-  followChord: string | undefined;
-  actions: PreviewContentMenuActions;
   /** Omitted or `null`: no Content section (a provider without selectable text). */
   content?: PreviewContentSection | null;
   /** Omitted or `null`: no Navigate section (a binary provider). */
@@ -73,7 +65,7 @@ export interface PreviewContentMenuArgs {
 }
 
 /**
- * What Copy Link Address copies (FR-116, contracts/menus-and-controls.md §4): a web or `mailto:` link's URL; a
+ * What Copy Link to Clipboard copies (FR-116, contracts/menus-and-controls.md §4): a web or `mailto:` link's URL; a
  * project file's absolute path, then `#fragment` when the link names one; a same-document heading as
  * `docPath` — the file the panel shows — then `#fragment`, never a bare `#fragment`, which names nothing
  * outside this panel; an outside link's target as written.
@@ -94,25 +86,8 @@ export function linkAddress(link: PreviewLink, docPath: string): string {
 }
 
 export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
-  const { link, selectionEmpty, followChord, actions, content, editorRoute, syncScroll } = args;
+  const { selectionEmpty, content, editorRoute, syncScroll } = args;
   const items: MenuAction[] = [];
-
-  if (link !== null && link.kind !== 'inert' && selectionEmpty) {
-    items.push({
-      label: 'Open Link',
-      testId: 'menu-item-Open Link',
-      section: 'contextual',
-      ...(followChord !== undefined ? { shortcut: followChord } : {}),
-      onClick: () => actions.openLink(link),
-    });
-    items.push({
-      label: 'Copy Link Address',
-      icon: 'copy',
-      testId: 'menu-item-Copy Link Address',
-      section: 'contextual',
-      onClick: () => actions.copyLinkAddress(link),
-    });
-  }
 
   if (content) {
     items.push({

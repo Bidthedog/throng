@@ -10,7 +10,7 @@ import {
 import {
   effectiveActivePanelId,
   formatDroppedPaths,
-  terminalLinkTarget,
+  isWslExecutable,
   firstBinding,
   resolveAction,
   resolveColour,
@@ -57,7 +57,28 @@ import { terminalContentMenu } from './terminal-content-menu.js';
 import { Icon } from '../common/icon.js';
 import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
-import { useReportPanelFailure } from '../workspace/panel-failure-notice.js';
+import {
+  useReportPanelFailure,
+  useReportSubjectFailure,
+} from '../workspace/panel-failure-notice.js';
+import { openFileInTab } from '../editor/editor-open.js';
+import { positionRevealTarget } from '../editor/reveal-range.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import {
+  linkFailureReport,
+  linkRouting,
+  openWebLink,
+  osLinkActions,
+  type LinkRoutingInputs,
+} from '../links/link-actions.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { openFileLinkMenu, openWebLinkMenu } from '../links/file-link-menu.js';
+import type { HoveredLink } from './hovered-link.js';
+import {
+  followTerminalLink,
+  terminalLinkBaseDirectory,
+  type TerminalLinkDeps,
+} from './terminal-link-activation.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
 import { useTerminal, type TerminalApi } from './use-terminal.js';
@@ -136,7 +157,7 @@ export function TerminalPanel({
   isActivePanelRef.current =
     ws.layout?.activeTabId === tabId && !!activeTab && effectiveActivePanelId(activeTab) === panel.id;
   const theme = useActiveTheme();
-  const { openMenu } = useContextMenu();
+  const { openMenu, updateMenu } = useContextMenu();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   // Safety net: never let the loading skeleton stick if the attach signal is missed.
   const giveUpSkeleton = useDelayedFlag(4000);
@@ -212,6 +233,98 @@ export function TerminalPanel({
     }),
     [theme],
   );
+  /*
+   * 045 FR-033 – FR-037 — where a link followed in THIS terminal is allowed to open.
+   *
+   * The two OS routes are bridge calls and are composed in below `link-actions.ts`; what a panel has
+   * to supply is the pair that needs a workspace around them, plus the notice. All three are
+   * unreachable from inside `useTerminal`'s mount effect, which is why they arrive as options.
+   *
+   * FR-055 is NOT enforced here: `performLinkTarget` refuses an editor or a preview for anything
+   * outside the owning project once, below every caller, precisely so a call site like this one
+   * cannot forget to.
+   */
+  const editorSettings = useAppSettings().editor;
+  const openTarget = editorSettings.openTarget;
+  const reportSubject = useReportSubjectFailure();
+  /** Shared with the start-failure banner below: one reading of the platform per render. */
+  const osName = window.throng?.osName ?? 'windows';
+  /*
+   * 045 FR-051, FR-052, FR-110 — the file's OWN default open action (044's per-provider setting),
+   * read AT THE GESTURE. There is no link-level default action any more (FR-112 retired it); the
+   * click rule fixes what a click does, and this is the one input it still reads live: whether an
+   * in-project file with no position goes to a preview.
+   *
+   * `linkActions` below is memoised and the mount effect holds it through a ref, so anything read
+   * into it is read once per panel and never again. A ref rewritten on every render is what keeps
+   * that setting live without putting it in the memo's dependencies — which would rebuild the
+   * performers, and through them nothing useful, on every unrelated settings change.
+   */
+  const previewProviders = usePreviewProviders();
+  const routingRef = useRef<LinkRoutingInputs>({
+    previewRegistry: previewProviders.registry,
+    previewSettings: editorSettings.previews,
+  });
+  routingRef.current = {
+    previewRegistry: previewProviders.registry,
+    previewSettings: editorSettings.previews,
+  };
+  /**
+   * FR-142 – FR-144, FR-151 — what this panel's flavour can tell a link about its directory, live for
+   * the same reason. Only a user-defined flavour can be WSL: the built-in detection never offers one.
+   */
+  const userFlavourFile = terminalSettings.flavours.find((f) => f.id === config.flavourId)?.file;
+  const linkFlavourRef = useRef({ shellIntegration: false, isWsl: false });
+  linkFlavourRef.current = {
+    shellIntegration: terminalSettings.shellIntegration,
+    isWsl: isWslExecutable(userFlavourFile),
+  };
+  /** FR-060, live for the same reason — the provider is registered once, against a live shell. */
+  const detectFileLinksRef = useRef(editorSettings.links.detectInTerminals);
+  detectFileLinksRef.current = editorSettings.links.detectInTerminals;
+  /** FR-120 / FR-123 — the existence-check timeout the link provider's held reply waits for. */
+  const linkSettingsRef = useRef(editorSettings.links);
+  linkSettingsRef.current = editorSettings.links;
+  const linkActions = useMemo<TerminalLinkDeps>(
+    () => ({
+      ...linkRouting(() => routingRef.current),
+      openInEditor: (link, position) => {
+        const tabId = ws.layout?.activeTabId;
+        // FR-033, FR-052 — the position is placed by `positionRevealTarget` once the view holds the
+        // text; `openFileInTab` reveals it in the editor that already holds the file too, so a follow
+        // into an open tab moves the caret rather than changing nothing (D2).
+        if (tabId) {
+          void openFileInTab(
+            ws,
+            tabId,
+            link.path,
+            openTarget,
+            position ? positionRevealTarget(position.line, position.column) : undefined,
+          );
+        }
+      },
+      openInPreview: (link) => {
+        void requestPreviewOpen({
+          absPath: link.path,
+          projectId: panel.originProjectId,
+          requesterPanelId: panel.id,
+        });
+      },
+      // One condition, one notice, one WORDING — the report is shaped in `link-actions.ts` so the
+      // editor's identical failure cannot read differently (FR-036, FR-037; 032's lesson).
+      reportFailure: (outcome) => {
+        reportSubject(
+          linkFailureReport(outcome, {
+            projectRoot,
+            osName,
+            ...(panel.originProjectId ? { projectId: panel.originProjectId } : {}),
+          }),
+        );
+      },
+    }),
+    [ws, openTarget, panel.originProjectId, panel.id, reportSubject, projectRoot, osName],
+  );
+
   // xterm re-reports the result set as output streams in or the buffer is trimmed, so the
   // bar's count stays true to the live scrollback (FR-012).
   const onSearchCount = useCallback(
@@ -248,37 +361,19 @@ export function TerminalPanel({
   const effectiveFontSize = Math.round(font.size * zoomFactor(panelZoomLevel(panel)));
   const apiRef = useRef<TerminalApi | null>(null);
 
-  // Right-click → the app's THEMED context menu (the shared ContextMenu), so the
-  // terminal's menu matches every other menu in throng rather than the OS-native
-  // Electron menu it used to pop (unstyled, ignoring the theme entirely). The two
-  // actions are unchanged: Copy writes the xterm selection to the OS clipboard;
-  // Paste writes the clipboard into the live shell. Both go through the renderer
-  // seams (terminal.writeClipboard / clipboard.paste + terminal.write) that already
-  // exist, so no native menu is needed.
-  const onContextMenu = useCallback(
-    (e: ReactMouseEvent): void => {
-      e.preventDefault();
-      e.stopPropagation();
-      // Capture the selection at open time — the menu items act on what was selected
-      // when the user right-clicked.
-      const selection = apiRef.current?.getSelection() ?? '';
-      // 024 US7 (FR-019d): a link under the pointer, with NO active selection, adds "Open Link" /
-      // "Copy Link Address" above Copy/Paste. An active selection takes priority — then the menu is
-      // the ordinary Copy menu, whatever the pointer is over.
-      const link = terminalLinkTarget(selection, apiRef.current?.getHoveredLink() ?? null);
+  /** The panel's ORDINARY menu — Copy/Paste and the rest. Never carries a link row any more (FR-169). */
+  const openContentMenu = useCallback(
+    (x: number, y: number, selection: string): void => {
       // 033 US5 (T063) — the items live in `terminal-content-menu.ts`, which declares their sections;
       // `ContextMenu` derives the dividers from those. Nothing here decides where a divider goes.
       openMenu(
-        e.clientX,
-        e.clientY,
+        x,
+        y,
         terminalContentMenu({
-          link,
           selection,
           redrawChord: firstBinding(keybindings, 'terminal.redraw'),
           startFailure: startFailureRef.current !== null,
           actions: {
-            openLink: (url) => window.throng?.openExternal?.(url),
-            copyLinkAddress: (url) => void window.throng?.terminal?.writeClipboard?.(url),
             copySelection: () => {
               void window.throng?.terminal?.writeClipboard?.(selection);
             },
@@ -294,6 +389,89 @@ export function TerminalPanel({
       );
     },
     [openMenu, panel.id, keybindings],
+  );
+
+  /**
+   * 045 FR-169 – FR-171, FR-170a – FR-170c — the ONE Link menu, opened AT ONCE over whatever the
+   * pointer rests on, and updated in place once main answers (`open-link-or-panel-menu.ts`).
+   *
+   * A web-class link needs nothing from main — `buildLinkMenu` draws Open Link / Copy Link to
+   * Clipboard from its class alone. A file link's `applicable` rows (row 2/3 — in the project by
+   * name, not a folder by grammar, a provider by extension) are decided by grammar in
+   * `links/file-link-menu.ts` — the editor's menu calls the same function — so the
+   * menu never sits empty while main is asked; rows 5/6 wait for main's answer (FR-170c). A folder by
+   * grammar (FR-158c/FR-158d) never asks main at all — it opens with its own synthesised resolution.
+   */
+  const openTerminalLinkMenu = useCallback(
+    (x: number, y: number, hovered: HoveredLink): void => {
+      if (hovered.kind === 'web') {
+        const uri = hovered.uri;
+        openWebLinkMenu({
+          x,
+          y,
+          opener: { openMenu },
+          // The same route the editor's web links take (FR-104); the OS url opener is the seam 024
+          // built its refusal of `file:` into, and the one a file link must never touch.
+          openLink: () => openWebLink(uri),
+          copyLink: () => void window.throng?.terminal?.writeClipboard?.(uri),
+        });
+        return;
+      }
+
+      const { request, position, positionText } = hovered;
+      openFileLinkMenu({
+        x,
+        y,
+        opener: { openMenu, updateMenu },
+        ws,
+        request,
+        ...(position === undefined ? {} : { position }),
+        ...(positionText === undefined ? {} : { positionText }),
+        projectRoot,
+        previewRegistry: routingRef.current.previewRegistry,
+        previewSettings: routingRef.current.previewSettings,
+        // Open Link is `followTerminalLink` — the SAME route the Ctrl+click takes (FR-054). No chord:
+        // FR-046 binds none in a terminal.
+        openLink: () =>
+          void followTerminalLink({
+            request,
+            ...(position === undefined ? {} : { position }),
+            deps: linkActions,
+          }),
+        deps: { ...linkActions, ...osLinkActions() },
+      });
+    },
+    [openMenu, updateMenu, projectRoot, linkActions, ws],
+  );
+
+  // Right-click → the app's THEMED context menu (the shared ContextMenu), so the
+  // terminal's menu matches every other menu in throng rather than the OS-native
+  // Electron menu it used to pop (unstyled, ignoring the theme entirely). The two
+  // actions are unchanged: Copy writes the xterm selection to the OS clipboard;
+  // Paste writes the clipboard into the live shell. Both go through the renderer
+  // seams (terminal.writeClipboard / clipboard.paste + terminal.write) that already
+  // exist, so no native menu is needed.
+  const onContextMenu = useCallback(
+    (e: ReactMouseEvent): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Capture the selection at open time — the menu items act on what was selected
+      // when the user right-clicked.
+      const selection = apiRef.current?.getSelection() ?? '';
+      const hovered = apiRef.current?.getHoveredLink() ?? null;
+      const x = e.clientX;
+      const y = e.clientY;
+
+      // 045 FR-169 / FR-171 — over a link with NO selection, the Link menu opens INSTEAD of the
+      // ordinary menu; a selection takes priority (024 US7, FR-019d), and away from a link the
+      // ordinary menu is unchanged.
+      if (selection.length === 0 && hovered !== null) {
+        openTerminalLinkMenu(x, y, hovered);
+        return;
+      }
+      openContentMenu(x, y, selection);
+    },
+    [openContentMenu, openTerminalLinkMenu],
   );
 
   useEffect(() => {
@@ -735,7 +913,30 @@ export function TerminalPanel({
     searchDecorations,
     onSearchCount,
     reserveKey,
-    linkHoverDelayMs: terminalSettings.linkHoverDelayMs,
+    // 045 FR-023: the terminal's live working directory, read at hover time rather than captured —
+    // a relative path a command printed almost always means the directory that command ran in.
+    // FR-142 – FR-144: only where this flavour can REPORT it; otherwise the store holds the stale
+    // launch directory, and there is no base directory at all.
+    linkBaseDirectory: () =>
+      terminalLinkBaseDirectory({
+        flavourId: config.flavourId ?? '',
+        shellIntegration: linkFlavourRef.current.shellIntegration,
+        isWsl: linkFlavourRef.current.isWsl,
+        cwd: peekTerminalCwd(panel.id),
+      }),
+    linkWslFlavour: () => linkFlavourRef.current.isWsl,
+    // 045 FR-168: the tooltip's destination is worded from the same open-target preference and live
+    // preview routing the follow itself reads, so the terminal's wording never diverges from the editor's.
+    linkWording: () => ({
+      openTarget,
+      previewRegistry: routingRef.current.previewRegistry,
+      previewSettings: routingRef.current.previewSettings,
+    }),
+    linkActions,
+    // FR-060 — read through the routing ref, which this render has just refreshed, so the switch
+    // applies to the next hover without re-registering the provider against a live shell.
+    detectFileLinks: () => detectFileLinksRef.current,
+    linkSettings: () => linkSettingsRef.current,
     isActive: () => isActivePanelRef.current,
   });
 
@@ -779,7 +980,6 @@ export function TerminalPanel({
    * available for a rootless panel that has never run, and the banner simply omits the line rather
    * than inventing one.
    */
-  const osName = window.throng?.osName ?? 'windows';
   const startFailurePath = projectRoot ?? panel.terminalMemory?.lastCwd ?? null;
   /**
    * What the banner and the menu's *Copy details* both put on the clipboard (030 FR-042c/FR-052).
