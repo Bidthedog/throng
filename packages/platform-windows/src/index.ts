@@ -9,6 +9,11 @@ export { WindowsProcessCwd } from './windows-process-cwd.js';
 export { WindowsForegroundHandoff } from './windows-foreground-handoff.js';
 export { WindowsDeElevatedLauncher } from './windows-de-elevated-launcher.js';
 export { WindowsFontEnumeration } from './windows-font-enumeration.js';
+// 045 (#394): the path spellings and the executable extensions core refuses to know.
+export { WindowsPathForms } from './windows-path-forms.js';
+export { WindowsExecutableExtensions } from './windows-executable-extensions.js';
+// 045 FR-159: the protocols whose Windows handlers no allowlist may reach (research R27).
+export { WindowsRefusedUriSchemes } from './windows-refused-uri-schemes.js';
 // 029 FR-012/FR-014: who else is holding a path. Deferred, and deliberately present — see the file.
 export { lookupHolder } from './holder-lookup.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.

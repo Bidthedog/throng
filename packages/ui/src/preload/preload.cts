@@ -630,6 +630,25 @@ contextBridge.exposeInMainWorld('throng', {
     /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
     paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
   },
+  // 045 (contracts/settings-and-environment.md §3): file links. Main's FileLinkResolver is the one
+  // authority for what a link IS and whether it may be opened, so a renderer sends the link TEXT and
+  // never a resolved path — main derives the owning project from `panelId` itself (I1/I2). All three
+  // are `invoke`: each answer goes to the window that asked, and nothing here is broadcast (I6).
+  links: {
+    resolve: (req: unknown) => ipcRenderer.invoke('throng:links:resolve', req),
+    reveal: (req: unknown) => ipcRenderer.invoke('throng:links:reveal', req),
+    open: (req: unknown) => ipcRenderer.invoke('throng:links:open', req),
+    follow: (req: unknown) => ipcRenderer.invoke('throng:links:follow', req),
+  },
+  // 045 round four (plan twelfth pass): a terminal's and an editor's web, loopback and allowlisted
+  // protocol links. Outside `throng:links:*`, whose contract keeps that namespace invoke-only; main
+  // applies the link policy (allowlist per request, refused set, never `file:`) — the renderer's own
+  // gate is only a first filter.
+  linkUri: {
+    openExternal: (url: string) => ipcRenderer.send('throng:linkUri:openExternal', url),
+    /** The platform's refused URI schemes — asked once per window (research R34, T288). */
+    refusedSchemes: () => ipcRenderer.invoke('throng:linkUri:refusedSchemes'),
+  },
   // 044 (contracts/preview-ipc.md): file previews. Main's PreviewService is the one authority for open
   // previews; a window asks to open, attaches as a viewer, and applies the updates pushed to it. The
   // viewing window is always the sender — no call names a window.

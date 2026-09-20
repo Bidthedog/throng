@@ -14,6 +14,7 @@
  */
 import type { ComponentType } from 'react';
 import type { PreviewContent, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
+import type { PreviewLinkWording } from './link-dom.js';
 
 export interface PreviewBodyProps {
   panelId: string;
@@ -21,6 +22,13 @@ export interface PreviewBodyProps {
   filePath: string;
   projectRoot: string;
   providerSettings: ProviderSettings;
+  /**
+   * 045 FR-168 (review round four, editor M2) — what this window's settings make a link's Ctrl+click
+   * DO, for the tooltip and the plain-click hint only. The chrome supplies it because judging it
+   * needs the provider registry, which a body never sees (FR-074). Absent: every in-project file
+   * link is worded for the preview, which is what a body did before this existed.
+   */
+  linkWording?: PreviewLinkWording;
   /**
    * FR-107 — from the last `PreviewUpdate.viewState` (attach, history navigate); `undefined` otherwise. On a
    * history step it is always present, and `null` names an entry with no saved place (044 FR-121e).

@@ -159,11 +159,25 @@
 /* ── Links (FR-094, FR-096b) ────────────────────────────────────────────────────────────────────── */
 
 /* The editor's link colour, underlined (highlight-style.ts:54). A followable link carries no href, so
-   the pointer is set here; an inert link is ordinary text. */
+   the pointer is set here; an inert link is ordinary text.
+
+   Round five (maintainer): "the underline … more subtle. Maybe slightly transparent until hovered
+   over". This file may name only `editorFg`, `editorBg`, `syntax*`, `border` and `accent`
+   (`preview-css-tokens.test.ts`'s SC-005 gate: every colour here sits on a pairing `theme-quality.ts`
+   already measures against `editorBg`) and may use no colour function at all, so `linkUnderline` and
+   `color-mix()` — the terminal's and the editor's own route to a translucent resting underline
+   (`terminal.css`, `link-decorations.ts`) — are both off limits here. `border` reads as a muted rule
+   against `editorBg` on every shipped theme already, which is the "subtle" look this asks for without
+   either; hover swaps in the link's own full-strength `syntaxFunction`, already used for its text. */
 .preview-markdown [data-throng-link] {
   color: var(--throng-colour-syntaxFunction);
   text-decoration: underline;
+  text-decoration-color: var(--throng-colour-border);
   cursor: pointer;
+}
+
+.preview-markdown [data-throng-link]:hover {
+  text-decoration-color: var(--throng-colour-syntaxFunction);
 }
 
 /* The focus indicator: an outline in the accent token, never a text colour. The class is set by the body

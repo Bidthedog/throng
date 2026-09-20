@@ -87,6 +87,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
@@ -97,6 +98,7 @@ import {
   type ReactElement,
 } from 'react';
 import {
+  defaultOpenActionFor,
   firstBinding,
   normaliseForCompare,
   noticeLogRecord,
@@ -116,8 +118,15 @@ import {
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { useWorkspace } from '../state/workspace-store.js';
+import { openFileInTab } from '../editor/editor-open.js';
+import { positionRevealTarget } from '../editor/reveal-range.js';
+import { linkFailureReport, osLinkActions, type LinkActionDeps } from '../links/link-actions.js';
+import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { findHeading, linkOf } from './link-dom.js';
-import { linkAddress, previewContentMenu, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
+import { previewContentMenu, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
+import { openPreviewLinkMenu } from './preview-link-menu.js';
+import { requestPreviewOpen } from './open-preview.js';
 import {
   isLinkNotice,
   linkNoticeAction,
@@ -283,6 +292,8 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   const placeRef = useRef(place);
   placeRef.current = place;
   const os = window.throng?.osName ?? 'windows';
+  const ws = useWorkspace();
+  const reportSubject = useReportSubjectFailure();
 
   // The persisted fields as they were when this view mounted. The run, not the layout, is the authority
   // from then on (contracts/preview-ipc.md §1 "which persisted field wins"); re-attaching on every
@@ -901,7 +912,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
 
   /* ── The body menu (FR-015b, FR-035, FR-095, FR-096d) ────────────────────────────────────────── */
 
-  const { openMenu } = useContextMenu();
+  const { openMenu, updateMenu } = useContextMenu();
   const keybindings = useKeybindings();
   const textSelection = view?.textSelection ?? false;
   const providerKind =
@@ -1047,14 +1058,107 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   }, []);
 
   /**
-   * The whole menu, for a right-click over `link` or over plain text. The selection is captured NOW: a
-   * menu row that copies copies what was selected when the menu opened, whatever pressing the row does to
-   * the live selection.
+   * 045 FR-169 – FR-171, FR-054 — the Link menu's own destinations for THIS window: Open In ▸ opens the
+   * target file exactly as the explorer does (`openFileInTab`, honouring *Open files in*), Open Preview
+   * reuses the same `requestPreviewOpen` a terminal and an editor call, and the two OS routes are
+   * `osLinkActions()`, unchanged. One failure report, shaped identically to the other two surfaces
+   * (`linkFailureReport`), so the wording cannot drift (FR-036, FR-037; 032's lesson).
+   */
+  const previewLinkDeps = useMemo<LinkActionDeps>(
+    () => ({
+      openInEditor: (link, position) => {
+        const tabId = ws.layout?.activeTabId;
+        if (tabId) {
+          void openFileInTab(
+            ws,
+            tabId,
+            link.path,
+            settings.editor.openTarget,
+            position ? positionRevealTarget(position.line, position.column) : undefined,
+          );
+        }
+      },
+      openInPreview: (link) => {
+        void requestPreviewOpen({
+          absPath: link.path,
+          projectId: panel.originProjectId,
+          requesterPanelId: panelId,
+        });
+      },
+      reportFailure: (outcome) => {
+        reportSubject(
+          linkFailureReport(outcome, {
+            projectRoot,
+            osName: os,
+            ...(panel.originProjectId ? { projectId: panel.originProjectId } : {}),
+          }),
+        );
+      },
+      ...osLinkActions(),
+    }),
+    [ws, settings.editor.openTarget, panel.originProjectId, panelId, reportSubject, projectRoot, os],
+  );
+
+  /**
+   * 045 FR-169 – FR-171 — over a link with NO selection, the ONE Link menu opens INSTEAD of this
+   * panel's own menu (`preview-link-menu.ts`, the same `buildLinkMenu` path a terminal and an editor
+   * draw from); `false` for an inert link — nothing follows it, so the ordinary menu below applies, as
+   * it does away from any link. Selecting text is what enables Content, so the two never mix.
+   */
+  const openLinkMenuOverPreview = useCallback(
+    (link: PreviewLink, point: { x: number; y: number }): boolean =>
+      openPreviewLinkMenu({
+        x: point.x,
+        y: point.y,
+        opener: { openMenu, updateMenu },
+        link,
+        panelId,
+        ...(panel.originProjectId ? { projectId: panel.originProjectId } : {}),
+        projectRoot,
+        docPath: stateRef.current?.filePath ?? mountFile.current,
+        previewRegistry: registry,
+        previewSettings: settings.editor.previews,
+        ...(firstBinding(keybindings, 'preview.followLink')
+          ? { chord: firstBinding(keybindings, 'preview.followLink')! }
+          : {}),
+        ws,
+        deps: previewLinkDeps,
+        onFollow,
+      }),
+    [openMenu, updateMenu, panelId, panel.originProjectId, projectRoot, registry, settings.editor.previews, keybindings, ws, previewLinkDeps, onFollow],
+  );
+
+  /*
+   * 045 FR-168 (review round four, editor M2) — what the BODY needs to word a link, which it cannot
+   * work out for itself: a body never sees the provider registry (FR-074).
+   *
+   * `previewable` is the same by-extension question the editor's and the terminal's tooltips ask
+   * (`defaultOpenActionFor`), so one link reads the same on all three surfaces (FR-166). A `file`
+   * link whose target no enabled provider claims is followed into an EDITOR (044 FR-090d,
+   * `preview-service.ts`), and 023 FR-025 decides which one.
+   */
+  const linkWording = useMemo(
+    () => ({
+      previewable: (absPath: string) =>
+        defaultOpenActionFor(registry, settings.editor.previews, absPath) === 'preview',
+      openTarget: settings.editor.openTarget === 'new' ? ('new' as const) : ('lastActive' as const),
+    }),
+    [registry, settings.editor.previews, settings.editor.openTarget],
+  );
+
+  /**
+   * The ORDINARY body menu, for a right-click over plain text, over a link WITH a selection (024
+   * FR-019d), or over an inert link. The selection is captured NOW: a menu row that copies copies what
+   * was selected when the menu opened, whatever pressing the row does to the live selection.
    */
   const openBodyMenu = useCallback(
     (link: PreviewLink | null, point: { x: number; y: number }): void => {
       const host = bodyHostRef.current;
       const captured = host === null ? null : captureSelection(host);
+      const selectionEmpty = captured === null;
+
+      if (link !== null && selectionEmpty && openLinkMenuOverPreview(link, point)) return;
+
       const content: PreviewContentSection | null = textSelection
         ? {
             copyFormat: copyFormatRef.current,
@@ -1065,18 +1169,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
       const editorRoute: PreviewEditorRouteItem | null =
         providerKind === 'text' && onEditorRoute !== undefined ? { parented, run: onEditorRoute } : null;
       const items = previewContentMenu({
-        link,
-        selectionEmpty: captured === null,
-        followChord: firstBinding(keybindings, 'preview.followLink'),
-        actions: {
-          openLink: onFollow,
-          // FR-116 — a same-document heading copies THIS panel's file, read when the row is chosen.
-          copyLinkAddress: (l) =>
-            void window.throng?.clipboard?.write({
-              text: linkAddress(l, stateRef.current?.filePath ?? mountFile.current),
-              mode: 'verbatim',
-            }),
-        },
+        selectionEmpty,
         content,
         editorRoute,
         // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
@@ -1091,7 +1184,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
       });
       if (items.length > 0) openMenu(point.x, point.y, items);
     },
-    [textSelection, copySelection, selectAll, providerKind, onEditorRoute, parented, keybindings, onFollow, openMenu, onToggleSyncScroll],
+    [openLinkMenuOverPreview, textSelection, copySelection, selectAll, providerKind, onEditorRoute, parented, keybindings, openMenu, onToggleSyncScroll],
   );
 
   /** The body's own report: the reader asked for a LINK's menu, with nothing selected (FR-095). */
@@ -1264,6 +1357,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
             filePath={state.filePath}
             projectRoot={projectRoot ?? ''}
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
+            linkWording={linkWording}
             initialViewState={state.viewState}
             navigationSeq={state.navigationSeq}
             syncLine={syncLine}

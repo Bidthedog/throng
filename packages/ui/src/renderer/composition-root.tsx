@@ -13,6 +13,7 @@ import { ConfirmProvider } from './confirm-dialog.js';
 import { NotificationProvider } from './common/notification.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
+import { LinkHint } from './links/link-hint.js';
 import { App } from './app.js';
 import { SubWorkspaceApp } from './subworkspace-app.js';
 
@@ -123,6 +124,8 @@ export function CompositionRoot(): ReactElement {
               <ProjectsProvider client={services.projects}>
                 <SubWorkspacesProvider client={services.subWorkspaces}>
                   <App />
+                  {/* 045 FR-166 — one link hint per WINDOW (each renderer is its own process). */}
+                  <LinkHint />
                 </SubWorkspacesProvider>
               </ProjectsProvider>
             </ContextMenuProvider>
@@ -171,6 +174,7 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
                   projects list is needed here too. */}
               <ProjectsProvider client={services.projects}>
                 <SubWorkspaceApp subWorkspaceId={id} />
+                <LinkHint />
               </ProjectsProvider>
             </ContextMenuProvider>
           </ConfirmProvider>

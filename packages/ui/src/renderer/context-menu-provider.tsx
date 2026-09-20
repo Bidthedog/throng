@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -30,6 +31,8 @@ interface MenuState {
   testId?: string;
   /** The element focused when the menu opened, so keyboard/action close can return focus to it. */
   opener?: HTMLElement | null;
+  /** This opening's identity (FR-170b/c) — see {@link ContextMenuController.updateMenu}. */
+  opId: number;
 }
 
 interface ContextMenuController {
@@ -41,8 +44,21 @@ interface ContextMenuController {
    * still hand-push a divider and compile, so the guarantee held only for the builders that
    * happened to be extracted while spec, plan and contract all claimed it covered every menu.
    * Dividers are derived from `section` inside `ContextMenu`, per level.
+   *
+   * Returns an opaque opening id (045 FR-170b/c) — pass it to {@link updateMenu} to revise THIS
+   * opening once an async answer arrives, never a later one.
    */
-  openMenu(x: number, y: number, items: MenuAction[], options?: OpenMenuOptions): void;
+  openMenu(x: number, y: number, items: MenuAction[], options?: OpenMenuOptions): number;
+  /**
+   * Replace the items of the opening `opId` names, in place — no reposition, no flicker (FR-170b/c:
+   * the Link menu opens at once with the renderer-known rows and gains, enables or removes rows when
+   * main answers).
+   *
+   * A no-op when `opId` is not the CURRENTLY open menu's — closed, or replaced by a later opening — so
+   * a late answer after close changes nothing (SC-021's "at most one resolution per opening" is only
+   * half the guarantee; the other half is that a stale one is silently dropped here).
+   */
+  updateMenu(opId: number, items: MenuAction[]): void;
   closeMenu(): void;
   /**
    * Is a menu on screen right now?
@@ -66,19 +82,27 @@ const Ctx = createContext<ContextMenuController | null>(null);
 export function ContextMenuProvider({ children }: { children: ReactNode }): ReactElement {
   const settings = useAppSettings();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // 045 FR-170b/c — each opening gets its own id, so a later `updateMenu` can tell "still this
+  // opening" from "closed, or replaced by a new one" without comparing menu contents.
+  const nextOpId = useRef(0);
   const openMenu = useCallback(
-    (x: number, y: number, items: MenuAction[], options?: OpenMenuOptions) => {
+    (x: number, y: number, items: MenuAction[], options?: OpenMenuOptions): number => {
       // Capture the surface that had focus (e.g. the Files & Folders tree) BEFORE the menu grabs it,
       // so a keyboard/action close can hand focus back with its highlighted item intact (#157 follow-up).
       const opener = document.activeElement as HTMLElement | null;
-      setMenu({ x, y, items, testId: options?.testId, opener });
+      const opId = ++nextOpId.current;
+      setMenu({ x, y, items, testId: options?.testId, opener, opId });
+      return opId;
     },
     [],
   );
+  const updateMenu = useCallback((opId: number, items: MenuAction[]) => {
+    setMenu((prev) => (prev && prev.opId === opId ? { ...prev, items } : prev));
+  }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   const value = useMemo<ContextMenuController>(
-    () => ({ openMenu, closeMenu, isOpen: menu !== null }),
-    [openMenu, closeMenu, menu],
+    () => ({ openMenu, updateMenu, closeMenu, isOpen: menu !== null }),
+    [openMenu, updateMenu, closeMenu, menu],
   );
 
   return (

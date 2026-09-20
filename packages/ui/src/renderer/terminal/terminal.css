@@ -81,33 +81,15 @@
   user-select: none;
 }
 
+/* 045 T280 — the label is a fixed cost, never a thing that gives way. As an ordinary flex item it
+   could shrink to its longest word, and `Windows PowerShell` then broke onto a second line the moment
+   a long link readout arrived beside it — which doubled the bar's height, resized the terminal, made
+   xterm drop the hovered link, and cleared the readout, over and over. The readout is what gives way
+   (`link-target-readout.css`), exactly as FR-167 and 040 FR-022 have it. */
 .terminal-status-bar__flavour {
   opacity: 0.85;
-}
-
-/* 024 US7 (#159 follow-up): the hover tooltip that names a terminal link's activation gesture
-   ("Ctrl+Click to open in system browser"). Appended to the document body element (so the panel's
-   clipping cannot cut it off), fixed at the pointer and nudged up-and-right so it never sits under
-   the cursor. Non-interactive — it must never eat the click that opens the link. Themed via the
-   shared tooltip surface tokens with literal fallbacks. */
-.terminal-link-tip {
-  position: fixed;
-  z-index: 20;
-  /* Positioned AND clamped in JS (showLinkTip) so it never spills off a viewport edge (FR-013). */
-  max-width: 60ch;
-  padding: 2px 8px;
-  border: 1px solid var(--throng-colour-border, #2a3340);
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 18px;
+  flex: 0 0 auto;
   white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-  color: var(--throng-colour-editorStatusStripFg, #a7b4c8);
-  background: var(--throng-colour-editorStatusStripBg, #151a23);
-}
-.terminal-link-tip[hidden] {
-  display: none;
 }
 
 /* Non-fatal "still starting" state: a small themed notice with a retry action, layered
@@ -148,4 +130,63 @@
 .terminal-panel__retry:hover {
   background: var(--throng-colour-cancelButtonHoverBg);
   color: var(--throng-colour-cancelButtonHoverText);
+}
+
+/* 045 FR-135 – FR-139 — the ONE link affordance, for every link kind (link-marks.ts). An xterm
+   decoration over the link's cells on each row it occupies: dashed at rest, solid on hover, in the
+   two link tokens and never a text colour. It must not take the pointer's events — xterm's own
+   Linkifier, under it, is what hovers and activates the link.
+
+   Round five (maintainer): "the underline … more subtle. Maybe slightly transparent until hovered
+   over" — the RESTING underline is `linkUnderline` at reduced opacity via `color-mix()` (no new theme
+   token: the same treatment `notification.css`/`editor.css`/`explorer.css` already use for a
+   translucent border), and hover restores full, solid opacity in `linkUnderlineHover`. The hovered
+   link's own native `title` (link-marks.ts, "THE HOVER TITLE") replaced the bespoke `.terminal-link-tip`
+   tooltip this rule used to sit beside; that tooltip and its CSS are gone. */
+.terminal-panel .terminal-link-mark {
+  pointer-events: none;
+  box-sizing: border-box;
+  border-bottom: 1px dashed color-mix(in srgb, var(--throng-colour-linkUnderline) 45%, transparent);
+}
+.terminal-panel .terminal-link-mark.terminal-link-mark--hover {
+  border-bottom-style: solid;
+  border-bottom-color: var(--throng-colour-linkUnderlineHover);
+}
+/* 045 T280 (D5, FR-172) — xterm hides EVERY decoration while the alternate buffer is active (an inline
+   `display: none`), which left a full-screen program's links marked but invisible. `link-marks.ts`
+   names that buffer on the panel; the alternate buffer has no scrollback, so no mark there is out of
+   view for xterm's hiding to protect. */
+.terminal-panel.terminal-alt-buffer .terminal-link-mark {
+  display: block !important;
+}
+
+/* O10 (research R22): xterm 6.0.0 draws its own link visuals and no option styles them — every OSC 8
+   cell renders as `xterm-underline-5` (dashed, in the cell's colour, whatever its target), a hovered
+   link gets an INLINE solid underline, and the screen gets `xterm-cursor-pointer`. Inside a terminal
+   panel those are switched off, so throng's mark is the only affordance (FR-139) and a hyperlink
+   that goes nowhere looks like plain text (FR-154). The cost, recorded in R22: a program's own
+   SGR 4:5 (dashed underline) is drawn without its underline here, since xterm gives it the same
+   class. */
+.terminal-panel .xterm-rows .xterm-underline-5 {
+  text-decoration: none;
+}
+.terminal-panel .xterm-rows .xterm-overline.xterm-underline-5 {
+  text-decoration: overline;
+}
+.terminal-panel .xterm-rows span[style*='text-decoration: underline'] {
+  text-decoration: none !important;
+}
+.terminal-panel .xterm.xterm-cursor-pointer,
+.terminal-panel .xterm .xterm-cursor-pointer {
+  cursor: text;
+}
+.terminal-panel .xterm.enable-mouse-events.xterm-cursor-pointer,
+.terminal-panel .xterm.enable-mouse-events .xterm-cursor-pointer {
+  cursor: default;
+}
+/* FR-164 — the hand whenever a followable link is hovered, Ctrl/Cmd held or not (it supersedes
+   FR-135's modifier-only hand). `link-marks.ts` puts the class on the panel for every such hover. */
+.terminal-panel.terminal-link-pointer .xterm,
+.terminal-panel.terminal-link-pointer .xterm .xterm-screen {
+  cursor: pointer;
 }

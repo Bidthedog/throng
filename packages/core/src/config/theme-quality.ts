@@ -230,8 +230,21 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * so one token moving in every theme moves it by construction — and this one moved TOWARDS the
  * neutral in every theme, which is a small pull together rather than any of the themes becoming
  * more alike in character. `DISTINCTNESS_THRESHOLD` is untouched at 4.3, with 1.87 of headroom.
+ *
+ * Re-measured by 045 FR-138, which added `linkUnderline` and `linkUnderlineHover` to every theme,
+ * each equal to that theme's `accent`: 6.181917223974843 → 6.286824864632278. The mirror of 024's
+ * case — two more terms that DIFFER between themes, because accents do, so the mean rises by
+ * construction with no theme changing character. The threshold is untouched at 4.3.
+ *
+ * Re-measured by 045's round four (FR-165g), which added `linkHintBackground`, `linkHintText` and
+ * `linkHintBorder` to every theme, each equal to that theme's `surfaceActive`/`text`/`border`
+ * respectively: 6.286824864632278 → 6.173849811284115. `warning`'s case again rather than
+ * `linkUnderline`'s: these three terms are carved-out roles that already sit close together within a
+ * theme (a card surface, its body text, a hairline), so three more near-identical terms pull the mean
+ * DOWN by construction, with no theme becoming more alike in character. The threshold is untouched at
+ * 4.3, and the closest pair still clears it with 1.87 of headroom.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.181917223974843;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.173849811284115;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

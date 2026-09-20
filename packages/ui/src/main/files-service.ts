@@ -21,6 +21,7 @@ import {
   type Holder,
   type IFileSystem,
   type IShellIntegration,
+  type ShellActionResult,
 } from '@throng/core';
 
 /**
@@ -519,12 +520,23 @@ export class FilesService {
     if (!this.isDocumentOpen?.(absPath)) return { error: OUTSIDE };
     try {
       const { kind } = await this.fs.stat(absPath);
-      if (kind === 'file') await this.shell.revealInFileManager(absPath);
+      if (kind === 'file') await this.revealFile(absPath);
       else await this.shell.openFolder(absPath);
       return { ok: true };
     } catch (e) {
       return this.failed(e);
     }
+  }
+
+  /**
+   * The seam's reveal, with a refusal raised as the error these methods already report (`failed`).
+   * 045 T229 made the seam RESOLVE a refusal with the OS's words instead of throwing; the explorer's
+   * two reveals keep the reporting they had.
+   */
+  private async revealFile(absPath: string): Promise<void> {
+    const result: ShellActionResult | undefined = await this.shell.revealInFileManager(absPath);
+    // `undefined` is a seam written before T229 (a test double): it did not refuse.
+    if (result !== undefined && !result.ok) throw new Error(result.osReason);
   }
 
   /** Open in OS file explorer: file → reveal-and-select; folder/root → open contents. */
@@ -534,7 +546,7 @@ export class FilesService {
       const abs = this.absOf(relPath);
       if (!(await this.within(abs))) return { error: OUTSIDE };
       const { kind } = await this.fs.stat(abs);
-      if (kind === 'file') await this.shell.revealInFileManager(abs);
+      if (kind === 'file') await this.revealFile(abs);
       else await this.shell.openFolder(abs);
       return { ok: true };
     } catch (e) {

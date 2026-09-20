@@ -1,0 +1,16 @@
+/* 045 FR-167 (round four), T280 — the hovered link's target, on every status bar that draws one.
+   Its own rules rather than the Markdown preview's: the same element used to clip only because
+   `preview.css` happened to be in the bundle, so a rule written for one surface was silently holding
+   up the other two.
+
+   A target is arbitrarily long, and a status bar is ONE LINE HIGH. So the readout must be able to
+   shrink (`min-width: 0` — a flex item's default `min-width: auto` refuses to go below its content)
+   and must clip rather than wrap. Measured in `terminal-link-once.e2e.ts`: a bar that grows resizes
+   the terminal, which makes xterm drop the hovered link, which clears the readout and shrinks the bar
+   again — a loop in which the link can never be hovered at all. */
+.link-target-readout {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

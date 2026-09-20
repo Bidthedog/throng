@@ -252,6 +252,11 @@ const COLOUR_AREA: Record<string, string> = {
 const GENERAL_COLOURS: ReadonlySet<string> = new Set([
   'accent', 'accentText', 'appBg', 'border', 'danger', 'dangerText', 'errorSurface', 'errorText',
   'hoverSurface', 'inputSurface', 'menuItemHoverSurface', 'scrollbarThumb', 'scrollbarTrack',
+  // 045 FR-138 — links are marked the same way in editors AND terminals, so no one area owns them.
+  'linkUnderline', 'linkUnderlineHover',
+  // 045 FR-165g — the link hint is one shared component across editors, terminals AND the Markdown
+  // preview (FR-166), so it is no more one area's than the underline above.
+  'linkHintBackground', 'linkHintText', 'linkHintBorder',
   'statusBarBg', 'success', 'warning',
   // `surface`/`surfaceActive` are the present-day, overloaded former `panelSurface` (#62) — no single
   // dominant area, so General is their home (FR-014). 021 removed `menuSurface`/`dialogSurface` and the

@@ -54,6 +54,22 @@ export interface ContentMenuArgs {
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
+  // 045 FR-169 — no link input. Every link action lives in the ONE Link menu, which opens INSTEAD of
+  // this one over a link (FR-171, `links/file-link-menu.ts`); this menu never carries a link row.
+}
+
+/**
+ * 045 §5 — the document offset the Link menu is hit-tested from.
+ *
+ * A right-click hit-tests the POINTER. A keyboard-opened menu (Shift+F10) has no pointer at all: its
+ * synthetic event carries the focused element's corner, which is nowhere near the caret — the same
+ * trap {@link placeCaretForContextMenu} was fixed for, and the reason that function already no-ops
+ * for a keyboard menu. So the caret is the answer there, and both answers are a single offset, so
+ * one hit test serves the whole run.
+ */
+export function linkMenuPosition(view: EditorView, event: MouseEvent): number | null {
+  if (isKeyboardMenu()) return view.state.selection.main.head;
+  return view.posAtCoords({ x: event.clientX, y: event.clientY });
 }
 
 /**

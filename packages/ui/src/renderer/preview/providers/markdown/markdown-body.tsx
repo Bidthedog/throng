@@ -82,7 +82,9 @@ import {
 } from 'react';
 import { splitFrontMatter } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
-import { linkElementOf, linkOf, linkTargetOf } from '../../link-dom.js';
+import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
+import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
+import { showLinkHint } from '../../../links/link-hint-store.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
 import {
@@ -202,10 +204,19 @@ export function MarkdownBody({
   onLinkTarget,
   onDrawn,
   onBodyFailure,
+  linkWording,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
   const remoteImages = providerSettings.loadRemoteImages === true;
+  /*
+   * 045 FR-168 (review round four, M2) — read through a ref, like the other live collaborators here:
+   * it changes when a provider is enabled or `editor.openTarget` moves, and neither should re-run
+   * the render effect below (which would re-parse the document to change a tooltip). The render pass
+   * reads it for the titles it bakes; the plain-click hint reads it at the click.
+   */
+  const linkWordingRef = useRef(linkWording);
+  linkWordingRef.current = linkWording;
   /** FR-117 — Show front matter. Shipped on, so anything but an explicit `false` shows the block. */
   const frontMatter = providerSettings.showFrontMatter !== false;
   const onFailureRef = useRef(onBodyFailure);
@@ -450,7 +461,7 @@ export function MarkdownBody({
         const body = bodyRef.current;
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
-        const fragment = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter });
+        const fragment = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {} });
         // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
         // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
         // text below moved up under the reader, and at the preview's end the engine's clamp read as the
@@ -554,7 +565,28 @@ export function MarkdownBody({
 
   const onClick = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>): void => {
-      if (!e.ctrlKey) return;
+      if (!e.ctrlKey) {
+        // 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own
+        // plain-click remedy as far as the plain click goes (FR-094's HOVER tooltip stands unchanged).
+        // Additive: nothing here is prevented, so whatever a plain click already does — placing the
+        // caret, starting a selection — is untouched.
+        const link = linkOf(e.target);
+        if (link !== null && selectionIsEmpty(e.currentTarget.ownerDocument)) {
+          const text = previewLinkHoverText(link, 'Ctrl', linkWordingRef.current ?? {});
+          if (text.length > 0) {
+            // Maintainer correction (FR-165b, FR-165c): the LINK's own last row's bottom-right corner
+            // — `getClientRects()`'s LAST rect, for an anchor text that wraps across lines — not the
+            // click point. Falls back to the click point only when nothing was measured at all.
+            const rects = linkElementOf(e.target)?.getClientRects();
+            const anchor =
+              rects && rects.length > 0
+                ? linkHintAnchor(rects[rects.length - 1]!)
+                : { left: e.clientX, top: e.clientY, right: e.clientX, bottom: e.clientY };
+            showLinkHint({ text, anchor });
+          }
+        }
+        return;
+      }
       const link = linkOf(e.target);
       if (link === null) return;
       // A Ctrl+drag ends in a click too; it selected text, and following would throw the selection away.

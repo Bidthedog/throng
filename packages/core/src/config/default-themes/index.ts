@@ -27,9 +27,18 @@ import {
  */
 function splitRolesFrom(parents: Record<string, string>): Record<string, string> {
   const roles: Record<string, string> = {};
-  for (const [token, parent] of Object.entries(TOKEN_PARENT)) {
-    const value = parents[parent];
-    if (value !== undefined) roles[token] = value;
+  // 045 FR-138: a chain can be two deep (`linkUnderlineHover` → `linkUnderline` → `accent`), so walk
+  // it until a supplied parent answers — the same walk `resolveSplitColour` does.
+  for (const token of Object.keys(TOKEN_PARENT)) {
+    let parent: string | undefined = TOKEN_PARENT[token];
+    for (let hops = 0; parent !== undefined && hops < Object.keys(TOKEN_PARENT).length; hops += 1) {
+      const value = parents[parent];
+      if (value !== undefined) {
+        roles[token] = value;
+        break;
+      }
+      parent = TOKEN_PARENT[parent];
+    }
   }
   return roles;
 }
@@ -465,7 +474,16 @@ function makeTheme(name: string, p: Palette): Theme {
       // The parentage is READ FROM `TOKEN_PARENT`, not restated here. It is one piece of knowledge,
       // and the resolver and this derivation are the two things that must agree about it — so
       // writing it out twice is precisely how they would come to disagree.
-      ...splitRolesFrom({ surface: p.surface, accent: p.accent }),
+      // 045 FR-165g widens the map with the three carve-outs whose parent is not `surface`/`accent`
+      // directly — `surfaceActive`, `text` and `border` are themselves base tokens, computed the same
+      // way the literal properties above are, so `linkHintBackground` etc. land byte-identical to them.
+      ...splitRolesFrom({
+        surface: p.surface,
+        accent: p.accent,
+        surfaceActive: p.surfaceActive ?? p.surface,
+        text: p.text,
+        border: p.border ?? p.surface,
+      }),
       // The foreground ON the accent colour — hard-coded as a near-black literal in several places
       // before 018. `p.bg` is what the button tokens already use for text on accent, so it is the
       // value that keeps every theme looking the same.

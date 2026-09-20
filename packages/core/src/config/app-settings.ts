@@ -19,6 +19,12 @@ import { NOTICE_SEVERITIES } from '../notice/severity.js';
 import { parsePreviewSettings, previewSettingsDefaults } from './preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 import type { PreviewSettings } from '../preview/settings-types.js';
+import { DEFAULT_PROTOCOL_ALLOWLIST } from '../links/protocol-uri.js';
+import {
+  KNOWN_FILE_EXTENSIONS,
+  resolveKnownExtensions,
+  type KnownExtensionEdits,
+} from '../links/known-extensions.js';
 
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
@@ -62,7 +68,16 @@ export interface TerminalFlavourConfig {
   commandRecipe?: string[];
 }
 
-/** Terminal preferences (005 Phase B, contracts/config-additions.md). */
+/**
+ * Terminal preferences (005 Phase B, contracts/config-additions.md).
+ *
+ * `linkHoverDelayMs` (024 US7, #159 follow-up) is RETIRED (045 round five, #408): the terminal's
+ * custom hover tooltip is replaced by a native HTML `title`, whose delay belongs to the OS and
+ * cannot be configured. There is no leaf, no descriptor and no value array — a persisted value is
+ * dropped by the tolerant parse (`terminalSettings` rebuilds the block from the leaves it knows)
+ * and the next ordinary write leaves it out, 019 FR-023's mechanism, same as `editor.links.defaultAction`
+ * (FR-112/FR-113).
+ */
 export interface TerminalSettings {
   /** User-defined flavours, shown in the Flavour dropdown alongside built-ins. */
   flavours: TerminalFlavourConfig[];
@@ -90,9 +105,16 @@ export interface TerminalSettings {
   /** 024 US1 (#152): show the terminal's per-panel status bar (new surface; carries the shell
    *  flavour label). When off, the bar is hidden and its row reclaimed. */
   showStatusBar: boolean;
-  /** 024 US7 (#159 follow-up): how long the pointer must rest on a terminal link before the
-   *  "Ctrl+Click to open…" hover tip appears, in milliseconds. Default 500. */
-  linkHoverDelayMs: number;
+  /**
+   * 045 FR-080/FR-080b (#394): tell the programs a terminal runs that throng renders OSC 8
+   * hyperlinks, by starting them with `FORCE_HYPERLINK=1`.
+   *
+   * It lives with the terminal settings rather than beside the link settings because it changes
+   * what a terminal is STARTED with (FR-061), which is also why it applies to the next terminal and
+   * never to one already running — a process's environment is fixed when it starts (FR-080c). A
+   * `FORCE_HYPERLINK` the user set themselves is never overridden, in either direction (FR-080a).
+   */
+  advertiseHyperlinks: boolean;
   /**
    * 039 FR-001/FR-002 (#223): seeds the New Panel dialog's "Remember the last running command"
    * checkbox for a FRESH Panel, and resolves an ABSENT per-Panel value (FR-005a). A Panel that
@@ -286,6 +308,71 @@ export interface EditorSettings {
    * naming it (FR-071).
    */
   previews: PreviewSettings;
+  /**
+   * 045: clickable file links (`Editor · Links`, #394). Its leaves share one block because FR-061
+   * requires the link settings "together in one place", and `group` + `subgroup` is the mechanism
+   * that puts them there.
+   */
+  links: EditorLinkSettings;
+}
+
+/**
+ * 045 FR-060, FR-120 — the `Editor · Links` block (#394).
+ *
+ * `defaultAction` (FR-050) is RETIRED (FR-112): what a click does is fixed by the click rule
+ * (FR-110), so there is nothing left to choose. A persisted value is dropped by `linkSettings`,
+ * which rebuilds the block from the leaves below, and the next ordinary write leaves it out — 019
+ * FR-023's mechanism for `explorer.openMode` (FR-113).
+ *
+ * ══ round five (#408): `detectInEditors` / `detectInTerminals` now govern EVERY kind of link ══
+ *
+ * The two switches used to gate only a GUESSED path, leaving a web link, an allowlisted protocol
+ * link and a program-emitted OSC 8 hyperlink drawn regardless. The maintainer's round-five reading
+ * of FR-060 is the opposite: ON means every kind of link is shown, OFF means none is. The renderer
+ * mechanics that make the switch actually gate the other three kinds belong to the panel-owning
+ * agents; this interface and its descriptors (`settings-metadata.ts`) state the new MEANING.
+ */
+export interface EditorLinkSettings {
+  /** Round five (#408): show every kind of link in editor documents — detected paths, web links,
+   *  allowlisted protocol links and OSC 8 hyperlinks alike. Off shows none of them. */
+  detectInEditors: boolean;
+  /** Round five (#408): show every kind of link in terminal output — detected paths, web links,
+   *  allowlisted protocol links and OSC 8 hyperlinks alike. Off shows none of them. */
+  detectInTerminals: boolean;
+  /**
+   * FR-120, reworded round five (#408): how long ONE resolution may take when a link is followed or
+   * its Link menu opens — nothing checks existence before a link is drawn (FR-155), so there is no
+   * "existence check" left for this to name. Bounded 250 – 25,000 by its descriptor, which
+   * `applyDeclaredBounds` enforces; there is no clamp here. Still read at
+   * `packages/ui/src/main/file-link-resolver.ts` to bound resolution — the KEY is unchanged, only
+   * the label and description are (renaming it would drop every persisted value).
+   */
+  existenceCheckTimeoutMs: number;
+  /**
+   * FR-159 (round four): URI schemes whose links are drawn and followed, besides web links. Stored as
+   * the whole list on purpose — a later release must never silently widen which schemes a user's
+   * throng hands to the OS (research R28). Entries are kept as typed; FR-159b's normalisation happens
+   * where they are compared (`protocolAllowlistSet`).
+   */
+  protocolAllowlist: string[];
+  /**
+   * Round five (#408): the FULL set of file extensions that end a path containing spaces — shipped as
+   * `KNOWN_FILE_EXTENSIONS` itself (`packages/core/src/links/known-extensions.ts`), not as edits
+   * against a hidden copy of it. The preferences array control shows the real list; adding to or
+   * removing from it is ordinary array editing.
+   *
+   * ══ SUPERSEDES round four's `{ added, removed }` shape (FR-178, FR-178a) ══
+   *
+   * That shape reached every install with a later-shipped extension automatically, because the
+   * shipped half moved with the release and only the user's edits were stored. A whole list cannot:
+   * an install that has edited this array stops receiving extensions this app ships afterwards. The
+   * maintainer chose this trade-off explicitly, for a list the user can actually see and edit rather
+   * than a two-list delta against one spelled out in prose.
+   *
+   * A document still holding the old `{ added, removed }` shape is migrated ONCE, on read — see
+   * `linkSettings` in `app-settings.ts`.
+   */
+  knownFileExtensions: string[];
 }
 
 /** Where the new-project folder picker opens (011, FR-041). */
@@ -607,7 +694,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     commandPollMs: 1000,
     shellIntegration: true,
     showStatusBar: true,
-    linkHoverDelayMs: 500,
+    // 045 FR-080b (#394): shipped ON. A program that emits OSC 8 is emitting a link throng did not
+    // have to guess, which is strictly better than one it did.
+    advertiseHyperlinks: true,
     // 039 FR-002. OFF restores 025 FR-015; ON for the directory is 025 FR-027b and is unchanged.
     defaultRememberCommand: false,
     defaultRememberDirectory: true,
@@ -663,6 +752,18 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     },
     // 044 — DERIVED from the provider registry, as `indentByLanguage` is from the language registry.
     previews: previewSettingsDefaults(SHIPPED_PREVIEW_PROVIDERS),
+    // 045 FR-060/FR-120 — both detection switches on, and a two-second resolution timeout. Detection
+    // is shipped on because a link a user has to enable is a feature they never find (#394). Round
+    // five (#408): the switches now gate every kind of link, not detected paths alone.
+    links: {
+      detectInEditors: true,
+      detectInTerminals: true,
+      existenceCheckTimeoutMs: 2000,
+      // 045 FR-159 — the schemes a user most often meets in a terminal or a document.
+      protocolAllowlist: [...DEFAULT_PROTOCOL_ALLOWLIST],
+      // Round five (#408) — the shipped list itself, not a copy of it; see `EditorLinkSettings`.
+      knownFileExtensions: [...KNOWN_FILE_EXTENSIONS],
+    },
   },
   tabs: {
     smoothScrollMs: 300,
@@ -956,14 +1057,15 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   }
   const shellIntegration =
     typeof v.shellIntegration === 'boolean' ? v.shellIntegration : fallback.shellIntegration;
-  // 031 T033: both of these used to clamp here as well as declare a range on their descriptors.
-  // `commandPollMs`'s two agreed (250–5000) and `linkHoverDelayMs`'s did not (declared 0–2000,
-  // clamped 0–5000) — and nothing could have told you which, because only one of the two was ever
-  // enforced. The clamps are gone; the descriptors are the range (FR-015, FR-016).
+  // 031 T033: this used to clamp here as well as declare a range on its descriptor — the two had
+  // disagreed (declared 0–2000, clamped 0–5000) until `linkHoverDelayMs` itself was retired (round
+  // five, #408). The clamp is gone; the descriptor is the range (FR-015, FR-016).
   const commandPollMs = wholeNumber(v.commandPollMs, fallback.commandPollMs);
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
-  const linkHoverDelayMs = wholeNumber(v.linkHoverDelayMs, fallback.linkHoverDelayMs);
+  // 045 FR-080b.
+  const advertiseHyperlinks =
+    typeof v.advertiseHyperlinks === 'boolean' ? v.advertiseHyperlinks : fallback.advertiseHyperlinks;
   // 039 FR-002. Per-field fallback, like every setting above: a config that sets one of these must
   // not reset the other three by omission.
   const defaultRememberCommand =
@@ -990,7 +1092,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     commandPollMs,
     shellIntegration,
     showStatusBar,
-    linkHoverDelayMs,
+    advertiseHyperlinks,
     defaultRememberCommand,
     defaultRememberDirectory,
     defaultRunAsAdmin,
@@ -1013,7 +1115,8 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     commandPollMs: t.commandPollMs,
     shellIntegration: t.shellIntegration,
     showStatusBar: t.showStatusBar,
-    linkHoverDelayMs: t.linkHoverDelayMs,
+    // 045 FR-080b, and the note below applies to it exactly as it does to 039's four.
+    advertiseHyperlinks: t.advertiseHyperlinks,
     // 039 FR-002. A field missing HERE is silently dropped on a settings write (032), which no
     // assertion about parsing would catch — hence the dedicated test.
     defaultRememberCommand: t.defaultRememberCommand,
@@ -1093,6 +1196,74 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     navigation: navigationSettings(v.navigation, fallback.navigation),
     // 044 — tolerant per leaf, and it keeps an unknown provider id (see `parsePreviewSettings`).
     previews: parsePreviewSettings(v.previews, SHIPPED_PREVIEW_PROVIDERS),
+    // 045 — tolerant per leaf, like every block above it.
+    links: linkSettings(v.links, fallback.links),
+  };
+}
+
+/**
+ * Tolerant per-field parse of `editor.links` (045 FR-060, FR-120). A bad leaf falls back to its own
+ * default. The block is REBUILT from the leaves it knows rather than spread from `v`, which is what
+ * drops a retired `defaultAction` (FR-112, FR-113): it is never read, so it is never written back.
+ * The timeout's range is its descriptor's, enforced by `applyDeclaredBounds` — no clamp here.
+ */
+function linkSettings(v: unknown, fallback: EditorLinkSettings): EditorLinkSettings {
+  if (!isRecord(v)) return cloneLinks(fallback);
+  return {
+    detectInEditors:
+      typeof v.detectInEditors === 'boolean' ? v.detectInEditors : fallback.detectInEditors,
+    detectInTerminals:
+      typeof v.detectInTerminals === 'boolean' ? v.detectInTerminals : fallback.detectInTerminals,
+    existenceCheckTimeoutMs: wholeNumber(v.existenceCheckTimeoutMs, fallback.existenceCheckTimeoutMs),
+    // Round four (FR-159, FR-178a). Strings are kept AS TYPED: the preferences list commits every
+    // keystroke and adds a row as `''`, so trimming or dropping empties here would delete the row being
+    // typed into. They are normalised where they are compared.
+    protocolAllowlist: stringList(v.protocolAllowlist, fallback.protocolAllowlist),
+    knownFileExtensions: knownFileExtensionsSetting(v.knownFileExtensions, fallback.knownFileExtensions),
+  };
+}
+
+/** A list of strings: a non-array falls back (copied), a non-string item is dropped. */
+function stringList(v: unknown, fallback: readonly string[]): string[] {
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [...fallback];
+}
+
+/**
+ * Round five (#408) — `editor.links.knownFileExtensions`, inverted from round four's two-list delta
+ * into the one list a user actually edits.
+ *
+ * A plain array is the CURRENT shape, and is honoured AS TYPED — an explicit `[]` is a deliberate
+ * choice (no extension ever ends a spaced path), not something to fall back from, exactly as
+ * `protocolAllowlist` above is (FR-159b's precedent). Non-string entries are dropped.
+ *
+ * A document still holding round four's `{ added, removed }` shape is migrated ONCE, on read:
+ * `resolveKnownExtensions` is the exact function that used to compute the effective set from those
+ * two lists (leading dot optional, case-insensitive), so the migration reuses it rather than
+ * re-implementing its normalisation. The migrated value is not written back until the next ordinary
+ * save — `linkSettings` rebuilds the whole block from the leaves it knows, so that save leaves the
+ * old keys out on its own (019 FR-023 / FR-112/FR-113's mechanism).
+ *
+ * Anything else (absent, `null`, a non-array-non-edit value) falls back to `fallback` — the shipped
+ * list on a fresh read, or the caller's own value when re-parsing an already-migrated document.
+ */
+function knownFileExtensionsSetting(v: unknown, fallback: readonly string[]): string[] {
+  if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
+  if (isRecord(v) && (Array.isArray(v.added) || Array.isArray(v.removed))) {
+    const edits: KnownExtensionEdits = {
+      added: stringList(v.added, []),
+      removed: stringList(v.removed, []),
+    };
+    return [...resolveKnownExtensions(KNOWN_FILE_EXTENSIONS, edits)];
+  }
+  return [...fallback];
+}
+
+/** A deep copy of the links block: two arrays, and a third that used to be a nested object. */
+function cloneLinks(l: EditorLinkSettings): EditorLinkSettings {
+  return {
+    ...l,
+    protocolAllowlist: [...l.protocolAllowlist],
+    knownFileExtensions: [...l.knownFileExtensions],
   };
 }
 
@@ -1135,6 +1306,11 @@ function cloneEditor(e: EditorSettings): EditorSettings {
         Object.entries(e.previews.providers).map(([id, p]) => [id, { ...p }]),
       ),
     },
+    // 045: the SEVENTH object-valued member. It holds three arrays (round five inverted the third
+    // from a nested `{ added, removed }` object into a plain list), so a spread is no longer enough —
+    // `cloneLinks` copies them. Omitting this line entirely shares the block with the shipped
+    // defaults, which is the fault `editor-settings.test.ts` sweeps for.
+    links: cloneLinks(e.links),
   };
 }
 
