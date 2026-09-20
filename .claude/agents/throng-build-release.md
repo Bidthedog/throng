@@ -36,6 +36,9 @@ runtime dependency means checking both.
 
 ## Release (docs/releasing.md)
 
+**Cutting one is the `throng-release` skill's job, not this agent's** — it holds the running order,
+the version question and the sign-off. What follows is the area knowledge that runbook assumes.
+
 Versioning → packaging → **reconcile** → **verification** (one verdict per artifact) → **QA
 sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.mjs`
 (`THRONG_QA_SIGNED_OFF`, `THRONG_VERDICT_FILES`, `THRONG_ARTIFACT_DIR`, `THRONG_RELEASE_TAG`,

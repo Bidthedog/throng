@@ -162,6 +162,19 @@ The rules that fell out of it, in the order they matter:
 - **Inline, not a toast, for anything with an action attached.** A toast cannot carry a button here,
   and a message that names a remedy the user cannot reach from it is worse than no message.
 
+## Cutting a release
+
+**The `throng-release` skill owns this, and it is not optional.** Load it the moment a release is in
+play — "do a release", "cut alpha5", "tag a version", "the publish job is stuck" — before touching a
+file. It carries the running order (version → `CHANGELOG.md` → the nine manifests → docs currency →
+gate → tag → `release.yml` → human sign-off → publish), the five conditions publication is refused
+on, and what each past failure turned out to be. It supersedes the generic `github-workflow:release`
+skill and `release-manager` agent, which know nothing about this repo's declared artifact set.
+
+Two things it will not do for you: it asks for the version rather than guessing one, and the QA
+sign-off on the `release` Environment is a human act no automation can satisfy.
+`docs/releasing.md` remains the reasoning behind the process; the skill is the procedure.
+
 ## Specialist agents
 
 `.claude/agents/` holds eleven repo-local subagents, one per area of this codebase — core/DI, daemon
