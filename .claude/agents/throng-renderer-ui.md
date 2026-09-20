@@ -41,7 +41,7 @@ stores: `renderer/state/` (`workspace-store.tsx`, `projects-store.tsx`, `subwork
 - **One gesture follows a link** (constitution **5.5.0**). A link rendered inside content — terminal
   output, document text, a preview, a dialog or notice body — follows on **Ctrl+click**, and on
   **Ctrl+Enter** where it holds a keyboard position; a plain click never navigates. Hover names the
-  gesture, and a panel's menu over a link offers Open Link / Copy Link Address. Tree rows, result
+  gesture, and a panel's menu over a link offers Open Link / Copy Link to Clipboard. Tree rows, result
   rows, tabs, buttons and menu items are not links. Known gap: `about/about-app.tsx` follows its
   links on a plain click — do not copy it.
 - **A preference picks the default; the menu offers every variant** (constitution **5.5.0**). Where
