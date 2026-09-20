@@ -1,6 +1,6 @@
 ---
 name: throng-release
-description: Cut a throng release end to end — settle the version, write the release notes into CHANGELOG.md, bump the nine manifests, bring the docs current, gate it, tag it, watch release.yml build and verify all three artifacts, and publish behind the human QA sign-off. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. Do NOT guess the version: if the request does not name one unambiguously, ask before touching a file. This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates.
+description: Cut a throng release end to end — settle the version, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, audit the dependencies, bring the docs current, gate it, tag it, watch release.yml build and verify all three artifacts, and publish behind the human QA sign-off. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. Do NOT guess the version: if the request does not name one unambiguously, ask before touching a file. This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates.
 ---
 
 # Releasing throng
@@ -67,8 +67,10 @@ Never commit release prep to `master` directly.
 git -C D:/git/throng switch -c release/v<version> origin/master
 ```
 
-`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). A worktree is
-fine but unnecessary — the prep is three files and no build state.
+`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). Work in the
+main checkout rather than a fresh worktree: the dependency sweep in step 5 needs an installed
+`node_modules` and runs the non-E2E stages against it, which a bare worktree would have to build
+from nothing.
 
 ## 3. The release notes are `CHANGELOG.md`, and they are written before the tag
 
@@ -110,7 +112,7 @@ the review that matters.
 4. **The date is the date it will publish**, in `YYYY-MM-DD`. Get it from `date "+%Y-%m-%d"`, not
    from memory.
 
-## 4. The version bump — one decision, nine files
+## 4. The version bump — one decision, eight files
 
 The root manifest is the decision; every workspace and the lockfile follow it, and
 `packages/core/tests/contract/product-version.contract.test.ts` fails the build if any disagrees.

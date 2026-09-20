@@ -166,9 +166,10 @@ The rules that fell out of it, in the order they matter:
 
 **The `throng-release` skill owns this, and it is not optional.** Load it the moment a release is in
 play — "do a release", "cut alpha5", "tag a version", "the publish job is stuck" — before touching a
-file. It carries the running order (version → `CHANGELOG.md` → the nine manifests → docs currency →
-gate → tag → `release.yml` → human sign-off → publish), the five conditions publication is refused
-on, and what each past failure turned out to be. It supersedes the generic `github-workflow:release`
+file. It carries the running order (version → `CHANGELOG.md` → the root manifest and the six
+workspaces that follow it → dependency audit → docs currency → gate → tag → `release.yml` → human
+sign-off → publish), the five conditions publication is refused on, and what each past failure
+turned out to be. It supersedes the generic `github-workflow:release`
 skill and `release-manager` agent, which know nothing about this repo's declared artifact set.
 
 Two things it will not do for you: it asks for the version rather than guessing one, and the QA
