@@ -263,19 +263,40 @@ gh run list --workflow release.yml --limit 3
 gh run watch <run-id>
 ```
 
-Four jobs, in order, each gating the next:
+**Two runs start, not one.** `release.yml` triggers on a push to `master` and on a `v*` tag, so the
+merge and the tag each fire one. They do not cancel each other — the concurrency group is keyed to
+the ref. The `master` run does everything except publish and is pure duplication; it is free on a
+public repo, so leave it unless runner minutes are being watched. **Take every verdict from the tag
+run**, which is the one carrying the publish job.
+
+Four jobs, in order, each gating the next. Measured on the alpha5 run (`35531917920`), tag pushed to
+approval gate in **45 minutes**:
 
 1. **E2E (full suite)** — everything except `@core`'s 50; one worker, no shards. This is the only
-   place the `@extended` half of the suite runs. ~40–60 min on a runner. A red suite means no
+   place the `@extended` half of the suite runs. **33 min** on a runner. A red suite means no
    artifact.
 2. **Build the per-user installer** — `npm run package`, then `artifact-set.mjs reconcile`, which
    fails in **both** directions: a declared artifact that was not built, and a built artifact nobody
-   declared.
+   declared. **5 min.**
 3. **Verify on a clean machine** — every declared artifact, resolved by **role**, each installed,
    launched, version-checked, journey-tested (project → terminal → reopen → reattach), checksummed
    and removed, with a verdict per role. It also renders `release-body-preview.md` — the exact body
-   publication will use.
-4. **Publish (gated)** — waits at the `release` Environment for required reviewers.
+   publication will use. **7 min.**
+4. **Publish (gated)** — waits at the `release` Environment for required reviewers, then **3 min**
+   to compute the checksums, compose the body and create the release.
+
+**What a passing verdict looks like**, so a skipped check is not mistaken for a clean one. `setup`
+passes all **13** steps. `portable` and `archive` pass **8** and mark **5 `not-applicable`** —
+`interrupted-install`, `install`, `shortcut`, `no-write`, `uninstall` — because neither format has
+an installer or an uninstaller. Any other shape deserves a look: a `not-applicable` on `setup`, or
+a role reporting fewer than 13 results in total, is a check that did not run.
+
+```sh
+gh run download <tag-run-id> --name verification-verdict --dir <scratch>
+```
+
+That artifact carries the three verdicts and `release-body-preview.md` together. Read the body
+before asking anyone to approve it.
 
 The declared set is three artifacts, and the declaration in
 `packages/core/src/config/release-artifacts.ts` is the contract:
@@ -291,11 +312,13 @@ is exactly why `ls dist/installer/*.exe | head -n1` was removed from three place
 
 ## 11. The human QA sign-off
 
-**Blocking, and it is the user's to give.** Tell them, in one line, what is waiting and where:
+**Blocking, and it is the user's to give.** Put in front of them what they need to decide with,
+rather than a link to go and find it: the rendered body you already downloaded in step 10, the three
+verdicts summarised (steps passed, steps `not-applicable`, each artifact's SHA-256), and the run
+URL. Then one flagged line asking for the approval.
 
-- download `release-body-preview.md` from the verify job's artifacts and read the text that will
-  ship;
-- approve the `release` Environment on the publish job.
+They may be away — this is the point in the release where an hour can pass, so it is worth a push
+notification rather than a message they see when they next look.
 
 No automation, default or timeout can satisfy it. Do not try to approve it yourself.
 
