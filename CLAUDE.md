@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/044-file-previews/plan.md
+at specs/045-clickable-file-links/plan.md
 <!-- SPECKIT END -->
 
 ## Verifying done-ness
@@ -62,6 +62,25 @@ Three rules about using it:
 - **A green gate goes stale the moment you edit** — and a remote gate is triggered against a REF, so
   it was only ever evidence about that *commit*, never about the working tree. Quote the run URL and
   the SHA when reporting done, not just the stage summary, and re-run if anything changed after it.
+- **The evidence is the TREE, not the SHA. A rewrite that changes no content needs no new gate.** A
+  rebase, a squash, a regrouping of commits, a reworded commit message — none of them change what
+  gets built and tested, so a gate that was green on the old tip is still evidence about the new one.
+  Prove it rather than asserting it, with the check the rewrite already owes you:
+
+  ```sh
+  git diff --stat <green-gate-sha> HEAD     # empty = identical content, the gate still holds
+  git rev-parse HEAD^{tree}                 # …or compare tree SHAs directly
+  ```
+
+  Empty diff → **do not re-run the gate.** Say which SHA was green, that the tree is unchanged since,
+  and quote the original run URL; that is a complete done-ness claim. Non-empty → the gate is stale
+  in the ordinary way and the rule above applies.
+
+  This exists because the opposite reflex is expensive and looks rigorous: `branch-sync` rebuilt 181
+  commits into 7, the green SHA stopped being an ancestor, and re-running cost ~38 runner-minutes to
+  re-test a byte-identical tree. **GitHub's own required checks are a different thing** — they are
+  keyed to the head SHA, they re-run on a force-push whatever you think, and they gate the merge.
+  Nothing here skips those; this rule is only about not *dispatching* `gate.yml` yourself.
 
 ## Formatting is ESLint's job — never run Prettier here
 
