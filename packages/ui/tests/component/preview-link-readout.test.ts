@@ -135,6 +135,6 @@ describe('the status bar names the hovered or focused link (FR-118)', () => {
     fireEvent.focus(site);
     await waitFor(() => expect(screen.queryByTestId(`preview-status-bar-${id}`)).toBeNull());
     expect(document.querySelector('.editor-status-strip__readout')).toBeNull();
-    expect(site.getAttribute('title')).toBe('https://example.com/ — Ctrl+click to follow');
+    expect(site.getAttribute('title')).toBe('https://example.com/');
   });
 });

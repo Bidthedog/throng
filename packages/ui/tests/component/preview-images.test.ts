@@ -216,7 +216,7 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
     const fragment = renderImages('[![](a.png "x")](https://real/)');
     const image = img(fragment);
     expect(image.hasAttribute('title')).toBe(false);
-    expect(fragment.querySelector('[data-throng-link]')?.getAttribute('title')).toBe('https://real/ — Ctrl+click to follow');
+    expect(fragment.querySelector('[data-throng-link]')?.getAttribute('title')).toBe('https://real/');
   });
 
   it('strips bidi controls from the source and the title', () => {

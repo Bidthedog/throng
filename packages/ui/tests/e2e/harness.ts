@@ -1346,6 +1346,234 @@ export async function geom(
 }
 
 /**
+ * The viewport point at the CENTRE of one character of rendered text (045).
+ *
+ * Written for terminal links, where a test has to put the pointer inside a specific token on a
+ * specific row. The obvious arithmetic — a row's width divided by a column count read from some
+ * other row's `textContent` — is wrong in a way that passes silently: a blank row reports a length
+ * of zero, the cell width comes out roughly double, and the pointer lands well past the token while
+ * the test reports only that nothing was underlined. Measured once, on `terminal-links.e2e.ts`.
+ *
+ * A DOM Range over the actual text node is exact instead, and needs no column count at all. It also
+ * FAILS LOUDLY: the row's whole rendered text is in the error, so "the pointer missed" and "the row
+ * does not say what the test thinks" are two different messages rather than one silent timeout.
+ *
+ * `index` is an offset into `token`, so a caller aims a few characters inside a link rather than at
+ * its first cell — an edge cell is where a hover is least reliable.
+ */
+export async function charPoint(
+  row: Locator,
+  token: string,
+  index = 0,
+): Promise<{ x: number; y: number }> {
+  await expect(row).toBeVisible();
+  return row.evaluate(
+    (el, [want, into]: [string, number]) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      let text = '';
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        nodes.push(node);
+        text += node.textContent ?? '';
+      }
+      // xterm's DOM renderer may draw a space as a no-break space; the offsets are the same either way.
+      const start = text.replace(/\u00a0/g, ' ').indexOf(want);
+      if (start < 0) {
+        throw new Error(`charPoint: this row does not contain ${want}. It reads: ${JSON.stringify(text)}`);
+      }
+      const at = start + into;
+      let seen = 0;
+      for (const node of nodes) {
+        const length = (node.textContent ?? '').length;
+        if (at < seen + length) {
+          const range = document.createRange();
+          range.setStart(node, at - seen);
+          range.setEnd(node, at - seen + 1);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        }
+        seen += length;
+      }
+      throw new Error(`charPoint: offset ${at} is past the end of ${JSON.stringify(text)}`);
+    },
+    [token, index] as [string, number],
+  );
+}
+
+/**
+ * The text of one terminal row that throng's link mark is DRAWN under (045 FR-135 – FR-139).
+ *
+ * The mark is an xterm decoration (`link-marks.ts`) — an element of its own in the decoration
+ * container, positioned over the cells, and not a style on the cells' spans. So "which characters are
+ * marked" is geometry: every character of the row whose centre falls inside a `.terminal-link-mark`
+ * box on the same row. `hover: true` counts only marks in the hover state
+ * (`.terminal-link-mark--hover`), which is what a hovered link draws on every row it occupies.
+ *
+ * xterm's OWN link visuals (the inline `text-decoration: underline` it writes on hover, and the
+ * `xterm-underline-5` class on OSC 8 cells) are switched off inside a terminal panel, so reading
+ * those would measure nothing — which is exactly how `terminal-links.e2e.ts` went red the day they
+ * were.
+ */
+export async function linkMarkedText(row: Locator, opts: { hover?: boolean } = {}): Promise<string> {
+  await expect(row).toBeVisible();
+  return row.evaluate((el, hoverOnly: boolean) => {
+    const rowBox = el.getBoundingClientRect();
+    const marks = [...(el.closest('.xterm')?.querySelectorAll<HTMLElement>('.terminal-link-mark') ?? [])]
+      .filter((m) => !hoverOnly || m.classList.contains('terminal-link-mark--hover'))
+      .map((m) => m.getBoundingClientRect())
+      .filter(
+        (b) =>
+          b.width > 0 &&
+          b.height > 0 &&
+          b.top < rowBox.bottom - rowBox.height / 4 &&
+          b.bottom > rowBox.top + rowBox.height / 4,
+      );
+    let out = '';
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text;
+      const text = node.textContent ?? '';
+      for (let i = 0; i < text.length; i += 1) {
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const c = range.getBoundingClientRect();
+        const cx = c.left + c.width / 2;
+        if (marks.some((b) => cx > b.left && cx < b.right)) out += text[i];
+      }
+    }
+    return out;
+  }, opts.hover === true);
+}
+
+/**
+ * What throng's own counters say about one terminal panel — attached to a failure so a red on a
+ * machine nobody can reach says WHERE the typing stopped: never written (the renderer dropped it),
+ * written but not acknowledged (the daemon or the pty), or acknowledged and simply never echoed (the
+ * shell). Best-effort: a page that refuses to evaluate yields a note, never a second failure.
+ */
+export async function terminalEvidence(win: Page, term: Locator): Promise<string> {
+  try {
+    const panelId = ((await term.getAttribute('data-testid')) ?? '').replace(/^terminal-/, '');
+    const snapshot = await win.evaluate((pid) => {
+      const fn = (window as unknown as { __throngTerminalDiagnostics?: () => Record<string, unknown> })
+        .__throngTerminalDiagnostics;
+      const entry = fn?.()[pid] as { input?: unknown; writes?: string[] } | undefined;
+      return entry === undefined ? null : { input: entry.input, lastWrites: (entry.writes ?? []).slice(-16) };
+    }, panelId);
+    const screen = await term.locator('.xterm-screen').boundingBox();
+    return JSON.stringify({ panelId, screenWidth: screen?.width ?? null, diagnostics: snapshot });
+  } catch (err) {
+    return `(no terminal evidence: ${String(err)})`;
+  }
+}
+
+/** Run `step`, and if it fails, fail with the terminal's own evidence attached. */
+async function withTerminalEvidence(win: Page, term: Locator, what: string, step: () => Promise<void>): Promise<void> {
+  try {
+    await step();
+  } catch (cause) {
+    throw new Error(`${what}\nterminal evidence: ${await terminalEvidence(win, term)}`, { cause });
+  }
+}
+
+/**
+ * Type a command line at a live shell prompt and run it — in three observed steps, not one gesture.
+ *
+ *   1. Click the terminal, and type at {@link TYPE_DELAY}: at zero delay keystrokes race the pty and
+ *      can arrive scrambled (see `fenceOnEcho` in `terminal-link-once.e2e.ts`).
+ *   2. Wait for the shell to ECHO `echoed` BEFORE pressing Enter. That is the proof the keystrokes
+ *      reached a shell that was reading them; without it, an Enter sent into a line that never
+ *      arrived fails later, on the output wait, with a message that blames the feature under test.
+ *   3. Press Enter and wait for `output`.
+ *
+ * `echoed` must be text the command line contains and nothing on screen already does — otherwise
+ * step 2 is satisfied by an earlier line. Each step's failure carries {@link terminalEvidence}.
+ */
+export async function runTypedCommand(
+  win: Page,
+  term: Locator,
+  command: string,
+  expected: { readonly echoed: string; readonly output: string; readonly timeout?: number },
+): Promise<void> {
+  const timeout = expected.timeout ?? TERMINAL_OUTPUT_TIMEOUT_MS;
+  await term.click();
+  await win.keyboard.type(command, { delay: TYPE_DELAY });
+  await withTerminalEvidence(win, term, `the shell never echoed the typed ${JSON.stringify(expected.echoed)}`, () =>
+    expect(term).toContainText(expected.echoed, { timeout }),
+  );
+  await win.keyboard.press('Enter');
+  await withTerminalEvidence(win, term, `${JSON.stringify(command)} never printed ${JSON.stringify(expected.output)}`, () =>
+    expect(term).toContainText(expected.output, { timeout }),
+  );
+}
+
+/**
+ * Narrow the window so terminal output wraps, returning only once the terminal has CONFORMED to the
+ * new width AND its PowerShell prompt has answered at that width. Resolves to a restore function.
+ *
+ * ══ WHY NOT JUST RESIZE AND TYPE ══
+ *
+ * A window resize reaches the shell by a chain of hops — the renderer's ResizeObserver (debounced),
+ * the daemon's grid, the pty, and ConPTY's repaint of the viewport, which PSReadLine then redraws its
+ * line over. Typing straight after `setContentSize` sends the keystrokes into the middle of that
+ * chain. On the gate's Server 2022 runner (build 20348) that sequence lost the whole typed line 3/4
+ * — the prompt stayed empty for 25s, the command never even echoed (gate run 35384128802) — while
+ * it passed 4/4 on the run before (35381378387) and every time on Windows 11. WHICH hop swallowed
+ * the line is a HYPOTHESIS, not a measurement: nothing on that runner recorded throng's input
+ * counters, which is why every step here now fails with {@link terminalEvidence} attached. What is
+ * known is that the line was typed into a resize in flight, and that is the part this removes.
+ * So the wait is on two positive facts, never a duration:
+ *   - the xterm's screen got narrower: xterm sizes itself ONLY from the grid the daemon broadcasts
+ *     back after resizing the pty (`conformGrid` in `use-terminal.ts`), so this is the pty resized;
+ *   - a command typed at the new width is echoed AND executed: `echo ('A'+'B')` prints `AB`, a
+ *     string its own command line does not contain, so the wait cannot be met by the echo alone.
+ */
+export async function narrowTerminalWindow(
+  app: ElectronApplication,
+  win: Page,
+  term: Locator,
+  width: number,
+  token: string,
+): Promise<() => Promise<void>> {
+  const screen = term.locator('.xterm-screen');
+  const before = (await screen.boundingBox())?.width ?? 0;
+  const original = await app.evaluate(({ BrowserWindow }, w) => {
+    const [bw] = BrowserWindow.getAllWindows();
+    const maximized = bw.isMaximized();
+    // A maximized window ignores a resize, and the output would then not wrap at all.
+    if (maximized) bw.unmaximize();
+    const size = bw.getContentSize();
+    bw.setContentSize(w, size[1]);
+    return { maximized, size };
+  }, width);
+  const restore = async (): Promise<void> => {
+    await app.evaluate(({ BrowserWindow }, o) => {
+      const [bw] = BrowserWindow.getAllWindows();
+      bw.setContentSize(o.size[0], o.size[1]);
+      if (o.maximized) bw.maximize();
+    }, original);
+  };
+  try {
+    await withTerminalEvidence(win, term, `the terminal never conformed to a ${width}px window`, () =>
+      expect
+        .poll(async () => (await screen.boundingBox())?.width ?? before, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
+        .toBeLessThan(before),
+    );
+    const half = Math.ceil(token.length / 2);
+    await runTypedCommand(win, term, `echo ('${token.slice(0, half)}'+'${token.slice(half)}')`, {
+      echoed: `'${token.slice(half)}')`,
+      output: token,
+    });
+  } catch (err) {
+    await restore();
+    throw err;
+  }
+  return restore;
+}
+
+/**
  * The rendered text of something that redraws, read once it has STOPPED redrawing (034 FR-019).
  *
  * `geom()` is this idea applied to geometry; this is the same idea applied to text, and it exists

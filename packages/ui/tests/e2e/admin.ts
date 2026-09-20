@@ -180,3 +180,46 @@ export function skipIfConsoleHidesAltScreen(): void {
     `this host's console does not forward the alternate-screen switch (build ${build} < 22000); see #298`,
   );
 }
+
+/**
+ * 045 — whether this host's ConPTY carries an OSC 8 hyperlink AROUND its text.
+ *
+ * Measured on GitHub's `windows-2022` runner (Server 2022, build 20348) by
+ * `platform-windows/tests/integration/terminal-link-flavours.integration.test.ts`: ConPTY there
+ * either drops the sequences (cmd) or forwards the opener and closer back to back and paints the
+ * text after both (every other shell, and a program such as `node` writing the bytes itself). The
+ * hyperlink then wraps no cells, so xterm has no OSC 8 link to report and throng none to mark or
+ * follow. Windows 11 (build 22000 and later) wraps the text.
+ *
+ * Drawn at the same build line as {@link skipIfConsoleHidesAltScreen}, and for the same reason: a
+ * guard that probed for the hyperlink and skipped when it could not see one would also skip
+ * silently if throng ever REGRESSED and stopped seeing it — the one outcome these halves exist to
+ * catch.
+ */
+export function consoleCarriesHyperlinks(): boolean {
+  const build = Number(release().split('.')[2] ?? '0');
+  return !(build > 0 && build < 22000);
+}
+
+/**
+ * Whether the OSC 8 HALF of a test runs here — and, when it does not, SAY so (045 FR-145).
+ *
+ * A half, not the whole test: the web-url and detected-path cases beside an OSC 8 case pass through
+ * that ConPTY untouched and still verify there. The skipped half is never passed and never failed —
+ * it is reported as NOT RUN, printed to the run's output and attached to the test as an annotation,
+ * so a green bar on that host cannot be read as OSC 8 evidence.
+ *
+ * Every assertion that could be satisfied VACUOUSLY on such a host belongs inside the half too — a
+ * dead hyperlink "showing no mark" is true of a hyperlink that never arrived, so its positive
+ * control and its negatives are skipped together.
+ */
+export function osc8HalfRuns(what: string): boolean {
+  if (consoleCarriesHyperlinks()) return true;
+  const build = release().split('.')[2] ?? '?';
+  const reason =
+    `this host's ConPTY (build ${build} < 22000) does not carry OSC 8 around its text — ` +
+    `${what} NOT RUN (045 FR-145)`;
+  console.warn(`[osc8] ${reason}`);
+  test.info().annotations.push({ type: 'not run', description: reason });
+  return false;
+}

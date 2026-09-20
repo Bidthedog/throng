@@ -13,6 +13,7 @@ import { DEFAULT_KEYBINDINGS, resolveAction, type PreviewLink } from '@throng/co
 import { MarkdownBody } from '../../src/renderer/preview/providers/markdown/markdown-body.js';
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
 import { linkNoticeMessage } from '../../src/renderer/preview/preview-link-notice.js';
+import { hideLinkHint, peekLinkHint } from '../../src/renderer/links/link-hint-store.js';
 import { COLD, mountMarkdownPreview } from './helpers/mount-preview-panel.js';
 
 const ROOT = 'D:/proj';
@@ -82,14 +83,14 @@ describe('what a link carries (FR-091, FR-094, FR-096b)', () => {
     expect(site.getAttribute('role')).toBe('link');
     expect(site.getAttribute('tabindex')).toBe('0');
     expect(JSON.parse(site.getAttribute('data-throng-link')!)).toEqual({ kind: 'external', url: 'https://example.com/' });
-    expect(site.getAttribute('title')).toBe('https://example.com/ — Ctrl+click to follow');
+    expect(site.getAttribute('title')).toBe('https://example.com/');
 
     expect(JSON.parse(link('Setup').getAttribute('data-throng-link')!)).toEqual({
       kind: 'file',
       absPath: 'D:/proj/docs/setup.md',
       fragment: 'install',
     });
-    expect(link('Setup').getAttribute('title')).toBe('docs/setup.md#install — Ctrl+click to follow');
+    expect(link('Setup').getAttribute('title')).toBe('docs/setup.md#install');
     expect(JSON.parse(link('Here').getAttribute('data-throng-link')!)).toEqual({ kind: 'heading', fragment: 'links' });
     expect(JSON.parse(link('Mail').getAttribute('data-throng-link')!)).toEqual({ kind: 'external', url: 'mailto:a@b.c' });
     expect(JSON.parse(link('Out').getAttribute('data-throng-link')!)).toMatchObject({ kind: 'outside' });
@@ -108,7 +109,63 @@ describe('what a link carries (FR-091, FR-094, FR-096b)', () => {
   it('a link a document authored with its own title keeps no author text: the title names the target', async () => {
     const { host } = mountBody('# T\n\n[x](https://example.com/ "Totally safe")');
     await ready(host);
-    expect(link('x').getAttribute('title')).toBe('https://example.com/ — Ctrl+click to follow');
+    expect(link('x').getAttribute('title')).toBe('https://example.com/');
+  });
+});
+
+/*
+ * FR-169a (round five) — the destination wording moved OFF the tooltip and onto the plain-click hint.
+ *
+ * FR-168's rule is unchanged: every kind of preview link words its own destination rather than
+ * sharing one hint. What changed is where a user reads it. The hover is now the target address alone
+ * (asserted above), so these cases follow the wording to the surface that still carries it — which is
+ * also the surface a user actually asked for, a hint appearing because they clicked.
+ */
+describe('the plain-click hint is worded by destination (FR-168, FR-169a)', () => {
+  it.each([
+    ['Site', 'Ctrl+Click to open in system browser'],
+    ['Setup', 'Ctrl+Click to open in throng preview'],
+    ['Here', 'Ctrl+Click to go to the heading'],
+    ['Mail', 'Ctrl+Click to open with the mailto handler'],
+    ['Out', 'Ctrl+Click to follow'],
+  ])('%s → %s', async (name, hint) => {
+    const { host, onFollow } = mountBody();
+    await ready(host);
+    fireEvent.click(link(name));
+    expect(onFollow).not.toHaveBeenCalled();
+    expect(peekLinkHint()?.text).toBe(hint);
+  });
+
+  /*
+   * Review round four, editor M2 — the `file` row above is right only because its fixture is a `.md`.
+   * `classifyPreviewLink` answers `kind: 'file'` for EVERY in-project reference whatever its
+   * extension, and 044 FR-090d / `preview-service.ts` open one with no enabled provider in an EDITOR.
+   * So the tooltip promised a preview for a link whose Ctrl+click opens an editor panel.
+   */
+  const MIXED = ['# T', '', '[Doc](docs/setup.md) and [Entry](src/main.ts)'].join('\n');
+  const onlyMarkdownPreviews = (absPath: string): boolean => absPath.toLowerCase().endsWith('.md');
+
+  it('an in-project file with NO enabled provider is worded for the editor it actually opens in', async () => {
+    const { host } = mountBody(MIXED, { linkWording: { previewable: onlyMarkdownPreviews } });
+    await ready(host);
+    fireEvent.click(link('Entry'));
+    expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in throng active editor');
+  });
+
+  it('…while one a provider DOES claim still says preview', async () => {
+    const { host } = mountBody(MIXED, { linkWording: { previewable: onlyMarkdownPreviews } });
+    await ready(host);
+    fireEvent.click(link('Doc'));
+    expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in throng preview');
+  });
+
+  it('the wording follows editor.openTarget, as the editor’s and the terminal’s do (023 FR-025)', async () => {
+    const { host } = mountBody(MIXED, {
+      linkWording: { previewable: onlyMarkdownPreviews, openTarget: 'new' },
+    });
+    await ready(host);
+    fireEvent.click(link('Entry'));
+    expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in throng new editor');
   });
 });
 
@@ -119,16 +176,19 @@ describe('what a link carries (FR-091, FR-094, FR-096b)', () => {
  */
 describe('data-throng-target — the target the status bar names (FR-118)', () => {
   const RLO = String.fromCharCode(0x202e);
-  const HINT = ' — Ctrl+click to follow';
 
-  it('a followable link carries its title without the hint', async () => {
+  /*
+   * FR-169a — the readout and the title are now the SAME STRING, not one derived from the other by
+   * trimming a hint off the end. That is worth asserting as equality rather than dropping: the two
+   * are written by different lines of the same hook, so they can still drift apart, and a user who
+   * sees one address in the status bar and another over the pointer has no way to tell which is real.
+   */
+  it('a followable link carries the same text as its title', async () => {
     const { host } = mountBody();
     await ready(host);
     for (const name of ['Site', 'Setup', 'Here', 'Mail', 'Out']) {
       const el = link(name);
-      const title = el.getAttribute('title') ?? '';
-      expect(title.endsWith(HINT), name).toBe(true);
-      expect(el.getAttribute('data-throng-target'), name).toBe(title.slice(0, -HINT.length));
+      expect(el.getAttribute('data-throng-target'), name).toBe(el.getAttribute('title'));
     }
     expect(link('Setup').getAttribute('data-throng-target')).toBe('docs/setup.md#install');
   });
@@ -179,8 +239,9 @@ describe('fix round 1 (item 7) — a link title cannot be reordered by bidi cont
     const { host } = mountBody(`# T\n\n${markdown}`);
     await ready(host);
     const title = link('Bidi').getAttribute('title') ?? '';
+    // FR-169a: the title is the address alone now, so the address IS the positive control — there is
+    // no trailing wording left to prove the attribute was written rather than merely emptied.
     expect(title).toContain('example.com/');
-    expect(title).toContain('Ctrl+click to follow');
     for (const ch of BIDI) expect(title.includes(ch), `U+${ch.charCodeAt(0).toString(16)}`).toBe(false);
   });
 
@@ -205,6 +266,83 @@ describe('Ctrl+click follows, a plain click does not (FR-094)', () => {
     await ready(host);
     fireEvent.click(link('Site'));
     expect(onFollow).not.toHaveBeenCalled();
+  });
+
+  /*
+   * 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own plain-click
+   * remedy as far as the plain click goes; FR-094's own onFollow behaviour above is unchanged.
+   */
+  describe('a plain click shows the shared link hint instead (FR-165, S6)', () => {
+    afterEach(() => hideLinkHint());
+
+    it('shows the hint, worded for this link, anchored at the link (not the click) when measured', async () => {
+      const { host, onFollow } = mountBody();
+      await ready(host);
+      const el = link('Setup');
+      vi.spyOn(el, 'getClientRects').mockReturnValue([
+        { left: 100, top: 30, right: 140, bottom: 44 },
+      ] as unknown as DOMRectList);
+      fireEvent.click(el, { clientX: 10, clientY: 20 });
+      expect(onFollow).not.toHaveBeenCalled();
+      expect(peekLinkHint()?.text).toBe('Ctrl+Click to open in throng preview');
+      expect(peekLinkHint()?.anchor).toEqual({ left: 140, top: 44, right: 140, bottom: 44 });
+    });
+
+    /*
+     * Maintainer correction (FR-165b, FR-165c): an anchor text that WRAPS across lines produces one
+     * client rect per line — the hint must anchor at the LAST one's bottom-right, not the first
+     * (nearer the click) and not the click point itself.
+     */
+    it("anchors at the LAST row's bottom-right for a link that wraps across lines", async () => {
+      const { host, onFollow } = mountBody();
+      await ready(host);
+      const el = link('Setup');
+      vi.spyOn(el, 'getClientRects').mockReturnValue([
+        { left: 100, top: 30, right: 140, bottom: 44 },
+        { left: 10, top: 44, right: 55, bottom: 58 },
+      ] as unknown as DOMRectList);
+      fireEvent.click(el, { clientX: 10, clientY: 20 });
+      expect(onFollow).not.toHaveBeenCalled();
+      expect(peekLinkHint()?.anchor).toEqual({ left: 55, top: 58, right: 55, bottom: 58 });
+    });
+
+    it('falls back to the click point when the link has no measured rects', async () => {
+      const { host, onFollow } = mountBody();
+      await ready(host);
+      fireEvent.click(link('Setup'), { clientX: 10, clientY: 20 });
+      expect(onFollow).not.toHaveBeenCalled();
+      expect(peekLinkHint()?.anchor).toEqual({ left: 10, top: 20, right: 10, bottom: 20 });
+    });
+
+    it('never shows on a Ctrl+click — the hint and the follow are mutually exclusive', async () => {
+      const { host } = mountBody();
+      await ready(host);
+      select(null);
+      fireEvent.click(link('Setup'), { ctrlKey: true });
+      expect(peekLinkHint()).toBeNull();
+    });
+
+    it('never shows on a click that drags (FR-165e)', async () => {
+      const { host } = mountBody();
+      await ready(host);
+      select(link('Site'));
+      fireEvent.click(link('Site'));
+      expect(peekLinkHint()).toBeNull();
+    });
+
+    it('never shows away from a link', async () => {
+      const { host } = mountBody();
+      await ready(host);
+      fireEvent.click(host);
+      expect(peekLinkHint()).toBeNull();
+    });
+
+    it('never shows for an inert link', async () => {
+      const { host } = mountBody();
+      await ready(host);
+      fireEvent.click(link('Bad'));
+      expect(peekLinkHint()).toBeNull();
+    });
   });
 
   it('Ctrl+click with a collapsed selection → exactly one onFollow with that link', async () => {
@@ -376,7 +514,7 @@ describe('in a mounted panel (the chrome’s half)', () => {
       act(() => {
         site.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
       });
-      expect(screen.getByTestId('menu-item-Copy Link Address')).toBeInTheDocument();
+      expect(screen.getByTestId('menu-item-Copy Link to Clipboard')).toBeInTheDocument();
       fireEvent.click(await screen.findByTestId('menu-item-Open Link'));
       expect(m.openExternal).toHaveBeenCalledWith('https://example.com/');
     } finally {

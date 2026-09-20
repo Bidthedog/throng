@@ -136,6 +136,17 @@ export interface MountedPreview {
   /** `window.throng.openExternal` — the GENERAL channel (terminal, About); a preview must never use it. */
   generalOpenExternal: ReturnType<typeof vi.fn>;
   clipboardWrite: ReturnType<typeof vi.fn>;
+  /**
+   * 045 FR-169 – FR-171 — `window.throng.links`, the Link menu's menu-open resolution and its two OS
+   * routes. Every method answers a safe default (`resolve`: not resolved; `follow`/`reveal`/`open`:
+   * refused) unless a test replaces it — the same pattern `preview.navigate` already uses.
+   */
+  links: {
+    resolve: ReturnType<typeof vi.fn>;
+    follow: ReturnType<typeof vi.fn>;
+    reveal: ReturnType<typeof vi.fn>;
+    open: ReturnType<typeof vi.fn>;
+  };
   push(update: PreviewUpdate): void;
   unmount(): void;
 }
@@ -241,9 +252,19 @@ export async function mountMarkdownPreview(
   const writeRich = vi.fn(() => Promise.resolve());
   const openInto = vi.fn(() => Promise.resolve({ action: 'open' }));
   const revealDocument = vi.fn(() => Promise.resolve());
+  // 045 FR-169 – FR-171 — the Link menu's menu-open resolution and its two OS routes. Safe defaults
+  // (not resolved; refused) so a test that does not care about the Link menu is unaffected; a test
+  // that does replaces the relevant method on `window.throng.links` before it opens the menu.
+  const links = {
+    resolve: vi.fn(() => Promise.resolve({ ok: false as const })),
+    follow: vi.fn(() => Promise.resolve({ kind: 'refused' as const, path: '' })),
+    reveal: vi.fn(() => Promise.resolve({ ok: false as const, reason: 'refused' as const, path: '' })),
+    open: vi.fn(() => Promise.resolve({ ok: false as const, reason: 'refused' as const, path: '' })),
+  };
   Reflect.set(window, 'throng', {
     panel: { notifyDestroyed: vi.fn(), onDestroyed: () => () => {}, notifyTyped: vi.fn() },
     preview,
+    links,
     openExternal: generalOpenExternal,
     clipboard: { write: clipboardWrite, writeRich, paste: vi.fn() },
     editor: { openInto },
@@ -304,6 +325,7 @@ export async function mountMarkdownPreview(
     openExternal,
     generalOpenExternal,
     clipboardWrite,
+    links,
     writeRich,
     openInto,
     revealDocument,

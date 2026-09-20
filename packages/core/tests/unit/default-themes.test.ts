@@ -16,7 +16,14 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 // which `theme.ts` already documents as "one pair of surfaces shared by the editor and the
 // terminal" — a result row is that same idea on a third surface. A new colour token here would
 // need the argument `editorStatusStripBg` records for not reusing `statusBarBg`, and there is none.
-const EXPECTED_COLOUR_TOKEN_COUNT = 68;
+//
+// 70 since 045 FR-138 added `linkUnderline` and `linkUnderlineHover` — the underline that marks a
+// link in both panel types, inheriting `accent` (see TOKEN_PARENT).
+//
+// 73 since 045's round four (FR-165g) added `linkHintBackground`, `linkHintText` and `linkHintBorder`
+// — the plain-click link hint's own surface, text and border, inheriting `surfaceActive`/`text`/
+// `border` respectively (see TOKEN_PARENT).
+const EXPECTED_COLOUR_TOKEN_COUNT = 73;
 /**
  * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
  * `searchScope` (FR-029a/FR-029b, FR-030).
@@ -44,7 +51,14 @@ const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
  * have drifted, and listing it here is what keeps the guard about drift rather than about the size
  * of the palette.
  */
-const ADDED_SINCE_FIXTURE = ['warning'];
+const ADDED_SINCE_FIXTURE = [
+  'warning',
+  'linkUnderline',
+  'linkUnderlineHover',
+  'linkHintBackground',
+  'linkHintText',
+  'linkHintBorder',
+];
 
 const EXPECTED = [
   'Light',

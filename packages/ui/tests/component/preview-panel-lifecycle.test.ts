@@ -22,6 +22,7 @@ import { StrictMode, createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PREVIEW_KIND,
+  createDefaultLayout,
   createPreviewProviderRegistry,
   type Panel,
   type PreviewAttachRequest,
@@ -33,6 +34,11 @@ import { PreviewPanel } from '../../src/renderer/preview/preview-panel.js';
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
 import { __resetPreviewStore, getPreviewFailure } from '../../src/renderer/preview/preview-store.js';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
+import { WorkspaceProvider } from '../../src/renderer/state/workspace-store.js';
+import { WorkspaceClient } from '../../src/renderer/state/workspace-client.js';
+import { ProjectsProvider } from '../../src/renderer/state/projects-store.js';
+import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
+import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
 
 vi.mock('../../src/renderer/common/panel-subject.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/renderer/common/panel-subject.js')>();
@@ -124,27 +130,60 @@ function installBridge() {
   return { preview, offs, log };
 }
 
+/**
+ * 045 FR-169 – FR-171 — the Link menu's Open In ▸ rows need the workspace layout (`useWorkspace`), and
+ * its failure report needs a project to name (`useReportSubjectFailure` → `useProjects`). Neither is
+ * exercised by anything this file asserts — no test here opens the Link menu or fails a link — so a
+ * minimal client over one fake bridge, shared by both providers, stands in for the real ones.
+ */
+function fakeBridge(): ThrongBridge {
+  const layout = createDefaultLayout('proj-1', { tab: 't1', panel: 'p1' });
+  return {
+    invoke: <T,>(method: string): Promise<T> => {
+      switch (method) {
+        case 'workspace.load':
+          return Promise.resolve({ layout, restored: true } as T);
+        case 'workspace.save':
+          return Promise.resolve({ ok: true } as T);
+        case 'projects.list':
+          return Promise.resolve({ projects: [] } as T);
+        default:
+          return Promise.resolve({} as T);
+      }
+    },
+  };
+}
+
 function renderPanel(
   view: PreviewProviderView,
   opts: { strict?: boolean; onRefused?: () => void } = {},
 ) {
+  const bridge = fakeBridge();
   const tree = createElement(
-    PreviewProviderRegistryContext.Provider,
-    { value: { registry, views: { testText: view } } },
+    ProjectsProvider,
+    { client: new ProjectsClient(bridge) },
     createElement(
-      NotificationProvider,
-      null,
-      // Every window's composition root provides the menu host; the panel opens its link menu through it.
+      WorkspaceProvider,
+      { client: new WorkspaceClient(bridge), activeProjectId: 'proj-1' },
       createElement(
-        ContextMenuProvider,
-        null,
-        createElement(PreviewPanel, {
-          panel: previewPanel(),
-          projectRoot: 'D:/proj',
-          onRefused: opts.onRefused ?? (() => {}),
-          onClearType: () => {},
-          onClose: () => {},
-        }),
+        PreviewProviderRegistryContext.Provider,
+        { value: { registry, views: { testText: view } } },
+        createElement(
+          NotificationProvider,
+          null,
+          // Every window's composition root provides the menu host; the panel opens its link menu through it.
+          createElement(
+            ContextMenuProvider,
+            null,
+            createElement(PreviewPanel, {
+              panel: previewPanel(),
+              projectRoot: 'D:/proj',
+              onRefused: opts.onRefused ?? (() => {}),
+              onClearType: () => {},
+              onClose: () => {},
+            }),
+          ),
+        ),
       ),
     ),
   );

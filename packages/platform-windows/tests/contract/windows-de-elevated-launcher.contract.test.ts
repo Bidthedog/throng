@@ -105,6 +105,41 @@ afterEach(() => {
   }
 });
 
+/**
+ * 045 Open item O2 (#394) — **can the UI MAIN process de-elevate, or must it ask the daemon?**
+ *
+ * FR-038 requires Open in OS Explorer and Open in OS Default Program not to start an application
+ * with administrator rights when throng itself is running elevated. Both actions are performed in
+ * UI main. The open question was whether the de-elevation mechanism is available there at all, or
+ * whether it is something only the daemon can do — because if it is the daemon's, FR-038 has to be
+ * delivered over an RPC and the design changes shape.
+ *
+ * A vitest process is an ordinary Node process, exactly as UI main is, and neither is the daemon.
+ * So what this file can observe about availability HERE is what main would observe.
+ *
+ * The `@admin`-dependent half — that an elevated host really does produce a medium-integrity
+ * child — is not asserted here: it belongs to the action it protects, and lives in
+ * `packages/ui/tests/integration/link-de-elevated-open.integration.test.ts`.
+ */
+describe('045 O2 — de-elevation availability outside the daemon', () => {
+  it('is available in an ordinary Node process, which is what UI main is', () => {
+    // `isAvailable()` is a property of the PLATFORM, not of being the daemon: the mechanism is
+    // `CreateProcessWithTokenW` with the interactive user's shell token, which any elevated
+    // Windows process can ask for. Nothing about it is daemon-specific, so FR-038 does not have
+    // to be handed over an RPC.
+    expect(new WindowsDeElevatedLauncher().isAvailable()).toBe(process.platform === 'win32');
+  });
+
+  it('exposes `launch`, and not `IDeElevator.wrap` — they are different seams', () => {
+    // Worth pinning, because the 045 contract text says "launch through `IDeElevator.wrap`".
+    // `wrap` rewrites a spec that node-pty then spawns; it needs a spawner on the other side, and
+    // a reveal has none. The seam that actually starts a de-elevated process is this one.
+    const subject = new WindowsDeElevatedLauncher() as unknown as Record<string, unknown>;
+    expect(typeof subject.launch).toBe('function');
+    expect(subject.wrap).toBeUndefined();
+  });
+});
+
 describe('WindowsDeElevatedLauncher — a failed de-elevated launch must be able to say why (FR-015)', () => {
   it('reports the shim\'s own stderr when the shim exits non-zero', async () => {
     // node.exe rejects the shim's argv ("bad option: -NoProfile") on stderr and exits

@@ -4,7 +4,9 @@
  * The load-bearing test here is the FIRST one: it ENUMERATES `SETTINGS_METADATA` rather than listing
  * settings by hand. A test that named the three settings this feature adds would pass while a new
  * bounded setting went unguarded, which is precisely the failure #227 exists to prevent — and
- * precisely how `terminals.linkHoverDelayMs` came to declare 0–2000 and clamp 0–5000 unnoticed.
+ * precisely how `terminals.linkHoverDelayMs` came to declare 0–2000 and clamp 0–5000 unnoticed (the
+ * setting itself is RETIRED as of 045 round five, #408 — its own history now lives on the cases
+ * below that still use it as the worked example).
  */
 import { describe, it, expect } from 'vitest';
 import { applyDeclaredBounds } from '../../src/config/bounds-guard.js';
@@ -92,9 +94,10 @@ describe('hard bounds — the control range is not always the enforced one (FR-0
   });
 
   it('uses min/max as the hard bound when no hardMin/hardMax is declared', () => {
-    // The three settings that parsed wider than they declared with no stated reason (FR-015).
+    // The settings that parsed wider than they declared with no stated reason (FR-015).
+    // `terminals.linkHoverDelayMs` was the third worked example here until it was retired (045 round
+    // five, #408); the pattern it demonstrated is unaffected by which settings still carry it.
     for (const [key, max] of [
-      ['terminals.linkHoverDelayMs', 2000],
       ['diagnostics.keepFiles', 20],
       ['search.asYouTypeDebounceMs', 1000],
     ] as const) {
@@ -238,6 +241,9 @@ describe('a fault INSIDE a table still counts as a correction (G12 / FR-008e)', 
  * disagreed with their declaration. Removing the clamps is what makes the guard the single
  * mechanism (FR-009); the point of these tests is that the resulting ranges are the DECLARED ones
  * — narrower than what the parser used to accept, and deliberately so.
+ *
+ * `terminals.linkHoverDelayMs` was one of the three disagreeing settings and is retired as of 045
+ * round five (#408); the two remaining cases still prove the same point.
  */
 describe('the declared range wins over the range the parser used to accept', () => {
   const declared = (key: string) => {
@@ -247,7 +253,6 @@ describe('the declared range wins over the range the parser used to accept', () 
   };
 
   const cases = [
-    { key: 'terminals.linkHoverDelayMs', min: 0, max: 2000, wasAccepted: 5000 },
     { key: 'diagnostics.keepFiles', min: 1, max: 20, wasAccepted: 50 },
     { key: 'search.asYouTypeDebounceMs', min: 0, max: 1000, wasAccepted: 60_000 },
   ] as const;
@@ -314,12 +319,11 @@ describe('the declared range wins over the range the parser used to accept', () 
 describe('parseAppSettings no longer enforces a range of its own (FR-009)', () => {
   it('passes an out-of-range value straight through — clamping is not its job', () => {
     const parsed = parseAppSettings({
-      terminals: { commandPollMs: 1, linkHoverDelayMs: 99_999 },
+      terminals: { commandPollMs: 1 },
       diagnostics: { keepFiles: 999, maxFileSizeKb: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(parsed.terminals.commandPollMs).toBe(1);
-    expect(parsed.terminals.linkHoverDelayMs).toBe(99_999);
     expect(parsed.diagnostics.keepFiles).toBe(999);
     expect(parsed.diagnostics.maxFileSizeKb).toBe(1);
     expect(parsed.search.asYouTypeDebounceMs).toBe(-5);
@@ -327,12 +331,11 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
 
   it('still rejects values that are not numbers at all — TYPE tolerance is its job', () => {
     const parsed = parseAppSettings({
-      terminals: { commandPollMs: 'often', linkHoverDelayMs: null },
+      terminals: { commandPollMs: 'often' },
       diagnostics: { keepFiles: {}, maxFileSizeKb: Number.NaN },
       search: { asYouTypeDebounceMs: 'soon' },
     });
     expect(parsed.terminals.commandPollMs).toBe(DEFAULT_APP_SETTINGS.terminals.commandPollMs);
-    expect(parsed.terminals.linkHoverDelayMs).toBe(DEFAULT_APP_SETTINGS.terminals.linkHoverDelayMs);
     expect(parsed.diagnostics.keepFiles).toBe(DEFAULT_APP_SETTINGS.diagnostics.keepFiles);
     expect(parsed.diagnostics.maxFileSizeKb).toBe(DEFAULT_APP_SETTINGS.diagnostics.maxFileSizeKb);
     expect(parsed.search.asYouTypeDebounceMs).toBe(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs);
@@ -341,12 +344,11 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
   it('and the guarded path puts every one of them back inside its declared range', () => {
     const { value } = parseSettingsGuarded({
       ...structuredClone(DEFAULT_APP_SETTINGS),
-      terminals: { ...DEFAULT_APP_SETTINGS.terminals, commandPollMs: 1, linkHoverDelayMs: 99_999 },
+      terminals: { ...DEFAULT_APP_SETTINGS.terminals, commandPollMs: 1 },
       diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, keepFiles: 999, maxFileSizeKb: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(value.terminals.commandPollMs).toBe(250);
-    expect(value.terminals.linkHoverDelayMs).toBe(2000);
     expect(value.diagnostics.keepFiles).toBe(20);
     expect(value.diagnostics.maxFileSizeKb).toBe(64);
     expect(value.search.asYouTypeDebounceMs).toBe(0);

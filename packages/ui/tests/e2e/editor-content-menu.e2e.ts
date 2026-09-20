@@ -6,6 +6,7 @@ import {
   openApp,
   createProject as newProject,
   firstPanelId,
+  charPoint,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -66,7 +67,63 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-cmenu-'));
   writeFileSync(join(root, 'lines.txt'), 'alpha\nbeta\ngamma\n');
+  // 045 T280 — a web link and a path, for the Link menu case at the end of the last test.
+  writeFileSync(join(root, 'links.txt'), `see ${EDITOR_WEB_LINK} here\nand ./lines.txt too\n`);
   return root;
+}
+
+const EDITOR_WEB_LINK = 'https://example.com/editor-link-menu';
+
+/**
+ * 045 T280 (FR-165, FR-167, FR-169 – FR-171) — an editor's link surfaces against a REAL CodeMirror:
+ * the status-bar target on hover, the plain-click hint, and the ONE Link menu on a right-click with
+ * nothing selected — web rows for a web link, the file rows for a path, and never the content menu.
+ * What a lower layer cannot see is the pointer hit-test: a real `posAtCoords` over real glyphs deciding
+ * the right-click is ON a link.
+ */
+async function expectEditorLinkSurfaces(win: Page, pid: string): Promise<void> {
+  await win.getByTestId('file-explorer-tree').getByText('links.txt', { exact: true }).click();
+  const editor = win.getByTestId(`editor-${pid}`);
+  await expect(editor.locator('.cm-content')).toContainText('editor-link-menu', { timeout: 8000 });
+  const readout = win.getByTestId(`editor-status-link-readout-${pid}`);
+  const menu = win.getByTestId('context-menu');
+
+  // A web link: hover names it, a plain click raises the hint, a right-click opens the Link menu.
+  const webAt = await charPoint(line(win, pid, 'editor-link-menu'), EDITOR_WEB_LINK, 8);
+  await win.mouse.move(webAt.x, webAt.y);
+  await expect(readout).toHaveText(EDITOR_WEB_LINK);
+  await win.mouse.click(webAt.x, webAt.y);
+  await expect(win.getByTestId('link-hint')).toBeVisible();
+  await expect(win.getByTestId('link-hint')).toContainText('Ctrl');
+  await win.mouse.click(webAt.x, webAt.y, { button: 'right' });
+  await expect(menu).toHaveCount(1);
+  await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Cut'), 'the content menu opened over a link').toHaveCount(0);
+  await win.getByTestId('menu-item-Copy Link to Clipboard').click();
+  await expect(menu).toHaveCount(0);
+  await expect
+    .poll(() => win.evaluate(async () => (await window.throng?.clipboard?.paste())?.text ?? ''))
+    .toBe(EDITOR_WEB_LINK);
+
+  // A path in the project: named absolutely in the status bar, and the file rows in the menu.
+  const fileAt = await charPoint(line(win, pid, 'lines.txt too'), './lines.txt', 4);
+  await win.mouse.move(fileAt.x, fileAt.y);
+  await expect(readout).toHaveText(/^[A-Za-z]:\\.*\\lines\.txt$/);
+  await win.mouse.click(fileAt.x, fileAt.y, { button: 'right' });
+  await expect(menu).toHaveCount(1);
+  await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open In')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Explorer')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toBeVisible({ timeout: 10_000 });
+  await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Cut')).toHaveCount(0);
+  await win.getByTestId('menu-item-Open In').click();
+  await expect(win.getByTestId('menu-item-New Editor')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Active Editor')).toBeVisible();
+  await win.keyboard.press('Escape');
+  await win.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
 }
 
 async function openEditorWithFile(win: Page): Promise<string> {
@@ -241,6 +298,9 @@ test('picking a language returns focus to the editor', { tag: ['@extended', '@ed
           ),
         )
         .toBe(true);
+
+      // 045 T280 — the same editor, on a file with links in it.
+      await expectEditorLinkSurfaces(win, pid);
     });
   } finally {
     cleanupTemp(root);

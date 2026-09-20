@@ -1,0 +1,28 @@
+SC-003 fixture. Every line below is ordinary log or prose text containing slashes, colons,
+dots and dotted words. None of it names anything on disk, and the detector must produce
+ZERO candidates for the whole file. This is the fixture that fails first if the grammar
+is loosened.
+
+The ratio was 3:1 and the split came out 60/40 in the end.
+Elapsed 00:12:03, retried at 00:12:09, gave up at 00:12:44.
+Version 1.2.3 superseded 1.2.2, which superseded 1.2.1.
+Please see the README for details, e.g. the section on retries.
+It was, roughly speaking, about 2/3 done.
+Rates of 10/s, 100/s and 1000/s were all fine.
+He said: run it again. She said: no.
+INFO  worker started, pid 4812, rss 51.2 MB
+WARN  queue depth 12; backlog 3; dropped 0
+ERROR connection reset by peer after 4.5s
+Contact us at support.example.com or on the forum.
+The acronym I.T. is written with dots, as is e.g. and i.e.
+Between 9:00 and 17:30 on weekdays only.
+A fraction such as 1/2 or 3/4 is not a path.
+Latitude 51.5074, longitude 0.1278.
+Chapter 4, section 2.1, paragraph 3.
+The exit code was 1; the signal was none.
+Score: 4.5 out of 5. Verdict: ship it.
+Progress 45/100 items, 12/100 failed.
+Ranges like 1..10 and 1...10 are not paths.
+Ellipses ... and en dashes - are not separators.
+Ratios written A:B, A/B and A|B alike.
+Nothing here. Nothing there. Nothing anywhere.

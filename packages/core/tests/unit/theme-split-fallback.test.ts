@@ -100,7 +100,17 @@ describe('the split-fallback chain (FR-008)', () => {
     // The map is the single statement of this knowledge — the resolver and makeTheme both read it,
     // so the two cannot drift. 021 removed `menuSurface`/`dialogSurface` (the menu/dialog cards were
     // consolidated back onto `surfaceActive`/`surface`), leaving the two field/hover carve-outs.
-    expect(Object.keys(TOKEN_PARENT).sort()).toEqual(['hoverSurface', 'inputSurface']);
+    // 045 FR-138 added the two link-underline tokens, and round four's FR-165g added the three link
+    // hint tokens — every chain is asserted in `theme-link-tokens.test.ts`.
+    expect(Object.keys(TOKEN_PARENT).sort()).toEqual([
+      'hoverSurface',
+      'inputSurface',
+      'linkHintBackground',
+      'linkHintBorder',
+      'linkHintText',
+      'linkUnderline',
+      'linkUnderlineHover',
+    ]);
   });
 });
 
