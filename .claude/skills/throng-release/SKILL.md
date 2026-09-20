@@ -31,9 +31,9 @@ upgrade/downgrade ordering, which compares `MAJOR.MINOR.PATCH` only.
 ## The shape of it
 
 ```
-preflight → branch → CHANGELOG → version bump → docs → local checks
-  → commit → PR → gate.yml → merge → tag → release.yml (full E2E → package
-  → reconcile → verify ×3 → render body) → human sign-off → publish
+preflight → branch → CHANGELOG → version bump → dependency audit → docs
+  → local checks → commit → PR → gate.yml → merge → tag → release.yml (full E2E
+  → package → reconcile → verify ×3 → render body) → human sign-off → publish
 ```
 
 Publication is refused unless five things hold — a real version, a reconciled artifact set, a
@@ -128,7 +128,57 @@ Nothing else carries the version. The app reads the root `package.json` in main 
 daemon, and the preload bridge in the renderer. **Do not confuse it with `BUILD_ID`**, which is a
 content hash for retiring a stale daemon.
 
-## 5. Documentation currency — the step that gets skipped
+## 5. Audit the dependencies, and take what fits
+
+A release is the right moment for this and the only one anybody remembers. Do it **on the release
+branch, before the gate and long before the tag** — an advisory found after the tag costs the whole
+pipeline.
+
+```sh
+npm audit                      # 0 vulnerabilities is the bar, not "none critical"
+npm outdated                   # current / wanted / latest
+```
+
+**Fix every advisory.** `npm audit fix` where it stays in range; a direct upgrade where it does not.
+An advisory with no fix available is a decision for the user, not something to carry silently into
+a release — name the package, the severity and what reaches it.
+
+**Take the in-range upgrades, leave the majors.**
+
+```sh
+npm update --save              # everything `wanted` allows; --save raises the declared floors
+npm audit                      # again, on the tree that will ship
+```
+
+Two traps, both from the alpha5 run:
+
+- **`npm update --save` rewrites the workspaces' internal `@throng/*` references from `"*"` to a
+  concrete range.** That is monorepo wiring rather than a dependency range, and pinning it means
+  rewriting six manifests on every version bump. Put them back to `"*"` and re-run `npm install`
+  before you commit — `git diff -- packages/*/package.json | grep @throng` is the check.
+- **A major upgrade does not belong on a release branch.** ESLint 10, TypeScript 7, Vitest 5,
+  Electron 44 and their kind each deserve their own PR and their own gate, because the failure mode
+  is discovering at tag time that one of them does not hold. List them in the commit message as
+  deliberately deferred, and tell the user.
+
+`better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
+
+**Then prove it, because native code moved.** Electron and `koffi` ship binaries the daemon loads
+under the bundled host-Node runtime, so a patch bump is not a no-op. Run everything the gate runs
+except E2E, on the upgraded tree, and quote the counts:
+
+```sh
+npm run build && npm run typecheck && npm run lint
+npm run test:unit && npm run test:component
+npm run test:integration && npm run test:contract
+```
+
+Capture the output to a scratch file rather than filtering it — the **running-tests** skill owns
+how. If anything moved that a user would notice, the changelog entry for it goes in this cycle's
+section; a patch sweep that clears no advisory and changes no behaviour usually needs no entry, and
+saying so in the commit message is enough.
+
+## 6. Documentation currency — the step that gets skipped
 
 The constitution requires README, CONTRIBUTING and the affected `docs/` guides to be current with
 any user-facing, setup, architecture or capability change, and the code-review gate checks it. A
@@ -146,7 +196,7 @@ Work through this, and say in the PR which ones needed nothing:
 | `CONTRIBUTING.md` | New scripts, new gates, a changed workflow. |
 | New settings | Every configurable option added this cycle is exposed in the preferences editors and named in the changelog entry. |
 
-## 6. Prove it locally before spending a runner
+## 7. Prove it locally before spending a runner
 
 ```sh
 npm run build                                                   # release-notes.mjs imports @throng/core
@@ -161,7 +211,7 @@ the publish job would refuse — find out here, not after a tag.
 
 Read the rendered body rather than only its exit code. It is what ships.
 
-## 7. Commit, PR, gate, merge
+## 8. Commit, PR, gate, merge
 
 Author the commit message into a file and use `git commit -F` — never `-m`, which lets the shell eat
 backticks and `$(…)` from the message while the commit succeeds. Follow the **git-commit** skill.
@@ -191,7 +241,7 @@ directions. If `status` is not `completed`, the watch gave up and the run is sti
 
 Merge once it is green and the PR's own checks pass.
 
-## 8. Tag
+## 9. Tag
 
 The tag is cut on `master`, after the merge, and pushing it is what starts the release.
 
@@ -204,7 +254,7 @@ git push origin v<version>
 
 Never force-push a tag, and never move one that has published.
 
-## 9. Watch `release.yml`
+## 10. Watch `release.yml`
 
 ```sh
 gh run list --workflow release.yml --limit 3
@@ -237,7 +287,7 @@ The declared set is three artifacts, and the declaration in
 Nothing globs and nothing resolves by extension — `nsis` and `portable` both produce a `.exe`, which
 is exactly why `ls dist/installer/*.exe | head -n1` was removed from three places in `release.yml`.
 
-## 10. The human QA sign-off
+## 11. The human QA sign-off
 
 **Blocking, and it is the user's to give.** Tell them, in one line, what is waiting and where:
 
@@ -247,7 +297,7 @@ is exactly why `ls dist/installer/*.exe | head -n1` was removed from three place
 
 No automation, default or timeout can satisfy it. Do not try to approve it yourself.
 
-## 11. After it publishes
+## 12. After it publishes
 
 ```sh
 gh release view v<version> --json name,isPrerelease,assets,publishedAt \
