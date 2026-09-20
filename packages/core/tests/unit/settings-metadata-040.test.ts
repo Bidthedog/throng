@@ -173,6 +173,11 @@ describe('the three status-bar settings sit together under Editor → Status Bar
     // a rule that the Editor group has one subsection, so the amendment is a second permitted pair
     // (the `editor.previews.*` keys, in `Previews`) rather than a loosening. A preview key in any
     // other subsection, or a non-preview key in `Previews`, is still a stray.
+    //
+    // 045 FR-061 (#394) amends it again, and in exactly the same shape: `editor.links.*` under
+    // `Editor → Links`, because FR-061 requires the default link action and both detection switches
+    // "together in one place". A third permitted pair, not a third loosening — a link key in any
+    // other subsection, or a non-link key in `Links`, is still a stray.
     const strays = SETTINGS_METADATA.filter(
       (d) =>
         d.group === 'Editor' &&
@@ -180,7 +185,8 @@ describe('the three status-bar settings sit together under Editor → Status Bar
         d.key !== BAR_KEY &&
         d.key !== CURSOR_KEY &&
         d.key !== COUNTS_KEY &&
-        !(d.subgroup === 'Previews' && d.key.startsWith('editor.previews.')),
+        !(d.subgroup === 'Previews' && d.key.startsWith('editor.previews.')) &&
+        !(d.subgroup === 'Links' && d.key.startsWith('editor.links.')),
     ).map((d) => d.key);
     expect(strays).toEqual([]);
   });

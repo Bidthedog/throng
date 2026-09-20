@@ -57,8 +57,9 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'common/colour-picker.tsx — flips + clamps on BOTH axes via clampToViewport (021/FR-036); found BY this guard',
   '.language-picker':
     'editor/language-picker.tsx — CLAMPS its height to the room above its strip; it opens upward from the bottom of its panel, so there is nothing below to flip to (found BY this guard, in 016)',
-  '.terminal-link-tip':
-    'terminal/use-terminal.ts (showLinkTip) — the Ctrl+Click hover tip; positioned up-right of the pointer and CLAMPED to the viewport (flips to the pointer\'s left at the right edge, drops below at the top) (024 US7, #159)',
+  // `.terminal-link-tip` was here until 045's round five deleted it. A link's hover is now a native
+  // HTML `title` on the panel, which the OS draws and positions — there is no element of ours left
+  // for this guard to have an opinion about. The wording that tip carried moved to `.link-hint`.
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
 
   // Everything below is CHROME, not a popup: fixed furniture with a z-index, anchored to nothing, so
@@ -77,6 +78,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
   '.tabstrip-popover':
     "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
+  '.link-hint':
+    'links/link-hint.tsx — the plain-click link hint (045 FR-165, FR-166, round four). ANCHORED at the link\'s bottom-right, so `clampToViewport` (the same positioner the context menu, colour picker and tab popover share) slides it back on screen; FR-165c says staying on screen wins over not covering the link, so it is never FLIPPED to the opposite side the way those are. Measured in a layout effect and held `visibility: hidden` until placed, and `pointer-events: none` so the click that raised it keeps its ordinary meaning',
   '.project-insert': 'a drag INSERTION MARKER inside its list — a line, not a surface',
   '.subworkspace-insert': 'a drag insertion marker inside its list',
   '.tab-insert': 'a drag insertion marker inside the tab strip',

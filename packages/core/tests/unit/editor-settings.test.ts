@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
 import { parseSettingsGuarded } from '../../src/config/settings-read.js';
 import { SHIPPED_INDENT_BY_LANGUAGE } from '../../src/editor/languages.js';
+import { KNOWN_FILE_EXTENSIONS } from '../../src/links/known-extensions.js';
 
 describe('editorSettings parser (006, contracts/config-additions.md)', () => {
   it('defaults the whole section when absent', () => {
@@ -58,6 +59,18 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
         },
+      },
+      // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
+      // check; `defaultAction` is retired (FR-112). Their key-by-key parse is asserted in
+      // `app-settings.links.test.ts`; they appear here because this assertion is exhaustive, which is
+      // what makes a silently-added key impossible.
+      links: {
+        detectInEditors: true,
+        detectInTerminals: true,
+        existenceCheckTimeoutMs: 2000,
+        // Round four (FR-159, FR-178a): the protocol allowlist and the extension edits.
+        protocolAllowlist: ['mailto', 'tel', 'slack'],
+        knownFileExtensions: [...KNOWN_FILE_EXTENSIONS],
       },
     });
   });
@@ -242,6 +255,18 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
         },
+      },
+      // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
+      // check; `defaultAction` is retired (FR-112). Their key-by-key parse is asserted in
+      // `app-settings.links.test.ts`; they appear here because this assertion is exhaustive, which is
+      // what makes a silently-added key impossible.
+      links: {
+        detectInEditors: true,
+        detectInTerminals: true,
+        existenceCheckTimeoutMs: 2000,
+        // Round four (FR-159, FR-178a): the protocol allowlist and the extension edits.
+        protocolAllowlist: ['mailto', 'tel', 'slack'],
+        knownFileExtensions: [...KNOWN_FILE_EXTENSIONS],
       },
     });
   });

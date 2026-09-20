@@ -295,20 +295,23 @@ describe('fix round 1 — the heading nonce and the hooks’ single registration
     renderer.render(text, ENV);
     const second = renderer.render(text, ENV);
     const a = second.querySelector('a');
-    expect(a?.getAttribute('title')).toBe('https://example.com/ — Ctrl+click to follow');
+    expect(a?.getAttribute('title')).toBe('https://example.com/');
     expect(a?.getAttribute('data-throng-link')).toBe('{"kind":"external","url":"https://example.com/"}');
   });
 });
 
 /*
  * Adversarial review (security) I3. Chromium shows the tooltip of the INNERMOST element that has a title, so
- * a title on anything inside a followable link replaces the link's own "<target> — Ctrl+click to follow"
- * while the pointer is over it — and Ctrl+click still follows the real target. The link's title is the only
- * one a reader may see over a link.
+ * a title on anything inside a followable link replaces the link's own while the pointer is over it — and
+ * Ctrl+click still follows the real target. The link's title is the only one a reader may see over a link.
+ *
+ * FR-169a sharpened this rather than changing it. A title is now the bare target address, so a forged one
+ * is indistinguishable from a real one by shape alone — there is no "— Ctrl+Click to…" suffix left for a
+ * reader to notice is missing. The decoy below is spelled in the new form for exactly that reason.
  */
 describe('nothing inside a followable link can show a title of its own (adversarial review I3)', () => {
   const ENV = { panelId: 'pv', docPath: 'D:/proj/README.md', projectRoot: 'D:/proj', remoteImages: true };
-  const FORGED = 'https://safe.example/ — Ctrl+click to follow';
+  const FORGED = 'https://safe.example/';
 
   function titlesInsideLinks(fragment: DocumentFragment): string[] {
     return [...fragment.querySelectorAll('[data-throng-link] [title]')].map((el) => el.outerHTML);
@@ -323,7 +326,7 @@ describe('nothing inside a followable link can show a title of its own (adversar
     const link = fragment.querySelector('[data-throng-link]');
     // Positive control: the link really is followable, and its own title names the real target.
     expect(link).not.toBeNull();
-    expect(link!.getAttribute('title')).toBe('https://evil.example/ — Ctrl+click to follow');
+    expect(link!.getAttribute('title')).toBe('https://evil.example/');
     expect(link!.children.length).toBeGreaterThan(0);
     expect(titlesInsideLinks(fragment)).toEqual([]);
     expect(fragment.querySelectorAll(`[title="${FORGED}"]`)).toHaveLength(0);

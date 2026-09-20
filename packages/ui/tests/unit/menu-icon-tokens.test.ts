@@ -89,18 +89,14 @@ const editorMenu = (): MenuAction[] =>
 /** The terminal menu with NO selection — the state the spec asserted in, where Copy is disabled. */
 const terminalMenu = (): MenuAction[] =>
   terminalContentMenu({
-    link: null,
     selection: '',
     redrawChord: 'Ctrl+Shift+R',
     startFailure: false,
     actions: {
-      openLink: noop,
-      copyLinkAddress: noop,
       copySelection: noop,
       paste: noop,
       redraw: noop,
       tryAgain: noop,
-      reloadTerminal: noop,
       copyDetails: noop,
       clearPanelType: noop,
     },
@@ -291,10 +287,7 @@ describe('Synchronise Scrolling wears the syncScroll glyph on every menu that of
       name: 'preview body',
       build: () =>
         previewContentMenu({
-          link: null,
           selectionEmpty: true,
-          followChord: undefined,
-          actions: { openLink: noop, copyLinkAddress: noop },
           syncScroll: { on: true, toggle: noop },
         }),
     },
@@ -590,18 +583,14 @@ describe('the failure rows appear only while there is a failure (FR-042c)', () =
   const terminalLabels = (startFailure: boolean): string[] =>
     flatten(
       terminalContentMenu({
-        link: null,
         selection: '',
         redrawChord: 'Ctrl+Shift+R',
         startFailure,
         actions: {
-          openLink: noop,
-          copyLinkAddress: noop,
           copySelection: noop,
           paste: noop,
           redraw: noop,
           tryAgain: noop,
-          reloadTerminal: noop,
           copyDetails: noop,
           clearPanelType: noop,
         },

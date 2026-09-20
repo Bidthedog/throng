@@ -1,12 +1,19 @@
 import { basename } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, shutdownApp } from './harness.js';
+import {
+  TERMINAL_OUTPUT_TIMEOUT_MS,
+  charPoint,
+  cleanupTemp,
+  linkMarkedText,
+  runTypedCommand,
+  shutdownApp,
+} from './harness.js';
 
 // Clipboard support (005): a program running inside the terminal — Claude Code,
 // tmux, vim — copies to the system clipboard by emitting an OSC 52 escape sequence.
@@ -72,6 +79,84 @@ import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, shutdownApp } from './harness.
  * in the first must not hide a regression in the second — which is the specific bug #142 was filed
  * for.
  */
+
+/**
+ * 045 T280 (FR-169 – FR-171, FR-170c) — the ONE Link menu, opened by a real right-click on a link a
+ * real shell printed, with nothing selected. Only a running xterm has the Linkifier that decides the
+ * pointer is ON a link; the menu's rows themselves are `buildLinkMenu`'s, pinned in unit tests.
+ *
+ *   - a web link: Open Link and Copy Link to Clipboard, and nothing of the ordinary menu. Copy Link is
+ *     performed and read back through the in-process clipboard seam this describe launches with.
+ *   - a detected path in the project: Open In ▸ (New Editor, Active Editor), Open in OS Explorer, and —
+ *     once main answers (FR-170c) — Open in OS Default Program; Copy Link to Clipboard last. The OS rows
+ *     are NOT clicked: this app is launched without the harness's OS-open stubs.
+ */
+async function expectTerminalLinkMenu(win: Page, pid: string, root: string): Promise<void> {
+  const term = win.getByTestId(`terminal-${pid}`);
+  const web = 'https://example.com/terminal-link-menu';
+  writeFileSync(join(root, 'menu-target.txt'), 'menu target\n', 'utf8');
+
+  // The line the paste above left at the prompt is dropped first (PSReadLine's Escape reverts it).
+  await win.keyboard.press('Escape');
+  // Split in the typed line, so only the OUTPUT rows hold the whole link.
+  await runTypedCommand(
+    win,
+    term,
+    "Write-Host ('https://example.com/'+'terminal-link-menu'); Write-Host ('.\\menu-'+'target.txt')",
+    { echoed: "'target.txt')", output: 'menu-target.txt' },
+  );
+
+  const rows = term.locator('.xterm-rows > div');
+  const arm = async (text: string): Promise<{ x: number; y: number }> => {
+    const row = rows.filter({ hasText: text }).last();
+    const box = (await row.boundingBox())!;
+    const at = await charPoint(row, text, 4);
+    await expect
+      .poll(
+        async () => {
+          // From the line below: the only thing that re-queries xterm's link providers.
+          await win.mouse.move(at.x, at.y + box.height);
+          await win.mouse.move(at.x, at.y);
+          return linkMarkedText(row, { hover: true });
+        },
+        { timeout: 30_000, intervals: [600], message: `${text} never became the hovered link` },
+      )
+      .not.toBe('');
+    return at;
+  };
+  const menu = win.getByTestId('context-menu');
+
+  // A web link.
+  const webAt = await arm('example.com/terminal-link-menu');
+  await win.mouse.click(webAt.x, webAt.y, { button: 'right' });
+  await expect(menu).toHaveCount(1);
+  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Paste'), 'the ordinary menu opened over a link').toHaveCount(0);
+  await win.getByTestId('menu-item-Copy Link to Clipboard').click();
+  await expect(menu).toHaveCount(0);
+  await expect
+    .poll(() => win.evaluate(async () => (await window.throng?.clipboard?.paste())?.text ?? ''))
+    .toBe(web);
+
+  // A detected path inside the project.
+  const fileAt = await arm('.\\menu-target.txt');
+  await win.mouse.click(fileAt.x, fileAt.y, { button: 'right' });
+  await expect(menu).toHaveCount(1);
+  await expect(win.getByTestId('menu-item-Open Link')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open In')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Explorer')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Open in OS Default Program')).toBeVisible({ timeout: 10_000 });
+  await expect(win.getByTestId('menu-item-Copy Link to Clipboard')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Paste')).toHaveCount(0);
+  await win.getByTestId('menu-item-Open In').click();
+  await expect(win.getByTestId('menu-item-New Editor')).toBeVisible();
+  await expect(win.getByTestId('menu-item-Active Editor')).toBeVisible();
+  await win.keyboard.press('Escape');
+  await win.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+}
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -331,6 +416,9 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
       );
       await win.getByTestId('menu-item-Paste').click();
       await expect(win.getByTestId(`terminal-${pid}`)).toContainText(PASTE, { timeout: 15000 });
+
+      // 045 T280 (FR-169 – FR-171) — over a link, the same right-click opens the Link menu instead.
+      await expectTerminalLinkMenu(win, pid, root);
     } finally {
       // This root is still the live PowerShell's cwd, so Windows will refuse the unlink and
       // `cleanupTemp` will log `[cleanup] EBUSY … — left for the temp sweep`. That is its documented

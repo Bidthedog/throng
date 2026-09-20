@@ -18,7 +18,6 @@ function settings(overrides: Partial<TerminalSettings> = {}): TerminalSettings {
     commandRecipes: {},
     commandPollMs: 1000,
     showStatusBar: true,
-    linkHoverDelayMs: 500,
     ...overrides,
   };
 }

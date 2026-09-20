@@ -55,7 +55,6 @@ function settings(overrides: Partial<TerminalSettings> = {}): TerminalSettings {
     commandPollMs: 1000,
     shellIntegration: true,
     showStatusBar: true,
-    linkHoverDelayMs: 500,
     ...overrides,
   };
 }

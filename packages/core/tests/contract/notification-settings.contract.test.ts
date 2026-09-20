@@ -29,7 +29,7 @@ describe('notifications merge contract', () => {
     panes: { projects: { maxWidth: 333 } },
     behaviour: { submenuHoverMs: 42 },
     explorer: { deleteMode: 'permanent', excludeGlobs: ['**/node_modules'] },
-    terminals: { linkHoverDelayMs: 250 },
+    terminals: { commandPollMs: 1500 },
     editor: { autoSave: true, indent: { style: 'tabs', indentWidth: 4, tabWidth: 4 } },
     newProject: { startingFolder: 'profile', lastProjectFolder: 'D:\\work' },
     search: { asYouTypeDebounceMs: 250 },
@@ -51,7 +51,7 @@ describe('notifications merge contract', () => {
     expect(resolved.behaviour.submenuHoverMs).toBe(42);
     expect(resolved.explorer.deleteMode).toBe('permanent');
     expect(resolved.explorer.excludeGlobs).toEqual(['**/node_modules']);
-    expect(resolved.terminals.linkHoverDelayMs).toBe(250);
+    expect(resolved.terminals.commandPollMs).toBe(1500);
     expect(resolved.editor.autoSave).toBe(true);
     expect(resolved.editor.indent).toEqual({ style: 'tabs', indentWidth: 4, tabWidth: 4 });
     expect(resolved.newProject.startingFolder).toBe('profile');

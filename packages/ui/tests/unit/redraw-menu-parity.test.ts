@@ -78,8 +78,6 @@ const headerActions = {
 };
 
 const contentActions = {
-  openLink: noop,
-  copyLinkAddress: noop,
   copySelection: noop,
   paste: noop,
   redraw: noop,
@@ -120,7 +118,6 @@ const header = (
  */
 const content = (over: { keybindings?: Keybindings; redraw?: () => void } = {}): MenuAction[] =>
   terminalContentMenu({
-    link: null,
     selection: '',
     redrawChord: firstBinding(over.keybindings ?? DEFAULT_KEYBINDINGS, 'terminal.redraw'),
     startFailure: false,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAppSettings, parseSettingsGuarded, DEFAULT_APP_SETTINGS } from '@throng/core';
+import { parseAppSettings, DEFAULT_APP_SETTINGS } from '@throng/core';
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
   it('defaults to empty flavours / disabledBuiltins / defaultShellArguments (+ showStatusBar on) when absent', () => {
@@ -11,7 +11,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
-      linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,
@@ -27,7 +30,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
-      linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,
@@ -87,23 +93,18 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
   });
 
   /*
-   * 031 T033 (#227) — this test used to assert a clamp to [0, 5000] HERE, and that was the bug.
-   *
-   * The descriptor declared 0–2000 all along; the clamp accepted 0–5000; and because the clamp was
-   * the only one of the two that ran on read, the declaration was decorative. The range now lives
-   * in one place, so the assertion moves with it: `parseAppSettings` keeps TYPE tolerance and
-   * rounding, and the guarded read path is what enforces the declared range.
+   * 045 round five (#408) — `linkHoverDelayMs` is RETIRED. The terminal's custom hover tooltip is
+   * replaced by a native HTML `title`, whose delay belongs to the OS and cannot be configured. This
+   * used to be the load-bearing example of a descriptor and a hand-written clamp disagreeing (031
+   * T033, #227: declared 0–2000, clamped 0–5000) — that history now lives on `bounds-guard.test.ts`'s
+   * `commandPollMs`/`diagnostics.keepFiles`/`search.asYouTypeDebounceMs` cases instead.
    */
-  it('parses terminals.linkHoverDelayMs tolerantly (024 US7; default 500, round, reject non-number)', () => {
-    expect(parseAppSettings({}).terminals.linkHoverDelayMs).toBe(500);
-    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 0 } }).terminals.linkHoverDelayMs).toBe(0);
-    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 750.4 } }).terminals.linkHoverDelayMs).toBe(750);
-    expect(parseAppSettings({ terminals: { linkHoverDelayMs: 'soon' } }).terminals.linkHoverDelayMs).toBe(500);
-  });
-
-  it('bounds terminals.linkHoverDelayMs at its DECLARED 0–2000 on the guarded read path (031, FR-015)', () => {
-    expect(parseSettingsGuarded({ terminals: { linkHoverDelayMs: -20 } }).value.terminals.linkHoverDelayMs).toBe(0);
-    expect(parseSettingsGuarded({ terminals: { linkHoverDelayMs: 99999 } }).value.terminals.linkHoverDelayMs).toBe(2000);
+  it('drops a persisted linkHoverDelayMs — no field on the shipped defaults or a parsed document', () => {
+    expect('linkHoverDelayMs' in DEFAULT_APP_SETTINGS.terminals).toBe(false);
+    expect('linkHoverDelayMs' in parseAppSettings({}).terminals).toBe(false);
+    const s = parseAppSettings({ terminals: { linkHoverDelayMs: 250, shellIntegration: false } });
+    expect('linkHoverDelayMs' in s.terminals).toBe(false);
+    expect(s.terminals.shellIntegration).toBe(false);
   });
 
   it('parses terminals.showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
@@ -165,7 +166,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
-      linkHoverDelayMs: 500,
+      // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
+      // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
+      // it appears here because this assertion is exhaustive.
+      advertiseHyperlinks: true,
       // 039 FR-002. `defaultRememberCommand` ships OFF, restoring 025 FR-015 — see the 039
       // supersession block and the dedicated describe at the foot of this file.
       defaultRememberCommand: false,

@@ -1,0 +1,4 @@
+Outside every project root.
+
+US4 scenario 3, US5 scenario 5 and SC-007 resolve a link to this file and require that
+Open in Editor and Open in Preview are never reachable for it (FR-055).

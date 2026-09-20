@@ -27,6 +27,15 @@ const makeHarness = (): ShellIntegrationHarness => {
     reset: () => {
       calls = [];
     },
+    // 045 T259 (FR-036): an Electron `shell` that refuses the reveal, in the OS's own words.
+    failing: () =>
+      new ElectronShellIntegration({
+        showItemInFolder: () => {
+          throw new Error('The network path was not found.');
+        },
+        openPath: async () => 'The network path was not found.',
+        openExternal: async () => {},
+      }),
   };
 };
 

@@ -15,7 +15,11 @@ import {
   type PreviewAffordance,
   type PreviewSettings,
 } from '@throng/core';
-import { editorContentMenu, placeCaretForContextMenu } from '../../src/renderer/editor/content-menu.js';
+import {
+  editorContentMenu,
+  linkMenuPosition,
+  placeCaretForContextMenu,
+} from '../../src/renderer/editor/content-menu.js';
 import { asKeyboardMenu } from '../../src/renderer/workspace/keyboard-menu.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 
@@ -590,5 +594,73 @@ describe('Undo and Redo reach the document authority, not CodeMirror', () => {
 
     expect(redos).toEqual([{ panelId: 'panel-1', viewId: 'view-1' }]);
     expect(v.dispatched).toHaveLength(0);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 045 round four (T276) — the content menu carries NO link row any more (FR-169)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * FR-169 moved every link action into ONE Link menu, separate from each panel's own context menu,
+ * and FR-171 opens it INSTEAD of this one over a link. So `editorContentMenu` no longer takes a link
+ * at all: the rows it used to lead with (T098's file-link run, T167's web-link pair) are gone, and
+ * what a right-click over a link opens is asserted where it is opened — `editor-web-link-menu.test.ts`
+ * mounts the editor and right-clicks a web link and a file link for real.
+ *
+ * `linkMenuPosition` stays: the Link menu is hit-tested from the pointer, or the caret for a keyboard
+ * menu, exactly as the run was (§5).
+ */
+describe('045 — the content menu draws no link row (FR-169)', () => {
+  it('no contextual section, no Open Link, no Copy Link row of either wording', () => {
+    const labels = menu(make()).map((i) => i.label);
+    expect(menu(make()).some((i) => i.section === 'contextual')).toBe(false);
+    // The retired wording, built rather than spelled out so a repo-wide sweep for it finds nothing
+    // still live (S7/FR-175) — this line asserts its ABSENCE, not that it should exist anywhere.
+    const retiredCopyLabel = ['Copy Link', 'Address'].join(' ');
+    for (const gone of ['Open Link', 'Copy Link to Clipboard', retiredCopyLabel, 'Open in Editor']) {
+      expect(labels).not.toContain(gone);
+    }
+  });
+
+  it('builds from no link input at all — the args carry no fileLink / webLink', () => {
+    const args: Parameters<typeof editorContentMenu>[0] = {
+      view: make().view,
+      panelId: 'panel-1',
+      viewId: 'view-1',
+      lineEnding: (): LineEndingId => 'lf',
+      wordWrap: { on: false, toggle: () => {} },
+      gotoLine: { open: () => {} },
+    };
+    // @ts-expect-error — FR-169: the content menu takes no link; this key must not type-check.
+    const withLink: Parameters<typeof editorContentMenu>[0] = { ...args, fileLink: null };
+    expect(menu(make()).map((i) => i.label)).toEqual(editorContentMenu(withLink).map((i) => i.label));
+  });
+});
+
+describe('045 — where the run is hit-tested from (§5)', () => {
+  it('a right-click composes from posAtCoords', () => {
+    const v = make();
+    v.posAt = 7;
+    expect(linkMenuPosition(v.view, rightClick())).toBe(7);
+  });
+
+  it('a KEYBOARD menu composes from the caret, not from the event’s coordinates', () => {
+    const v = make();
+    v.posAt = 7;
+    v.caret(3);
+
+    let answer: number | null = null;
+    asKeyboardMenu(() => {
+      answer = linkMenuPosition(v.view, rightClick());
+    });
+
+    expect(answer).toBe(3);
+  });
+
+  it('answers null when CodeMirror cannot place the pointer at all', () => {
+    const v = make();
+    v.posAt = null;
+    expect(linkMenuPosition(v.view, rightClick())).toBeNull();
   });
 });

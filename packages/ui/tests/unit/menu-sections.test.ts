@@ -20,6 +20,7 @@ import {
   MENU_SECTION_ORDER,
   PREVIEW_KIND,
   SHIPPED_PREVIEW_PROVIDERS,
+  buildLinkMenu,
   groupBySection,
   previewAffordance,
   previewSettingsDefaults,
@@ -363,15 +364,13 @@ const tabMenu = (detach: boolean): MenuAction[] =>
     actions: { rename: noop, destroyTab: noop, destroyOthers: noop },
   });
 
-const terminalMenu = (over: { link?: string | null; selection?: string; startFailure?: boolean }): MenuAction[] =>
+
+const terminalMenu = (over: { selection?: string; startFailure?: boolean }): MenuAction[] =>
   terminalContentMenu({
-    link: over.link ?? null,
     selection: over.selection ?? '',
     redrawChord: 'Ctrl+Shift+R',
     startFailure: over.startFailure ?? false,
     actions: {
-      openLink: noop,
-      copyLinkAddress: noop,
       copySelection: noop,
       paste: noop,
       redraw: noop,
@@ -417,30 +416,21 @@ const findInFilesMenu = (over: {
       : {}),
   });
 
-const previewLinkMenu = (): MenuAction[] =>
-  previewContentMenu({
-    link: { kind: 'external', url: 'https://example.test/' },
-    selectionEmpty: true,
-    followChord: 'Ctrl+Enter',
-    actions: { openLink: noop, copyLinkAddress: noop },
-  });
-
 /*
  * 044 FR-035, FR-035c, FR-015b, FR-015e — the preview body menu in full (contracts/menus-and-controls.md
- * §4): Contextual over a followable link with nothing selected, Content where the provider draws selectable
- * text, Navigate for a text provider.
+ * §4): Content where the provider draws selectable text, Navigate for a text provider, View & state last.
+ *
+ * 045 T277 — no `link` parameter any more: the Contextual section (Open Link, the copy item) is gone
+ * from this builder (FR-169). A right-click over a link opens the ONE Link menu instead
+ * (`preview/preview-link-menu.ts`), never this one — `preview-link-menu.test.ts` pins its rows.
  */
 const previewBodyMenu = (over: {
-  link?: boolean;
   selectionEmpty?: boolean;
   textSelection?: boolean;
   route?: 'standalone' | 'parented' | 'binary';
 }): MenuAction[] =>
   previewContentMenu({
-    link: over.link ? { kind: 'external', url: 'https://example.test/' } : null,
     selectionEmpty: over.selectionEmpty ?? false,
-    followChord: 'Ctrl+Enter',
-    actions: { openLink: noop, copyLinkAddress: noop },
     content: over.textSelection === false ? null : { copyFormat: 'rich', copy: noop, selectAll: noop },
     editorRoute: over.route === 'binary' ? null : { parented: over.route === 'parented', run: noop },
     // 044 FR-122b — every text-provider preview carries Synchronise Scrolling; a binary one does not.
@@ -598,17 +588,15 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Tab menu — main window', build: () => tabMenu(true) },
   { name: 'Tab menu — sub-workspace window', build: () => tabMenu(false) },
   { name: 'Terminal content menu — plain', build: () => terminalMenu({}) },
-  { name: 'Terminal content menu — link under the pointer', build: () => terminalMenu({ link: 'https://example.test/' }) },
   { name: 'Terminal content menu — with a selection', build: () => terminalMenu({ selection: 'ls -al' }) },
   { name: 'Terminal content menu — start failure', build: () => terminalMenu({ startFailure: true }) },
-  { name: 'Preview body menu — link under the pointer (044 FR-095)', build: () => previewLinkMenu() },
   {
     name: 'Preview body menu — text selected, standalone (044 FR-035, FR-015b)',
     build: () => previewBodyMenu({ route: 'standalone' }),
   },
   {
-    name: 'Preview body menu — link, nothing selected, parented (044 FR-095, FR-015d)',
-    build: () => previewBodyMenu({ link: true, selectionEmpty: true, route: 'parented' }),
+    name: 'Preview body menu — nothing selected, parented (044 FR-015d)',
+    build: () => previewBodyMenu({ selectionEmpty: true, route: 'parented' }),
   },
   { name: 'Cog menu', build: cogMenu },
   { name: 'Find in Files panel menu — idle', build: () => findInFilesMenu({}) },
@@ -1377,21 +1365,13 @@ describe('the cog menu is one section, therefore no divider (FR-052 as corrected
   });
 });
 
-describe('the terminal content menu leads with its contextual items (AS-8)', () => {
-  it('puts Open Link and Copy Link Address above Copy/Paste, with one divider between', () => {
-    const items = withDividers(terminalMenu({ link: 'https://example.test/' }));
-    const labels = items.map((i) => (isSeparator(i) ? '—' : i.label));
-    expect(labels).toEqual([
-      'Open Link',
-      'Copy Link Address',
-      '—',
-      'Copy',
-      'Paste',
-      '—',
-      'Refresh / redraw terminal',
-    ]);
-  });
-
+/**
+ * 045 T277 — the terminal's content menu carries no link row at all any more (FR-169): a right-click
+ * over a link opens the ONE Link menu instead of this one, so this menu's shape no longer varies with
+ * what the pointer is over. `links/link-menu.ts` and `links/open-link-or-panel-menu.ts` own that run
+ * now, and `terminal-file-link-menu.test.ts` pins it.
+ */
+describe('the terminal content menu (AS-8)', () => {
   it('drops the divider between Refresh / redraw terminal and Try again — both are View & state', () => {
     const items = withDividers(terminalMenu({ startFailure: true }));
     const labels = items.map((i) => (isSeparator(i) ? '—' : i.label));
@@ -1407,12 +1387,81 @@ describe('the terminal content menu leads with its contextual items (AS-8)', () 
   });
 });
 
-describe('the preview body menu over a link (044 FR-095)', () => {
-  it('is Open Link then Copy Link Address, one section, no divider', () => {
-    expect(shapeOf(previewLinkMenu())).toEqual(['Open Link', 'Copy Link Address']);
+/**
+ * 045 T080 — the file-link run is ONE contextual section, in both content menus (FR-031).
+ *
+ * The pin exists for one reason: the run is six rows long and it is the first contextual section the
+ * editor's menu has ever had, so the obvious mistake is to give it a section name of its own —
+ * 'link', say — which would sort it somewhere else in every menu in the app and derive a divider
+ * through the middle of it. `MENU_SECTION_ORDER` is the whole vocabulary and this run adds nothing
+ * to it; what the shape below proves is that one divider sits between the run and Copy/Paste and
+ * none sits inside it.
+ */
+describe('045 — the file-link run is one contextual section (FR-031, Principle VI)', () => {
+  it('the editor content menu, with no link under the pointer, is unchanged', () => {
+    expect(shapeOf(editorMenu())).toEqual([
+      'Cut',
+      'Copy',
+      'Paste',
+      'Select All',
+      'Undo',
+      'Redo',
+      '—',
+      'Go To Line…',
+      '—',
+      'Set Language…',
+      'Word Wrap ✓',
+    ]);
   });
 });
 
+/**
+ * 045 T274 — the Link menu (FR-169) is its own menu, drawn through the same divider derivation as
+ * every other: one contextual section, so NO divider inside it in any state. The content-menu pins
+ * above describe the pre-FR-169 runs and move with T277, which removes those runs.
+ */
+describe('045 T274 — the Link menu draws no divider in any state (FR-169, Principle VI)', () => {
+  const states = [
+    { kind: 'file', inProject: true, executable: false, preview: 'enabled' },
+    null,
+    'pending',
+  ] as const;
+  for (const resolution of states) {
+    it(`resolution ${resolution === null ? 'null' : typeof resolution === 'string' ? resolution : 'resolved'}`, () => {
+      const items = buildLinkMenu({
+        cls: 'onDevice',
+        resolution,
+        applicable: {
+          inProjectByName: true,
+          previewByExtension: 'enabled',
+          executableByExtension: false,
+          folderByGrammar: false,
+        },
+        openEditors: [{ id: 'e1', name: 'notes.md' }],
+        openLink: noop,
+      });
+      const actions = items.map(
+        (i): MenuAction => ({ label: i.label, section: i.section, onClick: noop }),
+      );
+      expect(separatorIndices(actions)).toEqual([]);
+      for (const item of items) expect(MENU_SECTION_ORDER).toContain(item.section);
+    });
+  }
+});
+
+/*
+ * 045 T167's editor-over-a-web-link shape pin is gone with the rows it pinned: FR-169 moved every link
+ * action into the ONE Link menu, which opens INSTEAD of the content menu over a link (FR-171). The
+ * content menu's own shape is pinned above; `editor-web-link-menu.test.ts` asserts the Link menu an
+ * editor opens, and `terminal-file-link-menu.test.ts` its rows and sections.
+ */
+
+/*
+ * 045 T277 — the preview body menu carries no link row at all any more (FR-169): a right-click over a
+ * link opens the ONE Link menu instead of this one (`preview/preview-link-menu.ts`, built from core's
+ * `buildLinkMenu` — the shape T274's describe above pins), so this menu's shape no longer varies with
+ * what the pointer is over. `preview-link-menu.test.ts` pins the Link menu's own rows.
+ */
 describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)', () => {
   const labelsOf = (items: MenuAction[]): string[] =>
     withDividers(items).map((i) => (isSeparator(i) ? '—' : (i.label ?? '')));
@@ -1431,11 +1480,8 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     ]);
   });
 
-  it('over a link with nothing selected: Contextual first; parented reads Go to Editor', () => {
-    expect(labelsOf(previewBodyMenu({ link: true, selectionEmpty: true, route: 'parented' }))).toEqual([
-      'Open Link',
-      'Copy Link Address',
-      '—',
+  it('with nothing selected, parented: Content (disabled), then Navigate reads Go to Editor', () => {
+    expect(labelsOf(previewBodyMenu({ selectionEmpty: true, route: 'parented' }))).toEqual([
       'Copy',
       'Copy as Rich Text',
       'Copy as Plain Text',
@@ -1451,10 +1497,7 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     const toggle = { calls: 0 };
     const build = (on: boolean, chord?: string): MenuAction[] =>
       previewContentMenu({
-        link: null,
         selectionEmpty: true,
-        followChord: undefined,
-        actions: { openLink: noop, copyLinkAddress: noop },
         syncScroll: { on, toggle: () => void (toggle.calls += 1), ...(chord !== undefined ? { chord } : {}) },
       });
     const on = build(true, 'Ctrl+Alt+F8');

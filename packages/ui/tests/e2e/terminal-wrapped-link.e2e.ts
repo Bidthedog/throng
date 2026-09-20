@@ -6,72 +6,46 @@ import {
   openApp,
   createProject as newProject,
   firstPanelId,
+  linkMarkedText,
   type OpenApp,
   TERMINAL_OUTPUT_TIMEOUT_MS,
 } from './harness.js';
+import { osc8HalfRuns } from './admin.js';
 
 /*
- * #326 — a wrapped terminal hyperlink is underlined only on its first row.
+ * #326 — a wrapped terminal hyperlink was underlined only on its first row.
  *
- * The link works: clicking any row of it opens the correct, complete URL. Only the DRAWING stops at
- * the row break, so what looks like a link is shorter than what behaves like one.
+ * The link worked: clicking any row of it opened the correct, complete URL. Only the DRAWING stopped
+ * at the row break, so what looked like a link was shorter than what behaved like one.
  *
- * ══ THE TWO CANDIDATES, AND WHY ONLY ONE SURVIVES READING THE SOURCE ══
+ * ══ WHY IT HAPPENED ══
  *
- * throng puts TWO link providers on a terminal, and they are not the same code:
+ * xterm's built-in `OscLinkProvider` takes a single `y` and never leaves it: every range it builds has
+ * `start.y === end.y === y` (its own TODO says so), and xterm drew its hover underline over exactly
+ * that range. A wrapped OSC 8 link is cells on several buffer lines sharing one `urlId`, so only the
+ * hovered row was drawn.
  *
- *   - PLAIN-TEXT URLs, matched by `WebLinksAddon` (use-terminal.ts, `new WebLinksAddon(...)`).
- *     `@xterm/addon-web-links` 0.12.0 IS wrap-aware — it stitches wrapped lines into one string
- *     (up to 2048 chars) before matching, so its range spans every row the URL occupies.
+ * ══ HOW 045 FIXED IT, AND WHAT THIS NOW MEASURES ══
  *
- *   - OSC 8 HYPERLINKS, matched by xterm's own built-in `OscLinkProvider`. That one takes a single
- *     `y` and never leaves it: every range it builds has `start.y === y` and `end.y === y`. Its
- *     closing comment says so outright —
+ * xterm's own link visuals are switched off inside a terminal panel (`terminal.css`; O10, research
+ * R22), and throng draws the ONE link affordance itself as xterm decorations (`link-marks.ts`):
+ * dashed at rest on every row a link occupies, solid on hover across every row of THAT link — for an
+ * OSC 8 link, every adjacent row carrying the same target (FR-131). So this measures throng's mark in
+ * its hover state (`.terminal-link-mark--hover`), not xterm's inline underline, which no longer
+ * exists to be measured.
  *
- *         // TODO: Handle fetching and returning other link ranges to underline other links with
- *         //       the same id
+ * ══ THE CONTROL ══
  *
- *     A wrapped OSC 8 link is exactly that: cells on several buffer lines sharing one `urlId`.
- *
- * The renderer is NOT the fault, which is worth stating because it was the first suspect.
- * `DomRenderer.ts` walks every row of whatever range it is given, starting at `x` on the first row
- * and 0 on continuation rows (`i === y ? x : 0`), ending at `x2` on the last and `cols` otherwise.
- * Give it a two-row range and it underlines two rows. It is being given a one-row range.
- *
- * ══ SO THIS TEST IS A DISCRIMINATOR, NOT JUST A REPRODUCTION ══
- *
- * Both link kinds are driven through the same gesture, in the same panel, at the same width:
- *
- *   - the PLAIN URL is the CONTROL. It must already underline across rows. If it does not, the
- *     reading above is wrong, the fault is somewhere common to both paths, and the OSC 8 assertion
- *     below would be blaming the wrong component. A test that only checked the failing case could
- *     not tell those apart.
- *   - the OSC 8 link is the DEFECT.
- *
- * ══ WHY THE FIX IS NOT A ONE-LINER, WHICH IS WORTH KNOWING BEFORE ANYONE TRIES ══
- *
- * The obvious move — register a link provider of our own that groups cells by `urlId` across wrapped
- * lines — DOES NOT WORK, and fails silently rather than loudly:
- *
- *   - `CoreBrowserTerminal.ts` registers `OscLinkProvider` in its constructor, so the built-in is
- *     always index 0 and discards the disposable that would remove it.
- *   - `Linkifier.ts`'s `_removeIntersectingLinks` walks providers in INDEX order and deletes any
- *     link whose cells overlap cells a lower-index provider already claimed. Ours would be index 1+
- *     and would lose on precisely the cells in question.
- *   - The public API offers `registerLinkProvider` and nothing else: no way to unregister the
- *     built-in, and `IBufferCell` exposes no `urlId`, so the grouping cannot be done from outside.
- *
- * So a fix means one of: an upstream change to `OscLinkProvider` (its TODO), a local patch of the
- * dependency, or a documented reach through `(term as any)._core._linkProviderService` to splice the
- * built-in out. That is a project decision, not something to pick while writing a test.
+ * Both link kinds are driven through the same gesture, in the same panel, at the same width. The
+ * PLAIN url comes from throng's own provider, which reads the LOGICAL line, so it spans every row by
+ * construction; if it does not, the fault is common to both paths — or this harness cannot see a
+ * multi-row mark at all — and the OSC 8 assertion would be blaming the wrong component.
  *
  * ══ WHY E2E ══
  *
- * The underline is drawn, not computed: xterm's DOM renderer sets an inline
- * `text-decoration: underline` per cell span on hover (`DomRendererRowFactory.ts`, `isLinkHover`).
- * Reproducing it needs a real xterm with a real buffer, a real wrap, and a real pointer over a
- * specific cell. No test in this repo constructs an xterm `Terminal` at all, so there is no seam
- * below this one. It is cheap as E2E goes — one shared app, no daemon state, no real shell work.
+ * The mark is drawn, not computed: a real xterm, a real buffer, a real wrap and a real pointer over a
+ * specific cell. `terminal-link-affordance.test.ts` pins the hover grouping with a fake terminal; it
+ * cannot say what a real Linkifier reports for a wrapped OSC 8 cell, or where a decoration lands.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -93,7 +67,6 @@ const createProject = (win: Page, name: string, root: string): Promise<void> =>
  *
  * Both are far wider than any panel this test can produce, so both are certain to wrap — the defect
  * only exists at a row break, and a fixture that happened to fit on one line would pass for free.
- * https, because `OscLinkProvider` drops any non-http(s) URL before it ever builds a range.
  */
 const LONG_PATH = 'abcdefghij'.repeat(24); // 240 chars
 const PLAIN_URL = `https://example.invalid/plain/${LONG_PATH}`;
@@ -125,67 +98,31 @@ async function startTerminal(win: Page, root: string): Promise<string> {
 }
 
 /**
- * Hover the first cell of the row containing `marker`'s following line, then count how many ROWS
- * carry an underlined span.
+ * Hover a cell of the FIRST row of the link starting with `urlText`, then count how many rows carry
+ * throng's mark in the hover state.
  *
- * The underline is an inline style the DOM renderer writes per cell
- * (`charElement.style.textDecoration = 'underline'`), so this reads what is actually drawn rather
- * than what any provider claims. Rows are counted, not spans: a row is split into several spans for
- * unrelated reasons (colour runs, the cursor cell), so a span count would move for reasons that have
- * nothing to do with this defect.
+ * Rows are counted, not marks: a mark is one decoration per row, but a count of elements would also
+ * move with anything else xterm happens to render in the decoration container.
  */
-async function underlinedRowsAfterHoveringLink(
-  win: Page,
-  pid: string,
-  urlText: string,
-): Promise<number> {
-  const cell = win
-    .getByTestId(`terminal-${pid}`)
-    .locator('.xterm-rows > div')
-    .filter({ hasText: urlText.slice(0, 40) })
-    .first();
-  await expect(cell).toBeVisible({ timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
-  const box = await cell.boundingBox();
+async function hoverMarkedRowsAfterHoveringLink(win: Page, pid: string, urlText: string): Promise<number> {
+  const rows = win.getByTestId(`terminal-${pid}`).locator('.xterm-rows > div');
+  const first = rows.filter({ hasText: urlText.slice(0, 40) }).first();
+  await expect(first).toBeVisible({ timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+  const box = await first.boundingBox();
   if (box === null) throw new Error('the row holding the link has no box — nothing to hover');
-  // A little inside the row, well clear of its left edge, so the pointer is certainly on a link cell.
+  // Arrive from the line below: xterm re-queries its link providers only when the LINE changes.
+  await win.mouse.move(box.x + box.width / 3, box.y + box.height * 1.5);
   await win.mouse.move(box.x + box.width / 3, box.y + box.height / 2);
 
-  return win
-    .getByTestId(`terminal-${pid}`)
-    .locator('.xterm-rows > div')
-    .evaluateAll(
-      (rows) =>
-        rows.filter((row) =>
-          [...row.querySelectorAll('span')].some(
-            (s) => (s as HTMLElement).style.textDecoration === 'underline',
-          ),
-        ).length,
-    );
+  let count = 0;
+  for (let i = 0; i < (await rows.count()); i += 1) {
+    if ((await linkMarkedText(rows.nth(i), { hover: true })).length > 0) count += 1;
+  }
+  return count;
 }
 
 // One line, deliberately: e2e-budget.test.ts and e2e-tags.test.ts match the declaration with a LINE-based regex.
 test('a wrapped OSC 8 hyperlink is underlined on every row it occupies, as a wrapped plain URL already is (#326)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
-  /*
-   * SKIPPED BY DEFAULT — the reproduction is confirmed, the fix is not yet decided.
-   *
-   * This fails on its last assertion, on purpose. #326 is real and reproduced, but no fix has landed
-   * because none is available through xterm's public API (see the header), and a red test for
-   * undelivered work would make `npm run gate` permanently red.
-   *
-   * Skipped IN THE BODY, not at the declaration: both guards match a declaration with
-   * `/^\s*test\(/`, so `test.skip(` at the front would drop this file out of the budget ratchet and
-   * leave it untagged, running it in neither lane.
-   *
-   *     THRONG_I326_REPRO=1 npx playwright test packages/ui/tests/e2e/terminal-wrapped-link.e2e.ts --workers=1
-   *
-   * Un-skip it in the commit that fixes the defect — at which point it passes and becomes the
-   * regression test.
-   */
-  test.skip(
-    process.env.THRONG_I326_REPRO !== '1',
-    '#326 is reproduced but unfixed; this fails by design. Set THRONG_I326_REPRO=1 to run it.',
-  );
-
   const root = mkdtempSync(join(tmpdir(), 'throng-wraplink-'));
   writeFixture(root);
 
@@ -199,28 +136,32 @@ test('a wrapped OSC 8 hyperlink is underlined on every row it occupies, as a wra
   await win.keyboard.press('Enter');
   await expect(term).toContainText('DONE', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
-  /*
-   * ══ CONTROL: the plain URL, whose provider IS wrap-aware ══
-   *
-   * This must already span more than one row. If it does not, the fault is common to both link
-   * paths — or this harness cannot see a multi-row underline at all — and the assertion after it
-   * would be pointing at the wrong component.
-   */
-  const plainRows = await underlinedRowsAfterHoveringLink(win, pid, PLAIN_URL);
-  expect(
-    plainRows,
-    'a wrapped PLAIN url must underline on every row it occupies — WebLinksAddon 0.12.0 stitches ' +
-      'wrapped lines before matching. If this is 1, the defect is not specific to OSC 8 and the ' +
-      'assertion below is blaming the wrong provider',
-  ).toBeGreaterThan(1);
+  // ══ CONTROL: the plain URL, from the provider that reads the logical line ══
+  await expect
+    .poll(() => hoverMarkedRowsAfterHoveringLink(win, pid, PLAIN_URL), {
+      timeout: 10_000,
+      message:
+        'a wrapped PLAIN url must be marked as hovered on every row it occupies. If this stays at 1 ' +
+        'or 0, the fault is not specific to OSC 8 and the assertion below is blaming the wrong provider',
+    })
+    .toBeGreaterThan(1);
 
-  // ══ THE DEFECT: the same URL, delivered as an OSC 8 hyperlink ══
-  const osc8Rows = await underlinedRowsAfterHoveringLink(win, pid, OSC8_URL);
-  expect(
-    osc8Rows,
-    'a wrapped OSC 8 hyperlink is underlined only on its first row: xterm\'s OscLinkProvider builds ' +
-      'every range with start.y === end.y === the hovered line, so the renderer is handed one row ' +
-      'for a link that occupies several. Clicking any row still opens the whole URL, which is why ' +
-      'this reads as a drawing fault rather than a broken link (#326)',
-  ).toBeGreaterThan(1);
+  /*
+   * ══ THE DEFECT: the same URL, delivered as an OSC 8 hyperlink ══
+   *
+   * Only where the OS's ConPTY carries the hyperlink around its text (`osc8HalfRuns`, admin.ts). Below
+   * build 22000 it wraps nothing, and because this link's TEXT is its url, the plain-url provider
+   * would mark every row anyway — the assertion would pass having measured the control twice. So it
+   * is reported NOT RUN there instead.
+   */
+  if (!osc8HalfRuns('the wrapped OSC 8 hover mark (#326)')) return;
+  await expect
+    .poll(() => hoverMarkedRowsAfterHoveringLink(win, pid, OSC8_URL), {
+      timeout: 10_000,
+      message:
+        "a wrapped OSC 8 hyperlink is marked as hovered only on the row under the pointer: xterm's " +
+        'OscLinkProvider reports one row at a time, and the hover state must span every adjacent row ' +
+        'with the same target (FR-131, #326)',
+    })
+    .toBeGreaterThan(1);
 });

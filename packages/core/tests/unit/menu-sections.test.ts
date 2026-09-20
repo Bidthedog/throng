@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { MENU_SECTION_ORDER, groupBySection, type MenuSection } from '@throng/core';
+import { MENU_SECTION_ORDER, buildLinkMenu, groupBySection, type MenuSection } from '@throng/core';
 
 /**
  * 033 US5 — the one section vocabulary every context menu groups by
@@ -198,19 +198,42 @@ describe('groupBySection (033 menu-sections.ts)', () => {
     ]);
   });
 
+  /*
+   * 045 FR-169: the Link menu is its own menu now, so it is ONE contextual group — no divider inside
+   * it, whatever rows the link's state draws. Built by the real builder, not a hand-copied list.
+   */
+  it('groups the Link menu into exactly one Contextual group (045 FR-169, T274)', () => {
+    const link = buildLinkMenu({
+      cls: 'onDevice',
+      resolution: { kind: 'file', inProject: true, executable: false, preview: 'enabled' },
+      applicable: {
+        inProjectByName: true,
+        previewByExtension: 'enabled',
+        executableByExtension: false,
+        folderByGrammar: false,
+      },
+      openEditors: [{ id: 'e1', name: 'notes.md' }],
+      openLink: () => undefined,
+    });
+    const groups = groupBySection(link, (i) => i.section);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.map((i) => i.label)).toEqual(link.map((i) => i.label));
+    expect(link[link.length - 1]!.label).toBe('Copy Link to Clipboard');
+  });
+
   it('leads with the Contextual group when the pointer supplied one (terminal link items)', () => {
     const terminal = [
       item('Copy', 'content'),
       item('Paste', 'content'),
       item('Open Link', 'contextual'),
-      item('Copy Link Address', 'contextual'),
+      item('Copy Link to Clipboard', 'contextual'),
       item('Refresh / redraw terminal', 'viewState'),
       item('Try again', 'viewState'),
       item('Copy details', 'viewState'),
       item('Clear panel type', 'viewState'),
     ];
     const groups = groupBySection(terminal, sectionOf);
-    expect(labels(groups)[0]).toEqual(['Open Link', 'Copy Link Address']);
+    expect(labels(groups)[0]).toEqual(['Open Link', 'Copy Link to Clipboard']);
     // Refresh and Try again are both View & state — no divider between them.
     expect(labels(groups)[2]).toEqual([
       'Refresh / redraw terminal',

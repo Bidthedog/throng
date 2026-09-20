@@ -287,6 +287,17 @@ const ALLOWED: readonly Allowed[] = [
   { file: `${UI_SRC}/main/icon-pack-service.ts`, kind: 'literal', token: 'README.md', reason: 'the icon-pack folder’s own README file name: unrelated to previews' },
 
   /*
+   * 045 FR-178 / FR-178a — the shipped known-FILE-EXTENSION list, which is what ends a path span that
+   * crosses a space (`D:\my folder\notes.md`). It is a spelling vocabulary of about 230 extensions,
+   * generated into the `removed` descriptor's prose, and it names `md` and `markdown` the same way it
+   * names `docx` and `png`: as three letters that end a filename. It selects no provider, is never
+   * asked whether anything can be previewed, and a new preview provider changes nothing in it.
+   * `links-no-os-names.test.ts` carries the matching exemption for the same file (FR-178b).
+   */
+  { file: `${CORE_SRC}/links/known-extensions.ts`, kind: 'literal', token: 'md', reason: 'the shipped known-file-extension list for the link grammar (FR-178): a filename suffix, not a provider reference' },
+  { file: `${CORE_SRC}/links/known-extensions.ts`, kind: 'literal', token: 'markdown', reason: 'the shipped known-file-extension list for the link grammar (FR-178): a filename suffix, not a provider reference' },
+
+  /*
    * Fix round 1, item 2 — the Markdown body's styles moved into the provider's own folder
    * (`providers/markdown/markdown.css`), which the discovery scope excludes entirely, so no allowance
    * for `preview-markdown*` is needed any more. `preview/preview.css` now holds only panel chrome
