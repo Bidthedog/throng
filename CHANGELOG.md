@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha5 — 2026-09-20
+
 ### Added
 - **Clickable file links** ([#394](https://github.com/Bidthedog/throng/issues/394),
   [#198](https://github.com/Bidthedog/throng/issues/198)): a file path printed in a terminal — by a
