@@ -232,8 +232,10 @@ describe('secondary metadata stays relative to the corrected base (T161, R29)', 
     const shrunk = rulesOf(read(PANEL_CSS))
       .filter((r) => /font-size:\s*0\.85em/.test(r.body))
       .flatMap((r) => r.selectors);
+    // #391 — `.fif-scope__missing` went with the notice it styled; the notice bar's `.fif-notice`
+    // took its place, and its size, in the same slot of the sheet.
     expect(shrunk).toEqual([
-      '.fif-scope__missing',
+      '.fif-notice',
       '.fif-status',
       '.fif-group__count',
       '.fif-group__stale',

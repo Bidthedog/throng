@@ -92,6 +92,16 @@ export const MAX_ROWS_PER_BATCH = 250;
 export const BATCH_FLUSH_MS = 50;
 
 /**
+ * The most matches one scan lists (#391, 043 FR-094).
+ *
+ * A search for `e` in a real project listed hundreds of thousands of rows, and Replace All acted on
+ * every one of them. A scan stops at this many; the status line's count is the listed count, and the
+ * panel says the list is partial. A constant, not a preference — the same reasoning as the batch
+ * bound above.
+ */
+export const MAX_LISTED_MATCHES = 20_000;
+
+/**
  * The other bound on a payload crossing the process boundary: how much re-derived snippet text one
  * COMMIT may answer with (FR-083b).
  *

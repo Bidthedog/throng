@@ -609,6 +609,8 @@ persist independently, sync one into a sub-workspace and confirm the parent/chil
   introduced, and none is needed.
 - **A term matching an enormous number of times**, or in a very large number of files. The panel must
   stay usable and must not stall while the scan continues.
+  > **Narrowed (2026-09-21) by FR-094 and FR-095** (#391): a scan lists at most 20,000 matches, and
+  > while it runs the form and its cancel stay usable but the rows are deliberately inert.
 - **A replacement that itself contains the search term** must not be re-matched and replaced again.
 - **Binary and unreadable files**, and files excluded by the project's ignore rules, met during the
   scan. Resolved by FR-045e and FR-045f: the scan skips whatever the editor already refuses to open as
@@ -813,6 +815,9 @@ persist independently, sync one into a sub-workspace and confirm the parent/chil
   discourages adding a watch for this feature.)*
   > **Partly superseded (2026-09-11) by FR-092a**: *"scope directory"* reads *scope directory or
   > file*. A scoped file that is renamed or deleted is marked missing exactly as a directory is.
+  > **Partly superseded (2026-09-21) by FR-096** (#391): the condition is REPORTED in the panel's
+  > notice bar as *Could not find `<scope>`*, not on the scope control, and the status line no longer
+  > repeats it. The control still marks its field invalid. The informational-only rule stands.
 - **FR-031**: The Find in Files panel MUST carry its own search input and match-mode controls,
   distinct from any find bar.
 - **FR-031a**: When find or replace in files is invoked **by its chord** and the focused panel holds a
@@ -883,6 +888,8 @@ persist independently, sync one into a sub-workspace and confirm the parent/chil
   file search and the find bar, so the two never offer different match vocabularies.
 - **FR-041**: Results MUST appear progressively rather than only on completion of the scan, and the
   interface MUST remain responsive while a scan is running.
+  > **Narrowed (2026-09-21) by FR-095** (#391): the form, the cancel control and the panel's menu stay
+  > responsive; the rows are deliberately inert until the scan completes or is cancelled.
 - **FR-042**: A search that completes having found nothing MUST be distinguishable from one that has
   not been run and from one still running. *(013 FR-009 requires a clear no-results state for the
   find bar; this is the same guarantee here.)*
@@ -1372,6 +1379,8 @@ been rewritten or renumbered.
   inside it. FR-030a's missing/refused notice MUST keep its place and MUST NOT be displaced by the
   new control. *(A clear acts on the text in the box; a browse acts on the scope. One box for both
   would claim they are the same kind of thing.)*
+  > **Partly superseded (2026-09-21) by FR-096** (#391): the notice sentence is withdrawn — the notice
+  > no longer lives in the scope row, so there is no place for the clear control to displace it from.
 - **FR-080d**: **No menu item is owed** for any of the three Clear controls, and FR-025a is not
   widened by them. Emptying a focused text field is text editing on that field, not a discrete
   command the panel offers — the same exemption FR-025a already grants navigational input, and the
@@ -1744,6 +1753,24 @@ been rewritten or renumbered.
   not a preference. Under the explicit-run trigger `Enter` is unchanged. The run control and the
   invocation routes are unaffected: only `Enter` is an idiom pressed by habit straight after typing.
   **Supersedes, in part, FR-043a** — see the note there.
+- **FR-094** *(#391, 2026-09-21)*: A scan MUST stop listing at **20,000** matches (a constant, not a
+  preference), and the count the status line shows MUST be the count listed. When it stops there, the
+  notice bar (FR-096) MUST say the results are partial and that **Replace All acts only on the results
+  listed below** — which it then does: no unlisted match on disk is touched. Below the cap no partial
+  notice is shown. **Supersedes the Assumption that no maximum is specified**, and narrows the edge
+  case about a term matching an enormous number of times.
+- **FR-095** *(#391, 2026-09-21)*: For as long as a scan is running — while the run control shows its
+  cancel ✕ — every result row MUST be drawn disabled and MUST ignore double-click, `Enter` and
+  right-click, and Replace All MUST be disabled, on the toolbar and in the menu. The form, the cancel
+  control and the panel's own menu stay live. The lock lifts when the scan completes or is cancelled.
+  FR-045a/FR-045b's stale marking is unchanged: it stays on its rows and never disables them.
+  **Narrows FR-041.**
+- **FR-096** *(#391, 2026-09-21)*: The panel MUST report every condition it raises in **one notice
+  bar**, inline, between the form and the results list, and nowhere else. A missing scope reads
+  **Could not find `<scope>`**, with the scope as entered, for a folder or a file alike (FR-092a); a
+  refused browse or typed path outside the project reads as a refusal; the cap reads as FR-094 says.
+  Each condition appears once, and clearing one removes only its own notice. The find bar's own inline
+  notices are untouched. **Supersedes FR-030a's placement and FR-080c's notice sentence.**
 
 ### Key Entities
 
@@ -1856,6 +1883,7 @@ been rewritten or renumbered.
   number of matches is specified. A term matching hundreds of thousands of times is expected to
   stream and remain scrollable rather than to be truncated at some figure; if planning finds a limit
   is needed, it is a decision to record there.
+  > **Superseded (2026-09-21) by FR-094** (#391): this is that decision. A scan lists at most 20,000.
 - **The find bar's existing anchoring, key bindings and theme-token sourcing are unchanged.** #220
   states these as must-nots; they are carried as FR-007, FR-011 and FR-012.
 - **`Ctrl+Shift+T` Quick Open (#219) has already shipped.** The maintainer's comment on #153 proposed

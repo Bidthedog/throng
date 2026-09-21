@@ -21,8 +21,9 @@
  *
  * The second rule looks like a React smell and is a deliberate answer to one. The obvious immutable
  * fold, `[...state.rows, ...batch]`, costs the ACCUMULATED total on every batch, which is quadratic
- * in the number of matches — and the spec's Assumptions decline a match ceiling, so nothing bounds
- * that number. At SC-004's 5,000 files the twentieth batch would cost twenty times the first for no
+ * in the number of matches — and `MAX_LISTED_MATCHES` (FR-094) is 20,000, eighty batches, which is
+ * still far too many to fold that way. At SC-004's 5,000 files the twentieth batch would cost twenty
+ * times the first for no
  * information gained, which is exactly the renderer stall FR-041 and SC-004 forbid. Appending in
  * place makes the n-th batch cost what the first did.
  *
@@ -67,6 +68,8 @@ export interface FileSearchUpdateEvent {
   totalMatches?: number;
   filesScanned?: number;
   skipped?: number;
+  /** #391 (043 FR-094) — the scan stopped at `MAX_LISTED_MATCHES`: the list is partial. */
+  capped?: true;
   /**
    * FR-045a — the result files that have changed since the scan, root-relative POSIX.
    *
@@ -97,6 +100,8 @@ export interface FileSearchResults {
   readonly filesScanned: number;
   /** FR-045f — one count for the whole scan. */
   readonly skipped: number;
+  /** #391 (043 FR-094) — the list stopped at `MAX_LISTED_MATCHES`, so Replace All reaches only it. */
+  readonly capped: boolean;
   /**
    * FR-045a — which of THESE files have changed since the scan produced them.
    *
@@ -125,6 +130,7 @@ export const NO_FILE_SEARCH_RESULTS: FileSearchResults = {
   totalMatches: 0,
   filesScanned: 0,
   skipped: 0,
+  capped: false,
   staleFiles: Object.freeze([]),
   version: 0,
 };
@@ -188,6 +194,8 @@ export function applyFileSearchUpdate(
     totalMatches: update.totalMatches ?? (replace ? 0 : state.totalMatches),
     filesScanned: update.filesScanned ?? (replace ? 0 : state.filesScanned),
     skipped: update.skipped ?? (replace ? 0 : state.skipped),
+    // Sticky within a run: once the walk has stopped at the cap, the list stays partial.
+    capped: update.capped === true || (replace ? false : state.capped),
     /*
      * FR-045c — a NEW generation is a re-run, and a re-run clears staleness for everything it
      * re-scanned. Falling back to `[]` rather than to the previous set is that clause: the rows
@@ -323,7 +331,7 @@ const listeners = new Set<() => void>();
  * Per file, the SCANNED offset of each match this panel has replaced and the shift that write caused.
  *
  * A map of maps rather than a list of pairs so the marking stays an O(1) question — the results list
- * asks it once per row on every render, and there is no match ceiling (Assumptions).
+ * asks it once per row on every render, up to `MAX_LISTED_MATCHES` rows (FR-094).
  */
 export type CommittedEdits = ReadonlyMap<string, ReadonlyMap<number, CommittedWrite>>;
 

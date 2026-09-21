@@ -272,8 +272,9 @@ describe('the scope control carries ONE notice at a time (FR-030a, FR-070)', () 
    * leaves the scope text alone.
    */
   const scopeField = (): HTMLInputElement => el(`fif-scope-${PANEL_ID}`) as HTMLInputElement;
-  const notices = (): NodeListOf<Element> =>
-    scopeControl().querySelectorAll('.fif-scope__missing');
+  // #391 — the notice is REPORTED in the panel's notice bar now, not in the scope row; the control
+  // still owns the condition (`data-scope-notice`), and the bar still shows exactly one of the two.
+  const notices = (): HTMLElement[] => screen.queryAllByTestId(`fif-scope-notice-${PANEL_ID}`);
   const noticeText = (): string => el(`fif-scope-notice-${PANEL_ID}`).textContent?.trim() ?? '';
 
   /** Run, list a row, and have the scan report the scope gone (FR-030a's route through main). */

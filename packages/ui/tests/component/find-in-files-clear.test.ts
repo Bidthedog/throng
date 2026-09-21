@@ -352,7 +352,7 @@ describe('the scope row keeps the browse control beside the box (FR-080c)', () =
     expect(el(`fif-scope-control-${PANEL_ID}`).contains(browse)).toBe(true);
   });
 
-  it('leaves FR-030a’s notice its place beside the field', () => {
+  it('cannot crowd the scope notice, which is reported in the notice bar (#391)', () => {
     mount();
     type(`fif-scope-${PANEL_ID}`, 'lib/deep');
     // The refusal a chooser outside the project raises (FR-070) — the notice that shares this row's
@@ -365,11 +365,12 @@ describe('the scope row keeps the browse control beside the box (FR-080c)', () =
       totalMatches: 0,
     });
 
+    // FR-080c's "keep its place" is withdrawn by #391: the notice left the scope row for the panel's
+    // notice bar, so the clear control and the notice no longer share an edge at all.
     const notice = maybe(`fif-scope-notice-${PANEL_ID}`);
-    expect(notice, 'the scope notice lost its place to the clear control').not.toBeNull();
-    // Beside the field, not inside it: the notice is the scope control's child and the input's peer.
-    expect(el(`fif-scope-control-${PANEL_ID}`).contains(notice as HTMLElement)).toBe(true);
-    expect(el(`fif-scope-${PANEL_ID}`).parentElement?.contains(notice as HTMLElement)).toBe(false);
+    expect(notice, 'the scope notice is not reported').not.toBeNull();
+    expect(el(`fif-scope-control-${PANEL_ID}`).contains(notice as HTMLElement)).toBe(false);
+    expect(el(`fif-scope-clear-${PANEL_ID}`)).toBeTruthy();
   });
 });
 

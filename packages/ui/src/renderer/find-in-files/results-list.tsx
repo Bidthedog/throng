@@ -6,9 +6,9 @@
  * Verified in research R18: there is no general-purpose virtualised list here. `react-arborist`
  * drives the explorer TREE and nothing else, CodeMirror's viewport virtualisation is internal to
  * the editor, and the preferences lists render every row. The nearest pattern is Quick Open's hard
- * cap — `QUICK_OPEN_MAX_ROWS = 200` with a "showing N of M" line — and this feature declines it:
- * the spec's Assumptions refuse a match ceiling, so a search for a common word in a real project
- * produces tens of thousands of rows and every one of them must be reachable.
+ * cap — `QUICK_OPEN_MAX_ROWS = 200` with a "showing N of M" line — and this feature declines one that
+ * low: a search for a common word in a real project produces thousands of rows, and every listed one
+ * must be reachable. The ceiling it does have is `MAX_LISTED_MATCHES`, 20,000 (#391, FR-094).
  *
  * Rendering all of them is the thing FR-041 and SC-004 forbid. So the list keeps the whole result
  * set in the model, gives the scroller the FULL extent (the scrollbar tells the truth about how
@@ -219,6 +219,12 @@ export interface ResultsListProps {
    * stylesheet, and R26's whole finding is that those two cannot be allowed to round separately.
    */
   rowHeightPx: number;
+  /**
+   * #391 — true while a scan is running. The rows are still streaming in under the pointer, so none
+   * of them can be opened, stepped to or given a menu until the scan completes or is cancelled; they
+   * are drawn disabled. Group headings stay live — collapsing one acts on nothing in a file.
+   */
+  locked?: boolean;
 }
 
 export function ResultsList({
@@ -232,6 +238,7 @@ export function ResultsList({
   committed,
   onCurrentChange,
   rowHeightPx,
+  locked = false,
 }: ResultsListProps): ReactElement {
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT_PX);
@@ -342,6 +349,8 @@ export function ResultsList({
   }, []);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    // #391 — nothing in a list that is still arriving can be opened or stepped to.
+    if (locked) return;
     const last = items.length - 1;
     /*
      * Enter opens the row the arrow keys landed on (FR-037, Assumptions).
@@ -421,6 +430,7 @@ export function ResultsList({
                   () => moveTo(start + i),
                   replacement,
                   committedWrite(committed, item.row),
+                  locked,
                 ),
           )}
         </div>
@@ -512,6 +522,8 @@ function renderRow(
   replacement: string | null,
   /** What this panel wrote here, or `undefined` while the match is still pending (FR-083). */
   write: CommittedWrite | undefined,
+  /** #391 — the scan is still running: the row is drawn disabled and answers nothing. */
+  locked: boolean,
 ): ReactElement {
   const { row, depth } = item;
   const committed = write !== undefined;
@@ -550,12 +562,24 @@ function renderRow(
       // as well as a class, because it is state a reader (and a test) asks about, not decoration.
       data-committed={committed ? 'true' : undefined}
       aria-current={current ? 'true' : undefined}
+      aria-disabled={locked ? 'true' : undefined}
       title={`${row.relPath}:${row.line}:${row.column}`}
       style={{ paddingLeft: `${4 + depth * 14}px` }}
       // FR-037 — a DOUBLE-click opens. A single click would open a file on every step through the
       // list, which is navigation, not a decision the user made.
-      onDoubleClick={onOpen}
-      onContextMenu={onPoint}
+      onDoubleClick={locked ? undefined : onOpen}
+      /*
+       * #391 — a locked row opens no menu at all: stopped here, so the panel's own handler one level
+       * up never sees it. A right-click on the panel anywhere else still opens the panel's menu.
+       */
+      onContextMenu={
+        locked
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          : onPoint
+      }
     >
       {/* Grouped like every other displayed quantity, and like the editor's own status readouts. */}
       <span className="fif-row__pos">

@@ -878,6 +878,7 @@ export type { MatchModes, Match, SearchCount } from './search/match-model.js';
 // fills these shapes lives in UI main; what the results MEAN is settled here, by unit test.
 export {
   MAX_ROWS_PER_BATCH,
+  MAX_LISTED_MATCHES,
   BATCH_FLUSH_MS,
   MAX_COMMIT_SNIPPET_CHARS,
   SNIPPET_CONTEXT_CHARS,

@@ -56,7 +56,9 @@ afterEach(() => {
 
 describe('the four scan states read differently (FR-042, FR-030a)', () => {
   it('says something, and something different, in each of them', () => {
-    const states: ScanStatus[] = ['notRun', 'running', 'complete', 'scopeMissing'];
+    // #391 — `scopeMissing` is reported once, in the panel's notice bar, and the status line no longer
+    // repeats it; see the refusal test below. The three the status line still carries must differ.
+    const states: ScanStatus[] = ['notRun', 'running', 'complete'];
     const readings = states.map((s) => {
       const reading = reach(s);
       // Each is mounted into its own tree; unmount it before the next so `getByTestId` stays
@@ -71,7 +73,7 @@ describe('the four scan states read differently (FR-042, FR-030a)', () => {
       expect(reading.text, `${states[i]} must say something`).not.toBe('');
     }
     const texts = readings.map((r) => r.text);
-    expect(new Set(texts).size, `the four states read as: ${texts.join(' | ')}`).toBe(4);
+    expect(new Set(texts).size, `the three states read as: ${texts.join(' | ')}`).toBe(3);
   });
 
   it('a completed scan that found nothing does not read as one never run (FR-042)', () => {
@@ -188,19 +190,18 @@ describe('a scope that goes underneath a finished run keeps its readout (043 T11
     expect(status().dataset.state).toBe('complete');
   });
 
-  it('never reads "Scope not found" beside a skip count', () => {
+  it('never repeats the missing scope in the status line, beside a skip count or otherwise (#391)', () => {
     scopeGoesOver({ totalMatches: 0, filesScanned: 9000, skipped: 1500 });
 
+    // The notice bar reports the condition; the status line reports the SCAN, and nothing else.
     const text = (status().textContent ?? '').trim();
-    expect(
-      text.includes('Scope not found') && screen.queryByTestId(`fif-skipped-${PANEL_ID}`) !== null,
-      `the status line reads: ${text}`,
-    ).toBe(false);
+    expect(text, `the status line reads: ${text}`).not.toMatch(/Could not find|Scope not found/);
+    expect(screen.getByTestId(`fif-scope-notice-${PANEL_ID}`)).toHaveTextContent(/^Could not find/);
     // The scan DID happen, so its tail is still told truthfully.
     expect(screen.getByTestId(`fif-skipped-${PANEL_ID}`)).toHaveTextContent(formatGrouped(1500));
   });
 
-  it('keeps "Scope not found" for a search that was refused before it ran, and no skip count', () => {
+  it('reports a search refused before it ran in the notice bar only, with no skip count (#391)', () => {
     mount();
     // A refusal at the start supersedes into a NEW generation with every counter reset, so this is
     // the one place the status is the run's truth: nothing was walked, nothing was skipped.
@@ -215,7 +216,9 @@ describe('a scope that goes underneath a finished run keeps its readout (043 T11
     });
 
     expect(status().dataset.state).toBe('scopeMissing');
-    expect((status().textContent ?? '').trim()).toContain('Scope not found');
+    // One condition, one notice: the bar says it, and the status line does not say it again.
+    expect((status().textContent ?? '').trim()).toBe('');
+    expect(screen.getByTestId(`fif-scope-notice-${PANEL_ID}`)).toHaveTextContent(/^Could not find/);
     expect(screen.queryByTestId(`fif-skipped-${PANEL_ID}`)).toBeNull();
   });
 });
