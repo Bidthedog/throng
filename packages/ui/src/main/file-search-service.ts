@@ -62,6 +62,7 @@
  */
 import {
   BATCH_FLUSH_MS,
+  MAX_LISTED_MATCHES,
   MAX_ROWS_PER_BATCH,
   compileExcluder,
   decode,
@@ -108,6 +109,8 @@ export interface FileSearchUpdate {
   filesScanned?: number;
   /** FR-045f — ONE count for the whole scan, never a notice or a marker per file. */
   skipped?: number;
+  /** #391 (043 FR-094) — the scan stopped at MAX_LISTED_MATCHES, so the list is partial. */
+  capped?: true;
   /**
    * FR-045a — the result files that have changed since the scan read them, root-relative POSIX.
    *
@@ -214,14 +217,16 @@ interface ScanRun {
   skipped: number;
   filesScanned: number;
   totalMatches: number;
+  /** #391 (043 FR-094) — the walk stopped at MAX_LISTED_MATCHES rather than at the end of the tree. */
+  capped: boolean;
   /**
    * FR-078a — every row this run has emitted, retained for the life of the run.
    *
    * So a window that attaches AFTER the walk finished is sent a snapshot rather than an empty panel.
    * The opposite used to be explicit here — the rows were pushed and forgotten — and the honest cost
    * of changing it is that peak memory becomes one main-side copy plus one per attached window,
-   * where it was one per window. With no match ceiling (Assumptions) that is unbounded in the same
-   * way the renderer's own copy already is.
+   * where it was one per window. Each copy is bounded by `MAX_LISTED_MATCHES` (#391, FR-094), the
+   * same bound the renderer's own copy has.
    *
    * The bound is the one FR-078a names and no other: the run dies with the panel. Nothing outlives
    * it, nothing is cached beside it, and nothing crosses `Panel.config` — so FR-023 is untouched and
@@ -459,6 +464,7 @@ export class FileSearchService {
     run.skipped = 0;
     run.filesScanned = 0;
     run.totalMatches = 0;
+    run.capped = false;
     run.rows = [];
     run.pending = [];
     run.held.clear();
@@ -690,6 +696,7 @@ export class FileSearchService {
       totalMatches: run.totalMatches,
       filesScanned: run.filesScanned,
       skipped: run.skipped,
+      ...(run.capped ? { capped: true as const } : {}),
       staleFiles: [...run.staleFiles],
       ...this.queryFor(webContentsId, run),
     });
@@ -808,6 +815,7 @@ export class FileSearchService {
       existing.skipped = 0;
       existing.filesScanned = 0;
       existing.totalMatches = 0;
+      existing.capped = false;
       // FR-078a's retention is per RUN, and a supersession is a new run: a snapshot sent after this
       // must describe the search that is happening, never the one it replaced.
       existing.rows = [];
@@ -836,6 +844,7 @@ export class FileSearchService {
       skipped: 0,
       filesScanned: 0,
       totalMatches: 0,
+      capped: false,
       rows: [],
       pending: [],
       flushTimer: null,
@@ -967,6 +976,12 @@ export class FileSearchService {
       run.filesScanned += 1;
       const before = run.totalMatches;
       for (const match of editorMatches(doc, run.term, run.modes)) {
+        // #391 (043 FR-094) — the list stops here, and the rest of the tree is not read: nothing past
+        // the cap could be listed, so reading on would only keep a scan running with nothing to add.
+        if (run.totalMatches >= MAX_LISTED_MATCHES) {
+          run.capped = true;
+          break;
+        }
         const line = doc.lineAt(match.from);
         run.pending.push({
           relPath,
@@ -983,6 +998,7 @@ export class FileSearchService {
       if (run.totalMatches > before) run.held.set(relPath, stamp);
       this.drain(run, generation, false);
       this.armFlush(run, generation);
+      if (run.capped) break;
     }
 
     if (this.stale(run, generation)) return;
@@ -1037,6 +1053,7 @@ export class FileSearchService {
       filesScanned: run.filesScanned,
       skipped: run.skipped,
     };
+    if (run.capped) payload.capped = true;
     if (rows && rows.length > 0) {
       payload.rows = rows;
       // FR-078a — kept as well as sent. The batch that goes out is the batch a later attach is shown

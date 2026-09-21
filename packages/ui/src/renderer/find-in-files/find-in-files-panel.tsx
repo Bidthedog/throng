@@ -40,6 +40,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import {
+  MAX_LISTED_MATCHES,
   formatGrouped,
   groupRows,
   isWithinRoot,
@@ -313,8 +314,8 @@ export function FindInFilesPanel({
    * list, indistinguishable from a search that found nothing (#380, US5 scenario 6).
    *
    * Keyed on the panel id ALONE, deliberately, and not on the ownership above: main answers an
-   * attach by re-sending the whole result set, and a scan has no match ceiling (Assumptions), so
-   * re-attaching whenever the project re-resolves would be unbounded work for no new information.
+   * attach by re-sending the whole result set — up to `MAX_LISTED_MATCHES` rows (FR-094) — so
+   * re-attaching whenever the project re-resolves would be that much work for no new information.
    * Detaching is `destroyFindInFilesPanel`'s, not this effect's cleanup — see the store.
    */
   useEffect(() => {
@@ -550,8 +551,9 @@ export function FindInFilesPanel({
     return markStale(orderGroups(groupRows(results.rows, grouping)), results.staleFiles);
     /*
      * `version`, not `rows`. The store appends a batch IN PLACE — `rows` is the same array across
-     * every batch of one run, deliberately, because the immutable fold is quadratic in a match
-     * count nothing bounds. `version` is what changes, and it is what a memo compares.
+     * every batch of one run, deliberately, because the immutable fold is quadratic in the match
+     * count — twenty thousand of them at the cap (FR-094). `version` is what changes, and it is what
+     * a memo compares.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, grouping]);
@@ -645,7 +647,8 @@ export function FindInFilesPanel({
    *
    * FR-084b: this is a panel CONTROL. FR-045b's four negatives govern rows, and no row is touched.
    */
-  const canReplaceAll = state.replaceEnabled && pendingRows().length > 0;
+  // #391 — and never while the scan is running: the list it would act on has not finished arriving.
+  const canReplaceAll = !running && state.replaceEnabled && pendingRows().length > 0;
 
   const onTermKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
     // `Enter` is an explicit run (FR-043a) and the near-universal find idiom, not a rebindable
@@ -992,6 +995,7 @@ export function FindInFilesPanel({
           <Icon token="replaceAll" />
         </button>
       </div>
+      <NoticeBar panelId={panelId} state={state} />
       <StatusLine panelId={panelId} state={state} />
 
       <ResultsList
@@ -1024,6 +1028,8 @@ export function FindInFilesPanel({
         onCurrentChange={(row) => {
           currentRow.current = row;
         }}
+        /* #391 — for exactly as long as the cancel ✕ shows. */
+        locked={running}
       />
     </div>
   );
@@ -1152,18 +1158,61 @@ function ScopeControl({
       >
         <Icon token="folderOpen" />
       </button>
-      {/*
-        ONE span, whichever condition holds.
+      {/* #391 — the condition is REPORTED in the panel's notice bar, not here. The control keeps
+          `aria-invalid` and `data-scope-notice`: those mark the field, they do not report. */}
+    </div>
+  );
+}
 
-        The wording says what is WRONG rather than what the user may not do — a message claiming
-        they cannot leave is false the moment an escape exists, and here both escapes are a few
-        pixels away: type a scope, or browse for another folder.
-      */}
-      {state.scopeNotice === null ? null : (
-        <span className="fif-scope__missing" data-testid={`fif-scope-notice-${panelId}`}>
-          {state.scopeNotice === 'missing' ? 'Scope missing' : 'Folder is outside the project'}
-        </span>
-      )}
+/**
+ * The panel's ONE notice bar (#391, 043 FR-094/FR-095) — between the form and the results list, and
+ * the only place the panel reports a condition. Inline rather than a toast.
+ *
+ * Each condition appears once. A missing scope used to be reported twice — "Scope missing" in the
+ * scope row and "Scope not found" in the status line — and the first named the wrong thing: the
+ * scope is there in the box; what is missing is the folder or file it names.
+ *
+ * The wording says what is WRONG rather than what the user may not do: every condition here has an
+ * escape a few pixels away — retype the scope, browse for another folder, narrow the term.
+ */
+function NoticeBar({
+  panelId,
+  state,
+}: {
+  panelId: string;
+  state: FindInFilesPanelState;
+}): ReactElement | null {
+  const notices: { key: string; testId: string; text: string }[] = [];
+  if (state.scopeNotice === 'missing') {
+    notices.push({
+      key: 'missing',
+      testId: `fif-scope-notice-${panelId}`,
+      text: `Could not find ${state.scopeSubPath}`,
+    });
+  } else if (state.scopeNotice === 'outsideProject') {
+    notices.push({
+      key: 'outside',
+      testId: `fif-scope-notice-${panelId}`,
+      text: 'Folder is outside the project',
+    });
+  }
+  if (state.results.capped) {
+    notices.push({
+      key: 'capped',
+      testId: `fif-capped-notice-${panelId}`,
+      text:
+        `Showing the first ${formatGrouped(MAX_LISTED_MATCHES)} matches — the results are partial. ` +
+        'Replace All acts only on the results listed below.',
+    });
+  }
+  if (notices.length === 0) return null;
+  return (
+    <div className="fif-notices" data-testid={`fif-notices-${panelId}`} role="status">
+      {notices.map((n) => (
+        <div key={n.key} className="fif-notice" data-testid={n.testId}>
+          {n.text}
+        </div>
+      ))}
     </div>
   );
 }
@@ -1179,11 +1228,11 @@ function ScopeControl({
  *
  * The fold is what keeps those apart: a `scopeMissing` arriving at a finished run's own generation
  * leaves that run's status alone, so this line goes on saying "N matches in M files" over the N
- * rows still listed, and the scope control carries the condition FR-030a names it as the surface
- * for. Only a search refused before it started reaches this branch — and it was superseded into a
- * fresh generation with every counter zeroed, which is why a skip count alongside "Scope not found"
- * would be a figure from a scan this same line says did not happen. Gated rather than merely
- * unreachable, because the gate is the assertion.
+ * rows still listed, and the notice bar reports the condition (#391). Only a search refused before
+ * it started reaches this branch — and it was superseded into a fresh generation with every counter
+ * zeroed, which is why no skip count is shown for it: it would be a figure from a scan that did not
+ * happen. Gated rather than merely unreachable, because the gate is the assertion. The line says
+ * nothing else for it: the bar is the one place the condition is reported.
  */
 function StatusLine({
   panelId,
@@ -1202,7 +1251,8 @@ function StatusLine({
         : status === 'cancelled'
           ? 'Cancelled'
           : status === 'scopeMissing'
-            ? 'Scope not found'
+            ? // #391 — reported once, in the notice bar, and not repeated here.
+              ''
             : totalMatches === 0
               ? 'No matches'
               : '';

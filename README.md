@@ -60,7 +60,7 @@ goal is to pull all of that into a single, simple customisable workspace.
   or a full one. The explorer toolbar searches the whole project, and any file or folder's
   **Open In → Search → Find** (or **Find & Replace**) opens the panel cleared and pointed at what you
   clicked, ready for a term. It searches **as you type** by default, results stream
-  in as they are found with no ceiling, grouped by file or by folder and file together, and a
+  in as they are found up to 20,000 matches, grouped by file or by folder and file together, and a
   double-click opens a match where you were already reading. A result's own menu offers **Open In**
   when you want it somewhere else — the last active editor, a new one, or another tab, the same three
   targets the file tree offers, each taking you straight to the match rather than to the top of the

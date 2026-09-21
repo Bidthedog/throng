@@ -904,3 +904,41 @@ describe('a scope typed in a different case from the disk (043 T263)', () => {
     expect(harness.updates().some((u) => u.status === 'scopeMissing')).toBe(true);
   });
 });
+
+/*
+ * #391 — a scan lists at most 20,000 matches.
+ *
+ * A search for `e` in a real project listed hundreds of thousands of rows, and Replace All acted on
+ * every one of them. The cap supersedes 043's "no maximum number of matches" Assumption. The count
+ * the status line shows is the count listed, so the two agree.
+ */
+describe('a scan stops listing at 20,000 matches (#391)', () => {
+  it('lists exactly 20,000 of 25,000 matches, and reports 20,000', async () => {
+    const root = await makeRoot();
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 25; i++) files[`src/f${String(i).padStart(2, '0')}.ts`] = linesWithTerm(1_000);
+    await seed(root, files);
+
+    const harness = new Harness();
+    expect(await harness.start({ projectRoot: root })).toEqual({ started: true });
+    await waitFor('the scan to settle', () => harness.settled());
+
+    expect(harness.rows()).toHaveLength(20_000);
+    expect(harness.settled()?.totalMatches).toBe(20_000);
+    // The panel is told the list is partial, so it can say so (FR-094).
+    expect(harness.settled()?.capped).toBe(true);
+  });
+
+  it('lists everything below the cap', async () => {
+    const root = await makeRoot();
+    await seed(root, { 'src/a.ts': linesWithTerm(1_500) });
+
+    const harness = new Harness();
+    await harness.start({ projectRoot: root });
+    await waitFor('the scan to settle', () => harness.settled());
+
+    expect(harness.rows()).toHaveLength(1_500);
+    expect(harness.settled()?.totalMatches).toBe(1_500);
+    expect(harness.settled()?.capped).toBeUndefined();
+  });
+});

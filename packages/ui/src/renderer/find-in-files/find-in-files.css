@@ -286,10 +286,31 @@
   border-color: var(--throng-colour-danger);
 }
 
-.fif-scope__missing {
+/* ── #391 — the ONE notice bar: every condition the panel reports, and nowhere else ─────────── */
+
+.fif-notices {
+  display: flex;
+  flex-direction: column;
   flex: 0 0 auto;
+  gap: 2px;
+  margin: 2px 6px;
+}
+
+/* Raised off the panel body, not painted with it: `surface` is reserved for pane bodies and dialog
+   cards (021 FR-023, `surface-token-roles.test.ts`), and on the panel it would not show at all. */
+.fif-notice {
+  padding: 3px 6px;
   font-size: 0.85em;
-  color: var(--throng-colour-danger);
+  color: var(--throng-colour-text);
+  background: var(--throng-colour-surfaceActive);
+  border-left: 3px solid var(--throng-colour-warning);
+  border-radius: 2px;
+}
+
+/* #391 — a row in a list that is still arriving: drawn disabled, and answers nothing. */
+.fif-row[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── The scan's state, in words (FR-042) ─────────────────────────────────── */

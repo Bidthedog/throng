@@ -582,8 +582,10 @@ and searches every file in the project. **Ctrl+Shift+H** opens the same panel wi
 showing. If you have a single-line selection in an editor or a terminal, it becomes the search term.
 
 - **It searches as you type.** A moment after you stop typing, results stream in as they are found,
-  grouped by file, or by folder and file (the toolbar switches). There is no cap on how many. If you
-  would rather press **Enter**, switch to explicit run under **Settings → Search · Find in Files**.
+  grouped by file, or by folder and file (the toolbar switches). The list stops at 20,000 matches and
+  a notice above it says so; narrow the scope or the term to see the rest. Results are locked until
+  the search finishes, and **✕** stops it at once. If you would rather press **Enter**, switch to
+  explicit run under **Settings → Search · Find in Files**.
 - **The scope box** says where it looks. It is empty for the whole project, or it holds a folder or a
   single file. Type a path relative to the project, or paste a full one, or use the folder button
   beside it. A path outside the project is refused on the box and nothing runs.
