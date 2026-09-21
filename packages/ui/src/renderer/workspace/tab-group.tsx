@@ -70,6 +70,7 @@ import {
   useDragState,
   NEW_TAB_DROP_ID,
 } from './drag-state.js';
+import { dragFromNonInteractive } from './drag-handle.js';
 
 function mergeRefs<T>(...refs: Array<(node: T | null) => void>): (node: T | null) => void {
   return (node) => refs.forEach((ref) => ref(node));
@@ -437,7 +438,7 @@ function TabChip({
         setPopoverSuppressed(true);
         onMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
       }}
-      {...(renaming ? {} : drag.listeners)}
+      {...(renaming ? {} : dragFromNonInteractive(drag.listeners))}
       {...drag.attributes}
     >
       {renaming ? (

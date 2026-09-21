@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
+import { dragFromNonInteractive } from './drag-handle.js';
 import {
   canGoBack,
   canGoForward,
@@ -899,7 +900,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             }),
           );
         }}
-        {...(renaming ? {} : listeners)}
+        {...(renaming ? {} : dragFromNonInteractive(listeners))}
         {...attributes}
       >
         {/* 044 FR-104 — Back / Forward, top left, before the type icon, on editors and previews only (FR-100). */}
