@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1359,5 +1359,41 @@ describe('the glyph controls are announced by their action, not their glyph (#28
     const id = firstPanelId();
 
     expect(screen.getByTestId(`panel-close-${id}`)).toHaveAccessibleName(/ panel$/);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * #406 — a press on a tab's close control never starts a tab drag
+ *
+ * The chip is dnd-kit's drag handle (PointerSensor, 4 px activation). The close control stops
+ * mousedown from reaching the chip, but the sensor listens for POINTERdown, so a press on the X that
+ * moved a few pixels started a reorder drag. The control first: the same press on the title does.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('a press on a tab’s close control never starts a tab drag (#406)', () => {
+  const drag = (from: HTMLElement): void => {
+    fireEvent.pointerDown(from, { isPrimary: true, button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(document, { isPrimary: true, clientX: 30, clientY: 10 });
+    // The first move past the threshold only ACTIVATES; the indicator follows the move after it.
+    fireEvent.pointerMove(document, { isPrimary: true, clientX: 40, clientY: 10 });
+  };
+  const release = (): void => {
+    fireEvent.pointerUp(document, { isPrimary: true, clientX: 30, clientY: 10 });
+  };
+
+  it('the title starts one; the close control does not', async () => {
+    mount();
+    await ready();
+    const tabId = (liveWorkspace().layout as WorkspaceLayout).tabs[0].id;
+
+    drag(screen.getByTestId(`tab-title-${tabId}`));
+    await waitFor(() => expect(screen.queryByTestId('tab-insert-indicator')).not.toBeNull());
+    release();
+    await waitFor(() => expect(screen.queryByTestId('tab-insert-indicator')).toBeNull());
+
+    drag(screen.getByTestId(`tabstrip-close-${tabId}`));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('tab-insert-indicator')).toBeNull();
+    release();
   });
 });
