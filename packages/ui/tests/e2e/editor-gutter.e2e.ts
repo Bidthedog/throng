@@ -74,6 +74,49 @@ test('gutter tokens paint only the gutter, not the editor body', { tag: ['@exten
   }
 });
 
+/*
+ * #384 — the gutter is chrome, not content: its line numbers cannot be selected as text.
+ *
+ * Text selection is off app-wide and re-enabled on `.cm-editor`, and that re-enable reached the
+ * gutter too, so a double-click on a line number or a drag down the gutter painted a selection over
+ * numbers that are not part of the document. Whether a real mouse starts a selection is the engine's
+ * input handling against the cascaded `user-select`, which jsdom does not apply — hence this layer.
+ * The control is the body: a double-click there still selects a word.
+ */
+test('the gutter line numbers cannot be selected; the document body still can (#384)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
+  const root = makeProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'GutterProj', root);
+      const pid = await openEditorWithFile(win);
+      const editor = win.getByTestId(`editor-${pid}`);
+      const selected = (): Promise<string> => win.evaluate(() => window.getSelection()?.toString() ?? '');
+
+      // Control: the document body is selectable.
+      await editor.locator('.cm-line', { hasText: 'three' }).dblclick();
+      await expect.poll(selected).toBe('three');
+
+      // Collapse it, then double-click a line number.
+      await editor.locator('.cm-line', { hasText: 'one' }).click();
+      const numbers = editor.locator('.cm-lineNumbers .cm-gutterElement');
+      await numbers.filter({ hasText: /^2$/ }).dblclick();
+      expect(await selected(), 'a double-click on a line number selected gutter text').toBe('');
+
+      // And a drag down the gutter, from line 1's number to line 4's.
+      const from = await numbers.filter({ hasText: /^1$/ }).boundingBox();
+      const to = await numbers.filter({ hasText: /^4$/ }).boundingBox();
+      if (!from || !to) throw new Error('the gutter line numbers have no layout');
+      await win.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await win.mouse.down();
+      await win.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+      await win.mouse.up();
+      expect(await selected(), 'a drag down the gutter selected gutter text').not.toMatch(/\d/);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
 test('a theme without gutter tokens inherits the default gutter colours (no migration)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();

@@ -218,6 +218,14 @@ textarea,
   -webkit-user-select: text;
 }
 
+/* #384 — but not the editor's GUTTER. The re-enable above cascades to everything inside
+   `.cm-editor`, gutters included, so a double-click on a line number or a drag down the gutter
+   painted a selection over numbers that are not part of the document. The gutter is chrome. */
+.cm-editor .cm-gutters {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .throng-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
