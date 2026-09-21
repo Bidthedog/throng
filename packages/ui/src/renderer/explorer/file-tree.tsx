@@ -58,6 +58,7 @@ import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel, requestPanelFocus } from '../workspace/panel-focus.js';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { guardVisibleRowScroll } from './visible-row-scroll.js';
 
 const ROW_HEIGHT = 24;
 
@@ -592,7 +593,11 @@ export function FileTree({
         )}
         {ready && width > 0 && height > 0 && (
           <Tree<TreeNodeData>
-            ref={treeRef}
+            ref={(api: TreeApi<TreeNodeData> | null | undefined) => {
+              treeRef.current = api ?? null;
+              // #419 — a row already in full view is left where it is; see visible-row-scroll.ts.
+              if (api) guardVisibleRowScroll(api);
+            }}
             data={data}
             idAccessor="id"
             width={width}
