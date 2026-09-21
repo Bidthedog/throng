@@ -100,3 +100,28 @@ describe('orderGroups (FR-035)', () => {
     ]);
   });
 });
+
+/**
+ * The cost of ordering a capped result set (Find in Files cancel report, #391 follow-up).
+ *
+ * The panel re-orders the whole list on every batch a scan streams in. At 20,000 results this took
+ * ~300 ms (measured): `localeCompare` with options builds a collator on every call, and every row in
+ * a file group re-split its own path on every comparison. Batches arrive every 50 ms, so the window
+ * froze for seconds, and a cancel pressed then arrived after the scan had finished. Measured after
+ * the fix: 2.6 ms. The ceiling below is ~40x that and a third of the old cost, so it separates the two
+ * on any machine this runs on rather than timing this one.
+ */
+describe('orderGroups at the result cap', () => {
+  it('orders 20,000 results in well under the time it used to take', () => {
+    const many: ResultRow[] = [];
+    for (let f = 0; f < 400; f++) {
+      for (let l = 0; l < 50; l++) many.push(row(`d${f % 20}/f${f}.ts`, l + 1, 1));
+    }
+    for (const grouping of ['file', 'fileAndFolder'] as const) {
+      const groups = groupRows(many, grouping);
+      const started = performance.now();
+      orderGroups(groups);
+      expect(performance.now() - started, `ordering under ${grouping}`).toBeLessThan(100);
+    }
+  });
+});
