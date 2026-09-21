@@ -335,6 +335,23 @@ describe('replay suppression on the alternate screen (028 T012)', () => {
     expect(res.result.altScreen, 'the view must be told which screen the program is on').toBe(true);
   });
 
+  it('says the program still owns the MOUSE when the tail is withheld (#290)', async () => {
+    // The tail was the rebuilt view's only record of the mouse modes. Withholding it without saying
+    // so left the view on the alternate screen with nobody owning the mouse, and a wheel notch was
+    // typed at the program as arrow keys.
+    const { host, attach, detach } = makeService();
+    await attach({ ...panel, viewId: 'A', cols: 100, rows: 30 });
+    host.emitData(ENTER_ALT_SCREEN);
+    host.emitData(`${String.fromCharCode(27)}[?1003;1006h`);
+    await detach({ panelId: 'p1', viewId: 'A' });
+
+    const res = (await attach({ ...panel, viewId: 'A', cols: 100, rows: 30 })) as {
+      result: { scrollback: string; mouse?: readonly number[] };
+    };
+    expect(res.result.scrollback).toBe('');
+    expect([...(res.result.mouse ?? [])].sort()).toEqual([1003, 1006]);
+  });
+
   it('still replays the tail for a program on the NORMAL screen', async () => {
     // The suppression is about the alternate screen alone: an ordinary shell's scrollback is exactly
     // what a rebuilt view needs, and withholding it would blank a terminal on every tab switch.

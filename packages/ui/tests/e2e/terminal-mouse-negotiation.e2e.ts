@@ -13,14 +13,13 @@ import {
 /*
  * #290, the half PR #343/#346 did not fix — what a rebuilt terminal view believes about the MOUSE.
  *
- * ══ STATUS: SKIPPED, AND FAILING ON PURPOSE ══
+ * ══ STATUS: THE REGRESSION TEST FOR THE FIX ══
  *
- * #290 is `under-observation` with no milestone: the maintainer could not reproduce the defect by
- * hand. This file reproduces it deterministically (2.8s, every run) but through a SYNTHETIC fixture
- * that arms the mouse itself, and it is NOT established that a real session reaches the same state.
- * That gap is exactly why the issue is parked and why this test is skipped rather than deleted — the
- * measurement is worth keeping, the red bar is not. See the skip at the top of the test body for how
- * to run it.
+ * This was the reproduction, parked behind THRONG_I290_REPRO while #290 was under observation. The
+ * maintainer confirmed it matches the reported defect, and it now runs unconditionally. The fix: the
+ * daemon tracks the program's mouse-reporting modes alongside its keyboard negotiation
+ * (negotiation-scan.ts, `mouseModes`), returns them on attach as `mouse`, and a rebuilt view writes
+ * them into xterm the way it writes `1049`. The mechanism below describes the defect as it was.
  *
  * The report is that terminal scrolling dies after a project switch and only a window resize brings
  * it back. The KEYBOARD routes (Ctrl+Home/Ctrl+End, PageUp/PageDown) were fixed by making the daemon
@@ -181,32 +180,6 @@ const ARROW_UP = '\\u001b[A';
 
 // One line, deliberately: e2e-budget.test.ts and e2e-tags.test.ts match the declaration with a LINE-based regex.
 test('a wheel notch still reaches a full-screen program after its panel has been rebuilt (#290)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  /*
-   * SKIPPED BY DEFAULT — #290 is under observation, not scheduled.
-   *
-   * This test FAILS, on purpose: it is the reproduction, and no fix has been written. The
-   * maintainer could not reproduce the defect by hand, so #290 was reclassified `under-observation`
-   * with no milestone, and a red test for unscheduled work would make `npm run gate` permanently
-   * red — which is how a gate stops meaning anything.
-   *
-   * It is skipped IN THE BODY rather than with `test.skip(...)` as the declaration, and that is not
-   * a style choice. Both guards match a declaration with `/^\s*test\(/`
-   * (tests/unit/e2e-budget.test.ts and tests/unit/e2e-tags.test.ts), so `test.skip(` at the front
-   * would drop this file out of BOTH counts: the budget total would fall below its own ratchet, and
-   * the test would carry no visible tags and therefore run in neither lane.
-   *
-   * Run it deliberately:
-   *
-   *     THRONG_I290_REPRO=1 npx playwright test packages/ui/tests/e2e/terminal-mouse-negotiation.e2e.ts --workers=1
-   *
-   * Un-skip it for good when #290 is scheduled, or when someone reproduces the defect from a real
-   * session rather than from this fixture — see the CAVEAT in the header.
-   */
-  test.skip(
-    process.env.THRONG_I290_REPRO !== '1',
-    '#290 is under observation; this reproduction fails by design. Set THRONG_I290_REPRO=1 to run it.',
-  );
-
   const root = mkdtempSync(join(tmpdir(), 'throng-mouseneg-'));
   const logPath = join(root, 'received.log');
   writeFixture(root, logPath);
@@ -254,16 +227,16 @@ test('a wheel notch still reaches a full-screen program after its panel has been
   await term2.click();
 
   /*
-   * The mechanism, asserted where a reader can see it rather than left in the header. This is the
-   * fact that makes the defect inevitable rather than incidental, and it is also what distinguishes
-   * this from the eviction theory: zero replayed bytes at ~4 KiB of session output is a WITHHELD
-   * tail, not an overflowed one.
+   * The mechanism, RECORDED rather than asserted. On a Windows 11 workstation the daemon sees the
+   * program's `1049`, withholds the tail, and this reads 0 — the case that made the defect
+   * inevitable. On the gate's windows-2022 runner it read ~4970 bytes, 4/4: that ConPTY does not
+   * pass `1049` through for the daemon to track, so the tail is replayed there. The wheel must reach
+   * the program either way, and that is what the assertions below decide.
    */
-  expect(
-    await replayedBytes(win),
-    'the rebuilt view was expected to replay nothing, because the daemon withholds the tail for an ' +
-      'alternate-screen program (terminal-service.ts) — if this is non-zero the mechanism has changed',
-  ).toBe(0);
+  test.info().annotations.push({
+    type: 'replayed-bytes',
+    description: String(await replayedBytes(win)),
+  });
 
   /*
    * ══ THE DEFECT, AS THE PERSON WHO FILED #290 EXPERIENCED IT ══

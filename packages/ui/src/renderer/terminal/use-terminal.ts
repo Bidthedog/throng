@@ -965,9 +965,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
           kitty = applyDecPrivateMode(kitty, modes, enable);
           rememberKitty();
         }
-        // Mouse reporting is NOT suppressed: the daemon does not track it, so the replayed tail is
-        // this view's only source for it, and unlike the kitty stack these modes are idempotent
-        // flags that re-applying cannot corrupt.
+        // Mouse reporting is NOT suppressed: unlike the kitty stack these modes are idempotent flags
+        // that re-applying cannot corrupt. The daemon's copy (#290) arrives through this same
+        // handler, as the mode sequence the attach writes, so there is one path, not two.
         mouseReporting.apply(modes, enable); // 028 (issue 187) — same snoop, second question
         return false; // observe only — never claim the sequence
       };
@@ -1525,6 +1525,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
         if (res.keyboard) {
           kitty = res.keyboard;
           rememberKitty();
+        }
+        /*
+         * The mouse, likewise (#290, the wheel). For an alternate-screen program the tail is
+         * withheld, so without this the view held `altBuffer: true` with no mouse reporting — a pair
+         * that was never true while the program ran — and a wheel notch was typed at it as arrows.
+         *
+         * Written as the mode sequence, for the reason the `1049` above is: xterm's OWN mouse
+         * protocol has to be on too, or a notch routed to the program is turned into an arrow key by
+         * xterm's alternate-scroll fallback instead of a mouse report. The DEC-mode snoop sees this
+         * write like any other, so `mouseReporting` follows without a second path. Idempotent flags,
+         * so the tail replayed after it (normal buffer only) cannot corrupt them.
+         */
+        if (res.mouse && res.mouse.length > 0) {
+          term.write(`\x1b[?${res.mouse.join(';')}h`);
         }
         if (res.scrollback) {
           replayingTail = true;

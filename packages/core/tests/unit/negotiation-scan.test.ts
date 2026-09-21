@@ -111,6 +111,39 @@ describe('scanKeyboardNegotiation', () => {
     expect(kittyKeyboardActive(feed(PUSH, '\x1b[?u').state)).toBe(true);
   });
 
+  describe('mouse reporting — the wheel half of #290', () => {
+    /*
+     * A rebuilt view of an alternate-screen program replays NOTHING, so the only record of whether
+     * the program claimed the mouse is the one the daemon kept. Without it the view restores the
+     * alternate screen, believes nobody owns the mouse, and turns a wheel notch into arrow keys.
+     */
+    it('starts with no mouse mode set', () => {
+      expect(createNegotiationScan().mouseModes).toEqual([]);
+    });
+
+    it('sees a program claim the mouse, several modes in one sequence', () => {
+      expect([...feed('\x1b[?1000;1006h').mouseModes].sort()).toEqual([1000, 1006]);
+    });
+
+    it('releases them one at a time, and stays claimed while any remains', () => {
+      expect(feed('\x1b[?1002h\x1b[?1006h', '\x1b[?1002l').mouseModes).toEqual([1006]);
+      expect(feed('\x1b[?1002h\x1b[?1006h', '\x1b[?1002l', '\x1b[?1006l').mouseModes).toEqual([]);
+    });
+
+    it('sees a mouse sequence split across two chunks', () => {
+      const stream = '\x1b[?1003h';
+      for (let cut = 0; cut <= stream.length; cut++) {
+        const scan = feed(stream.slice(0, cut), stream.slice(cut));
+        expect(scan.mouseModes, `split after ${String(cut)} byte(s)`).toEqual([1003]);
+      }
+    });
+
+    it('ignores DEC modes that are not mouse reporting', () => {
+      // 1007 (alternate scroll) is a wheel mode but not a CLAIM on the mouse; 1049 is the screen.
+      expect(feed('\x1b[?1049h\x1b[?1007h\x1b[?2004h').mouseModes).toEqual([]);
+    });
+  });
+
   it('THE DEFECT: applying one tail twice leaves the protocol stuck on (#290)', () => {
     /*
      * This is the whole reason the daemon is now the authority, expressed at the layer where it can

@@ -714,6 +714,12 @@ export type TerminalAttachEnvelope =
        * still contains the sequences that produced it and would count every push a second time.
        */
       keyboard?: import('@throng/core').KittyKeyboardState;
+      /**
+       * The DEC mouse-reporting modes the program has enabled (#290, the wheel). An alternate-screen
+       * program is replayed nothing, so a rebuilt view learns from this alone that the program owns
+       * the mouse — without it a wheel notch is typed at the program as arrow keys.
+       */
+      mouse?: readonly number[];
       exit?: { code: number | null };
       /** A remembered directory that no longer exists; the terminal started at the root (FR-005b). */
       cwdFallback?: string;

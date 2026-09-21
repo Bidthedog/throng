@@ -210,6 +210,16 @@ export interface TerminalAttachResult {
    * this honestly. Absent only when there is no running session to ask.
    */
   keyboard?: KittyKeyboardState;
+  /**
+   * The DEC mouse-reporting modes the program has enabled (#290, the wheel) — the MOUSE half of
+   * `keyboard` above.
+   *
+   * A rebuilt view of an alternate-screen program is replayed nothing, and the tail was its only
+   * source for this. Without it the view restores the alternate screen, believes nobody claimed the
+   * mouse, and routes a wheel notch as arrow keys to a program that asked for mouse reports. Absent
+   * only when there is no running session to ask.
+   */
+  mouse?: readonly number[];
   exit?: { code: number | null; signal?: string };
 }
 

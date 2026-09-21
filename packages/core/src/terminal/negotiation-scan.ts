@@ -5,6 +5,7 @@ import {
   type KittyCsiPrefix,
   type KittyKeyboardState,
 } from './kitty-keyboard.js';
+import { MOUSE_REPORTING_MODES } from './wheel-decision.js';
 
 /**
  * Track a terminal program's KEYBOARD NEGOTIATION from the raw output stream (#290).
@@ -69,13 +70,39 @@ const KITTY_PREFIXES = new Set<string>(['?', '=', '>', '<']);
 export interface NegotiationScan {
   /** What the program has negotiated, after this chunk. */
   readonly state: KittyKeyboardState;
+  /**
+   * The DEC mouse-reporting modes the program has enabled and not yet disabled (#290, the wheel).
+   *
+   * A rebuilt view of an ALTERNATE-screen program is replayed nothing, so it cannot learn this from
+   * the tail — and without it the view restores the alternate screen, believes nobody owns the
+   * mouse, and `decideWheel` turns a notch into arrow keys typed at a program that asked for mouse
+   * reports. A set rather than a flag for the reason `createMouseReportingState` gives: programs
+   * enable several modes and release them one at a time.
+   */
+  readonly mouseModes: readonly number[];
   /** An unterminated trailing escape sequence, to be prepended to the next chunk. */
   readonly pending: string;
 }
 
 /** A fresh scan: nothing negotiated, nothing half-read. */
 export function createNegotiationScan(): NegotiationScan {
-  return { state: createKittyKeyboardState(), pending: '' };
+  return { state: createKittyKeyboardState(), mouseModes: [], pending: '' };
+}
+
+/** Fold one DEC private mode set/reset into the live mouse-reporting set. */
+function applyMouseModes(
+  live: readonly number[],
+  modes: readonly number[],
+  enable: boolean,
+): readonly number[] {
+  const relevant = modes.filter((m) => MOUSE_REPORTING_MODES.includes(m));
+  if (relevant.length === 0) return live;
+  const next = new Set(live);
+  for (const mode of relevant) {
+    if (enable) next.add(mode);
+    else next.delete(mode);
+  }
+  return [...next];
 }
 
 /** `"1;2"` → `[1, 2]`; `""` → `[]`. Empty positions read as 0, as a terminal's parser does. */
@@ -93,6 +120,7 @@ function params(raw: string): number[] {
 export function scanKeyboardNegotiation(previous: NegotiationScan, chunk: string): NegotiationScan {
   const text = previous.pending + chunk;
   let state = previous.state;
+  let mouseModes = previous.mouseModes;
   let consumedTo = 0;
 
   CSI.lastIndex = 0;
@@ -106,11 +134,13 @@ export function scanKeyboardNegotiation(previous: NegotiationScan, chunk: string
       // sequence is only evidence about state, and `applyKittyCsi` leaves state untouched for it.
       state = applyKittyCsi(state, prefix as KittyCsiPrefix, params(m[2] ?? '')).state;
     } else if ((final === 'h' || final === 'l') && prefix === '?') {
-      state = applyDecPrivateMode(state, params(m[2] ?? ''), final === 'h');
+      const modes = params(m[2] ?? '');
+      state = applyDecPrivateMode(state, modes, final === 'h');
+      mouseModes = applyMouseModes(mouseModes, modes, final === 'h');
     }
   }
 
-  return { state, pending: trailingPartial(text, consumedTo) };
+  return { state, mouseModes, pending: trailingPartial(text, consumedTo) };
 }
 
 /**
