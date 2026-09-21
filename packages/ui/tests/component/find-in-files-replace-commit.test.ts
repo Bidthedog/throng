@@ -72,7 +72,11 @@ afterEach(() => {
 async function ready(): Promise<ReturnType<typeof userEvent.setup>> {
   const user = userEvent.setup();
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+  // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+  await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 3 });
   await user.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
   await user.type(screen.getByTestId(`fif-replacement-${PANEL_ID}`), 'thread');
@@ -133,7 +137,11 @@ describe('T093 — the three granularities are distinct, deliberate actions (FR-
   it('the commit rows are drawn LIVE only while replace is disclosed (FR-046)', async () => {
     const user = userEvent.setup();
     renderFindInFilesPanel();
-    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+    // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+    await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
     stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 3 });
 
     await user.pointer({ target: screen.getByTestId('fif-row-src/a.ts-6'), keys: '[MouseRight]' });

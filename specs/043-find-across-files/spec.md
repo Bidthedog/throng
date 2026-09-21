@@ -903,6 +903,8 @@ persist independently, sync one into a sub-workspace and confirm the parent/chil
   > apply to the tree's *Open In → Search* route. That route empties the term, so there is nothing to
   > re-run, and it deliberately starts nothing. The chord and the toolbar control are unchanged: a
   > reused panel re-runs its term on both, under both triggers.
+  > **Partly superseded (2026-09-21) by FR-093** (#389): under as-you-type, `Enter` within 1000 ms of
+  > the last edit is not a run. It is one again after that, and always under explicit run.
 - **FR-043b**: A user-configurable preference MUST offer **as-you-type** scanning as an alternative,
   in which editing the term, the match modes or the search scope starts a scan once typing **settles**
   — never one scan per keystroke. It MUST ship **off**, so the shipped behaviour is FR-043a's explicit
@@ -1735,6 +1737,13 @@ been rewritten or renumbered.
   platform's native dialog cannot offer files and folders in one dialog on Windows — a request for
   both returns folders only — so a file scope is reached by the tree's menu or by typing its path.
   The button's title, "Browse for a folder in this project", stays true.)*
+- **FR-093** *(#389, 2026-09-21)*: With **as-you-type** on, `Enter` in the search input pressed
+  within **1000 ms** of the last edit to the query MUST do nothing — the settle already runs that
+  term, and a second run supersedes it, so the list the user is reading resets and streams again.
+  After that window, `Enter` is an explicit run exactly as FR-043a says. The window is a constant,
+  not a preference. Under the explicit-run trigger `Enter` is unchanged. The run control and the
+  invocation routes are unaffected: only `Enter` is an idiom pressed by habit straight after typing.
+  **Supersedes, in part, FR-043a** — see the note there.
 
 ### Key Entities
 

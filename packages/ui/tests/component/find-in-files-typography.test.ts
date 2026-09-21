@@ -119,7 +119,11 @@ afterEach(() => {
 async function withOneResult(): Promise<void> {
   const user = userEvent.setup();
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+  // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+  await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   bridge.emit({
     panelId: PANEL_ID,
     generation: 1,

@@ -75,7 +75,11 @@ afterEach(() => {
 async function withResults(): Promise<ReturnType<typeof userEvent.setup>> {
   const user = userEvent.setup();
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+  // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+  await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 2 });
   return user;
 }
@@ -228,7 +232,11 @@ describe('T208 — a committed row shows the file as it now is (FR-083, FR-083a)
   async function readyForCommit(): Promise<ReturnType<typeof userEvent.setup>> {
     const user = userEvent.setup();
     renderFindInFilesPanel();
-    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+    // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+    await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
     stub.emit({
       panelId: PANEL_ID,
       generation: 1,
