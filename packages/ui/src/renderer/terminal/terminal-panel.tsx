@@ -43,6 +43,7 @@ import {
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
 import { requestRedraw } from './redraw.js';
+import { setTerminalDebugLogging, terminalDebug } from './debug-log.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
 import { TerminalStatusBar } from './terminal-status-bar.js';
 import {
@@ -218,7 +219,11 @@ export function TerminalPanel({
   const [attached, setAttached] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const config = (panel.config ?? {}) as Partial<TerminalPanelConfig>;
-  const terminalSettings = useAppSettings().terminals;
+  const appSettings = useAppSettings();
+  const terminalSettings = appSettings.terminals;
+  // #290/#162 — terminal debug lines follow `diagnostics.logLevel`, in every window a terminal is in.
+  const debugLogging = appSettings.diagnostics.logLevel === 'debug';
+  useEffect(() => setTerminalDebugLogging(debugLogging), [debugLogging]);
   const showStatusBar = terminalSettings.showStatusBar;
   const xtermTheme = useMemo(() => buildXtermTheme(theme), [theme]);
   const font = useMemo(() => terminalFont(theme), [theme]);
@@ -375,7 +380,16 @@ export function TerminalPanel({
           startFailure: startFailureRef.current !== null,
           actions: {
             copySelection: () => {
-              void window.throng?.terminal?.writeClipboard?.(selection);
+              // #290 — the copy symptom: Copy enabled, clipboard unchanged. Record what was sent and
+              // whether the write came back, so a log from the fault can tell the two halves apart.
+              terminalDebug(panel.id, 'menu-copy', { selectionLength: selection.length });
+              void window.throng?.terminal
+                ?.writeClipboard?.(selection)
+                .then(
+                  () => terminalDebug(panel.id, 'menu-copy-written', {}),
+                  (error: unknown) =>
+                    terminalDebug(panel.id, 'menu-copy-failed', { error: String(error) }),
+                );
             },
             paste: () => apiRef.current?.paste(),
             redraw: () => requestRedraw(panel.id, 'manual'),

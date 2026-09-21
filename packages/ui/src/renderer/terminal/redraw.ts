@@ -1,4 +1,5 @@
 import { countReconcile, type ReconcileTrigger } from './diagnostics.js';
+import { terminalDebug } from './debug-log.js';
 
 /**
  * Ask the daemon to make a terminal's running program redraw its whole screen (028, #162/#163).
@@ -34,6 +35,8 @@ export function registerTerminalRefresh(panelId: string, refresh: () => void): (
 
 export function requestRedraw(panelId: string, trigger: ReconcileTrigger): void {
   countReconcile(panelId, trigger);
+  // #162 debug: which redraws happened, and why — a manual one after a garble is the tell.
+  terminalDebug(panelId, 'redraw', { trigger, hasRefresher: refreshers.has(panelId) });
   // Ask the program, for the case where only the program can answer…
   void window.throng?.terminal?.repaint?.(panelId);
   // …and repaint the view regardless, which is the whole of a normal-screen redraw and harmless

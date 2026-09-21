@@ -285,7 +285,10 @@ running, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`.
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
 behind instead of vanishing. `diagnostics.logLevel`, `diagnostics.maxFileSizeKb` and
 `diagnostics.keepFiles` control how much is kept and for how long; the **Logging** section of the
-preferences window edits those same values.
+preferences window edits those same values. At `debug`, terminals also write `[renderer-terminal]`
+lines to `main.log` — what each view was handed when it attached, screen and mouse mode changes,
+wheel routing, selections, menu copies and redraws — for diagnosing a terminal that misbehaves on
+one machine only.
 
 ### Running a dev build beside an installed throng
 

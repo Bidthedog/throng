@@ -6,6 +6,7 @@ import {
   applyDecPrivateMode,
   applicationReadingInput,
   createMouseReportingState,
+  MOUSE_REPORTING_MODES,
   kittyKeyboardActive,
   win32InputActive,
   decideWheel,
@@ -71,6 +72,10 @@ import {
   recordModeEvent,
 } from './diagnostics.js';
 import { requestRedraw, registerTerminalRefresh } from './redraw.js';
+import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
+
+/** #290 debug — the DEC modes worth a log line: the screens, alternate scroll, and mouse reporting. */
+const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
 
 /*
@@ -701,6 +706,25 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // private-mode snoop that already drives the win32-input gate, because the wheel decision below
     // must not steal a gesture from a program that genuinely claimed the mouse.
     const mouseReporting = createMouseReportingState();
+    /*
+     * #290 debug — the copy symptom. With the program owning the mouse a drag should reach IT and
+     * xterm should hold no selection; a selection appearing while the program believes it owns the
+     * mouse is the state the report describes. Logged on the empty→non-empty edge only.
+     */
+    let hadSelection = false;
+    term.onSelectionChange(() => {
+      if (!terminalDebugEnabled()) return;
+      const has = term.hasSelection();
+      if (has && !hadSelection) {
+        terminalDebug(panelId, 'selection', {
+          length: term.getSelection().length,
+          buffer: term.buffer.active.type,
+          mouseReporting: mouseReporting.isOn(),
+          xtermMouse: term.modes.mouseTrackingMode,
+        });
+      }
+      hadSelection = has;
+    });
 
     // The key handler does three things, in order:
     //   1. Hand throng's own chords (find, scrollback nav) back to the app — returning false
@@ -864,12 +888,36 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * synthesised keys at a shell prompt would type into the user's command line (FR-035c). That is
      * why the decision is a pure function pinned by unit tests rather than an inline condition.
      */
+    // #290 debug: one line per CHANGE in what a notch was decided from, plus a heartbeat with the
+    // count, rather than one per event — a wheel spin is dozens of events a second.
+    let wheelSignature = '';
+    let wheelCount = 0;
+    let wheelLoggedAt = 0;
     term.attachCustomWheelEventHandler((e) => {
       const route = decideWheel({
         altBuffer: term.buffer.active.type === 'alternate',
         mouseReporting: mouseReporting.isOn(),
         ctrlKey: e.ctrlKey || e.metaKey,
       });
+      if (terminalDebugEnabled()) {
+        wheelCount += 1;
+        const signature = `${route}|${term.buffer.active.type}|${String(mouseReporting.isOn())}|${term.modes.mouseTrackingMode}`;
+        const now = Date.now();
+        if (signature !== wheelSignature || now - wheelLoggedAt > 2000) {
+          terminalDebug(panelId, 'wheel', {
+            route,
+            buffer: term.buffer.active.type,
+            mouseReporting: mouseReporting.isOn(),
+            xtermMouse: term.modes.mouseTrackingMode,
+            viewportY: term.buffer.active.viewportY,
+            baseY: term.buffer.active.baseY,
+            notchesSinceLastLine: wheelCount,
+          });
+          wheelSignature = signature;
+          wheelLoggedAt = now;
+          wheelCount = 0;
+        }
+      }
       if (route === 'arrows') {
         // Three presses per notch — the conventional scroll step, and what xterm's own alternate
         // scroll sends. The bytes are exactly what a real arrow key produces, so the program cannot
@@ -969,6 +1017,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // that re-applying cannot corrupt. The daemon's copy (#290) arrives through this same
         // handler, as the mode sequence the attach writes, so there is one path, not two.
         mouseReporting.apply(modes, enable); // 028 (issue 187) — same snoop, second question
+        // #290 debug: the screen and mouse modes only — the ones the wheel and copy depend on.
+        if (modes.some((m) => DEBUG_LOGGED_MODES.has(m))) {
+          terminalDebug(panelId, 'dec-mode', {
+            modes,
+            enable,
+            replayingTail,
+            mouseReporting: mouseReporting.isOn(),
+          });
+        }
         return false; // observe only — never claim the sequence
       };
     term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, onDecPrivateMode(true));
@@ -1540,6 +1597,18 @@ export function useTerminal(opts: UseTerminalOptions): void {
         if (res.mouse && res.mouse.length > 0) {
           term.write(`\x1b[?${res.mouse.join(';')}h`);
         }
+        // #290/#162 debug: what this (re)built view was handed, and what it holds after adopting it.
+        terminalDebug(panelId, 'attach', {
+          status: res.status,
+          altScreen: res.altScreen,
+          mouse: res.mouse,
+          kitty: res.keyboard ? kittyKeyboardActive(res.keyboard) : undefined,
+          replayBytes: res.scrollback?.length ?? 0,
+          redrawn: res.redrawn,
+          grid: res.grid,
+          view: { cols: term.cols, rows: term.rows },
+          buffer: term.buffer.active.type,
+        });
         if (res.scrollback) {
           replayingTail = true;
           term.write(res.scrollback, () => {
@@ -1663,6 +1732,11 @@ export function useTerminal(opts: UseTerminalOptions): void {
      */
 
     return () => {
+      terminalDebug(panelId, 'view-dispose', {
+        buffer: term.buffer.active.type,
+        mouseReporting: mouseReporting.isOn(),
+        xtermMouse: term.modes.mouseTrackingMode,
+      });
       disposed = true;
       applyResizeRef.current = null;
       if (resizeTimer !== undefined) clearTimeout(resizeTimer);
