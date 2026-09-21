@@ -295,6 +295,8 @@ contextBridge.exposeInMainWorld('throng', {
   diagnostics: {
     openLogs: (): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
       ipcRenderer.invoke('throng:diagnostics:openLogs'),
+    /** #290/#162 — terminal debug lines into main.log; the renderer sends only at level `debug`. */
+    debug: (message: string) => ipcRenderer.send('throng:diagnostics:debug', message),
   },
   about: {
     // Cog → About throng (020, FR-003): create-or-focus the single shared, app-modal

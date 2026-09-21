@@ -66,6 +66,8 @@ declare global {
       /** #123 — reveal the logs + crash reports folder in the OS file manager. */
       diagnostics?: {
         openLogs: () => Promise<{ ok: true; path: string } | { ok: false; error: string }>;
+        /** #290/#162 — one terminal debug line into main.log (written only at level `debug`). */
+        debug?: (message: string) => void;
       };
       about?: {
         open: () => void;

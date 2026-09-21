@@ -88,6 +88,7 @@ import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { acquireSingleInstance } from './single-instance.js';
 import { installCrashHandlers, startUiDiagnostics } from './diagnostics.js';
 import { registerNoticeLogIpc } from './notice-log.js';
+import { registerRendererDebugLogIpc } from './renderer-debug-log.js';
 import {
   hasUserDataDirSwitch,
   instanceConfigRoot,
@@ -904,6 +905,8 @@ if (isPrimaryInstance)
   // Wired through `logAlways`, so `diagnostics.logLevel` cannot silently swallow the record of a
   // notice the user asked never to be shown (FR-006b) — which is the only evidence it happened.
   registerNoticeLogIpc(diagnostics, ipcMain);
+  // #290/#162 — the renderer's terminal debug lines, written only at `diagnostics.logLevel: debug`.
+  registerRendererDebugLogIpc(diagnostics.log, ipcMain);
 
   /*
    * Nullable ref to the main window, for the Preferences and About windows' parent.
