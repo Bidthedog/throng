@@ -322,6 +322,19 @@ export interface FindInFilesPanelState {
    * user's next keystroke in the wrong field.
    */
   readonly focusTarget: 'search' | 'replacement';
+  /**
+   * The cancel ✕ decides what THIS window shows, not only what main does.
+   *
+   * Measured: a scan that hits the cap finishes in main in under 300 ms, while the batches it has
+   * already sent take the renderer seconds to fold. A cancel reaching main then finds nothing
+   * running and is ignored, so the batches in flight kept landing and the run ended "complete" —
+   * the ✕ did nothing. So a cancel drops every update from this panel's runs up to and including
+   * the newest one this window has seen, and while no new run has been started it drops everything
+   * (`Infinity`): main may still send the run the ✕ interrupted before it hears the cancel.
+   */
+  readonly dropThrough: number;
+  /** The highest generation any update for this panel has carried, dropped or not. */
+  readonly seenGeneration: number;
 }
 
 const panels = new Map<string, FindInFilesPanelState>();
@@ -447,8 +460,13 @@ function subscribe(cb: () => void): () => void {
  * which is what this checks, so a batch from an abandoned walk costs no render either.
  */
 function receive(update: FileSearchUpdateEvent): void {
-  const panel = panels.get(update.panelId);
-  if (!panel) return;
+  const found = panels.get(update.panelId);
+  if (!found) return;
+  const panel =
+    update.generation > found.seenGeneration ? { ...found, seenGeneration: update.generation } : found;
+  if (panel !== found) panels.set(update.panelId, panel);
+  // The ✕ was pressed on this run, or on the one before a run this window has not started yet.
+  if (update.generation <= panel.dropThrough) return;
   const results = applyFileSearchUpdate(panel.results, update);
   /*
    * A NEW generation is a NEW RUN — the one fact both clauses below turn on.
@@ -581,6 +599,8 @@ export function ensureFindInFilesPanel(panelId: string, init: FindInFilesPanelIn
     seedSeq: 0,
     adoptSeq: 0,
     focusTarget: 'search',
+    dropThrough: 0,
+    seenGeneration: 0,
   });
   emit();
 }
@@ -776,6 +796,8 @@ export function runFindInFiles(panelId: string): void {
   panels.set(panelId, {
     ...panel,
     results: { ...panel.results, status: 'running' },
+    // A run started here is wanted: only generations already seen stay dropped.
+    dropThrough: panel.dropThrough === Infinity ? panel.seenGeneration : panel.dropThrough,
   });
   emit();
 
@@ -827,6 +849,27 @@ export function runFindInFiles(panelId: string): void {
 
 /** Cancel a running scan (FR-043). Idempotent: cancelling a finished scan is a no-op. */
 export function cancelFindInFiles(panelId: string): void {
+  /*
+   * The panel stops NOW, whatever main has already sent — see `dropThrough`. It reads Cancelled and
+   * lists nothing, which is what main's own cancel shows (FR-043: a cancelled walk yields nothing,
+   * not a truncated set). Fresh arrays: the fold appends in place.
+   */
+  update(panelId, (p) =>
+    p.results.status !== 'running'
+      ? p
+      : {
+          ...p,
+          dropThrough: Infinity,
+          results: {
+            ...NO_FILE_SEARCH_RESULTS,
+            rows: [],
+            staleFiles: [],
+            status: 'cancelled',
+            generation: p.results.generation,
+            version: p.results.version + 1,
+          },
+        },
+  );
   window.throng?.fileSearch?.cancel?.(panelId);
 }
 
@@ -913,6 +956,8 @@ export function resetFindInFilesPanel(
     },
     seedSeq: p.seedSeq + 1,
     focusTarget: 'search',
+    dropThrough: 0,
+    seenGeneration: 0,
   }));
   window.throng?.fileSearch?.clear?.(panelId);
 }
