@@ -165,8 +165,14 @@ describe('every action button has visible space between its glyph and its border
     // stay uniform across "Aa", "ab" and an emoji, which is what `box-sizing: border-box` on a
     // fixed width and height guarantees once padding exists.
     expect(declared(button, 'box-sizing')).toBe('border-box');
-    expect(px(button, 'width')).toBeGreaterThan(0);
-    expect(px(button, 'width')).toBe(px(button, 'height'));
+    // #381 — the box is a `calc()` over the icon token now, which jsdom cannot compute, so the two
+    // declarations are compared as written. Whether the box HOLDS the glyph at every icon size is
+    // `icon-control-box.test.ts`'s arithmetic.
+    const rule = readFileSync(FIND_BAR_CSS, 'utf8').match(/\.find-bar-btn \{([^}]*)\}/)?.[1] ?? '';
+    const width = /(?:^|[;\s])width:\s*([^;]+);/.exec(rule)?.[1];
+    const height = /(?:^|[;\s])height:\s*([^;]+);/.exec(rule)?.[1];
+    expect(width, '.find-bar-btn declares no width').toContain('var(--throng-size-icon');
+    expect(width).toBe(height);
   });
 });
 

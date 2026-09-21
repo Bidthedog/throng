@@ -73,18 +73,27 @@
 
 /* Collapse/expand control — absolutely pinned to the pane's top-outer corner so
    it keeps the SAME position + size whether the pane is expanded (sitting beside
-   the panel title) or collapsed (the only thing in the rail). (FR #3) */
+   the panel title) or collapsed (the only thing in the rail). (FR #3)
+
+   #381 — the size is DERIVED from `--throng-size-icon` (glyph + 2px room + 1px border, each side),
+   so it is still the same in both states, and still 22px at the default 16. Everything positioned
+   around it derives from the same token: the rail's top padding below, the panel-title clearance
+   below that, and the rail's width (`railWidthPx` in panes/rail-width). A frozen 22px let a larger
+   icon size in the Themes editor spill the glyph over the pane header. */
 .pane-collapse {
+  --pane-collapse-room: 2px;
+  --pane-collapse-border: 1px;
+
   position: absolute;
   top: 5px;
-  width: 22px;
-  height: 22px;
+  width: calc(var(--throng-size-icon) + (var(--pane-collapse-room) + var(--pane-collapse-border)) * 2);
+  height: calc(var(--throng-size-icon) + (var(--pane-collapse-room) + var(--pane-collapse-border)) * 2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   color: var(--throng-colour-textMuted);
-  border: 1px solid var(--throng-colour-border);
+  border: var(--pane-collapse-border) solid var(--throng-colour-border);
   border-radius: 4px;
   cursor: pointer;
   z-index: 6;
@@ -107,7 +116,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 32px;
+  /* Clear of the collapse control: 5px above it, its box, 5px below (32px at the default icon). */
+  padding-top: calc(var(--throng-size-icon) + 16px);
   background: var(--throng-colour-railBg);
   overflow: hidden;
 }
@@ -124,11 +134,12 @@
 }
 
 /* Push the top panel's title clear of the absolute collapse button. */
+/* 5px inset + the control's box + 7px gap: 34px at the default icon, and it grows with the control. */
 .pane--sidebar .pane-sidebar__body .sidebar-panel:first-child .panel__header {
-  padding-left: 34px;
+  padding-left: calc(var(--throng-size-icon) + 18px);
 }
 .pane--explorer .pane-explorer__body .panel__header {
-  padding-right: 34px;
+  padding-right: calc(var(--throng-size-icon) + 18px);
 }
 
 /* Rotated, uppercased label shown in a collapsed gutter (rail). */
