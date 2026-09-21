@@ -232,6 +232,15 @@
   right: 2px;
 }
 
+/* No hover BOX for the clear: it sits inside the input, over its right-hand edge, so `.fif-btn`'s
+   filled background and border were drawn on top of the focused input's own border. The glyph's
+   colour, from the generic hover rule above, is the whole cue. Same shape as that rule — so the same
+   specificity — and later, so this one wins. */
+:where(body:not([data-window-blurred])) .fif-btn--clear:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+
 /* An engaged toggle — a match mode, or the grouping in force — reads as SELECTED, which is the
    `surfaceActive` role rather than the hover one. */
 .fif-btn--on {
