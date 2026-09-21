@@ -95,7 +95,10 @@ afterEach(() => {
 async function ready(): Promise<ReturnType<typeof userEvent.setup>> {
   const user = userEvent.setup();
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+  // The run control, not Enter: under the shipped as-you-type default an Enter this soon after typing
+  // is ignored (#389), and this file needs a scan started NOW.
+  await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 3 });
   return user;
 }
@@ -266,7 +269,11 @@ describe('044 — a result row never offers Preview (FR-054, FR-055)', () => {
     });
     const user = userEvent.setup();
     renderFindInFilesPanel();
-    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle{Enter}');
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+
+    // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
+
+    await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
     stub.emit({
       panelId: PANEL_ID,
       generation: 1,

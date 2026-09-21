@@ -280,6 +280,63 @@ describe('with as-you-type on, a settled edit starts a scan (FR-043b)', () => {
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
+ * #389 — Enter straight after typing, under as-you-type, is one search, not two
+ *
+ * A quick typer presses Enter out of habit. The as-you-type settle already covers the term, so a
+ * second scan wipes the list from under them and walks the tree again. Within 1000 ms of the last
+ * edit to the query, Enter does nothing (narrowing FR-043a under the as-you-type trigger only).
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('with as-you-type on, Enter just after typing starts no second scan (#389)', () => {
+  beforeEach(() => {
+    config.settings = settings({ trigger: 'asYouType' });
+  });
+
+  it('Enter before the settle fires: one scan, for the typed term', () => {
+    mount();
+    type('needle');
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    tick(SETTLE_MS * 20);
+
+    expect(startedTerms()).toEqual(['needle']);
+  });
+
+  it('Enter just after the settled scan started: still one scan', () => {
+    mount();
+    type('needle');
+    tick(SETTLE_MS + 10);
+    expect(startedTerms()).toEqual(['needle']);
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    tick(SETTLE_MS * 20);
+
+    expect(startedTerms()).toEqual(['needle']);
+  });
+
+  it('the run control straight after typing: one scan, and the pending settle is dropped', () => {
+    mount();
+    type('needle');
+    fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
+    expect(startedTerms()).toEqual(['needle']);
+
+    tick(SETTLE_MS * 20);
+
+    expect(startedTerms()).toEqual(['needle']);
+  });
+
+  it('Enter a second after the last edit is an explicit re-run again', () => {
+    mount();
+    type('needle');
+    tick(1_000 + 10);
+    expect(startedTerms()).toEqual(['needle']);
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+
+    expect(startedTerms()).toEqual(['needle', 'needle']);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
  * FR-043a's final clause — invoking find in files IS an explicit run
  * ────────────────────────────────────────────────────────────────────────── */
 
@@ -287,7 +344,9 @@ describe('invoking find in files runs (FR-043a, T064c)', () => {
   it('re-runs a reused panel’s existing term when nothing is seeded', () => {
     mount();
     type('needle');
-    fireEvent.keyDown(input(), { key: 'Enter' });
+    // The settle runs it. An Enter here would be ignored under the shipped as-you-type default — it
+    // lands inside #389's window, where the settle already covers the term.
+    tick(SETTLE_MS + 10);
     expect(startedTerms()).toEqual(['needle']);
 
     // The user pressed the chord again with no selection: they asked for a search, and the term

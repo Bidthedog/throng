@@ -164,6 +164,16 @@ function ClearInput({
 const SETTLE_CEILING_FACTOR = 4;
 
 /**
+ * How long after the last edit to the query `Enter` is ignored under as-you-type (#389).
+ *
+ * The settle already runs the term the user just typed, so an `Enter` pressed out of habit straight
+ * afterwards used to start a SECOND scan that superseded the first — the list filled, reset and
+ * streamed again. Inside this window `Enter` does nothing; after it, `Enter` is an explicit re-run
+ * again (FR-043a, narrowed by #389 under the as-you-type trigger only). Hard-coded, not a preference.
+ */
+const ENTER_AFTER_EDIT_IGNORED_MS = 1000;
+
+/**
  * The two groupings, in the order their controls are drawn (FR-033, narrowed by FR-073).
  *
  * The icon token is NOT carried here. Each control below writes its own `<Icon token="…" />`
@@ -347,6 +357,8 @@ export function FindInFilesPanel({
   });
   /** The query as it was last seen, so an effect can tell an edit from a re-render. */
   const seen = useRef<string | null>(null);
+  /** When the user last EDITED the query — not an invocation, not an adoption (#389). */
+  const lastEditAt = useRef<number | null>(null);
 
   const settleMs = prefs.settleMs;
   const asYouType = prefs.trigger === 'asYouType';
@@ -378,6 +390,20 @@ export function FindInFilesPanel({
       runFindInFiles(panelId);
     }, settleMs);
   }, [panelId, settleMs]);
+
+  /**
+   * An explicit run — `Enter`, the run control or the menu's Run (FR-043a).
+   *
+   * It drops a settle still pending from typing, exactly as an invocation does below: the run has just
+   * searched the query on screen, and the timer would search it again a moment later, superseding
+   * the list the user is already reading (#389).
+   */
+  const runNow = useCallback((): void => {
+    if (burst.current.timer) clearTimeout(burst.current.timer);
+    burst.current.timer = null;
+    burst.current.startedAt = null;
+    runFindInFiles(panelId);
+  }, [panelId]);
 
   /*
    * 043 T260 — the invocation counter as this effect last saw it.
@@ -437,6 +463,7 @@ export function FindInFilesPanel({
       return;
     }
     if (!changed) return;
+    lastEditAt.current = Date.now();
     if (asYouType) scheduleScan();
   }, [queryKey, invocationSeq, adoptSeq, asYouType, scheduleScan]);
 
@@ -625,7 +652,11 @@ export function FindInFilesPanel({
     // chord — the run COMMAND is the rebindable route to the same thing.
     if (event.key !== 'Enter' || event.altKey || event.ctrlKey) return;
     event.preventDefault();
-    runFindInFiles(panelId);
+    // #389 — under as-you-type the settle already covers a term typed a moment ago; a second run
+    // here would supersede it and re-stream the list.
+    const sinceEdit = lastEditAt.current === null ? Infinity : Date.now() - lastEditAt.current;
+    if (asYouType && sinceEdit < ENTER_AFTER_EDIT_IGNORED_MS) return;
+    runNow();
   };
 
   /*
@@ -702,7 +733,7 @@ export function FindInFilesPanel({
         grouping: state.grouping,
         keybindings,
         actions: {
-          run: () => runFindInFiles(panelId),
+          run: runNow,
           cancel: () => cancelFindInFiles(panelId),
           toggleReplace: () => toggleFindInFilesReplace(panelId),
           setGrouping: (next) => setFindInFilesGrouping(panelId, next, prefs.rememberGrouping),
@@ -938,7 +969,7 @@ export function FindInFilesPanel({
             className="fif-btn"
             data-testid={`fif-run-${panelId}`}
             title="Run search"
-            onClick={() => runFindInFiles(panelId)}
+            onClick={runNow}
           >
             <Icon token="search" />
           </button>
