@@ -86,21 +86,25 @@
  * scaled to fit inside it rather than being allowed to set the button's dimensions. */
 /* 021 (FR-027) — the find bar's action buttons are Confirm-type (they act on the search), so they
    consume only the Confirm tokens for rest / hover / pressed — no borrowed accent or border. */
+/* #381 — the box is DERIVED from `--throng-size-icon`, the size `.icon` gives the glyph, plus
+   everything `border-box` spends on both sides: padding AND border. It was a frozen 24px, which is
+   the default glyph and nothing more, so raising `sizes.iconPx` one step clipped every glyph here.
+   At the default 16 the box is still 24. (`.fif-btn` is the twin, and was fixed the same way.)
+   The two terms are written as literals — 3px padding, 1px border — because `find-bar-toolbar.test.ts`
+   reads this rule through jsdom's computed style, which resolves no `var()`. */
 .find-bar-btn {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 24px;
-  height: 24px;
+  width: calc(var(--throng-size-icon) + (3px + 1px) * 2);
+  height: calc(var(--throng-size-icon) + (3px + 1px) * 2);
   /* 043 (FR-010) — visible space between the glyph and the border, on all four sides. It was `0`,
      so every glyph sat hard against its own edge and the control read as a bordered character
-     rather than a button. The box stays 24px because `box-sizing` is border-box, so the padding
-     comes out of the glyph's room rather than out of the row's. */
+     rather than a button. */
   padding: 3px;
   overflow: hidden;
-  font-size: 12px;
   line-height: 1;
   color: var(--throng-colour-confirmButtonText);
   text-align: center;

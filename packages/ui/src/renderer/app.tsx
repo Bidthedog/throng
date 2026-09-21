@@ -59,10 +59,8 @@ import { usePersistedBool } from './panes/use-persisted-bool.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 import { navigateFocusedHistory } from './navigation/navigate-history.js';
+import { railWidthPx } from './panes/rail-width.js';
 
-/** Fixed width (px) of a collapsed side-pane rail. Sized so the 22px collapse
- *  button (pinned 5px from the outer edge) has an equal 5px margin on both sides. */
-const RAIL_WIDTH = 32;
 
 /** The middle (workspace) pane never shrinks below this; the side panes yield to
  *  preserve it (right/Explorer first, then the left sidebar). The app's minimum
@@ -811,8 +809,13 @@ export function App(): ReactElement {
   // clearance) renders at a sensible width — reduced toward its min, Explorer first
   // — instead of crushing the workspace. This is display-only (the stored width is
   // untouched), so the pane grows back to its set width when the window widens.
-  let leftW = leftShown ? sidebarWidth.value : RAIL_WIDTH;
-  let rightW = rightShown ? explorerWidth.value : RAIL_WIDTH;
+  // Live theme from the user config (hot-reloads when themes/*.json changes).
+  const activeTheme = useActiveTheme();
+  // #381 — a collapsed rail is sized around its collapse control, which grows with the icon size.
+  const railWidth = railWidthPx(activeTheme.sizes?.iconPx ?? 16);
+
+  let leftW = leftShown ? sidebarWidth.value : railWidth;
+  let rightW = rightShown ? explorerWidth.value : railWidth;
   if (shellWidth > 0) {
     let over = leftW + rightW + WORKSPACE_MIN_WIDTH - shellWidth;
     if (over > 0 && rightShown) {
@@ -843,12 +846,14 @@ export function App(): ReactElement {
     userRight: rightToggle.value,
     sidebarW: sidebarWidth.value,
     explorerW: explorerWidth.value,
+    railW: railWidth,
   });
   coordRef.current = {
     userLeft: leftVisible.value,
     userRight: rightToggle.value,
     sidebarW: sidebarWidth.value,
     explorerW: explorerWidth.value,
+    railW: railWidth,
   };
   useEffect(() => {
     const el = shellRef.current;
@@ -859,14 +864,14 @@ export function App(): ReactElement {
       setShellWidth(total); // drives the render-time width clamp above
       const c = coordRef.current;
       // Footprint of each pane at the user's set width (or a rail when collapsed).
-      const occLeft = c.userLeft ? c.sidebarW : RAIL_WIDTH;
-      const occRight = c.userRight ? c.explorerW : RAIL_WIDTH;
+      const occLeft = c.userLeft ? c.sidebarW : c.railW;
+      const occRight = c.userRight ? c.explorerW : c.railW;
       let needRight = false;
       let needLeft = false;
       if (occLeft + occRight + WORKSPACE_MIN_WIDTH > total) {
         if (c.userRight) {
           needRight = true; // Explorer collapses first
-          if (c.userLeft && c.sidebarW + RAIL_WIDTH + WORKSPACE_MIN_WIDTH > total) needLeft = true;
+          if (c.userLeft && c.sidebarW + c.railW + WORKSPACE_MIN_WIDTH > total) needLeft = true;
         } else if (c.userLeft) {
           needLeft = true; // Explorer already a rail → collapse the sidebar
         }
@@ -898,9 +903,6 @@ export function App(): ReactElement {
       rightToggle.set(true);
     }
   };
-
-  // Live theme from the user config (hot-reloads when themes/*.json changes).
-  const activeTheme = useActiveTheme();
 
   return (
     <ThemeProvider theme={activeTheme}>
