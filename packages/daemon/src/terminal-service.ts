@@ -457,6 +457,7 @@ export class TerminalService {
           redrawn,
           altScreen: existing.altScreen,
           keyboard: existing.negotiation.state,
+          mouse: existing.negotiation.mouseModes,
         };
       }
       this.terminate(existing);
