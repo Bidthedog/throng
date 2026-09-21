@@ -1,6 +1,6 @@
 {
   "name": "throng",
-  "version": "1.0.0-alpha5",
+  "version": "1.0.0-alpha6",
   "private": true,
   "description": "throng — project-first terminal & agent workspace",
   "author": "Christopher Sebok",
@@ -72,7 +72,7 @@
     "jsdom": "^29.1.1",
     "playwright": "^1.48.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.70.0",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.11"
   },
   "dependencies": {

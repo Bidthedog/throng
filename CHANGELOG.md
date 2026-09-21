@@ -29,6 +29,41 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha6 — 2026-09-21
+
+### Added
+- **Terminal debug logging** ([#290](https://github.com/Bidthedog/throng/issues/290),
+  [#162](https://github.com/Bidthedog/throng/issues/162)): with **Log level** set to `debug`
+  (Settings → Logging), terminals write `[renderer-terminal]` lines to `main.log` — what each view
+  was handed when it reattached, screen and mouse mode changes, where each wheel notch went,
+  selections, menu copies and redraws. For diagnosing a terminal that misbehaves on one machine only;
+  at the default level nothing is written and nothing is sent.
+
+### Fixed
+- **The mouse wheel works again in a full-screen terminal program after a tab or project switch**
+  ([#290](https://github.com/Bidthedog/throng/issues/290)). Coming back to a terminal running a
+  program that uses the mouse — Claude Code, `vim`, `less` — used to turn each wheel notch into
+  arrow-key presses until the panel was resized. throng now remembers that the program owns the
+  mouse while its panel is hidden.
+- **Find in Files** ([#389](https://github.com/Bidthedog/throng/issues/389),
+  [#391](https://github.com/Bidthedog/throng/issues/391),
+  [#421](https://github.com/Bidthedog/throng/issues/421),
+  [#422](https://github.com/Bidthedog/throng/issues/422)): pressing Enter straight after typing no
+  longer runs the search twice; results are capped at 20,000 and locked while a search runs, with one
+  notice bar for a missing scope, a scope outside the project and the cap; ✕ cancels at once, and a
+  search that reaches the cap no longer freezes the window; the ✕ inside an input no longer draws a
+  hover box over its border.
+- **Editor gutter line numbers can no longer be selected as text**
+  ([#384](https://github.com/Bidthedog/throng/issues/384)).
+- **Icon controls follow the icon size setting** — the find bar buttons, the terminal retry button,
+  pane collapse and the rail no longer clip or overlap their icons when `sizes.iconPx` is raised
+  ([#381](https://github.com/Bidthedog/throng/issues/381)).
+- **A press on a panel or tab title starts a drag**; only the interactive controls in a header or tab
+  chip block one ([#406](https://github.com/Bidthedog/throng/issues/406)).
+- **Clicking a fully visible row no longer scrolls the file explorer**, which also stops the first
+  double-click near the bottom of a tree with two scrollbars being lost
+  ([#419](https://github.com/Bidthedog/throng/issues/419)).
+
 ## 1.0.0-alpha5 — 2026-09-20
 
 ### Added
