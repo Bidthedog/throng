@@ -65,6 +65,14 @@ issue (agreed) → /speckit-specify → /speckit-clarify → /speckit-plan → /
 5. **Converge & document** — `/speckit-converge` until code and artifacts agree, and bring the `README`, the affected `docs/` guides and `CONTRIBUTING` current **in the same change**.
 6. **Pull request** — branch from `master`, complete the whole PR template, link the agreed issue, and attach passing test output.
 
+**Not every change has a spec, and the template says so.** Steps 2–3 and 5's `/speckit-converge`
+describe work that specifies new behaviour. A defect fix, a test, a chore or a tooling change
+specifies none, so no `specs/NNN-*` directory exists or should be created for it — the PR template's
+*AI Code -> Spec Kit artifacts* section offers that as an explicit route rather than leaving the
+contributor to delete the section or write a spec after the fact. Step 4's test-first discipline is
+not waived by that route; for a reported defect it is stricter, because the first commit is a test
+that reproduces the bug.
+
 **Constitution check** — every plan must pass the Constitution Check gate (11 principles).
 Watch especially project-first isolation (I), platform-abstracted core behind contract-tested
 seams (II), daemon-owned terminals with no orphaned processes (III), test-first + UI-needs-E2E
@@ -80,6 +88,11 @@ know it works* (outcomes). If they can't, it isn't clear enough yet.
 Labels are how the backlog is filtered and picked up, so an unlabelled issue is invisible rather
 than merely untidy. **Every issue carries exactly one type and at least one area.** The issue
 templates apply the type for you; the area is yours to add.
+
+**This section governs pull requests too.** A PR carries the same type, area and milestone as the
+issue(s) it closes — but `gh pr create` inherits none of them, so they are added by hand, and a PR
+with no milestone is missing from the board a maintainer merges from. The PR template asks for this
+explicitly.
 
 | | Labels | Rule |
 |---|---|---|
