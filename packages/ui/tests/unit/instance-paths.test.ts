@@ -35,6 +35,23 @@ describe('instance paths: packaged (installed) defaults', () => {
   });
 });
 
+describe('instance paths: the portable build (#429)', () => {
+  // electron-builder's portable launcher sets this for the app it unpacks and starts.
+  const PORTABLE_ENV = { PORTABLE_EXECUTABLE_DIR: 'C:\\Users\\dev\\Downloads' };
+
+  it('takes its own pipe, so it never adopts or leaves a daemon for the installed app', () => {
+    expect(instancePipeName(BASE_PIPE, false, PORTABLE_ENV)).toBe(`${BASE_PIPE}.portable`);
+    expect(instancePipeName(BASE_PIPE, false, PORTABLE_ENV)).not.toBe(instancePipeName(BASE_PIPE, false, {}));
+  });
+
+  it('leaves the installed and dev pipes as they were', () => {
+    expect(instancePipeName(BASE_PIPE, false, {})).toBe(BASE_PIPE);
+    expect(instancePipeName(BASE_PIPE, true, {})).toBe(`${BASE_PIPE}.dev`);
+    // A dev run started from a shell that happens to carry the variable is still a dev run.
+    expect(instancePipeName(BASE_PIPE, true, PORTABLE_ENV)).toBe(`${BASE_PIPE}.dev`);
+  });
+});
+
 describe('instance paths: unpackaged (dev) defaults', () => {
   it('moves userData, the config root and the pipe aside', () => {
     expect(instanceUserDataDir(APPDATA, true)).toBe(`${APPDATA}\\${DEV_DATA_DIR_NAME}`);

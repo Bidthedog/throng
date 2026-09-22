@@ -81,7 +81,13 @@ export function createUiContainer(): Container {
   // A dev instance takes a suffixed endpoint so it can neither adopt nor RETIRE the installed
   // app's daemon — a build-id mismatch on a shared pipe would kill its terminals.
   const uiUserContext = new NodeUserContext();
-  const uiDefaultPipe = instancePipeName(defaultPipeName(uiUserContext.currentUser().userId), devMode);
+  // The portable build takes its own endpoint too (#429): its daemon outlives the temp folder it
+  // runs from, and must never be adopted by an installed throng.
+  const uiDefaultPipe = instancePipeName(
+    defaultPipeName(uiUserContext.currentUser().userId),
+    devMode,
+    process.env,
+  );
   container
     .bind<IUiSettings>(UI_TYPES.UiSettings)
     .toConstantValue(readUiSettings(process.env, uiDefaultPipe));

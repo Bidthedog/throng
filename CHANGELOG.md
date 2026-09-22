@@ -29,6 +29,14 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Fixed
+- **Running the portable build no longer breaks terminals in an installed throng**
+  ([#429](https://github.com/Bidthedog/throng/issues/429)). The portable build deletes its
+  temporary folder when it closes, but its background terminal service kept running from it, and
+  the next throng to start adopted that service: every terminal then failed with "Failed to load
+  native module: conpty.node". The portable build now keeps to its own service, and throng
+  replaces any service whose files have been deleted instead of adopting it.
+
 ## 1.0.0-alpha6 — 2026-09-21
 
 ### Added
