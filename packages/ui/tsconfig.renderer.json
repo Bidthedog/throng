@@ -8,7 +8,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "useDefineForClassFields": true,
-    "types": ["react", "react-dom", "node"]
+    "types": ["react", "react-dom", "node", "vite/client"]
   },
   "include": ["src/renderer/**/*"]
 }
