@@ -57,9 +57,31 @@ export function instanceDatabasePath(userDataDir: string, env: NodeJS.ProcessEnv
   return env.THRONG_DATABASE_PATH ?? join(userDataDir, 'throng.db');
 }
 
-/** The default pipe for this instance, derived from the per-user default. */
-export function instancePipeName(basePipeName: string, devMode: boolean): string {
-  return devMode ? `${basePipeName}${DEV_PIPE_SUFFIX}` : basePipeName;
+/** Appended for the portable build, so its daemon never answers for an installed throng (#429). */
+export const PORTABLE_PIPE_SUFFIX = '.portable';
+
+/**
+ * Whether this is the portable build: electron-builder's self-extracting launcher sets
+ * `PORTABLE_EXECUTABLE_DIR` for the app it unpacks and starts.
+ */
+export function isPortableLaunch(env: NodeJS.ProcessEnv): boolean {
+  return typeof env.PORTABLE_EXECUTABLE_DIR === 'string' && env.PORTABLE_EXECUTABLE_DIR !== '';
+}
+
+/**
+ * The default pipe for this instance, derived from the per-user default.
+ *
+ * The portable build takes its own (#429). It runs from a temp folder its launcher deletes on exit,
+ * and its detached daemon outlives that folder; on the installed app's pipe that orphan was adopted
+ * by the next installed launch, and every terminal failed to load `conpty.node`.
+ */
+export function instancePipeName(
+  basePipeName: string,
+  devMode: boolean,
+  env: NodeJS.ProcessEnv = {},
+): string {
+  if (devMode) return `${basePipeName}${DEV_PIPE_SUFFIX}`;
+  return isPortableLaunch(env) ? `${basePipeName}${PORTABLE_PIPE_SUFFIX}` : basePipeName;
 }
 
 /**

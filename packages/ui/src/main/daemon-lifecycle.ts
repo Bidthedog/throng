@@ -213,7 +213,21 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
     // elevated daemon). A process's integrity can't be raised in place, so this is the
     // only way; it ends the old daemon's terminals, which the mixed-mode design accepts.
     const elevate = shouldRespawnDaemonElevated(opts.appElevated === true, info.elevated === true);
-    if (!stale && !elevate) return { spawned: false }; // up to date — reuse it (Principle III)
+    /*
+     * #429 — a daemon whose own entry is gone from disk is an ORPHAN, whoever started it.
+     *
+     * The portable build unpacks to a temp folder its launcher deletes on exit, and the daemon it
+     * started is detached (Principle III), so it outlives the folder. It still answers the pipe with
+     * the current build id, and it cannot start a terminal: node-pty loads `conpty.node` on the first
+     * one, and that file went with the folder. Reusing it made every terminal in the adopting app
+     * fail with "Cannot find module … conpty.node".
+     *
+     * Checked BEFORE the #192 guard on purpose. That guard protects another instance's terminals; an
+     * install that has been deleted has no terminals left to start and nothing that can come back
+     * for it, so it is retired like a stale daemon of ours.
+     */
+    const orphaned = typeof info.daemonEntry === 'string' && !existsSync(info.daemonEntry);
+    if (!stale && !elevate && !orphaned) return { spawned: false }; // up to date — reuse it (Principle III)
 
     /*
      * NEVER retire a daemon that is not ours (#192).
@@ -233,7 +247,7 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
      * An old daemon that predates this field reports nothing, and is retired as before: it is
      * necessarily running code older than this handshake, so it can only be ours to replace.
      */
-    if (info.daemonEntry && !sameEntry(info.daemonEntry, opts.daemonEntry)) {
+    if (!orphaned && info.daemonEntry && !sameEntry(info.daemonEntry, opts.daemonEntry)) {
       return { spawned: false, foreign: true };
     }
 
