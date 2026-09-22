@@ -33,7 +33,9 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 /** Inside `packages/ui/tests/` so `react`, `@throng/core` and `@types/*` resolve the way they do for
  *  the real renderer sources — module resolution walks up from the file, and nowhere else. */
 const GUARD = join(HERE, '..', '.tsc-notice-guard');
-const TSC = fileURLToPath(new URL('../../../../node_modules/typescript/bin/tsc', import.meta.url));
+/** The compiler the build uses: TypeScript 7, installed as `@typescript/native`. The `typescript`
+ *  name is the TS 6 API package that typescript-eslint needs, and ships no `tsc` (#417). */
+const TSC = fileURLToPath(new URL('../../../../node_modules/@typescript/native/bin/tsc', import.meta.url));
 
 afterAll(() => rmSync(GUARD, { recursive: true, force: true }));
 

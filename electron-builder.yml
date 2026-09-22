@@ -52,6 +52,9 @@ files:
   - '!node_modules/vitest/**'
   - '!node_modules/@vitest/**'
   - '!node_modules/typescript/**'
+  # TS 7 compiler (`@typescript/native`), its per-platform native binaries and the TS 6 API package
+  # behind the `typescript` alias all live under @typescript/ (#417).
+  - '!node_modules/@typescript/**'
   - '!node_modules/eslint*/**'
   - '!node_modules/@typescript-eslint/**'
   # CRITICAL (FR-009 launch): the workspace libraries are imported as BARE specifiers
