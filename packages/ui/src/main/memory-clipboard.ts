@@ -23,7 +23,7 @@ export class MemoryClipboard implements IClipboard {
   private text = '';
   private html = '';
 
-  writeText(text: string): void {
+  async writeText(text: string): Promise<void> {
     this.text = text;
     // A plain write is not half-rich: it replaces whatever writeRich() left behind, exactly as the
     // real OS clipboard replaces every format in one write (044 FR-035a / R12).
@@ -39,7 +39,7 @@ export class MemoryClipboard implements IClipboard {
     this.html = entry.html;
   }
 
-  readText(): string {
+  async readText(): Promise<string> {
     return this.text;
   }
 

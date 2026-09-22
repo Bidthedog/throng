@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { homedir } from 'node:os';
 import { Container } from 'inversify';
-import { app, clipboard as electronClipboard, shell } from 'electron';
+import { app, clipboard as electronClipboard, ClipboardItem, shell } from 'electron';
 import type {
   IClipboard,
   IConfigSettings,
@@ -101,7 +101,7 @@ export function createUiContainer(): Container {
   const clipboardSeam: IClipboard =
     process.env.THRONG_E2E_CLIPBOARD === 'memory'
       ? new MemoryClipboard()
-      : new ElectronClipboard(electronClipboard);
+      : new ElectronClipboard(electronClipboard, (payload) => new ClipboardItem(payload));
   container.bind<IClipboard>(UI_TYPES.Clipboard).toConstantValue(clipboardSeam);
   container
     .bind<ClipboardService>(UI_TYPES.ClipboardService)

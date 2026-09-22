@@ -17,13 +17,13 @@ import { ClipboardService } from '../../src/main/clipboard-service.js';
 function osClipboard(): IClipboard & { setExternally: (text: string) => void } {
   let text = '';
   return {
-    writeText: (value: string) => {
+    writeText: async (value: string) => {
       text = value;
     },
     async writeRich(entry: { text: string; html: string }) {
       text = entry.text;
     },
-    readText: () => text,
+    readText: async () => text,
     setExternally: (value: string) => {
       text = value;
     },
@@ -31,66 +31,66 @@ function osClipboard(): IClipboard & { setExternally: (text: string) => void } {
 }
 
 describe('ClipboardService — one record, every panel, every window', () => {
-  it('remembers the SHAPE of what throng last copied', () => {
+  it('remembers the SHAPE of what throng last copied', async () => {
     const os = osClipboard();
     const service = new ClipboardService(os);
 
-    service.write('one\ntwo\n', 'rectangular');
-    expect(os.readText()).toBe('one\ntwo\n'); // the OS clipboard carries PLAIN TEXT, as always
-    expect(service.pasteMode()).toBe('rectangular');
+    await service.write('one\ntwo\n', 'rectangular');
+    expect(await os.readText()).toBe('one\ntwo\n'); // the OS clipboard carries PLAIN TEXT, as always
+    expect(await service.pasteMode()).toBe('rectangular');
   });
 
-  it('carries the mode ACROSS PANELS AND WINDOWS — there is only one record', () => {
+  it('carries the mode ACROSS PANELS AND WINDOWS — there is only one record', async () => {
     // The service is a single instance in UI main. A panel in another window asking for the paste
     // mode is asking the same object, so a block cut in one file pastes as a block in another.
     const os = osClipboard();
     const service = new ClipboardService(os);
 
-    service.write('col1\ncol2\n', 'rectangular'); // panel A, main window
-    expect(service.pasteMode()).toBe('rectangular'); // panel B, sub-workspace window
+    await service.write('col1\ncol2\n', 'rectangular'); // panel A, main window
+    expect(await service.pasteMode()).toBe('rectangular'); // panel B, sub-workspace window
   });
 
-  it('falls back to VERBATIM when ANY other source touches the clipboard', () => {
+  it('falls back to VERBATIM when ANY other source touches the clipboard', async () => {
     const os = osClipboard();
     const service = new ClipboardService(os);
-    service.write('a line\n', 'full-line');
-    expect(service.pasteMode()).toBe('full-line');
+    await service.write('a line\n', 'full-line');
+    expect(await service.pasteMode()).toBe('full-line');
 
     // A browser, an editor, anything at all copies something. throng's record now describes text
     // that is no longer on the clipboard — so it does not describe what is about to be pasted.
     os.setExternally('something a user copied from a web page');
 
-    expect(service.pasteMode()).toBe('verbatim');
+    expect(await service.pasteMode()).toBe('verbatim');
     // …and the pasted TEXT is whatever the OS clipboard now holds — throng's remembered text is not
     // resurrected. The record is a description of the clipboard, never a substitute for it.
-    expect(service.read()).toBe('something a user copied from a web page');
+    expect(await service.read()).toBe('something a user copied from a web page');
   });
 
-  it('recovers WITHOUT polling once throng copies again', () => {
+  it('recovers WITHOUT polling once throng copies again', async () => {
     // Self-correcting: the mismatch is not an error state to be cleared, and nothing had to notice
     // the external copy. The next throng copy simply makes the record true again.
     const os = osClipboard();
     const service = new ClipboardService(os);
 
-    service.write('block\n', 'rectangular');
+    await service.write('block\n', 'rectangular');
     os.setExternally('external');
-    expect(service.pasteMode()).toBe('verbatim');
+    expect(await service.pasteMode()).toBe('verbatim');
 
-    service.write('block again\n', 'rectangular');
-    expect(service.pasteMode()).toBe('rectangular');
+    await service.write('block again\n', 'rectangular');
+    expect(await service.pasteMode()).toBe('rectangular');
   });
 
-  it('treats an identical-text external copy as still ours — because it is indistinguishable', () => {
+  it('treats an identical-text external copy as still ours — because it is indistinguishable', async () => {
     // If another application put the SAME text on the clipboard, there is nothing to detect and
     // nothing to get wrong: pasting it as a block yields exactly the text the user is looking at.
     const os = osClipboard();
     const service = new ClipboardService(os);
-    service.write('same\n', 'rectangular');
+    await service.write('same\n', 'rectangular');
     os.setExternally('same\n');
-    expect(service.pasteMode()).toBe('rectangular');
+    expect(await service.pasteMode()).toBe('rectangular');
   });
 
-  it('survives the OS rewriting the line endings in transit — Windows hands back CRLF', () => {
+  it('survives the OS rewriting the line endings in transit — Windows hands back CRLF', async () => {
     // The bug this test exists for. My first fake OS clipboard was a perfect pipe: whatever you put
     // in came back out. The REAL Windows clipboard is not — it normalises text to CRLF. So an LF
     // document that cut a line wrote "beta\n", read back "beta\r\n", concluded that another
@@ -99,17 +99,17 @@ describe('ClipboardService — one record, every panel, every window', () => {
     const os = osClipboard();
     const service = new ClipboardService(os);
 
-    service.write('beta\n', 'full-line');
+    await service.write('beta\n', 'full-line');
     os.setExternally('beta\r\n'); // …the OS, "helpfully", on the way back out
 
-    expect(service.pasteMode()).toBe('full-line'); // it is still OUR text
+    expect(await service.pasteMode()).toBe('full-line'); // it is still OUR text
   });
 
-  it('starts verbatim — an app that has copied nothing has no shape to claim', () => {
+  it('starts verbatim — an app that has copied nothing has no shape to claim', async () => {
     const os = osClipboard();
     const service = new ClipboardService(os);
     os.setExternally('text from before throng started');
-    expect(service.pasteMode()).toBe('verbatim');
+    expect(await service.pasteMode()).toBe('verbatim');
     expect(service.currentRecord()).toBeNull();
   });
 
@@ -122,11 +122,11 @@ describe('ClipboardService — one record, every panel, every window', () => {
     const os = osClipboard();
     const service = new ClipboardService(os);
 
-    service.write('Hello world', 'full-line'); // the editor's whole-line copy
-    expect(service.pasteMode()).toBe('full-line');
+    await service.write('Hello world', 'full-line'); // the editor's whole-line copy
+    expect(await service.pasteMode()).toBe('full-line');
 
     await service.writeRich({ text: 'Hello world', html: '<p>Hello world</p>' }); // the preview's rich copy
 
-    expect(service.pasteMode()).toBe('verbatim'); // not full-line — a mid-line Ctrl+V must not split a new line in
+    expect(await service.pasteMode()).toBe('verbatim'); // not full-line — a mid-line Ctrl+V must not split a new line in
   });
 });

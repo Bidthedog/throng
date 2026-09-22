@@ -4,8 +4,11 @@ import type { IClipboard } from '../abstractions/clipboard.js';
  * Reusable contract suite for {@link IClipboard} (016, FR-013a / contracts/clipboard.md).
  *
  * Runnable against any implementation — an in-memory fake in a unit test, or the real Electron
- * clipboard in a contract test. Framework-agnostic: it THROWS on a violation, so callers assert
- * with `expect(() => runClipboardContract(...)).not.toThrow()`.
+ * clipboard in a contract test. Framework-agnostic: it REJECTS on a violation, so callers assert
+ * with `await expect(runClipboardContract(...)).resolves.toBeUndefined()`.
+ *
+ * `async` since Electron 44, whose clipboard is the W3C-shaped async one (#417): every call here is
+ * awaited, so a violation surfaces as a rejection rather than an unhandled promise.
  *
  * The obligation that matters most is the one that looks pedantic: **line endings survive
  * VERBATIM**. Normalising them here would be a disaster — the clipboard is how text crosses between
@@ -13,7 +16,7 @@ import type { IClipboard } from '../abstractions/clipboard.js';
  * a file with the other convention. Normalisation is a DOCUMENT concern (FR-023a), decided by the
  * destination, and this layer must not pre-empt it.
  */
-export function runClipboardContract(name: string, make: () => IClipboard): void {
+export async function runClipboardContract(name: string, make: () => IClipboard): Promise<void> {
   const fail = (why: string): never => {
     throw new Error(`${name} violates the IClipboard contract: ${why}`);
   };
@@ -21,55 +24,55 @@ export function runClipboardContract(name: string, make: () => IClipboard): void
   // Round-trip: what goes in comes back out.
   {
     const cb = make();
-    cb.writeText('hello');
-    if (cb.readText() !== 'hello') fail(`readText() did not return what writeText() wrote`);
+    await cb.writeText('hello');
+    if ((await cb.readText()) !== 'hello') fail(`readText() did not return what writeText() wrote`);
   }
 
   // Unicode survives — a clipboard that mangles non-ASCII is worse than none.
   {
     const cb = make();
     const text = 'héllo — 世界 — 🎉';
-    cb.writeText(text);
-    if (cb.readText() !== text) fail('Unicode did not round-trip');
+    await cb.writeText(text);
+    if ((await cb.readText()) !== text) fail('Unicode did not round-trip');
   }
 
   // LINE ENDINGS SURVIVE VERBATIM. Not normalised, not "helpfully" converted.
   {
     const cb = make();
     const crlf = 'one\r\ntwo\r\n';
-    cb.writeText(crlf);
-    if (cb.readText() !== crlf) fail('CRLF line endings were altered — they must survive verbatim');
+    await cb.writeText(crlf);
+    if ((await cb.readText()) !== crlf) fail('CRLF line endings were altered — they must survive verbatim');
 
     const lf = 'one\ntwo\n';
-    cb.writeText(lf);
-    if (cb.readText() !== lf) fail('LF line endings were altered — they must survive verbatim');
+    await cb.writeText(lf);
+    if ((await cb.readText()) !== lf) fail('LF line endings were altered — they must survive verbatim');
 
     const mixed = 'one\r\ntwo\nthree';
-    cb.writeText(mixed);
-    if (cb.readText() !== mixed) fail('a mixed-ending text was normalised — it must survive verbatim');
+    await cb.writeText(mixed);
+    if ((await cb.readText()) !== mixed) fail('a mixed-ending text was normalised — it must survive verbatim');
   }
 
   // A write REPLACES; it never appends.
   {
     const cb = make();
-    cb.writeText('first');
-    cb.writeText('second');
-    if (cb.readText() !== 'second') fail('writeText() did not replace the previous contents');
+    await cb.writeText('first');
+    await cb.writeText('second');
+    if ((await cb.readText()) !== 'second') fail('writeText() did not replace the previous contents');
   }
 
   // Empty is a legal value — it clears the clipboard, and is not an error.
   {
     const cb = make();
-    cb.writeText('something');
-    cb.writeText('');
-    if (cb.readText() !== '') fail('writing an empty string did not clear the clipboard');
+    await cb.writeText('something');
+    await cb.writeText('');
+    if ((await cb.readText()) !== '') fail('writing an empty string did not clear the clipboard');
   }
 
   // Reading is IDEMPOTENT — a read does not consume.
   {
     const cb = make();
-    cb.writeText('stable');
-    if (cb.readText() !== 'stable' || cb.readText() !== 'stable') {
+    await cb.writeText('stable');
+    if ((await cb.readText()) !== 'stable' || (await cb.readText()) !== 'stable') {
       fail('readText() is not idempotent — a read must not consume the clipboard');
     }
   }
@@ -78,9 +81,9 @@ export function runClipboardContract(name: string, make: () => IClipboard): void
   {
     const cb = make();
     try {
-      cb.readText();
-      cb.writeText('x');
-      cb.readText();
+      await cb.readText();
+      await cb.writeText('x');
+      await cb.readText();
     } catch (err) {
       fail(`it threw: ${String(err)}`);
     }
@@ -121,7 +124,7 @@ export async function runClipboardRichContract(
   {
     const { clipboard, html } = make();
     await clipboard.writeRich({ text: 'hello', html: '<p>hello</p>' });
-    if (clipboard.readText() !== 'hello') {
+    if ((await clipboard.readText()) !== 'hello') {
       fail("readText() did not return writeRich()'s plain text");
     }
     if (html() !== '<p>hello</p>') fail('the HTML was not written to the clipboard');
@@ -131,7 +134,7 @@ export async function runClipboardRichContract(
   {
     const { clipboard } = make();
     await clipboard.writeRich({ text: 'plain fallback', html: '<b>bold</b>' });
-    if (clipboard.readText().includes('<')) fail('readText() leaked HTML — it must stay plain text');
+    if ((await clipboard.readText()).includes('<')) fail('readText() leaked HTML — it must stay plain text');
   }
 
   // A write REPLACES; writeRich after writeRich replaces both the text and the HTML.
@@ -139,7 +142,7 @@ export async function runClipboardRichContract(
     const { clipboard, html } = make();
     await clipboard.writeRich({ text: 'first', html: '<i>first</i>' });
     await clipboard.writeRich({ text: 'second', html: '<i>second</i>' });
-    if (clipboard.readText() !== 'second') fail('writeRich() did not replace the previous text');
+    if ((await clipboard.readText()) !== 'second') fail('writeRich() did not replace the previous text');
     if (html() !== '<i>second</i>') fail('writeRich() did not replace the previous HTML');
   }
 
@@ -148,8 +151,8 @@ export async function runClipboardRichContract(
   {
     const { clipboard, html } = make();
     await clipboard.writeRich({ text: 'rich', html: '<b>rich</b>' });
-    clipboard.writeText('plain');
-    if (clipboard.readText() !== 'plain') fail('writeText() after writeRich() did not replace the text');
+    await clipboard.writeText('plain');
+    if ((await clipboard.readText()) !== 'plain') fail('writeText() after writeRich() did not replace the text');
     if (html() !== '') fail('writeText() after writeRich() left the earlier HTML in place');
   }
 }

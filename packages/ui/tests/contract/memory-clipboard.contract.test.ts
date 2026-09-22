@@ -13,8 +13,10 @@ import { runClipboardContract, runClipboardRichContract } from '@throng/core/tes
 import { MemoryClipboard } from '../../src/main/memory-clipboard.js';
 
 describe('MemoryClipboard', () => {
-  it('satisfies the IClipboard contract', () => {
-    expect(() => runClipboardContract('MemoryClipboard', () => new MemoryClipboard())).not.toThrow();
+  it('satisfies the IClipboard contract', async () => {
+    await expect(
+      runClipboardContract('MemoryClipboard', () => new MemoryClipboard()),
+    ).resolves.toBeUndefined();
   });
 
   it('satisfies the IClipboard writeRich contract (044 FR-035a / R12)', async () => {

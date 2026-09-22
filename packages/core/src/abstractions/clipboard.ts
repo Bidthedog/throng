@@ -19,15 +19,21 @@
  * target (a mail client) while a plain target (an editor, a terminal) still receives the plain text
  * alternative. Reading stays plain-text-only; there is no `readRich`.
  */
+/*
+ * Every member is ASYNC, including the read. Electron 44 replaced the synchronous `clipboard`
+ * module with the W3C-shaped async one (`readText(): Promise<string>`, `write(items)`), and there is
+ * no sync route left in main — so a sync seam could only have been honoured by an implementation
+ * that blocks, which is worse than a promise (#417).
+ */
 export interface IClipboard {
   /** Replace the clipboard's contents with `text`. Empty is legal — it clears it. */
-  writeText(text: string): void;
+  writeText(text: string): Promise<void>;
   /**
    * Replace the clipboard's contents with BOTH `text` (the plain-text fallback) and `html` (the
    * rich-text alternative) — 044 FR-035a. A rich target reads the HTML; a plain target reads `text`,
    * exactly as `writeText` would have left it.
    */
   writeRich(entry: { text: string; html: string }): Promise<void>;
-  /** The clipboard's current text, or the empty string when it holds none (never throws). */
-  readText(): string;
+  /** The clipboard's current text, or the empty string when it holds none (never rejects). */
+  readText(): Promise<string>;
 }
