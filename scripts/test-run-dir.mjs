@@ -71,7 +71,7 @@ export function sweepStaleRunDirs({ ageMs = 6 * 60 * 60 * 1000, keep = '' } = {}
   const parent = tmpdir();
   const cutoff = Date.now() - ageMs;
   let removed = 0;
-  let entries = [];
+  let entries;
   try {
     entries = readdirSync(parent).filter((n) => n.startsWith('throng_e2e_'));
   } catch {
@@ -128,7 +128,7 @@ const AGENT_LOG = /^throng-agent-\d+\.log$/;
  * Held by `packages/ui/tests/unit/test-run-dir.test.ts`.
  */
 export function cleanupRunDir(dir) {
-  let leftovers = [];
+  let leftovers;
   try {
     leftovers = readdirSync(dir);
   } catch {

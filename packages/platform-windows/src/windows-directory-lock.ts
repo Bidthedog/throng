@@ -38,7 +38,7 @@ export class WindowsDirectoryLock implements IDirectoryLock {
   private readonly held = new Map<LockHandle, ChildProcess>();
 
   acquire(absPath: string): LockHandle {
-    let isDir = false;
+    let isDir: boolean;
     try {
       isDir = statSync(absPath).isDirectory();
     } catch {

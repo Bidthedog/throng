@@ -338,7 +338,7 @@ export class FileConfigStore implements IConfigStore {
   async writeFilesAtomic(files: Array<{ path: string; content: string }>): Promise<WriteAllResult> {
     const snaps: FileSnapshot[] = [];
     for (const f of files) {
-      let existed = false;
+      let existed: boolean;
       let original: Buffer | undefined;
       try {
         original = await readFile(f.path);

@@ -201,12 +201,9 @@ export function useDirtyPathKey(): string {
 
 /** True when any of the given panels has an unsaved editor (tab/project dot). */
 export function useEditorDirty(panelIds: readonly string[]): boolean {
-  const key = panelIds.join('\u0000');
   return useSyncExternalStore(
     subscribe,
     () => panelIds.some((id) => states.get(id)?.dirty === true),
     () => panelIds.some((id) => states.get(id)?.dirty === true),
   );
-  // `key` participates only to document intent; the snapshot recomputes each call.
-  void key;
 }
