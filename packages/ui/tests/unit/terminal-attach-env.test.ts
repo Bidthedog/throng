@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_APP_SETTINGS, type TerminalFlavour, type TerminalSettings } from '@throng/core';
 
 /**
@@ -19,6 +19,20 @@ import { DEFAULT_APP_SETTINGS, type TerminalFlavour, type TerminalSettings } fro
  * must not be made to look as though it has. Reading the setting on every attach gives exactly the
  * behaviour the requirement asks for and the setting's own description promises: it applies to the
  * next terminal, and the one already running is untouched.
+ *
+ * ══ THE FIXTURE OWNS `FORCE_HYPERLINK`, WHICH IS #436 ══
+ *
+ * `terminal-ipc.ts` reads the AMBIENT `process.env` twice per attach — once as the input to
+ * `hyperlinkAdvertisementEnv`, and once as the `baseEnv` it sends. Both are correct in production:
+ * the launching environment is exactly what a user's own `FORCE_HYPERLINK` arrives in, and
+ * respecting it is FR-080a. But it means an ambient value is part of this file's fixture unless the
+ * fixture says otherwise — and the one variable that would land on these assertions is the one the
+ * code under test adds.
+ *
+ * It is not hypothetical: a Claude Code terminal exports `FORCE_HYPERLINK=1`, so running
+ * `npm run test:unit` from one turned three of these red on a clean `master`. A unit test of the
+ * environment throng BUILDS must start from a known environment rather than inherit one, so
+ * `beforeEach` clears the key and `afterEach` puts the developer's own back.
  */
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -96,8 +110,15 @@ const lastLaunch = (): AttachCall['params']['launch'] => {
 };
 
 beforeEach(() => {
+  // #436 — a known environment, not the developer's. Windows folds env-name case and Node follows
+  // it, so removing the canonical spelling removes a `force_hyperlink` from a user profile too.
+  vi.stubEnv('FORCE_HYPERLINK', undefined);
   terminals = { ...DEFAULT_APP_SETTINGS.terminals, advertiseHyperlinks: true };
   register();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('FR-080 — the variable is merged into `launch.env`', () => {
@@ -125,6 +146,26 @@ describe('FR-080 — the variable is merged into `launch.env`', () => {
 
   it('the shipped value advertises — the setting is ON out of the box', () => {
     expect(DEFAULT_APP_SETTINGS.terminals.advertiseHyperlinks).toBe(true);
+  });
+});
+
+/*
+ * The other half of #436. The fixture above clears `FORCE_HYPERLINK` so the assertions measure what
+ * throng adds — which would be indistinguishable from the fixture simply HIDING the behaviour the
+ * red suite was reporting. This says the behaviour is real and is the one FR-080a asks for: the
+ * launching environment reaching the attach path is the point, not an accident of the test.
+ *
+ * `spawn-env-hyperlinks.test.ts` covers the decision itself over every shape of input. What only
+ * this layer can say is that `terminal-ipc` feeds it the LIVE environment rather than an empty one.
+ */
+describe('FR-080a — the launching environment is what the decision is made against', () => {
+  it("a user's own FORCE_HYPERLINK reaches the attach path, and throng adds nothing over it", async () => {
+    vi.stubEnv('FORCE_HYPERLINK', '0');
+    await attach();
+    expect(
+      lastLaunch().env?.FORCE_HYPERLINK,
+      'throng neither replaced the user’s value nor added its own beside it',
+    ).toBeUndefined();
   });
 });
 
