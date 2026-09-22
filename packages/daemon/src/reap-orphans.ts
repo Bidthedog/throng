@@ -102,7 +102,7 @@ function snapshotProcesses(): ProcInfo[] {
 export function reapOrphans(): number[] {
   if (process.platform !== 'win32') return [];
   if (process.env.THRONG_NO_ORPHAN_REAP === '1') return [];
-  let orphans: number[] = [];
+  let orphans: number[];
   try {
     orphans = findOrphans(snapshotProcesses());
   } catch {

@@ -106,8 +106,8 @@ describe('panel-type form reducer', () => {
 
   it('Clear resets the type selection and inputs to the initial empty state', () => {
     const d = deps();
-    let s = selectKind(initialFormState(), 'terminal', d);
-    s = clearForm();
+    expect(selectKind(initialFormState(), 'terminal', d).selectedKind).not.toBeNull();
+    const s = clearForm();
     expect(s.selectedKind).toBeNull();
     expect(s.values).toEqual({});
     expect(canConfirm(s, d)).toBe(false);

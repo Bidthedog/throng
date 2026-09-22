@@ -1777,7 +1777,7 @@ export async function installResizeProbe(app: ElectronApplication): Promise<{
  */
 export async function daemonPid(pipeName: string, timeoutMs = 30_000): Promise<number> {
   const deadline = Date.now() + timeoutMs;
-  let last: RpcFailure | 'a reply carrying no pid' | 'never attempted' = 'never attempted';
+  let last: RpcFailure | 'a reply carrying no pid';
   for (;;) {
     const outcome = await daemonRpcOutcome(pipeName, 'health.ping');
     const pid = (outcome.value as { pid?: number } | null)?.pid;

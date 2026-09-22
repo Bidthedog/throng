@@ -102,7 +102,6 @@ test('a key pressed in the same beat as the click reaches the shell', { tag: ['@
         }, pid);
 
       let landed = 0;
-      let rows: string[] = [];
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         const marker = `IDLEOK${attempt}`;
         await win.getByTestId('project-list').click();
@@ -121,7 +120,7 @@ test('a key pressed in the same beat as the click reaches the shell', { tag: ['@
           console.log(`[input-idle] attempt ${attempt}: a character was lost`);
         }
       }
-      rows = await rowsNow();
+      const rows = await rowsNow();
       console.log(`[input-idle] landed on attempt ${landed || '(none)'}; rows: ${JSON.stringify(rows.slice(-6))}`);
       expect(
         landed,

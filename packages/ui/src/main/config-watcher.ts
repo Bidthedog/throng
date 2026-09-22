@@ -124,7 +124,7 @@ export async function readConfigOnce(
   // BEFORE the first read, so a write that commits from here on makes this payload provably stale.
   const generation = storeGeneration(store);
   const rawSettings = await store.readRaw({ kind: 'settings' });
-  let settingsUnreadable = false;
+  let settingsUnreadable: boolean;
   if (rawSettings.trim().length === 0) {
     /*
      * EMPTY IS NOT ABSENT, and the difference is the whole point of this feature.

@@ -105,11 +105,16 @@ export default tseslint.config(
   // React renderer: hooks correctness rules. `exhaustive-deps` is advisory
   // (surfaced as a warning, does not fail CI) — the rules-of-hooks check that
   // catches genuine bugs stays an error.
+  //
+  // Named explicitly rather than spread from `configs.recommended`: from v6 that preset also
+  // carries the React Compiler rules (`refs`, `immutability`, `set-state-in-effect`, …), which
+  // assume a component tree written for the compiler. throng does not use the compiler, and
+  // adopting those rules is a refactor of the renderer, not a dependency bump (#417).
   {
     files: ['packages/ui/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
   },

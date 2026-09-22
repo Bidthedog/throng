@@ -968,7 +968,7 @@ function writeMouseLinkFixture(
 
 /** Every byte the fixture has received, in order. */
 function receivedBytes(logPath: string): string {
-  let raw = '';
+  let raw: string;
   try {
     raw = readFileSync(logPath, 'utf8');
   } catch {

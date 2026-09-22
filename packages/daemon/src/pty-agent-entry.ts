@@ -210,7 +210,7 @@ function onCommand(msg: AgentCommand): void {
     }
     case 'childpids': {
       const h = handles.get(msg.key);
-      let pids: number[] = [];
+      let pids: number[];
       try {
         pids = h ? pty.listChildPids(h) : [];
       } catch (error) {
@@ -225,7 +225,7 @@ function onCommand(msg: AgentCommand): void {
     case 'childprocs': {
       const h = handles.get(msg.key);
       void (async (): Promise<void> => {
-        let procs: ChildProcess[] = [];
+        let procs: ChildProcess[];
         try {
           // The daemon knows this terminal only by its synthetic `key`, never by the shell's real
           // OS pid — `PtyAgentHost.start` returns `{ pid: key }`. The children we report carry
