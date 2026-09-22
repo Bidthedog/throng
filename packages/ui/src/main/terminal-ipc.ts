@@ -463,8 +463,8 @@ export function registerTerminalIpc(deps: {
   // OSC 52 clipboard write (a program inside the terminal — Claude Code, tmux, vim —
   // copies to the system clipboard). The sandboxed renderer decodes the sequence and
   // relays the plain text here, the only place that can reach the OS clipboard.
-  ipcMain.handle('throng:terminal:clipboardWrite', (_e, text: string) => {
-    if (typeof text === 'string' && text.length > 0) clipboard.writeText(text);
+  ipcMain.handle('throng:terminal:clipboardWrite', async (_e, text: string) => {
+    if (typeof text === 'string' && text.length > 0) await clipboard.writeText(text);
     return { ok: true };
   });
 }

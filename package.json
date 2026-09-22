@@ -64,7 +64,7 @@
     "@types/react-dom": "^19.3.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "concurrently": "^10.0.5",
-    "electron": "^43.7.3",
+    "electron": "^44.4.3",
     "electron-builder": "^26.15.3",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",

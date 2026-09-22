@@ -24,8 +24,8 @@ export class ClipboardService {
   constructor(private readonly clipboard: IClipboard) {}
 
   /** Write text to the OS clipboard and remember what SHAPE it was. */
-  write(text: string, mode: ClipboardMode): void {
-    this.clipboard.writeText(text);
+  async write(text: string, mode: ClipboardMode): Promise<void> {
+    await this.clipboard.writeText(text);
     this.record = { text, mode };
   }
 
@@ -47,7 +47,7 @@ export class ClipboardService {
   }
 
   /** The OS clipboard's current text — what a paste will actually insert. */
-  read(): string {
+  async read(): Promise<string> {
     return this.clipboard.readText();
   }
 
@@ -57,8 +57,8 @@ export class ClipboardService {
    * A mismatch is not an error and not a bug: it simply means the clipboard moved on, and the
    * honest answer is verbatim.
    */
-  pasteMode(): ClipboardMode {
-    return pasteModeFor(this.record, this.clipboard.readText());
+  async pasteMode(): Promise<ClipboardMode> {
+    return pasteModeFor(this.record, await this.clipboard.readText());
   }
 
   /** What throng believes it last wrote — exposed for tests and diagnostics, never persisted. */

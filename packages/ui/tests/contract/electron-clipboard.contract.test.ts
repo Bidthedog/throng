@@ -8,32 +8,46 @@
  */
 import { describe, expect, it } from 'vitest';
 import { runClipboardContract, runClipboardRichContract } from '@throng/core/testing';
-import { ElectronClipboard, type ElectronClipboardModule } from '../../src/main/electron-clipboard.js';
+import {
+  ElectronClipboard,
+  type ClipboardItemFactory,
+  type ElectronClipboardModule,
+} from '../../src/main/electron-clipboard.js';
 
-/** An in-memory stand-in for Electron's `clipboard`, faithful to its plain-text behaviour. */
+/**
+ * An in-memory stand-in for Electron 44's `clipboard`, faithful to its async plain-text behaviour:
+ * `write` takes items, and the item is whatever the injected factory produced — here, the MIME map
+ * itself, which is all this fake needs to record.
+ */
 function fakeClipboardModule(): ElectronClipboardModule & { htmlRecord: { current: string } } {
   let text = '';
   const htmlRecord = { current: '' };
   return {
-    writeText: (value: string) => {
+    writeText: async (value: string) => {
       text = value;
       htmlRecord.current = '';
     },
-    readText: () => text,
-    // Mirrors Electron's `clipboard.write({ text, html })` (044 FR-035a / R12).
-    write: (entry: { text: string; html: string }) => {
-      text = entry.text;
-      htmlRecord.current = entry.html;
+    readText: async () => text,
+    write: async (items: readonly unknown[]) => {
+      const payload = items[0] as Record<string, string>;
+      text = payload['text/plain'] ?? '';
+      htmlRecord.current = payload['text/html'] ?? '';
     },
     htmlRecord,
   };
 }
 
+/** Stands in for Electron's `ClipboardItem` constructor — the MIME map, unwrapped. */
+const fakeItem: ClipboardItemFactory = (payload) => payload;
+
 describe('ElectronClipboard', () => {
-  it('satisfies the IClipboard contract', () => {
-    expect(() =>
-      runClipboardContract('ElectronClipboard', () => new ElectronClipboard(fakeClipboardModule())),
-    ).not.toThrow();
+  it('satisfies the IClipboard contract', async () => {
+    await expect(
+      runClipboardContract(
+        'ElectronClipboard',
+        () => new ElectronClipboard(fakeClipboardModule(), fakeItem),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it('satisfies the IClipboard writeRich contract (044 FR-035a)', async () => {
@@ -41,23 +55,23 @@ describe('ElectronClipboard', () => {
       runClipboardRichContract('ElectronClipboard', () => {
         const fake = fakeClipboardModule();
         return {
-          clipboard: new ElectronClipboard(fake),
+          clipboard: new ElectronClipboard(fake, fakeItem),
           html: () => fake.htmlRecord.current,
         };
       }),
     ).resolves.toBeUndefined();
   });
 
-  it('yields the empty string — rather than throwing — when the OS clipboard cannot be read', () => {
-    // Electron's readText() can throw on a locked or unavailable clipboard. A failed paste must not
+  it('yields the empty string — rather than rejecting — when the OS clipboard cannot be read', async () => {
+    // Electron's readText() can reject on a locked or unavailable clipboard. A failed paste must not
     // take the editor down with it.
     const hostile: ElectronClipboardModule = {
-      writeText: () => {},
-      readText: () => {
+      writeText: async () => {},
+      readText: async () => {
         throw new Error('clipboard unavailable');
       },
-      write: () => {},
+      write: async () => {},
     };
-    expect(new ElectronClipboard(hostile).readText()).toBe('');
+    await expect(new ElectronClipboard(hostile, fakeItem).readText()).resolves.toBe('');
   });
 });

@@ -19,9 +19,9 @@ const asMode = (raw: unknown): ClipboardMode =>
   MODES.includes(raw as ClipboardMode) ? (raw as ClipboardMode) : 'verbatim';
 
 export function registerClipboardIpc(clipboard: ClipboardService): void {
-  ipcMain.handle('throng:clipboard:write', (_event, raw: Record<string, unknown>) => {
+  ipcMain.handle('throng:clipboard:write', async (_event, raw: Record<string, unknown>) => {
     if (typeof raw?.text !== 'string') return;
-    clipboard.write(raw.text, asMode(raw.mode));
+    await clipboard.write(raw.text, asMode(raw.mode));
   });
 
   /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
@@ -39,8 +39,8 @@ export function registerClipboardIpc(clipboard: ClipboardService): void {
    * the answer is needed is why this feature has no clipboard polling and no OS clipboard observer —
    * there is no event to miss.
    */
-  ipcMain.handle('throng:clipboard:paste', () => ({
-    text: clipboard.read(),
-    mode: clipboard.pasteMode(),
+  ipcMain.handle('throng:clipboard:paste', async () => ({
+    text: await clipboard.read(),
+    mode: await clipboard.pasteMode(),
   }));
 }
