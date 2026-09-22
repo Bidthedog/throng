@@ -129,7 +129,7 @@ Paste the relevant passing output in your PR — "tests pass" without evidence i
 
 ## Coding standards
 
-TypeScript 7.x / Node 20 (ESM); match the surrounding style and comment density. The
+TypeScript 7.x / Node 24 (ESM); match the surrounding style and comment density. The
 constitution's engineering principles are binding: **SOLID / DRY / YAGNI** (VIII);
 **constructor injection only** — no service locators or ambient singletons, one IoC container
 per process boundary (IX); **externalised typed config**, no magic values (X); and **no OS

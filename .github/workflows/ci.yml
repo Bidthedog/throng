@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       # Point TEMP/TMP at an alias-free path. The default %TEMP%
       # (C:\Users\RUNNER~1\...) carries an 8.3 short-name because the runner username
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       # Alias-free temp dir — see the note on the `test` job (avoids 8.3 short-name
       # path mismatches from the C:\Users\RUNNER~1\... default %TEMP%).
@@ -238,7 +238,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Install dependencies
         run: npm ci

@@ -1,7 +1,7 @@
 name: Release
 
 # Packaging, clean-machine installer verification, and gated GitHub-Releases publish for throng
-# (feature 020, #21). Windows-only (FR-038), windows-2022 + Node 20 to match CI's native builds so
+# (feature 020, #21). Windows-only (FR-038), windows-2022 + Node 24 to match CI's native builds so
 # the bundled runtime's ABI matches the daemon's native modules (better-sqlite3, node-pty, koffi).
 #
 # - build-installer + verify-installer run on every push to the packaging branch and on demand, so
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       # Alias-free temp dir — the runner's default %TEMP% carries an 8.3 short name
       # (C:\Users\RUNNER~1\...) that breaks in-tree path matching in some file specs. Same reason
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Install dependencies
         run: npm ci

@@ -21,7 +21,7 @@ const execFileAsync = promisify(execFile);
 /**
  * Windows `IPtyHost` (005 Phase C) over node-pty/ConPTY, owned by the **daemon**.
  *
- * IMPORTANT: node-pty (a native module built for plain Node 20) is required
+ * IMPORTANT: node-pty (a native module built for plain host Node) is required
  * **lazily in the constructor**, never at module top level — so importing this
  * package's barrel into the Electron main process does NOT load the native
  * binary (which would mismatch Electron's ABI). Only the daemon, which constructs

@@ -149,7 +149,7 @@ never kills them.
 ## Prerequisites
 
 - **Node.js 20 LTS.** `better-sqlite3` and `node-pty` ship prebuilt binaries (no native
-  toolchain), and the daemon builds against host Node 20 — no `electron-rebuild`.
+  toolchain), and the daemon builds against host Node 24 — no `electron-rebuild`.
 - **Windows 11** (see [Platform support](#platform-support)).
 
 ## Commands
