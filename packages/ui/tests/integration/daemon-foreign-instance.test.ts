@@ -76,11 +76,17 @@ describe('ensureDaemon and another instance (#192)', () => {
     const ours = entryFile('our-current-build');
     // A daemon on our pipe reporting a mismatching build id AND a different entry — which is exactly
     // what a packaged install, or another worktree, looks like from here.
+    //
+    // The other instance's entry must EXIST: #429 retires a daemon whose entry is gone from disk,
+    // whoever it belongs to. This used a hardcoded `E:/tools/throng/…` path, which only ever
+    // existed on one workstation — where it passed — and on the gate runner read as a deleted
+    // install.
+    const theirs = entryFile('someone-elses-build');
     await fakeDaemon(pipeName, {
       status: 'ok',
       pid: 999_999,
       buildId: 'someone-elses-build',
-      daemonEntry: 'E:/tools/throng/resources/app/packages/daemon/dist/main.js',
+      daemonEntry: theirs,
     });
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
