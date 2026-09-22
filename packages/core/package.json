@@ -1,6 +1,6 @@
 {
   "name": "@throng/core",
-  "version": "1.0.0-alpha6",
+  "version": "1.0.0-beta7",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@codemirror/search": "^6.7.2",
-    "@codemirror/state": "^6.7.5",
+    "@codemirror/state": "^6.7.6",
     "picomatch": "^4.0.7"
   },
   "devDependencies": {

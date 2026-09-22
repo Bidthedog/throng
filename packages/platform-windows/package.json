@@ -1,6 +1,6 @@
 {
   "name": "@throng/platform-windows",
-  "version": "1.0.0-alpha6",
+  "version": "1.0.0-beta7",
   "private": true,
   "type": "module",
   "main": "dist/index.js",

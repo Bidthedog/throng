@@ -1,6 +1,6 @@
 {
   "name": "throng",
-  "version": "1.0.0-alpha6",
+  "version": "1.0.0-beta7",
   "private": true,
   "description": "throng — project-first terminal & agent workspace",
   "author": "Christopher Sebok",
@@ -77,7 +77,7 @@
   },
   "dependencies": {
     "@codemirror/search": "^6.7.2",
-    "@codemirror/state": "^6.7.5",
+    "@codemirror/state": "^6.7.6",
     "better-sqlite3": "^12.11.1",
     "inversify": "^8.2.3",
     "koffi": "^3.3.1",

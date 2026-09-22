@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-beta7 — 2026-09-22
+
 ### Fixed
 - **Running the portable build no longer breaks terminals in an installed throng**
   ([#429](https://github.com/Bidthedog/throng/issues/429)). The portable build deletes its
