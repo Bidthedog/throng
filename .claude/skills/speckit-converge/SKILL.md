@@ -24,12 +24,12 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 - Check if `.specify/extensions.yml` exists in the project root.
 - If it exists, read it and look for entries under the `hooks.before_converge` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- If the YAML cannot be parsed or is invalid, do not skip silently: tell the user that `.specify/extensions.yml` could not be read (include the parser error) and that no hooks were checked, including any mandatory (`optional: false`) hooks registered there, then continue normally
 - Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
 - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `/speckit-git-commit`.
+- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `/speckit-git-commit`.
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
 
@@ -55,6 +55,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
     Wait for the result of the hook command before proceeding to the Goal.
     ```
+    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
 
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
@@ -95,7 +96,7 @@ skip constitution checks gracefully rather than failing.
 
 ### 1. Initialize Convergence Context
 
-Run `.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks` once from repo root and parse JSON for FEATURE_DIR and AVAILABLE_DOCS. Derive absolute paths:
+Run `.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireSpec -RequireTasks -IncludeTasks` once from repo root and parse JSON for FEATURE_DIR and AVAILABLE_DOCS. Derive absolute paths:
 
 - SPEC = FEATURE_DIR/spec.md
 - PLAN = FEATURE_DIR/plan.md
@@ -147,6 +148,12 @@ Create an internal model (do not echo raw artifacts):
   scope beyond what the artifacts define.
 
 ### 4. Assess the Codebase and Classify Findings
+
+Include every existing task in the intent inventory, regardless of checkbox state or
+Convergence phase: completion claims are not evidence. Verify current behavior against
+the spec, plan, tasks, and constitution; for corrective task chains, assess the resulting
+behavior, not superseded implementation details. Check both unmet obligations and
+implementation that contradicts, exceeds, or falls outside the stated intent.
 
 For each item in the intent inventory, inspect the current code in scope and produce a
 `Finding` only where there is a gap. Classify every finding by **gap type**:
@@ -242,14 +249,14 @@ Append to the **end** of `tasks.md`, per the append contract:
 After producing the result, check if `.specify/extensions.yml` exists in the project root.
 
 - If it exists, read it and look for entries under the `hooks.after_converge` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
+- If the YAML cannot be parsed or is invalid, do not skip silently: tell the user that `.specify/extensions.yml` could not be read (include the parser error) and that no hooks were checked, including any mandatory (`optional: false`) hooks registered there, then continue normally
 - Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
 - For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
   - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
   - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
 - Report the convergence outcome (`converged` or `tasks_appended`) in-session before listing
   any hooks, so users can decide whether to run optional follow-up commands.
-- When constructing slash commands from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `/speckit-git-commit`.
+- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `/speckit-git-commit`.
 - For each executable hook, output the following based on its `optional` flag:
   - **Optional hook** (`optional: true`):
 
@@ -273,5 +280,6 @@ After producing the result, check if `.specify/extensions.yml` exists in the pro
     Executing: `/{command}`
     EXECUTE_COMMAND: {command}
     ```
+    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
 
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
