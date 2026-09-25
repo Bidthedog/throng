@@ -1,13 +1,9 @@
 {
   "permissions": {
-    "allow": [
-    ],
-    "deny": [
-    ],
-    "ask": [
-    ]
+    "allow": [],
+    "deny": [],
+    "ask": []
   },
   "enabledPlugins": {},
-  "enabledMcpjsonServers": [
-  ]
+  "enabledMcpjsonServers": []
 }
