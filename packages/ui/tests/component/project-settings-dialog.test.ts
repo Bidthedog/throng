@@ -83,6 +83,9 @@ function fakeDaemon(initial: ProjectDto[]) {
         case 'projects.list':
           reply = { projects: projects.map((p) => ({ ...p, hiddenPaths: [...p.hiddenPaths] })) };
           break;
+        case 'projects.categories.list':
+          reply = { categories: [] };
+          break;
         case 'projects.setActive':
           reply = { activeId: (params as { id: string }).id };
           break;
@@ -273,14 +276,18 @@ describe('the hidden list, and the door it reopens (FR-043)', () => {
      * The renderer cannot stat anything itself — it has no filesystem — so the only way this
      * component could have depended on the path existing is by ASKING the daemon. That is what the
      * recorded method list rules out: the rows are drawn, and the removal works, having sent nothing
-     * but the store's own list/setActive/setHidden traffic.
+     * but the store's own list/categories.list/setActive/setHidden traffic.
      */
     const { user, onClose, methods } = await mount([project('p1', 'Demo', ['build/gone.js'])]);
     await openProject(user, 'open-p1', onClose);
 
     expect(rows()).toHaveLength(1);
     expect(rowText()[0]).toContain('build/gone.js');
-    expect(methods.filter((m) => m !== 'projects.list' && m !== 'projects.setActive')).toEqual([]);
+    expect(
+      methods.filter(
+        (m) => m !== 'projects.list' && m !== 'projects.categories.list' && m !== 'projects.setActive',
+      ),
+    ).toEqual([]);
 
     await user.click(screen.getByTestId('hidden-path-remove-build/gone.js'));
     await waitFor(() => expect(rows()).toHaveLength(0));

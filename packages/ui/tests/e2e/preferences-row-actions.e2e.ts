@@ -287,22 +287,24 @@ test('clear unbinds an action entirely, and reset brings the chords back (FR-016
       const prefs = await openPrefs(app, win, 'keybindings');
       await expect(prefs.getByTestId('keybindings-tab')).toBeVisible();
 
-      const chord = prefs.getByTestId('binding-zoom.in-chord');
+      // `panel.zoomIn`, not `zoom.in`: 046 FR-105 left `zoom.in` a single chord, and the reset below
+      // is only a claim about the FULL shipped set when there is more than one binding to restore.
+      const chord = prefs.getByTestId('binding-panel.zoomIn-chord');
       await expect(chord).not.toContainText('unbound');
 
       // Every action is clearable — unbound is a valid state for all of them.
-      await prefs.getByTestId('binding-clear-zoom.in').click();
+      await prefs.getByTestId('binding-clear-panel.zoomIn').click();
       await expect(chord).toContainText('unbound');
-      await expect.poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['zoom.in'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual([]);
+      await expect.poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['panel.zoomIn'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual([]);
 
       // An unbound action offers no clear (it would be a no-op) but IS overridden, so it offers
       // a reset — which restores the FULL shipped chord set, not just one chord.
-      await expect(prefs.getByTestId('binding-clear-zoom.in')).toBeDisabled();
-      await prefs.getByTestId('binding-reset-zoom.in').click();
+      await expect(prefs.getByTestId('binding-clear-panel.zoomIn')).toBeDisabled();
+      await prefs.getByTestId('binding-reset-panel.zoomIn').click();
       await expect(chord).not.toContainText('unbound');
       await expect
-        .poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['zoom.in']?.length)
-        .toBeGreaterThan(1); // zoom.in ships with several chords
+        .poll(() => readJson(cfgRoot, 'keybindings.json')?.bindings?.['panel.zoomIn']?.length)
+        .toBeGreaterThan(1); // panel.zoomIn ships a chord and the Ctrl+wheel gesture
     },
   );
 });

@@ -9,7 +9,7 @@
  *    window-level drop handler, a future editable body — can act on them, and no editor bridge is called.
  * 2. **Commands resolved by chord.** With a preview active, Ctrl+S, Delete, F2, Ctrl+X, Ctrl+C and Ctrl+F
  *    resolve to nothing file-, save-, rename- or find-shaped. The preview has its own keyboard scope
- *    (044 R16), so they cannot fall back to the Files & Folders scope and act on the TREE's selection
+ *    (044 R16), so they cannot fall back to the File Explorer scope and act on the TREE's selection
  *    while the reader looks at the page (FR-021).
  * 3. **Renaming the panel.** The rename chord has no starter to reach and a header double-click opens no
  *    box (FR-030).

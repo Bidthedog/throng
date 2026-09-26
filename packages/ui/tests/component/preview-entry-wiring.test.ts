@@ -112,7 +112,7 @@ describe('each entry point reaches preview.open (FR-001, FR-002, FR-005)', () =>
 });
 
 describe('the chord is the workspace’s only when nothing else took the key', () => {
-  it('does nothing while Files & Folders is the active pane — the tree owns the chord there', async () => {
+  it('does nothing while File Explorer is the active pane — the tree owns the chord there', async () => {
     const { bridge } = await mount();
     setActivePane('explorer');
     fireEvent.keyDown(document.body, CHORD);

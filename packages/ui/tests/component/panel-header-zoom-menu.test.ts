@@ -279,10 +279,12 @@ describe('a Find in Files panel offers no rename in its header menu (FR-061)', (
 describe('a preview panel offers live zoom and no rename in its header menu (044 FR-030, FR-034)', () => {
   it('offers Zoom In, Zoom Out and Reset Zoom, each with its chord', () => {
     const zoom = menuFor(PREVIEW_KIND).find((i) => i.label === 'Zoom');
+    // 046 iterate round 1 (FR-102/FR-105): panel.zoomIn's stored token is now literally 'Ctrl+Alt++'
+    // (the same-binding `+` key), not the `=` it displayed before this round.
     expect((zoom?.submenu ?? []).map((i) => [i.label, i.shortcut])).toEqual([
-      ['Zoom In', 'Ctrl+Alt+='],
+      ['Zoom In', 'Ctrl+Alt++'],
       ['Zoom Out', 'Ctrl+Alt+-'],
-      ['Reset Zoom', 'Ctrl+Alt+0'],
+      ['Reset Zoom', 'Ctrl+Alt+Numpad0'],
     ]);
   });
 

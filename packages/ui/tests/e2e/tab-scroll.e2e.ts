@@ -17,6 +17,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { shippedPress } from '../shared/window-chords.js';
 import {
   openApp,
   createProject as newProject,
@@ -206,7 +207,7 @@ test.describe('an eased strip', () => {
     // The CHORD route, not the control: `tabs.openPicker` is window-level, so it opens the same
     // picker from wherever focus happens to be.
     await beginScrollTrace(shared.win);
-    await shared.win.keyboard.press('Control+Alt+T');
+    await shared.win.keyboard.press(shippedPress('tabs.openPicker'));
     await expect(shared.win.getByTestId('tabpicker')).toBeVisible();
     await shared.win.getByTestId(`tabpicker-row-${target.tabId}`).click();
     await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);

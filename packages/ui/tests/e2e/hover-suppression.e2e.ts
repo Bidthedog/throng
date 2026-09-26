@@ -13,7 +13,7 @@ import {
 /**
  * US10 / FR-035 — the STRANDED HOVER never lingers when the window is blurred.
  *
- * The reported path: the cog menu's "Themes" item sits over the Files & Folders root; clicking it
+ * The reported path: the cog menu's "Themes" item sits over the File Explorer root; clicking it
  * opens Preferences (which blurs the main window) and closes the menu with NO pointer movement, so the
  * root is left painted with its `:hover` background. The general case: any element left under the
  * pointer while the window loses focus must not keep a hover background until a real pointermove with
@@ -96,7 +96,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('the Files & Folders root drops its hover background while Preferences is open (FR-035)', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
+test('the File Explorer root drops its hover background while Preferences is open (FR-035)', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   const projectRoot = own(makeProjectFolder());
   try {
     await runApp(async (app, win) => {

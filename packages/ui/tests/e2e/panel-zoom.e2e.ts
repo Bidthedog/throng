@@ -126,8 +126,9 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       // Content is unchanged — zoom never touches the buffer (FR-013).
       await expect(content).toContainText('const answer = 42;');
 
-      // Reset returns only p1 to its default size.
-      await win.keyboard.press('Control+Alt+Digit0');
+      // Reset returns only p1 to its default size — on the keypad zero since 046 FR-114; the main-row
+      // 0 no longer resets.
+      await win.keyboard.press('Control+Alt+Numpad0');
       await expect.poll(() => editorFontPx(win, p1)).toBeCloseTo(baseP1, 1);
       expect(await panelZoom(win, p1)).toBe(0);
     });

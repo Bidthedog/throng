@@ -19,7 +19,7 @@
  *
  * ══ WHAT DID NOT COME WITH IT, AND WHERE IT ALREADY LIVES ══
  *
- * The migrated test also asserted two things that are not modality at all: that the Files & Folders
+ * The migrated test also asserted two things that are not modality at all: that the File Explorer
  * Delete action raises this dialog, and that cancelling leaves the file on disk. Both are covered by
  * `packages/ui/tests/e2e/explorer.e2e.ts:413` ("delete confirmation can be cancelled; the toolbar
  * Delete button works"), which right-clicks `a.txt`, clicks Delete, asserts `confirm-dialog` is

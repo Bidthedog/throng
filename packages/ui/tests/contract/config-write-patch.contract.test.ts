@@ -285,6 +285,78 @@ describe('step 7 — atomic write, and the serialisation that makes it mean some
   });
 });
 
+describe('046 T058/T127 — the Unload setting round-trips; the withdrawn level does not (FR-034a, FR-111)', () => {
+  /*
+   * `projects.unloadTerminalAction` opened a new top-level section (`projects`). Step 5 strips a key
+   * the schema does not model, so until the schema modelled it a Preferences write would have been
+   * silently discarded — the control would move and the file would not.
+   *
+   * `confirmations.unloadProject` (FR-034b) is WITHDRAWN by FR-111: no Unload row asks anything, so it
+   * is no longer modelled. A value a development settings.json still carries is an unmodelled key, and
+   * like every retired key it is dropped by the next write rather than migrated (019 FR-023) — it
+   * governed a dialog that no longer exists, so dropping it changes nothing the user sees.
+   */
+  it('a patch to the withdrawn confirmations.unloadProject is not persisted, and its neighbour is untouched', async () => {
+    const { store, root } = freshStore();
+    seedRaw(root, JSON.stringify(DEFAULT_APP_SETTINGS));
+
+    const res = await writeConfigPatch(store, { kind: 'settings' }, [
+      { path: ['confirmations', 'unloadProject'], value: 'single' },
+    ]);
+
+    expect(res).toEqual({ ok: true });
+    const after = readSettings(root) as { confirmations: { unloadProject?: string; destroyProject: string } };
+    expect(after.confirmations).not.toHaveProperty('unloadProject');
+    // Its neighbour in the same section is untouched (G1).
+    expect(after.confirmations.destroyProject).toBe(DEFAULT_APP_SETTINGS.confirmations.destroyProject);
+  });
+
+  it('a patch to projects.unloadTerminalAction persists, and survives the parse', async () => {
+    const { store, root } = freshStore();
+    seedRaw(root, JSON.stringify(DEFAULT_APP_SETTINGS));
+
+    const res = await writeConfigPatch(store, { kind: 'settings' }, [
+      { path: ['projects', 'unloadTerminalAction'], value: 'endTerminals' },
+    ]);
+
+    expect(res).toEqual({ ok: true });
+    const after = readSettings(root) as { projects?: { unloadTerminalAction?: string } };
+    expect(after.projects?.unloadTerminalAction).toBe('endTerminals');
+  });
+
+  it('projects.unloadTerminalAction is read back by the next, unrelated write', async () => {
+    const { store, root } = freshStore();
+    await writeConfigPatch(store, { kind: 'settings' }, [
+      { path: ['projects', 'unloadTerminalAction'], value: 'endTerminals' },
+    ]);
+    // A later, unrelated write re-parses the document from disk: the key must still be there.
+    await writeConfigPatch(store, { kind: 'settings' }, [{ path: ['appearance', 'theme'], value: 'Matrix' }]);
+
+    const after = readSettings(root) as { projects?: { unloadTerminalAction?: string } };
+    expect(after.projects?.unloadTerminalAction).toBe('endTerminals');
+  });
+
+  it('a stored document carrying the withdrawn level loses it at the next patch; the action survives', async () => {
+    // `writeConfigDoc` stores the document as given; it is the NEXT patch's parse of that base that
+    // decides whether the keys are modelled — so that is what this asserts on.
+    const { store, root } = freshStore();
+    const doc = {
+      ...DEFAULT_APP_SETTINGS,
+      confirmations: { ...DEFAULT_APP_SETTINGS.confirmations, unloadProject: 'single' },
+      projects: { unloadTerminalAction: 'endTerminals' },
+    };
+    await writeConfigDoc(store, { kind: 'settings' }, JSON.stringify(doc));
+    await writeConfigPatch(store, { kind: 'settings' }, [{ path: ['appearance', 'theme'], value: 'Matrix' }]);
+
+    const after = readSettings(root) as {
+      confirmations: { unloadProject?: string };
+      projects?: { unloadTerminalAction?: string };
+    };
+    expect(after.confirmations).not.toHaveProperty('unloadProject');
+    expect(after.projects?.unloadTerminalAction).toBe('endTerminals');
+  });
+});
+
 describe('error identifiers', () => {
   it('are stable identifiers, not sentences', async () => {
     // Wording for the user is chosen at the notice layer, which is what lets one failure read

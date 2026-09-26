@@ -43,6 +43,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_KEYBINDINGS } from '@throng/core';
 import { ContextMenu, type MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { ContextMenuProvider, useContextMenu } from '../../src/renderer/context-menu-provider.js';
 import { cogMenuItems } from '../../src/renderer/title-bar/cog-menu-items.js';
@@ -170,8 +171,16 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
    * ten preferences suites reach the preferences window, FR-053). A fixture would have restated the
    * order rather than checked it.
    */
+  // 046 iterate round 1 (FR-074, FR-107) had retired `navigate` and led with a Zoom row; round 2
+  // (FR-113) removed that row too, so the cog is back to its single Application section. This file
+  // is about menu MECHANICS (roving focus, Enter, End), not any one row's own behaviour.
   const cog = (): MenuAction[] =>
-    cogMenuItems({ openPreferences: vi.fn(), openLogs: vi.fn(), openAbout: vi.fn() });
+    cogMenuItems({
+      openPreferences: vi.fn(),
+      openLogs: vi.fn(),
+      openAbout: vi.fn(),
+      keybindings: DEFAULT_KEYBINDINGS,
+    });
 
   const openCog = () => {
     const onClose = vi.fn();
@@ -206,6 +215,8 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
   it('arrows move through the rows, and End jumps to the last', async () => {
     const { user } = openCog();
 
+    // 046 iterate round 2 (FR-113) — the cog is back to a single Application section: Down lands
+    // straight on Settings, the first ordinary row.
     await user.keyboard('{ArrowDown}');
     expect(focused()).toBe('cog-menu-settings');
     await user.keyboard('{ArrowDown}');
@@ -214,7 +225,6 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     expect(focused()).toBe('cog-menu-settings');
 
     await user.keyboard('{End}');
-    // "About throng" is last (020 FR-003), after Settings / Key Bindings / Themes / Open Logs Folder.
     expect(focused()).toBe('cog-menu-about');
   });
 
@@ -225,7 +235,12 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
       createElement(ContextMenu, {
         x: 0,
         y: 0,
-        items: cogMenuItems({ openPreferences, openLogs: vi.fn(), openAbout: vi.fn() }),
+        items: cogMenuItems({
+          openPreferences,
+          openLogs: vi.fn(),
+          openAbout: vi.fn(),
+          keybindings: DEFAULT_KEYBINDINGS,
+        }),
         onClose,
         testId: 'cog-menu',
         submenuDelayMs: 60_000,
@@ -233,6 +248,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     );
     const user = userEvent.setup();
 
+    // 046 iterate round 2 (FR-113) — Settings is the very first row now, no Zoom row ahead of it.
     await user.keyboard('{ArrowDown}{Enter}');
 
     expect(openPreferences).toHaveBeenCalledWith('settings');
@@ -249,19 +265,13 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     /*
      * MIGRATED FROM `packages/ui/tests/e2e/titlebar-chrome.e2e.ts:107` (035 FR-001).
      *
-     * The E2E asserted the same five NAMES off the rendered menu, and its own comment says why it
+     * The E2E asserted the same NAMES off the rendered menu, and its own comment says why it
      * asserted names rather than whole rows: *"keeps the test about WHICH COMMANDS the cog offers…
      * a decorative change should not redden this, but a command appearing or vanishing must."*
      *
-     * Everything it needed was already here except this. The rows are built by the REAL
-     * `cogMenuItems()` (see `cog()` above), rendered through the REAL `ContextMenu`, and the
-     * dismissal half is the Escape test directly above. What no test asserted anywhere — unit
-     * included — is the LABELS: `menu-sections.test.ts:562` pins the five `testId`s and
-     * `:556` pins the sections, but nothing pinned the words the user actually reads.
-     *
-     * So a rename to "Preferences", or a sixth command appearing, was invisible to the whole suite
-     * below E2E. Reading them off `role="menuitem"` is deliberate: that is what a screen reader and
-     * a user both see, and it is the assertion the E2E was making.
+     * 046 iterate round 1 (FR-074, FR-107) had superseded the four Navigate rows this test used to
+     * pin (Next/Previous Project, Focus File Explorer/Projects) with a Zoom row. 046 iterate round 2
+     * (FR-113) removes that Zoom row too, so this is back to exactly the five Application rows.
      */
     openCog();
     const labels = screen

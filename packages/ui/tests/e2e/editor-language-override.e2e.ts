@@ -292,6 +292,10 @@ test('the strip DIMS with its panel — it does not stay lit while every other i
       await createProject(win, 'LangProj', root);
       const pid = await openEditorOn(win, 'main.rs', 'fn main');
       await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Rust');
+      // The file was opened from the File Explorer, which therefore holds the active pane, and 046
+      // FR-121 shows no workspace panel as active while it does — so the strip is dimmed here. Put
+      // focus back in the editor first; the lit reading is about the workspace's active panel.
+      await win.getByTestId(`editor-${pid}`).click();
 
       // The active panel's strip is fully lit.
       const litOpacity = await win.evaluate(

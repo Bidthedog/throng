@@ -101,8 +101,10 @@ describe('the split-fallback chain (FR-008)', () => {
     // so the two cannot drift. 021 removed `menuSurface`/`dialogSurface` (the menu/dialog cards were
     // consolidated back onto `surfaceActive`/`surface`), leaving the two field/hover carve-outs.
     // 045 FR-138 added the two link-underline tokens, and round four's FR-165g added the three link
-    // hint tokens — every chain is asserted in `theme-link-tokens.test.ts`.
+    // hint tokens — every chain is asserted in `theme-link-tokens.test.ts`. 046 iterate round 1
+    // (FR-072) added `categoryHeaderBackground`, falling back to `sidebarBg`.
     expect(Object.keys(TOKEN_PARENT).sort()).toEqual([
+      'categoryHeaderBackground',
       'hoverSurface',
       'inputSurface',
       'linkHintBackground',

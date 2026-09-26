@@ -168,8 +168,9 @@ test('Ctrl+wheel is left to zoom, not sent to the program', { tag: ['@extended',
       await wheelOver(win, pid, -300, true);
       await wheelOver(win, pid, 300, true);
 
-      // Zoom belongs to the window-level binding. A Ctrl+wheel that also reached the program would
-      // scroll it while resizing the text — two responses to one gesture (FR-033).
+      // Ctrl+wheel is PANEL zoom now (046: it zooms the panel under the pointer), and it is throng's
+      // gesture, not the program's. A Ctrl+wheel that also reached the program would scroll it while
+      // resizing the text — two responses to one gesture (FR-033).
       expect(arrowCount(keysReceived(root)), 'Ctrl+wheel reached the program').toBe(before);
     });
   } finally {

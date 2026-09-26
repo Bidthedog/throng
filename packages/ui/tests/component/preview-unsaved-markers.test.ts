@@ -3,7 +3,7 @@
  *
  * The first cut asserted that nothing reached `editor-state` — which is the MECHANISM, and says
  * nothing about the markers a user reads. This mounts the three surfaces that count unsaved documents
- * — the Tab chip, the Projects list and the Files & Folders tree — beside a preview whose parent
+ * — the Tab chip, the Projects list and the File Explorer tree — beside a preview whose parent
  * document is dirty, and reads the markers themselves.
  *
  * ══ THE CONTROL IS WHAT MAKES THE ABSENCE MEAN SOMETHING ══
@@ -136,6 +136,8 @@ function fakeDaemon(): ThrongBridge {
               },
             ],
           } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         case 'document.pruneMissing':
           return Promise.resolve({ pruned: 0 } as T);
         case 'fileopUndo.get':
@@ -264,7 +266,10 @@ describe('a dirty preview is not counted as unsaved anywhere (SC-006, FR-044)', 
   it('lights no Tab, project or tree marker — and the editor holding the same file lights all three', async () => {
     const { push } = mount();
     await screen.findByTestId('fake-body-pv');
-    const tree = await screen.findByRole('tree');
+    // 046 US2 — the Projects panel is ALSO `role="tree"` now, so an unscoped `findByRole('tree')`
+    // is ambiguous the moment both are mounted; scope to the File Explorer's own tree container.
+    const explorerTree = await screen.findByTestId('file-explorer-tree');
+    const tree = within(explorerTree).getByRole('tree');
     await within(tree).findByText('notes.prvtxt');
     await screen.findByText('Proj');
 

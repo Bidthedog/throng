@@ -15,7 +15,7 @@
  * ══ WHY THE CLICK IS OBSERVED AT THE OPENER ══
  *
  * FR-005 makes opening a preview ONE command. Every entry point — this button, the two menus, the
- * chord, Files & Folders — goes through the window's registered opener (`requestPreviewOpen`), and
+ * chord, File Explorer — goes through the window's registered opener (`requestPreviewOpen`), and
  * that opener is what calls `window.throng.preview.open` (open-preview.test.ts owns that half). So
  * the assertion here is that the button reaches the one command with the right request.
  */

@@ -1,5 +1,5 @@
 /**
- * US2 (#155, spec 024): drop a file/folder from Files & Folders onto a terminal → its absolute
+ * US2 (#155, spec 024): drop a file/folder from File Explorer onto a terminal → its absolute
  * path(s) are inserted at the shell cursor, quoted when they contain whitespace, several joined by a
  * space, and the line is never submitted. Driven through the throng:tree-drop seam (mirroring
  * throng:os-drop), since a real react-dnd → native drop cannot be driven from Playwright.

@@ -75,6 +75,7 @@ function bridgeFor(projects: ProjectDto[]): ThrongBridge {
   return {
     invoke<TResult>(method: string): Promise<TResult> {
       if (method === 'projects.list') return Promise.resolve({ projects } as TResult);
+      if (method === 'projects.categories.list') return Promise.resolve({ categories: [] } as TResult);
       if (method === 'projects.setActive') return Promise.resolve({} as TResult);
       return Promise.reject(new Error(`unexpected call: ${method}`));
     },

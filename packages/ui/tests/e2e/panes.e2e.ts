@@ -132,11 +132,16 @@ test('right pane: rail only while collapsed; expand reveals the explorer', { tag
   // pane by hand. See the file header — test 4 is the only test that creates a project, and it
   // runs after this one. Nothing here is weakened; the dependency is simply named.
   await expect(win.getByTestId('pane-rail-right')).toBeVisible();
+  // 046 FR-001 — the rail names the pane, and its own button explains the gesture; neither still
+  // says "Files & Folders" (app.tsx :1003/:1012).
+  await expect(win.getByTestId('pane-rail-right')).toHaveText('File Explorer');
+  await expect(win.getByTestId('pane-show-right')).toHaveAttribute('title', 'Show File Explorer');
   const collapsed = await buttonGeom(win, 'pane-show-right', 'right');
 
   await win.getByTestId('pane-show-right').click();
   await expect(win.getByTestId('file-explorer-empty')).toBeVisible();
   await expect(win.getByTestId('pane-rail-right')).toHaveCount(0);
+  await expect(win.getByTestId('pane-hide-right')).toHaveAttribute('title', 'Hide File Explorer');
   const expanded = await buttonGeom(win, 'pane-hide-right', 'right');
   approxSame(collapsed, expanded);
 });

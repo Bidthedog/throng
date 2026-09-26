@@ -15,7 +15,7 @@ import { createDefaultLayout, type Panel, type WorkspaceLayout } from '@throng/c
 import { KeybindingsHandler } from '../../src/renderer/app.js';
 import { registerEditorActions, unregisterEditorActions, type EditorActions } from '../../src/renderer/editor/editor-actions.js';
 import { __resetHistoryStore, setPanelHistory } from '../../src/renderer/navigation/history-store.js';
-import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
+import { getActivePane, setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { mountWorkspace, type MountedWorkspace } from './helpers/mount-workspace.js';
 
 const PROJECT = 'proj';
@@ -57,28 +57,77 @@ afterEach(() => {
 
 async function mount(): Promise<void> {
   m = await mountWorkspace(grid(), {
-    extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {} })],
+    extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {}, onRevealLeft: () => {}, onRevealRight: () => {} })],
     throng: { editor: { openInto: () => Promise.resolve({ action: 'open' }) } },
   });
 }
 
-describe('focus.* — Ctrl+Alt+Arrow moves the active panel (012)', () => {
+/**
+ * 046 iterate round 1 (FR-102) — `focus.left/right/up/down`'s shipped chord moved to TIER 1
+ * (`Ctrl+Shift+Alt+Arrow*`), freeing the plain `Ctrl+Alt+Arrow` family back to the editor/shell.
+ */
+describe('focus.* — Ctrl+Shift+Alt+Arrow moves the active panel (012, FR-102)', () => {
   it('right, down, left and up each move it one panel', async () => {
     await mount();
-    act(() => press('ArrowRight', { ctrlKey: true, altKey: true }));
+    act(() => press('ArrowRight', { ctrlKey: true, shiftKey: true, altKey: true }));
     expect(active()).toBe('p2');
-    act(() => press('ArrowDown', { ctrlKey: true, altKey: true }));
+    act(() => press('ArrowDown', { ctrlKey: true, shiftKey: true, altKey: true }));
     expect(active()).toBe('p4');
-    act(() => press('ArrowLeft', { ctrlKey: true, altKey: true }));
+    act(() => press('ArrowLeft', { ctrlKey: true, shiftKey: true, altKey: true }));
     expect(active()).toBe('p3');
-    act(() => press('ArrowUp', { ctrlKey: true, altKey: true }));
+    act(() => press('ArrowUp', { ctrlKey: true, shiftKey: true, altKey: true }));
     expect(active()).toBe('p1');
   });
 
-  it('with Shift added it is a different chord, and moves nothing', async () => {
+  it('without Shift it is a different (now unbound) chord, and moves nothing', async () => {
     await mount();
-    act(() => press('ArrowRight', { ctrlKey: true, altKey: true, shiftKey: true }));
+    act(() => press('ArrowRight', { ctrlKey: true, altKey: true }));
     expect(active()).toBe('p1');
+  });
+});
+
+/**
+ * 046 iterate round 4 (FR-122, SC-019) — the four directional chords act only while the WORKSPACE
+ * holds the active pane. From the Projects pane or the File Explorer the chord does nothing: no panel
+ * is selected, focus stays where it is, and the chord is consumed so it never reaches the list or the
+ * tree. The focused element below stands in for the side pane's own focus target; its bubble listener
+ * is what "the list or the tree" would receive.
+ */
+describe('focus.* acts only while the workspace holds the active pane (FR-122)', () => {
+  for (const side of ['projects', 'files'] as const) {
+    it(`from ${side}: Ctrl+Shift+Alt+ArrowRight moves nothing, keeps focus and is consumed`, async () => {
+      await mount();
+      const sideTarget = document.createElement('div');
+      sideTarget.tabIndex = 0;
+      const reached = vi.fn();
+      sideTarget.addEventListener('keydown', reached);
+      document.body.appendChild(sideTarget);
+      try {
+        sideTarget.focus();
+        act(() => setActivePane(side));
+
+        let notTaken = true;
+        act(() => {
+          notTaken = fireEvent.keyDown(sideTarget, { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true, shiftKey: true, altKey: true });
+        });
+
+        expect(active(), 'the workspace selection moved from a side pane').toBe('p1');
+        expect(getActivePane(), 'the active pane left the side pane').toBe(side);
+        expect(document.activeElement).toBe(sideTarget);
+        expect(notTaken, 'the chord was not consumed (default not prevented)').toBe(false);
+        expect(reached, 'the chord reached the side pane').not.toHaveBeenCalled();
+      } finally {
+        sideTarget.remove();
+      }
+    });
+  }
+
+  it('from the workspace: the same chord moves the active panel as today (control)', async () => {
+    await mount();
+    act(() => setActivePane('workspace'));
+    act(() => press('ArrowRight', { ctrlKey: true, shiftKey: true, altKey: true }));
+    expect(active()).toBe('p2');
+    expect(getActivePane()).toBe('workspace');
   });
 });
 

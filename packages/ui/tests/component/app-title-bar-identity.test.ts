@@ -85,6 +85,8 @@ function mount(opts: { elevated: boolean; projectName?: string }) {
       switch (method) {
         case 'projects.list':
           return Promise.resolve({ projects: [project] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         case 'workspace.load':
           return Promise.resolve({ layout, restored: true } as T);
         case 'workspace.loadSubWorkspaces':

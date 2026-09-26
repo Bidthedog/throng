@@ -243,7 +243,7 @@ interface Allowed {
 
 const EDITOR_LANGUAGE =
   'Markdown the EDITOR LANGUAGE (core/src/editor/languages.ts), not the preview provider: a new provider needs no edit here';
-const FILE_ICON = 'the Files & Folders file-type ICON for .md files, keyed by extension: unrelated to previews';
+const FILE_ICON = 'the File Explorer file-type ICON for .md files, keyed by extension: unrelated to previews';
 
 const ALLOWED: readonly Allowed[] = [
   /* The editor language registry and its grammar loader. */

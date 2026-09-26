@@ -73,7 +73,12 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.resize-handle': 'chrome — a drag edge pinned to its pane',
   '.resize-handle--leading': 'chrome — the same drag edge, leading side',
   '.pane-explorer__body--active': 'chrome — an active-pane highlight, not a surface',
+  '.projects-panel--active':
+    'chrome — the SAME active-pane highlight one pane along (046 US2, T040), sharing the identical '
+    + '::after rule with .pane-explorer__body--active (panes.css)',
   '.terminal-panel__starting': 'chrome — a status overlay filling its own panel',
+  '.editor-pending-chord':
+    'chrome — the two-stroke chord indication (046 FR-092), pinned to the bottom-right of its own editor and clamped to it by max-width; anchored to nothing, so nothing to flip away from',
   '.tab-strip':
     'chrome — the tab strip itself. Its z-index belongs to the ::before/::after OVERFLOW FADES (031/#225), which are decoration painted over the scrolling track and are `pointer-events: none`. Nothing opens out of it, so there is no edge to flip away from; the fades are clamped to the strip by construction',
   '.tabstrip-popover':

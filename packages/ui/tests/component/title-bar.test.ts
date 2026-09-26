@@ -115,6 +115,44 @@ describe('the cog is main-window only (FR-005, FR-007)', () => {
   });
 });
 
+/**
+ * 046 iterate round 1 (checkpoint 2026-09-24; T121, FR-074, FR-107) — SUPERSEDES the block this
+ * replaces (046 US2, FR-019), which pinned a Navigate section here: Next Project, Previous Project,
+ * Focus File Explorer and Focus Projects, each with a `cog-menu-project-next` / `-previous` /
+ * `-focus-explorer` / `-focus-projects` row. FR-074 retires the section — the four commands keep
+ * their chords (now Ctrl+Shift+Alt+PageDown/PageUp/F/P, 10A) but no longer appear in ANY menu, listed
+ * only in the Key Bindings editor's Focus & Zoom group — so this file's job is reduced to proving
+ * they are actually GONE, not to re-pinning what replaced them. The Zoom row FR-107 adds in their
+ * place is `cog-zoom-row.test.ts`'s (T121) own file: this one asserted a `cogNavigate` prop this
+ * component may no longer even accept, so it is dropped rather than reused.
+ *
+ * RED today: `cog-menu-items.ts:42-74` still builds the Navigate section (its own doc comment says
+ * so), so `cog-menu-project-next` etc. are still drawn and this file's assertions of their ABSENCE
+ * currently fail.
+ */
+describe('046 T121 — the cog draws no Navigate section any more (FR-074)', () => {
+  it('opens on something other than Next Project — none of the four retired rows is drawn', async () => {
+    const user = userEvent.setup();
+    render(
+      createElement(ContextMenuProvider, {
+        children: createElement(TitleBar, { identity: 'throng', showCog: true }),
+      }),
+    );
+    await user.click(screen.getByTestId('title-bar-cog'));
+
+    for (const testId of [
+      'cog-menu-project-next',
+      'cog-menu-project-previous',
+      'cog-menu-focus-explorer',
+      'cog-menu-focus-projects',
+    ]) {
+      expect(screen.queryByTestId(testId), testId).toBeNull();
+    }
+    // Application still opens the menu's SECOND section — `cog-zoom-row.test.ts` pins the first.
+    expect(screen.getByTestId('cog-menu-settings')).toBeVisible();
+  });
+});
+
 describe('which window controls each window gets (FR-002, FR-003, FR-034)', () => {
   it('gives a normal window minimise, maximise and close', () => {
     stubWindowBridge();

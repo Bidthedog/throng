@@ -234,7 +234,7 @@ async function newEditor(win: Page): Promise<string> {
  *
  * A bare `element.focus()` avoids that and was the first attempt. It is not enough, and the failure
  * is instructive: DOM focus is not the same fact as which PANE the application thinks the keyboard is
- * in. Every test here opens its file from the tree, which leaves the active pane at Files & Folders —
+ * in. Every test here opens its file from the tree, which leaves the active pane at File Explorer —
  * so `currentScope` kept answering `explorer`, `navigate.gotoLine` (EDITOR_ONLY) resolved to null,
  * and the chord did nothing. The one test that passed had clicked the word-wrap button on the way
  * past, which set the pane as a side effect. That is the whole diagnosis of a two-test failure that

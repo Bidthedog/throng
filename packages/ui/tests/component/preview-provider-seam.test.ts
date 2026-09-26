@@ -11,7 +11,7 @@
  *
  * | #   | Surface                                   | Claim                                                              |
  * |-----|-------------------------------------------|--------------------------------------------------------------------|
- * | S1  | Files & Folders Open In (`FileTree`)      | Preview for `.prvtxt` and `.prvbin`, none for `.txt`               |
+ * | S1  | File Explorer Open In (`FileTree`)      | Preview for `.prvtxt` and `.prvbin`, none for `.txt`               |
  * | S2  | Editor status strip                       | the button for `.prvtxt`; none for `.prvbin` (no editor surface)  |
  * | —   | Default open action (`EditorOpenListener`)| binary: Preview while enabled, Editor while disabled (FR-051)      |
  * | S3  | Preview header menu (`PanelPlaceholder`)  | the binary menu is the text menu without Open in Editor           |
@@ -135,6 +135,8 @@ function daemonOver(layout: WorkspaceLayout, saves: WorkspaceLayout[] = []): Thr
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
           return Promise.resolve({ projects: [{ id: PROJECT, name: 'Proj', rootFolder: ROOT, createdAt: '', lastOpenedAt: '' }] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         case 'document.pruneMissing':
           return Promise.resolve({ pruned: 0 } as T);
         case 'fileopUndo.get':
@@ -164,9 +166,9 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
 });
 
-/* ══ S1, S6a — Files & Folders Open In → Preview ═════════════════════════════════════════════════ */
+/* ══ S1, S6a — File Explorer Open In → Preview ═════════════════════════════════════════════════ */
 
-describe('S1 / S6a — Files & Folders offers Open In → Preview for both test providers (FR-003, FR-062, FR-070)', () => {
+describe('S1 / S6a — File Explorer offers Open In → Preview for both test providers (FR-003, FR-062, FR-070)', () => {
   class ImmediateResizeObserver implements ResizeObserver {
     constructor(private readonly cb: ResizeObserverCallback) {}
     observe(target: Element): void {
@@ -394,7 +396,7 @@ describe('the default open action follows the provider’s kind (FR-050, FR-051,
     return { openInto };
   }
 
-  /** A Files & Folders click, once the settings are live and the workspace has loaded. */
+  /** A File Explorer click, once the settings are live and the workspace has loaded. */
   async function treeOpen(absPath: string): Promise<void> {
     await waitFor(() => expect(live.ws?.layout).toBeTruthy());
     // The Probe renders in the same commit as `EditorOpenListener`, whose `addEventListener` is a passive

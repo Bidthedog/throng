@@ -1,5 +1,5 @@
 /**
- * US3 (#85) — undo a FILE OPERATION in Files & Folders.
+ * US3 (#85) — undo a FILE OPERATION in File Explorer.
  *
  * A rename, a move or a delete in the tree is a real change on disk, and until now it was a change
  * with no way back short of doing the inverse by hand — or, for a delete, going to the Recycle Bin
@@ -192,8 +192,8 @@ test('undo works from anywhere in the pane, not only with a row focused', { tag:
       await input.press('Enter');
       await expect(tree.getByText('other.txt', { exact: true })).toBeVisible({ timeout: 8000 });
 
-      // Click the pane's header — inside Files & Folders, but not on a row and not in the tree.
-      await win.getByTestId('files-pane').getByText('Files & Folders').click();
+      // Click the pane's header — inside File Explorer, but not on a row and not in the tree.
+      await win.getByTestId('files-pane').getByText('File Explorer').click();
       await win.keyboard.press('Control+z');
       await expect.poll(() => existsSync(join(root, 'renamed.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
       expect(existsSync(join(root, 'other.txt'))).toBe(false);

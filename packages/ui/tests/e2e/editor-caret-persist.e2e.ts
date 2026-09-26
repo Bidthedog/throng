@@ -27,9 +27,11 @@ import {
   panelIds,
   reloadWindow,
   cleanupTemp,
+  settleOnActiveProject,
   type AppOptions,
   type OpenApp,
 } from './harness.js';
+import { shippedPress } from '../shared/window-chords.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -170,13 +172,20 @@ async function switchToProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.project-item', { hasText: name })).toHaveClass(/project-item--active/);
 }
 
-test('the editor takes focus on switching to a project whose editor mounts fresh (issue 144)', { tag: ['@core', '@editor', '@reserve:window'] }, async () => {
+test('the editor takes focus on switching from the workspace to a project whose editor mounts fresh, and a list click keeps focus on the list (issue 144, 046 FR-082)', { tag: ['@core', '@editor', '@reserve:window'] }, async () => {
   // The remaining #144 defect: the mount-time focus is gated on saved SESSION view-state so a plain
   // file-open leaves the tree focusable (for F2-rename). But switching to a project whose active
   // editor has NOT been mounted this session — the common "reopen an existing project after a
   // restart" case — has no saved view-state either, so that gate declined to focus it. A deliberate
   // PROJECT switch must move the caret into the target editor; a tree file-open must not. The two
   // are told apart by whether the ACTIVE TAB changed, which is what the fix keys on.
+  //
+  // 046 FR-082 SUPERSEDES #144 for ONE route: a switch made by clicking (or Enter on) a row in the
+  // Projects list keeps keyboard focus on that row — the maintainer's words: "keep the selected
+  // project activated instead of activating the middle panel like we used to". A switch made FROM
+  // the workspace — `project.next` / `project.previous` while a panel holds focus — still delivers
+  // focus into the target's editor, which is #144's guarantee on the route it still covers. This
+  // declaration asserts both halves.
   const rootA = makeProject(); // lines.txt: AAAA / BBBB / CCCC / DDDD
   const rootB = mkdtempSync(join(tmpdir(), 'throng-caret-b-'));
   writeFileSync(join(rootB, 'other.txt'), 'other\n');
@@ -200,8 +209,22 @@ test('the editor takes focus on switching to a project whose editor mounts fresh
       await reloadWindow(win);
       await expect(win.getByTestId('workspace-no-project')).toBeVisible({ timeout: 8000 });
 
-      // Open ProjA — its editor mounts fresh and must take keyboard focus WITHOUT a click.
-      await switchToProject(win, 'ProjA');
+      // ── The LIST route (FR-082): a click on ProjB's row switches project and leaves keyboard
+      // focus on that row, not in the workspace.
+      await switchToProject(win, 'ProjB');
+      await settleOnActiveProject(win, 'ProjB');
+      const rowB = win.locator('.project-item', { hasText: 'ProjB' });
+      await expect(rowB).toBeFocused();
+
+      // ── The WORKSPACE route (#144): a panel of ProjB holds focus, then project.previous steps to
+      // ProjA (created just before ProjB, so its immediate predecessor in the list). ProjA's editor
+      // has not been mounted since the reload, so it mounts fresh and must take keyboard focus
+      // WITHOUT a click.
+      const pidB = await firstPanelId(win);
+      await win.getByTestId(`panel-${pidB}`).click();
+      await expect(rowB).not.toBeFocused();
+      await win.keyboard.press(shippedPress('project.previous'));
+      await settleOnActiveProject(win, 'ProjA');
       const content = win.getByTestId(`editor-${pidA}`).locator('.cm-content');
       await expect(content).toContainText('CCCC', { timeout: 8000 });
       await expect(win.getByTestId(`editor-${pidA}`).locator('.cm-editor')).toHaveClass(
