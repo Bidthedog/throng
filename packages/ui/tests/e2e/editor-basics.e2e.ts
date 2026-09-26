@@ -91,7 +91,7 @@ test('refuses an out-of-tree save and leaves the buffer unsaved', { tag: ['@core
   }
 });
 
-test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active', { tag: ['@core', '@editor'] }, async () => {
+test('the File Explorer pane gates Ctrl+S (no-op) and highlights when active', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'gated.txt');
   try {
@@ -100,16 +100,25 @@ test('the Files & Folders pane gates Ctrl+S (no-op) and highlights when active',
       const pid = await newEditor(win);
       await typeInto(win, pid, 'unsaved edits');
 
-      // Click the Files & Folders pane → it becomes the active pane (highlighted).
+      // Click the File Explorer pane → it becomes the active pane (highlighted).
       await win.getByTestId('files-pane').click();
       await expect(win.getByTestId('files-pane')).toHaveAttribute('data-active-pane', 'true');
       // The highlight border is an overlay pseudo-element rendered ABOVE the tree
       // row selection box (FR-071) — assert the ::after border + its stacking.
+      // 046 FR-073: the outline is as thin as the pane's own default border (`.pane--explorer`'s
+      // border-left), read from the live pane rather than spelled, and never the workspace panels' 2px.
       const overlay = await win.getByTestId('files-pane').evaluate((el) => {
         const s = getComputedStyle(el, '::after');
-        return { border: s.borderTopWidth, z: s.zIndex, pe: s.pointerEvents };
+        const pane = el.closest('.pane--explorer');
+        return {
+          border: s.borderTopWidth,
+          paneBorder: pane ? getComputedStyle(pane).borderLeftWidth : null,
+          z: s.zIndex,
+          pe: s.pointerEvents,
+        };
       });
-      expect(overlay.border).toBe('2px');
+      expect(overlay.paneBorder, 'files-pane is not inside .pane--explorer').not.toBeNull();
+      expect(overlay.border).toBe(overlay.paneBorder);
       expect(Number(overlay.z)).toBeGreaterThan(0);
       expect(overlay.pe).toBe('none'); // never intercepts clicks on the tree
 

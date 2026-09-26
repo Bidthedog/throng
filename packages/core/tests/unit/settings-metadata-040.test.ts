@@ -37,6 +37,7 @@ const CURSOR_KEY = 'editor.statusBar.showCursorPosition';
 const COUNTS_KEY = 'editor.statusBar.showCounts';
 const BAR_KEY = 'editor.showStatusBar';
 const TERMINAL_BAR_KEY = 'terminals.showStatusBar';
+const WRAP_KEY = 'editor.defaultWordWrap';
 
 const descriptor = (key: string): FieldDescriptor => {
   const found = SETTINGS_METADATA.find((d) => d.key === key);
@@ -127,6 +128,24 @@ describe('no user-facing string calls it a status strip (FR-034a)', () => {
       (d) => /status\s+strip/i.test(d.label) || /status\s+strip/i.test(d.description),
     ).map((d) => d.key);
     expect(offenders, 'these say "status strip" to the user').toEqual([]);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Branch-review finding (spec 046) — these two descriptions must not hard-code
+ * editor.toggleWordWrap's shipped chord, the same rule keybindings-metadata.test.ts's M9 case
+ * already holds zoom.reset to. `Ctrl+Alt+W` moved to the two-stroke `Ctrl+E W` (046 FR-091/FR-092),
+ * and the chord is rebindable regardless — a setting description naming a specific key combination
+ * goes stale the moment a user rebinds it, or the shipped default moves again.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('editor.defaultWordWrap / editor.showStatusBar do not hard-code a chord (branch-review, 046)', () => {
+  it('names the key binding by its command, not by a specific chord', () => {
+    for (const key of [WRAP_KEY, BAR_KEY]) {
+      const text = descriptor(key).description;
+      // A chord token looks like "Ctrl+…", "Shift+…", "Alt+…" or a bare key name followed by "+".
+      expect(text, key).not.toMatch(/Ctrl\+|Shift\+|Alt\+|Cmd\+/);
+    }
   });
 });
 

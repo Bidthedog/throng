@@ -216,7 +216,7 @@ describe('placement falls back to a local view of the parent (fix round 1, items
     const ws = fakeWs(twoTabs());
     watchFocus('new-1');
 
-    // The Files & Folders chord (and Open In → Preview): no requester. Main's registry recorded the
+    // The File Explorer chord (and Open In → Preview): no requester. Main's registry recorded the
     // document's panel in ANOTHER window, but this window shows the file too.
     const outcome = await openPreview({
       ws,

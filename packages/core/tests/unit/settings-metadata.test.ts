@@ -524,3 +524,61 @@ describe('the replace summary notice has a display mode and a duration of its ow
     expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ mode: 'timed', timeoutMs: 5000 });
   });
 });
+
+/**
+ * 046 US4 — the Unload settings after FR-111 (T125; originally T055, FR-034a/FR-034b).
+ *
+ * `confirmations.unloadProject` is WITHDRAWN: no project-menu Unload row prompts any more, so a
+ * confirmation level for that prompt has nothing to govern, and its descriptor leaves the registry
+ * (and with it the Preferences editor). `projects.unloadTerminalAction` stays exactly where it was —
+ * key, values, labels, group — because it still decides what the plain **Unload Project** row does
+ * and which action the second row names (FR-081).
+ *
+ * Its DESCRIPTION, though, was written for the dialog era: "when no dialog is shown, and which button
+ * the dialog focuses", and "Keep terminals running closes idle shells". Both are now false — there is
+ * no dialog (FR-111), and keeping terminals running keeps idle shells too (FR-086). A description is
+ * the one place a user reads what a setting does, so it is asserted here rather than left to drift.
+ */
+describe('the Unload settings in the registry after FR-111 (046 US4)', () => {
+  const byKey = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
+
+  it('has no descriptor for confirmations.unloadProject', () => {
+    expect(byKey.get('confirmations.unloadProject'), 'the withdrawn confirmation level still has a descriptor').toBeUndefined();
+  });
+
+  it('no longer counts confirmations.unloadProject as a configurable leaf', () => {
+    expect(settingsLeaves()).not.toContain('confirmations.unloadProject');
+  });
+
+  it('still describes projects.unloadTerminalAction as a two-way select, named per data-model §3', () => {
+    const d = byKey.get('projects.unloadTerminalAction');
+    expect(d, 'projects.unloadTerminalAction has no descriptor').toBeDefined();
+    expect(d?.group).toBe('Confirmations');
+    expect(d?.control).toBe('select');
+    expect(d?.allowedValues).toEqual(['keepRunning', 'endTerminals']);
+    expect(d?.label).toBe('Unload project: default terminal action');
+    expect(d?.optionLabels).toEqual({
+      keepRunning: 'Keep terminals running',
+      endTerminals: 'End terminals',
+    });
+    expect(settingsLeaves()).toContain('projects.unloadTerminalAction');
+  });
+
+  it('describes projects.unloadTerminalAction without a dialog (FR-111)', () => {
+    const description = byKey.get('projects.unloadTerminalAction')?.description ?? '';
+    expect(description).not.toMatch(/dialog|prompt|confirm/i);
+  });
+
+  it('describes projects.unloadTerminalAction without closing idle shells (FR-086)', () => {
+    const description = byKey.get('projects.unloadTerminalAction')?.description ?? '';
+    // Keep terminals running keeps EVERY terminal, idle shells included; saying otherwise tells the
+    // user their idle shell will be gone when it will not.
+    expect(description).not.toMatch(/clos\w*\s+idle|idle\s+(shells?|terminals?)\s+(are\s+|is\s+)?clos/i);
+  });
+
+  it('still says what each value does', () => {
+    const description = byKey.get('projects.unloadTerminalAction')?.description ?? '';
+    expect(description).toMatch(/keep/i);
+    expect(description).toMatch(/end/i);
+  });
+});

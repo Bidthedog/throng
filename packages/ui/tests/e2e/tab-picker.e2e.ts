@@ -13,6 +13,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
+import { shippedPress } from '../shared/window-chords.js';
 import {
   openApp,
   createProject as newProject,
@@ -67,7 +68,7 @@ async function rowIds(): Promise<string[]> {
  * never going to appear.
  */
 async function openPicker(via: 'chord' | 'control'): Promise<void> {
-  if (via === 'chord') await shared.win.keyboard.press('Control+Alt+T');
+  if (via === 'chord') await shared.win.keyboard.press(shippedPress('tabs.openPicker'));
   else await shared.win.getByTestId('tabstrip-show-all').click();
   await expect(shared.win.getByTestId('tabpicker')).toBeVisible();
   await expect(shared.win.getByTestId('tabpicker-input')).toBeFocused();
@@ -151,7 +152,7 @@ test('T055 — choosing an entry scrolls the strip to that tab AND makes it acti
     .toBe(true);
 });
 
-test('T056 — Ctrl+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+test('T056 — Ctrl+Shift+Alt+T opens the picker at ANY tab count, including with nothing hidden (T5)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   await freshProject();
   // Deliberately NOT overflowing: the picker is a navigation aid, not an overflow affordance, and a
   // user who knows the name of the tab they want should not first have to make the strip too small.

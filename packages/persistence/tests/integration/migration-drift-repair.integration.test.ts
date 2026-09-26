@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence';
+import { ProjectService } from '@throng/core';
+import {
+  openDatabase,
+  runMigrations,
+  LATEST_VERSION,
+  ProjectCategoryRepository,
+  ProjectRepository,
+} from '@throng/persistence';
 import type { ThrongDatabase } from '@throng/persistence';
 
 const tempDirs: string[] = [];
@@ -77,6 +84,90 @@ describe('schema-drift repair (migration safety net)', () => {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run('s1', 'u', 'Sub-workspace 1', '#6aa3ff', '{}', '[]', 't', 0),
+      ).not.toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('heals a DB stamped to LATEST but missing projects.category_id (046, v9)', () => {
+    const path = freshDbPath();
+
+    // A fully migrated store, then the category column taken away again: the shape an
+    // intermediate build leaves when it stamps the version without adding the column.
+    let db = openDatabase({ databasePath: path });
+    runMigrations(db);
+    db.prepare(
+      `INSERT INTO projects (id, owner_user, name, colour, root_folder, is_active, created_at, updated_at)
+       VALUES ('p1', 'u', 'P', '#123456', 'C:/p1', 0, 't', 't')`,
+    ).run();
+    db.exec('ALTER TABLE projects DROP COLUMN category_id');
+    db.pragma(`user_version = ${LATEST_VERSION}`);
+    expect(columns(db, 'projects')).not.toContain('category_id');
+    db.close();
+
+    db = openDatabase({ databasePath: path });
+    try {
+      const result = runMigrations(db);
+      expect(columns(db, 'projects')).toContain('category_id');
+      expect(result.repairs).toEqual(
+        expect.arrayContaining([{ table: 'projects', column: 'category_id' }]),
+      );
+      // The existing row survives and carries the '' default the read-time heal resolves.
+      const row = db.prepare(`SELECT category_id FROM projects WHERE id = 'p1'`).get() as {
+        category_id: string;
+      };
+      expect(row.category_id).toBe('');
+      // This owner has NO default category (v9 ran on an empty store, so it seeded none). Listing
+      // through the service must still never report '' (ipc-contract ProjectDto.categoryId): the
+      // list creates the default the heal rule resolves into.
+      expect(new ProjectCategoryRepository(db).list('u')).toEqual([]);
+      const service = new ProjectService({
+        store: new ProjectRepository(db),
+        categories: new ProjectCategoryRepository(db),
+        userContext: { currentUser: () => ({ userId: 'u', userName: 'U' }) },
+        newId: () => 'default-u',
+        now: () => '2026-01-01T00:00:00.000Z',
+      });
+      expect(service.list().map((p) => [p.id, p.categoryId])).toEqual([['p1', 'default-u']]);
+      // A write naming the column now succeeds instead of "no such column: category_id".
+      expect(() =>
+        db.prepare(`UPDATE projects SET category_id = ? WHERE id = 'p1'`).run('cat-1'),
+      ).not.toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('heals a DB stamped to LATEST but missing project_categories.position (046, v10)', () => {
+    const path = freshDbPath();
+
+    // A fully migrated store with two categories, then the position column taken away again.
+    let db = openDatabase({ databasePath: path });
+    runMigrations(db);
+    const categories = new ProjectCategoryRepository(db);
+    categories.ensureDefault('u', { id: 'd-u', name: 'In Progress', now: '2026-01-01T00:00:00.000Z' });
+    db.prepare(
+      `INSERT INTO project_categories (id, owner_user, name, is_default, minimised, created_at, updated_at)
+       VALUES ('c-1', 'u', 'Later', 0, 0, 't', 't')`,
+    ).run();
+    db.exec('ALTER TABLE project_categories DROP COLUMN position');
+    db.pragma(`user_version = ${LATEST_VERSION}`);
+    expect(columns(db, 'project_categories')).not.toContain('position');
+    db.close();
+
+    db = openDatabase({ databasePath: path });
+    try {
+      const result = runMigrations(db);
+      expect(columns(db, 'project_categories')).toContain('position');
+      expect(result.repairs).toEqual(
+        expect.arrayContaining([{ table: 'project_categories', column: 'position' }]),
+      );
+      // The rows survive, and the store reads them instead of throwing "no such column: position".
+      expect(new ProjectCategoryRepository(db).list('u').map((c) => c.id)).toEqual(['d-u', 'c-1']);
+      // A write naming the column now succeeds.
+      expect(() =>
+        db.prepare(`UPDATE project_categories SET position = ? WHERE id = 'c-1'`).run(3),
       ).not.toThrow();
     } finally {
       db.close();

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { runApp, createProject, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 // Session 2026-07-06c: New File in the context menu (FR-096) + right-clicking empty
-// space in the Files & Folders pane opens a root-targeted menu (FR-097).
+// space in the File Explorer pane opens a root-targeted menu (FR-097).
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-newitems-'));

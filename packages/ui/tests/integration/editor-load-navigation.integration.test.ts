@@ -399,7 +399,7 @@ describe('a load with a history intent moves only (FR-102)', () => {
     });
 
     /*
-     * Review of batch B, M-2 — `neverRead` was honoured only by the folder WATCH. Files & Folders' own delete
+     * Review of batch B, M-2 — `neverRead` was honoured only by the folder WATCH. File Explorer's own delete
      * calls `markDeleted` directly (`FilesService.setOnDeleted`), and the stand-in passed its `fileMissing`
      * guard: an in-app delete of its folder dirtied the empty stand-in all the same.
      */

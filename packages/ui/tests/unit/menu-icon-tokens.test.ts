@@ -103,7 +103,12 @@ const terminalMenu = (): MenuAction[] =>
   });
 
 const cogMenu = (): MenuAction[] =>
-  cogMenuItems({ openPreferences: noop, openLogs: noop, openAbout: noop });
+  cogMenuItems({
+    openPreferences: noop,
+    openLogs: noop,
+    openAbout: noop,
+    keybindings: DEFAULT_KEYBINDINGS,
+  });
 
 const MENUS: { name: string; build: () => MenuAction[] }[] = [
   { name: 'explorer (file)', build: explorerFile },

@@ -7,10 +7,11 @@
  * are we?" gets exactly one answer, from here.
  */
 import { describe, expect, it, beforeEach } from 'vitest';
-import { DEFAULT_KEYBINDINGS, type Keybindings, type Tab } from '@throng/core';
+import { COMMAND_SCOPES, DEFAULT_KEYBINDINGS, type ActionId, type Keybindings, type Tab } from '@throng/core';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import {
   currentScope,
+  DELIBERATELY_PANEL_SCOPED,
   editorChordsFor,
   isPanelScoped,
   opensTransientOverlay,
@@ -54,6 +55,17 @@ describe('which scope are we in', () => {
   it('is the EXPLORER scope whenever the file tree holds the focus, whatever panel is active', () => {
     setActivePane('files');
     expect(currentScope({ tabs: [tabWith('editor')], activeTabId: 't1' })).toBe('explorer');
+  });
+
+  /**
+   * 046 FR-015, data-model.md §5 — `ActivePane` gains a THIRD member, `projects`, beside `files` and
+   * `workspace`. With the Projects pane focused, `Ctrl+X` must resolve in the `projects` scope (where
+   * only `EVERYWHERE` commands are live) rather than falling through to `explorer` and reaching the
+   * File Explorer's `file.cut` while the user's attention and selection are in the Projects list.
+   */
+  it('is the PROJECTS scope whenever the Projects pane holds the focus, whatever panel is active', () => {
+    setActivePane('projects');
+    expect(currentScope({ tabs: [tabWith('editor')], activeTabId: 't1' })).toBe('projects');
   });
 
   it('falls back to explorer — the one scope where no text-editing command is live', () => {
@@ -117,10 +129,11 @@ describe('the file-tree chords are NOT live over a Find in Files panel (043 R14)
   });
 
   it('window-level chords are unaffected — a user must still be able to leave the panel', () => {
+    // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
     expect(
       resolveScoped(
         DEFAULT_KEYBINDINGS,
-        { key: 'ArrowLeft', ctrl: true, alt: true },
+        { key: 'ArrowLeft', ctrl: true, alt: true, shift: true },
         over('findInFiles'),
         quiet,
       ),
@@ -179,8 +192,14 @@ describe('the file, save and find chords resolve to nothing over a preview (044 
   }
 
   it('keeps window-level chords live, so the user can still leave the panel', () => {
+    // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
     expect(
-      resolveScoped(DEFAULT_KEYBINDINGS, { key: 'ArrowLeft', ctrl: true, alt: true }, over('preview'), quiet),
+      resolveScoped(
+        DEFAULT_KEYBINDINGS,
+        { key: 'ArrowLeft', ctrl: true, alt: true, shift: true },
+        over('preview'),
+        quiet,
+      ),
     ).toBe('focus.left');
   });
 });
@@ -272,8 +291,9 @@ describe('the focus guard (FR-017f)', () => {
   it('never suppresses a WINDOW command — the user must be able to leave the bar (FR-024b)', () => {
     // Focus movement and zoom outrank everything. Trapping a user inside a find bar because the
     // guard was too eager would be a worse bug than the one it prevents.
+    // 046 iterate round 1 (FR-102): zoom.in's shipped chord moved to tier 1, Ctrl+Shift+Alt++.
     const tab = { tabs: [tabWith('editor')], activeTabId: 't1' };
-    const zoomIn = { key: '=', ctrl: true, shift: false, alt: false };
+    const zoomIn = { key: '+', ctrl: true, shift: true, alt: true };
 
     expect(resolveScoped(DEFAULT_KEYBINDINGS, zoomIn, tab, { transientFocus: true })).toBe(
       'zoom.in',
@@ -296,6 +316,7 @@ describe('the focus guard (FR-017f)', () => {
      * data-model.md §2 records this as a SILENT failure.
      */
     expect(isPanelScoped('navigate.quickOpen')).toBe(false);
+    expect(isPanelScoped('tabs.openPicker')).toBe(false);
 
     /*
      * 033 US2 — and its NAMESPACE SIBLING is the opposite, which is why the line above is an exact
@@ -326,6 +347,20 @@ describe('the focus guard (FR-017f)', () => {
     expect(isPanelScoped('search.findInFiles')).toBe(false);
     expect(isPanelScoped('search.replaceInFiles')).toBe(false);
     expect(isPanelScoped('search.findNext')).toBe(true);
+
+    /*
+     * 046 US2 (data-model §4) — `project.next` / `project.previous` are WINDOW commands, like
+     * `zoom.*` and `navigate.quickOpen`: stepping the active project means the same thing from a
+     * terminal's find bar as from anywhere else, so a focused transient surface must not suppress
+     * them. Exact matches, not a `project.` prefix — a future `project.`-prefixed command that acts
+     * on ONE project's content (a rename box, say) must not be silently swept into the window tier by
+     * a broad prefix the way `navigate.gotoLine` is deliberately excluded from `navigate.quickOpen`'s.
+     */
+    expect(isPanelScoped('project.next')).toBe(false);
+    expect(isPanelScoped('project.previous')).toBe(false);
+    // The prefix trap, stated directly: an unrelated `project.`-prefixed id must still default to
+    // panel-scoped (`true`) unless it is one of the two exact ids above.
+    expect(isPanelScoped('project.rename' as never)).toBe(true);
   });
 });
 
@@ -337,8 +372,9 @@ describe('012’s window chords outrank editor commands (FR-024b · T109)', () =
   });
 
   it('leaves the shipped defaults alone — they do not collide', () => {
-    // 012 uses Ctrl+Alt+Arrow; this feature uses Shift+Alt+Arrow. Nothing is withheld today, which
-    // is exactly why this rule needs a test: nothing in the shipped app would ever exercise it.
+    // focus.left is tier 1 (Ctrl+Shift+Alt+Arrow, FR-102); this feature's column-select is a
+    // recorded exception at Shift+Alt+Arrow (FR-103). Nothing is withheld today, which is exactly
+    // why this rule needs a test: nothing in the shipped app would ever exercise it.
     const chords = editorChordsFor(DEFAULT_KEYBINDINGS, 'editor.columnSelectLeft');
     expect(chords).toEqual(['Shift+Alt+ArrowLeft']);
   });
@@ -348,8 +384,9 @@ describe('012’s window chords outrank editor commands (FR-024b · T109)', () =
     // permits it — the two commands live in different scopes, so it is not a conflict there — and
     // the editor is the one context that could silently overrule the window: its commands sit at
     // `Prec.highest` INSIDE CodeMirror, which is exactly how an editor swallows a chord.
-    expect(DEFAULT_KEYBINDINGS.bindings['focus.left']).toContain('Ctrl+Alt+ArrowLeft');
-    const rebound = rebind('editor.columnSelectLeft', ['Ctrl+Alt+ArrowLeft']);
+    // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
+    expect(DEFAULT_KEYBINDINGS.bindings['focus.left']).toContain('Ctrl+Shift+Alt+ArrowLeft');
+    const rebound = rebind('editor.columnSelectLeft', ['Ctrl+Shift+Alt+ArrowLeft']);
 
     // The editor never binds it, so the keypress is not handled there, is not preventDefault'ed,
     // and reaches the window-level listener exactly as it would with no editor focused.
@@ -357,7 +394,7 @@ describe('012’s window chords outrank editor commands (FR-024b · T109)', () =
   });
 
   it('withholds ONLY the colliding chord, not the command’s other bindings', () => {
-    const rebound = rebind('editor.cutLine', ['Ctrl+Alt+ArrowLeft', 'Ctrl+X']);
+    const rebound = rebind('editor.cutLine', ['Ctrl+Shift+Alt+ArrowLeft', 'Ctrl+X']);
     expect(editorChordsFor(rebound, 'editor.cutLine')).toEqual(['Ctrl+X']);
   });
 
@@ -393,7 +430,8 @@ describe('one transient overlay may open another (033 FR-071)', () => {
   const tabs = [tabWith('editor')];
   const input = { tabs, activeTabId: 't1' };
   const gotoLine = { key: 'g', ctrl: true };
-  const openPicker = { key: 't', ctrl: true, alt: true };
+  // 046 iterate round 1 (FR-102): tabs.openPicker's shipped chord moved to tier 1.
+  const openPicker = { key: 't', ctrl: true, shift: true, alt: true };
   const cutLine = { key: 'x', ctrl: true };
 
   it('names the commands whose whole effect is to open an overlay, and nothing else', () => {
@@ -413,7 +451,9 @@ describe('one transient overlay may open another (033 FR-071)', () => {
   it('still suppresses it in a panel’s OWN transient surface — a find bar is not an overlay', () => {
     const opts = { transientFocus: true, overlayOpen: false };
     expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, input, opts)).toBeNull();
-    expect(resolveScoped(DEFAULT_KEYBINDINGS, openPicker, input, opts)).toBeNull();
+    // The tab picker is a WINDOW command (like Quick Open), not a panel one, so a find bar does not
+    // suppress it — see the terminal case at the end of this file (046 iterate).
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, openPicker, input, opts)).toBe('tabs.openPicker');
   });
 
   it('never widens to a command that edits the panel underneath', () => {
@@ -430,5 +470,120 @@ describe('one transient overlay may open another (033 FR-071)', () => {
     const opts = { transientFocus: false, overlayOpen: false };
     expect(resolveScoped(DEFAULT_KEYBINDINGS, gotoLine, input, opts)).toBe('navigate.gotoLine');
     expect(resolveScoped(DEFAULT_KEYBINDINGS, cutLine, input, opts)).toBe('editor.cutLine');
+  });
+});
+
+/**
+ * 046 iterate — `Ctrl+Alt+T` did nothing while a terminal held the focus, and worked from every other
+ * element. A terminal's focused element IS xterm's helper textarea, so the transient-input guard reads
+ * it as a busy input surface; `tabs.openPicker` is scoped EVERYWHERE (031 FR-032a) and must survive
+ * it exactly as `navigate.quickOpen` does.
+ */
+describe('the tab picker chord from a focused terminal', () => {
+  it('resolves Ctrl+Shift+Alt+T to tabs.openPicker while xterm’s textarea holds the caret', () => {
+    // 046 iterate round 1 (FR-102): tabs.openPicker's shipped chord moved to tier 1.
+    const input = { tabs: [tabWith('terminal')], activeTabId: 't1' };
+    const xtermFocused = transientInputFocused(docWith({ tag: 'TEXTAREA' }));
+    const opts = { transientFocus: xtermFocused, overlayOpen: false };
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, { key: 't', ctrl: true, shift: true, alt: true }, input, opts),
+    ).toBe('tabs.openPicker');
+  });
+});
+
+/**
+ * 046 iterate round 1 (T109, FR-110) — the audit: every `ActionId` whose `COMMAND_SCOPES` entry is
+ * EVERYWHERE (all six dispatch scopes — a window command, per `isPanelScoped`'s own doc comment)
+ * MUST be either exempt in `isPanelScoped` or named on an explicit **deliberately panel-scoped**
+ * list, with a reason. A new EVERYWHERE command on neither fails.
+ *
+ * `DELIBERATELY_PANEL_SCOPED` does not exist yet (`scope.ts` has no such export) — RED until T113
+ * adds it. Once it does, R22's own finding stands: every EVERYWHERE command is exempt except
+ * `menu.open`, which this file settles below rather than assumes.
+ */
+describe('FR-110 audit: every EVERYWHERE command is exempt or deliberately panel-scoped', () => {
+  // The six scopes `isPanelScoped`'s doc comment and `keybindings.ts`'s own (unexported) EVERYWHERE
+  // constant enumerate — restated here because EVERYWHERE itself is module-private to keybindings.ts.
+  const ALL_SCOPES = ['editor', 'terminal', 'explorer', 'findInFiles', 'preview', 'projects'] as const;
+
+  const everywhereActions = (Object.keys(COMMAND_SCOPES) as ActionId[]).filter((action) =>
+    ALL_SCOPES.every((scope) => COMMAND_SCOPES[action].has(scope)),
+  );
+
+  it('finds EVERYWHERE commands to audit — the discovery is not vacuous', () => {
+    expect(everywhereActions.length, 'no EVERYWHERE-scoped ActionId found — COMMAND_SCOPES read wrong').
+      toBeGreaterThan(10);
+    // The chord the widening was made for, by name (033 US1) — if this one stops being found, the
+    // discovery itself is broken.
+    expect(everywhereActions).toContain('navigate.quickOpen');
+  });
+
+  it('every EVERYWHERE command is exempt in isPanelScoped, or named on the deliberately-panel-scoped list', () => {
+    const unaccounted = everywhereActions.filter(
+      (action) => isPanelScoped(action) && !(action in DELIBERATELY_PANEL_SCOPED),
+    );
+    expect(
+      unaccounted,
+      'an EVERYWHERE command is neither exempt in isPanelScoped nor named on ' +
+        'DELIBERATELY_PANEL_SCOPED with a reason — a new one added here is silently dead from a ' +
+        'focused terminal or find bar (data-model §2)',
+    ).toEqual([]);
+  });
+
+  it('DELIBERATELY_PANEL_SCOPED names only EVERYWHERE actions, each with a non-empty reason', () => {
+    for (const [action, reason] of Object.entries(DELIBERATELY_PANEL_SCOPED)) {
+      expect(everywhereActions, `${action} is on the list but is not EVERYWHERE-scoped`).toContain(action);
+      expect(reason.length, `${action}'s reason is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  /*
+   * menu.open (Shift+F10 / ContextMenu) is the one EVERYWHERE command R22 found unclassified.
+   * Settled here, not assumed: `isPanelScoped('menu.open')` is already `true` today (it falls
+   * through every exemption in `isPanelScoped` — none of the `zoom.`/`panel.`/`focus.`/`view.`
+   * prefixes or exact matches names it), so a focused terminal's transient-input guard ALREADY
+   * suppresses the app's OWN "rebuild a contextmenu at the focused element" dispatch
+   * (`app.tsx`'s `case 'menu.open'`) there. That is deliberate, not a regression FR-110 need fix:
+   * a terminal panel already has its own native right-click `contextmenu` handler
+   * (`terminal-content-menu.ts`), and Shift+F10 is the browser's own native gesture for
+   * "open a context menu" — throng's synthetic re-dispatch would be redundant over a terminal,
+   * where a context menu is already reachable the same gesture opens elsewhere. So `menu.open`
+   * joins `DELIBERATELY_PANEL_SCOPED`, not `isPanelScoped`'s exemption list.
+   */
+  /*
+   * 046 iterate round 3 (T178, FR-116) — `focus.workspace` is the way BACK from a side pane or a
+   * notice, so it has to work from exactly where focus is likeliest to be stranded: a terminal's
+   * helper textarea or a find bar. It is a WINDOW command: audited as EVERYWHERE, exempt in
+   * `isPanelScoped` by the `focus.` prefix, and resolved while a transient surface holds the caret.
+   */
+  it('ANSWER: focus.workspace is a window command — EVERYWHERE, exempt, and live from a focused terminal', () => {
+    expect(everywhereActions).toContain('focus.workspace');
+    expect(isPanelScoped('focus.workspace')).toBe(false);
+    expect('focus.workspace' in DELIBERATELY_PANEL_SCOPED).toBe(false);
+
+    const input = { tabs: [tabWith('terminal')], activeTabId: 't1' };
+    const xtermFocused = transientInputFocused(docWith({ tag: 'TEXTAREA' }));
+    const chord = { key: 'N', ctrl: true, shift: true, alt: true };
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, chord, input, { transientFocus: xtermFocused, overlayOpen: false }),
+      'focus.workspace must still resolve while xterm’s helper textarea holds the caret',
+    ).toBe('focus.workspace');
+  });
+
+  it('ANSWER: menu.open is SILENCED from a focused terminal — it is deliberately panel-scoped, not exempt', () => {
+    expect(isPanelScoped('menu.open')).toBe(true);
+    expect(DELIBERATELY_PANEL_SCOPED['menu.open' as ActionId]?.length).toBeGreaterThan(0);
+
+    const input = { tabs: [tabWith('terminal')], activeTabId: 't1' };
+    const xtermFocused = transientInputFocused(docWith({ tag: 'TEXTAREA' }));
+    const shiftF10 = { key: 'F10', shift: true };
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, shiftF10, input, { transientFocus: xtermFocused, overlayOpen: false }),
+      'menu.open must resolve to nothing while xterm’s helper textarea holds the caret',
+    ).toBeNull();
+    // Away from any transient surface, Shift+F10 still opens the app's own contextmenu dispatch.
+    expect(
+      resolveScoped(DEFAULT_KEYBINDINGS, shiftF10, input, { transientFocus: false, overlayOpen: false }),
+    ).toBe('menu.open');
   });
 });

@@ -309,54 +309,57 @@ test('US1: a key binding shows a reset icon only once overridden, and resetting 
       await expect(prefs.getByTestId('keybindings-tab')).toBeVisible();
 
       // Pristine: the row is at its shipped binding, so it carries NO reset affordance.
-      await expect(prefs.getByTestId('binding-reset-zoom.in')).toBeDisabled();
+      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeDisabled();
 
-      // `zoom.in` ships with MULTIPLE chords — remember them, because a reset must restore
-      // the FULL set, not just the one we remove (US1/AC4).
-      const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['zoom.in'];
+      // `panel.zoomIn` ships with MULTIPLE bindings (a chord plus the Ctrl+wheel gesture) — remember
+      // them, because a reset must restore the FULL set, not just the one we remove (US1/AC4). It was
+      // `zoom.in` until 046 FR-105 left that a single chord, which would leave nothing to restore
+      // beside the one removed (046 T142, analyze G3).
+      const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['panel.zoomIn'];
       expect(shippedZoomIn.length).toBeGreaterThan(1);
 
       // Customise two actions by dropping one chord from each.
-      await prefs.getByTestId('binding-zoom.in-remove-0').click();
+      await prefs.getByTestId('binding-panel.zoomIn-remove-0').click();
       // The row immediately advertises itself as modified — the affordance IS the cue (FR-004a).
-      await expect(prefs.getByTestId('binding-reset-zoom.in')).toBeEnabled();
+      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeEnabled();
       await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in']?.length)
+        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn']?.length)
         .toBe(shippedZoomIn.length - 1);
 
-      const shippedZoomOut: string[] = readKeybindings(cfgRoot).bindings['zoom.out'];
-      await prefs.getByTestId('binding-zoom.out-remove-0').click();
-      await expect(prefs.getByTestId('binding-reset-zoom.out')).toBeEnabled();
+      const shippedZoomOut: string[] = readKeybindings(cfgRoot).bindings['panel.zoomOut'];
+      expect(shippedZoomOut.length).toBeGreaterThan(1);
+      await prefs.getByTestId('binding-panel.zoomOut-remove-0').click();
+      await expect(prefs.getByTestId('binding-reset-panel.zoomOut')).toBeEnabled();
       /*
-       * Wait for the zoom.out edit to be WRITTEN before resetting zoom.in.
+       * Wait for the panel.zoomOut edit to be WRITTEN before resetting panel.zoomIn.
        *
        * The affordance turning enabled is renderer state; the file is written on a debounce. Reading
-       * it straight away — and, worse, resetting zoom.in while that write is still pending — lets the
-       * pending write land AFTER the reset, carrying a bindings map in which zoom.in is still the
-       * edited version. The reset then looks broken: `zoom.in` comes back as
-       * ["Ctrl++", "Ctrl+WheelUp"] with the shipped "Ctrl+=" missing.
+       * it straight away — and, worse, resetting panel.zoomIn while that write is still pending — lets the
+       * pending write land AFTER the reset, carrying a bindings map in which the first action is still
+       * the edited version. The reset then looks broken: it comes back with the removed shipped chord
+       * still missing (measured when this case drove `zoom.in`, before 046 re-pointed it).
        *
        * Measured unloaded, so this is not an artefact of a loaded machine: 2 failures in 11 runs, and
        * still 1 in 14 with the test budget raised to 120s — which is what ruled out slowness and
        * pointed at the write ordering.
        */
       await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.out']?.length)
+        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomOut']?.length)
         .toBe(shippedZoomOut.length - 1);
-      const zoomOutAfterEdit: string[] = readKeybindings(cfgRoot).bindings['zoom.out'];
+      const zoomOutAfterEdit: string[] = readKeybindings(cfgRoot).bindings['panel.zoomOut'];
 
       // Reset exactly one — no confirmation, applied immediately.
-      await prefs.getByTestId('binding-reset-zoom.in').click();
+      await prefs.getByTestId('binding-reset-panel.zoomIn').click();
       // The FULL shipped chord set comes back, not just the removed chord.
       await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in'])
+        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn'])
         .toEqual(shippedZoomIn);
 
       // Its affordance disappears (it is no longer modified) …
-      await expect(prefs.getByTestId('binding-reset-zoom.in')).toBeDisabled();
+      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeDisabled();
       // … while the OTHER customisation is untouched and still offers its reset.
-      expect(readKeybindings(cfgRoot)?.bindings?.['zoom.out']).toEqual(zoomOutAfterEdit);
-      await expect(prefs.getByTestId('binding-reset-zoom.out')).toBeEnabled();
+      expect(readKeybindings(cfgRoot)?.bindings?.['panel.zoomOut']).toEqual(zoomOutAfterEdit);
+      await expect(prefs.getByTestId('binding-reset-panel.zoomOut')).toBeEnabled();
     },
   );
 });
@@ -445,11 +448,13 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
       await prefs.getByTestId('prefs-tab-keybindings').click();
-      const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['zoom.in'];
-      await prefs.getByTestId('binding-zoom.in-remove-0').click();
-      await expect(prefs.getByTestId('binding-reset-zoom.in')).toBeEnabled();
+      // `panel.zoomIn` rather than `zoom.in` (046 T142): it still ships more than one binding, so the
+      // edit leaves something on disk for Reset All to restore around.
+      const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['panel.zoomIn'];
+      await prefs.getByTestId('binding-panel.zoomIn-remove-0').click();
+      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeEnabled();
       await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in']?.length)
+        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn']?.length)
         .toBe(shippedZoomIn.length - 1);
 
       // The confirmation must state BOTH what is reset AND what survives (FR-006).
@@ -465,7 +470,7 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
 
       // Settings and bindings are back to shipped …
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
-      await expect.poll(() => readKeybindings(cfgRoot)?.bindings?.['zoom.in'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual(shippedZoomIn);
+      await expect.poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn'], { timeout: FILE_OP_TIMEOUT_MS }).toEqual(shippedZoomIn);
       // … and the user's CUSTOM theme is still on disk, untouched.
       const custom = JSON.parse(readFileSync(join(cfgRoot, 'themes', 'MyUser.json'), 'utf8'));
       expect(custom.colours.accent).toBe('#abcdef');

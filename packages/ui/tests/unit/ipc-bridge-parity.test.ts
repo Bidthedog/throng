@@ -149,6 +149,14 @@ describe('IPC bridge parity', () => {
     ).toEqual([]);
   });
 
+  it('the retired throng:zoomLevel handler (046 iterate round 2, FR-113) is gone from both sides', () => {
+    // 046 iterate round 1 (FR-107) added this channel for the cog menu's Zoom row's disabled states.
+    // Round 2 removed that row — its only caller — and `main.ts` removed the handler with it rather
+    // than leaving it registered with nothing left to invoke it.
+    expect(main.has('throng:zoomLevel')).toBe(false);
+    expect(preload.has('throng:zoomLevel')).toBe(false);
+  });
+
   it('keeps no stale entry in the known-one-way list', () => {
     // The other direction of the ratchet: a channel that has since been wired must not keep
     // claiming to be broken, or the list becomes a place where fixed things go to be forgotten.

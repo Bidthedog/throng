@@ -136,6 +136,9 @@ test('a search command can actually be rebound (FR-017)', { tag: ['@extended', '
         const init: KeyboardEventInit = { key: 'k', bubbles: true, ctrlKey: true, shiftKey: true };
         window.dispatchEvent(new KeyboardEvent('keydown', init));
         window.dispatchEvent(new KeyboardEvent('keyup', init));
+        // 046 FR-124 — the capture box records once EVERY key is up, so the modifiers come up too.
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true, ctrlKey: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Control', bubbles: true }));
       });
       await expect(prefs.getByTestId('capture-modal')).toBeHidden();
 

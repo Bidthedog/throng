@@ -43,8 +43,8 @@
  *
  * The chord's manifest coverage therefore names this file, in `window-chords.ts`'s
  * `COVERED_ELSEWHERE`, which `window-chord-manifest.test.ts` checks by reading the press out of the
- * code with comments stripped. `Control+Alt+M` is written as a literal for that guard's benefit: a
- * changed default (FR-020b) makes this test press the wrong key and fail loudly, which is the same
+ * code with comments stripped. `Control+Shift+Alt+V` is written as a literal for that guard's benefit:
+ * a changed default (FR-020b, moved to tier 1 by 046 FR-102, and from M to V by 046 FR-117) makes this test press the wrong key and fail loudly, which is the same
  * answer the derived spelling would have given.
  *
  * ══ TIER: SERIAL ══
@@ -132,14 +132,14 @@ test('the notice chord reaches the app while a real shell has the keyboard', { t
        *
        * FR-020b's shipped default, written INLINE as a literal rather than through a named
        * constant. `window-chord-manifest.test.ts` reads this file with its comments stripped and
-       * looks for `keyboard.press('Control+Alt+M')`, because the exemption it is checking exists
+       * looks for `keyboard.press('Control+Shift+Alt+V')`, because the exemption it is checking exists
        * to point at a keystroke — measured: a `press(CHORD)` indirection failed that guard, which
        * is the guard being right rather than fussy.
        *
        * A changed default therefore makes this press the wrong key and fail loudly, which is the
        * same answer deriving it from the shipped bindings would have given.
        */
-      await win.keyboard.press('Control+Alt+M');
+      await win.keyboard.press('Control+Shift+Alt+V');
       await expect(
         list,
         'the shell swallowed the chord, or it resolved to nothing — focus never reached the notice',

@@ -45,6 +45,51 @@ describe('hand-written theme token copy (FR-006/007/008/009)', () => {
     }
   });
 
+  it('hand-writes a label and description for each 046 side-pane icon: unload, category (FR-061, R11)', () => {
+    // The Unload menu and the Projects pane's category header each need a themeable glyph of their
+    // own — neither can borrow an existing token without re-skinning an unrelated control by
+    // accident (the same reasoning `editJson`/`editVisual` recorded above). `projectList`, the third
+    // token this pair originally shipped beside, was retired (branch-review finding, 046 iterate
+    // round 2) — it described a cog-menu row that FR-074/FR-107 had already retired before the
+    // description was written, and nothing ever drew it.
+    for (const token of ['unload', 'category']) {
+      const key = `icons.${token}`;
+      expect(THRONG_THEME.icons[token], key).toBeTruthy();
+      const entry = THEME_TOKEN_COPY[key];
+      expect(entry, `missing copy for ${key}`).toBeDefined();
+      expect(entry.label.trim().length, key).toBeGreaterThan(0);
+      expect(entry.description.trim().length, key).toBeGreaterThan(0);
+      expect(entry.description, `${key} restates the identifier`).not.toBe(mechanicalCopy(key).description);
+    }
+  });
+
+  /**
+   * M8 (review finding) — `icons.unload`/`icons.category` described places these glyphs are never
+   * drawn. Real call sites (`project-menu.ts`): `unload` marks the three Unload rows of a project's
+   * context menu — never a confirmation (`confirm-dialog.tsx` never renders an icon at all, by
+   * constitutional exception); `category` marks the "Move to Category" row of that same menu, not a
+   * category header in the pane itself (the header's chevron is a different control, unthemed).
+   *
+   * `icons.projectList`, the third token M8 originally covered here, was retired (branch-review
+   * finding, 046 iterate round 2): its description named a cog-menu "Focus Projects" row that
+   * FR-074/FR-107 had already retired before the description was ever written, and no call site in
+   * the renderer ever drew the token — `THEME_TOKEN_COPY` carries no entry for it any more
+   * (`theme_copy.test.ts`'s "no entries for unknown tokens" guard covers that directly).
+   */
+  it('describes unload/category by the menu rows they are actually drawn on (M8)', () => {
+    const unload = THEME_TOKEN_COPY['icons.unload'].description;
+    expect(unload, 'icons.unload').toMatch(/Unload.*(menu|row)/i);
+    expect(unload, 'icons.unload never draws in a confirmation dialog').not.toMatch(/confirmation/i);
+
+    const category = THEME_TOKEN_COPY['icons.category'].description;
+    expect(category, 'icons.category').toMatch(/Move to Category/i);
+    expect(category, 'icons.category is not drawn beside a category header').not.toMatch(/category header/i);
+  });
+
+  it('carries no entry for the retired icons.projectList token (branch-review finding, 046 iterate round 2)', () => {
+    expect(THEME_TOKEN_COPY['icons.projectList']).toBeUndefined();
+  });
+
   it('has no entries for unknown tokens', () => {
     const known = new Set(tokens);
     for (const key of Object.keys(THEME_TOKEN_COPY)) {

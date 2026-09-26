@@ -116,7 +116,7 @@ test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)
   }
 });
 
-test('closing a context menu by keyboard returns focus to the Files & Folders tree (#157 follow-up)', { tag: ['@extended', '@window'] }, async () => {
+test('closing a context menu by keyboard returns focus to the File Explorer tree (#157 follow-up)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-menufocus-'));
   writeFileSync(join(root, 'thing.txt'), 'x\n');
   try {
@@ -170,6 +170,6 @@ test('an advertised shortcut inside the menu runs the action and closes it — C
  * "arrow keys open a sub-menu focusing its first child, and step back out to the parent (FR-018b)"
  * asserted roving focus INSIDE one component. It needed no window, no daemon and no project, and it
  * is now five component tests that run in about three seconds in total. What stays here is what a
- * DOM cannot show: a keypress arriving from the Files & Folders tree, focus returning to that tree,
+ * DOM cannot show: a keypress arriving from the File Explorer tree, focus returning to that tree,
  * and an in-menu shortcut whose effect is a file on disk.
  */

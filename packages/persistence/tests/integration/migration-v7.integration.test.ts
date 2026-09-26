@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, DocumentStateRepository } from '@throng/persistence';
+import { openDatabase, runMigrations, DocumentStateRepository, LATEST_VERSION } from '@throng/persistence';
 
 /**
  * Migration v7 + the document-state store (016, FR-028e).
@@ -58,7 +58,8 @@ describe('migration v7', () => {
 
       const again = runMigrations(db);
       expect(again.applied).toBe(false);
-      expect(again.to).toBe(8); // 024 US3 added v8; the chain's latest is now 8
+      // Nothing past the latest version: the exact number is pinned once, in user-version-pin.
+      expect(again.to).toBe(LATEST_VERSION);
       // The data survived: a migration that dropped and recreated the table would lose it.
       expect(repo.get(OWNER, 'p1', 'src/main.rs')?.languageId).toBe('python');
     } finally {

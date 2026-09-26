@@ -15,7 +15,7 @@
  * mistake is not expressible.
  *
  * What did NOT come with it: the other three tests in that file assert things this layer genuinely
- * cannot see — Shift+F10 arriving from outside the menu, focus returning to the Files & Folders
+ * cannot see — Shift+F10 arriving from outside the menu, focus returning to the File Explorer
  * tree, and a Ctrl+C that must produce a de-duplicated copy on disk. Those are tracked separately
  * (034 FR-047: every assertion of a deleted test is accounted for).
  */

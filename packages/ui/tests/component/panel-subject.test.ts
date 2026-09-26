@@ -83,6 +83,8 @@ function services(layout: WorkspaceLayout, projects: ProjectDto[]): Services {
           return Promise.resolve({ layout, restored: true } as TResult);
         case 'projects.list':
           return Promise.resolve({ projects } as TResult);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as TResult);
         default:
           return Promise.resolve({} as TResult);
       }

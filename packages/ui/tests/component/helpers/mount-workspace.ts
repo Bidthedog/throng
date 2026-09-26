@@ -53,6 +53,8 @@ export async function mountWorkspace(
           return Promise.resolve({
             projects: [{ id: layout.projectId, name: 'Proj', rootFolder: opts.projectRoot ?? 'D:/proj' }],
           } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         case 'workspace.loadSubWorkspaces':
         case 'subworkspace.list':
           return Promise.resolve({ subWorkspaces: [] } as T);

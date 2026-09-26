@@ -25,7 +25,7 @@
  *
  * ══ TIER ══
  *
- * The second and third tests open the Files & Folders context menu (Open In → Preview) and every test
+ * The second and third tests open the File Explorer context menu (Open In → Preview) and every test
  * presses keys into a focused app, so the file is in `parallel-plan.json`'s serial tier as FOCUS.
  *
  * The third test (044 T183) is not about what stays in view: it is a real mouse drag selecting text,
@@ -215,7 +215,7 @@ test('Back twice then Forward once returns a preview to the place the reader lef
     const tree = win.getByTestId('file-explorer-tree');
     await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
 
-    // A standalone preview of README, from Files & Folders.
+    // A standalone preview of README, from File Explorer.
     const before = await previewIds(win);
     await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
     await win.getByTestId('menu-item-Open In').click();

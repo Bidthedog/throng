@@ -69,12 +69,14 @@ const readout = (id: string): HTMLElement | null =>
 function panelWith(
   editor: Record<string, unknown>,
   configDelayTicks = 0,
+  keybindings?: Record<string, string[]>,
 ): ReturnType<typeof mountEditor> {
   return mountEditor({
     panelId: PANEL,
     doc: { text: TEXT, version: 1, absPath: FILE },
     settings: { editor },
     configDelayTicks,
+    keybindings,
   });
 }
 
@@ -232,7 +234,7 @@ describe('editor.showStatusBar overrides both readout toggles (FR-033)', () => {
     expect(screen.queryByTestId(`editor-language-${PANEL}`)).toBeNull();
   });
 
-  it('does not disable the wrap command or its Ctrl+Alt+W chord (FR-033, 024)', async () => {
+  it('does not disable the wrap command or its chord (FR-033, 024)', async () => {
     /*
      * The second half of FR-033, and the half a "hide the row" implementation gets wrong. The chord
      * lives in the editor's own keymap, not on the bar, so hiding the bar must not take it away —
@@ -241,8 +243,19 @@ describe('editor.showStatusBar overrides both readout toggles (FR-033)', () => {
      * This is ALSO asserted end to end (`status-bar-visibility.e2e.ts:90`, `@extended @window`,
      * from #152), and that spec stays: the E2E budget ratchets downward too, so removing it would
      * need its own re-seed and would trade a real-window check for a cheaper one.
+     *
+     * 046 iterate round 1 (FR-091/FR-092): `editor.toggleWordWrap`'s shipped default moved to the
+     * two-stroke `Ctrl+E W`, whose CodeMirror-side pending-prefix keymap is 10D's own territory
+     * (`toCodeMirrorKey`, `pending-chord.tsx`), not this file's. What this test owns is the
+     * STATUS-BAR-HIDING behaviour, so it rebinds the command to a single-stroke chord it CAN press
+     * through a real keydown — the rebind path (FR-070) is itself already-proven machinery, and
+     * doing so keeps this test from depending on infrastructure it is not about.
      */
-    const h = panelWith({ showStatusBar: false, defaultWordWrap: true });
+    const h = panelWith(
+      { showStatusBar: false, defaultWordWrap: true },
+      0,
+      { 'editor.toggleWordWrap': ['Ctrl+Alt+W'] },
+    );
     await waitFor(() => expect(strip()).toBeNull());
 
     const docKey = wordWrapDocKey(FILE, PANEL);

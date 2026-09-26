@@ -397,7 +397,7 @@ describe('main’s answers', () => {
     expect(notice()).toBeNull();
   });
 
-  it('openedInEditor → the Files & Folders open path, carrying the heading for the caret (FR-090d)', async () => {
+  it('openedInEditor → the File Explorer open path, carrying the heading for the caret (FR-090d)', async () => {
     await mountDoc();
     const opened: unknown[] = [];
     const listener = (e: Event): void => void opened.push((e as CustomEvent).detail);

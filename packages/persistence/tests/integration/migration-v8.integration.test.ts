@@ -35,7 +35,9 @@ describe('migration v8', () => {
   it('brings the chain up to v8 and creates the fileop_undo table', () => {
     const db = freshDb();
     try {
-      expect(LATEST_VERSION).toBe(8);
+      // At least v8: the exact latest version is pinned once, in user-version-pin, so a later
+      // migration does not have to edit every per-version file.
+      expect(LATEST_VERSION).toBeGreaterThanOrEqual(8);
       const t = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='fileop_undo'")
         .get();
