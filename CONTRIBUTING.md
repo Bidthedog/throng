@@ -117,7 +117,7 @@ enough to scan in a list. Detail belongs in the body, never the title.
 
 ## Testing
 
-Layered and test-first — the runner commands are in the [README](README.md#commands). Beyond
+Layered and test-first — the runner commands are in [docs/testing.md](docs/testing.md). Beyond
 "all green, on observed output, never assumed":
 
 - **Test-first** (Red → Green → Refactor): tests written and seen failing before the code.
@@ -134,7 +134,7 @@ Layered and test-first — the runner commands are in the [README](README.md#com
 - **`@admin` tests are elevation-gated** — skipped unless elevated, and excluded from the normal suite unless `THRONG_E2E_INCLUDE_ADMIN` is set. Run them locally with `npm run test:e2e:admin`; a green non-elevated bar never implies admin coverage. **CI now runs the `@admin` subset** in a dedicated job (`E2E (@admin, elevated)`), because GitHub's Windows runners are elevated and are the only runner that can honour it.
 - **A green CI bar does not cover the non-elevated path.** CI is *elevated*, so every spec calling `skipIfElevated()` self-skips there and is verified **only** by a developer running the suite from a non-elevated shell — put that run in the PR evidence, and state which specs it covers rather than implying CI covered them. A spec with no elevation guard does run on CI; don't claim a developer run is needed for it either. Overstating coverage in *either* direction is the failure this rule exists to prevent.
 - **A flaky test FAILS the run.** `failOnFlakyTests` is set, so a test that only passes on retry turns the run red. A green run means every test passed on its **first** attempt. Retries are kept for their *diagnostic* value (they capture the first failure's trace), never to absorb a failure into a pass.
-- **Write E2E that cannot flake.** Open with `settle(win)` — a *positive* assertion that the window rendered. A negative opening assertion (`toHaveCount(0)`) is satisfied by a DOM that has not rendered anything: it looks like a wait and settles nothing. Take geometry with `geom(locator)` (which polls until the element stops moving), never through `page.evaluate` + `querySelector` + `getBoundingClientRect`. Prefer a real condition over `waitForTimeout(n)`: a sleep asserts that *n* ms is always enough; a condition asserts the thing actually happened. See [docs/testing.md](docs/testing.md).
+- **Write E2E that cannot flake.** Open with `settle(win)` — a *positive* assertion that the window rendered. A negative opening assertion (`toHaveCount(0)`) is satisfied by a DOM that has not rendered anything: it looks like a wait and settles nothing. Take geometry with `geom(locator)` (which polls until the element stops moving), never through `page.evaluate` + `querySelector` + `getBoundingClientRect`. Prefer a real condition over `waitForTimeout(n)`: a sleep asserts that *n* ms is always enough; a condition asserts the thing actually happened. See [docs/testing.md](docs/testing.md#writing-an-e2e) and, for the full rules, [the testing skill's writing guide](.claude/skills/throng-testing/references/writing-e2e.md).
 - **Quarantine, don't skip.** A test that cannot be made deterministic is tagged `@quarantine`, so what is *not* being tested stays countable: `THRONG_E2E_INCLUDE_QUARANTINE=1 npx playwright test --grep @quarantine --list`. Deleting it, or `test.skip`-ping it, hides the gap.
 - **Write the guard like the REQUIREMENT, not like the change.** There is no jsdom layer, so a cross-cutting rule ("no hard-coded colour paints anywhere", "there are exactly two notice models") is enforced by a *source guard*: a unit test that WALKS THE TREE and asserts a property of the source. Shape it around what the requirement says, never around the files you happened to edit — a guard that checks the three files you remember passes while the rule is still broken in the fourth. Feature 018 is the case in point: a hand count found four dead CSS variables and five notice surfaces; the guards found **thirteen** and **nine**. A count made by hand is a count that is wrong.
 
@@ -149,95 +149,12 @@ per process boundary (IX); **externalised typed config**, no magic values (X); a
 calls in core** — everything OS-specific sits behind a contract-tested seam (II). Keep the
 renderer sandboxed: it reaches privileged capability only through the preload bridge.
 
-## Adding a preview provider
+## Adding a preview provider or a platform port
 
-A preview provider is two files and two registration lines — nothing else in the codebase names a
-provider, and a test holds it to that.
-
-- **The descriptor** — `packages/core/src/preview/providers/<id>.ts`. Pure data, no OS and no DOM:
-  the provider's id and display name, the file extensions it claims, whether it is `text` (its
-  previews can be parented to an editor) or `binary` (always standalone), and any settings of its
-  own.
-- **The view** — `packages/ui/src/renderer/preview/providers/<id>/`. The renderer half: how the
-  provider turns its content into what the preview panel shows, including its own styles. Its body
-  loads lazily, on first use, so registering a provider pulls in none of its libraries **or its
-  stylesheet** — a provider's document CSS lives in its own folder (e.g.
-  `providers/markdown/markdown.css`) and is imported by its body module, not by the shared panel
-  chrome (`preview/preview.css`), so it rides in the provider's own lazily loaded chunk. A body may
-  honour optional props the panel passes it — `syncLine` (the source line to scroll to, for
-  editor/preview scroll sync), `onLinkTarget` (report a hovered or keyboard-focused link's target,
-  for the status-bar readout), `onTopLineChange` (report the top block's own source line as the
-  reader scrolls the preview, for the editor half of two-way scroll sync) and `placePolicy` (where
-  a followed link or a history step should land it) — and a body that ignores any of them still
-  conforms: all are optional, and a provider with no source-line concept, no links, or no opinion on
-  where to land simply never calls them, so its preview just does not drive the editor.
-  A body that honours two-way sync may also read `syncEcho` (the line is where the editor went, so record it and do not scroll), return `false` from `onTopLineChange` (the panel could not act yet; report again on the next `syncLine`) and call `onTopLineRead` (hand the panel a reader for its top block's line, used when an editor is adopted) — all equally optional.
-- **Registration** — one line in each of `packages/core/src/preview/providers/index.ts` (add the
-  descriptor to `SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS`) and
-  `packages/ui/src/renderer/preview/providers/index.ts` (add the view to `PREVIEW_PROVIDER_VIEWS`,
-  keyed by the descriptor's id).
-
-That's the whole surface. The preview panel and its menus, the editor's status bar and menus,
-Files & Folders' **Open In → Preview**, the preferences editor and layout persistence all pick up a
-new provider without being edited.
-
-Two tests enforce it, not a review comment:
-
-- `packages/ui/tests/component/preview-provider-seam.test.ts` injects a throwaway text provider and
-  a throwaway binary provider (`packages/ui/tests/fixtures/preview/test-providers.ts` — test-only,
-  neither ships) and asserts, through the real components and builders, that Files & Folders'
-  **Open In → Preview**, the editor status bar, the default open action, the preview panel and its
-  header menu, the settings tab and layout restore all handle them by kind — including drawing
-  their controls disabled, not hidden, while a provider is turned off.
-- `packages/ui/tests/unit/preview-surfaces-name-no-provider.test.ts` parses every source and
-  stylesheet under `packages/ui/src` and `packages/core/src` outside the provider folders — not a
-  list of known surfaces, so a new file is covered without editing the guard — and fails the build
-  on an import from `preview/providers/` other than the two registration indexes, or on any
-  Markdown-specific token outside comments: a `'markdown'` or `'.md'` literal or **regular
-  expression** (matched by its pattern body, delimiters and flags stripped, so `/\.md$/` is caught
-  the same as the string `'.md'`), an identifier such as `markdownView`, a CSS class. The few
-  legitimate mentions (Markdown the editor language, the `.md` file icon) are allowlisted in the
-  test with a reason each, and an allowance that stops matching fails too — so a surface
-  special-cased to Markdown instead of reading the registry is caught before it merges.
-
-## Adding a platform port
-
-Principle II: `packages/core` states the rules, `packages/platform-*` answers the OS questions, and
-a **contract suite** in `packages/core/src/testing/` decides whether an implementation is one. The
-two ports clickable file links added are the current worked example, and a new platform gets links
-working by implementing them and nothing else.
-
-- **`IPathForms`** (`packages/core/src/abstractions/path-forms.ts`) — the four path *spellings* only
-  an OS can map: `homeDirectory()`, `fromDriveForm()` (`/d/x` and `/mnt/d/x`), `fromFileUrl()` (a
-  `file:` URI, percent-decoded, host to UNC) and `fromHomeForm()` (`~`). Every method is **total**
-  and answers `null` rather than throwing when the input is not its form.
-- **`IExecutableExtensions`** (`packages/core/src/abstractions/executable-extensions.ts`) — whether
-  the OS would *run* a file, answered from its extension alone. `isExecutable(path)` is what the
-  feature calls; `executableExtensions()` reports the whole set, which is what lets the test assert
-  that **none** of them runs under a click without hand-copying a list that would go stale.
-
-The Windows implementations are `packages/platform-windows/src/windows-path-forms.ts` and
-`windows-executable-extensions.ts`, bound in the UI composition root under `UI_TYPES.PathForms` and
-`UI_TYPES.ExecutableExtensions`.
-
-**The contract suites are `runPathFormsContract(makeSubject)` and
-`runExecutableExtensionsContract(makeSubject)`**, in `packages/core/src/testing/`. They are written
-in the repo's **pure-throw** style — the file imports nothing, not even a test runner, and signals a
-failure by throwing `IPathForms contract violation: …`. That is what keeps `@throng/core` free of a
-test dependency and lets any layer run the suite; a platform package calls it from one `it(...)`
-(`packages/platform-windows/tests/contract/windows-path-forms.contract.test.ts`).
-
-Two rules a new implementation must satisfy, and they are what the suites actually check:
-
-- **Assert shape and relationship, never a literal path.** The suite says `fromDriveForm('/d/git/x')`
-  names drive `d` and ends in `git` + separator + `x`; it does not say `D:\git\x`. A macOS or Linux
-  implementation therefore passes it without the suite being rewritten.
-- **Totality.** No method throws for any string — an empty one, one carrying a NUL, a very long one,
-  one with mixed separators. Anything the port does not recognise is `null` or `false`.
-
-Nothing under `packages/core/src/links/` may name an operating system, an extension or a drive
-mapping, and `packages/core/tests/unit/links-no-os-names.test.ts` fails the build on one, alongside
-the existing `no-os-imports.test.ts`.
+Both are extension points of the architecture, described with their contracts and the steps to add
+one in [docs/architecture.md](docs/architecture.md): [adding a preview
+provider](docs/architecture.md#adding-a-preview-provider) and [adding a platform
+port](docs/architecture.md#adding-a-platform-port).
 
 ## Commits, branches, review
 

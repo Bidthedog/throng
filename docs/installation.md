@@ -1,11 +1,10 @@
+[throng](../README.md) › [Docs](README.md) › Installation
+
 # Installing throng
 
-Downloading, verifying, installing, upgrading, and removing throng on Windows.
-
-> **Status.** The installer described here comes from **feature 020 — Application Packaging**
-> ([#21](https://github.com/Bidthedog/throng/issues/21)). To run a revision that has no release yet, use a
-> developer checkout instead — `npm install && npm run build && npm start` (see the
-> [quick start](quick-start.md)).
+Everything you need to get throng onto a Windows machine and running: a packaged download for
+using it, or a source checkout for running a revision that has no release yet. Once it is running,
+the [quick start](quick-start.md) takes it from there.
 
 ## Before you start
 
@@ -132,8 +131,23 @@ Each Windows account installs and runs its **own** per-user copy of throng. Two 
 with live terminals — at the same time, fully isolated: neither account's terminals, projects, or settings
 are visible to, or disturbed by, the other.
 
----
+## Running from source
 
-**See also:** [Quick start](quick-start.md) (using throng once it's installed) ·
-[Versioning, packaging & releasing](releasing.md) (how these builds are made) ·
-[README](../README.md).
+To run a revision that has no release yet, or to work on throng itself:
+
+- **Node.js 22.12 or later** and **Windows 11**. The native modules (`better-sqlite3`, `node-pty`) ship
+  prebuilt binaries, so no compiler toolchain is needed.
+- From a clone of the repository:
+
+  ```bash
+  npm install
+  npm start            # builds everything, then opens the app
+  ```
+
+  After a build, `npm run start:ui` opens the app without rebuilding (it starts its own background
+  service), and `npm run start:daemon` runs the background service alone.
+
+A source run is a separate **dev instance**: it keeps its own data, config and background service, so it
+can run beside an installed throng without touching it. Where each lives, and the variables that move them,
+are in [environment](environment.md). Contributing changes back is covered in
+[CONTRIBUTING.md](../CONTRIBUTING.md), and how the packaged downloads are built in [releasing](releasing.md).

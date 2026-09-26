@@ -1,15 +1,28 @@
+[throng](../README.md) › Docs
+
 # throng docs
 
-| Guide | For | What it covers |
-|---|---|---|
-| [Quick start](quick-start.md) | Users | First launch to a working project: projects, panels, terminals, editors, sub-workspaces, preferences, and the default key bindings. |
-| [Installation](installation.md) | Users | Downloading, verifying, installing, upgrading, and removing the packaged app on Windows (per-user, no admin). |
-| [Versioning, packaging & releasing](releasing.md) | Maintainers | How a build is versioned, packaged into a per-user installer, verified on a clean machine, and published behind gates. |
-| [Testing](testing.md) | Contributors | The four test layers, how to run them, and how to write E2E that cannot flake. |
+Every guide, one line each. Each topic has one home; the others link to it.
 
-Two things deliberately live elsewhere:
+## Using throng
 
-- **What throng is, and its architecture, commands and configuration** — the [README](../README.md).
-  It describes the app's current finite state, not its history.
-- **What's planned** — the [issue tracker](https://github.com/Bidthedog/throng/issues), grouped by
-  [milestone](https://github.com/Bidthedog/throng/milestones).
+| Guide | What it covers |
+|---|---|
+| [Installation](installation.md) | Downloading, verifying, installing, upgrading and removing throng, and running it from source. |
+| [Quick start](quick-start.md) | A short tour from first launch to a working project, and how to get around. |
+| [Key bindings](key-bindings.md) | Every default key binding, the chord conventions, multi-key chords, non-US layouts and rebinding. |
+| [Preferences](preferences.md) | Every setting and what it does, themes, icon packs and where config files live. |
+| [Environment](environment.md) | Every environment variable throng, its build and its tests read, and where each instance keeps its data. |
+
+## Working on throng
+
+| Guide | What it covers |
+|---|---|
+| [Architecture](architecture.md) | How throng is built, domain by domain, with component and process diagrams. |
+| [Testing](testing.md) | The test layers, how to run them, the gate and the E2E lanes. |
+| [Releasing](releasing.md) | What a release is and how one is cut. |
+| [Contributing](../CONTRIBUTING.md) | How work is proposed, specced, built and reviewed. |
+
+What's planned lives in the [issue tracker](https://github.com/Bidthedog/throng/issues), grouped by
+[milestone](https://github.com/Bidthedog/throng/milestones); what changed in each release is in the
+[changelog](../CHANGELOG.md).

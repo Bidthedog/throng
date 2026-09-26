@@ -52,8 +52,8 @@ paste relevant passing output here
 
 <!-- Constitution Development Workflow: documentation MUST be brought current in the same change. -->
 
-- [ ] **`README.md`** reflects the **current finite state** of the app (no feature-changelog narration); any superseded description was replaced, not appended. *(N/A if this change alters no user-facing behaviour, setup, architecture, or capabilities.)*
-- [ ] **`docs/`** guides updated where this change affects them — e.g. [`docs/quick-start.md`](../docs/quick-start.md) for user-facing behaviour, [`docs/testing.md`](../docs/testing.md) for the test suite. *(Planned work is tracked in issues and milestones, not in a roadmap document — there is nothing to tick off.)* *(N/A for a test-only change that documents nothing a reader of these guides would look for.)*
+- [ ] The **`throng-docs` audit** was run: each user-visible change is documented in its one home under [`docs/`](../docs/README.md) — [key bindings](../docs/key-bindings.md), [preferences](../docs/preferences.md), [environment](../docs/environment.md), [architecture](../docs/architecture.md), [quick start](../docs/quick-start.md), [installation](../docs/installation.md) — and `docs-currency.test.ts` is green. *(Or: "docs unaffected".)*
+- [ ] **`README.md`** is still a short entry point (a new major feature gets one line in its feature list, nothing more).
 - [ ] **`CONTRIBUTING.md`** updated if the process, toolchain, testing bar, or setup changed.
 
 ## Constitution compliance
