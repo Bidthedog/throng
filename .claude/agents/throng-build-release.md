@@ -1,5 +1,6 @@
 ---
 name: throng-build-release
+model: sonnet
 description: Use for the build pipeline, packaging and release — TypeScript project references, the Vite renderer build, the generation scripts, electron-builder and the NSIS per-user installer, the bundled host-Node runtime, installer verification and publish gates, the GitHub Actions workflows and E2E shard planning on CI. Triggers include a broken or slow build, a native module ABI error, "the packaged app cannot find X", adding a runtime dependency, cutting a release or a tag, CI workflow edits, runner minutes, and version stamping.
 ---
 

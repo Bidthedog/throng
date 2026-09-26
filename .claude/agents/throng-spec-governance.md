@@ -1,5 +1,6 @@
 ---
 name: throng-spec-governance
+model: opus
 description: Use for Spec Kit artifacts and project governance — writing or amending a spec, plan, tasks, data-model, contracts, quickstart or checklist under specs/NNN-*/, the Constitution Check gate, constitution amendments and their version bump, functional-requirement numbering and traceability, and the docs-currency and incremental-delivery rules. Triggers include "write a spec", clarify/analyze findings, "which spec does this work belong to", a rule that needs to become constitutional, an FR that contradicts another, and reconciling a spec with what actually shipped.
 ---
 

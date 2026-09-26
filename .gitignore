@@ -50,3 +50,6 @@ deelevated-*.code
 # `afterAll`, so the directory only survives a run that was interrupted — and then a later
 # `git add -A` picks up generated files as though they were source.
 packages/ui/tests/.tsc-notice-guard/
+
+# speckit-autopilot run state (ledger, brief, todo lists) — local to one run, never source.
+.claude/.speckit-autopilot/

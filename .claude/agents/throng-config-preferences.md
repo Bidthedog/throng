@@ -1,6 +1,6 @@
 ---
 name: throng-config-preferences
-model: sonnet
+model: opus
 description: Use for anything configurable — app settings, key bindings, themes and theme tokens, icon packs, their metadata registries in @throng/core, the shipped defaults generator, the config store on disk with its hot-reload and atomic writes, and the visual preferences editors. Triggers include adding or renaming a setting, changing a default or a bounds/clamp, adding a keybinding or command, adding or editing a theme token, "the preferences editor does not expose this", a config file that fails to write or reload, and reset/revert behaviour.
 ---
 
