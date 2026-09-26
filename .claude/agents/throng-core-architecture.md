@@ -1,5 +1,6 @@
 ---
 name: throng-core-architecture
+model: opus
 description: Use for work in packages/core — the OS-agnostic domain layer, its abstractions/ports, the InversifyJS composition roots and DI tokens in all three processes, and any decision about which package a piece of code belongs in. Triggers include adding or changing an abstraction with an OS-specific implementation, wiring a new service, "where should this live", a circular or upward dependency between packages, a direct OS call appearing in core, and reviews against Principles II (Platform-Abstracted Core), VIII (SOLID/DRY/YAGNI), IX (DI & Composition Root) and X (Externalised Configuration).
 ---
 

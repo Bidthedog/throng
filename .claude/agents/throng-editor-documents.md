@@ -1,5 +1,6 @@
 ---
 name: throng-editor-documents
+model: opus
 description: Use for the CodeMirror 6 editor panels and the document model behind them — the single-authority document state, replicas across panels and windows, dirty/undo/save semantics, language detection and manual overrides, indentation, external file changes, moved or deleted files, and editor recovery. Triggers include the same file open in two panels, undo/redo diverging, a dirty-state or save-all bug, word wrap, syntax highlighting or a language loader, an editor that will not reopen after a crash, and drag-and-drop into an editor.
 ---
 
