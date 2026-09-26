@@ -4,7 +4,7 @@
  * ══ WHAT IS ROUTED, AND WHAT IS NOT ══
  *
  * A default open action of Preview is a REFINEMENT of 006 FR-011/FR-012/FR-013 and 033 FR-009: a click
- * or Enter in Files & Folders, and a Quick Open pick, open the file's preview instead of an editor
+ * or Enter in File Explorer, and a Quick Open pick, open the file's preview instead of an editor
  * (FR-052) — and when the file is already open in an editor, the SAME `preview.open` command places the
  * preview beside it or focuses the one already open (FR-053; main decides, contracts/preview-ipc.md §1).
  *
@@ -272,6 +272,8 @@ function fakeServices(layout: WorkspaceLayout): Services {
           return Promise.resolve({ ok: true } as T);
         case 'projects.list':
           return Promise.resolve({ projects: [{ id: PROJECT, name: 'Proj', rootFolder: ROOT }] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         default:
           return Promise.resolve({} as T);
       }
@@ -364,7 +366,7 @@ async function treeOpen(absPath: string): Promise<void> {
   });
 }
 
-describe('Files & Folders click and Enter go through the router (T135)', () => {
+describe('File Explorer click and Enter go through the router (T135)', () => {
   it('with Markdown set to Preview, the open intent asks preview.open and opens no editor', async () => {
     const { openInto } = await mountChrome(PREVIEW, createElement(EditorOpenListener, null));
 

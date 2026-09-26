@@ -142,7 +142,7 @@ describe('an editor (FR-102, FR-112)', () => {
     expect(e1.openFile).not.toHaveBeenCalled();
   });
 
-  it('does nothing with Files & Folders active, with an untyped panel active, or with no history known', async () => {
+  it('does nothing with File Explorer active, with an untyped panel active, or with no history known', async () => {
     const { e1, e2 } = await mount();
     setActivePane('explorer');
     await act(() => navigateFocusedHistory(ws!.ws(), 'back'));
@@ -161,7 +161,7 @@ describe('the chord, through the window’s own key handler, over a real editor 
   it('Alt+ArrowLeft is Back, and CodeMirror does not move the caret by syntax', async () => {
     ed = mountEditor({
       doc: { text: 'call(alpha, beta);\n', version: 1, absPath: 'C:/proj/b.ts' },
-      extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {} })],
+      extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {}, onRevealLeft: () => {}, onRevealRight: () => {} })],
     });
     await waitFor(() => expect(ed!.text()).toContain('call(alpha'));
     setPanelHistory('p-ed', history(['C:/proj/a.ts', 'C:/proj/b.ts'], 1));
@@ -192,7 +192,7 @@ describe('US7b fix round 1, item 1 — Shift+Alt+Arrow is still column select (C
   it('Shift+Alt+ArrowLeft extends the column selection and loads nothing', async () => {
     ed = mountEditor({
       doc: { text: 'call(alpha, beta);\n', version: 1, absPath: 'C:/proj/b.ts' },
-      extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {} })],
+      extras: [createElement(KeybindingsHandler, { key: 'keys', onToggleProjects: () => {}, onToggleExplorer: () => {}, onRevealLeft: () => {}, onRevealRight: () => {} })],
     });
     await waitFor(() => expect(ed!.text()).toContain('call(alpha'));
     setPanelHistory('p-ed', history(['C:/proj/a.ts', 'C:/proj/b.ts'], 1));

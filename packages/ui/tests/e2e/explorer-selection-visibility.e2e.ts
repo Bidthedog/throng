@@ -1,5 +1,5 @@
 /**
- * The Files & Folders selection highlight belongs to the ACTIVE pane (024 follow-up).
+ * The File Explorer selection highlight belongs to the ACTIVE pane (024 follow-up).
  *
  * The tree always HAS a selection — it is what every file operation acts on, and it tracks the open
  * editor — but drawing it from an inactive pane made the application look as though two things were

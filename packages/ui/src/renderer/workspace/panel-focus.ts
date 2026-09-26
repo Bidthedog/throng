@@ -7,7 +7,13 @@
  *
  * Module-level (not React state) so it is reachable from the global keydown handler
  * without threading refs through the tree. Callbacks are removed on unmount.
+ *
+ * 046 FR-125: EVERY panel type registers one. A body made of ordinary controls (the untyped panel's
+ * type form, Find in Files) does it through {@link usePanelFocusTarget}; a new panel type is not done
+ * until it registers either way.
  */
+import { useCallback, useEffect, useRef, type FocusEvent, type RefCallback } from 'react';
+
 const registry = new Map<string, () => void>();
 
 /**
@@ -33,12 +39,47 @@ const registry = new Map<string, () => void>();
  */
 let pendingFocusPanelId: string | null = null;
 
+/**
+ * A HOLD on delivering parked focus (046 FR-125 against rename-on-create). While held, a
+ * {@link requestPanelFocus} only parks and a registering panel does not take the parked focus.
+ *
+ * A new tab opens with its name box focused, and the same click makes the new tab active, which
+ * `PanelFocusSync` answers by asking for focus in its panel. Delivered, that takes the caret out of the
+ * name box, which commits and closes it on blur. So the New Tab control holds delivery for as long as
+ * the box is open and releases it when the box closes; the parked request then lands, and focus moves
+ * into the new tab's panel as FR-125 requires.
+ */
+let focusHeld = false;
+
+/** Hold parked-focus delivery (see {@link focusHeld}). Pair with {@link releasePanelFocus}. */
+export function holdPanelFocus(): void {
+  focusHeld = true;
+}
+
+/**
+ * End the hold and deliver the parked request, if any — but only when focus is not already somewhere
+ * the user put it: a name box closed by clicking elsewhere leaves focus on what was clicked, and that
+ * click is the more recent statement of where the user is.
+ */
+export function releasePanelFocus(): void {
+  if (!focusHeld) return;
+  focusHeld = false;
+  const pending = pendingFocusPanelId;
+  if (pending === null) return;
+  const active = typeof document === 'undefined' ? null : document.activeElement;
+  if (active !== null && active !== document.body) {
+    pendingFocusPanelId = null;
+    return;
+  }
+  if (focusPanel(pending)) pendingFocusPanelId = null;
+}
+
 /** Register (or replace) the focus callback for a panel view. */
 export function registerPanelFocus(panelId: string, focus: () => void): void {
   registry.set(panelId, focus);
   // Honour a focus requested while this panel was still mounting (issue 144) — the project-switch
   // case, where the request beats the deferred editor mount. Clear it so it fires exactly once.
-  if (pendingFocusPanelId === panelId) {
+  if (pendingFocusPanelId === panelId && !focusHeld) {
     pendingFocusPanelId = null;
     try {
       focus();
@@ -64,13 +105,72 @@ export function unregisterPanelFocus(panelId: string): void {
  */
 export function requestPanelFocus(panelId: string): void {
   pendingFocusPanelId = panelId;
+  if (focusHeld) return; // delivered on release (see `focusHeld`)
   if (focusPanel(panelId)) pendingFocusPanelId = null;
 }
 
-/** Tests only: every registration gone, and no focus request left parked. */
+/** Tests only: every registration gone, no focus request left parked, and no hold. */
 export function __resetPanelFocus(): void {
   registry.clear();
   pendingFocusPanelId = null;
+  focusHeld = false;
+}
+
+/** What can take the caret by keyboard: the tabbable controls, in document order. */
+const FOCUSABLE =
+  'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), ' +
+  'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
+
+/**
+ * The focus target of a panel whose body is ordinary DOM controls (046 FR-125, constitution v5.6.0
+ * Principle XI "Focus follows the active Panel") — the untyped panel's type form and Find in Files.
+ *
+ * The editor, terminal and preview register their own input surface; a panel made of plain controls
+ * gets the same guarantee from here: a keyboard route that makes it the active panel puts the caret
+ * on the control inside it that last held focus while that control is still in the panel, else on its
+ * first focusable control. A body with no focusable control at all makes its own container focusable
+ * (`tabIndex=-1`) and takes focus there, so no route leaves the caret in the panel it left.
+ *
+ * Returns the two props for the body's ROOT element: the ref it registers against, and the `onFocus`
+ * (React's bubbling focusin) that remembers the last control focused inside it.
+ */
+export function usePanelFocusTarget(panelId: string): {
+  ref: RefCallback<HTMLElement>;
+  onFocus: (event: FocusEvent<HTMLElement>) => void;
+} {
+  const containerRef = useRef<HTMLElement | null>(null);
+  const lastRef = useRef<HTMLElement | null>(null);
+
+  const ref = useCallback<RefCallback<HTMLElement>>((el) => {
+    containerRef.current = el;
+  }, []);
+
+  const onFocus = useCallback((event: FocusEvent<HTMLElement>): void => {
+    const container = containerRef.current;
+    if (event.target instanceof HTMLElement && event.target !== container) lastRef.current = event.target;
+  }, []);
+
+  useEffect(() => {
+    registerPanelFocus(panelId, () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const last = lastRef.current;
+      if (last && last.isConnected && container.contains(last)) {
+        last.focus();
+        return;
+      }
+      const first = container.querySelector<HTMLElement>(FOCUSABLE);
+      if (first) {
+        first.focus();
+        return;
+      }
+      container.tabIndex = -1;
+      container.focus();
+    });
+    return () => unregisterPanelFocus(panelId);
+  }, [panelId]);
+
+  return { ref, onFocus };
 }
 
 /**

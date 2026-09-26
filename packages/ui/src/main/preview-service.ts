@@ -564,7 +564,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // A link to the file this run already shows moves nothing: the renderer scrolls to the fragment.
     if (canon(target) === canon(run.filePath)) return withFragment({ kind: 'shown' as const, update: this.snapshot(run) });
 
-    // 3. No enabled provider: an editor, as from Files & Folders.
+    // 3. No enabled provider: an editor, as from File Explorer.
     const provider = enabledProviderFor(this.deps.registry, this.previewSettings(), target);
     if (!provider) return { kind: 'openedInEditor' };
 

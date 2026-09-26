@@ -25,12 +25,18 @@
  * message uses when it talks *about* a panel's title ("that Panel Title is already taken"). The
  * thing such a notice is about is the Panel, whose `name` IS its title. A separate kind would give
  * two ways to say one thing, and the two would be formatted differently within a release.
+ *
+ * `category` (046, [contracts/project-categories.md](../../../../specs/046-side-panes-and-project-list/contracts/project-categories.md)
+ * §1 "Failures") names a Project Category — the workspace's own word for the group a project sits
+ * in on the Projects pane — the same way `project` names a project: one required `name`, nothing a
+ * call site could get creative with.
  */
 export type NoticeSubject =
   | { kind: 'none' }
   | { kind: 'file'; name: string; dir?: string }
   | { kind: 'folder'; name: string; dir?: string }
   | { kind: 'project'; name: string }
+  | { kind: 'category'; name: string }
   | { kind: 'pane'; name: string }
   | { kind: 'tab'; name: string; project?: string }
   | { kind: 'panel'; name: string; tab?: string; project?: string }
@@ -49,6 +55,7 @@ export const SUBJECT_KINDS: readonly NoticeSubject['kind'][] = [
   'file',
   'folder',
   'project',
+  'category',
   'pane',
   'tab',
   'panel',
@@ -116,6 +123,7 @@ function partsOf(subject: NoticeSubject): (string | undefined)[] {
     case 'terminal':
       return [subject.project, subject.tab, subject.panel, subject.flavour];
     case 'project':
+    case 'category':
     case 'pane':
     case 'panelType':
     case 'subWorkspace':
@@ -139,6 +147,7 @@ function contextFor(subject: NoticeSubject, context: SubjectContext): (string | 
     case 'terminal':
       return [context.project, context.tab, context.panel, undefined];
     case 'project':
+    case 'category':
     case 'pane':
     case 'panelType':
     case 'subWorkspace':

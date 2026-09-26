@@ -5,6 +5,7 @@ export type { MigrationResult } from './migration-runner.js';
 export { reconcileSchema, addColumnsFor } from './schema-guard.js';
 export type { ColumnRepair } from './schema-guard.js';
 export { ProjectRepository } from './project-repository.js';
+export { ProjectCategoryRepository } from './project-category-repository.js';
 export { WorkspaceRepository } from './workspace-repository.js';
 export { SubWorkspaceRepository } from './subworkspace-repository.js';
 // Per-document state (016) — the language override, keyed by the FILE rather than the panel.

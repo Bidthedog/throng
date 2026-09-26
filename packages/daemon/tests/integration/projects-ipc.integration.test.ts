@@ -169,6 +169,24 @@ describe('projects.* IPC', () => {
     expect(list.map((p) => p.id)).toEqual([c.id, a.id, b.id, d.id]);
   });
 
+  /**
+   * arch review #5 — `orderedIds`'s shape used to be checked in TWO places: a daemon-side
+   * pre-check in `ProjectIpcService` and core's `assertOrderedIds` inside `ProjectService.reorder`
+   * itself, both throwing the identical message. The daemon-side copy is gone now (core owns it
+   * alone, exactly as `projects.move` already relied on it alone — see the comment above the
+   * `PROJECTS_MOVE_METHOD` handler); this pins the wire-level result — code AND message — stays
+   * exactly what it was.
+   */
+  it('rejects a malformed orderedIds on projects.reorder with -32602 and the same message', async () => {
+    const bad = await call('projects.reorder', { orderedIds: ['a', 42, 'c'] });
+    expect(bad.error.code).toBe(-32602);
+    expect(bad.error.message).toBe('"orderedIds" must be an array of strings');
+
+    const notArray = await call('projects.reorder', { orderedIds: 'nope' });
+    expect(notArray.error.code).toBe(-32602);
+    expect(notArray.error.message).toBe('"orderedIds" must be an array of strings');
+  });
+
   it('rejects invalid params with -32602', async () => {
     const bad = await call('projects.create', { name: '', colour: '#fff', rootFolder: 'C:/x' });
     expect(bad.error.code).toBe(-32602);

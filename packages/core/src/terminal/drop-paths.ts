@@ -1,5 +1,5 @@
 /**
- * Formatting for a path dropped from Files & Folders onto a terminal (024 US2, #155). Pure. No OS/DOM.
+ * Formatting for a path dropped from File Explorer onto a terminal (024 US2, #155). Pure. No OS/DOM.
  *
  * The rule (FR-005): wrap a path in double quotes ONLY when it contains whitespace — otherwise insert
  * it bare — and escape nothing else, so a `$` or `&` in a name passes through exactly as the Copy Path

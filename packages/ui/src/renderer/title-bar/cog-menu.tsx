@@ -2,6 +2,7 @@ import { useRef, type ReactElement } from 'react';
 
 import { Icon } from '../common/icon.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { useKeybindings } from '../config/config-store.js';
 import { cogMenuItems } from './cog-menu-items.js';
 
 /**
@@ -21,25 +22,33 @@ import { cogMenuItems } from './cog-menu-items.js';
  * What this component is now: a button that opens the shared menu. Flip/clamp, click-away, Escape,
  * keyboard navigation and the one-menu-at-a-time invariant all come for free, because they are the
  * shared menu's, and there is only one of it.
+ *
+ * 046 iterate round 1 (T122, FR-107) added a Zoom row here, live-refreshed against the window's own
+ * zoom level. 046 iterate round 2 (FR-113) REMOVES it — the maintainer's own words, mid-build:
+ * "Remove the new 'Zoom' options from the menu." — so this component is back to a plain button that
+ * opens the shared menu; there is no zoom state to read or refresh here any more.
  */
 
 export function CogMenu(): ReactElement {
   const { openMenu, isOpen } = useContextMenu();
+  const keybindings = useKeybindings();
   const wasOpen = useRef(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const open = (): void => {
-    const r = btnRef.current?.getBoundingClientRect();
-    // 033 US5 (T062b) — the items live in `cog-menu-items.ts` so the unit table can drive them.
-    // All five are Application, so this menu has one section and draws no divider.
-    const items = cogMenuItems({
+  // 033 US5 (T062b) — the items live in `cog-menu-items.ts` so the unit table can drive them.
+  const buildItems = () =>
+    cogMenuItems({
       openPreferences: (tab) => window.throng?.openPreferences?.(tab),
       openLogs: () => void window.throng?.diagnostics?.openLogs?.(),
       openAbout: () => window.throng?.about?.open?.(),
+      keybindings,
     });
+
+  const open = (): void => {
+    const r = btnRef.current?.getBoundingClientRect();
     // Anchor under the cog, as a drop-down should be. The shared menu flips and clamps from here, so
     // a cog near the right edge no longer pushes its menu off-screen — which the bespoke one did.
-    openMenu(r?.left ?? 0, r?.bottom ?? 0, items, { testId: 'cog-menu' });
+    openMenu(r?.left ?? 0, r?.bottom ?? 0, buildItems(), { testId: 'cog-menu' });
   };
 
   return (

@@ -49,6 +49,15 @@ describe('every union member renders (FR-024)', () => {
   });
 
   /*
+   * `category` is in the union because a Project Category is the workspace's own word (046,
+   * contracts/project-categories.md §1 "Failures") — a refused category delete or rename names the
+   * category it was about, the same way a refused project mutation names the project.
+   */
+  it('renders a category', () => {
+    expect(formatSubject({ kind: 'category', name: 'In Progress' })).toBe('In Progress');
+  });
+
+  /*
    * `pane` is in the union because FR-024 fixes the workspace's own vocabulary and Pane is one of
    * its words — the Projects and File Explorer panes both raise notices, and without this member
    * they would have to describe themselves as something they are not.
@@ -94,7 +103,7 @@ describe('every union member renders (FR-024)', () => {
    * message uses when it talks ABOUT a panel's title — and the thing such a notice is about is the
    * Panel, whose `name` IS its title. A tenth-and-a-half kind would give two ways to say one thing.
    */
-  it('has exactly ten kinds, and panelTitle is not one of them', () => {
+  it('has exactly eleven kinds, and panelTitle is not one of them', () => {
     /*
      * `SUBJECT_KINDS` is typed `readonly NoticeSubject['kind'][]`, so adding a member to the union
      * without adding it here is a compile error, and adding `panelTitle` here without adding it to
@@ -107,6 +116,7 @@ describe('every union member renders (FR-024)', () => {
         'file',
         'folder',
         'project',
+        'category',
         'pane',
         'tab',
         'panel',
@@ -124,6 +134,7 @@ describe('every union member renders (FR-024)', () => {
       file: { kind: 'file', name: 'notes.txt' },
       folder: { kind: 'folder', name: 'src' },
       project: { kind: 'project', name: 'Alpha' },
+      category: { kind: 'category', name: 'In Progress' },
       pane: { kind: 'pane', name: 'File Explorer' },
       tab: { kind: 'tab', name: 'Work' },
       panel: { kind: 'panel', name: 'Build' },

@@ -7,10 +7,12 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
+import { shippedTwoStroke } from '../shared/window-chords.js';
 import {
   openApp,
   createProject,
   firstPanelId,
+  focusEditor,
   cleanupTemp,
   type AppOptions,
   type OpenApp,
@@ -114,16 +116,23 @@ test('hiding the editor status bar keeps the word-wrap command working (#152)', 
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
       await prefs.getByTestId('control-editor.showStatusBar').click();
 
-      // The strip is gone, but Ctrl+Alt+W still toggles wrap (the command is not stranded).
+      // The strip is gone, but Ctrl+E,W (046 FR-091, FR-124; Ctrl+Alt+W before it) still toggles wrap —
+      // the command is not stranded.
       await expect(win.getByTestId(`editor-status-strip-${pid}`)).toHaveCount(0);
-      await win.getByTestId(`editor-${pid}`).click();
+      await focusEditor(win, pid);
       const whiteSpace = () =>
         win
           .getByTestId(`editor-${pid}`)
           .locator('.cm-content')
           .evaluate((el) => getComputedStyle(el as HTMLElement).whiteSpace);
       const before = await whiteSpace();
-      await win.keyboard.press('Control+Alt+w');
+      // 046 FR-124 — one continuous press: the first stroke's modifiers held through the second.
+      const { hold, first, second } = shippedTwoStroke('editor.toggleWordWrap');
+      for (const mod of hold) await win.keyboard.down(mod);
+      await win.keyboard.press(first);
+      await expect(win.getByTestId('editor-pending-chord')).toBeVisible();
+      await win.keyboard.press(second);
+      for (const mod of [...hold].reverse()) await win.keyboard.up(mod);
       await expect.poll(whiteSpace).not.toBe(before); // wrap flipped → the command still runs
 
       // …and "Set Language…" temporarily REVEALS the hidden strip with its picker open, rather than

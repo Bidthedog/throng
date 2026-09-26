@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { shippedPress } from '../shared/window-chords.js';
 import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, commitPanelRename, createProject as newProject, firstPanelId, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
 
 /*
@@ -72,7 +73,7 @@ async function expectActive(win: Page, pid: string): Promise<void> {
  * axis, and a stable depth-first order independent of focus history.
  *
  * ONE witness is what is left, and it is the only thing the unit tests cannot say: that
- * `Control+Alt+ArrowRight` is bound, is delivered to the window, reaches the mover, and that the
+ * `focus.right`'s shipped chord (`Control+Shift+Alt+ArrowRight` since 046 FR-102) is bound, is delivered to the window, reaches the mover, and that the
  * panel it names is the one that renders as active. A second press would prove nothing the first
  * did not.
  */
@@ -86,7 +87,7 @@ test('the directional chord reaches the mover and the new panel renders active (
     await win.getByTestId(`panel-${p1}`).click();
     await expectActive(win, p1);
 
-    await win.keyboard.press('Control+Alt+ArrowRight');
+    await win.keyboard.press(shippedPress('focus.right'));
     await expectActive(win, p2);
   });
 });
@@ -146,7 +147,7 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       // Give the TERMINAL caret focus, then move focus right by keyboard. Git Bash /
       // cmd must NOT swallow the chord — the capture-phase handler intercepts it.
       await win.getByTestId(`terminal-${p1}`).click();
-      await win.keyboard.press('Control+Alt+ArrowRight');
+      await win.keyboard.press(shippedPress('focus.right'));
       await expect(win.getByTestId(`panel-${p2}`)).toHaveAttribute('data-active', 'true');
 
       // Input routing followed the move: typing now lands in the EDITOR, not the terminal.
@@ -154,7 +155,7 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       await expect(win.getByTestId(`editor-${p2}`).locator('.cm-content')).toContainText('HELLO_EDITOR');
 
       // Move back to the terminal; typing a command now lands in the terminal.
-      await win.keyboard.press('Control+Alt+ArrowLeft');
+      await win.keyboard.press(shippedPress('focus.left'));
       await expect(win.getByTestId(`panel-${p1}`)).toHaveAttribute('data-active', 'true');
       await win.keyboard.type('echo TERM_OK_777');
       await win.keyboard.press('Enter');

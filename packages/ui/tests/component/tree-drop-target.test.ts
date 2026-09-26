@@ -1,5 +1,5 @@
 /**
- * `TreeDropTarget` — what a panel does with a file dragged out of Files & Folders (024 US4, #114).
+ * `TreeDropTarget` — what a panel does with a file dragged out of File Explorer (024 US4, #114).
  *
  * PLACE AT: `packages/ui/tests/component/tree-drop-target.test.ts`
  * MIGRATED FROM (035 FR-007/FR-008): `packages/ui/tests/e2e/tree-drop-open.e2e.ts:194`

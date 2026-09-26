@@ -286,8 +286,23 @@ export class NodePtyHost implements IPtyHost {
     return () => sub.dispose();
   }
 
+  /** Throws when the process table cannot be read — see {@link descendantPids}. */
   listChildPids(handle: PtyHandle): number[] {
     return descendantPids(handle.pid);
+  }
+
+  /**
+   * 046 (Unload) — the same pids, from an ASYNC snapshot shared by every terminal asked about
+   * together, and REJECTING when the table cannot be read.
+   *
+   * `listChildPids` scans the whole process table synchronously, once per terminal: measured at
+   * 0.55–0.7 s a scan (`Get-CimInstance Win32_Process`, five cold runs), so three terminals froze the
+   * daemon's one event loop — every terminal's output — for ~2 s and ran past main's call budget.
+   * Here the scan runs off the loop, and concurrent callers share one. A failure is never `[]`:
+   * that is what an idle shell looks like, and Unload would end a running process on it.
+   */
+  probeChildPids(handle: PtyHandle): Promise<number[]> {
+    return pidTableSnapshot().then((byParent) => descendantsOf(byParent, handle.pid).map((row) => row.pid));
   }
 
   /**
@@ -329,23 +344,21 @@ function conhostChildren(parentPid: number): number[] {
   }
 }
 
-/** All live descendant pids of `rootPid`, via a single process snapshot. */
-function descendantPids(rootPid: number): number[] {
-  let csv: string;
-  try {
-    csv = execFileSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId),$($_.ParentProcessId)" }',
-      ],
-      { encoding: 'utf8', timeout: 5000, windowsHide: true },
-    );
-  } catch {
-    return [];
-  }
+const PID_TABLE_ARGS = [
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId),$($_.ParentProcessId)" }',
+];
+/** A snapshot's own cap. One measured at 0.55–0.7 s; past this the answer is "unknown" (busy). */
+const PID_TABLE_TIMEOUT_MS = 5000;
+
+/**
+ * `pid,ppid` lines → a parent-indexed table. THROWS on a table with no rows: every live system has
+ * processes, so an empty answer means the snapshot failed, and reading it as "no children" would
+ * call a busy terminal idle (046 review #2).
+ */
+function parsePidTable(csv: string): Map<number, ProcessTreeRow[]> {
   const childrenByParent = new Map<number, ProcessTreeRow[]>();
   for (const line of csv.split(/\r?\n/)) {
     const comma = line.indexOf(',');
@@ -358,7 +371,60 @@ function descendantPids(rootPid: number): number[] {
     if (list) list.push(row);
     else childrenByParent.set(ppid, [row]);
   }
-  return descendantsOf(childrenByParent, rootPid).map((row) => row.pid);
+  if (childrenByParent.size === 0) throw new Error('the process table came back empty');
+  return childrenByParent;
+}
+
+/**
+ * All live descendant pids of `rootPid`, via a single synchronous process snapshot.
+ *
+ * THROWS when the snapshot fails (046 review #2) — it used to return `[]`, which is what an idle
+ * shell looks like, so a PowerShell timeout on a loaded machine classified a running build as idle.
+ * The daemon's busy check catches the throw and counts the terminal busy.
+ */
+function descendantPids(rootPid: number): number[] {
+  const csv = execFileSync('powershell.exe', PID_TABLE_ARGS, {
+    encoding: 'utf8',
+    timeout: PID_TABLE_TIMEOUT_MS,
+    windowsHide: true,
+  });
+  return descendantsOf(parsePidTable(csv), rootPid).map((row) => row.pid);
+}
+
+/**
+ * The pid table shared by every {@link NodePtyHost.probeChildPids} call made together (046 review
+ * #1). A call arriving while a snapshot is in flight, or within {@link PID_TABLE_SHARE_MS} of one
+ * finishing, gets that snapshot; one arriving later takes a fresh one, so the sharing collapses ONE
+ * `list` or `closeIdle` and never serves a stale table to the next. A failure is shared only with
+ * the callers already waiting on it.
+ */
+const PID_TABLE_SHARE_MS = 250;
+let pidTableInFlight: Promise<Map<number, ProcessTreeRow[]>> | null = null;
+let pidTableSettledAt = 0;
+
+function pidTableSnapshot(): Promise<Map<number, ProcessTreeRow[]>> {
+  const fresh = pidTableSettledAt === 0 || Date.now() - pidTableSettledAt < PID_TABLE_SHARE_MS;
+  if (pidTableInFlight && fresh) return pidTableInFlight;
+  pidTableSettledAt = 0;
+  const snapshot = new Promise<string>((resolve, reject) => {
+    execFile(
+      'powershell.exe',
+      PID_TABLE_ARGS,
+      { encoding: 'utf8', timeout: PID_TABLE_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+    );
+  }).then(parsePidTable);
+  pidTableInFlight = snapshot;
+  snapshot.then(
+    () => {
+      if (pidTableInFlight === snapshot) pidTableSettledAt = Date.now();
+    },
+    () => {
+      // A failure is shared only with the callers already waiting on it; the next call tries again.
+      if (pidTableInFlight === snapshot) pidTableInFlight = null;
+    },
+  );
+  return snapshot;
 }
 
 /**

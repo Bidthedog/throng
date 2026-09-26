@@ -27,12 +27,14 @@ import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
 import { focusPanel, requestPanelFocus } from './workspace/panel-focus.js';
-import { setActivePane } from './workspace/active-pane.js';
+import { consumeProjectSwitchPendingFor, getActivePane, setActivePane } from './workspace/active-pane.js';
+import { MouseZoomHandler } from './workspace/mouse-zoom.js';
 import { asKeyboardMenu } from './workspace/keyboard-menu.js';
 import { requestPanelRename } from './workspace/panel-rename.js';
 import { requestTabPicker } from './workspace/tab-picker.js';
 import { getExplorerCommands } from './explorer/explorer-commands.js';
-import { chordKey, isBackquote } from './config/chord-key.js';
+import { useSidePaneActions, type SidePaneActions } from './workspace/side-pane-actions.js';
+import { chordKey, resolveKeydown, windowProducedEvent } from './config/chord-key.js';
 import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
@@ -123,9 +125,15 @@ function caretRect(el: HTMLElement): DOMRect | null {
       /* an offset the node cannot take — fall through to the selection's own box */
     }
   }
-  const rect = range.getBoundingClientRect();
-  if (rect.height === 0 && rect.width === 0) return null;
-  return rect;
+  try {
+    const rect = range.getBoundingClientRect();
+    if (rect.height === 0 && rect.width === 0) return null;
+    return rect;
+  } catch {
+    // A Range that cannot report its own box (e.g. a test environment with no layout engine) falls
+    // back to the element's own box, exactly as "an all-zero rect" already does above.
+    return null;
+  }
 }
 
 /**
@@ -201,7 +209,7 @@ const NAVIGATE_FORWARD: ActionId = 'navigate.forward';
  *
  * ══ WHY `file.undo` AND `file.redo` ARE HERE ══
  *
- * Because the explorer's undo must work from anywhere in the Files & Folders pane, not only with a
+ * Because the explorer's undo must work from anywhere in the File Explorer pane, not only with a
  * tree ROW focused. Rename through the context menu and dismiss it with the mouse, and focus is on
  * the pane rather than on a row — at which point a scoped handler would hand `Ctrl+Z` to whatever
  * widget had focus, and the user's rename would stand. That is the defect
@@ -234,6 +242,14 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
       'panel.rename',
       'file.undo',
       'file.redo',
+      // 046 US2 (FR-010 – FR-017) — step the active project, or jump keyboard focus straight to a
+      // side pane, from anywhere (data-model §4: the pane toggles' reasoning, one requirement along).
+      'project.next',
+      'project.previous',
+      'focus.explorer',
+      'focus.projects',
+      // 046 iterate round 3 (FR-116) — and the way back to the centre, from the same anywhere.
+      'focus.workspace',
       TABS_OPEN_PICKER,
       QUICK_OPEN,
       GOTO_LINE,
@@ -257,14 +273,24 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<string> = new Set([
 export function KeybindingsHandler({
   onToggleProjects,
   onToggleExplorer,
+  onRevealLeft,
+  onRevealRight,
 }: {
   onToggleProjects: () => void;
   onToggleExplorer: () => void;
+  /** 046 US2 (FR-017) — reveal the sidebar/File Explorer pane if hidden; a no-op if already shown. */
+  onRevealLeft: () => void;
+  onRevealRight: () => void;
 }): null {
   const keybindings = useKeybindings();
   const ws = useWorkspace();
   const cbRef = useRef({ onToggleProjects, onToggleExplorer });
   cbRef.current = { onToggleProjects, onToggleExplorer };
+  // 046 US2 — the SAME dispatch the cog menu's Navigate section uses (side-pane-actions.ts), read
+  // through a ref for `onKeyDown`'s reason: the listener isn't re-subscribed on every render.
+  const sidePane = useSidePaneActions(onRevealLeft, onRevealRight);
+  const sidePaneRef = useRef<SidePaneActions>(sidePane);
+  sidePaneRef.current = sidePane;
   // The workspace store is read through a ref so the keydown listener isn't
   // re-subscribed on every layout change (012 — per-type zoom routes to it).
   const wsRef = useRef(ws);
@@ -302,6 +328,10 @@ export function KeybindingsHandler({
       focusPanel(target); // move the caret / input into the target view
     };
     const dispatchMove = (dir: Direction): void => {
+      // 046 FR-122 — the directional chords act only while the workspace holds the active pane.
+      // From the Projects pane or the File Explorer they do nothing; the listener below has
+      // already consumed the chord, so it reaches neither the list nor the tree.
+      if (getActivePane() !== 'workspace') return;
       const f = activeFocus();
       if (!f) return;
       const target = moveFocus(f.root, f.activeId, dir); // null at the edge → stay put
@@ -335,23 +365,18 @@ export function KeybindingsHandler({
        *    the name encodes nothing — and dropping the modifier turned the editor's column select,
        *    `Shift+Alt+ArrowLeft`, into `Alt+ArrowLeft`: `navigate.back`, a window chord, which this
        *    capture-phase listener then swallowed before CodeMirror ever saw the key.
+       *
+       * That rule now lives in `chordCandidates` (046 FR-026, R2), which builds the produced token
+       * exactly as above and, for Ctrl+digit WITHOUT Alt, tries the PHYSICAL digit first — so
+       * `Ctrl+Shift+0` resolves on every layout (US produces `)`, German `=`), while AltGr+0 (`}`,
+       * reported as Ctrl+Alt) keeps its produced-only meaning. The first candidate that names a
+       * command live in this scope wins; a physical `Ctrl+1` bound to something else outranks a
+       * layout whose Ctrl+1 happens to produce `+`.
        */
-      const backtick = isBackquote(e);
-      const keepShift =
-        backtick || /^F\d{1,2}$/.test(e.key) || /^[a-z]$/i.test(e.key) || /^Arrow(Left|Right|Up|Down)$/.test(e.key);
       // Window-level chords are live in every scope (012, FR-024b) — including from inside an
       // editor's find bar, so the user can always move focus out of wherever they are. The
       // HANDLED gate below is what keeps this listener to zoom/focus/view and nothing else.
-      const action = resolveScoped(
-        keybindings,
-        {
-          key: chordKey(e),
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          ...(keepShift ? { shift: e.shiftKey } : {}),
-        },
-        scopeInput(),
-      );
+      const action = resolveKeydown(e, (ev) => resolveScoped(keybindings, ev, scopeInput()), windowProducedEvent(e));
       if (!action || !WINDOW_HANDLED_ACTIONS.has(action)) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
@@ -402,6 +427,19 @@ export function KeybindingsHandler({
         case 'focus.cycleBack':
           dispatchCycle(-1);
           break;
+        /*
+         * 046 iterate round 3 (FR-116) — back to the active tab's active panel, exactly as a
+         * directional move ending there would go. UNLIKE `dispatchMove` / `dispatchCycle` it does
+         * not skip when the target is already the active panel: that is the whole case — focus is
+         * on a side pane or a notice, the active panel has not changed, and the caret must return.
+         * With no project, no active tab or a tab with no panel, `activeFocus()` is null and the
+         * chord does nothing (and raises no notice).
+         */
+        case 'focus.workspace': {
+          const f = activeFocus();
+          if (f) goToPanel(f.tabId, f.activeId);
+          break;
+        }
         /*
          * 041 FR-020 (#314) — focus the most recent notice.
          *
@@ -490,8 +528,19 @@ export function KeybindingsHandler({
         case 'view.toggleExplorer':
           cbRef.current.onToggleExplorer();
           break;
+        /*
+         * 046 US2 (FR-010 – FR-017) — step the active project, or jump focus to a side pane. The SAME
+         * `dispatch` the cog menu's Navigate section calls (side-pane-actions.ts), so choosing an item
+         * there and pressing its chord can never disagree about what happens.
+         */
+        case 'project.next':
+        case 'project.previous':
+        case 'focus.explorer':
+        case 'focus.projects':
+          sidePaneRef.current.dispatch(action);
+          break;
         // 024 US3 (#85): undo/redo a FILE operation. Resolved here as well as in the tree's own
-        // handler, because `file.*` only resolves at all while the active pane is Files & Folders —
+        // handler, because `file.*` only resolves at all while the active pane is File Explorer —
         // so this cannot reach an editor, and it works wherever focus sits inside the pane.
         case 'file.undo':
           getExplorerCommands()?.undoFileOp();
@@ -514,7 +563,7 @@ export function KeybindingsHandler({
           // for all three. No focused element with a menu → nothing happens.
           {
             let el = document.activeElement as HTMLElement | null;
-            // Files & Folders: react-arborist keeps DOM focus on the tree CONTAINER (roving focus),
+            // File Explorer: react-arborist keeps DOM focus on the tree CONTAINER (roving focus),
             // so a synthetic contextmenu on activeElement would open the ROOT menu even when a row is
             // highlighted (#157 follow-up). Redirect to the highlighted row; when nothing is
             // highlighted, to the root row — so the menu still comes off the root folder, not mid-pane.
@@ -579,10 +628,10 @@ export function KeybindingsHandler({
       if (e.defaultPrevented) return;
       const layout = wsRef.current.layout;
       const scope: ScopeInput = { tabs: layout?.tabs, activeTabId: layout?.activeTabId ?? null };
-      const action = resolveScoped(
-        keybindings,
+      const action = resolveKeydown(
+        e,
+        (ev) => resolveScoped(keybindings, ev, scope),
         { key: chordKey(e), ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey },
-        scope,
       );
       if (action !== 'preview.followLink') return;
       // The scope gate, stated here as well as declared in `COMMAND_SCOPES`, for Go To Line's
@@ -620,7 +669,7 @@ export function KeybindingsHandler({
  * — so it fires there too. A panel that is a bare placeholder registers no focus callback, so
  * requesting its focus is a harmless no-op; only a real input surface (editor/terminal) is focused.
  */
-function PanelFocusSync(): null {
+export function PanelFocusSync(): null {
   const { layout } = useWorkspace();
   const activeTabId = layout?.activeTabId ?? null;
   const activeTab = layout?.tabs.find((t) => t.id === activeTabId);
@@ -629,10 +678,35 @@ function PanelFocusSync(): null {
   useEffect(() => {
     const prev = prevTabRef.current;
     prevTabRef.current = activeTabId;
+    /*
+     * FR-082 (046 iterate round 1) — a PROJECT switch (a click/Enter on a project row, or the
+     * project.next/previous chord — `projects-store.tsx`'s `switchProject` marks every one of them)
+     * never claims the workspace on its own; the active pane stays exactly where it was.
+     *
+     * Fix-round-2 (branch review hypothesis) — consumed as soon as THIS project's layout settles
+     * (`layout?.projectId` matches the switch's own target), decoupled from the `activeTabId !==
+     * null && … && activePanelId` focus-delivery guard below. Consuming it only INSIDE that guard
+     * left the mark stuck for a switch into a project with no tabs (or whose active tab holds no
+     * panel), which never satisfies it: the mark then wrongly suppressed the workspace claim for
+     * whatever activeTabId change came next.
+     */
+    if (consumeProjectSwitchPendingFor(layout?.projectId ?? null)) return;
     if (activeTabId !== null && prev !== activeTabId && activePanelId) {
+      /*
+       * US2 fix round 1 (review finding 1, FR-014/FR-015) — the same pairing `open-in-editor.ts`,
+       * `open-preview.ts` and `tab-group.tsx` already make at THEIR point of delivering focus into a
+       * panel. Before this, a same-project tab switch (Ctrl+Tab, `tab-picker.tsx`) left the active
+       * pane on whatever claimed it last (a pointerdown/focus on the Projects pane, FR-015) even once
+       * focus genuinely moved into a workspace Panel here — so `EditorKeybindings`'s
+       * `getActivePane() !== 'workspace'` gate (editor-chrome.tsx) stayed shut and Ctrl+S was a no-op
+       * until the user clicked inside the editor by hand. A tab switch within the SAME project
+       * reaching here is the same fact: real focus is about to move into a workspace Panel, so the
+       * pane it belongs to is what must be live.
+       */
+      setActivePane('workspace');
       requestPanelFocus(activePanelId);
     }
-  }, [activeTabId, activePanelId]);
+  }, [activeTabId, activePanelId, layout?.projectId]);
   return null;
 }
 
@@ -903,6 +977,21 @@ export function App(): ReactElement {
       rightToggle.set(true);
     }
   };
+  // 046 US2 (FR-017) — IDEMPOTENT reveal, over the same setters the collapse buttons use: a no-op
+  // when the pane is already shown, so `focus.explorer` / `focus.projects` never hide a pane that
+  // was already open the way a plain toggle would.
+  const revealLeft = (): void => {
+    if (!leftShown) {
+      setAutoLeft(false);
+      leftVisible.set(true);
+    }
+  };
+  const revealRight = (): void => {
+    if (!rightShown) {
+      setAutoRight(false);
+      rightToggle.set(true);
+    }
+  };
 
   return (
     <ThemeProvider theme={activeTheme}>
@@ -990,7 +1079,16 @@ export function App(): ReactElement {
             <TransientScrim />
             <NavigationChrome />
             <SearchKeybindings />
-            <KeybindingsHandler onToggleProjects={toggleLeft} onToggleExplorer={toggleRight} />
+            <KeybindingsHandler
+              onToggleProjects={toggleLeft}
+              onToggleExplorer={toggleRight}
+              onRevealLeft={revealLeft}
+              onRevealRight={revealRight}
+            />
+            {/* 046 iterate round 1 (T118/T119, FR-106) — Ctrl+wheel / Ctrl+middle-click zoom the
+                panel under the pointer. A sub-workspace window is its own renderer realm and
+                mounts its own copy (`subworkspace-app.tsx`). */}
+            <MouseZoomHandler />
             <WorkspacePane />
             <section
               className={`pane pane--explorer${rightShown ? '' : ' pane--collapsed'}`}
@@ -1000,7 +1098,7 @@ export function App(): ReactElement {
                 type="button"
                 className="pane-collapse pane-collapse--right"
                 data-testid={rightShown ? 'pane-hide-right' : 'pane-show-right'}
-                title={`${rightShown ? 'Hide' : 'Show'} Files & Folders`}
+                title={`${rightShown ? 'Hide' : 'Show'} File Explorer`}
                 onClick={toggleRight}
               >
                 <Chevron dir={rightShown ? 'right' : 'left'} />
@@ -1009,7 +1107,7 @@ export function App(): ReactElement {
                 <FileExplorerPane onResizeStart={explorerWidth.start} resizing={explorerWidth.dragging} />
               ) : (
                 <div className="pane-rail" data-testid="pane-rail-right">
-                  <span className="pane-rail__label">Files &amp; Folders</span>
+                  <span className="pane-rail__label">File Explorer</span>
                 </div>
               )}
             </section>

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import {
   daemonPid,
   daemonRpc,
   conhostChildren,
+  probeConhostChildren,
   expectNoOrphanConhosts, cleanupTemp} from './harness.js';
 import { skipIfElevated } from './admin.js';
 
@@ -72,6 +74,33 @@ async function openTerminal(
    */
   // sleep-justified: would wait for NodePtyHost.attributeConhosts() to have resolved this conhost's pid, but nothing exposes that internal state — this covers its documented ~200ms attribution window with margin.
   await win.waitForTimeout(1200);
+}
+
+/**
+ * The pids of `image` processes whose parent is `parentPid` — for a non-elevated daemon, the shells
+ * its ConPTY sessions launched. `null` when the OS query itself failed, so a broken probe can never
+ * read as "the same shells" or as "no shells".
+ */
+function shellChildren(parentPid: number, image: string): number[] | null {
+  try {
+    const out = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '${image}' -and $_.ParentProcessId -eq ${parentPid} } | ForEach-Object { $_.ProcessId }`,
+      ],
+      { encoding: 'utf8', timeout: 8000, windowsHide: true },
+    );
+    return out
+      .split(/\r?\n/)
+      .map((l) => Number(l.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .sort((a, b) => a - b);
+  } catch {
+    return null;
+  }
 }
 
 /** Click through however many confirmation dialogs the destroy flow shows. */
@@ -148,6 +177,120 @@ test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@te
       await win.locator('[data-testid^="project-delete-"]').first().click();
       await acceptConfirmations(win);
       await expectNoOrphanConhosts(dpid, baseline);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+test('Unload Project and End Terminals reaps a busy terminal, and Unload Project keeps an idle shell alive, through the row menu', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-orphan-unload-'));
+  try {
+    await runApp(async (_app, win, { pipeName }) => {
+      await createProject(win, 'UnloadReap', root);
+      const dpid = await daemonPid(pipeName);
+      const baseline = conhostChildren(dpid);
+      const row = win.locator('.project-item', { hasText: 'UnloadReap' });
+
+      // --- Unload Project and End Terminals, with a BUSY shell (046 FR-081, FR-111) ---
+      // `projects.unloadTerminalAction` ships as keepRunning, so the plain row keeps and the second
+      // row is its opposite. A busy shell is the stronger case for End: nothing about it being busy
+      // may stop the reap, and no dialog may ask first (FR-111).
+      const pid = await firstPanelId(win);
+      await openTerminal(win, pid, 'cmd', dpid);
+      await win.getByTestId(`terminal-${pid}`).click();
+      await win.keyboard.type('ping -n 30 127.0.0.1');
+      await win.keyboard.press('Enter');
+      // The real condition: the daemon's OWN busy check for this panel reports true, rather than
+      // guessing how long ping.exe takes to become a real child pid.
+      await expect
+        .poll(
+          async () => {
+            const result = (await daemonRpc(pipeName, 'terminal.list', { includeBusy: true })) as {
+              sessions: Array<{ panelId: string; busy: boolean }>;
+            } | null;
+            return result?.sessions.find((s) => s.panelId === pid)?.busy ?? false;
+          },
+          { timeout: 15000 },
+        )
+        .toBe(true);
+
+      await row.click({ button: 'right' });
+      await win.getByTestId('menu-item-Unload Project and End Terminals').click();
+
+      await expectNoOrphanConhosts(dpid, baseline);
+      // The row named its action before the click, so nothing asked (FR-111, SC-015).
+      await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
+
+      // The unloaded row paints its name italic (analysis K1, moved from the deleted
+      // loaded-projects.e2e.ts — jsdom cannot tell how an element was painted).
+      await expect(row).toHaveAttribute('data-loaded', 'false');
+      const italic = await row
+        .locator('.project-item__name')
+        .evaluate((el) => getComputedStyle(el).fontStyle);
+      expect(italic).toBe('italic');
+
+      // Select it again — the layout (FR-033: nothing deleted) comes back, and the terminal Panel
+      // reattaches through the existing `attach {explicit:false}` path with a NEW shell (contracts/
+      // unload.md §2 "The next load": an ended session gets a new shell, not a missing panel).
+      await row.locator('[data-testid^="project-switch-"]').click();
+      await expect(row).toHaveAttribute('data-loaded', 'true');
+      const normal = await row
+        .locator('.project-item__name')
+        .evaluate((el) => getComputedStyle(el).fontStyle);
+      expect(normal).toBe('normal');
+      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
+      await expect.poll(() => conhostChildren(dpid).length, { timeout: 20000 }).toBeGreaterThan(baseline.length);
+      // The real condition for "settled, and idle" (the daemon's OWN busy check) rather than a fixed
+      // wait for attribution to have happened.
+      await expect
+        .poll(
+          async () => {
+            const result = (await daemonRpc(pipeName, 'terminal.list', { includeBusy: true })) as {
+              sessions: Array<{ panelId: string; busy: boolean }>;
+            } | null;
+            return result?.sessions.find((s) => s.panelId === pid)?.busy ?? null;
+          },
+          { timeout: 15000 },
+        )
+        .toBe(false);
+
+      // --- Unload Project (default keepRunning), with only an IDLE shell (FR-086, Principle III) ---
+      // Keep Terminals Running keeps EVERY terminal, idle shells included: the same shell process,
+      // and the same ConPTY host, are still there after the unload and after the project is
+      // selected again — the panel reattaches rather than spawning a new shell.
+      const shellsBefore = shellChildren(dpid, 'cmd.exe');
+      expect(shellsBefore, 'the shell probe failed').not.toBeNull();
+      expect(shellsBefore, 'exactly one cmd.exe shell under the daemon').toHaveLength(1);
+      const hostsBefore = probeConhostChildren(dpid);
+      expect(hostsBefore.ok, 'the conhost probe failed').toBe(true);
+      const hostsKept = hostsBefore.pids.filter((p) => !baseline.includes(p)).sort((a, b) => a - b);
+      expect(hostsKept).toHaveLength(1);
+
+      await row.click({ button: 'right' });
+      await win.getByTestId('menu-item-Unload Project').click();
+      await expect(row).toHaveAttribute('data-loaded', 'false');
+      await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
+
+      await row.locator('[data-testid^="project-switch-"]').click();
+      await expect(row).toHaveAttribute('data-loaded', 'true');
+      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
+      // The reattached session answers the daemon's own list as the same idle panel.
+      await expect
+        .poll(
+          async () => {
+            const result = (await daemonRpc(pipeName, 'terminal.list', { includeBusy: true })) as {
+              sessions: Array<{ panelId: string; busy: boolean }>;
+            } | null;
+            return result?.sessions.find((s) => s.panelId === pid)?.busy ?? null;
+          },
+          { timeout: 15000 },
+        )
+        .toBe(false);
+      expect(shellChildren(dpid, 'cmd.exe'), 'the idle shell survived Unload with the same pid').toEqual(shellsBefore);
+      const hostsAfter = probeConhostChildren(dpid);
+      expect(hostsAfter.ok, 'the conhost probe failed').toBe(true);
+      expect(hostsAfter.pids.filter((p) => !baseline.includes(p)).sort((a, b) => a - b)).toEqual(hostsKept);
     });
   } finally {
     cleanupTemp(root);

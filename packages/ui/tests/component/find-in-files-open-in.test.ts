@@ -249,7 +249,7 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
 
 /*
  * 044 T105 (FR-054, FR-055) — a regression guard, passing by design: a Find in Files result always
- * opens an EDITOR, so its Open In never offers Preview. Files & Folders gains Preview through its OWN
+ * opens an EDITOR, so its Open In never offers Preview. File Explorer gains Preview through its OWN
  * argument to `buildContextMenuItems` (contracts/menus-and-controls.md §5); the shared
  * `describeOpenInTargets` this row draws from is untouched. The lister below is the REAL shared builder
  * over a Markdown row's facts — a file a preview provider claims — so a Preview added to the shared

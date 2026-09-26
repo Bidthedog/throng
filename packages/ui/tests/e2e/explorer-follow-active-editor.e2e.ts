@@ -1,5 +1,5 @@
 /**
- * #188 — "Automatically select the active editor's file in Files & Folders".
+ * #188 — "Automatically select the active editor's file in File Explorer".
  *
  * The tree used to keep whatever selection it had, so after moving between editor panels or tabs the
  * user had to find the current file by hand before they could act on it. The new
@@ -334,7 +334,7 @@ test('off: the tree never moves on its own, and the setting re-applies with no r
 
         // The manual route still works while the preference is off (#137).
         await win.getByTestId(`panel-handle-${pidB}`).click({ button: 'right' });
-        await win.getByTestId('menu-item-Reveal File in Files & Folders').click();
+        await win.getByTestId('menu-item-Reveal File in File Explorer').click();
         await expect(tree.getByText('deep.txt', { exact: true })).toBeVisible();
         await expect(tree.locator('.tree-row--selected')).toContainText('deep.txt');
 

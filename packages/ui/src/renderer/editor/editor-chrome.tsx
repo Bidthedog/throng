@@ -14,10 +14,12 @@ import { EditorNoticeDialog } from './editor-notice-dialog.js';
 import { MissingFileWatcher } from './missing-file-watcher.js';
 import { MovedPathSync } from './moved-path-sync.js';
 import { EditorTitlePublisher } from './editor-title-publisher.js';
+import { PendingChord } from './pending-chord.js';
 import { PreviewCommands } from '../preview/preview-commands.js';
 import { PreviewProviderSync } from '../preview/preview-provider-sync.js';
 import { PreviewPathSync } from '../preview/preview-path-sync.js';
 import { HistoryMirrorSync } from '../navigation/history-mirror-sync.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 /**
  * Editor window chrome (006): the editor keybindings (Ctrl+S / Ctrl+Shift+S,
@@ -45,6 +47,8 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
       {/* 044 FR-063/FR-064 — a provider turned off closes THIS window's previews of it. */}
       <PreviewProviderSync isSubWorkspace={isSubWorkspace} />
       <EditorTitlePublisher />
+      {/* 046 FR-092 — the pending indication for a two-stroke chord, portalled into the waiting editor. */}
+      <PendingChord />
       <UnsavedOpenDialog />
       <DirtyCloseDialog />
       <EditorNoticeDialog />
@@ -70,13 +74,15 @@ export function EditorKeybindings({ isSubWorkspace }: { isSubWorkspace: boolean 
     const onKeyDown = (e: KeyboardEvent): void => {
       // Resolve WITH shift to distinguish Ctrl+S (save) from Ctrl+Shift+S (Save-All).
       const live = ref.current.ws.layout;
-      const action = resolveScoped(
-        keybindings,
-        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-        { tabs: live?.tabs, activeTabId: live?.activeTabId ?? null },
-        // Save is deliberately NOT suppressed by a focused find bar: Ctrl+S must save the file
-        // you are looking at, wherever the caret happens to be.
-        { transientFocus: false },
+      const action = resolveKeydown(e, (ev) =>
+        resolveScoped(
+          keybindings,
+          ev,
+          { tabs: live?.tabs, activeTabId: live?.activeTabId ?? null },
+          // Save is deliberately NOT suppressed by a focused find bar: Ctrl+S must save the file
+          // you are looking at, wherever the caret happens to be.
+          { transientFocus: false },
+        ),
       );
       if (action !== 'editor.save' && action !== 'editor.saveAll' && action !== 'editor.saveAs') return;
       // Panel-scoped: only when a workspace Panel — not the Files pane — is active.

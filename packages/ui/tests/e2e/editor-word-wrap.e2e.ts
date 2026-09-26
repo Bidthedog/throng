@@ -1,13 +1,14 @@
 /**
  * US1 (#152, spec 024): per-document editor word-wrap toggle, reachable from the status bar, the
- * content menu, and the Ctrl+Alt+W chord. Default On (editor.defaultWordWrap). The toggle reflows the
+ * content menu, and the `Ctrl+E,W` two-stroke chord (046 FR-091, FR-124; Ctrl+Alt+W before it). Default On (editor.defaultWordWrap). The toggle reflows the
  * live view (the CodeMirror content's white-space flips between wrapping and not).
  */
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, focusEditor, cleanupTemp} from './harness.js';
+import { shippedTwoStroke } from '../shared/window-chords.js';
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-wrap-'));
@@ -52,9 +53,17 @@ test('word wrap toggles from the status bar, the chord, and the content menu (#1
       await expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
       await expect.poll(() => contentWraps(win, pid)).toBe(false);
 
-      // Ctrl+Alt+W → back on.
-      await win.getByTestId(`editor-${pid}`).click();
-      await win.keyboard.press('Control+Alt+w');
+      // Ctrl+E,W → back on. Two strokes (046 FR-091) in ONE continuous press (FR-124): Ctrl held
+      // from E through W. The first leaves the editor visibly waiting, and only then is the second
+      // sent, so it lands in the chord rather than in the document.
+      const { hold, first, second } = shippedTwoStroke('editor.toggleWordWrap');
+      await focusEditor(win, pid);
+      for (const mod of hold) await win.keyboard.down(mod);
+      await win.keyboard.press(first);
+      await expect(win.getByTestId('editor-pending-chord')).toBeVisible();
+      await win.keyboard.press(second);
+      for (const mod of [...hold].reverse()) await win.keyboard.up(mod);
+      await expect(win.getByTestId('editor-pending-chord')).toHaveCount(0);
       await expect(wrapBtn).toHaveText('Wrap');
       await expect.poll(() => contentWraps(win, pid)).toBe(true);
 

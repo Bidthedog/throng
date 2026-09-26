@@ -13,7 +13,7 @@ import { runApp, createProject, cleanupTemp} from './harness.js';
  *  - every `.ctl` field (a settings input + the Themes dropdown) resolves to `inputSurface`;
  *  - a menu/dropdown card (the context menu) resolves to `surfaceActive`;
  *  - a dialog card (a modal) resolves to `surface`;
- *  - the Files & Folders pane (`.pane--explorer`) resolves to the SAME background as the sidebar.
+ *  - the File Explorer pane (`.pane--explorer`) resolves to the SAME background as the sidebar.
  * It also proves the US5 relabel reached the UI: the Themes editor shows the renamed rows.
  */
 
@@ -67,7 +67,7 @@ test('every surface resolves to its consolidated token + the relabel renders', {
       // Wait for the written theme to actually apply before reading any computed colour.
       await expect.poll(() => rootVar(win, '--throng-colour-inputSurface'), { timeout: 8000 }).toBe(VALUES.inputSurface);
 
-      // --- Files & Folders pane == the sidebar (both are Side Panel Background). The `.pane--explorer`
+      // --- File Explorer pane == the sidebar (both are Side Panel Background). The `.pane--explorer`
       // element is always in the DOM (collapsed or not), so its background is readable without toggling. ---
       const sidebarBg = await bgOf(win, '.pane--sidebar');
       const explorerBg = await bgOf(win, '.pane--explorer');

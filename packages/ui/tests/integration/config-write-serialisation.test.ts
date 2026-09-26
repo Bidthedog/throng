@@ -206,23 +206,29 @@ describe('a whole-document write and a reset — one KEYBINDINGS document (#333)
    */
   it('the reset wins, restoring the FULL shipped chord set (#333)', async () => {
     const { store, svc, root } = freshKeybindings();
-    const shipped = DEFAULT_KEYBINDINGS.bindings['zoom.in'];
+    // `panel.zoomIn`, not `zoom.in` (046 T142, analyze G3): `zoom.in` ships exactly ONE keyboard
+    // chord now (FR-105's one-keyboard-chord rule), so removing chord 0 and resetting would restore
+    // the very same single-element array whether or not the reset actually read the FULL shipped
+    // set — the assertion would pass for the wrong reason. `panel.zoomIn` still ships a chord PLUS
+    // the Ctrl+wheel gesture (`Ctrl+Alt++`, `Ctrl+WheelUp`), so restoring the full array is a claim
+    // this test can actually distinguish from restoring only the first token.
+    const shipped = DEFAULT_KEYBINDINGS.bindings['panel.zoomIn'];
     expect(shipped.length).toBeGreaterThan(1);
 
-    // What removing chord 0 from `zoom.in` sends: the whole document, minus that one chord.
+    // What removing chord 0 from `panel.zoomIn` sends: the whole document, minus that one chord.
     const edited = {
       version: DEFAULT_KEYBINDINGS.version,
-      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'zoom.in': shipped.slice(1) },
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'panel.zoomIn': shipped.slice(1) },
     };
 
     // The user's order: remove, then reset. The reset is issued second, so it must land second —
-    // if the document write lands after it, `zoom.in` keeps the edited value and the Reset control
-    // silently did nothing, which is the reported symptom.
+    // if the document write lands after it, `panel.zoomIn` keeps the edited value and the Reset
+    // control silently did nothing, which is the reported symptom.
     const write = writeConfigDoc(store, { kind: 'keybindings' }, JSON.stringify(edited));
-    const reset = svc.resetBinding('zoom.in');
+    const reset = svc.resetBinding('panel.zoomIn');
     await Promise.all([write, reset]);
 
-    expect(readKeybindings(root).bindings['zoom.in']).toEqual(shipped);
+    expect(readKeybindings(root).bindings['panel.zoomIn']).toEqual(shipped);
   });
 
   it('the reset reads the earlier write’s result, so a sibling edit survives it (G11)', async () => {

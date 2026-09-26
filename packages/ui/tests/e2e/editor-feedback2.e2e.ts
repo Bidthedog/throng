@@ -107,7 +107,7 @@ test.afterAll(async () => {
  * did, and the round trip the second half was set up by.
  */
 /*
- * MOVED DOWN (044 T163d): "the Files & Folders context menu has a New Folder action". An
+ * MOVED DOWN (044 T163d): "the File Explorer context menu has a New Folder action". An
  * in-document React menu row, a create addressed to a folder, and a rename box. Held below E2E, each
  * observed failing against a broken implementation before this was deleted:
  *

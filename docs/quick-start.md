@@ -29,12 +29,17 @@ throng opens centred on your main display, with an application-drawn title bar r
 |---|---|
 | **Left** — Projects & Sub-workspaces | Your projects, and any torn-off windows |
 | **Middle** — Workspace | Tabs and panels: your terminals and editors |
-| **Right** — Files & Folders | The active project's file tree |
+| **Right** — File Explorer | The active project's file tree |
 
 Both side panes collapse to a narrow labelled rail — click the chevron in the pane's top-outer
-corner, or press **Ctrl+Alt+B** (projects) and **Ctrl+Alt+N** (files). The middle pane never collapses.
-If you make the window too narrow, throng collapses the Explorer for you, then the sidebar, and
-restores them when you widen it again.
+corner, or press **Ctrl+Shift+Alt+J** (projects) and **Ctrl+Shift+Alt+K** (files). The middle pane
+never collapses. If you make the window too narrow, throng collapses the Explorer for you, then the
+sidebar, and restores them when you widen it again. **Ctrl+Shift+Alt+B**, **Ctrl+Shift+Alt+N** and
+**Ctrl+Shift+Alt+M** — left to right, like the panes — jump keyboard focus straight into the Projects
+pane's project list, back to the active panel in the middle pane, or into the File Explorer, from
+anywhere in the window — reopening a collapsed pane first if it needs to — without changing what's
+shown.
+Whichever pane holds focus is outlined in the active colour, as thin as the pane's ordinary border.
 
 There is no onboarding tour. Everything is empty until you create a project, which is the next
 step.
@@ -55,9 +60,48 @@ root, because that's the project isolation guarantee doing its job.
 
 Once created, the project opens with a single tab ("Tab 1") holding a single empty panel
 ("Panel 1"), ready to be configured. If more than one project exists, you can click a project
-to switch to it; **double-click its name to rename it**. Removing a project (**✕**) removes it
+to switch to it — focus stays in the project list, so **Up** / **Down** and **Enter** carry on from
+there until you click into the workspace; **double-click its name to rename it**. Removing a project (**✕**) removes it
 from throng, kills all terminals and editors for that project, but **deletes nothing on disk** — the
 confirmation says so.
+
+**Right-click a project** — or press **Shift+F10** / the context-menu key on a focused row — for a
+menu with **Edit**, **Rename**, **Remove**, **Move to Category ▸** and two Unload rows:
+**Unload Project**, and a second row naming the other terminal action — **Unload Project and End
+Terminals** as shipped, or **Unload Project and Keep Terminals Running** if you have changed the
+default. The first three do exactly what the inline **✎**, a double-click and the inline **✕**
+already do; the Unload rows are disabled on a project that isn't loaded. Unload closes the project's
+tabs and panels and returns its row to the unloaded style, but forgets nothing — its layout, tabs,
+panels, colour and category are kept, and selecting the project again brings the same layout back.
+Unsaved editors are offered for saving first, as they are when you remove a project; that is the only
+thing Unload ever asks. Otherwise each row does what it says, with no confirmation: keeping terminals
+running keeps every terminal, idle shells included, and each one reattaches when you select the
+project again; ending them ends every terminal, running processes included. What **Unload Project**
+does is the **Unload project: default terminal action** setting (**Keep terminals running** as
+shipped), in **Settings → Confirmations**.
+
+**Categories** group projects in the Projects pane. Each category's header is a highlighted strip
+with its name in bold capitals (the strip's colour is the **Category Header Background** theme
+token; the name you typed keeps its own casing). Every project starts in the default **In
+Progress** category, which is always first, cannot be deleted or minimised, and can be renamed. A
+project's right-click menu offers **Move to Category ▸**, listing every other category and **New
+Category…**, which asks for a name, creates the category and moves the project into it. A category
+name must be unique, ignoring case: a duplicate is refused the same way a duplicate project name
+is, and the name field stays open to correct it. A category header's own right-click menu offers
+**Rename Category**, **Delete Category** and a checkable **Minimise Category** (the default header
+offers only **Rename Category**). Minimising
+a category hides its projects — except the active one, whose row stays visible until you switch away
+— and you can drag a project into another category's section, or onto a minimised header, to move it
+there. A project drag starts from anywhere on its row — the grip, the name, the colour swatch or the
+empty space — except the inline **✎** / **✕** buttons and an open rename field; a press that doesn't
+move is still a click. Deleting a category moves its projects into the default one, keeping their
+order.
+
+**Reorder categories** by dragging a category's header to a new place, or with **Move Category Up**
+/ **Move Category Down** on its right-click menu (each is greyed out at the end of the list it can't
+pass). The default category stays pinned first: its header doesn't drag, nothing can be dropped
+above it, and its menu has neither item. A category moves with its projects and its minimised state,
+and the order is kept across restarts.
 
 ## 2. Lay out the workspace
 
@@ -83,7 +127,8 @@ scrolling until you let go. A fade over each edge shows that there is more strip
 The **+** stays pinned on the right at every tab count. The active tab is always scrolled fully into
 view, clear of the fades, however it became active.
 
-**The tab picker** (**▾**, or **Ctrl+Alt+T** from anywhere, at any tab count) lists every tab, hidden
+**The tab picker** (**▾**, or **Ctrl+Shift+Alt+T** from anywhere — a focused terminal or an open
+find bar included — at any tab count) lists every tab, hidden
 or not. Type to narrow it: the terms match in **any order** and anywhere in the name, so `find file`
 finds "file find.txt" as readily as "find any file.md". Choosing a tab scrolls the strip to it and
 makes it active; **Escape** dismisses without moving anything.
@@ -438,16 +483,25 @@ anything that does not need the daemon — browsing and editing files — keeps 
 
 ## 4. Edit files
 
-Click any file in the **Files & Folders** tree to open it in the last active editor panel — or
+Click any file in the **File Explorer** tree to open it in the last active editor panel — or
 **drag a file in from Windows Explorer** and drop it onto an editor, or onto an empty panel,
 which becomes an editor showing that file.
 
 - **The tree follows the editor.** Whichever file you move to — another panel, another tab, a file
-  you just opened — is expanded to, selected and marked in **Files & Folders**, so a rename or a
+  you just opened — is expanded to, selected and marked in **File Explorer**, so a rename or a
   right-click always lands on the file you are actually in. It never takes the keyboard: your caret
   stays where it was. Turn it off under **Settings → File Explorer → Follow the active editor**; the
   file you are editing stays marked either way.
 - **Save** with **Ctrl+S**; **Ctrl+Shift+S** saves all (scoped to the project); **Ctrl+Alt+S** is Save As.
+- **Word wrap** toggles with **Ctrl+E,W** — a two-key chord: hold **Ctrl**, press **E**, then
+  press **W** with **Ctrl** still held. Letting go of **Ctrl** between the two ends the chord, and
+  the **W** then types a *w*. Between the two, the editor shows *(Ctrl+E) was pressed. Waiting for
+  the next key of the chord…*. **Escape** cancels, as do moving focus out of the editor and four seconds'
+  wait; a second key that completes no chord types nothing and the editor says the combination is
+  not bound. It is an editor-only chord, so a terminal never has Ctrl+E taken from it. To record a
+  chord of your own with up to three keys (`Ctrl+E,W,Q`), press it the same way in the Key Bindings
+  capture box: hold the modifiers, press the keys, then let go. Nothing is recorded until every key
+  is up. A fourth key is refused and ignored; letting go still records the first three.
 - **Syntax highlighting** covers 31 languages, detected by extension. Wrong guess? Correct it from
   the **language picker** in the status bar — throng remembers your choice for that file.
 - **The status bar says where you are** — the caret's line and column, how many characters are
@@ -515,9 +569,9 @@ rendered preview beside the editor: it follows your typing a moment after you pa
 saving, and shares the editor's unsaved dot. Click the status-bar button again and the open preview
 is focused, rather than opening a second one.
 
-You don't need the file open in an editor first. Right-click it in **Files & Folders** and choose
+You don't need the file open in an editor first. Right-click it in **File Explorer** and choose
 **Open In → Preview** to read it without opening it for editing — the preview follows the file on
-disk instead, and Files & Folders does not show it as open. Open the same file from Files & Folders
+disk instead, and File Explorer does not show it as open. Open the same file from File Explorer
 afterwards and the preview, where it stands, adopts that editor and starts following its buffer.
 
 Scrolling either side of a parented pair moves the other to match — whatever block (heading,
@@ -552,7 +606,7 @@ its source.
 Every editor and every preview panel remembers the files it has shown, with **Back** and
 **Forward** buttons at the top left of its title bar — disabled at either end — `Alt+Left` /
 `Alt+Right`, and your mouse's own back/forward buttons if it has them. Opening a file into a panel
-by any other route — Files & Folders, Quick Open, a Find in Files result, or a preview link — drops
+by any other route — File Explorer, Quick Open, a Find in Files result, or a preview link — drops
 anything ahead of where you are and adds the new file as the newest entry; Back and Forward step
 through that list without changing it. History survives a restart and is dropped when the panel is.
 How many entries each panel remembers is **`Editor · Navigation · Navigation history size`**
@@ -569,7 +623,8 @@ entry per file shown.
 
 - In an **editor** it finds *and replaces* — **Ctrl+H**, then **Alt+Enter** for the current match
   or **Ctrl+Alt+Enter** for all. Replace-all is a **single undoable step** and leaves the file's
-  encoding and line endings alone.
+  encoding and line endings alone. Both replace keys act only while the replace row is showing; with
+  the bar open on find alone they do nothing and the key passes through to the editor.
 - In a **terminal** it searches the retained scrollback **read-only** — it never types at your
   shell. Park on a match and the view stays there while output keeps streaming.
 
@@ -602,7 +657,7 @@ showing. If you have a single-line selection in an editor or a terminal, it beco
 
 You can also start here from the tree. Right-click a file or folder and choose **Open In → Search →
 Find** or **Find & Replace**, or use the toolbar's **Find in Files** button for the whole project. The
-panel can't be renamed, and it zooms with **Ctrl+Alt+=** like any other.
+panel can't be renamed, and it zooms with **Ctrl+Alt++** or **Ctrl+Wheel** like any other.
 
 ### Open a file without walking to it
 
@@ -623,12 +678,12 @@ and the full path is shown so two files with the same name stay distinguishable.
   `Editor · Navigation · Quick open excludes hidden` in Preferences.
 
 > **`node_modules` is now hidden by default, in the tree as well as here.** It joined the shipped
-> `explorer.excludeGlobs` list, so a fresh install no longer shows it in **Files & Folders** and
+> `explorer.excludeGlobs` list, so a fresh install no longer shows it in **File Explorer** and
 > Quick Open does not offer files inside it. That is a change to what the file tree draws, not only
 > to this modal.
 >
 > **To get it back**, remove `**/node_modules` from `explorer.excludeGlobs` in Preferences →
-> *Files & Folders*. To see inside it for one search only, press the toggle described above rather
+> *File Explorer*. To see inside it for one search only, press the toggle described above rather
 > than editing the setting.
 >
 > If you already had throng installed, the entry is added for you on upgrade — but **only if you had
@@ -678,10 +733,10 @@ They're listed under Projects in the sidebar, where **⧉** opens and **✕** de
 
 ## 7. Make it yours
 
-Click the **cog** in the title bar and choose **Settings**, **Key Bindings** or **Themes**. All
-three are tabs of one preferences window that floats above throng and minimises with it. It stays
-on top but **does not block the app** — keep using throng while you edit a theme and watch each
-change land live.
+Click the **cog** in the title bar and choose **Settings**, **Key Bindings** or **Themes** — that is
+the whole menu. All three are tabs of one preferences window that floats above throng and minimises
+with it. It stays on top but **does not block the app** — keep using throng while you edit a theme
+and watch each change land live.
 
 **In the visual editors, changes apply immediately — there is no Save button and no restart.**
 Toggles and dropdowns apply at once; typed values apply a moment after you stop typing.
@@ -776,18 +831,44 @@ Changed too much? Four separate scopes undo it, all reading the same shipped-def
 The defaults worth knowing. Every one is rebindable in **Preferences → Key Bindings**, which is
 also the full list.
 
+**How the defaults are laid out.** The modifiers say how far a chord reaches:
+
+- **Ctrl+Shift+Alt+key** — getting around and the whole window: moving between panes, panels, tabs,
+  projects and notices, showing or hiding a side pane, and the window's zoom.
+- **Ctrl+Alt+key** or **Ctrl+Shift+key** — the panel or pane that has focus, rather than what it
+  shows (its zoom, for instance).
+- **One modifier, or none** — the content: editing, finding, saving, file operations.
+
+A handful of long-standing chords sit outside that pattern on purpose, because they are the ones
+every other editor uses or because a terminal needs them: **Ctrl+Shift+T** Quick Open,
+**Ctrl+Shift+F** / **Ctrl+Shift+H** Find / Replace in Files, **Ctrl+Shift+S** Save All,
+**Ctrl+Alt+S** Save As, **Ctrl+Alt+Enter** Replace All, **Ctrl+`** / **Ctrl+Shift+`** panel
+cycling, **Ctrl+E,W** word wrap, **Shift+Alt+Arrow** column selection, the function keys (**F2**,
+**F3**, **F11**, **Shift+F10**) and the Menu key. Where a chord names **+**, it means the **+** key:
+**Ctrl+Shift+Alt++** is Ctrl, Shift and Alt held with the **+** key — the one that shares **=** on a
+UK or US keyboard — and the keypad **+** and **-** are the same binding as their main-row keys, so
+either fires it. **Resetting the zoom is different — it takes the keypad's 0 specifically**: the
+main-row **0** does not reset either zoom, on any layout.
+
 | | |
 |---|---|
-| **Ctrl+Alt+B** / **Ctrl+Alt+N** | Show/hide the Projects pane / the Files & Folders pane |
-| **Ctrl+Alt+T** | Open the tab picker — type to filter, **Up/Down** to move, **Enter** to choose |
+| **Ctrl+Shift+Alt+J** / **Ctrl+Shift+Alt+K** | Show/hide the Projects pane / the File Explorer pane |
+| **Ctrl+Shift+Alt+B** / **Ctrl+Shift+Alt+M** | Focus the project list / the File Explorer pane, from anywhere |
+| **Ctrl+Shift+Alt+N** | **Focus Workspace** — put keyboard focus back in the active panel in the middle pane, from a side pane or anywhere else, without changing tab, panel or project |
+| **Ctrl+Shift+Alt+PageUp** / **Ctrl+Shift+Alt+PageDown** | Previous / Next project, skipping a minimised category, stopping at either end |
+| **Ctrl+Shift+Alt+T** | Open the tab picker — type to filter, **Up/Down** to move, **Enter** to choose. Works from a focused terminal too |
 | **Ctrl+Shift+T** | **Quick Open** — type part of a file's name or path, **Enter** to open it |
 | **Ctrl+G** | **Go To Line** — in an editor. A terminal still gets its own `^G` |
 | **F11** | Full screen |
 | **Ctrl+`** / **Ctrl+Shift+`** | Cycle the active panel forward / back |
-| **Ctrl+Alt+Arrow** | Move focus to the panel left / right / up / down |
-| **Ctrl+Alt+M** | Focus the most recent notice, so its list can be read and scrolled by keyboard. **Esc** returns you to where you were |
-| **Ctrl+=** / **Ctrl+-** / **Ctrl+0** | Zoom the whole app in / out / reset (also Ctrl+Wheel) |
-| **Ctrl+Alt+=** / **Ctrl+Alt+-** / **Ctrl+Alt+0** | Zoom **this panel** independently |
+| **Ctrl+Shift+Alt+Arrow** | Move focus to the panel left / right / up / down, from the focused panel (does nothing while a side pane has focus). The caret moves with it, into whichever control in that panel last had focus, or its first |
+| **Ctrl+Shift+Alt+V** | Focus the most recent notice, so its list can be read and scrolled by keyboard. **Esc** returns you to where you were |
+| **Ctrl+Shift+Alt++** / **Ctrl+Shift+Alt+-** | Zoom the whole window in / out |
+| **Ctrl+Shift+Alt+Numpad0** | Reset the whole window's zoom — the **keypad** zero; there is no other keyboard or mouse route |
+| **Ctrl+Alt++** / **Ctrl+Alt+-** | Zoom **the focused panel** in / out |
+| **Ctrl+Alt+Numpad0** / **Ctrl+Alt+0** / **Ctrl+MiddleClick** | Reset **the focused panel's** zoom — the keypad zero, the main-row zero, or middle-click over the panel |
+| **Ctrl+Wheel** | Zoom **the panel under the pointer** in or out. Over the title bar or a side pane it does nothing, and it never scrolls the panel |
+| **Ctrl+E,W** | Toggle word wrap in the focused editor — hold Ctrl, press **E**, then **W** |
 | **Ctrl+F** / **Ctrl+H** | Find / replace in the active panel |
 | **Ctrl+Shift+F** / **Ctrl+Shift+H** | Find / replace **across every file in the project** |
 | **F3** / **Shift+F3** / **Escape** | Next match / previous match / close find |
@@ -809,6 +890,46 @@ and editors correctly — throng intercepts its own chords ahead of the shell.
 
 Two entries look like a clash but aren't: **Ctrl+X** is *cut file* in the tree and *cut line* in an
 editor. The scopes are disjoint, so only one ever fires.
+
+**If you are upgrading.** These defaults moved: the window zoom from **Ctrl+=** / **Ctrl+-** /
+**Ctrl+0** to **Ctrl+Shift+Alt++** / **-** / **Numpad0** — the *keypad* zero, not the main row; the
+side-pane, focus, project, notice and tab-picker chords from **Ctrl+Alt+…** to **Ctrl+Shift+Alt+…**;
+the panel zoom's own reset from **Ctrl+Alt+0** to **Ctrl+Alt+Numpad0**; **Ctrl+Wheel** and
+**Ctrl+MiddleClick** from the window zoom to the panel under the pointer; and word wrap from
+**Ctrl+Alt+W** to **Ctrl+E,W**. Plain **Ctrl++**, **Ctrl+-**, **Ctrl+0** and **Ctrl+Shift+0** are no
+longer bound, and neither is the main-row **Ctrl+Shift+Alt+0** — only the keypad zero resets the
+window zoom. The panel zoom resets from either zero (**Ctrl+Alt+Numpad0** or **Ctrl+Alt+0**). An existing install is moved to the new defaults on upgrade only where
+you still had the old default for that command; a binding you changed is left exactly as you saved
+it, and a new default is not applied where it would clash with one of your own bindings.
+
+**On a keyboard that isn't UK or US.** The **Ctrl+Shift+Alt** chords follow the **key's position**,
+not the character it prints, so they fire the same way on every layout — which has three
+consequences:
+
+- **Letters are the key in the US position.** On a French AZERTY keyboard, **Ctrl+Shift+Alt+M**
+  (Focus File Explorer) is the key labelled **,**. B, N, J, K and V sit in the same place on AZERTY
+  and QWERTZ as on a UK or US keyboard, so the three focus chords still run left to right.
+- **The window zoom's + and - are the keys beside 0 on a US keyboard.** On German, Spanish and
+  Italian layouts the keys labelled **+** and **-** sit elsewhere and don't fire it; on Nordic
+  layouts the key labelled **+** is in the US **-** position, so Ctrl+Shift+Alt with it zooms
+  **out**. The keypad **+** and **-** work on every layout regardless. **Resetting the window zoom
+  needs the numeric keypad** — Ctrl+Shift+Alt+Numpad0 — on every layout; a laptop keyboard with no
+  keypad has no keyboard route to reset the window zoom at all.
+- **A few AltGr+Shift characters are taken.** Where AltGr+Shift types a character on a key a
+  **Ctrl+Shift+Alt** chord uses, the chord wins and the character doesn't type: **Ń** (on N, Focus
+  Workspace) on Polish (programmer's); **Ñ** (N) and **Þ** (T) on US-International; and **Ț** (T) on
+  Romanian (Programmers). UK, German, French, Spanish, Italian and Nordic layouts lose none. B, M,
+  J, K and V carry no AltGr+Shift character on any of these layouts, and no default uses P or F, so
+  US-International's **Ö** (P) types. If you
+  type one of these, rebind the chord in **Preferences → Key Bindings**. Characters typed with AltGr
+  *without* Shift — **€**, **@**, **{**, **µ** and the rest — are unaffected.
+
+The **Ctrl+Alt** panel chords, by contrast, follow the character, so they never take an AltGr
+character — on a layout where AltGr makes **Ctrl+Alt+-** type something, use **Ctrl+Wheel** over the
+panel instead. On a UK or US keyboard, **Ctrl+Alt++** also fires from the **=** key without Shift,
+so stepping the panel zoom needs no keypad, and neither does resetting it: **Ctrl+Alt+0** on the
+main row, or **Ctrl+MiddleClick** over the panel. Where AltGr+0 types a character (`}` on German,
+`@` on AZERTY), it keeps typing it; use Ctrl+MiddleClick there.
 
 ## Where throng keeps things
 

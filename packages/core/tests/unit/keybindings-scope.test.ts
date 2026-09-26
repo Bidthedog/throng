@@ -35,11 +35,13 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, CTRL_X, 'terminal')).toBeNull();
   });
 
+  // RE-PINNED by 046 iterate round 1 (FR-102 *changes* row): focus.left moves from Ctrl+Alt+ArrowLeft
+  // to the Ctrl+Shift+Alt navigation tier.
   it('keeps a window-level chord live in every scope', () => {
     for (const scope of ['editor', 'terminal', 'explorer'] as DispatchScope[]) {
-      expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'ArrowLeft', ctrl: true, alt: true }, scope)).toBe(
-        'focus.left',
-      );
+      expect(
+        resolveAction(DEFAULT_KEYBINDINGS, { key: 'ArrowLeft', ctrl: true, shift: true, alt: true }, scope),
+      ).toBe('focus.left');
     }
   });
 
@@ -76,13 +78,14 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, chord, 'explorer')).toBeNull();
     // …and the two `navigate.` commands really do differ, so a prefix rule would be wrong.
     expect([...COMMAND_SCOPES['navigate.gotoLine']]).toEqual(['editor']);
-    // EVERYWHERE is the full set by definition: 043 R14 made that four scopes rather than three, and
-    // 044 R16 made it five with the preview panel's own scope.
+    // EVERYWHERE is the full set by definition: 043 R14 made that four scopes rather than three,
+    // 044 R16 made it five with the preview panel's own scope, and 046 R3 six with the Projects pane.
     expect([...COMMAND_SCOPES['navigate.quickOpen']].sort()).toEqual([
       'editor',
       'explorer',
       'findInFiles',
       'preview',
+      'projects',
       'terminal',
     ]);
   });
@@ -146,6 +149,73 @@ describe('the Find in Files scope (043 R14)', () => {
       'Terminal',
       'Find in Files',
     ]);
+  });
+});
+
+/**
+ * 046 R3 (FR-015) — the SIXTH scope, for the reason 043 R14 and 044 R16 give one pane along.
+ *
+ * Before it existed the renderer's `currentScope` answered `explorer` for any pane that was not the
+ * workspace, so with the Projects pane focused F2 renamed the File Explorer's selected FILE and Delete
+ * deleted it. The scope is joined to EVERYWHERE and to no other set, so window commands stay live and
+ * nothing that acts on a document or the file tree is.
+ */
+describe('the Projects scope (046 R3, FR-015)', () => {
+  const PROJECTS: DispatchScope = 'projects';
+  // Every scope, discovered from the declarations rather than listed here, so a seventh scope added
+  // later is covered without editing this test.
+  const ALL_SCOPES = new Set<DispatchScope>(ACTION_IDS.flatMap((a) => [...COMMAND_SCOPES[a]]));
+
+  it('is a value of DispatchScope that some command is live in', () => {
+    expect(ALL_SCOPES.has(PROJECTS)).toBe(true);
+  });
+
+  it('is a member of EVERYWHERE and of no narrower scope set', () => {
+    for (const action of ACTION_IDS) {
+      const scopes = COMMAND_SCOPES[action];
+      if (!scopes.has(PROJECTS)) continue;
+      expect(
+        [...ALL_SCOPES].every((s) => scopes.has(s)),
+        `"${action}" is live in projects without being EVERYWHERE`,
+      ).toBe(true);
+    }
+    // …and every EVERYWHERE command picks it up — zoom, focus movement, the view toggles, menu.open.
+    for (const action of ['zoom.in', 'focus.left', 'view.toggleProjects', 'menu.open', 'navigate.quickOpen']) {
+      expect(COMMAND_SCOPES[action as ActionId].has(PROJECTS), action).toBe(true);
+    }
+  });
+
+  it('is named "Projects" in the Key Bindings editor and takes its place in the canonical order', () => {
+    // `scopeNames` walks SCOPE_ORDER and reads SCOPE_NAMES, so a lone `projects` set reads as one
+    // pill only if the scope is in both.
+    expect(scopeNames(new Set<DispatchScope>([PROJECTS]))).toEqual(['Projects']);
+    expect(scopeNames(new Set<DispatchScope>(['explorer', PROJECTS]))).toHaveLength(2);
+  });
+
+  it('still collapses an EVERYWHERE command to the single "Everywhere" pill', () => {
+    expect(scopeNames(COMMAND_SCOPES['zoom.in'])).toEqual(['Everywhere']);
+    // A set missing only `projects` is NOT everywhere, so SCOPE_ORDER's length counts the new scope.
+    const allButProjects = new Set([...ALL_SCOPES].filter((s) => s !== PROJECTS));
+    expect(scopeNames(allButProjects)).not.toEqual(['Everywhere']);
+  });
+
+  it('has no file-tree, editor or document-search command live in it', () => {
+    for (const action of ACTION_IDS) {
+      const scopes = COMMAND_SCOPES[action];
+      if (!scopes.has(PROJECTS)) continue;
+      expect(action.startsWith('file.'), action).toBe(false);
+      expect(action.startsWith('editor.'), action).toBe(false);
+      // The find-bar `search.*` commands act on a panel's content and are PANELS-scoped. The only
+      // `search.*` commands allowed here are the project-wide ones, which are EVERYWHERE by 043 FR-028.
+      if (action.startsWith('search.')) {
+        expect([...ALL_SCOPES].every((s) => scopes.has(s)), action).toBe(true);
+      }
+    }
+    expect(COMMAND_SCOPES['search.find'].has(PROJECTS)).toBe(false);
+    // F2 and Delete are claimed by nothing here — the defect R3 exists to close.
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F2' }, PROJECTS)).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'Delete' }, PROJECTS)).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'x', ctrl: true }, PROJECTS)).toBeNull();
   });
 });
 

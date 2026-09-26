@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { runApp, createProject, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
 
 /**
- * 026 / #186 — the Files & Folders tree must stay live-synced with the filesystem.
+ * 026 / #186 — the File Explorer tree must stay live-synced with the filesystem.
  *
  * Three reported symptoms, asserted separately because they do not share one cause:
  *

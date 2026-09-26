@@ -189,8 +189,10 @@ describe('the three link hint tokens are described once, in the General area (FR
 });
 
 describe('shipped-defaults version 11 — the link hint tokens reach existing installs (FR-165g)', () => {
-  it('is version 11', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(11);
+  it('is version 14 (046 iterate round 3, T175 bumps it again for FR-118s B / N / M remap, after iterate round 1s 13)', () => {
+    // Re-pinned: 046 iterate round 5 (FR-124) bumps it to 15 for word wrap's Ctrl+E,W.
+    // Re-pinned: 046 iterate round 7 (FR-127) bumps it to 16 for the panel reset's Ctrl+Alt+0.
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
   });
 
   it('fills all three tokens into a version-10 built-in theme', () => {
@@ -208,6 +210,44 @@ describe('shipped-defaults version 11 — the link hint tokens reach existing in
     const filled = plan.fillThemes.find((f) => f.name === 'throng');
     expect(filled, 'throng was not refilled').toBeDefined();
     for (const t of HINT_TOKENS) expect(filled!.theme.colours[t], t).toMatch(/\S/);
+  });
+
+  it('is idempotent: re-running the plan against an already-filled install yields nothing to fill', () => {
+    const present: Record<string, Theme> = {};
+    for (const [name, theme] of Object.entries(D.themes)) present[name] = structuredClone(theme);
+    const plan = planThemeUpgrade({ shipped: D, present, throngBase: D.themes.throng });
+    expect(plan.fillThemes).toHaveLength(0);
+    expect(plan.addThemes).toHaveLength(0);
+  });
+});
+
+/**
+ * 046 T007 (FR-061, R11) — the side-pane icon tokens the version-12 seed carried. `unload` and
+ * `category` are the two that survive today; `projectList`, the third, was retired (branch-review
+ * finding, 046 iterate round 2) — see `theme-migration.test.ts`'s "retired icon tokens" block for
+ * what happens to it on an install that already received it.
+ */
+const SIDE_PANE_ICON_TOKENS = ['unload', 'category'] as const;
+
+describe('shipped-defaults version 12 — the side-pane icon tokens reach existing installs (FR-061, R11)', () => {
+  it('THRONG_THEME carries both', () => {
+    for (const t of SIDE_PANE_ICON_TOKENS) expect(THRONG_THEME.icons[t], t).toBeTruthy();
+  });
+
+  it('fills both tokens into a version-11 built-in theme', () => {
+    const asVersion11 = (theme: Theme): Theme => {
+      const t = structuredClone(theme);
+      delete t.icons.unload;
+      delete t.icons.category;
+      return t;
+    };
+    const present: Record<string, Theme> = {};
+    for (const [name, theme] of Object.entries(D.themes)) present[name] = structuredClone(theme);
+    present.throng = asVersion11(D.themes.throng);
+    const plan = planThemeUpgrade({ shipped: D, present, throngBase: D.themes.throng });
+    const filled = plan.fillThemes.find((f) => f.name === 'throng');
+    expect(filled, 'throng was not refilled').toBeDefined();
+    for (const t of SIDE_PANE_ICON_TOKENS) expect(filled!.theme.icons[t], t).toMatch(/\S/);
   });
 
   it('is idempotent: re-running the plan against an already-filled install yields nothing to fill', () => {

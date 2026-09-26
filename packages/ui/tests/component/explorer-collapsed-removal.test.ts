@@ -3,7 +3,7 @@
  *
  * ══ WHAT THE USER SEES ══
  *
- * They open a folder in Files & Folders, look at it, collapse it (or collapse everything), and get on
+ * They open a folder in File Explorer, look at it, collapse it (or collapse everything), and get on
  * with something else. Later the folder goes — a `git worktree remove`, a branch switch, a cleanup
  * script. An error notice appears: "Couldn't list the contents of <folder> — It could not be found.
  * It may have been moved, renamed or deleted." Nothing on screen was showing that folder, and the user

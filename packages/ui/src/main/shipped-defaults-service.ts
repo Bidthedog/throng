@@ -9,6 +9,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
+  applyKeybindingsUpgrade,
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   guardedSettingsValidator,
@@ -309,6 +310,32 @@ export class ShippedDefaultsService {
   }
 
   /**
+   * The KEYBINDINGS half of {@link upgrade} — the guarded `zoom.reset` leaf rewrite (046 FR-025).
+   * The exact twin of {@link settingsUpgradeFile}, and for the same reason: reads and rewrites the
+   * RAW document, so every other saved chord and any key the schema does not model survives
+   * untouched, and an unparseable file is left ALONE rather than guessed at.
+   *
+   * Delegates the leaf-application itself to core's {@link applyKeybindingsUpgrade} rather than
+   * re-deriving it from {@link planKeybindingsUpgrade}'s output by hand — one implementation of
+   * "how a plan becomes a document", proven by that function's own unit tests plus the
+   * service-level wiring tests beside `shipped-defaults-seed-upgrade.test.ts`.
+   */
+  private async keybindingsUpgradeFile(): Promise<{ path: string; content: string } | null> {
+    const doc: ConfigDocId = { kind: 'keybindings' };
+    const raw = await this.store.readRaw(doc);
+    if (raw.trim().length === 0) return null; // absent → `seed` writes the shipped document
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    const next = applyKeybindingsUpgrade(parsed, this.shipped);
+    if (next === parsed) return null; // nothing owed
+    return { path: this.store.pathOf(doc), content: FileConfigStore.serialize(next) };
+  }
+
+  /**
    * FR-015a: the startup upgrade. Adds newly-shipped themes absent from config, materialises
    * newly-added theme properties into existing theme files (built-ins from their shipped value,
    * customs from the base throng default), and carries an enumerated set of guarded value changes.
@@ -339,6 +366,11 @@ export class ShippedDefaultsService {
    * - **043 FR-065/FR-067** — `colours.searchMatch{,Current,CurrentBorder}` and
    *   `icons.findInFiles`, per token, in BUILT-IN themes only. This is the project's **first
    *   non-additive theme upgrade**.
+   * - **046 FR-025** — the keybinding `zoom.reset`, when it still set-equals (order-insensitive)
+   *   what v11 shipped AND no other action already binds the physical or pre-046-produced token a
+   *   Ctrl+Shift+Digit0 press can resolve to (`planKeybindingsUpgrade`'s collision guard — without
+   *   it the addition could silently steal that key from whatever already owned it, invisibly to
+   *   Preferences). The project's first non-additive KEYBINDINGS upgrade.
    *
    * ══ WHY THE NARROWING WAS TAKEN ══
    *
@@ -370,6 +402,9 @@ export class ShippedDefaultsService {
       [
         ...[...names].map((name): ConfigDocId => ({ kind: 'theme', name })),
         { kind: 'settings' },
+        // 046 FR-025 — the guarded `zoom.reset` rewrite joins the lock set for the same
+        // read-modify-write reason the settings document is in it.
+        { kind: 'keybindings' },
       ],
       async () => {
         const present = await this.readPresentThemes();
@@ -401,6 +436,9 @@ export class ShippedDefaultsService {
         // 033 FR-070a, 043 FR-074/FR-075 — the guarded settings leaves, or nothing at all.
         const settingsFile = await this.settingsUpgradeFile();
         if (settingsFile) files.push(settingsFile);
+        // 046 FR-025 — the guarded `zoom.reset` binding, or nothing at all.
+        const keybindingsFile = await this.keybindingsUpgradeFile();
+        if (keybindingsFile) files.push(keybindingsFile);
         files.push(this.markerFile());
         const res: WriteAllResult = await this.store.writeFilesAtomic(files);
         if (!res.ok) return res;

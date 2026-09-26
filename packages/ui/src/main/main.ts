@@ -283,8 +283,13 @@ function resetZoom(webContents: WebContents): void {
 // the user's keybindings document (so edits to keybindings.json apply live + across
 // sessions, and the keys are real DOM events). The renderer forwards the resulting
 // action here over IPC; acting on the sending frame's webContents/window keeps each
-// window independent. Mouse-driven zoom (Ctrl+wheel / Ctrl+middle-click) uses the
-// same zoom IPC.
+// window independent.
+// Ctrl+wheel / Ctrl+middle-click zoom the PANEL under the pointer instead (FR-106) and
+// never reach this IPC — that dispatch is entirely renderer-side (`workspace/mouse-zoom.ts`).
+//
+// 046 iterate round 1 (FR-107) added a `throng:zoomLevel` handler here for the cog menu's Zoom
+// row's disabled states. 046 iterate round 2 (FR-113) removed that row — its only caller — so the
+// handler is removed with it rather than left registered with nothing to invoke it.
 function registerZoomIpc(): void {
   ipcMain.on('throng:zoomBy', (event, steps: number) => {
     if (typeof steps === 'number' && Number.isFinite(steps)) {

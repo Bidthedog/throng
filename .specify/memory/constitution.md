@@ -1,6 +1,502 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.5.2 → 5.6.0
+Bump rationale: MINOR — three rules the maintainer approved on 2026-09-23 while hand-testing spec 046
+                (iterate round 1), each argued against the project's own test.
+
+                (1) VI "A chord MAY stand without a menu item". Considered MAJOR and rejected. MAJOR
+                is a previously-STATED guarantee withdrawn. VI's only menu MUST is "every panel
+                action has a menu item", and it stands verbatim: the new rule is scoped to commands
+                that are NOT panel actions, which no rule ever required to have a menu item. What
+                changes is a READING — the rationale's "the keyboard [is an] accelerator over
+                [the menu]" and IV's Ctrl+F5 "never a substitute" — from which spec 046 FR-019
+                DERIVED a cog-menu route for four window commands. A derivation in one feature's
+                spec is not a constitutional guarantee; both source sentences stay and are
+                annotated as true of the panel actions they describe. The maintainer's words were
+                broader ("keyboard shortcuts can exist without a corresponding menu item"); read at
+                full breadth they would withdraw the panel-action rule, which WOULD be MAJOR. They
+                were given about the cog menu's Navigate rows, not about panel menus, so the rule is
+                written at the narrower reading and the checkpoint is told so.
+
+                (2) IV "Modifier families". A new constraint that shipped code fails — eleven
+                commands, enumerated in the rule — which is the ordinary MINOR case (v3.15.0,
+                v4.2.0, v4.3.0 precedent): nothing previously guaranteed is withdrawn, and the rule
+                is written as an end-state requirement under Incremental Delivery with its known
+                violations listed IN the principle. It adds one shadowable exception (`Ctrl+Shift+-`,
+                readline `undo`), the same MINOR shape as v4.4.0's `Ctrl+F5`.
+
+                (3) III "Stated exception" for Unload with Keep Terminals Running. Considered MAJOR
+                and rejected. The idle-shell rule ("closed when its project or the application is
+                closed") is kept for EVERY path it was written for — application close and project
+                close — and a new, explicitly user-instructed action is carved out beside it. No
+                shipped release contains Unload (it exists only on the unmerged 046 branch), so no
+                released behaviour becomes non-compliant; the 046 branch's own Unload, which closes
+                idle shells on Keep running, is non-compliant and is re-specified by 046 FR-086 in
+                the same round. The exception widens what the user may keep, it does not reduce what
+                the application guarantees to clean up: every kept terminal is still reaped by
+                project deletion and by "terminate all".
+
+Modified sections:
+  - Principle III → "Terminal lifecycle on close/reopen": ADDED a "Stated exception (v5.6.0)"
+    sub-bullet. The two existing rules are unchanged.
+  - Principle IV → recorded-exceptions bullet annotated (extended by one); ADDED the
+    `Ctrl+Shift+-` exception bullet; the Ctrl+F5 paragraph's "never a substitute" annotated (still
+    true, panel action); ADDED the "Modifier families" rule block with its known-violation list.
+  - Principle VI → ADDED "A chord MAY stand without a menu item (v5.6.0)"; the 2026-09-09 audit
+    sentence on the cog menu's "single Application section" annotated with a record (046 added a
+    Navigate section; iterate round 1 removes it, which makes the sentence true again — it is not
+    rewritten); rationale extended by one sentence.
+
+Added sections: none (three rule blocks inside existing principles). Removed: nothing.
+
+Audited against the code on 2026-09-23 before writing, not inferred from the specs:
+  (a) `packages/core/src/config/keybindings.ts` WINDOWS_BINDINGS + COMMAND_SCOPES, every default:
+      the eleven violations listed in IV are the complete set. `focus.cycleBack` (`Ctrl+Shift+``)
+      is the direction-reversal carve-out, not a violation; `terminal.scrollLineUp/Down`
+      (`Ctrl+Shift+ArrowUp/Down`) and every `Ctrl+Alt` window command already conform.
+  (b) `zoom.reset` reaches `webContents.setZoomLevel(0)` (main.ts `resetZoom`) — the WINDOW zoom —
+      and `panel.zoomReset` resets the active panel (app.tsx). The maintainer's report that
+      Ctrl+Shift+0 "reset a panel's zoom" is not explained by this reading; it is a hypothesis-level
+      observation recorded in 046 research, and the remap gives the window reset `Ctrl+Alt+0`.
+  (c) xterm.js (`@xterm/xterm/src/common/input/Keyboard.ts`) sends `^_` (C0.US) for a Ctrl keydown
+      whose key is `_` — the basis of the `Ctrl+Shift+-` exception. `Ctrl+Shift+=`, `Ctrl+Shift+0`,
+      `Ctrl+Shift+S`, `Ctrl+Shift+W` and `Ctrl+Shift+Enter` send nothing a line editor reads.
+  (d) `unload-project.ts` Keep running calls `terminal.closeIdle` — the behaviour (3) changes.
+  (e) `title-bar/cog-menu-items.ts` carries the 046 `navigate` section — the sentence in (VI) above.
+
+Templates / artifacts reviewed:
+  ✅ .specify/templates/plan-template.md      — no change needed (Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change needed (no principle enumerated)
+  ✅ .specify/templates/tasks-template.md     — no change needed
+  ✅ .specify/extensions.yml                  — no before/after_constitution hooks registered
+  ✅ .claude/agents/*.md, CLAUDE.md            — grep for "never a substitute", "Ctrl+Alt family",
+                                                "idle shell": no agent file restates the changed
+                                                sentences; no edit needed
+  ⚠ specs/046-side-panes-and-project-list/    — amended in the same round (iterate round 1):
+                                                FR-072 – FR-088 and their supersessions
+  ⚠ README.md:305, docs/testing.md:383         — describe Keep running closing an idle shell; they
+                                                change with the code (docs currency, 046 FR-088)
+  ⚠ packages/core/src/config/keybindings.ts    — the eleven known violations; remapped by 046
+                                                iterate round 1, not by this amendment
+  ✅ specs/024, 026, 028, 033, 043             — shipped records of the chords they chose; not
+                                                rewritten (046 records the supersession)
+
+Follow-up TODOs: none deferred beyond the known-violation list, which 046 iterate round 1 owns and
+                 which is tracked in the rule itself.
+
+Revised before publication (2026-09-24), still 5.6.0:
+  The maintainer reviewed 046's remap and kept five chords as exceptions to the new families. IV
+  gains a "Recorded exceptions to the families" bullet (Quick Open Ctrl+Shift+T, Find / Replace in
+  Files Ctrl+Shift+F / Ctrl+Shift+H, Save All Ctrl+Shift+S, Save As Ctrl+Alt+S). It also gains a
+  "multi-stroke chord" bullet: the first stroke is judged by the terminal tiers, so a reserved first
+  stroke is never live in a terminal. That bullet exists because 046 FR-091 ships word wrap on
+  Ctrl+E W, editor-only.
+
+  Why not a separate 5.6.1 / 5.7.0: 5.6.0 has never left this branch (commit e2939e9f, unpushed,
+  unmerged, unreleased), so no reader, spec or plan has cited a 5.6.0 without these bullets. A
+  second number would record a version that existed for one day on one machine. Measured against
+  5.5.2, the whole amendment is still MINOR: the exception list is additive guidance of the v4.4.0
+  shape, and the multi-stroke bullet restates the reserved-tier rule for a chord form that did not
+  exist. The known-violation sentence is left as written, and the new bullet reclassifies five of
+  its entries, so the record of what the first audit found survives.
+
+  Audited 2026-09-24: throng has no multi-stroke chords today (core keybindings.ts eventToToken /
+  resolveAction / chordCollisions, ui capture-modal.tsx). CodeMirror's keymap has a native prefix
+  engine. Ctrl+E is unbound in the Windows editor (CodeMirror maps its emacs Ctrl-e to macOS only).
+  `editor.toggleWordWrap` is EDITOR_ONLY.
+
+Revised again before publication (2026-09-24, second review), still 5.6.0:
+  The maintainer rejected the "Ctrl+Shift acts on the panel, Ctrl+Alt acts on the application" families
+  and REDEFINED the convention as three tiers, in their words: "What I'd like is to be able to navigate to
+  any surface pane / panel with CTRL+SHIFT (move between panes, panels, activate panels, tabs etc), then
+  use CTRL+ALT to do things that affect the pane or panel when inside a panel or pane. Actions that
+  affect the pane content itself should be bound to CTRL+, SHIFT+ or ALT+. So, three hierarchies (with a
+  few noted exceptions)." Also: "zoom in / out / reset need to use the same chord combinations for each
+  action within a group. Mixing them does not make any sense". In an addendum they kept the "Ctrl++"
+  notation and ruled that the keypad + and - are the same binding as the main-row keys, not separate
+  tokens.
+
+  Principle IV:
+  - "Modifier families" is REPLACED by "Three modifier tiers", with its noted-exception list, the
+    group-consistency rule, the terminal-cost statement and the one-binding rule for the keypad
+    + and -.
+  - The `Ctrl+Shift+-` terminal exception is WITHDRAWN: panel zoom returns to Ctrl+Alt, so nothing
+    takes readline's `^_`. The terminal-tier exception list is back to its four v4.4.0 entries.
+  - The multi-stroke bullet is kept, moved inside the tier block.
+
+  Still 5.6.0, for the reason given above: nothing has cited this version. Measured against 5.5.2 the
+  amendment is still MINOR — an additive keyboard convention inside an existing principle, with known
+  violations enumerated as an end-state requirement; no stated guarantee is withdrawn.
+
+  Audited 2026-09-24 for the new tier 1:
+  - xterm.js 6.0.0 sends nothing for Ctrl+Shift+letter or punctuation (`Keyboard.ts` default branch).
+  - CodeMirror claims on Windows: Ctrl+Shift+Arrow / Home / End (selection), Shift-Mod-k (deleteLine),
+    Shift-Mod-\ (matching bracket), and throng's own Mod-Shift-z (redo, use-editor.ts).
+  - PSReadLine binds Ctrl+Shift+Left/Right (select by word), which xterm delivers as CSI 1;6 C/D.
+
+  The superseded draft text, kept as a record (the full draft is in commit b396d233,
+  `git show b396d233:.specify/memory/constitution.md`):
+
+  | Modifier families: `Ctrl+Shift` acts on the active panel or pane, `Ctrl+Alt` acts on the
+  | application. `Ctrl+Shift+<key>` MUST be used only for a command that acts on the active panel or
+  | pane; `Ctrl+Alt+<key>` MUST be used only for a global command. Known violations at v5.6.0: global
+  | commands on Ctrl+Shift — zoom.reset, navigate.quickOpen, search.findInFiles,
+  | search.replaceInFiles, editor.saveAll; panel commands on Ctrl+Alt — panel.zoomIn/Out/Reset,
+  | editor.saveAs, editor.toggleWordWrap, search.replaceAll. Recorded exceptions to the families (first
+  | review): Ctrl+Shift+T / F / H, Ctrl+Shift+S / Ctrl+Alt+S.
+  |
+  | `Ctrl+Shift+-`, added at v5.6.0 (`panel.zoomOut`): xterm sends it as `^_` (readline `undo`);
+  | justified by the families putting panel zoom on Ctrl+Shift; readline's undo stays on
+  | Ctrl+X Ctrl+U and PSReadLine's on Ctrl+Z.
+
+Revised a third time before publication (2026-09-24, iterate-round-1 checkpoint), still 5.6.0:
+  The maintainer hand-tested the second-review tiers and agreed the FINAL convention at the
+  speckit-iterate round 1 checkpoint. Their decisions, in substance:
+  1. Ctrl+Shift+Alt is navigation and global / application actions, and every Ctrl+Shift+Alt
+     chord is matched on the PHYSICAL key (KeyboardEvent.code), never on the produced character,
+     so it works on every layout (Ctrl+Alt is AltGr in Europe; AltGr+Shift produces characters on
+     e.g. Polish). The renderer's existing physical matching for Ctrl+digit and the backtick
+     (`chord-key.ts`) extends to the whole family.
+  2. Ctrl+Alt and Ctrl+Shift are commands on the active panel or pane.
+  3. A single modifier (Ctrl, Alt, Shift), or none, is content.
+  4. One keyboard chord per command, plus at most one mouse gesture. The keypad +, - and 0 are the
+     SAME binding as the main-row key, not a second chord. Written `Ctrl++`, `Ctrl+Alt++`,
+     `Ctrl+Shift+Alt++` ("Ctrl plus the + key"), never `Ctrl+Num+` or `Ctrl+Plus`.
+  5. Recorded exceptions, kept as they are: Ctrl+F, Ctrl+H, Ctrl+S, Ctrl+F5; Quick Open
+     Ctrl+Shift+T; Find / Replace in Files Ctrl+Shift+F / H; Save All Ctrl+Shift+S; Save As
+     Ctrl+Alt+S; Replace All Ctrl+Alt+Enter; F2, F3, F11, Shift+F10; focus cycle Ctrl+` /
+     Ctrl+Shift+` (Shift reverses); menu.open keeps both Shift+F10 and the Menu key ("fine as it
+     is": a single-purpose hardware key, not a second chord).
+  6. Multi-stroke chords are a new capability: word wrap is `Ctrl+E W`.
+
+  Principle IV:
+  - "Three modifier tiers" is REPLACED, in place, by the agreed rule: tier 1 `Ctrl+Shift+Alt`
+    (navigation and the application), tier 2 `Ctrl+Alt` / `Ctrl+Shift` (the active panel or pane),
+    tier 3 one modifier or none (content).
+  - ADDED: physical-key matching for all of tier 1, with a disclosure duty for the AltGr+Shift
+    characters a tier-1 letter can take; the one-keyboard-chord-per-command rule and its single
+    exception (`menu.open`); the keypad `0` beside `+` and `-`; the written form of `+` chords; the
+    exhaustive exception list above; the tier-1 terminal-cost statement.
+  - WITHDRAWN: "Three-modifier chords SHOULD NOT be shipped", which tier 1 now contradicts by
+    design. It stood only in unpublished drafts of this version.
+  - Retained unchanged: group consistency, the multi-stroke bullet, "the tiers never override the
+    terminal tiers", the AltGr check (extended by one sentence on the keypad), the upgrade rule.
+  - The known-violation list is re-audited against the new rule (below).
+  - The "Retired at v4.3.1" bullet gains a one-line record of the pane toggles' second move.
+
+  Principle VI: the 2026-09-09 cog-menu audit clause gains a second record. The cog menu now has a
+  View & state section with a Zoom row for the window zoom (046 FR-107), because AltGr and mouse
+  users need a route that is not a chord. "A chord MAY stand without a menu item" is unchanged:
+  it removes an obligation, and this is the option it keeps.
+
+  Still 5.6.0, for the reason given in the first revision: the version has never left this branch
+  (unmerged, unreleased), so no reader, spec or plan outside 046 has cited it. Measured against
+  5.5.2 the whole amendment is still MINOR. A keyboard convention is ADDED inside an existing
+  principle, and existing code fails it — the ordinary MINOR case, with the violations enumerated
+  in the principle as an end-state requirement under Incremental Delivery. No guarantee stated in
+  a published version is withdrawn. The one withdrawn sentence (three-modifier chords) never
+  appeared in a published version.
+
+  Audited 2026-09-24 before writing, against the code at `3b04ec33`, not inferred from the specs:
+  - `keybindings.ts` WINDOWS_BINDINGS: the known-violation list in IV is the complete set under
+    the new rule. `terminal.scrollLineUp/Down` (`Ctrl+Shift+ArrowUp/Down`) acts on the pane's
+    viewport and now CONFORMS as tier 2; it is no longer an exception. `editor.columnSelect*`
+    (`Shift+Alt+Arrow`) fits no tier and is recorded by derivation, flagged for the maintainer.
+  - Canonical token order is `Ctrl+Shift+Alt+<key>` (`eventToToken`); tokens are shown as
+    written, so the display form is `Ctrl+Shift+Alt++`.
+  - xterm.js 6.0.0 `CoreBrowserTerminal._isThirdLevelShift`: on Windows, Ctrl+Alt with a key
+    code above 47 is a third-level shift and sends nothing on keydown. Arrows (37–40) and
+    PageUp / PageDown (33 / 34) are below it: arrows send `CSI 1;8 A`–`D`; Shift+PageUp / PageDown
+    scroll xterm's viewport (`Keyboard.ts`).
+  - `chord-key.ts` `chordCandidates` / `resolveKeydown`: physical matching exists for
+    `Digit0`–`Digit9` with Ctrl held and Alt NOT held, and for the backtick. Tier 1 needs it with
+    Alt held, which R2's AltGr reason excluded; Shift held is what makes it safe (046 research R22).
+  - `keybindings/scope.ts` `isPanelScoped`: `tabs.openPicker` was missing from the window-command
+    exemptions until `3b04ec33`, which is why the tab picker chord was dead in a terminal.
+
+Modified sections (this revision): Principle IV ("Three modifier tiers" block replaced; "Retired
+  at v4.3.1" bullet gains a record); Principle VI (cog-menu audit clause gains a record).
+Added sections: none. Removed sections: none.
+
+Templates / artifacts reviewed (this revision):
+  ✅ .specify/templates/plan-template.md      — no change (the Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change (no principle enumerated)
+  ✅ .specify/templates/tasks-template.md     — no change
+  ✅ .claude/agents/*.md, CLAUDE.md            — no agent file restates the tier text
+  ⚠ specs/046-side-panes-and-project-list/    — amended in the same change: FR-101 – FR-112,
+                                                SC-014 – SC-016, supersessions S15 – S23,
+                                                research R22, data-model §3 / §4 / §8 notes
+  ✅ specs/046-side-panes-and-project-list/plan.md — described the second-review tiers when this
+                                                revision was written; the round-1 plan now carries
+                                                the agreed tiers, the second-review section marked
+                                                superseded (checked 2026-09-25)
+  ⚠ packages/core/src/config/keybindings.ts    — the known violations; remapped by 046, not by
+                                                this amendment
+  ⚠ README.md, docs/quick-start.md             — the keyboard reference changes with the code
+                                                (docs currency, 046 FR-088 / FR-112)
+  ✅ specs/003, 012, 024, 026, 031, 041        — shipped records of the chords they chose; not
+                                                rewritten (046 records each supersession)
+
+Follow-up TODOs (deferred, and honest about it):
+  - The live line-editor check of tier 1's `CSI 1;8` arrow sequences in every hosted flavour
+    (bash readline `bind -p`, PSReadLine `Get-PSReadLineKeyHandler`) is owed at implementation.
+  - Whether Chromium on Windows reports `AltGraph` for the right-hand AltGr key but not for left
+    Ctrl+Alt is a HYPOTHESIS (046 research R22). If it holds, tier 1 can decline AltGr+Shift and
+    take no character; if not, the disclosure duty in IV is the whole answer.
+  - `editor.columnSelect*` is an exception by derivation, awaiting the maintainer.
+
+Corrected before publication (2026-09-25), still 5.6.0 — two claims in this report were wrong:
+  - Bump rationale (3) says the idle-shell rule "is kept for EVERY path it was written for —
+    application close and project close". That was asserted, not audited. 046 T124 / T153 read the
+    code and found that no production path closes an idle shell at application close, and none ever
+    has: the app-close prompt (`main.ts`) is raised for idle sessions too, *Leave running* keeps
+    every session, and the daemon runs no idle sweep at shutdown. Rule III's app-close clause is
+    therefore a PRE-EXISTING known violation, not something this amendment preserves. It is recorded
+    as an end-state requirement in 046 plan.md's Complexity Tracking (commit d34a0502) with an open
+    tracking issue. The MINOR argument is unaffected — the stated exception still withdraws no
+    guarantee — but the sentence overstated what the code does.
+  - The first report's "Follow-up TODOs: none deferred" is wrong for the same reason: the app-close
+    idle sweep IS deferred, to the tracking issue named in 046's Complexity Tracking.
+  Also: the ⚠ on README.md:305 above is cleared (it now says Keep terminals running keeps idle
+  shells); docs/testing.md:383 follows 046 T129. The rule text of Principle III is not changed.
+
+The superseded second-review tier text, kept as a record (full text in commit 62cff579,
+`git show 62cff579:.specify/memory/constitution.md`):
+
+  | Three modifier tiers: `Ctrl+Shift` navigates, `Ctrl+Alt` acts on the container, one modifier
+  | acts on the content. Tier 1 navigation `Ctrl+Shift+<key>`; tier 2 container `Ctrl+Alt+<key>`
+  | (a panel's zoom); tier 3 content, one modifier or none. Three-modifier chords SHOULD NOT be
+  | shipped. Noted exceptions: the window zoom group `Ctrl+=` / `Ctrl++` / `Ctrl+-` / `Ctrl+0`;
+  | Ctrl+Shift+T / F / H; Ctrl+Shift+S / Ctrl+Alt+S; Ctrl+Alt+Enter; `focus.*` Ctrl+Alt+Arrow;
+  | `terminal.scrollLine*` Ctrl+Shift+ArrowUp/Down; `editor.columnSelect*` Shift+Alt+Arrow;
+  | Ctrl+E W. Known violations: focus.cycle / cycleBack, project.next / previous,
+  | focus.explorer / projects, view.toggleProjects / toggleExplorer, focus.notice,
+  | tabs.openPicker, and zoom.reset's Ctrl+Shift+0.
+
+Revised a fourth time before publication (2026-09-25, maintainer mid-build decisions), still 5.6.0:
+  The maintainer reviewed the in-progress build and gave two decisions, verbatim: "Remove the new
+  "Zoom" options from the menu." and "The "Zoom Reset" key bindings need to use the numpad zero, NOT
+  the 0 key."
+
+  Principle VI: the iterate-round-1-checkpoint record above (the cog menu gaining a View & state
+  section with a Zoom row) gains a THIRD record: the row is WITHDRAWN. The cog menu returns to the
+  single Application section the 2026-09-09 audit describes, this time for good rather than as an
+  intermediate state (046 FR-113). "A chord MAY stand without a menu item" is unaffected: the window
+  zoom chords were already reachable without a menu item, and losing the row's mouse route is a
+  narrowing this maintainer decision accepts, not a principle change.
+
+  Principle IV: the "keypad `+`, `-` and `0` are the SAME binding as the main-row key" bullet gains a
+  named, narrow exception. For `zoom.reset` and `panel.zoomReset` ONLY, the keypad `0` (`Numpad0`) is
+  now a SEPARATE, physical-only match — the main-row key no longer resets either zoom at all (046
+  FR-114). Every other command's `+` / `-` / `0` same-binding rule is unchanged; this is not a
+  reversal of the rule, only a second, narrower rule for the two commands the maintainer named.
+  Written as `Ctrl+Alt+Numpad0` / `Ctrl+Shift+Alt+Numpad0` — WITH the `Numpad0` name, unlike the
+  bare-symbol form the `+` / `-` bullet still requires — because these two chords no longer have a
+  main-row form to write instead.
+
+  Why not a separate 5.6.1 / 5.7.0: as the first three revisions of this report note, 5.6.0 has never
+  left the 046 branch (unmerged, unreleased), so no reader, spec or plan outside 046 has cited it
+  without this note. The change is MINOR, measured the same way as the third revision: an existing,
+  additive rule (the keypad same-binding rule) gets a narrower carve-out for two commands, and a
+  shipped-but-unreleased UI element (the Zoom row, shipped only on this branch, never released) is
+  withdrawn before anyone outside the branch could rely on it — withdrawing something never published
+  guarantees nothing, so it is not MAJOR.
+
+  Audited 2026-09-25 before writing, against the code on the branch as it stood:
+  - `packages/ui/src/renderer/title-bar/cog-menu-items.ts` builds the `viewState` Zoom row
+    (`zoomControls`, test ids `cog-menu-zoom-in/out/reset`) and `cog-menu.tsx:50` reads
+    `window.throng.zoomLevel()` to show its percentage — both to be removed by 046, not by this
+    amendment; the amendment records the rule, the spec's tasks do the removal.
+  - `packages/core/src/config/keybindings.ts` ships `zoom.reset: ['Ctrl+Shift+Alt+0']` and
+    `panel.zoomReset: ['Ctrl+Alt+0', 'Ctrl+MiddleClick']` — both to be remapped to `Numpad0` by 046.
+  - `packages/ui/src/renderer/config/chord-key.ts`'s `digitCandidate` today aliases `Numpad0` to the
+    bare `'0'` for EVERY Ctrl+digit command (no `Numpad…` token is ever emitted) — the general FR-105
+    rule this amendment carves its two-command exception into.
+
+Modified sections (this revision): Principle IV (keypad same-binding bullet gains a named exception);
+  Principle VI (cog-menu record gains a third, withdrawing entry).
+Added sections: none. Removed sections: none.
+
+Templates / artifacts reviewed (this revision):
+  ✅ .specify/templates/plan-template.md      — no change (the Constitution Check reads this file)
+  ✅ .specify/templates/spec-template.md      — no change
+  ✅ .specify/templates/tasks-template.md     — no change
+  ✅ .claude/agents/*.md, CLAUDE.md            — no agent file restates the Zoom-row or keypad-0 text
+  ⚠ specs/046-side-panes-and-project-list/    — amended in the same change: FR-113 – FR-115, SC-017,
+                                                supersessions S24 – S25, a new Clarifications session,
+                                                tasks.md Phase 11 (T154 – T167)
+  ⚠ specs/046-side-panes-and-project-list/plan.md — NOT amended in this change; it still names the
+                                                cog Zoom row from the iterate-round-1 checkpoint and
+                                                goes stale until a future round updates it
+  ⚠ packages/core/src/config/keybindings.ts,
+    packages/ui/src/renderer/title-bar/cog-menu-items.ts,
+    packages/ui/src/renderer/config/chord-key.ts — the two commands this amendment names; remapped
+                                                by 046 tasks T154 – T164, not by this amendment
+  ⚠ README.md, docs/quick-start.md, CHANGELOG.md — the keyboard reference and the cog menu's shape
+                                                change with the code (docs currency, 046 T165 – T167)
+
+Follow-up TODOs (deferred, and honest about it):
+  - T154 – T167 are written, not yet executed, as of this revision.
+  - plan.md's iterate-round-1 section is stale until a future round reconciles it; tracked in
+    tasks.md's Phase 11 preamble, not as a separate issue (it is 046's own plan, still open).
+
+Revised a fifth time before publication (2026-09-25, convergence T168, still 5.6.0):
+  Convergence (046 T168) found the fourth revision's "named, narrow exception for these two
+  commands only" reading did not match the code it audited. `chord-capture.ts`'s
+  `sameBindingSymbolOfCode` returns `Numpad0` unconditionally, for every command, not only
+  `zoom.reset` / `panel.zoomReset` (`packages/core/src/config/chord-capture.ts:91-92`), and
+  `chord-key.ts`'s `chordCandidates` never folds a `Numpad0` press into the `0` / `Digit0`
+  candidate for ANY command (`packages/ui/src/renderer/config/chord-key.ts:121-122`, `:91`) —
+  commit `b67029fa` removed the fold from binding identity generally, not only for the two zoom
+  commands the fourth revision named.
+
+  Principle IV: the keypad `0` bullet's named exception (fourth revision) is corrected. The keypad
+  `0` (`Numpad0`) is a SEPARATE, physical-only match from the main-row `0` for EVERY command, not
+  only `zoom.reset` and `panel.zoomReset` — those two remain the only commands that SHIP a default
+  using it. A user who binds any other command to `Ctrl+Alt+0` in Key Bindings fires it only from
+  the main-row `0`; the keypad press does not fire it and instead records its own `Ctrl+Alt+Numpad0`
+  capture. The keypad `+` and `-` bullet is unaffected: they remain the same binding as the main-row
+  key for every command, including `zoom.reset` and `panel.zoomReset`'s own `+` / `-` siblings
+  (`zoom.in` / `zoom.out` / `panel.zoomIn` / `panel.zoomOut`).
+
+  Why this reading, not the fourth revision's: the maintainer's instruction, verbatim, "The 'Zoom
+  Reset' key bindings need to use the numpad zero, NOT the 0 key," named the two zoom commands
+  because those were the only ones with a shipped `0`-family default at the time; it did not say the
+  resolver's behaviour should be scoped to only those two, and no other shipped default binds `0` at
+  all. The fourth revision's "two-command exception" was a derived narrowing of an instruction that
+  was never that narrow — the earlier keypad-0 equivalence for all commands was itself a derived
+  extension of the maintainer's separate `+` / `-` request, never a maintainer decision about `0`.
+
+  Why not a separate 5.6.1 / 5.7.0: unchanged reasoning from the fourth revision — 5.6.0 has never
+  left the 046 branch (unmerged, unreleased). This correction narrows what the RULE claims to be
+  exceptional (from two commands to the general case); it changes no shipped or planned default:
+  `zoom.reset` and `panel.zoomReset` still ship `Numpad0`, and no other command ships or plans a
+  `0`-family default before or after this correction, so nothing compliant becomes non-compliant.
+  Not MAJOR; the ordinary MINOR case of a clarification the code already satisfied.
+
+  Consequence recorded, stated plainly: a user who binds another command to `Ctrl+Alt+0` fires it
+  only from the main-row `0`; the keypad zero does not fire it.
+
+  Modified sections (this revision): Principle IV (keypad `0` bullet's named exception widened from
+    two commands to general).
+  Added sections: none. Removed sections: none.
+
+  Templates / artifacts reviewed (this revision):
+    ✅ .specify/templates/plan-template.md, spec-template.md, tasks-template.md — no change
+    ✅ .claude/agents/*.md, CLAUDE.md — no agent file restates the two-command scoping
+    ⚠ specs/046-side-panes-and-project-list/spec.md — amended in the same change (FR-105's note,
+                                                  FR-114, convergence task T168)
+    ⚠ specs/046-side-panes-and-project-list/tasks.md — T162 / T163's wording notes corrected in the
+                                                  same change (T168)
+
+  Follow-up TODOs: none deferred by this revision.
+
+Revised an eighth time before publication (2026-09-26, 046 iterate round 7), still 5.6.0:
+  The maintainer: "Add Ctrl+Alt+0 as a secondary default keybinding for "reset panel zoom"", and,
+  asked how it meets the one-keyboard-chord rule, chose "Second chord, new exception".
+  Principle IV: a named exception under the one-chord rule: `panel.zoomReset` ships `Ctrl+Alt+0`
+  beside `Ctrl+Alt+Numpad0`, matched on the produced `0`. Bump reasoning: a narrowed obligation
+  for one command, folded into the unreleased 5.6.0 as every revision above is.
+  Modified sections: Principle IV (one named exception). Added / removed sections: none.
+  ⚠ specs/046-side-panes-and-project-list/spec.md: FR-127, S31, in the same change.
+
+Revised a seventh time before publication (2026-09-26, 046 iterate round 5), still 5.6.0:
+  The maintainer, hand-testing: "Focus should move to either the first control on those panels,
+  or the last active control e.g. empty panels should have the panel type drop-down focussed if
+  no other controls were previously active, and the find in files panel should have the search
+  text box active if none of its other controls were previously active. Any future panels we
+  create should have the same behaviour - I expect this is a constitution amendment." The rule's
+  wording was put to the maintainer and approved as written.
+
+  Principle XI: a new rule, "Focus follows the active Panel" (every Panel type has a keyboard
+  focus target; a keyboard route into a Panel moves DOM focus to its last-focused control, else
+  its first; the Projects-list switch is the exception, 046 FR-082). Known violations at
+  adoption: the untyped Panel and Find in Files (046 FR-125 fixes them).
+  Principle IV: a third v5.6.0 record under "Retired at v4.3.1", factual only: 046 FR-124 writes
+  a two-stroke chord `Mods+K1,K2` and word wrap as `Ctrl+E,W`. No rule changes.
+
+  Bump reasoning: the XI rule is a new obligation, MINOR by this file's own test. It is folded
+  into 5.6.0 rather than a 5.7.0 for the reason every revision above gives: 5.6.0 has never left
+  the 046 branch (unmerged, unreleased), so nothing outside 046 has cited it.
+
+  Modified sections (this revision): Principle XI (one rule added), Principle IV (a record).
+  Added sections: none. Removed sections: none.
+
+  Templates / artifacts reviewed (this revision):
+    ✅ .specify/templates/plan-template.md, spec-template.md, tasks-template.md: no change
+    ✅ .claude/agents/*.md, CLAUDE.md: no file states a panel focus rule
+    ⚠ specs/046-side-panes-and-project-list/spec.md: amended in the same change (FR-124,
+       FR-125, a round-5 clarification session)
+    ⚠ packages/ui/src/renderer: the untyped Panel and Find in Files change with the code
+
+  Clerical: the footer "Last Amended" date is 2026-09-26.
+
+Revised a sixth time before publication (2026-09-25, 046 iterate round 3), still 5.6.0:
+  The maintainer, hand-testing: "There does not seem to be a way to get back to the center pane
+  from the keyboard." and "all shortcuts use Ctrl+Shift+Alt. Focus should be B, N and M (from left
+  to right). Collapse / expand side panes should be J and K, from left to right. V for notices if it
+  is not already reserved."
+
+  Principle IV: the "Retired at v4.3.1" paragraph's v5.6.0 record, which says spec 046 moves the pane
+  toggles to `Ctrl+Shift+Alt+B` / `Ctrl+Shift+Alt+N`, gains a second record. They move again, to
+  `Ctrl+Shift+Alt+J` / `Ctrl+Shift+Alt+K`, and B / N / M become the three focus chords (046 FR-117).
+  No rule changes. Every new chord is tier 1 and matched physically. None is in the reserved or
+  shadowable tier. The group rule holds, with three focus commands and two toggles each on one
+  modifier set. The seven-layout disclosure the tier-1 cost bullet requires is in 046 research R22
+  (J, K and V lose nothing; Polish `Ń` stays on N). The "Known violations at v5.6.0" list is not
+  touched. It records the pre-046 audit, and none of its entries is re-opened.
+
+  Principle VI: nothing is amended. 046's new `focus.workspace` (FR-116) moves the user between
+  surfaces and acts on no panel, so "A chord MAY stand without a menu item" already covers it as
+  written. The spec says it stands on its chord alone, as that rule requires.
+
+  Bump reasoning, against this file's own test: PATCH-level. The change is a factual record of where
+  a spec moved two defaults, with no new obligation and no guarantee withdrawn. It is folded into
+  5.6.0 rather than a 5.6.1, for the reason every revision above gives: 5.6.0 has never left the 046
+  branch (unmerged, unreleased), so nothing outside 046 has cited it.
+
+  Audited 2026-09-25 before writing, against the branch at `69127230`:
+  - `packages/core/src/config/keybindings.ts` ships `view.toggleProjects` `Ctrl+Shift+Alt+B`,
+    `view.toggleExplorer` `Ctrl+Shift+Alt+N`, `focus.notice` `Ctrl+Shift+Alt+M`, `focus.explorer`
+    `Ctrl+Shift+Alt+F` and `focus.projects` `Ctrl+Shift+Alt+P`. No `focus.workspace` exists, and no
+    shipped default binds J, K or V with any modifier. The record above is written for the state
+    046 T173 produces, not for what is on disk now. Until T173 lands, the code still matches the
+    first record.
+  - `packages/ui/src/renderer/keybindings/scope.ts` exempts every `focus.*` action as a window
+    command by prefix, so `focus.workspace` needs no new exemption for Principle IV's "window command
+    survives a focused terminal" reading (046 FR-110).
+
+  Modified sections (this revision): Principle IV ("Retired at v4.3.1" paragraph, a second v5.6.0
+  record).
+  Added sections: none. Removed sections: none.
+
+  Templates / artifacts reviewed (this revision):
+    ✅ .specify/templates/plan-template.md, spec-template.md, tasks-template.md: no change
+    ✅ .claude/agents/*.md, CLAUDE.md: no agent file names the 046 pane-toggle or focus chords
+       (`grep -rn "Ctrl+Shift+Alt+[BNMFP]" .claude CLAUDE.md` found nothing)
+    ⚠ specs/046-side-panes-and-project-list/spec.md: amended in the same change (FR-116 – FR-120,
+       SC-018, S27, a round-3 clarification session)
+    ⚠ specs/046-side-panes-and-project-list/tasks.md: Phase 13 (T172 – T190) appended
+    ⚠ specs/046-side-panes-and-project-list/research.md, quickstart.md: R22 round-3 check and
+       NumLock result; quickstart §5b
+    ⚠ specs/046-side-panes-and-project-list/plan.md, data-model.md, contracts/: NOT amended in this
+       change. They still name F / P / B / N / M under their round-1 owners, and 046 T186 reconciles
+       them
+    ⚠ README.md, docs/quick-start.md, docs/testing.md, CHANGELOG.md: change with the code (046
+       T182 – T185)
+
+  Follow-up TODOs (deferred, and honest about it):
+    - 046 T172 – T190 are written, not executed, as of this revision.
+    - 046 FR-120 (the Numpad0 / NumLock defect) is recorded but not specified. It may bear on
+      Principle IV's Numpad0 named exception, and that is not decided here.
+
+  Clerical correction (2026-09-26): the footer "Last Amended" date still read 2026-09-23 after this
+  sixth revision; it is corrected to 2026-09-25. Metadata-only: no principle text and no version
+  number changes.
+
+---- previous report ----
+
 Version change: 5.5.1 → 5.5.2
 Bump rationale: PATCH — the maintainer's decision of 2026-09-19 for PR #408: the link menu's copy
                 item is labelled "Copy Link to Clipboard", not "Copy Link Address". Checked
@@ -1374,6 +1870,20 @@ lifecycle, and MUST carry enough identity to be restored across restarts.
   - A terminal **with no active running process** (idle shell) MUST be closed
     when its project or the application is closed, and MUST be re-created in a
     new process when the project or application is reopened.
+  - **Stated exception (v5.6.0): an explicit Unload that keeps terminals running keeps
+    ALL of them.** When the user unloads a project and the action they chose, by name
+    or through the preference that picks the default, is to **keep terminals running**,
+    EVERY terminal of that project MUST be kept alive, idle shells included, and each
+    MUST be re-attached (live session and restored scrollback) when the project is next
+    loaded, never re-created. The user has instructed the application to put the project
+    away with its terminals intact, and closing an idle shell they chose to keep would
+    discard its working directory, environment and history against that instruction.
+    The exception is confined to that one user-instructed action: **application close
+    and every other project close keep the two rules above unchanged**, and an Unload
+    that ends terminals is a user-instructed destruction governed by the resource-hygiene
+    and no-orphaned-views rules above. The kept terminals remain tagged to their project
+    and are ended, like any other, by the project's deletion or by "terminate all" on
+    application close.
 - When the application is closed while one or more terminals have active running
   processes, the user MUST be warned and offered exactly three choices:
   (A) close and leave terminals running in the background, (B) close and
@@ -1434,7 +1944,9 @@ not the flavour a given user happens to run.
   (`editor.save`) — all three shipped before this rule existed — and `Ctrl+F5`
   (`terminal.redraw`), added deliberately by feature 028 (issue #163).
   This list is exhaustive; any addition to it MUST come with its own justification,
-  and no chord in the reserved tier may join it.
+  and no chord in the reserved tier may join it. *(Unchanged at v5.6.0: a `Ctrl+Shift+-`
+  entry drafted for 5.6.0 was withdrawn before publication, when panel zoom returned to
+  `Ctrl+Alt`. The draft is kept in the Sync Impact Report.)*
 - **`Ctrl+F5`, the first exception taken under this rule rather than inherited by it.**
   What it displaces: a full-screen program can receive `Ctrl+F5` as a function-key
   sequence, and terminal file managers bind the function keys heavily. What justifies
@@ -1446,6 +1958,10 @@ not the flavour a given user happens to run.
   (`Ctrl+R`, `Ctrl+L`) or already an exception. It is scoped `terminal` only, so it is
   inert in an editor or the file tree, and the two menu items remain the canonical route
   — the chord is an accelerator over them, never a substitute (Principle VI).
+  *(Read at v5.6.0: this still holds, because `terminal.redraw` is a PANEL action and
+  Principle VI keeps a panel action's menu item canonical. It is no longer a general
+  statement that every chord needs a menu item beneath it — see VI, "A chord MAY stand
+  without a menu item".)*
 - **Retired at v4.3.1**: `Ctrl+B` (`view.toggleProjects`) and `Ctrl+N`
   (`view.toggleExplorer`), which moved to `Ctrl+Alt+B` / `Ctrl+Alt+N` in feature 026
   (issue #165). "Open to revisiting" was not decoration — these two were revisited and
@@ -1453,6 +1969,149 @@ not the flavour a given user happens to run.
   `backward-char` and `next-history`, and the `Ctrl+Alt` family was already throng's
   own via `panel.zoom*` and `focus.*`, so the exception bought nothing. Only the
   shipped defaults moved; a user who had saved these bindings keeps them.
+  *(Record, v5.6.0: spec 046 moves both again, to `Ctrl+Shift+Alt+B` / `Ctrl+Shift+Alt+N`,
+  under the three modifier tiers below. `Ctrl+B` and `Ctrl+N` stay unclaimed.)*
+  *(Record, v5.6.0, 046 iterate round 3, 2026-09-25: moved once more before release, to
+  `Ctrl+Shift+Alt+J` / `Ctrl+Shift+Alt+K`. `Ctrl+Shift+Alt+B / N / M` now focus the Projects pane,
+  the workspace and the File Explorer, left to right (046 FR-117). `Ctrl+B` and `Ctrl+N` still
+  stay unclaimed.)*
+  *(Record, v5.6.0, 046 iterate round 5, 2026-09-26: no rule changes here. 046 FR-124 writes a
+  two-stroke chord as `Mods+K1,K2`, the modifiers held through both keys and matched exactly as
+  pressed, and word wrap's multi-stroke exception becomes `Ctrl+E,W`.)*
+
+**Three modifier tiers: `Ctrl+Shift+Alt` navigates, `Ctrl+Alt` and `Ctrl+Shift` act on the
+active panel or pane, one modifier acts on the content** (v5.6.0; the maintainer's rule, agreed
+2026-09-24 at spec 046's iterate-round-1 checkpoint). A user who knows what a command does
+should be able to guess its modifiers:
+
+- **Tier 1, navigation and the application — `Ctrl+Shift+Alt+<key>`.** Moving between
+  surfaces or activating one — panes, panels, tabs, projects and notices, including
+  revealing or hiding a side pane — and commands that act on the whole window or the
+  application, such as the window zoom.
+- **Tier 2, the active panel or pane — `Ctrl+Alt+<key>` or `Ctrl+Shift+<key>`.** Commands
+  that act on the panel or pane holding focus rather than on what it shows: a panel's zoom,
+  its viewport.
+- **Tier 3, content — one modifier (`Ctrl+`, `Alt+` or `Shift+`), or none.** Acting on the
+  content a surface shows: editing, the clipboard, find and replace, save, scrollback,
+  history, selection.
+- The test is **what the command changes, not where it is live**.
+- **Tier 1 is matched on the physical key.** Every `Ctrl+Shift+Alt` chord MUST be matched on
+  the physical key (`KeyboardEvent.code`), never on the character the keypress produces, in
+  every resolver and in the Key Bindings capture modal. On Windows `Ctrl+Alt` IS AltGr, and
+  on some layouts (Polish among them) AltGr+Shift produces a character, so a
+  produced-character match would fire on one layout and miss on the next. The physical rules
+  the renderer already applies to `Ctrl`+digit and to the backtick (`chord-key.ts`) extend to
+  the whole tier.
+  - What it costs: where AltGr+Shift types a character on a key that carries a tier-1
+    default, the chord can take that character. The spec that ships a tier-1 default MUST
+    name those losses on the seven common European layouts the AltGr check below names, as
+    that check already requires for `Ctrl+Alt`.
+- **One keyboard chord per command, plus at most one mouse gesture.** A second keyboard chord
+  for the same command is a second thing to learn and a second thing to collide. The one
+  exception is `menu.open`, which keeps both `Shift+F10` and the dedicated Menu key
+  (`ContextMenu`): the Menu key is a single-purpose hardware key, not a second chord.
+- **The keypad `+`, `-` and `0` are the same binding as the main-row key**, never a second
+  chord: every binding on `+`, `-` or `0` fires from the keypad key with the same modifiers.
+  Every resolver, and the capture modal, MUST treat these keys identically wherever they
+  sit, so a press is never recorded or matched differently by where the key is. They are
+  written `Ctrl++`, `Ctrl+Alt++` and `Ctrl+Shift+Alt++` — the modifiers, plus the `+` key —
+  and never `Ctrl+Num+` or `Ctrl+Plus`, in the docs and in the UI alike.
+  - **Named exception (v5.6.0, maintainer mid-build decision, 2026-09-25):** for `zoom.reset`
+    and `panel.zoomReset` ONLY, the keypad `0` (`Numpad0`) is a **separate, physical-only**
+    match, not the same binding as the main-row `0` — the main-row key no longer resets
+    either zoom at all. Written WITH the `Numpad0` name (`Ctrl+Alt+Numpad0`,
+    `Ctrl+Shift+Alt+Numpad0`), unlike the bare-symbol form above, because these two chords no
+    longer have a main-row form to write instead. Every other command's `+` / `-` / `0`
+    same-binding rule is unchanged (046 FR-114).
+  - **Correction (v5.6.0, convergence 046 T168, 2026-09-25):** the "for `zoom.reset` and
+    `panel.zoomReset` ONLY" scoping above named which commands SHIP a `Numpad0` default, not
+    what the resolver does. The keypad `0` (`Numpad0`) is a **separate, physical-only** match,
+    distinct from the main-row `0`, for **every** command, not only these two — a keyboard
+    matches `Numpad0` as its own token everywhere, and never folds it into `0` / `Digit0`. A
+    user who binds any OTHER command to `Ctrl+Alt+0` fires it only from the main-row `0`; the
+    keypad `0` does not fire it. The keypad `+` and `-` bullet above is unaffected and stands
+    for every command, these two included. `zoom.reset` and `panel.zoomReset` remain the only
+    commands that ship a `Numpad0` default; that part of the named exception stands.
+  - **Named exception (v5.6.0, maintainer, 2026-09-26, 046 FR-127):** `panel.zoomReset` ALSO
+    ships the main-row **`Ctrl+Alt+0`** as a second keyboard chord, beside `Ctrl+Alt+Numpad0` and
+    its `Ctrl+MiddleClick` gesture — the one-chord rule's second exception after `menu.open`. It is
+    matched on the produced `0`, so an AltGr+0 that types `}` or `@` (German, AZERTY) never fires
+    it. `zoom.reset` keeps its single chord; the main-row 0 still resets no window zoom.
+- **A group of related commands uses one set of modifiers.** Zoom in, zoom out and zoom
+  reset MUST share modifiers within each zoom, so that learning one teaches the other two.
+  A group MUST NOT mix tiers.
+- **Outside the tiers:**
+  - function keys (`F2`, `F3` / `Shift+F3`, `F11`, `Shift+F10`, `Ctrl+F5`), which carry
+    OS and editor conventions of their own;
+  - mouse gestures;
+  - **multi-stroke chords** (a first stroke, then a second key, such as `Ctrl+E W`).
+    A multi-stroke chord's FIRST stroke is judged by the terminal tiers above as though it
+    were the whole chord, because a pending prefix consumes that stroke. A multi-stroke
+    chord whose first stroke is in the reserved tier (`Ctrl+E`, `Ctrl+K`, …) MUST NOT be
+    live in any scope that includes a terminal.
+- **Recorded exceptions** (exhaustive; an addition MUST be justified in the spec that ships
+  it and recorded here):
+  - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S` and `Ctrl+F5`;
+  - **`navigate.quickOpen` `Ctrl+Shift+T`, `search.findInFiles` `Ctrl+Shift+F` and
+    `search.replaceInFiles` `Ctrl+Shift+H`**: the chords every editor a user arrives from
+    carries;
+  - **`editor.saveAll` `Ctrl+Shift+S` and `editor.saveAs` `Ctrl+Alt+S`**, kept as a pair by
+    the maintainer's decision;
+  - **`search.replaceAll` `Ctrl+Alt+Enter`**, live only while an editor's find bar is open;
+  - the function keys **`F2`** (`panel.rename`, `file.rename`), **`F3` / `Shift+F3`**,
+    **`F11`** and **`Shift+F10`**;
+  - **`focus.cycle` `Ctrl+`` and `focus.cycleBack` `Ctrl+Shift+``**: Shift only reverses
+    the direction of the same pair;
+  - **`menu.open` `Shift+F10` and `ContextMenu`**, the one-chord rule's exception above;
+  - **`editor.toggleWordWrap` `Ctrl+E W`**, a multi-stroke chord, editor-only, by the
+    maintainer's decision;
+  - **`editor.columnSelect*` `Shift+Alt+Arrow`**, VS Code's column-select chord. *(Recorded
+    by derivation at 5.6.0: the maintainer's list did not name it, and no tier admits
+    `Shift+Alt`. Spec 046 carries it as a question for the maintainer.)*
+- **What tier 1 costs a terminal.** On Windows, xterm.js treats `Ctrl+Alt` with any key whose
+  key code is above 47 as a third-level (AltGr) shift and sends nothing for it on keydown
+  (`@xterm/xterm` 6.0.0, `CoreBrowserTerminal._isThirdLevelShift`). So a tier-1 chord on a
+  letter, a digit, `+` or `-` takes no bytes from any shell. On an arrow xterm would send
+  `CSI 1;8 A`–`D`, and with Shift held `PageUp` / `PageDown` scroll xterm's own viewport.
+  The window listener captures tier-1 chords before xterm, so those are what a shell gives
+  up. No default readline or PSReadLine binding uses a `1;8` sequence *(046 research R22;
+  the live check against each hosted flavour is owed at implementation, as FR-021 requires)*.
+- **What tier 2's `Ctrl+Shift` costs a terminal.** For `Ctrl+Shift` with a letter or with
+  punctuation xterm sends **no bytes**, with two exceptions: `Ctrl+Shift+2` sends `NUL`, and
+  `Ctrl+Shift+-` sends `^_`, readline's `undo` (`Keyboard.ts`: the Ctrl branch requires
+  Shift up, and the fallback maps only `_` and `@`). `Ctrl+Shift` with an arrow, `Home`,
+  `End`, `Delete`, a function key or `Tab` carries a modifier-encoded sequence that a line
+  editor can bind, and stays subject to the terminal tiers.
+- **The tiers never override the terminal tiers above.** A reserved chord stays untakeable
+  whatever tier it is in, and a shadowable chord still needs a recorded exception.
+- **The AltGr check.** A `Ctrl+Alt+<letter>` or `Ctrl+Alt+<digit>` default MUST pass it: on
+  Windows `Ctrl+Alt` IS AltGr, so on a layout where that key has an AltGr character, the
+  character is typed and the chord never fires.
+  - The spec that ships the default MUST name the common European layouts (UK, German,
+    French, Spanish, Italian, Nordic, Polish) on which the chord is unreachable.
+  - It MUST NOT choose a letter that is unreachable on UK or German when a free letter is
+    reachable on all seven.
+  - The keypad has no AltGr characters, so a tier-2 chord on `+`, `-` or `0` stays reachable
+    from the keypad on a layout where the main-row key is lost.
+- This is an **end-state requirement** under the Incremental Delivery rule, binding on new
+  work immediately.
+  - **Known violations at v5.6.0** (audit of `packages/core/src/config/keybindings.ts` at
+    `3b04ec33`, 2026-09-24), each remapped by spec 046:
+    - application commands on one modifier, each with more than one keyboard chord:
+      `zoom.in` (`Ctrl+=`, `Ctrl++`), `zoom.out` (`Ctrl+-`) and `zoom.reset` (`Ctrl+0`,
+      `Ctrl+Shift+0` — the last also a group that mixes, unreleased and on the 046 branch
+      only);
+    - navigation on tier 2: `focus.left/right/up/down` (`Ctrl+Alt+Arrow`), `focus.notice`
+      (`Ctrl+Alt+M`), `view.toggleProjects` / `view.toggleExplorer` (`Ctrl+Alt+B` / `N`),
+      `project.next` / `project.previous` (`Ctrl+Alt+PageDown` / `PageUp`),
+      `focus.explorer` / `focus.projects` (`Ctrl+Alt+F` / `P`) and `tabs.openPicker`
+      (`Ctrl+Alt+T`);
+    - a second keyboard chord: `panel.zoomIn` (`Ctrl+Alt+=` beside `Ctrl+Alt++`).
+
+    `editor.toggleWordWrap` (`Ctrl+Alt+W`) conforms and moves anyway, to the recorded
+    `Ctrl+E W`, by the maintainer's decision.
+  - Only shipped defaults move. A saved binding is rewritten only where it still equals an
+    old shipped default, and only when the new chord collides with nothing the user bound.
 
 **One command, one chord across panel types.** A command offered in more than one
 panel type MUST use the SAME chord in each, so it is learned once rather than per
@@ -1682,6 +2341,25 @@ among several.
   replace (`search.find`/`replace`/`replaceAll`), and the editor's line commands
   (`editor.cutLine`/`indentLines`/`outdentLines`) reach no menu — MUST be closed by
   tracked work, not silently tolerated.
+
+**A chord MAY stand without a menu item (v5.6.0).** Keyboard shortcuts can exist
+without a corresponding menu item. A command that is **not** a panel action — one that
+moves the user between surfaces or acts on the window, the workspace or the project,
+such as stepping to the next project or putting focus on a side pane — MAY be reachable
+by its chord alone, and no menu is obliged to carry it.
+
+- It MUST still be listed in the Key Bindings editor with a label and a description,
+  and documented, so it stays rebindable and discoverable there
+  (configuration-editor completeness).
+- **Panel actions are not affected.** "Every panel action has a menu item" above stands
+  unchanged: a discrete command or state toggle that acts on a Panel or its content keeps
+  its menu item as the canonical route, with the chord as an accelerator over it.
+- This supersedes, for non-panel commands only, the older reading that a chord is always
+  "an accelerator over a menu item, never a substitute" — a reading carried by this
+  principle's rationale and by Principle IV's `Ctrl+F5` paragraph. Both remain true of the
+  panel actions they describe.
+- A feature MAY still add a menu item for such a command where one helps; this rule
+  removes the obligation, not the option.
 **One section vocabulary for every menu.** A menu is only browsable if its items are
 grouped, and grouping is only learnable if every menu groups the same way. Each menu
 inventing its own order teaches the user nothing transferable, so the vocabulary is the
@@ -1714,7 +2392,21 @@ application's, not the menu's.
   **tab context menu** and the **cog menu** drawing their items in one undivided run.
   Feature 033 US5 sectioned all four — the cog menu draws a single Application section and
   therefore correctly carries no divider at all — and `menu-sections.test.ts` pins each
-  shape.
+  shape. *(Record, v5.6.0: spec 046 added a Navigate section above Application in the cog
+  menu, which made that clause briefly untrue; 046's iterate round 1 removes the section
+  again (046 FR-074, under "A chord MAY stand without a menu item" above), restoring the
+  single Application section this 2026-09-09 audit describes. The audit text is kept as
+  it was written.)* *(Record, v5.6.0, iterate-round-1 checkpoint: the cog menu gains a
+  **View & state** section above Application, holding one **Zoom** row (zoom in, zoom out,
+  reset) for the window zoom (046 FR-107), because a user whose layout turns `Ctrl+Alt` into
+  AltGr, or who works with the mouse, needs a route that is not a chord. The clause above is
+  untrue again from that change, deliberately, and `menu-sections.test.ts` pins the new
+  two-section shape.)* *(Record, v5.6.0, maintainer mid-build decision, 2026-09-25: the row
+  above is WITHDRAWN. The maintainer, verbatim: "Remove the new "Zoom" options from the
+  menu." The cog menu returns to the single Application section this 2026-09-09 audit
+  describes — this time for good rather than as an intermediate state (046 FR-113). The
+  window zoom now has no mouse or menu route at all, only its Ctrl+Shift+Alt chords;
+  `menu-sections.test.ts` is re-pinned to the single-section shape.)*
 - **Recurrence is now prevented structurally rather than by audit.** `section` is a
   REQUIRED field on `MenuAction`, so an item that declares none is a compile error, not a
   convention someone has to notice. That is a stronger guarantee than the audit asked for,
@@ -1800,7 +2492,10 @@ Discoverability is the same requirement applied to commands: an action reachable
 only by a chord the user has not memorised, or only by a glyph on a bar they can
 hide, is an action they do not have. Making the menu the canonical index — and
 letting the status bar and the keyboard be accelerators over it — is what keeps
-"reachable without instruction" true as the number of panel actions grows. The section
+"reachable without instruction" true as the number of panel actions grows. A command
+that is not a panel action has no panel menu to be indexed in, and forcing it into a
+whole-app menu buys a row nobody browses for; the Key Bindings editor is its index
+instead (v5.6.0). The section
 vocabulary is the same requirement one level down: a menu the user must read end to end
 is not browsable, and grouping only pays if the grouping is the same everywhere, so
 where an item sits is a property of the application rather than a choice each menu makes
@@ -1971,6 +2666,17 @@ The model MUST obey these rules:
   foreground together (they share one effective OS Z-order). **Minimise/restore MAY
   be independent** per window. Closing the main window (application exit) MUST close
   all sub-workspace windows.
+- **Focus follows the active Panel.** Every Panel type MUST have a keyboard focus target.
+  When a Panel becomes the active Panel by a keyboard route (a focus.* chord, focus.workspace,
+  a tab switch), DOM focus MUST move into it: to the control inside it that last held focus,
+  else its first focusable control (an untyped Panel: its type picker; Find in Files: its
+  search box). Focus MUST NOT stay behind in a Panel that is no longer active. A new Panel
+  type is not done until it meets this. A switch made from the Projects list is the
+  exception: focus stays on the list (046 FR-082).
+  *(v5.6.0, 046 iterate round 5, 2026-09-26, the maintainer's approved wording. Known
+  violations at adoption: the untyped Panel and Find in Files register no focus target in
+  `packages/ui/src/renderer/workspace/panel-focus.ts`; only the editor, terminal and preview
+  do. 046 FR-125 fixes both.)*
 - Only **Panels** MUST be reattachable to the main workspace, and only into **their
   original project's** workspace. The **main workspace MUST NOT mix Panels from
   different projects**; cross-project mixing exists only inside sub-workspaces. A
@@ -2202,7 +2908,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.5.2 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-19
+**Version**: 5.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-26
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and

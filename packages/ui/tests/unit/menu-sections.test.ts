@@ -14,7 +14,7 @@
  * is nothing here for it to assert. The type change (T059) still covers it — which is the point of
  * moving the guarantee to the provider.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_KEYBINDINGS,
   MENU_SECTION_ORDER,
@@ -381,8 +381,23 @@ const terminalMenu = (over: { selection?: string; startFailure?: boolean }): Men
     },
   });
 
+/*
+ * 046 iterate round 1 (checkpoint 2026-09-24; FR-074, FR-107) retired the Navigate section (and the
+ * `SidePaneActions` it alone existed to dispatch through): Next/Previous Project and the two Focus
+ * rows drop out of the cog entirely (they keep their chords, listed under Focus & Zoom in the Key
+ * Bindings editor instead). Round 1 replaced it with a `viewState` Zoom row.
+ *
+ * 046 iterate round 2 (FR-113) REMOVES that Zoom row too — the maintainer's own words, mid-build:
+ * "Remove the new 'Zoom' options from the menu." The cog is back to its single `application`
+ * section, and `cogMenuItems` no longer takes a window zoom level at all.
+ */
 const cogMenu = (): MenuAction[] =>
-  cogMenuItems({ openPreferences: noop, openLogs: noop, openAbout: noop });
+  cogMenuItems({
+    openPreferences: noop,
+    openLogs: noop,
+    openAbout: noop,
+    keybindings: DEFAULT_KEYBINDINGS,
+  });
 
 /**
  * The Find in Files panel's menu (043 FR-025a), in the three states that change its shape:
@@ -833,9 +848,12 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       zoom.map((i) => [i.label, i.shortcut]),
       'each zoom item shows its OWN chord — "contains Ctrl" cannot tell them apart',
     ).toEqual([
-      ['Zoom In', 'Ctrl+Alt+='],
+      // 046 iterate round 1 (FR-102/FR-105) — the shipped default moved from `Ctrl+Alt+=` to
+      // `Ctrl+Alt++`; the same-binding rule (FR-105) still resolves the physical `=` key without
+      // Shift to this chord, but this is the CANONICAL form `firstBinding` reports.
+      ['Zoom In', 'Ctrl+Alt++'],
       ['Zoom Out', 'Ctrl+Alt+-'],
-      ['Reset Zoom', 'Ctrl+Alt+0'],
+      ['Reset Zoom', 'Ctrl+Alt+Numpad0'],
     ]);
   });
 
@@ -884,7 +902,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Destroy Panel',
       '—',
       // Navigate — the two reveal items exist only for a panel with a file behind it.
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       // 044 FR-111 — Back and Forward on every editor, drawn DISABLED at the ends rather than hidden.
       // No Open Preview here: this fixture hands the builder no affordance, which is `absent`.
@@ -1059,7 +1077,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       '—',
       'Destroy Panel',
       '—',
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Open Preview',
       'Back',
@@ -1180,7 +1198,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(false) }))).toEqual([
       'Close Panel',
       '—',
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Open in Editor',
       'Back',
@@ -1200,7 +1218,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     ).toEqual([
       'Close Panel',
       '—',
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Go to Editor',
       'Back',
@@ -1218,7 +1236,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: binaryPreview, syncScroll: true }))).toEqual([
       'Close Panel',
       '—',
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Back',
       'Forward',
@@ -1251,7 +1269,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(shapeOf(items)).toEqual([
       'Close Panel',
       '—',
-      'Reveal File in Files & Folders',
+      'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Open in Editor',
       'Back',
@@ -1326,7 +1344,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(find('Refresh')?.icon).toBe('refresh');
     expect(find('Open in Editor')?.icon).toBe('editorPanel');
 
-    for (const label of ['Refresh', 'Open in Editor', 'Forward', 'Reveal File in Files & Folders', 'Open in OS Explorer', 'Close Panel']) {
+    for (const label of ['Refresh', 'Open in Editor', 'Forward', 'Reveal File in File Explorer', 'Open in OS Explorer', 'Close Panel']) {
       find(label)?.onClick?.();
     }
     expect(fired).toEqual(['refreshPreview', 'openInEditor', 'navigateForward', 'revealInTree', 'openInOsExplorer', 'destroy']);
@@ -1347,15 +1365,26 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
   });
 });
 
-describe('the cog menu is one section, therefore no divider (FR-052 as corrected, AS-5)', () => {
+/*
+ * 046 US2 (FR-019) narrowed this describe's premise: the cog menu as a WHOLE is no longer one
+ * section (the "T120" describe further below pins its full two-section shape and one divider — now
+ * `[viewState, application]`, FR-074/FR-107, iterate round 1). What still holds, and is worth stating
+ * on its own, is the `application` GROUP itself — the five preferences/diagnostic/about rows carry no
+ * divider AMONG THEMSELVES, which FR-052/AS-5 were actually about. `cog()` is `cogMenu()` from this
+ * file's own table fixture, not a fresh inline builder, so this block does not carry its own opinion
+ * of `CogMenuActions`'s shape.
+ */
+describe('the cog menu’s Application section is one group, therefore no divider WITHIN it (FR-052 as corrected, AS-5)', () => {
+  const cog = (): MenuAction[] => cogMenu();
+
   it('draws five Application items and nothing between them', () => {
-    const items = cogMenuItems({ openPreferences: noop, openLogs: noop, openAbout: noop });
-    expect(items.map((i) => i.section)).toEqual(['application', 'application', 'application', 'application', 'application']);
-    expect(separatorIndices(items)).toEqual([]);
+    const application = cog().filter((i) => i.section === 'application');
+    expect(application.map((i) => i.section)).toEqual(['application', 'application', 'application', 'application', 'application']);
+    expect(separatorIndices(application)).toEqual([]);
   });
 
   it('keeps the test identifiers roughly ten preferences suites depend on (FR-053)', () => {
-    expect(cogMenuItems({ openPreferences: noop, openLogs: noop, openAbout: noop }).map((i) => i.testId)).toEqual([
+    expect(cog().filter((i) => i.section === 'application').map((i) => i.testId)).toEqual([
       'cog-menu-settings',
       'cog-menu-keybindings',
       'cog-menu-themes',
@@ -1721,5 +1750,353 @@ describe('the dormant terminal Reload item (039 FR-024)', () => {
     expect(l).toContain('Reload');
     expect(l).not.toContain('Try again');
     expect(l).not.toContain('Copy details');
+  });
+});
+
+/**
+ * 046 iterate round 2 (T155, FR-113) — SUPERSEDES the round-1 block this replaces (T120, FR-074,
+ * FR-107), which pinned a `[viewState, application]` cog with the Zoom row leading it. The
+ * maintainer's own words, mid-build: "Remove the new 'Zoom' options from the menu." The cog is
+ * pinned back to its single `application` section — the shape the 2026-09-09 audit (constitution
+ * Principle VI) describes, and round 1 had temporarily widened.
+ *
+ * Zoom itself is unaffected: the chords still fire, and the panel header's own Zoom submenu
+ * (`panel-header-zoom-menu.test.ts`) is untouched — only the cog's OWN Zoom row is gone, which is
+ * `cog-zoom-row.test.ts`'s subject at the component layer.
+ */
+describe('046 T155 — the cog menu is back to a single [application] section, no viewState row (FR-113)', () => {
+  it('no item is sectioned `viewState`, and none of the three zoom rows is drawn', () => {
+    const items = cogMenu();
+    expect(items.some((i) => i.section === 'viewState'), 'a viewState-sectioned row survived FR-113').toBe(false);
+    for (const retired of ['Zoom', 'Zoom In', 'Zoom Out', 'Reset Zoom']) {
+      expect(items.map((i) => i.label), retired).not.toContain(retired);
+    }
+  });
+
+  it('the section order is exactly [application] — no divider at all', () => {
+    const items = cogMenu();
+    const seen = [...new Set(items.map((i) => i.section))];
+    expect(seen).toEqual(['application']);
+    assertSectioned(items, 'cog menu');
+  });
+
+  it('opens and closes on the same section — Application, throughout', () => {
+    const items = cogMenu();
+    expect(items[0]?.section).toBe('application');
+    expect(items.at(-1)?.section).toBe('application');
+  });
+});
+
+/**
+ * 046 iterate round 1 (checkpoint 2026-09-24; T120, FR-081, FR-038, FR-111) — SUPERSEDES the block
+ * this replaces (046 US4/US5, T061/T079), which pinned THREE unconditional Unload rows (`Unload` /
+ * `Unload and Keep Terminals Running` / `Unload and End Terminals`) — still what
+ * `project-menu.ts:61-80` actually builds today, so every Unload assertion below is RED until T128.
+ *
+ * Two rows now (contracts/menus.md §6): **Unload Project** always runs the LIVE preference
+ * (`onUnload(undefined)`, exactly as the old plain `Unload` row did — `unload.md` §6 step 3, `variant
+ * ?? settings.projects.unloadTerminalAction`), and one more row names whichever action the
+ * preference does NOT pick, so the two rows are never the same command twice (006 FR-030). This adds
+ * `defaultAction` to `ProjectMenuArgs` — the LIVE `projects.unloadTerminalAction` value — purely to
+ * choose row 2's label and its explicit variant; nothing here changes `onUnload`'s own signature. Row
+ * 2's label and its identifying `onClick` variant are pinned across BOTH preference values, since
+ * "follows a live preference change on the next open" is a claim about two shapes, not one.
+ *
+ * `Move to Category ▸` is unaffected by this round and keeps its T081/US5 pin unchanged below.
+ */
+describe('046 T120 — the project row menu draws TWO Unload rows, following the live preference (contracts/menus.md §1, §6; FR-081, FR-038, FR-111)', () => {
+  const SHAPE = (defaultAction: 'keepRunning' | 'endTerminals'): string[] => [
+    'Edit',
+    'Rename',
+    '—',
+    'Remove',
+    '—',
+    'Move to Category',
+    'Unload Project',
+    defaultAction === 'keepRunning'
+      ? 'Unload Project and End Terminals'
+      : 'Unload Project and Keep Terminals Running',
+  ];
+  const OTHER_ROW = (defaultAction: 'keepRunning' | 'endTerminals'): string =>
+    defaultAction === 'keepRunning' ? 'Unload Project and End Terminals' : 'Unload Project and Keep Terminals Running';
+  const OTHER_VARIANT = (defaultAction: 'keepRunning' | 'endTerminals'): 'keepRunning' | 'endTerminals' =>
+    defaultAction === 'keepRunning' ? 'endTerminals' : 'keepRunning';
+
+  async function build(opts: {
+    loaded: boolean;
+    defaultAction?: 'keepRunning' | 'endTerminals';
+    onEdit?: () => void;
+    onRename?: () => void;
+    onRemove?: () => void;
+    onUnload?: (variant?: 'keepRunning' | 'endTerminals') => void;
+    categories?: { id: string; name: string }[];
+    onMoveToCategory?: (categoryId: string) => void;
+    onNewCategory?: () => void;
+  }): Promise<MenuAction[]> {
+    const { projectMenu } = await import('../../src/renderer/sidebar/project-menu.js');
+    return projectMenu({
+      loaded: opts.loaded,
+      defaultAction: opts.defaultAction ?? 'keepRunning',
+      onEdit: opts.onEdit ?? noop,
+      onRename: opts.onRename ?? noop,
+      onRemove: opts.onRemove ?? noop,
+      onUnload: opts.onUnload ?? noop,
+      categories: opts.categories ?? [],
+      onMoveToCategory: opts.onMoveToCategory ?? noop,
+      onNewCategory: opts.onNewCategory ?? noop,
+    });
+  }
+
+  for (const defaultAction of ['keepRunning', 'endTerminals'] as const) {
+    it(`with the project LOADED and the preference "${defaultAction}", exactly two Unload rows, both enabled`, async () => {
+      const items = await build({ loaded: true, defaultAction });
+
+      expect(shapeOf(items)).toEqual(SHAPE(defaultAction));
+      assertSectioned(items, 'project menu');
+      for (const label of ['Unload Project', OTHER_ROW(defaultAction)]) {
+        expect(items.find((i) => i.label === label)?.disabled ?? false, label).toBe(false);
+        expect(items.find((i) => i.label === label)?.section, label).toBe('viewState');
+      }
+    });
+
+    it(`with the project NOT loaded and the preference "${defaultAction}", both rows are drawn but disabled (FR-038) — never absent`, async () => {
+      const items = await build({ loaded: false, defaultAction });
+
+      expect(shapeOf(items)).toEqual(SHAPE(defaultAction));
+      for (const label of ['Unload Project', OTHER_ROW(defaultAction)]) {
+        expect(items.find((i) => i.label === label)?.disabled, label).toBe(true);
+      }
+    });
+
+    it(`"Unload Project" runs the live preference (no variant); the other row names and runs "${OTHER_VARIANT(defaultAction)}" explicitly — no dialog either way (FR-111)`, async () => {
+      const onUnload = vi.fn();
+      const items = await build({ loaded: true, defaultAction, onUnload });
+
+      items.find((i) => i.label === 'Unload Project')?.onClick?.();
+      expect(onUnload, 'Unload Project defers to the live preference, exactly as the old plain row did').toHaveBeenLastCalledWith(undefined);
+      items.find((i) => i.label === OTHER_ROW(defaultAction))?.onClick?.();
+      expect(onUnload).toHaveBeenLastCalledWith(OTHER_VARIANT(defaultAction));
+    });
+  }
+
+  it('never draws the third, now-retired row ("Unload and Keep Terminals Running" / "Unload and End Terminals" as unconditional labels)', async () => {
+    const items = await build({ loaded: true, defaultAction: 'keepRunning' });
+    expect(items.filter((i) => i.label?.startsWith('Unload')).length, 'exactly two Unload rows').toBe(2);
+  });
+
+  it('Move to Category ▸ (FR-053) lists every category it is given, in order, then New Category…, carries the category icon, and never disables', async () => {
+    const onMoveToCategory = vi.fn();
+    const onNewCategory = vi.fn();
+    const items = await build({
+      loaded: true,
+      categories: [
+        { id: 'cat-a', name: 'Side Quests' },
+        { id: 'cat-b', name: 'Someday' },
+      ],
+      onMoveToCategory,
+      onNewCategory,
+    });
+
+    const moveTo = items.find((i) => i.label === 'Move to Category');
+    expect(moveTo?.icon).toBe('category');
+    expect(moveTo?.section).toBe('viewState');
+    expect(moveTo?.disabled ?? false).toBe(false);
+    expect(shapeOf(moveTo?.submenu ?? [])).toEqual(['Side Quests', 'Someday', 'New Category…']);
+    assertSectioned(moveTo?.submenu ?? [], 'project menu → Move to Category');
+
+    moveTo?.submenu?.find((i) => i.label === 'Side Quests')?.onClick?.();
+    expect(onMoveToCategory).toHaveBeenCalledWith('cat-a');
+    moveTo?.submenu?.find((i) => i.label === 'New Category…')?.onClick?.();
+    expect(onNewCategory).toHaveBeenCalledTimes(1);
+  });
+
+  it('every item carries an icon token (Edit editVisual, Rename rename, Remove destroy, both Unload rows unload)', async () => {
+    const items = await build({ loaded: true, defaultAction: 'keepRunning' });
+    const iconOf = (label: string): string | undefined => items.find((i) => i.label === label)?.icon;
+
+    expect(iconOf('Edit')).toBe('editVisual');
+    expect(iconOf('Rename')).toBe('rename');
+    expect(iconOf('Remove')).toBe('destroy');
+    expect(iconOf('Unload Project')).toBe('unload');
+    expect(iconOf('Unload Project and End Terminals')).toBe('unload');
+  });
+
+  it('Edit, Rename and Remove call their own collaborator and no other', async () => {
+    const onEdit = vi.fn();
+    const onRename = vi.fn();
+    const onRemove = vi.fn();
+    const items = await build({ loaded: true, onEdit, onRename, onRemove });
+
+    items.find((i) => i.label === 'Edit')?.onClick?.();
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onRename).not.toHaveBeenCalled();
+    expect(onRemove).not.toHaveBeenCalled();
+
+    items.find((i) => i.label === 'Rename')?.onClick?.();
+    expect(onRename).toHaveBeenCalledTimes(1);
+
+    items.find((i) => i.label === 'Remove')?.onClick?.();
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 046 T079/T080, extended by iterate round 1 (checkpoint 2026-09-24; T120, FR-083) — the category
+ * header's context menu (`category-menu.ts`, contracts/menus.md §2 and §6, FR-050, FR-053, FR-083).
+ * A non-default header draws [content, destroy, **navigate**, viewState] as of this round — `navigate`
+ * is NEW (`ORDER` in `menu-sections.ts` places it ahead of `viewState`), holding **Move Category Up**
+ * and **Move Category Down**. Up is disabled on the first non-default category, Down on the last;
+ * neither is drawn on the default category's menu, whatever its own reorder state — Principle VI's
+ * absent-not-disabled rule again, the same reason Delete and Minimise are absent there. The default
+ * header's own tests are UNCHANGED by this round; the shape and section pins for a NON-default header
+ * are RED until T138, which does not exist yet (`category-menu.ts` builds no Move row today).
+ *
+ * `canMoveUp` / `canMoveDown` / `onMoveUp` / `onMoveDown` are this file's own guess at T138's
+ * `CategoryMenuArgs` extension — plausible, not confirmed against `category-menu.ts`, which has no
+ * such fields yet. The boundary WORDING ("first" / "last") is `projects-panel-category-menu.test.ts`
+ * (T133)'s, at the component layer that actually computes position from a live category order; this
+ * file only pins that the two booleans it is GIVEN reach the two rows' `disabled`.
+ *
+ * Minimise Category is the Word Wrap idiom (`content-menu.ts:217-218`): the checkmark lives in the
+ * LABEL (`Minimise Category` / `Minimise Category ✓`) and the test id is pinned to the bare label so
+ * it stays reachable while the state it reports changes.
+ */
+describe('046 T120 — the category header menu draws [content, destroy, navigate, viewState] (contracts/menus.md §2, §6, FR-050, FR-053, FR-083)', () => {
+  async function build(opts: {
+    isDefault: boolean;
+    minimised: boolean;
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
+    onRename?: () => void;
+    onDelete?: () => void;
+    onToggleMinimised?: () => void;
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+  }): Promise<MenuAction[]> {
+    const { categoryMenu } = await import('../../src/renderer/sidebar/category-menu.js');
+    return categoryMenu({
+      isDefault: opts.isDefault,
+      minimised: opts.minimised,
+      canMoveUp: opts.canMoveUp ?? true,
+      canMoveDown: opts.canMoveDown ?? true,
+      onRename: opts.onRename ?? noop,
+      onDelete: opts.onDelete ?? noop,
+      onToggleMinimised: opts.onToggleMinimised ?? noop,
+      onMoveUp: opts.onMoveUp ?? noop,
+      onMoveDown: opts.onMoveDown ?? noop,
+    });
+  }
+
+  it('a non-default category draws Rename Category, Delete Category, Move Category Up/Down and Minimise Category, sectioned [content, destroy, navigate, viewState]', async () => {
+    const items = await build({ isDefault: false, minimised: false });
+
+    expect(shapeOf(items)).toEqual([
+      'Rename Category',
+      '—',
+      'Delete Category',
+      '—',
+      'Move Category Up',
+      'Move Category Down',
+      '—',
+      'Minimise Category',
+    ]);
+    assertSectioned(items, 'category menu (non-default)');
+    expect(items.find((i) => i.label === 'Rename Category')?.section).toBe('content');
+    expect(items.find((i) => i.label === 'Delete Category')?.section).toBe('destroy');
+    expect(items.find((i) => i.label === 'Move Category Up')?.section).toBe('navigate');
+    expect(items.find((i) => i.label === 'Move Category Down')?.section).toBe('navigate');
+    expect(items.find((i) => i.label === 'Minimise Category')?.section).toBe('viewState');
+  });
+
+  it('Move Category Up is disabled on the first non-default category (canMoveUp false), Down stays enabled', async () => {
+    const items = await build({ isDefault: false, minimised: false, canMoveUp: false, canMoveDown: true });
+    expect(items.find((i) => i.label === 'Move Category Up')?.disabled).toBe(true);
+    expect(items.find((i) => i.label === 'Move Category Down')?.disabled ?? false).toBe(false);
+  });
+
+  it('Move Category Down is disabled on the last non-default category (canMoveDown false), Up stays enabled', async () => {
+    const items = await build({ isDefault: false, minimised: false, canMoveUp: true, canMoveDown: false });
+    expect(items.find((i) => i.label === 'Move Category Up')?.disabled ?? false).toBe(false);
+    expect(items.find((i) => i.label === 'Move Category Down')?.disabled).toBe(true);
+  });
+
+  it('the default category draws Rename Category ONLY — no divider — even when canMoveUp/canMoveDown are both true', async () => {
+    const items = await build({ isDefault: true, minimised: false, canMoveUp: true, canMoveDown: true });
+
+    expect(shapeOf(items)).toEqual(['Rename Category']);
+    expect(items.find((i) => i.label === 'Delete Category')).toBeUndefined();
+    expect(items.find((i) => i.label === 'Move Category Up')).toBeUndefined();
+    expect(items.find((i) => i.label === 'Move Category Down')).toBeUndefined();
+    expect(items.find((i) => i.label === 'Minimise Category')).toBeUndefined();
+  });
+
+  it('every item carries an icon token (Rename rename, Delete destroy, Move Up/Down moveUp/moveDown, Minimise collapse/expand)', async () => {
+    const collapsed = await build({ isDefault: false, minimised: false });
+    expect(collapsed.find((i) => i.label === 'Rename Category')?.icon).toBe('rename');
+    expect(collapsed.find((i) => i.label === 'Delete Category')?.icon).toBe('destroy');
+    expect(collapsed.find((i) => i.label === 'Move Category Up')?.icon).toBe('moveUp');
+    expect(collapsed.find((i) => i.label === 'Move Category Down')?.icon).toBe('moveDown');
+    expect(collapsed.find((i) => i.label === 'Minimise Category')?.icon).toBe('collapse');
+
+    const expanded = await build({ isDefault: false, minimised: true });
+    // The label itself carries the checkmark while minimised ("Minimise Category ✓", the Word Wrap
+    // idiom below), so this looks it up by the STABLE test id rather than the exact label text.
+    expect(expanded.find((i) => i.testId === 'menu-item-Minimise Category')?.icon).toBe('expand');
+  });
+
+  it('the Minimise Category label carries the checkmark while minimised, at a STABLE test id (the Word Wrap idiom)', async () => {
+    const collapsed = await build({ isDefault: false, minimised: false });
+    const row1 = collapsed.find((i) => i.label === 'Minimise Category');
+    expect(row1?.testId ?? `menu-item-${row1?.label}`).toBe('menu-item-Minimise Category');
+
+    const expanded = await build({ isDefault: false, minimised: true });
+    const row2 = expanded.find((i) => i.label?.startsWith('Minimise Category'));
+    expect(row2?.label).toBe('Minimise Category ✓');
+    expect(row2?.testId).toBe('menu-item-Minimise Category');
+  });
+
+  it('Rename, Delete, the toggle and each Move row call their own collaborator and no other', async () => {
+    const onRename = vi.fn();
+    const onDelete = vi.fn();
+    const onToggleMinimised = vi.fn();
+    const onMoveUp = vi.fn();
+    const onMoveDown = vi.fn();
+    const items = await build({
+      isDefault: false,
+      minimised: false,
+      onRename,
+      onDelete,
+      onToggleMinimised,
+      onMoveUp,
+      onMoveDown,
+    });
+
+    items.find((i) => i.label === 'Rename Category')?.onClick?.();
+    expect(onRename).toHaveBeenCalledTimes(1);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(onToggleMinimised).not.toHaveBeenCalled();
+    expect(onMoveUp).not.toHaveBeenCalled();
+    expect(onMoveDown).not.toHaveBeenCalled();
+
+    items.find((i) => i.label === 'Delete Category')?.onClick?.();
+    expect(onDelete).toHaveBeenCalledTimes(1);
+
+    items.find((i) => i.label === 'Move Category Up')?.onClick?.();
+    expect(onMoveUp).toHaveBeenCalledTimes(1);
+    expect(onMoveDown).not.toHaveBeenCalled();
+
+    items.find((i) => i.label === 'Move Category Down')?.onClick?.();
+    expect(onMoveDown).toHaveBeenCalledTimes(1);
+
+    items.find((i) => i.label === 'Minimise Category')?.onClick?.();
+    expect(onToggleMinimised).toHaveBeenCalledTimes(1);
+  });
+
+  it('the default category still runs Rename', async () => {
+    const onRename = vi.fn();
+    const items = await build({ isDefault: true, minimised: false, onRename });
+
+    items.find((i) => i.label === 'Rename Category')?.onClick?.();
+    expect(onRename).toHaveBeenCalledTimes(1);
   });
 });

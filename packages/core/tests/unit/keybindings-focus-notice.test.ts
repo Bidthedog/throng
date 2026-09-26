@@ -32,24 +32,34 @@ describe('focus.notice (041 FR-020)', () => {
     const scope = COMMAND_SCOPES['focus.notice'];
     // 043 R14 added a fourth scope, `findInFiles`, and EVERYWHERE is the full set by definition —
     // a notice can be raised while a Find in Files panel has focus like any other surface. 044 R16
-    // added a fifth, `preview`, for the same reason.
-    expect([...scope].sort()).toEqual(['editor', 'explorer', 'findInFiles', 'preview', 'terminal']);
+    // added a fifth, `preview`, for the same reason. 046 R3 added a sixth, `projects`: a notice can
+    // be raised while the Projects pane has focus too.
+    expect([...scope].sort()).toEqual(['editor', 'explorer', 'findInFiles', 'preview', 'projects', 'terminal']);
     // Stated as an equality with a SIBLING rather than a literal list, so the two cannot drift: if
     // the family's scope ever widens, this widens with it or fails.
     expect([...scope].sort()).toEqual([...COMMAND_SCOPES['focus.cycle']].sort());
   });
 
-  it('defaults to Ctrl+Alt+M (FR-020b)', () => {
-    expect(DEFAULT_KEYBINDINGS.bindings['focus.notice']).toEqual(['Ctrl+Alt+M']);
+  /*
+   * RE-PINNED by 046 iterate round 1 (T097, FR-102 *changes* row): `focus.notice` moves from the
+   * Ctrl+Alt family to the Ctrl+Shift+Alt navigation tier, alongside every other window command.
+   *
+   * RE-PINNED by 046 iterate round 3 (T172, FR-117): same tier, V rather than M. M now focuses the
+   * File Explorer (B / N / M focus the three surfaces left to right), and the maintainer asked for
+   * "V for notices if it is not already reserved" — it is not.
+   */
+  it('defaults to Ctrl+Shift+Alt+V (FR-020b, 046 FR-117)', () => {
+    expect(DEFAULT_KEYBINDINGS.bindings['focus.notice']).toEqual(['Ctrl+Shift+Alt+V']);
   });
 
   it('takes a chord nothing else claims', () => {
-    // The reason `Ctrl+Alt+M` was chosen: unbound, and inside the `Ctrl+Alt` family throng already
-    // owns — so it displaces no hosted line-editor binding and needs no constitutional exception.
+    // The reason `Ctrl+Shift+Alt+V` was chosen: unbound, and inside the family throng's whole
+    // navigation tier already owns — so it displaces no hosted line-editor binding and needs no
+    // constitutional exception.
     const taken = Object.entries(DEFAULT_KEYBINDINGS.bindings)
       .filter(([command]) => command !== 'focus.notice')
       .flatMap(([, chords]) => chords);
-    expect(taken).not.toContain('Ctrl+Alt+M');
+    expect(taken).not.toContain('Ctrl+Shift+Alt+V');
   });
 
   it('appears in the Preferences metadata, so it is discoverable and rebindable (FR-027)', () => {

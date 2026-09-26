@@ -18,12 +18,17 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_KEYBINDINGS, shippedBindingsFor } from '@throng/core';
+import { resolveKeydown } from '../../src/renderer/config/chord-key.js';
+import { resolveScoped } from '../../src/renderer/keybindings/scope.js';
+import { chordEventOnLayout, type Layout } from '../shared/chord-event.js';
 import {
   COMPONENT_DIR,
   COVERED,
   COVERED_ELSEWHERE,
   COVERED_IN_COMPONENT,
   E2E_DIR,
+  chordEvent,
   codeOnly,
   discoverKeepShiftChords,
   handledActions,
@@ -135,5 +140,71 @@ describe('the window-chord coverage manifest (SC-021)', () => {
     expect(keepsShift('ArrowLeft')).toBe(true);
     expect(keyOf('Ctrl+Shift+T')).toBe('T');
     expect(keyOf('Ctrl++')).toBe('+');
+  });
+
+  it('reads the physical digit branch through chordCandidates itself (046 T044, FR-026)', () => {
+    // Ctrl+digit keeps Shift now — the physical token.
+    expect(keepsShift('0')).toBe(true);
+    /*
+     * 046 iterate round 1 (T111) — `keepsShift` always forces Shift on when it builds its probe
+     * event, so `{ altKey: true }` here is Ctrl+Alt+SHIFT+0 — the tier-1 rule's own shape, not R2's
+     * Ctrl+Alt-WITHOUT-Shift AltGr exclusion (chord-candidates.test.ts's "German AltGr+0" case, which
+     * holds Alt without Shift and is unaffected). Before T111 this combination matched nothing
+     * physically and fell through to the produced token, which does not keep Shift; now it IS the
+     * tier-1 rule, which always names Shift explicitly.
+     */
+    expect(keepsShift('0', { altKey: true })).toBe(true);
+    // The builder reports what a real US keyboard does: the produced `)` AND the physical Digit0.
+    expect(chordEvent('Ctrl+Shift+0')).toMatchObject({ key: ')', code: 'Digit0', ctrlKey: true, shiftKey: true, altKey: false });
+    expect(chordEvent('Ctrl+0')).toMatchObject({ key: '0', code: 'Digit0', shiftKey: false });
+    expect(chordEvent('Ctrl++')).toMatchObject({ key: '+', code: 'Equal' });
+    /*
+     * 046 iterate round 1 (T106) — `zoom.reset`'s shipped default moved to the tier-1
+     * `Ctrl+Shift+Alt+0` (FR-102), so this is the token the manifest now discovers, not the
+     * pre-round `Ctrl+Shift+0` (#390, retired by FR-107). Digit0 with Alt held excludes RULE 1's
+     * Ctrl-without-Alt candidate, so this only comes back once T111 adds the tier-1 rule — before
+     * that, `zoom.reset` drops out of `discoverKeepShiftChords()` entirely, which is exactly the
+     * `stale` failure the "covers every discovered chord" test above reports until then.
+     *
+     * 046 iterate round 2 (FR-114) moved the chord again, to `Ctrl+Shift+Alt+Numpad0` — the
+     * maintainer's own words, mid-build: "The 'Zoom Reset' key bindings need to use the numpad zero,
+     * NOT the 0 key." The discovery mechanism is unchanged; only the literal it now finds is.
+     */
+    expect(discoverKeepShiftChords().get('zoom.reset')).toContain('Ctrl+Shift+Alt+Numpad0');
+  });
+
+  /**
+   * 046 iterate round 1 (T106, FR-109 bullet 1) — every `Ctrl+Shift+Alt` default this window's
+   * dispatcher HANDLES resolves through it on all five R22 layouts, using the exact expression the
+   * dispatcher itself uses (`resolveKeydown` over `resolveScoped`) — this file's own domain, rather
+   * than the general discovery `renderer-chord-resolvers.test.ts` performs across every call site.
+   */
+  describe('every HANDLED Ctrl+Shift+Alt default resolves on all five layouts (FR-109 bullet 1)', () => {
+    const LAYOUTS: Layout[] = ['US', 'UK', 'German', 'French', 'Polish'];
+    const NO_TABS = { tabs: [], activeTabId: null };
+
+    const tier1Handled = handledActions()
+      .map((action) => ({ action, chords: (shippedBindingsFor().bindings[action] ?? []) as string[] }))
+      .flatMap(({ action, chords }) =>
+        chords
+          .filter((chord) => /^Ctrl\+Shift\+Alt\+/.test(chord))
+          .map((chord) => ({ action, chord, code: chordEvent(chord).code })),
+      );
+
+    it('finds HANDLED tier-1 defaults to check — the discovery is not vacuous', () => {
+      expect(tier1Handled.length, 'no HANDLED action ships a Ctrl+Shift+Alt default').toBeGreaterThan(5);
+    });
+
+    for (const { action, chord, code } of tier1Handled) {
+      for (const layout of LAYOUTS) {
+        it(`${action} (${chord}) resolves on the ${layout} layout`, () => {
+          const e = chordEventOnLayout(layout, code, { ctrlKey: true, shiftKey: true, altKey: true });
+          const resolved = resolveKeydown(e, (ev) =>
+            resolveScoped(DEFAULT_KEYBINDINGS, ev, NO_TABS, { transientFocus: false }),
+          );
+          expect(resolved).toBe(action);
+        });
+      }
+    }
   });
 });

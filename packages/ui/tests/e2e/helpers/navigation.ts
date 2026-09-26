@@ -55,7 +55,7 @@ export async function openQuickOpen(win: Page): Promise<void> {
 }
 
 /**
- * Open Quick Open from the Files & Folders toolbar button (V1).
+ * Open Quick Open from the File Explorer toolbar button (V1).
  *
  * Located by its ACCESSIBLE NAME, exactly as `explorer.e2e.ts` already addresses Expand and Collapse
  * all. That is not a stylistic match: V3 requires the button's `title` to carry the command's live

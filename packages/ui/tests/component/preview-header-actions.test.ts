@@ -8,7 +8,7 @@
  * | Row                             | On a preview                                                         |
  * |---------------------------------|----------------------------------------------------------------------|
  * | Close Panel                     | destroyed, no prompt (FR-042)                                         |
- * | Reveal File in Files & Folders  | `throng:reveal-in-tree` for the file the PREVIEW shows                |
+ * | Reveal File in File Explorer    | `throng:reveal-in-tree` for the file the PREVIEW shows                |
  * | Open in OS Explorer             | `files.revealDocument` for that file                                  |
  * | Refresh                         | `preview.refresh` (FR-028)                                            |
  * | Zoom ▸ Zoom In                  | this panel's zoom, never its parent editor's (FR-034)                 |
@@ -96,7 +96,7 @@ describe('the ordinary rows (FR-033)', () => {
     expect(screen.queryByTestId('dirty-close-dialog')).toBeNull();
   });
 
-  it('Reveal File in Files & Folders dispatches throng:reveal-in-tree for the previewed file', async () => {
+  it('Reveal File in File Explorer dispatches throng:reveal-in-tree for the previewed file (046 FR-001)', async () => {
     await mountText();
     const heard: unknown[] = [];
     const listener = (e: Event): void => {
@@ -105,7 +105,7 @@ describe('the ordinary rows (FR-033)', () => {
     window.addEventListener('throng:reveal-in-tree', listener);
     try {
       await openHeaderMenu();
-      fireEvent.click(item('Reveal File in Files & Folders'));
+      fireEvent.click(item('Reveal File in File Explorer'));
       expect(heard).toEqual([{ absPath: FILE }]);
     } finally {
       window.removeEventListener('throng:reveal-in-tree', listener);

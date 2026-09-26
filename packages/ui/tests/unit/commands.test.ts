@@ -24,8 +24,15 @@ describe('toCodeMirrorKey', () => {
     expect(toCodeMirrorKey('Alt+F')).toBe('Alt-f');
   });
 
-  it('leaves a SHIFTED letter uppercase — the event says `X`, and CodeMirror resolves it', () => {
-    expect(toCodeMirrorKey('Ctrl+Shift+X')).toBe('Ctrl-Shift-X');
+  it('lowercases a letter shifted WITH Ctrl/Alt/Meta — CodeMirror names it by its base key (046 FR-124)', () => {
+    // Re-pinned from `Ctrl-Shift-X`: with Ctrl held as well as Shift, CodeMirror's `runHandlers` tries
+    // `Ctrl-X` (no Shift, the key is a character) and then the BASE key `Shift-Ctrl-x` — never
+    // `Shift-Ctrl-X`, so an uppercase name matched nothing. `Ctrl+E,Shift+W`'s second stroke showed it.
+    expect(toCodeMirrorKey('Ctrl+Shift+X')).toBe('Ctrl-Shift-x');
+  });
+
+  it('leaves a letter shifted by Shift ALONE uppercase — that path matches the produced `X`', () => {
+    expect(toCodeMirrorKey('Shift+X')).toBe('Shift-X');
   });
 
   it('leaves named keys exactly as they are', () => {
@@ -41,6 +48,50 @@ describe('toCodeMirrorKey', () => {
     // it would be a binding that can never match — which is exactly the invisible failure above.
     expect(toCodeMirrorKey('Ctrl+WheelUp')).toBeNull();
     expect(toCodeMirrorKey('')).toBeNull();
+  });
+});
+
+/**
+ * 046 T115 (FR-091, FR-092, research R19) — a TWO-STROKE token in CodeMirror's prefix notation.
+ *
+ * CodeMirror already owns the pending-prefix engine: a keymap name with a space in it (`"Ctrl-e w"`)
+ * is a two-stroke binding, and `runHandlers` stores the first stroke for 4 s. So the whole bridge is
+ * this function — which today splits on `+` alone and hands CodeMirror `Ctrl-E W`. That is two
+ * failures in one string, each of them the invisible kind the file header describes: the first
+ * stroke `Ctrl-E` never matches the event CodeMirror names `Ctrl-e`, and the second stroke `W` never
+ * matches an unshifted `w`. The chord would simply never fire, with no error anywhere.
+ */
+describe('toCodeMirrorKey — two-stroke chords (046 FR-092, R19)', () => {
+  // 046 FR-124 (S29) re-pins the three below: a two-stroke chord is ONE continuous press, so each
+  // stroke is written AS PHYSICALLY PRESSED — the second carries the first's held modifiers.
+  it('writes `Ctrl+E,W` as CodeMirror’s space-separated prefix form, Ctrl held through W', () => {
+    expect(toCodeMirrorKey('Ctrl+E,W')).toBe('Ctrl-e Ctrl-w');
+    // A legacy space-separated token is the same binding (core `parseTwoStroke`).
+    expect(toCodeMirrorKey('Ctrl+E W')).toBe('Ctrl-e Ctrl-w');
+  });
+
+  it('translates EACH physical stroke by the single-stroke rules — an added Shift is part of the second', () => {
+    expect(toCodeMirrorKey('Ctrl+K,Shift+W')).toBe('Ctrl-k Ctrl-Shift-w');
+    expect(toCodeMirrorKey('Ctrl+K,F3')).toBe('Ctrl-k Ctrl-F3');
+    // A comma that is a stroke's own key is not a separator.
+    expect(toCodeMirrorKey('Ctrl+,,W')).toBe('Ctrl-, Ctrl-w');
+    // 046 FR-126 — re-pinned from "three strokes are refused": up to three keys, four refused.
+    expect(toCodeMirrorKey('Ctrl+E,W,X')).toBe('Ctrl-e Ctrl-w Ctrl-x');
+    expect(toCodeMirrorKey('Ctrl+E,Shift+W,Q')).toBe('Ctrl-e Ctrl-Shift-w Ctrl-q');
+    expect(toCodeMirrorKey('Ctrl+E,W,X,Q')).toBeNull();
+  });
+
+  it('bridges the SHIPPED word-wrap binding, the one the editor keymap is built from (FR-091)', () => {
+    const chords = editorChordsFor(DEFAULT_KEYBINDINGS, 'editor.toggleWordWrap');
+    expect(chords).toEqual(['Ctrl+E,W']);
+    expect(chords.map(toCodeMirrorKey)).toEqual(['Ctrl-e Ctrl-w']);
+  });
+
+  it('still refuses every gesture — a wheel or a middle click is not a key (FR-106)', () => {
+    expect(toCodeMirrorKey('Ctrl+WheelUp')).toBeNull();
+    expect(toCodeMirrorKey('Ctrl+WheelDown')).toBeNull();
+    // Shipped for `panel.zoomReset`. A keymap entry named `Ctrl-MiddleClick` could never match.
+    expect(toCodeMirrorKey('Ctrl+MiddleClick')).toBeNull();
   });
 });
 

@@ -23,7 +23,10 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 // 73 since 045's round four (FR-165g) added `linkHintBackground`, `linkHintText` and `linkHintBorder`
 // — the plain-click link hint's own surface, text and border, inheriting `surfaceActive`/`text`/
 // `border` respectively (see TOKEN_PARENT).
-const EXPECTED_COLOUR_TOKEN_COUNT = 73;
+//
+// 74 since 046 iterate round 1 (FR-072) added `categoryHeaderBackground` — the Projects pane's
+// category header strip, inheriting `sidebarBg` (see TOKEN_PARENT).
+const EXPECTED_COLOUR_TOKEN_COUNT = 74;
 /**
  * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
  * `searchScope` (FR-029a/FR-029b, FR-030).
@@ -38,7 +41,15 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 73;
 // each deliberately not a reuse (`retry` means "try again", `chevronLeft` steps the tab strip).
 // 70 since 044's 2026-09-16 iteration (FR-122c): `syncScroll`, the Synchronise Scrolling toggle — a
 // new ACTION, so a token of its own rather than a reuse of `preview` or `refresh`.
-const EXPECTED_ICON_TOKEN_COUNT = 70;
+// 73 since 046 (FR-061, R11): `unload`, `category` and `projectList` — the Unload menu, the Projects
+// pane's category header and the pane's own panel-type marker, none of them a reuse of an existing
+// token (see the comment beside them in theme.ts).
+//
+// 72 since 046 iterate round 2 (branch-review finding): `projectList` retired. It described the cog
+// menu's "Focus Projects" row — a row FR-074/FR-107 had already retired before the description was
+// ever written, and nothing in the renderer has drawn the token at any point. `migrateTheme` drops a
+// stray `projectList` key from a theme that received it via the version-12 seed (theme-ops.ts).
+const EXPECTED_ICON_TOKEN_COUNT = 72;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
@@ -58,6 +69,7 @@ const ADDED_SINCE_FIXTURE = [
   'linkHintBackground',
   'linkHintText',
   'linkHintBorder',
+  'categoryHeaderBackground',
 ];
 
 const EXPECTED = [

@@ -42,7 +42,7 @@ export async function navigatePanelHistory(ws: WorkspaceApi, panelId: string, di
 }
 
 /**
- * The chord's panel: the active panel of the active tab, while a workspace panel — not Files & Folders — has
+ * The chord's panel: the active panel of the active tab, while a workspace panel — not File Explorer — has
  * the keyboard (FR-105). `null` otherwise.
  */
 export function focusedHistoryPanel(ws: WorkspaceApi): string | null {

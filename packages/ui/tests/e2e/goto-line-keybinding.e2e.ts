@@ -58,7 +58,11 @@ async function openKeybindings(app: ElectronApplication, win: Page): Promise<Pag
   return prefs;
 }
 
-/** Dispatch a synthetic chord (keydown then keyup) on the prefs window. */
+/**
+ * Dispatch a synthetic chord on the prefs window: keydown, keyup, then a keyup for each held modifier
+ * (the last with no modifier flags). 046 FR-124 — the capture box records only once EVERY key,
+ * modifiers included, is up, so a chord whose modifiers never came up would never be recorded.
+ */
 async function sendChord(
   prefs: Page,
   key: string,
@@ -66,9 +70,21 @@ async function sendChord(
 ): Promise<void> {
   await prefs.evaluate(
     ({ key: k, mods: m }) => {
-      const init = { key: k, bubbles: true, ...m } as KeyboardEventInit;
+      const held: Record<string, boolean | undefined> = { ...m };
+      const init = { key: k, bubbles: true, ...held } as KeyboardEventInit;
       window.dispatchEvent(new KeyboardEvent('keydown', init));
       window.dispatchEvent(new KeyboardEvent('keyup', init));
+      const names: Array<[string, string]> = [
+        ['ctrlKey', 'Control'],
+        ['altKey', 'Alt'],
+        ['shiftKey', 'Shift'],
+        ['metaKey', 'Meta'],
+      ];
+      for (const [flag, name] of names) {
+        if (!held[flag]) continue;
+        held[flag] = false;
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: name, bubbles: true, ...held } as KeyboardEventInit));
+      }
     },
     { key, mods },
   );
@@ -139,7 +155,7 @@ async function editorWithFile(win: Page): Promise<string> {
  *
  * A CLICK, not `element.focus()`: DOM focus is not the same fact as which PANE the application thinks
  * the keyboard is in, and this test opens its file from the tree — which leaves the active pane at
- * Files & Folders, where `navigate.gotoLine` (EDITOR_ONLY) resolves to nothing at all. The first
+ * File Explorer, where `navigate.gotoLine` (EDITOR_ONLY) resolves to nothing at all. The first
  * rendered line is used rather than `.cm-content` because Playwright scrolls an element's centre into
  * view before clicking it, and `.cm-content` is the whole document.
  */

@@ -1,5 +1,5 @@
 /**
- * 044 T104 — Files & Folders *Open In → Preview* (FR-003, FR-004, FR-012, FR-062, SC-001;
+ * 044 T104 — File Explorer *Open In → Preview* (FR-003, FR-004, FR-012, FR-062, SC-001;
  * contracts/menus-and-controls.md §5).
  *
  * ══ WHO DECIDES, WHO DRAWS ══

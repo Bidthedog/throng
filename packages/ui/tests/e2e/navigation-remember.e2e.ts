@@ -138,7 +138,7 @@ async function newEditor(win: Page): Promise<string> {
  * Open `file` from the tree and then put the keyboard in the editor by CLICKING A RENDERED LINE.
  *
  * Both halves are needed and `goto-line.e2e.ts` documents why at length: opening from the tree
- * leaves the ACTIVE PANE at Files & Folders, so `navigate.gotoLine` — which is EDITOR_ONLY —
+ * leaves the ACTIVE PANE at File Explorer, so `navigate.gotoLine` — which is EDITOR_ONLY —
  * resolves to nothing and `Ctrl+G` does nothing at all. Clicking a line sets the pane as well as the
  * DOM focus. It must be a rendered LINE rather than `.cm-content`, whose box for a four-hundred-line
  * document is thousands of pixels tall: Playwright scrolls an element's centre into view before

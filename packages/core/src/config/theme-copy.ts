@@ -64,7 +64,7 @@ const ROLE_CONTEXT: Record<TypographyRole, string> = {
 
 /** The concrete surface each role paints, woven into every field description. */
 const ROLE_SURFACE: Record<TypographyRole, string> = {
-  paneTitle: 'the PROJECTS, TERMINALS and FILES & FOLDERS headings that sit atop each sidebar pane',
+  paneTitle: 'the PROJECTS, TERMINALS and FILE EXPLORER headings that sit atop each sidebar pane',
   tab: 'the name on each tab in the tab strip',
   panel: 'the name in a workspace panel’s own header bar',
   paneText: 'the body text of every pane and panel — empty states, hints and list rows (never a header)',
@@ -125,7 +125,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.sidebarBg': {
     label: 'Side Panel Background',
     description:
-      'The surface behind the left side panel that holds the projects and sub-workspaces lists, and behind the Files and Folders pane.',
+      'The surface behind the left side panel that holds the projects and sub-workspaces lists, and behind the File Explorer pane.',
   },
   'colours.surface': {
     label: 'Panel Surface',
@@ -229,6 +229,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.railBg': {
     label: 'Collapsed Rail Background',
     description: 'The narrow strip shown when a side pane is collapsed, carrying its expand toggle.',
+  },
+  'colours.categoryHeaderBackground': {
+    label: 'Category Header Background',
+    description:
+      'The strip behind a category name in the Projects pane, including the default category’s own header. Unset, it follows the raised surface colour.',
   },
   'colours.border': {
     label: 'Interface Border',
@@ -363,7 +368,7 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'colours.activePanelBorder': {
     label: 'Active Pane Highlight',
     description:
-      'The outline marking the pane or panel you are working in — the Files and Folders pane and workspace panels alike. While a project is open it is painted with THAT project’s colour, so this value shows mainly when no project is open.',
+      'The outline marking the pane or panel you are working in — the File Explorer pane and workspace panels alike. While a project is open it is painted with THAT project’s colour, so this value shows mainly when no project is open.',
   },
   'colours.activePanelBorderInactive': {
     label: 'Inactive Pane Highlight',
@@ -552,11 +557,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'icons.folder': {
     label: 'Folder icon',
-    description: 'The glyph shown beside a closed folder in the files and folders tree.',
+    description: 'The glyph shown beside a closed folder in the File Explorer tree.',
   },
   'icons.folderOpen': {
     label: 'Open folder icon',
-    description: 'The glyph shown beside an expanded folder in the files and folders tree.',
+    description: 'The glyph shown beside an expanded folder in the File Explorer tree.',
   },
   'icons.chevron': {
     label: 'Tree chevron icon',
@@ -776,6 +781,28 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Synchronise scrolling icon',
     description:
       "The glyph on the Synchronise Scrolling button on the editor's and the preview's status bars, and on the Synchronise Scrolling menu rows, that turns scrolling an editor and its preview together on or off.",
+  },
+  /*
+   * 046 — the Projects pane's context menu. Two tokens for two distinct MENU ROWS: unload (a
+   * project's three Unload rows) and category (a project's Move to Category row) — neither draws
+   * anywhere else. Kept as separate tokens so retheming "unload" can never also retheme "Move to
+   * Category" by accident.
+   *
+   * A third token, `projectList`, originally shipped beside these two — retired (branch-review
+   * finding, 046 iterate round 2): its description named the title bar's cog-menu "Focus Projects"
+   * row, a row FR-074/FR-107 had already retired before the description was written, and no call
+   * site in the renderer ever drew it. `theme.ts` no longer defines `THRONG_THEME.icons.projectList`
+   * and `theme-ops.ts`'s `migrateTheme` drops the stray key from an install that already has it.
+   */
+  'icons.unload': {
+    label: 'Unload project icon',
+    description:
+      "The glyph on a project's two Unload context-menu rows, which detach it from the window without deleting anything on disk.",
+  },
+  'icons.category': {
+    label: 'Project category icon',
+    description:
+      "The glyph on a project's Move to Category context-menu row, which reassigns it to a different category.",
   },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {

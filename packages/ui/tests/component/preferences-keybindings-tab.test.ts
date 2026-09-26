@@ -51,9 +51,18 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_KEYBINDINGS, KEYBINDINGS_METADATA } from '@throng/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  DEFAULT_APP_SETTINGS,
+  DEFAULT_KEYBINDINGS,
+  KEYBINDINGS_METADATA,
+  resetBindingValue,
+  resolveAction,
+  THRONG_THEME,
+  type Keybindings,
+} from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
+import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
@@ -101,6 +110,15 @@ function press(key: string, mods: Partial<KeyboardEventInit> = {}): void {
   act(() => {
     window.dispatchEvent(new KeyboardEvent('keydown', init));
     window.dispatchEvent(new KeyboardEvent('keyup', init));
+    // 046 iterate round 5 (FR-124): the capture records once EVERY key is up, so a press ends with
+    // the modifier keyups a real keyboard sends — each released in turn, the last reporting none.
+    const held = { ctrlKey: !!init.ctrlKey, shiftKey: !!init.shiftKey, altKey: !!init.altKey, metaKey: !!init.metaKey };
+    const names: [keyof typeof held, string][] = [['shiftKey', 'Shift'], ['altKey', 'Alt'], ['metaKey', 'Meta'], ['ctrlKey', 'Control']];
+    for (const [flag, name] of names) {
+      if (!held[flag]) continue;
+      held[flag] = false;
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: name, bubbles: true, ...held }));
+    }
   });
 }
 
@@ -220,7 +238,8 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
     expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
 
     // `focus.left` ships bound to exactly this and its name contains no part of it.
-    await user.type(search(), 'Ctrl+Alt+ArrowLeft');
+    // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
+    await user.type(search(), 'Ctrl+Shift+Alt+ArrowLeft');
 
     // BOTH assertions inside the wait. Waiting only on `focus.left` being visible waits for
     // something already true of the UNFILTERED list, so it returns on the first tick and the
@@ -373,7 +392,9 @@ describe('the tab hands the write path the map it built (FR-033)', () => {
     press('k', { ctrlKey: true });
 
     await waitFor(() => expect(docs.length).toBeGreaterThan(0));
-    expect(lastMap(docs)?.['view.toggleProjects']).toEqual(['Ctrl+Alt+B', 'Ctrl+K']);
+    // 046 iterate round 1 (FR-102): view.toggleProjects' shipped chord moved to tier 1, and to J by
+    // iterate round 3 (FR-117).
+    expect(lastMap(docs)?.['view.toggleProjects']).toEqual(['Ctrl+Shift+Alt+J', 'Ctrl+K']);
   });
 
   it('carries the document VERSION through, so the write is not a downgrade', async () => {
@@ -403,7 +424,9 @@ describe('the tab hands the write path the map it built (FR-033)', () => {
     press('F7');
 
     await waitFor(() => expect(docs.length).toBeGreaterThan(0));
-    expect(lastMap(docs)?.['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'F7']);
+    // 046 iterate round 1 (FR-102): view.toggleExplorer's shipped chord moved to tier 1, and to K by
+    // iterate round 3 (FR-117).
+    expect(lastMap(docs)?.['view.toggleExplorer']).toEqual(['Ctrl+Shift+Alt+K', 'F7']);
   });
 });
 
@@ -466,16 +489,17 @@ describe('Reassign moves a chord between two actions (FR-033/034)', () => {
      * asserted both by polling the file twice; both are asserted here in ONE document, which is
      * strictly stronger — the two file polls could each have read a different write.
      *
-     * `Ctrl+Alt+B` is chosen because `view.toggleProjects` actually holds it. Using any other chord
-     * raises no conflict, the Reassign control never appears, and the test would quietly stop
-     * testing this path (026 / #165 records exactly that happening).
+     * `Ctrl+Shift+Alt+J` is chosen because `view.toggleProjects` actually holds it (046 iterate round
+     * 1, FR-102: moved to tier 1; iterate round 3, FR-117: B to J, B now being `focus.projects`').
+     * Using any other chord raises no conflict, the Reassign control never appears, and the test
+     * would quietly stop testing this path (026 / #165 records exactly that happening).
      */
     const { docs } = recordWrites();
     const { user } = mountTab();
 
     await user.dblClick(screen.getByTestId('binding-view.toggleExplorer'));
     await screen.findByTestId('capture-modal');
-    press('b', { ctrlKey: true, altKey: true });
+    press('j', { ctrlKey: true, altKey: true, shiftKey: true });
 
     // The conflict must be real, or there is nothing to reassign — asserted, not assumed.
     expect(await screen.findByTestId('capture-conflict')).toBeVisible();
@@ -484,7 +508,7 @@ describe('Reassign moves a chord between two actions (FR-033/034)', () => {
     await waitFor(() => expect(docs.length).toBeGreaterThan(0));
     const map = lastMap(docs) ?? {};
     // Additive for the new owner: it keeps what it had.
-    expect(map['view.toggleExplorer']).toEqual(['Ctrl+Alt+N', 'Ctrl+Alt+B']);
+    expect(map['view.toggleExplorer']).toEqual(['Ctrl+Shift+Alt+K', 'Ctrl+Shift+Alt+J']);
     // And the previous owner loses it.
     expect(map['view.toggleProjects']).toEqual([]);
   });
@@ -553,5 +577,174 @@ describe('the tab lists every rebindable command (SC-006)', () => {
     ]) {
       expect(screen.queryByTestId(`binding-${action}`), `${action} is missing`).not.toBeNull();
     }
+  });
+});
+
+/**
+ * 046 US2 (T036, FR-022, FR-070) — Next Project, Previous Project, Focus File Explorer and Focus
+ * Projects, rebindable through the same capture path every other command already uses.
+ *
+ * 046 iterate round 1 (T097, FR-087) moved `focus.explorer` and `focus.projects` out of View and
+ * into **Focus & Zoom**, beside the rest of the focus-movement family; `project.next` /
+ * `project.previous` stay in View.
+ */
+describe('the four 046 side-pane commands (T036, FR-022, FR-070)', () => {
+  it('appear in their groups, each with its label', () => {
+    mountTab();
+
+    const viewGroup = screen.getByTestId('keybindings-group-View');
+    const viewText = viewGroup.textContent ?? '';
+    for (const label of ['Next Project', 'Previous Project']) {
+      expect(viewText, `"${label}" is not in the View group`).toContain(label);
+    }
+    for (const action of ['project.next', 'project.previous']) {
+      expect(
+        within(viewGroup).queryByTestId(`binding-${action}`),
+        `${action}'s row is not inside the View group`,
+      ).not.toBeNull();
+    }
+
+    const focusZoomGroup = screen.getByTestId('keybindings-group-Focus & Zoom');
+    const focusZoomText = focusZoomGroup.textContent ?? '';
+    for (const label of ['Focus File Explorer', 'Focus Projects']) {
+      expect(focusZoomText, `"${label}" is not in the Focus & Zoom group`).toContain(label);
+    }
+    for (const action of ['focus.explorer', 'focus.projects']) {
+      expect(
+        within(focusZoomGroup).queryByTestId(`binding-${action}`),
+        `${action}'s row is not inside the Focus & Zoom group`,
+      ).not.toBeNull();
+    }
+  });
+
+  it('a rebinding changes what the chord RESOLVES to — no reload, the same document the write produced', async () => {
+    /*
+     * "Live dispatch with no reload" restated as what actually makes that true: `KeybindingsHandler`
+     * resolves every keydown against `useKeybindings()`, a React context value — so the document
+     * this write produces is what the NEXT keydown resolves against, with nothing to restart. That is
+     * asserted here at the layer that owns it, `resolveAction`, rather than by mounting the whole
+     * window: the tab's job ends at handing over the right document, and core's resolver is what
+     * "live" actually means once it has one.
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+
+    // F9 is unbound in the shipped table, so the ADD is unambiguous.
+    await user.dblClick(screen.getByTestId('binding-focus.projects'));
+    await screen.findByTestId('capture-modal');
+    press('F9');
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    const written = lastMap(docs);
+    // 046 iterate round 1 (FR-102): focus.projects' shipped chord moved to tier 1, and to B by
+    // iterate round 3 (FR-117).
+    expect(written?.['focus.projects']).toEqual(['Ctrl+Shift+Alt+B', 'F9']);
+
+    // Before the rebind: F9 resolved to nothing, in every scope this command lives in.
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F9' }, 'terminal')).not.toBe('focus.projects');
+    // The document the tab just wrote: the SAME F9 now resolves to focus.projects — from a terminal
+    // too (FR-020's EVERYWHERE scope), with no window reload standing between the write and this.
+    const nextDoc = { version: DEFAULT_KEYBINDINGS.version, bindings: written! };
+    expect(resolveAction(nextDoc, { key: 'F9' }, 'terminal')).toBe('focus.projects');
+  });
+});
+
+/**
+ * 046 US3 (T048, FR-025/FR-026, scenario 3), SUPERSEDED by the iterate round 1 checkpoint
+ * (FR-102/FR-107) — `zoom.reset` no longer carries the three default chords (`Ctrl+0`,
+ * `Ctrl+Shift+0`, `Ctrl+MiddleClick`) this block originally named. `#390`'s `Ctrl+Shift+0` and the
+ * plain-`Ctrl` trio are retired outright: the panel header's own Zoom submenu and the keyboard are
+ * the routes now, and the gesture moved to the PANEL zoom (`panel.zoomReset`'s own
+ * `Ctrl+MiddleClick`, FR-106). SUPERSEDED AGAIN by 046 iterate round 2 (FR-114) — the maintainer's
+ * own words, mid-build: "The 'Zoom Reset' key bindings need to use the numpad zero, NOT the 0 key."
+ * `zoom.reset` ships exactly ONE chord, the tier-1 `Ctrl+Shift+Alt+Numpad0`
+ * (`packages/core/src/config/keybindings.ts`).
+ *
+ * "Lists the one chord" is `mountTab()`'s ordinary claim — it renders against `DEFAULT_KEYBINDINGS`
+ * directly, which is exactly what the shipped row shows before any override exists.
+ *
+ * "Resetting it restores the chord" is a different claim, and it needs an override to reset FROM.
+ * The reset action reads `window.throng.config.resetBinding` (015), NOT `writeConfig` — a channel
+ * this file's other describe blocks deliberately do not simulate (see "an unbound action" above:
+ * that round trip "stays whole" as an E2E because IT asserts the FILE). This block asserts no file;
+ * it mounts the tab through a live `ConfigProvider` with a fake bridge that behaves the way the main
+ * process does — `resetBinding` computes the shipped value with the SAME pure function core ships
+ * (`resetBindingValue`) and pushes it back through `onChange`, the one channel a real reset actually
+ * uses (`resetBinding` does not go through `write`/`writePatch`, so neither adoption path in
+ * `config-store.tsx` ever sees it). "What a reset button does to the DOM" is a component-layer claim
+ * on its own terms (docs/testing altitude), not a duplicate of the E2E it sits beside.
+ */
+describe('zoom.reset ships its tier-1 default chord (046 US3, T048, FR-025/026, superseded by FR-102/FR-107)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('lists Ctrl+Shift+Alt+Numpad0 and nothing else', () => {
+    mountTab();
+    const row = screen.getByTestId('binding-zoom.reset-chord');
+    expect(within(row).getByTestId('binding-zoom.reset-pill-0')).toHaveTextContent('Ctrl+Shift+Alt+Numpad0');
+    expect(within(row).queryByTestId('binding-zoom.reset-pill-1')).toBeNull();
+  });
+
+  /**
+   * The tab through a real `ConfigProvider`, with `resetBinding` wired to the same pure function
+   * core ships. `overrides` seeds a keybindings document the tab opens WITH — a user override to
+   * reset FROM, the thing `mountTab()` above has no way to arrange.
+   */
+  function mountTabLive(overrides: Record<string, string[]>): { resetBinding: ReturnType<typeof vi.fn> } {
+    let keybindings: Keybindings = { version: 1, bindings: { ...DEFAULT_KEYBINDINGS.bindings, ...overrides } };
+    let push: ((payload: unknown) => void) | null = null;
+    const resetBinding = vi.fn((action: string) => {
+      const restored = resetBindingValue(keybindings, action);
+      if (restored) {
+        keybindings = restored;
+        push?.({ settings: DEFAULT_APP_SETTINGS, theme: THRONG_THEME, keybindings });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    Reflect.set(window, 'throng', {
+      config: {
+        get: () => Promise.resolve({ settings: DEFAULT_APP_SETTINGS, theme: THRONG_THEME, keybindings }),
+        onChange: (cb: (payload: unknown) => void) => {
+          push = cb;
+          return () => {
+            push = null;
+          };
+        },
+        resetBinding,
+      },
+    });
+    render(
+      createElement(
+        NotificationProvider,
+        null,
+        createElement(
+          ConfigProvider,
+          null,
+          createElement(
+            ResetNoticeProvider,
+            null,
+            createElement(ContextMenuProvider, null, createElement(KeybindingsTab)),
+          ),
+        ),
+      ),
+    );
+    return { resetBinding };
+  }
+
+  it('resetting a user override restores the one default chord', async () => {
+    mountTabLive({ 'zoom.reset': ['Ctrl+9'] });
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId('binding-zoom.reset-pill-0')).toHaveTextContent('Ctrl+9'));
+    expect(screen.getByTestId('binding-reset-zoom.reset')).toBeEnabled();
+
+    await user.click(screen.getByTestId('binding-reset-zoom.reset'));
+
+    await waitFor(() => {
+      const row = screen.getByTestId('binding-zoom.reset-chord');
+      expect(within(row).getByTestId('binding-zoom.reset-pill-0')).toHaveTextContent('Ctrl+Shift+Alt+Numpad0');
+      expect(within(row).queryByTestId('binding-zoom.reset-pill-1')).toBeNull();
+    });
   });
 });

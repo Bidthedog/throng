@@ -193,7 +193,7 @@ export function previewSettingsDescriptors(registry: PreviewProviderRegistry): F
       out.push({
         key: providerKey(provider.id, 'defaultOpenAction'),
         label: `${provider.displayName}: Default open action`,
-        description: `What opening a ${provider.displayName} file from Files & Folders or Quick Open does: open it in an editor, or open its preview. Find in Files results and Open In always open an editor.`,
+        description: `What opening a ${provider.displayName} file from File Explorer or Quick Open does: open it in an editor, or open its preview. Find in Files results and Open In always open an editor.`,
         group: GROUP,
         subgroup: SUBGROUP,
         control: 'select',

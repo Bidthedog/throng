@@ -1,5 +1,5 @@
 /**
- * Right-clicking the EMPTY SPACE of the Files & Folders pane opens a menu targeting the project
+ * Right-clicking the EMPTY SPACE of the File Explorer pane opens a menu targeting the project
  * ROOT (004 FR-097), and what that menu then does goes to the root and not to the selection.
  *
  * PLACE AT: `packages/ui/tests/component/explorer-root-menu.test.ts`

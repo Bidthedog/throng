@@ -25,7 +25,9 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { shippedBindingsFor } from '@throng/core';
+import { shippedBindingsFor, splitStrokes } from '@throng/core';
+import { chordCandidates } from '../../src/renderer/config/chord-key.js';
+import { chordEvent, keyOf } from './chord-event.js';
 
 /** The dispatcher whose allowlist is the subject. */
 export const APP_TSX = fileURLToPath(new URL('../../src/renderer/app.tsx', import.meta.url));
@@ -53,7 +55,11 @@ export const E2E_DIR = fileURLToPath(new URL('../e2e/', import.meta.url));
  * it. This one cannot: it is a node-env unit guard, and `app.tsx` touches `window` at module scope.
  */
 export function handledActions(): string[] {
-  const src = readFileSync(APP_TSX, 'utf8');
+  return parseHandledActions(readFileSync(APP_TSX, 'utf8'));
+}
+
+/** `handledActions` over a given source text — the part that parses, separated so it can be fed. */
+export function parseHandledActions(src: string): string[] {
   const block = /const WINDOW_HANDLED_ACTIONS:[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
   if (!block) {
     throw new Error(
@@ -61,10 +67,15 @@ export function handledActions(): string[] {
         `restructured, and this guard is no longer reading the allowlist it claims to cover`,
     );
   }
-  const entries = (block[1] ?? '')
-    .split('\n')
-    .map((line) => line.replace(/\/\/.*$/, '').trim().replace(/,$/, ''))
-    .filter((line) => line.length > 0);
+  // Comments go through `codeOnly`, and entries are split on the COMMA, never on the line. The old
+  // per-line `/\/\/.*$/` strip could not see past a `\r` (`.` does not match it), so on a CRLF
+  // checkout — the hosted runner's — a whole-line comment survived and was read as an entry, while an
+  // LF workstation stayed green. Splitting on commas also takes a trailing or inline comment, and two
+  // entries on one line, without any line-shaped assumption at all.
+  const entries = codeOnly(block[1] ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
   const actions = entries.map((entry) => {
     const literal = /^'([^']+)'$/.exec(entry) ?? /^"([^"]+)"$/.exec(entry);
     if (literal) return literal[1] as string;
@@ -78,27 +89,21 @@ export function handledActions(): string[] {
   return actions;
 }
 
-/** The key segment of a binding token — everything after the modifiers. `Ctrl++` → `+`. */
-export function keyOf(token: string): string {
-  let rest = token;
-  for (;;) {
-    const mod = /^(Ctrl|Control|Shift|Alt|Meta)\+(?=.)/.exec(rest);
-    if (!mod) return rest;
-    rest = rest.slice(mod[0].length);
-  }
-}
+export { chordEvent, keyOf, type ChordEvent } from './chord-event.js';
 
 /**
- * The dispatcher's three `keepShift` branches, restated against a BINDING token.
+ * Whether the dispatcher KEEPS Shift for a chord on this key — asked of `chordCandidates` itself.
  *
- * `app.tsx` asks the live event; this asks the chord the event would have to be. The two agree by
- * construction: `chordKey` normalises the physical Backquote to `` ` `` whatever it produced, a
- * function key's `e.key` is its own name, and a letter chord's `e.key` is that letter with case
- * folded away by `normalizeToken`. Restated rather than imported because it is not exported — and
- * `handledActions()` above would catch the dispatcher being restructured underneath it.
+ * `app.tsx` asks the live event; this asks the event a US keyboard would produce with Shift held, and
+ * reports whether any candidate token still carries the modifier. Imported rather than restated
+ * (046 T044): a restated copy of the rule is the one thing that can drift silently, and the digit
+ * branch 046 added (`Ctrl+Shift+0`) is exactly a change the old restatement would not have seen.
+ * `mods` defaults to Ctrl held and Alt not, the shape of every window chord this guard is about;
+ * the digit branch needs both (Alt held is how AltGr types, and excludes it).
  */
-export function keepsShift(key: string): boolean {
-  return key === '`' || /^F\d{1,2}$/.test(key) || /^[a-z]$/i.test(key) || /^Arrow(Left|Right|Up|Down)$/.test(key);
+export function keepsShift(key: string, mods: { ctrlKey?: boolean; altKey?: boolean } = {}): boolean {
+  const e = chordEvent(key, { ctrlKey: mods.ctrlKey ?? true, altKey: mods.altKey ?? false, shiftKey: true });
+  return chordCandidates(e).some((token) => /(^|\+)Shift\+/.test(token));
 }
 
 /** Every HANDLED action whose shipped chord goes through one of those branches, with those chords. */
@@ -106,7 +111,10 @@ export function discoverKeepShiftChords(): Map<string, string[]> {
   const bindings = shippedBindingsFor().bindings;
   const found = new Map<string, string[]>();
   for (const action of handledActions()) {
-    const chords = (bindings[action] ?? []).filter((token) => keepsShift(keyOf(token)));
+    const chords = (bindings[action] ?? []).filter((token) => {
+      const e = chordEvent(token);
+      return keepsShift(keyOf(token), { ctrlKey: e.ctrlKey, altKey: e.altKey });
+    });
     if (chords.length > 0) found.set(action, chords);
   }
   return found;
@@ -141,6 +149,16 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
    */
   ['search.findInFiles', 'find in files — the second Ctrl+Shift+<letter> pair'],
   ['search.replaceInFiles', 'replace in files — the same command with replace pre-enabled'],
+  /*
+   * 046 T049 — both pressed from a focused REAL terminal, which must receive nothing. `zoom.reset`'s
+   * shipped chord takes the PHYSICAL code branch `chordCandidates` added (FR-026), and only a real
+   * engine reports a genuine `code` for it; `focus.explorer` (`Ctrl+Shift+Alt+M` since 046 iterate
+   * round 3, FR-117; `F` before) takes the letter branch and is pressed in the same declaration
+   * (analysis H1). 046 iterate round 2 (T164, FR-114) re-pointed the physical key `zoom.reset`
+   * presses from Digit0 to Numpad0.
+   */
+  ['zoom.reset', 'Ctrl+Shift+Alt+Numpad0 from a focused real terminal (046 T049, re-pointed T164)'],
+  ['focus.explorer', 'Ctrl+Shift+Alt+M from a focused real terminal (046 T049, re-pointed T181)'],
 ]);
 
 /**
@@ -158,7 +176,8 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
 export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: string }> = new Map([
   ['menu.open', { spec: 'menu-keyboard.e2e.ts', press: 'Shift+F10' }],
   /*
-   * 041 FR-020a — `Ctrl+Alt+M` takes the letter branch, so it belongs in this file's subject, and it
+   * 041 FR-020a — `Ctrl+Shift+Alt+V` (tier 1 since 046 FR-102, on V since iterate round 3's FR-117;
+   * `M` before, which is `focus.explorer`'s now) takes the letter branch, so it belongs in this file's subject, and it
    * is deliberately not in it. What the requirement claims is that a REAL SHELL does not swallow the
    * chord, and this file's shared app has no terminal: adding one would make every test in it pay
    * for a `cmd` launch, and the assertion still needs a notice on screen to move focus TO.
@@ -167,7 +186,7 @@ export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: strin
    * which asserted nothing — an inert binding passes that identically (T062, FR-029). Its real home
    * builds the shell and the notice it needs.
    */
-  ['focus.notice', { spec: 'notice-focus-chord.e2e.ts', press: 'Control+Alt+M' }],
+  ['focus.notice', { spec: 'notice-focus-chord.e2e.ts', press: 'Control+Shift+Alt+V' }],
 ]);
 
 /**
@@ -180,12 +199,45 @@ export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: strin
  * with `COVERED_ELSEWHERE`, the claim is checked: the named file must press the key with each modifier.
  */
 export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: string; mods: readonly string[] }> = new Map([
-  ['focus.left', { test: 'window-arrow-chords.test.ts', key: 'ArrowLeft', mods: ['ctrlKey', 'altKey'] }],
-  ['focus.right', { test: 'window-arrow-chords.test.ts', key: 'ArrowRight', mods: ['ctrlKey', 'altKey'] }],
-  ['focus.up', { test: 'window-arrow-chords.test.ts', key: 'ArrowUp', mods: ['ctrlKey', 'altKey'] }],
-  ['focus.down', { test: 'window-arrow-chords.test.ts', key: 'ArrowDown', mods: ['ctrlKey', 'altKey'] }],
+  // 046 iterate round 1 (FR-102): focus.left/right/up/down moved to tier 1.
+  ['focus.left', { test: 'window-arrow-chords.test.ts', key: 'ArrowLeft', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['focus.right', { test: 'window-arrow-chords.test.ts', key: 'ArrowRight', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['focus.up', { test: 'window-arrow-chords.test.ts', key: 'ArrowUp', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['focus.down', { test: 'window-arrow-chords.test.ts', key: 'ArrowDown', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
   ['navigate.back', { test: 'window-arrow-chords.test.ts', key: 'ArrowLeft', mods: ['altKey'] }],
   ['navigate.forward', { test: 'window-arrow-chords.test.ts', key: 'ArrowRight', mods: ['altKey'] }],
+  /*
+   * 046 US2 (T033) — `focus.projects` (moved to tier 1 at the iterate round 1 checkpoint, T099; on
+   * `Ctrl+Shift+Alt+B` since iterate round 3's FR-117, `P` before) takes the LETTER branch, the shape
+   * `window-chord-manifest.test.ts` exists to catch. `focus.explorer` (`Ctrl+Shift+Alt+M`) is claimed
+   * in `COVERED` by `focus.explorer`'s E2E instead (T049) — real-engine proof that a focused terminal
+   * receives nothing.
+   *
+   * 046 iterate round 3 (T177, FR-116) — `focus.workspace` (`Ctrl+Shift+Alt+N`) is the same letter
+   * shape, claimed by the same file: the component layer is the lowest that mounts the side panes,
+   * the workspace and the real `KeybindingsHandler` together, so no E2E is added for it.
+   */
+  ['focus.projects', { test: 'side-pane-focus-commands.test.ts', key: 'B', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['focus.workspace', { test: 'side-pane-focus-commands.test.ts', key: 'N', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  /*
+   * 046 iterate round 1 (T106/T111) — `project.next` / `project.previous` moved to the tier-1
+   * `Ctrl+Shift+Alt+PageDown` / `Ctrl+Shift+Alt+PageUp` at the same checkpoint (T099), and newly
+   * appear in `discoverKeepShiftChords()` once `chordCandidates` gains the tier-1 rule. Pressed,
+   * literally, by T033's own file (re-pointed to the tier-1 shape in this same round).
+   */
+  ['project.next', { test: 'side-pane-focus-commands.test.ts', key: 'PageDown', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['project.previous', { test: 'side-pane-focus-commands.test.ts', key: 'PageUp', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  /*
+   * 046 iterate round 1 (T106/T111) — the same newly-discovered shape, one namespace along:
+   * `zoom.in` / `zoom.out` ship tier-1 (`Ctrl+Shift+Alt++` / `Ctrl+Shift+Alt+-`), and
+   * `panel.zoomIn` / `panel.zoomOut` / `panel.zoomReset` ship `Ctrl+Alt` without Shift. Pressed beside
+   * `zoom.reset` / `panel.zoomReset`'s existing cases in the same file.
+   */
+  ['zoom.in', { test: 'window-zoom-reset-shift.test.ts', key: '+', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['zoom.out', { test: 'window-zoom-reset-shift.test.ts', key: '_', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  ['panel.zoomIn', { test: 'window-zoom-reset-shift.test.ts', key: '=', mods: ['ctrlKey', 'altKey'] }],
+  ['panel.zoomOut', { test: 'window-zoom-reset-shift.test.ts', key: '-', mods: ['ctrlKey', 'altKey'] }],
+  ['panel.zoomReset', { test: 'window-zoom-reset-shift.test.ts', key: '0', mods: ['ctrlKey', 'altKey'] }],
 ]);
 
 /** Where the component tests live, for resolving a `COVERED_IN_COMPONENT` claim. */
@@ -229,4 +281,121 @@ export function codeOnly(src: string): string {
 export function pressesChord(src: string, chord: string): boolean {
   const literal = chord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(String.raw`keyboard\s*\.\s*press\(\s*['"\`]${literal}['"\`]`).test(src);
+}
+
+/**
+ * A binding token's key segment, Playwright-cased: `+`, `-` and the digits have no key of their own
+ * in Chromium DevTools Protocol's key names, so Playwright presses the PHYSICAL key that types them
+ * (046 iterate round 1, T106/T111, FR-104, FR-105) — mirroring `chord-key.ts`'s own token→code
+ * mapping into the one form the E2E suite needs: a literal for `page.keyboard.press`.
+ */
+const PLAYWRIGHT_KEY_OF: Readonly<Record<string, string>> = {
+  '+': 'Equal',
+  '-': 'Minus',
+  '0': 'Digit0',
+  '1': 'Digit1',
+  '2': 'Digit2',
+  '3': 'Digit3',
+  '4': 'Digit4',
+  '5': 'Digit5',
+  '6': 'Digit6',
+  '7': 'Digit7',
+  '8': 'Digit8',
+  '9': 'Digit9',
+};
+
+/** Playwright's own modifier spelling — `Ctrl` (throng's) is `Control` there. */
+const PLAYWRIGHT_MOD_OF: Readonly<Record<string, string>> = {
+  Ctrl: 'Control',
+  Control: 'Control',
+  Shift: 'Shift',
+  Alt: 'Alt',
+  Meta: 'Meta',
+};
+
+/** One single-stroke binding token → the ONE literal `page.keyboard.press` takes for it. */
+function toPlaywrightPress(stroke: string): string {
+  const mods: string[] = [];
+  let rest = stroke;
+  for (;;) {
+    const m = /^(Ctrl|Control|Shift|Alt|Meta)\+(?=.)/.exec(rest);
+    if (!m) break;
+    mods.push(PLAYWRIGHT_MOD_OF[m[1] as string] as string);
+    rest = rest.slice(m[0].length);
+  }
+  // An unshifted letter is pressed lowercase — the `key` a real keyboard reports for it. Playwright's
+  // `press('W')` sends `key: 'W'` with no Shift held, which no keyboard produces and which CodeMirror
+  // does not match as a bare `w` second stroke (046 T142).
+  const letter = /^[a-z]$/i.test(rest) ? (mods.includes('Shift') ? rest.toUpperCase() : rest.toLowerCase()) : undefined;
+  const key = letter ?? PLAYWRIGHT_KEY_OF[rest] ?? rest;
+  return [...mods, key].join('+');
+}
+
+/**
+ * A binding token → the literal string(s) `page.keyboard.press` takes (046 T106/T111), one per
+ * stroke AS WRITTEN (core `splitStrokes`, comma-aware: `Ctrl+,` is one stroke).
+ *
+ * 046 FR-124 (S29): a two-stroke token (`Ctrl+E,W`) is ONE continuous press — the first stroke's
+ * modifiers stay HELD through the second — so its second entry names only what the second stroke
+ * adds (`w`). Pressing the two entries one after the other releases Ctrl between them, which is no
+ * longer the chord; press a two-stroke chord through {@link toPlaywrightTwoStroke} instead.
+ */
+export function toPlaywrightPresses(token: string): string[] {
+  const strokes = splitStrokes(token);
+  if (!strokes) throw new Error(`${token} is not a binding token`);
+  return strokes.map(toPlaywrightPress);
+}
+
+/**
+ * A two-stroke chord as Playwright presses it (046 FR-124): `keyboard.down` each of `hold`, `press`
+ * `first`, `press` `second`, then `keyboard.up` each of `hold` — the first stroke's modifiers held
+ * from the first key through the second. `Ctrl+E,W` → `{ hold: ['Control'], first: 'e', second: 'w' }`;
+ * `Ctrl+E,Shift+W` → `second: 'Shift+W'`. Throws for a token that is not exactly two strokes.
+ */
+export interface PlaywrightTwoStroke {
+  hold: string[];
+  first: string;
+  second: string;
+}
+
+export function toPlaywrightTwoStroke(token: string): PlaywrightTwoStroke {
+  const strokes = splitStrokes(token);
+  if (!strokes || strokes.length !== 2) throw new Error(`${token} is not a two-stroke chord`);
+  const [first, second] = strokes as [string, string];
+  const hold: string[] = [];
+  let key = first;
+  for (;;) {
+    const m = /^(Ctrl|Control|Shift|Alt|Meta)\+(?=.)/.exec(key);
+    if (!m) break;
+    hold.push(PLAYWRIGHT_MOD_OF[m[1] as string] as string);
+    key = key.slice(m[0].length);
+  }
+  return { hold, first: toPlaywrightPress(key), second: toPlaywrightPress(second) };
+}
+
+/** {@link toPlaywrightTwoStroke} for `action`'s FIRST shipped binding on this platform. */
+export function shippedTwoStroke(action: string): PlaywrightTwoStroke {
+  const token = shippedBindingsFor().bindings[action]?.[0];
+  if (token === undefined) throw new Error(`${action} ships no binding — nothing to press`);
+  return toPlaywrightTwoStroke(token);
+}
+
+/**
+ * The presses for `action`'s FIRST shipped binding on this platform (046 T142).
+ *
+ * An E2E that presses a shipped default reads it here rather than spelling it, so a moved default is
+ * pressed as moved instead of failing on a stale literal. Throws for an action that ships no binding
+ * rather than pressing nothing, which would pass any negative assertion that followed.
+ */
+export function shippedPresses(action: string): string[] {
+  const token = shippedBindingsFor().bindings[action]?.[0];
+  if (token === undefined) throw new Error(`${action} ships no binding — nothing to press`);
+  return toPlaywrightPresses(token);
+}
+
+/** {@link shippedPresses} for a single-stroke default — throws if the default is a two-stroke chord. */
+export function shippedPress(action: string): string {
+  const presses = shippedPresses(action);
+  if (presses.length !== 1) throw new Error(`${action} ships a ${presses.length}-stroke chord; use shippedPresses`);
+  return presses[0] as string;
 }

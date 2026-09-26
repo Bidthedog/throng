@@ -93,7 +93,7 @@ const NEW_KEYS = [
   {
     key: 'editor.previews.providers.markdown.defaultOpenAction',
     governs:
-      'whether opening a Markdown file from Files & Folders or Quick Open opens an editor or its preview (FR-050 – FR-052)',
+      'whether opening a Markdown file from File Explorer or Quick Open opens an editor or its preview (FR-050 – FR-052)',
     section: PREVIEW_SECTION,
   },
   {

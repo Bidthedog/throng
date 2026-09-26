@@ -8,6 +8,7 @@
 import { useCallback, type KeyboardEvent } from 'react';
 import { resolveAction, type TargetNode } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 export interface KeybindingOps {
   selectedRelPaths: string[];
@@ -51,11 +52,7 @@ export function useExplorerKeybindings(ops: KeybindingOps): (e: KeyboardEvent) =
       // Explicitly the EXPLORER scope: this handler is attached to the tree, so by construction
       // it only fires while the tree has focus. Ctrl+X here cuts a FILE — the same chord cuts a
       // LINE inside an editor, and the scope is what keeps the two apart (016, FR-017b0).
-      const action = resolveAction(
-        keybindings,
-        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-        'explorer',
-      );
+      const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, 'explorer'));
       if (action === 'preview.open' && ops.openPreview) {
         e.preventDefault();
         ops.openPreview(ops.primarySelected);

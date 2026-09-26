@@ -60,7 +60,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
  * 026 — renaming in the tree must leave keyboard focus IN the tree.
  *
  * Committing an inline rename unmounts the text input it was typed into. Nothing then takes focus
- * back, so it falls to `<body>` and the Files & Folders pane goes dead to the keyboard: the arrow
+ * back, so it falls to `<body>` and the File Explorer pane goes dead to the keyboard: the arrow
  * keys stop moving the selection, F2 no longer starts another rename, Delete does nothing. The user
  * has to click the tree again to carry on — after an action they performed *in* the tree.
  *
@@ -89,7 +89,7 @@ function makeProject(): string {
   return root;
 }
 
-/** Is DOM focus inside the Files & Folders tree? */
+/** Is DOM focus inside the File Explorer tree? */
 function focusIsInTree(win: Page): Promise<boolean> {
   return win.evaluate(() => {
     const tree = document.querySelector('[data-testid="file-explorer-tree"]');

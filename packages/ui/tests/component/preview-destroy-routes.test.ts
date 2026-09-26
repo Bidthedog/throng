@@ -118,6 +118,8 @@ function fakeDaemon(layout: WorkspaceLayout): ThrongBridge {
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
           return Promise.resolve({ projects: [] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         case 'panelName.claim':
           return Promise.resolve({ granted: (params as { desired: string }).desired, adjusted: false } as T);
         default:

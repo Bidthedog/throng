@@ -50,7 +50,7 @@
  */
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
@@ -58,6 +58,7 @@ import {
   firstPanelId,
   panelIds,
   addPanels,
+  switchProject,
   cleanupTemp,
   type OpenApp,
 } from './harness.js';
@@ -82,10 +83,18 @@ function press(token: string): string {
   const key = keyOf(token);
   const mods = token.slice(0, token.length - key.length).replace(/Ctrl\+/g, 'Control+');
   const shifted = /(^|\+)Shift\+/.test(token);
+  /*
+   * A DIGIT is pressed by its physical code (046 T049). Measured on this engine: `Control+Shift+0`
+   * arrives as key `0`, code `Digit0` — a shifted digit no keyboard produces, which even the pre-046
+   * dispatcher resolved (it dropped Shift and read `Ctrl+0`) — while `Control+Shift+Digit0` arrives
+   * as key `)`, code `Digit0`, which is what a US keyboard sends and what FR-026 is about.
+   */
   const tail =
     key === '`'
       ? 'Backquote'
-      : /^[a-z]$/i.test(key)
+      : /^[0-9]$/.test(key)
+        ? `Digit${key}`
+        : /^[a-z]$/i.test(key)
         ? shifted
           ? key.toUpperCase()
           : key.toLowerCase()
@@ -123,6 +132,8 @@ const RENAME_TO = 'alpha-renamed.txt';
 
 let shared: OpenApp;
 let root = '';
+/** Extra temp roots a test made; removed after the app has closed and released them. */
+const cleanupAfter: string[] = [];
 let editorPanel = '';
 
 test.beforeAll(async () => {
@@ -151,6 +162,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await shared?.close();
   if (root) cleanupTemp(root);
+  for (const dir of cleanupAfter) cleanupTemp(dir);
 });
 
 /**
@@ -172,7 +184,7 @@ async function focusEditorPanel(win: Page): Promise<void> {
  * The chords themselves. Each test restores whatever it changed.
  * ══════════════════════════════════════════════════════════════════════════════════════════════ */
 
-test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+test('the pane toggles still resolve — Ctrl+Shift+Alt+J and Ctrl+Shift+Alt+K', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
 
@@ -183,7 +195,7 @@ test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@e
   await win.keyboard.press(chordFor('view.toggleProjects'));
   await expect(win.getByTestId('pane-hide-left')).toBeVisible();
 
-  // Files & Folders (right): the same, with the project open.
+  // File Explorer (right): the same, with the project open.
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
   await win.keyboard.press(chordFor('view.toggleExplorer'));
   await expect(win.getByTestId('pane-rail-right')).toBeVisible();
@@ -191,7 +203,7 @@ test('the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N', { tag: ['@e
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
-test('the tab picker still resolves — Ctrl+Alt+T', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+test('the tab picker still resolves — Ctrl+Shift+Alt+T', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
   await win.locator('body').click();
   await win.keyboard.press(chordFor('tabs.openPicker'));
@@ -238,7 +250,7 @@ test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+
   const tree = win.getByTestId('file-explorer-tree');
 
   /*
-   * `file.undo` / `file.redo` are EXPLORER_ONLY, so the active pane has to be Files & Folders before
+   * `file.undo` / `file.redo` are EXPLORER_ONLY, so the active pane has to be File Explorer before
    * either chord resolves at all — clicking a row is what puts it there. A file operation also has
    * to exist to reverse, so this renames one and then walks the operation back and forward.
    */
@@ -369,4 +381,160 @@ test('find and replace in files still resolve — Ctrl+Shift+F and Ctrl+Shift+H 
   // Leave the tab as this file found it — the panel is empty, so its × asks nothing.
   await win.getByTestId(`panel-close-${panelId}`).click();
   await expect(panel).toHaveCount(0);
+});
+
+/** Every chunk a terminal view has put on the wire, from its own diagnostics (see quick-open.e2e.ts). */
+async function inputWrites(win: Page, panelId: string): Promise<string[] | null> {
+  return win.evaluate((id) => {
+    const probe = (
+      window as unknown as { __throngTerminalDiagnostics?: () => Record<string, { writes: string[] }> }
+    ).__throngTerminalDiagnostics;
+    return probe?.()[id]?.writes ?? null;
+  }, panelId);
+}
+
+/**
+ * `CSI I` / `CSI O` — a focus report, as `diagnostics.ts` stores it (`JSON.stringify`, so the log
+ * holds the escape spelled out). Not a keystroke: a chord that moves focus makes a terminal with
+ * focus reporting on answer the real focus change, and that is 028's behaviour, not a leak.
+ */
+const FOCUS_REPORTS = new Set(['\\u001b[I', '\\u001b[O']);
+
+const zoomLevel = (app: OpenApp['app']): Promise<number> =>
+  app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getZoomLevel() ?? NaN);
+
+test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and Ctrl+Shift+Alt+PageDown reach the app and the shell receives nothing (046 T049, re-pointed T164/FR-114, T181/FR-117)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
+  /*
+   * 046 FR-027, FR-016, FR-010 — three window chords pressed with a REAL shell holding the keyboard.
+   *
+   * ══ WHY IT IS IRREDUCIBLE ══
+   *
+   * `zoom.reset` resolves through `chordCandidates`' PHYSICAL code match: the dispatcher reads
+   * `e.code` (`Numpad0`) rather than trusting `e.key`, which a real keypad reports differently
+   * depending on NumLock and Shift (`'0'`, or the documented Shift+NumLock quirk `'Insert'`). Only a
+   * real engine reports a genuine `code` for a physical keypad press; window-zoom-reset-shift.test.ts
+   * proves the dispatch over an event it built itself, and cannot say what the engine sends. The
+   * other half — the shell gets NOTHING — needs a real terminal view wired to a real ConPTY.
+   *
+   * 046 iterate round 2 (T164, FR-114) — the maintainer's own words, mid-build: "The 'Zoom Reset' key
+   * bindings need to use the numpad zero, NOT the 0 key." Re-pointed from a `Control+Shift+Alt+0`
+   * (Digit0) press to the Numpad0-coded one the shipped default now actually needs.
+   *
+   * ══ HOW "NOTHING" IS READ ══
+   *
+   * The terminal view's own write log (028 diagnostics): every chunk it put on the wire to the shell,
+   * in order. quick-open.e2e.ts's AS-1 settled why the log and not the screen — a chord a shell
+   * swallows silently leaves the screen unchanged, so an unchanged screen proves nothing. A byte echo
+   * (`cat -v` in Git Bash) was tried first and dropped: measured, it ended by itself on 5 of ~20
+   * runs with the log holding only the command that started it, which made it a witness that fails
+   * for reasons of its own.
+   */
+  const { app, win } = shared;
+  const nextRoot = mkdtempSync(join(tmpdir(), 'throng-chords-next-'));
+  cleanupAfter.push(nextRoot);
+
+  // A SECOND project, created after ChordProj so it is the one Ctrl+Shift+Alt+PageDown steps to — then back.
+  await createProject(win, 'ChordNext', nextRoot);
+  await switchProject(win, 'ChordProj');
+
+  // The empty panel focus cycling left behind, when there is one, rather than a third narrow split.
+  let pid = '';
+  for (const id of await panelIds(win)) {
+    if (id !== editorPanel && (await win.getByTestId(`panel-type-select-${id}`).count()) > 0) pid = id;
+  }
+  if (pid === '') {
+    await addPanels(win, 1);
+    const ids = await panelIds(win);
+    pid = ids[ids.length - 1] as string;
+  }
+  await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
+  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId(`panel-type-confirm-${pid}`).click();
+  const term = win.getByTestId(`terminal-${pid}`);
+  await expect(term).toContainText(basename(root), { timeout: 30_000 });
+
+  const textarea = term.locator('.xterm-helper-textarea');
+  await term.click();
+  await expect(textarea).toBeFocused();
+
+  // The probe proves it can MOVE before it is asked to stay still (FR-053b's standard).
+  const beforeProof = (await inputWrites(win, pid)) ?? [];
+  await win.keyboard.type('x');
+  await expect.poll(async () => ((await inputWrites(win, pid)) ?? []).length).toBeGreaterThan(beforeProof.length);
+  await win.keyboard.press('Backspace');
+
+  /** What the view wrote since `before`, focus reports aside — read at once, while the view lives. */
+  const leaked = async (before: string[]): Promise<string[]> => {
+    const now = await inputWrites(win, pid);
+    expect(now, 'the terminal view has no write log — the probe is reading nothing').not.toBeNull();
+    return (now ?? []).slice(before.length).filter((chunk) => !FOCUS_REPORTS.has(chunk));
+  };
+
+  // ── Ctrl+Shift+Alt+Numpad0 resets a zoomed window (FR-027, FR-114). ─────────────────────────
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.setZoomLevel(2));
+  await expect.poll(() => zoomLevel(app)).toBe(2);
+  await expect(textarea).toBeFocused();
+  const beforeZoom = (await inputWrites(win, pid)) ?? [];
+  const zoomReset = KEEP_SHIFT.get('zoom.reset')?.find((t) => /(^|\+)Shift\+/.test(t));
+  expect(zoomReset, 'zoom.reset ships no Shift chord to press').toBeDefined();
+  await win.evaluate(() => {
+    const w = window as unknown as { __t049Key?: string };
+    w.__t049Key = undefined;
+    const note = (e: KeyboardEvent): void => {
+      if (['Control', 'Shift', 'Alt'].includes(e.key)) return;
+      w.__t049Key = `${e.key}|${e.code}`;
+      window.removeEventListener('keydown', note, true);
+    };
+    window.addEventListener('keydown', note, true);
+  });
+  await win.keyboard.press(press(zoomReset as string));
+  // The claim is about the PHYSICAL code, not the produced key — a real keypad reports a different
+  // `key` depending on NumLock and Shift (FR-114's whole point: `code` decides, not `key`), so only
+  // `code` is asserted here.
+  expect(await win.evaluate(() => (window as unknown as { __t049Key?: string }).__t049Key)).toMatch(/\|Numpad0$/);
+  await expect.poll(() => zoomLevel(app), { message: 'Ctrl+Shift+Alt+Numpad0 did not reset the zoom' }).toBe(0);
+  expect(await leaked(beforeZoom), 'Ctrl+Shift+Alt+Numpad0 reached the shell').toEqual([]);
+
+  // ── Ctrl+Shift+Alt+M focuses the File Explorer (FR-016, FR-117). ───────────────────────────────
+  const beforeFocus = (await inputWrites(win, pid)) ?? [];
+  await win.keyboard.press(chordFor('focus.explorer'));
+  await expect
+    .poll(() => win.evaluate(() => document.activeElement?.closest('[data-testid="file-explorer-tree"]') !== null))
+    .toBe(true);
+  expect(await leaked(beforeFocus), 'Ctrl+Shift+Alt+M reached the shell').toEqual([]);
+
+  // ── Ctrl+Shift+Alt+PageDown switches project (FR-010). ───────────────────────────────────────
+  await term.click();
+  await expect(textarea).toBeFocused();
+  const beforeSwitch = (await inputWrites(win, pid)) ?? [];
+  /*
+   * The switch takes this view away, and its log with it (`forgetDiagnostics` on unmount), so the log
+   * is copied in the page on the chord's own KEYUP — after the keydown has been fully dispatched, which
+   * is when a leaked key would have been written, and before the new project's layout can arrive over
+   * IPC. A copy that is missing fails below rather than passing as "nothing written".
+   */
+  await win.evaluate((id) => {
+    const w = window as unknown as {
+      __throngTerminalDiagnostics?: () => Record<string, { writes: string[] }>;
+      __t049Writes?: string[] | null;
+    };
+    w.__t049Writes = undefined;
+    window.addEventListener(
+      'keyup',
+      () => {
+        w.__t049Writes = w.__throngTerminalDiagnostics?.()[id]?.writes ?? null;
+      },
+      { capture: true, once: true },
+    );
+  }, pid);
+  await win.keyboard.press(chordFor('project.next'));
+  await expect(win.locator('.project-item', { hasText: 'ChordNext' })).toHaveAttribute('data-active', 'true');
+  const atKeyup = await win.evaluate(() => (window as unknown as { __t049Writes?: string[] | null }).__t049Writes ?? null);
+  expect(atKeyup, 'the terminal view was gone by the chord’s keyup — the probe read nothing').not.toBeNull();
+  expect(
+    (atKeyup ?? []).slice(beforeSwitch.length).filter((chunk) => !FOCUS_REPORTS.has(chunk)),
+    'Ctrl+Shift+Alt+PageDown reached the shell',
+  ).toEqual([]);
+
+  await switchProject(win, 'ChordProj'); // leave the file where later tests would expect it
 });

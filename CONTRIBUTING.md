@@ -178,14 +178,14 @@ provider, and a test holds it to that.
   keyed by the descriptor's id).
 
 That's the whole surface. The preview panel and its menus, the editor's status bar and menus,
-Files & Folders' **Open In → Preview**, the preferences editor and layout persistence all pick up a
+File Explorer's **Open In → Preview**, the preferences editor and layout persistence all pick up a
 new provider without being edited.
 
 Two tests enforce it, not a review comment:
 
 - `packages/ui/tests/component/preview-provider-seam.test.ts` injects a throwaway text provider and
   a throwaway binary provider (`packages/ui/tests/fixtures/preview/test-providers.ts` — test-only,
-  neither ships) and asserts, through the real components and builders, that Files & Folders'
+  neither ships) and asserts, through the real components and builders, that File Explorer's
   **Open In → Preview**, the editor status bar, the default open action, the preview panel and its
   header menu, the settings tab and layout restore all handle them by kind — including drawing
   their controls disabled, not hidden, while a provider is turned off.

@@ -163,7 +163,7 @@ outright (FR-047):
 | Open In offers "New Editor" (a second panel) and disables it once the file is open | `packages/ui/tests/component/editor-open-router.test.ts` ("Open In → New Editor opens an editor") and `packages/ui/tests/component/editor-open-routing.test.ts` ("opens a NEW panel every time when the open target is "new"") |
 | a persisted language this build no longer knows opens as plain text, without error, and is preserved (FR-005b) | `packages/ui/tests/unit/language-override-load.test.ts`, alongside the existing `language-precedence.test.ts`, `language-loaders.test.ts` and `language-detect.integration.test.ts` cases |
 | the editor pill shows the containing folder in brackets (subfolder + root) | `packages/ui/tests/component/panel-box.test.ts` ("the editor file pill shows the containing folder") |
-| the Files & Folders context menu has a New Folder action | `packages/ui/tests/component/explorer-root-menu.test.ts` ("New Folder on a subfolder row creates inside THAT folder (FR-086)") |
+| the File Explorer context menu has a New Folder action | `packages/ui/tests/component/explorer-root-menu.test.ts` ("New Folder on a subfolder row creates inside THAT folder (FR-086)") |
 | a value outside a declared range is refused, and the last valid one stands (T057) | `packages/ui/tests/component/preferences-number-control.test.ts` (the existing above-maximum case, plus the new "refuses a value below the declared minimum, and says so") |
 
 `e2e-budget.json` is unchanged after the phase — five additions and five removals net to zero:
@@ -370,6 +370,95 @@ OSC 8 target that is not `http(s)` before it builds a range unless the link hand
 the running app — no underline, no tooltip, a Ctrl+click that did nothing — while every unit and
 component test around it passed, because **nothing below E2E constructs an xterm `Terminal`**. That
 is the shape of claim this layer is for.
+
+## Spec 046 — side panes and project list, and the two declarations that pay for two
+
+Side panes, project cycling and categories (spec 046, #331/#332/#390/#411/#292) add two E2E
+declarations. Both are paid for by two declarations that came down in the same spec, so
+`e2e-budget.json` reads what it read going in: **total 573**, `core` 39.
+
+| Declaration | Tags | What it proves |
+| --- | --- | --- |
+| `window-chord-resolution.e2e.ts` — *"from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and Ctrl+Shift+Alt+PageDown reach the app and the shell receives nothing (046 T049, re-pointed T164/FR-114, T181/FR-117)"* | `@extended @window @reserve:input` | from a focused **real terminal**, a real Ctrl+Shift+Alt+Numpad0 resets a zoomed window, a real Ctrl+Shift+Alt+PageDown switches project and a real Ctrl+Shift+Alt+M focuses the File Explorer, and the terminal view's own write log shows no bytes sent to the shell for any of them. (Written against Ctrl+Shift+0, Ctrl+Alt+F and Ctrl+Alt+PageDown; iterate rounds 1 and 2 moved all three, and round 3 moved File Explorer focus from Ctrl+Shift+Alt+F to Ctrl+Shift+Alt+M, below.) Only a real engine reports `e.code` for a physical key, and Principle V names a layout-dependent chord as what a synthesised event cannot prove — `window-zoom-reset-shift.test.ts` holds the dispatch over a synthesised event and cannot say what the engine reports. |
+| `terminal-no-orphans.e2e.ts` — *"Unload Project and End Terminals reaps a busy terminal, and Unload Project keeps an idle shell alive, through the row menu"* (T065, rewritten in place by T129) | `@extended @terminal @reserve:process` | **Unload Project and End Terminals** on a busy shell, with no dialog (FR-111), returns the daemon's conhost count to baseline; once the project is selected again and its new shell is idle, plain **Unload Project** (the shipped `keepRunning` default) keeps that idle shell alive (FR-086, Principle III) — the same `cmd.exe` pid and the same ConPTY host are still under the daemon after the project is selected again, so the panel reattached rather than respawning; both go through the project row's context menu. An extra case from the T048b demotion below rides on the same launch at no extra declaration: after the Unload the row's `.project-item__name` computes `italic`, and `normal` again once the project is selected — the painted half of `loaded-projects.e2e.ts`'s old claim, which no lower layer can read (`getComputedStyle` tells nothing at component level). |
+
+Two declarations came down to pay for them, each moved to a layer that already holds the claim
+rather than deleted outright:
+
+| Removed E2E declaration | Where its assertion lives now |
+| --- | --- |
+| `pane-shortcuts.e2e.ts` — *"Ctrl+Alt+B toggles the Projects pane and Ctrl+Alt+N toggles the File Explorer pane"* | A duplicate of `window-chord-resolution.e2e.ts`'s *"the pane toggles still resolve — Ctrl+Alt+B and Ctrl+Alt+N"* (retitled for Ctrl+Shift+Alt+B / N by T142, and to *"the pane toggles still resolve — Ctrl+Shift+Alt+J and Ctrl+Shift+Alt+K"* by T181) — the same presses (the survivor reads the chords through `chordFor()` rather than spelling them literally), the same `pane-hide-*` / `pane-rail-*` assertions, and the declaration `window-chords.ts`'s `COVERED` map already named for both toggles. Removing it is a de-duplication, not a demotion: no lower layer mounts `app.tsx`'s pane rails, so the surviving E2E is still what holds the claim. |
+| `loaded-projects.e2e.ts` — *"indicates loaded vs not-loaded projects"* (the file's only declaration) | `packages/ui/tests/component/projects-panel-loaded-style.test.ts`, mounting `ProjectsPanel` over one persisted project and a fresh store — exactly what a restart gives, since loaded state is session-only. It asserts `data-loaded`, the `--unloaded` modifier, the unsaved dot and the loaded marker; the *painted* italic style it also carried is not claimed here (Principle V — the component layer cannot tell how an element was painted) and moves instead into the `terminal-no-orphans.e2e.ts` case above. |
+
+`e2e-budget.json`'s `byCategory` moves `@window` down by one net (one declaration removed from
+`pane-shortcuts.e2e.ts`, one added to `window-chord-resolution.e2e.ts`, one more removed from
+`loaded-projects.e2e.ts`) and `@terminal` up by one (`terminal-no-orphans.e2e.ts`'s new
+declaration) — the ratchet moves on both sides of the ledger and lands at the same total.
+`parallel-plan.json` is unchanged: both surviving files were already in the serial tier, and
+neither new declaration steals focus or drives a long-running shell in a way the parallel tier
+would starve.
+
+### Iterate round 1 — the presses move, the budget does not
+
+046's first iterate round moved the navigation and window defaults to `Ctrl+Shift+Alt` (FR-101 –
+FR-105), gave `Ctrl+Wheel` / `Ctrl+MiddleClick` to the panel zoom (FR-106), put word wrap on the
+two-stroke `Ctrl+E W` (FR-091) and made Unload prompt-free (FR-111). **No E2E declaration is added
+or removed**: every change is to what an existing declaration presses or asserts, with its tags
+unchanged, so `e2e-budget.json` still reads **total 573**, `core` 39, and `parallel-plan.json` is
+untouched.
+
+Where a spec presses a shipped default it now reads it — `shippedPress(action)` /
+`shippedPresses(action)` in `packages/ui/tests/shared/window-chords.ts`, which run the first shipped
+binding through `toPlaywrightPresses` — so a default that moves again is pressed as moved rather than
+failing on a stale literal. The one deliberate literal is `notice-focus-chord.e2e.ts`, because
+`window-chord-manifest.test.ts` checks its `COVERED_ELSEWHERE` exemption by finding the keystroke
+spelled in the code.
+
+- **`window-chord-resolution.e2e.ts`** presses the tier-1 chords: the pane toggles
+  (`Control+Shift+Alt+J` / `K`; `B` / `N` until round 3), the tab picker (`Control+Shift+Alt+T`),
+  project cycling (`Control+Shift+Alt+PageDown`), File Explorer focus (`Control+Shift+Alt+M`; `F`
+  until round 3) and the window zoom
+  reset on the keypad (`Control+Shift+Alt+Numpad0`, FR-114 — round 2 took the main-row `0` off both
+  resets). The last three are still pressed from a focused **real terminal** whose write log must
+  stay empty — the `@reserve:input` case — because only a real engine reports `e.code` for a
+  physical key held with Ctrl, Shift and Alt. The three declarations that name a chord in their
+  title were retitled to match.
+- **The other re-pointed presses** (T142): `notice-focus-chord.e2e.ts` (`Control+Shift+Alt+M`, and
+  the `COVERED_ELSEWHERE` entry with it; `Control+Shift+Alt+V` since T181); `tab-picker.e2e.ts`, `transient-overlays.e2e.ts` and
+  `tab-scroll.e2e.ts` (`Control+Shift+Alt+T`); `pane-shortcuts.e2e.ts` (the replaced shipped
+  `Control+Shift+Alt+B` no longer toggling); `move-focus.e2e.ts` (`Control+Shift+Alt+ArrowRight` /
+  `ArrowLeft`); `editor-word-wrap.e2e.ts` and `status-bar-visibility.e2e.ts` (two presses,
+  `Control+e` then `w`, with `editor-pending-chord` asserted visible between them so the second
+  stroke is never sent blind — lowercase because `press('W')` sends a `key: 'W'` with no Shift, which
+  no keyboard produces and CodeMirror does not match as the bare `w` stroke; measured, the chord
+  went pending and then reported itself not bound); `panel-zoom.e2e.ts` (the panel reset as `Control+Alt+Numpad0`);
+  `tab-settings.e2e.ts` (the Key Bindings row shows, and a capture keeps, the shipped
+  `Ctrl+Shift+Alt+T`); and `preferences-reset.e2e.ts`, whose remove-then-reset cases now use
+  `panel.zoomIn` / `panel.zoomOut` — actions that still ship a chord plus a gesture — because
+  FR-105 left `zoom.in` and `zoom.out` a single chord each, with nothing left to restore around.
+- **`terminal-no-orphans.e2e.ts`**'s Unload declaration changes what it asserts (T129); its row in
+  the table above records that.
+
+**Iterate round 3 (T181, FR-117)** moved the letters again: the three focus commands to
+`Ctrl+Shift+Alt+B` / `N` / `M` (Projects, the new **Focus Workspace**, File Explorer), the pane
+toggles to `J` / `K` and `focus.notice` to `V`, leaving `F` and `P` unbound. It too adds and removes
+no declaration and changes no tag, so the budget still reads **total 573**, `core` 39. Two titles
+changed (the pane-toggle declaration and the real-terminal one, both quoted above), one literal
+press changed (`notice-focus-chord.e2e.ts`, now `Control+Shift+Alt+V`), and `pane-shortcuts.e2e.ts`
+changed only in its comments; every other press goes through `chordFor()` / `shippedPress()` and
+followed the defaults on its own. `focus.workspace` is proven at the component layer
+(`side-pane-focus-commands.test.ts`, claimed by `window-chords.ts`'s `COVERED_IN_COMPONENT`), the
+lowest layer that mounts both side panes, the workspace and the real `KeybindingsHandler` together,
+so it needs no E2E.
+
+What stayed below E2E: the physical-key mapping across US, UK, German, French and Polish `key`
+values, the keypad same-binding rule, the two-stroke engine's endings, the capture modal's
+two-stroke control, the gesture routing to the panel under the pointer, and the v13 and v14
+saved-bindings upgrades (each with its idempotent re-run) are all unit, component or integration tests — none of them
+needs a window, and a synthesised event is exactly what they are about. The one claim a synthesised
+event cannot settle, whether Chromium reports `AltGraph` for the right-hand AltGr key (FR-104), is
+not an E2E either: Playwright's key events carry whatever modifier state the test sets, so it is a
+maintainer's hand check (T149).
 
 ## The bridge parity guard
 

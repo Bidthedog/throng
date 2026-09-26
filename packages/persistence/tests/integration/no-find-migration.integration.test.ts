@@ -1,12 +1,12 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createProject, type Panel, type Project, type WorkspaceLayout } from '@throng/core';
 import {
   openDatabase,
   runMigrations,
-  LATEST_VERSION,
   ProjectRepository,
   WorkspaceRepository,
   type ThrongDatabase,
@@ -39,16 +39,12 @@ import {
  */
 const OWNER = 'alice';
 const PANEL_ID = 'fif-1';
+const MIGRATIONS_DIR = fileURLToPath(new URL('../../src/migrations/', import.meta.url));
 
 let db: ThrongDatabase;
 let dataDir: string;
 let projects: ProjectRepository;
 let workspaces: WorkspaceRepository;
-
-/** A second, untouched store inside the same scratch directory `afterEach` already removes. */
-function freshDbPath(): string {
-  return join(dataDir, 'fresh.db');
-}
 
 function seedProject(): Project {
   const project = createProject(
@@ -92,18 +88,17 @@ afterEach(() => {
 });
 
 describe('043 adds a panel type and no schema (research R11)', () => {
-  it('leaves the latest schema version exactly where 016 left it', () => {
-    expect(LATEST_VERSION).toBe(8);
-  });
 
-  it('still migrates a fresh store to that version and no further', () => {
-    const fresh = openDatabase({ databasePath: freshDbPath() });
-    try {
-      expect(runMigrations(fresh).to).toBe(8);
-      expect(Number(fresh.pragma('user_version', { simple: true }))).toBe(8);
-    } finally {
-      fresh.close();
-    }
+  // 043 shipped with the chain at v8 (024's fileop_undo) and added nothing to it. The next step is
+  // 046's v9, so the claim is stated as history — what sits at v8 and v9 — and survives every later
+  // migration, rather than as a latest-version number that the next migration must edit.
+  it('added no migration: v8 is 024\'s fileop_undo and the next step, v9, is 046\'s project_categories', () => {
+    const files = readdirSync(MIGRATIONS_DIR).filter((f) => /^v\d+-.+\.ts$/.test(f));
+    const at = (version: number): string[] => files.filter((f) => f.startsWith(`v${version}-`));
+    expect(at(8)).toEqual(['v8-fileop-undo.ts']);
+    expect(at(9)).toEqual(['v9-project-categories.ts']);
+    // And no migration anywhere in the chain is a search's.
+    expect(files.filter((f) => /find|search/i.test(f))).toEqual([]);
   });
 
   it('creates no table of its own — a search is not a stored thing', () => {
