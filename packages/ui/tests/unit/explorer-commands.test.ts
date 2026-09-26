@@ -1,29 +1,31 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  __resetExplorerCommands,
   getExplorerCommands,
   registerExplorerCommands,
+  requestExplorerFocus,
   unregisterExplorerCommands,
   type ExplorerCommands,
 } from '../../src/renderer/explorer/explorer-commands.js';
 
 /**
- * The Files & Folders pane's command registry (024 US3, #85 follow-up).
+ * The File Explorer pane's command registry (024 US3, #85 follow-up).
  *
  * MIGRATED IN PART FROM `fileop-undo.e2e.ts:117` — *"undo works from anywhere in the pane, not only
  * with a row focused"*. That test made a real project on disk, launched Electron, renamed a file
- * through the context menu, clicked the pane's HEADER (inside Files & Folders but not on a row or in
+ * through the context menu, clicked the pane's HEADER (inside File Explorer but not on a row or in
  * the tree), pressed Ctrl+Z, and then polled `existsSync` until the old name came back.
  *
  * ══ WHAT IT WAS ACTUALLY ABOUT ══
  *
  * Not the rename, and not the filesystem. The tree's own keydown handler fires only while a DOM
- * element inside the tree holds focus, and "working in the Files & Folders pane" is broader than
+ * element inside the tree holds focus, and "working in the File Explorer pane" is broader than
  * that — the toolbar, the pane container after a context-menu action, nowhere in particular after a
  * dialog closed. Ctrl+Z stopped working in exactly those moments, which reads as *undo is
  * unreliable* rather than as *focus is somewhere unexpected*.
  *
  * This module is the fix: the pane registers its commands here, and the WINDOW-level handler
- * dispatches them whenever the active pane is Files & Folders. The E2E's click-the-header was a way
+ * dispatches them whenever the active pane is File Explorer. The E2E's click-the-header was a way
  * of putting focus outside the tree; the registry is what makes that work, and it had no test at any
  * layer.
  *
@@ -41,16 +43,59 @@ import {
  * are filesystem claims and they keep their filesystem.
  */
 
-const commands = (undo = vi.fn(), redo = vi.fn()): ExplorerCommands => ({
+const commands = (undo = vi.fn(), redo = vi.fn(), focus = vi.fn()): ExplorerCommands => ({
   undoFileOp: undo,
   redoFileOp: redo,
+  focusSelectedOrFirst: focus,
 });
 
 afterEach(() => {
   // Module-level state, shared by every test in the process: a registration left behind would let
   // the next test's `getExplorerCommands()` return a stranger's spy.
-  const live = getExplorerCommands();
-  if (live) unregisterExplorerCommands(live);
+  __resetExplorerCommands();
+});
+
+/**
+ * 046 US2 (FR-017) — `focus.explorer` reveals the pane and asks for its focus in the SAME dispatch,
+ * and revealing a collapsed pane is a state update: the pane (and its registration) exists only on
+ * the render AFTER. `requestExplorerFocus` is the `panel-focus.ts` pattern applied here — a request
+ * made before anything is registered is parked, and honoured the instant something registers.
+ */
+describe('requestExplorerFocus parks a request made before the pane mounts (046, FR-017)', () => {
+  it('calls straight through when something is already registered', () => {
+    const focus = vi.fn();
+    registerExplorerCommands(commands(vi.fn(), vi.fn(), focus));
+
+    requestExplorerFocus();
+
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op with nothing registered — it does not throw', () => {
+    expect(() => requestExplorerFocus()).not.toThrow();
+  });
+
+  it('parks the request and fires it the instant a pane registers', () => {
+    const focus = vi.fn();
+    requestExplorerFocus(); // nothing registered yet — parked
+
+    registerExplorerCommands(commands(vi.fn(), vi.fn(), focus));
+
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
+  it('a parked request fires exactly once — the NEXT registration is not also asked to focus', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    requestExplorerFocus();
+    registerExplorerCommands(commands(vi.fn(), vi.fn(), first));
+    expect(first).toHaveBeenCalledTimes(1);
+
+    // A later, unrelated registration (e.g. a project switch's new tree) must not replay the
+    // already-consumed request.
+    registerExplorerCommands(commands(vi.fn(), vi.fn(), second));
+    expect(second).not.toHaveBeenCalled();
+  });
 });
 
 describe('the pane publishes its commands for the window-level handler', () => {

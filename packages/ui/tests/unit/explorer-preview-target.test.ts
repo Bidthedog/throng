@@ -1,5 +1,5 @@
 /**
- * 044 US1 fix round 1, item 3 — `preview.open` over Files & Folders previews the selected FILE, and a
+ * 044 US1 fix round 1, item 3 — `preview.open` over File Explorer previews the selected FILE, and a
  * folder is not a file (FR-003's "absent on folders", applied to the chord).
  *
  * The tree's key handler asks `previewTargetFor` which path, if any, the command names. Nothing, for a

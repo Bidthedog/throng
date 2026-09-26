@@ -399,6 +399,8 @@ export function mountEditor(opts: {
                 ]
               : [],
           } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         default:
           return Promise.resolve({} as T);
       }

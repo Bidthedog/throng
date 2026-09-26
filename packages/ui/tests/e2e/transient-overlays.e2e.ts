@@ -35,6 +35,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { shippedPress } from '../shared/window-chords.js';
 import {
   openApp,
   createProject as newProject,
@@ -64,11 +65,12 @@ let panelId: string;
 /**
  * The tab picker's chord (031 T5, `tabs.openPicker`).
  *
- * Named here rather than imported: `helpers/navigation.ts` owns the two NAVIGATION chords and this
- * one belongs to the tab strip, which has no chord helper. It is the chord the user actually
- * pressed in the report that produced FR-071.
+ * Read from the shipped default rather than spelled: `helpers/navigation.ts` owns the two
+ * NAVIGATION chords and this one belongs to the tab strip, which has no chord helper. FR-071's report
+ * pressed its pre-046 `Ctrl+Alt+T`; 046 FR-102 moved it to tier 1's `Ctrl+Shift+Alt+T`, and deriving
+ * it presses the default as it ships instead of a stale literal.
  */
-const TAB_PICKER_CHORD = 'Control+Alt+T';
+const TAB_PICKER_CHORD = shippedPress('tabs.openPicker');
 
 /** The three overlays SC-017's matrix is drawn over. Each id is also its `data-testid`. */
 const OVERLAYS = ['quickopen', 'gotoline', 'tabpicker'] as const;

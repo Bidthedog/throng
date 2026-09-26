@@ -98,6 +98,54 @@ describe('migrateTheme (021, FR-031/032)', () => {
   });
 });
 
+/**
+ * Branch-review finding (spec 046 iterate round 2) — `icons.projectList` is retired: it described
+ * the title bar's cog-menu "Focus Projects" row, a row FR-074/FR-107 had already retired before the
+ * description was ever written, and no call site in the renderer has ever drawn the token. Version
+ * 12's shipped-defaults seed already wrote it into every existing install's `theme.json` before this
+ * round, so a saved theme carrying the stray key must not error and should have it tidied away —
+ * the same precedent `REMOVED` (021's colour tokens) and the retired `dialog` typography role above
+ * already set. `icons` is `Record<string, string>`, so parsing an extra key never actually errored;
+ * this is about not carrying it forever, and about a custom/other theme's OWN `projectList` value
+ * (an author's legitimate reuse of the identifier) not surviving a migrate pass it never needed.
+ */
+describe('migrateTheme drops the retired icons.projectList token (branch-review finding, 046 iterate round 2)', () => {
+  function themeWithProjectListIcon(): Theme {
+    return {
+      name: 'Has projectList',
+      colours: { accent: '#111111' },
+      fonts: THRONG_THEME.fonts,
+      icons: { ...THRONG_THEME.icons, projectList: '🗂' },
+    };
+  }
+
+  it('drops icons.projectList', () => {
+    const out = migrateTheme(themeWithProjectListIcon());
+    expect(out.icons.projectList).toBeUndefined();
+  });
+
+  it('is lossless for every OTHER icon token', () => {
+    const theme = themeWithProjectListIcon();
+    const out = migrateTheme(theme);
+    for (const [token, value] of Object.entries(theme.icons)) {
+      if (token === 'projectList') continue;
+      expect(out.icons[token], token).toBe(value);
+    }
+  });
+
+  it('is idempotent', () => {
+    const once = migrateTheme(themeWithProjectListIcon());
+    const twice = migrateTheme(once);
+    expect(twice).toEqual(once);
+  });
+
+  it('does not error, and needs no drop, on a theme that never carried it', () => {
+    const clean: Theme = { name: 'Clean', colours: { accent: '#111111' }, fonts: THRONG_THEME.fonts, icons: { unload: '⏏' } };
+    expect(() => migrateTheme(clean)).not.toThrow();
+    expect(migrateTheme(clean).icons.projectList).toBeUndefined();
+  });
+});
+
 describe('migrateTheme — 021 follow-up (active highlight, weight, dialog, editor)', () => {
   it('consolidates activePaneHighlight onto activePanelBorder (drops the old key)', () => {
     const t = legacyTheme();

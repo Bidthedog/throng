@@ -84,6 +84,17 @@ async function mount() {
   return { user };
 }
 
+describe('the pane header names the pane (046 FR-001)', () => {
+  it('reads "File Explorer", not the retired "Files & Folders"', async () => {
+    await mount();
+
+    // No testid on the header span (it is copy, not a control), so this reads the class the
+    // panel chrome always uses for its title — the same selector `theme-fonts.e2e.ts` pins.
+    const header = document.querySelector('.panel__title');
+    expect(header?.textContent).toBe('File Explorer');
+  });
+});
+
 describe('the project-settings control with no project (US8, FR-041)', () => {
   it('is DRAWN AND DISABLED rather than absent', async () => {
     // The spec originally allowed either. The 2026-08-15 clarification settled it for every

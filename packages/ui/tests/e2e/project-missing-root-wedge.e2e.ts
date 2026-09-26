@@ -11,7 +11,7 @@ import { skipIfElevated } from './admin.js';
  * ══ THE DEFECT AS REPORTED ══
  *
  * Switching to a project whose root has been deleted or moved fails with a bare `ENOENT`, and the
- * workspace WEDGES: the Files & Folders tree changes to the new project, but the active tab and the
+ * workspace WEDGES: the File Explorer tree changes to the new project, but the active tab and the
  * main display never switch. Panels keep responding, so the application looks alive while being
  * stuck half-way between two projects.
  *

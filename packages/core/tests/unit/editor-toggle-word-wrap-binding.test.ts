@@ -1,14 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_KEYBINDINGS, resolveAction, COMMAND_SCOPES } from '../../src/config/keybindings.js';
+import {
+  DEFAULT_KEYBINDINGS,
+  resolveAction,
+  COMMAND_SCOPES,
+  isValidTwoStrokeToken,
+  twoStrokeTerminalViolations,
+} from '../../src/config/keybindings.js';
 import { KEYBINDINGS_METADATA } from '../../src/config/keybindings-metadata.js';
 
 /**
- * US1 / FR-003b (spec 024): the word-wrap toggle command ships on Ctrl+Alt+W, editor scope only,
- * with a metadata descriptor (the completeness gate requires one), and does not reach a terminal.
+ * US1 / FR-003b (spec 024), RE-PINNED by 046 iterate round 1 (T097, FR-091/FR-092, FR-102 *changes*
+ * row): `Ctrl+Alt+W` moves to the Ctrl+Shift+Alt navigation tier and is no longer free, so the
+ * word-wrap toggle becomes the two-stroke chord `Ctrl+E W` — Constitution IV's reserved-prefix
+ * exception for exactly this. Editor scope only; still does not reach a terminal.
  */
-describe('editor.toggleWordWrap keybinding (024 US1)', () => {
-  it('is bound to Ctrl+Alt+W', () => {
-    expect(DEFAULT_KEYBINDINGS.bindings['editor.toggleWordWrap']).toEqual(['Ctrl+Alt+W']);
+describe('editor.toggleWordWrap keybinding (024 US1, 046 FR-091/FR-092)', () => {
+  it('is bound to the two-stroke chord Ctrl+E,W (re-pinned for FR-124)', () => {
+    expect(DEFAULT_KEYBINDINGS.bindings['editor.toggleWordWrap']).toEqual(['Ctrl+E,W']);
+  });
+
+  it('is a valid two-stroke token — a modifier on the first stroke, bare on the second', () => {
+    expect(isValidTwoStrokeToken('Ctrl+E,W')).toBe(true);
   });
 
   it('is live in the editor scope, not the terminal', () => {
@@ -18,10 +30,17 @@ describe('editor.toggleWordWrap keybinding (024 US1)', () => {
     expect(scopes.has('explorer')).toBe(false);
   });
 
-  it('resolves Ctrl+Alt+W to the command in the editor scope but not in a terminal', () => {
-    const ev = { key: 'W', ctrl: true, alt: true };
-    expect(resolveAction(DEFAULT_KEYBINDINGS, ev, 'editor')).toBe('editor.toggleWordWrap');
-    expect(resolveAction(DEFAULT_KEYBINDINGS, ev, 'terminal')).toBeNull();
+  it('carries no terminal-scope violation (FR-092 forbids a two-stroke chord live in a terminal)', () => {
+    const violation = twoStrokeTerminalViolations(DEFAULT_KEYBINDINGS.bindings).find(
+      (v) => v.action === 'editor.toggleWordWrap',
+    );
+    expect(violation).toBeUndefined();
+  });
+
+  it('the first stroke alone does not resolve the command — a single keydown is not the whole chord', () => {
+    const firstStroke = { key: 'E', ctrl: true };
+    expect(resolveAction(DEFAULT_KEYBINDINGS, firstStroke, 'editor')).toBeNull();
+    expect(resolveAction(DEFAULT_KEYBINDINGS, firstStroke, 'terminal')).toBeNull();
   });
 
   it('has a keybindings-metadata descriptor (completeness gate)', () => {

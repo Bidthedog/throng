@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence';
+import { openDatabase, runMigrations } from '@throng/persistence';
+import { applyMigrationV2 } from '../../src/migrations/v2-projects-workspace.js';
+import { applyMigrationV3 } from '../../src/migrations/v3-project-order.js';
+import { applyMigrationV4 } from '../../src/migrations/v4-subworkspace-identity.js';
+import { applyMigrationV5 } from '../../src/migrations/v5-subworkspace-order.js';
+import { applyMigrationV6 } from '../../src/migrations/v6-project-hidden.js';
+import { applyMigrationV7, MIGRATION_V7_VERSION } from '../../src/migrations/v7-document-state.js';
 
 /**
  * REWRITTEN by 016 — and the history is the point.
@@ -32,16 +38,25 @@ function freshDbPath(): string {
 }
 
 describe('016 adds per-document state at v7 (reversing 006’s "no editor migration")', () => {
-  it('the latest schema version is 8', () => {
-    expect(LATEST_VERSION).toBe(8);
-  });
-
-  it('a freshly migrated store reports user_version 8', () => {
+  // The exact latest version is pinned once, in user-version-pin. What this file owns is WHERE
+  // document_state arrives: at v7, and not before — a claim no later migration has to edit.
+  it('document_state arrives at exactly v7: absent after v2–v6, present after v7', () => {
+    expect(MIGRATION_V7_VERSION).toBe(7);
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
-      const result = runMigrations(db);
-      expect(result.to).toBe(8);
-      expect(Number(db.pragma("user_version", { simple: true }))).toBe(8);
+      const tables = (): string[] =>
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+          .all()
+          .map((r) => (r as { name: string }).name);
+      db.transaction(() => {
+        for (const step of [applyMigrationV2, applyMigrationV3, applyMigrationV4, applyMigrationV5, applyMigrationV6]) {
+          step(db);
+        }
+      })();
+      expect(tables()).not.toContain('document_state');
+      db.transaction(() => applyMigrationV7(db))();
+      expect(tables()).toContain('document_state');
     } finally {
       db.close();
     }

@@ -94,6 +94,8 @@ function fakeDaemon(projects: readonly unknown[] = []) {
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
           return Promise.resolve({ projects } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         default:
           // Loud rather than silent: an unexpected RPC resolved to `{}` is how a test starts
           // passing against a code path that no longer exists.
@@ -1230,6 +1232,9 @@ describe('a Find in Files panel is not renamable (FR-061)', () => {
     // POSITIVE CONTROL, first and deliberately: this very panel, before it is typed, DOES register.
     // Without it a broken registry would make the assertion below pass for the wrong reason — and
     // "nothing was listening" is exactly what a registry that never works looks like.
+    // `ready()` resolves once the store holds a layout, which can be before the header's passive
+    // effect has registered (seen 1 in 2731 under the full component run). Flush effects first.
+    await act(async () => {});
     act(() => {
       expect(requestPanelRename(panelId), 'an untyped panel still registers a rename').toBe(true);
     });
@@ -1244,6 +1249,7 @@ describe('a Find in Files panel is not renamable (FR-061)', () => {
         'Find in Files',
       ),
     );
+    await act(async () => {}); // the unregister cleanup is a passive effect too
     act(() => {
       expect(
         requestPanelRename(panelId),

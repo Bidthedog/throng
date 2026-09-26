@@ -1,5 +1,5 @@
 /**
- * The Files & Folders menu as DRAWN: where the horizontal rules land, that a rule is not an item,
+ * The File Explorer menu as DRAWN: where the horizontal rules land, that a rule is not an item,
  * and what the "Open In" flyout actually contains once it is open (US5/#158, FR-018a; 033 US5
  * FR-048/FR-050).
  *

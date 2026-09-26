@@ -79,7 +79,7 @@ function explorerNotices(win: Page): Locator {
   return win.getByTestId('explorer-error');
 }
 
-/** Rename `name` to `to` from the Files & Folders tree (F2, as `fileop-lock-cause` does). */
+/** Rename `name` to `to` from the File Explorer tree (F2, as `fileop-lock-cause` does). */
 async function renameInTree(win: Page, name: string, to: string): Promise<void> {
   const tree = win.getByTestId('file-explorer-tree');
   await expect(tree).toBeVisible();

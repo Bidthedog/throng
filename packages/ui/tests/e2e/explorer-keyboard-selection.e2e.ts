@@ -1,5 +1,5 @@
 /**
- * 024 US3 follow-up — in Files & Folders the arrow keys move the SELECTION, not a separate cursor.
+ * 024 US3 follow-up — in File Explorer the arrow keys move the SELECTION, not a separate cursor.
  *
  * Every file operation reads the selection, so a tree where the highlight and the operations
  * disagree quietly does the wrong thing: Ctrl+X cut the row the user had arrowed AWAY from, and

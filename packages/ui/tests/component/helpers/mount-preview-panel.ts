@@ -87,6 +87,8 @@ function fakeDaemon(): ThrongBridge {
           return Promise.resolve({
             projects: [{ id: PROJECT, name: 'proj', rootFolder: ROOT, createdAt: '', lastOpenedAt: '' }],
           } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         default:
           return Promise.resolve({} as T);
       }

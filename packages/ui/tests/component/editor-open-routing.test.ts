@@ -92,6 +92,8 @@ function fakeServices(): Services {
           return Promise.resolve({
             projects: [{ id: PROJECT, name: 'Proj', rootFolder: 'D:/proj' }],
           } as TResult);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as TResult);
         case 'document.pruneMissing':
           return Promise.resolve({ pruned: 0 } as TResult);
         case 'fileopUndo.get':

@@ -168,7 +168,7 @@ describe('groupBySection (033 menu-sections.ts)', () => {
     expect(groupBySection([], sectionOf)).toEqual([]);
   });
 
-  it('groups the shipped Files & Folders menu into its four derived boundaries', () => {
+  it('groups the shipped File Explorer menu into its four derived boundaries', () => {
     // contracts/menu-sections.md §3.1 — zero movement: the four hand-pushed
     // separators become the four boundaries between these five groups.
     const explorer = [

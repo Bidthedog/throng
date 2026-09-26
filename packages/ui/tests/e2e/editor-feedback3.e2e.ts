@@ -112,7 +112,7 @@ test('a context menu opened near the bottom-right edge stays fully on-screen (FR
     await expect(tree).toBeVisible();
 
     const viewport = await win.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
-    // The Files & Folders tree is the right-hand pane, so a right-click here lands
+    // The File Explorer tree is the right-hand pane, so a right-click here lands
     // near the window's right edge — the menu (which opens rightward by default)
     // must flip LEFT to stay on-screen.
     await tree.getByText('top.txt', { exact: true }).click({ button: 'right' });

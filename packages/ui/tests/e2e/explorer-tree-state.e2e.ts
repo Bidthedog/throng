@@ -1,5 +1,5 @@
 /**
- * E2E — REPRODUCTION ONLY (v1 bug sweep). Three reported Files & Folders defects:
+ * E2E — REPRODUCTION ONLY (v1 bug sweep). Three reported File Explorer defects:
  *
  *   1. Dragging an EXPANDED folder into another folder collapses it, but the
  *      expansion icon reportedly stays open.

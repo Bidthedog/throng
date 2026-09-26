@@ -72,6 +72,8 @@ function fakeDaemon(): ThrongBridge {
           return Promise.resolve({ subWorkspaces: [] } as T);
         case 'projects.list':
           return Promise.resolve({ projects: [] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
         default:
           return Promise.reject(new Error(`unexpected RPC from the preview header mount: ${method}`));
       }

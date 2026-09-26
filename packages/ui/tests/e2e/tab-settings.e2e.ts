@@ -15,6 +15,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
+import { shippedBindingsFor } from '@throng/core';
 import { FILE_OP_TIMEOUT_MS, openApp, settle, setSlider, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import {
   configRootSeeded,
@@ -269,7 +270,10 @@ test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebinda
       await expect(
         prefs.getByTestId('keybindings-group-Tabs').getByTestId('binding-tabs.openPicker'),
       ).toHaveCount(1);
-      await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText('Ctrl+Alt+T');
+      // Read from the shipped default (Ctrl+Shift+Alt+T since 046 FR-102) rather than spelled.
+      const shipped = shippedBindingsFor().bindings['tabs.openPicker']?.[0];
+      expect(shipped, 'tabs.openPicker ships no chord').toBeDefined();
+      await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText(shipped as string);
       await expect(prefs.getByTestId('binding-tabs.openPicker-scope')).toHaveText('Everywhere');
 
       // REBINDABLE — capture is additive, so the shipped chord survives beside the new one.
@@ -279,7 +283,7 @@ test('T057 — tabs.openPicker appears in the Key Bindings editor and is rebinda
       await expect(prefs.getByTestId('capture-modal')).toBeHidden();
       await expect
         .poll(() => readBindings(cfgRoot)?.['tabs.openPicker'])
-        .toEqual(['Ctrl+Alt+T', 'F9']);
+        .toEqual([shipped, 'F9']);
 
       // …and the new chord is what the editor now shows.
       await expect(prefs.getByTestId('binding-tabs.openPicker-chord')).toContainText('F9');

@@ -1,9 +1,11 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { THRONG_THEME } from '@throng/core';
 import { stripComments } from './helpers/strip-comments.js';
+import { IconPackService } from '../../src/main/icon-pack-service.js';
 
 /**
  * Every `<Icon token="…" />` in the renderer names a token the shipped theme actually defines.
@@ -93,5 +95,51 @@ describe('Icon tokens', () => {
     // here as a collapsing count rather than as a quietly narrower sweep.
     const total = files.reduce((n, f) => n + [...code(f).matchAll(STATIC_TOKEN)].length, 0);
     expect(total).toBeGreaterThan(10);
+  });
+});
+
+/**
+ * 046 T007 (FR-061, R11) — `unload` and `category` each need a BESPOKE shape in the bundled
+ * `throng-svg` image pack, not the generic rounded-square badge every undrawn token falls back to
+ * (`GENERIC_SHAPE` in `packages/ui/src/main/icon-pack-service.ts`). `SVG_SHAPES` itself is
+ * module-private, so this drives it the same way the shipped pack does: seed the two bundled packs
+ * into a throwaway `icon-packs/` directory via the public `ensureBundledPacks()` and read back the
+ * `.svg` file each of the two tokens produced.
+ *
+ * A third token, `projectList`, originally shipped alongside these two — retired (branch-review
+ * finding, 046 iterate round 2): it described a cog-menu row FR-074/FR-107 had already retired
+ * before the description was written, and no call site ever drew it. `THRONG_THEME.icons` no longer
+ * defines it, so `known` above (line 68) already excludes it from every check in this file.
+ *
+ * `dismiss` stands in as a KNOWN-generic reference — it is a real shipped token
+ * (`THRONG_THEME.icons.dismiss`) that has never had a bespoke `SVG_SHAPES` entry, so whatever content
+ * it produces today IS the generic fallback, discovered rather than hand-copied from the private
+ * constant.
+ */
+describe('the two 046 side-pane tokens have a bespoke SVG_SHAPES entry, not the generic fallback', () => {
+  let packsDir: string;
+
+  beforeEach(() => {
+    packsDir = mkdtempSync(join(tmpdir(), 'throng-icon-shapes-'));
+  });
+  afterEach(() => {
+    rmSync(packsDir, { recursive: true, force: true });
+  });
+
+  const svgPath = (token: string): string => join(packsDir, 'throng-svg', `${token}.svg`);
+
+  it('dismiss is still undrawn — the generic reference this test relies on', () => {
+    // Guards the test itself: if `dismiss` ever gains bespoke art, the comparison below would
+    // compare bespoke-against-bespoke and could pass for the wrong reason.
+    expect(THRONG_THEME.icons.dismiss, 'icons.dismiss').toBeTruthy();
+  });
+
+  it('unload and category each render distinct art, not the generic badge', async () => {
+    await new IconPackService(packsDir).ensureBundledPacks();
+    const generic = readFileSync(svgPath('dismiss'), 'utf8');
+    for (const token of ['unload', 'category']) {
+      const rendered = readFileSync(svgPath(token), 'utf8');
+      expect(rendered, `${token}.svg is the generic fallback shape, not a bespoke one`).not.toBe(generic);
+    }
   });
 });

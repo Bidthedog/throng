@@ -74,7 +74,7 @@ test('with no project open the button is DRAWN AND DISABLED, its tooltip says wh
     await runOwnApp(async (_app, win) => {
       await settle(win);
       /*
-       * The Files & Folders pane defaults to COLLAPSED when no project is open
+       * The File Explorer pane defaults to COLLAPSED when no project is open
        * (`throng.explorerVisibleNoProject`, app.tsx) — "the user may still expand it to its empty
        * placeholder". Expanding it is the state FR-018c is about: a button nobody can see is
        * neither drawn nor disabled, and the requirement is about what the user finds when they look.

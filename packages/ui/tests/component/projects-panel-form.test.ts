@@ -82,6 +82,7 @@ import { ProjectsProvider, useProjects } from '../../src/renderer/state/projects
 import { WorkspaceProvider, useWorkspace } from '../../src/renderer/state/workspace-store.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
+import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { ProjectsPanel } from '../../src/renderer/sidebar/projects-panel.js';
 
 /*
@@ -155,6 +156,10 @@ function fakeDaemon(seed: ProjectDto[] = []) {
       switch (method) {
         case 'projects.list':
           reply = { projects: listed() };
+          break;
+
+        case 'projects.categories.list':
+          reply = { categories: [] };
           break;
 
         case 'projects.create': {
@@ -348,7 +353,11 @@ async function mount(seed: ProjectDto[] = [], stubs: Stubs = {}) {
       children: createElement(
         NotificationProvider,
         null,
-        createElement(ConfirmProvider, null, createElement(Host, null)),
+        createElement(
+          ConfirmProvider,
+          null,
+          createElement(ContextMenuProvider, null, createElement(Host, null)),
+        ),
       ),
     }),
   });

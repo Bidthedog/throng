@@ -7,6 +7,7 @@ import {
   DEFAULT_KEYBINDINGS,
   SHIPPED_DEFAULTS_VERSION,
   V4_EXCLUDE_GLOBS,
+  V11_ZOOM_RESET_BINDING,
   V6_FIND_IN_FILES_ICON,
   V6_SEARCH_IN_FILES_SETTINGS,
   V6_SEARCH_MATCH_COLOURS,
@@ -428,5 +429,202 @@ describe('ShippedDefaultsService.upgrade (additive, plus the 043 guarded value r
         expect(readFileSync(join(root, 'themes', `${n}.json`), 'utf8'), n).toBe(themesAfterFirst[i]);
       });
     });
+  });
+});
+
+/*
+ * 046 FR-025, I5/arch#4 — the guarded `zoom.reset` keybinding rewrite, exercised through the real
+ * UI-main upgrade path (`ShippedDefaultsService.upgrade()`), not just `planKeybindingsUpgrade`'s
+ * own unit tests (packages/core/tests/unit/shipped-defaults-upgrade-v12-keybindings.test.ts).
+ *
+ * `keybindingsUpgradeFile` used to hand-roll the leaf application that
+ * `@throng/core`'s `applyKeybindingsUpgrade` already provides (and which, until this file, had no
+ * production caller — only that core test exercised it). These prove the WIRING against a config
+ * root shaped like a real v11 install, the same reason the settings-leaf `describe` block above
+ * exists for `planSettingsUpgrade`.
+ */
+describe('ShippedDefaultsService.upgrade — the guarded zoom.reset keybinding leaf (046 FR-025)', () => {
+  /** A config root as an installation on shipped-defaults v11 would have left it. */
+  function v11KeybindingsInstall(bindings: Record<string, string[]>): { root: string; store: FileConfigStore } {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    writeFileSync(
+      join(root, 'keybindings.json'),
+      `${JSON.stringify({ version: 11, bindings }, null, 2)}\n`,
+      'utf8',
+    );
+    writeFileSync(join(root, 'defaults-state.json'), `${JSON.stringify({ version: 11 }, null, 2)}\n`, 'utf8');
+    return { root, store };
+  }
+  const bindingsOnDisk = (root: string): Record<string, string[]> =>
+    (readJson(join(root, 'keybindings.json')) as { bindings: Record<string, string[]> }).bindings;
+
+  it('moves an install still on the v11 pair to the shipped zoom.reset value', async () => {
+    // RE-PINNED by 046 iterate round 1 (T100, FR-102/FR-107): the SHIPPED value this now moves to
+    // is v13's, straight past v12's intermediate 'Ctrl+Shift+0' — which is itself retired, not
+    // shipped, by this round. RE-PINNED AGAIN by 046 iterate round 2 (FR-114) — the maintainer's
+    // own words, mid-build: "The 'Zoom Reset' key bindings need to use the numpad zero, NOT the 0
+    // key." — so the shipped value's key segment is `Numpad0`, not the main-row `0`.
+    const { root, store } = v11KeybindingsInstall({ 'zoom.reset': [...V11_ZOOM_RESET_BINDING] });
+    expect(await new ShippedDefaultsService(store, SHIPPED).upgrade()).toMatchObject({ ok: true });
+    expect(bindingsOnDisk(root)['zoom.reset']).toEqual(SHIPPED.keybindings.bindings['zoom.reset']);
+    expect(bindingsOnDisk(root)['zoom.reset']).toContain('Ctrl+Shift+Alt+Numpad0');
+  });
+
+  it('leaves a REBOUND zoom.reset exactly as the user set it', async () => {
+    const { root, store } = v11KeybindingsInstall({ 'zoom.reset': ['Ctrl+Shift+R'] });
+    await new ShippedDefaultsService(store, SHIPPED).upgrade();
+    expect(bindingsOnDisk(root)['zoom.reset']).toEqual(['Ctrl+Shift+R']);
+  });
+
+  it('leaves zoom.reset untouched when another action already binds the REAL v13 target Ctrl+Shift+Alt+Numpad0', async () => {
+    // RE-PINNED (fix round, review finding CRITICAL 1): `Ctrl+Shift+)` was the collision token to
+    // check while the intended target was `Ctrl+Shift+0` (v12). 046 iterate round 2 (FR-114) moved
+    // the real v13 target to `Ctrl+Shift+Alt+Numpad0`, so that is what must block the move now.
+    const { root, store } = v11KeybindingsInstall({
+      'zoom.reset': [...V11_ZOOM_RESET_BINDING],
+      'editor.saveAs': ['Ctrl+Shift+Alt+Numpad0'],
+    });
+    await new ShippedDefaultsService(store, SHIPPED).upgrade();
+    expect(bindingsOnDisk(root)['zoom.reset']).toEqual([...V11_ZOOM_RESET_BINDING]);
+    expect(bindingsOnDisk(root)['editor.saveAs']).toEqual(['Ctrl+Shift+Alt+Numpad0']);
+  });
+});
+
+/*
+ * 046 iterate round 1 (T095, FR-108) — the v12 → v13 keybindings upgrade, through the real
+ * UI-main upgrade path. `planKeybindingsUpgrade`'s own unit tests
+ * (packages/core/tests/unit/shipped-defaults-upgrade-v13-keybindings.test.ts) prove the guard;
+ * this proves the WIRING against a config root shaped like a real v12 install, the same reason the
+ * v11 describe block above exists for the v12 rewrite.
+ */
+describe('ShippedDefaultsService.upgrade — the v12 to v13 keybindings rows (046 FR-108)', () => {
+  /** A config root as an installation stamped 12, still on v11's chords for every guarded row. */
+  function v12KeybindingsInstall(bindings: Record<string, string[]>): { root: string; store: FileConfigStore } {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    writeFileSync(
+      join(root, 'keybindings.json'),
+      `${JSON.stringify({ version: 12, bindings }, null, 2)}\n`,
+      'utf8',
+    );
+    writeFileSync(join(root, 'defaults-state.json'), `${JSON.stringify({ version: 12 }, null, 2)}\n`, 'utf8');
+    return { root, store };
+  }
+  const bindingsOnDisk = (root: string): Record<string, string[]> =>
+    (readJson(join(root, 'keybindings.json')) as { bindings: Record<string, string[]> }).bindings;
+
+  it('moves an install still on the v11 chords straight to the v13 shipped values', async () => {
+    const { root, store } = v12KeybindingsInstall({
+      'focus.notice': ['Ctrl+Alt+M'],
+      'view.toggleProjects': ['Ctrl+Alt+B'],
+      'editor.toggleWordWrap': ['Ctrl+Alt+W'],
+    });
+    expect(await new ShippedDefaultsService(store, SHIPPED).upgrade()).toMatchObject({ ok: true });
+    const after = bindingsOnDisk(root);
+    expect(after['focus.notice']).toEqual(SHIPPED.keybindings.bindings['focus.notice']);
+    expect(after['view.toggleProjects']).toEqual(SHIPPED.keybindings.bindings['view.toggleProjects']);
+    // Re-pinned for FR-124: the live shipped word-wrap chord is `Ctrl+E,W` (shipped-defaults 15).
+    expect(after['editor.toggleWordWrap']).toEqual(['Ctrl+E,W']);
+  });
+
+  it('moves the four side-pane commands from their v12 value to the v13 shipped values', async () => {
+    const { root, store } = v12KeybindingsInstall({
+      'project.next': ['Ctrl+Alt+PageDown'],
+      'project.previous': ['Ctrl+Alt+PageUp'],
+      'focus.explorer': ['Ctrl+Alt+F'],
+      'focus.projects': ['Ctrl+Alt+P'],
+    });
+    await new ShippedDefaultsService(store, SHIPPED).upgrade();
+    const after = bindingsOnDisk(root);
+    expect(after['project.next']).toEqual(SHIPPED.keybindings.bindings['project.next']);
+    expect(after['focus.explorer']).toEqual(SHIPPED.keybindings.bindings['focus.explorer']);
+  });
+
+  it('leaves a rebound action exactly as the user set it', async () => {
+    const { root, store } = v12KeybindingsInstall({ 'focus.notice': ['Ctrl+Shift+Q'] });
+    await new ShippedDefaultsService(store, SHIPPED).upgrade();
+    expect(bindingsOnDisk(root)['focus.notice']).toEqual(['Ctrl+Shift+Q']);
+  });
+
+  it('is idempotent — a second upgrade rewrites nothing further', async () => {
+    const { root, store } = v12KeybindingsInstall({ 'focus.notice': ['Ctrl+Alt+M'] });
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    await service.upgrade();
+    const afterFirst = readFileSync(join(root, 'keybindings.json'), 'utf8');
+    await service.upgrade();
+    expect(readFileSync(join(root, 'keybindings.json'), 'utf8')).toBe(afterFirst);
+  });
+});
+
+/*
+ * 046 iterate round 3 (T176, FR-118) — the v13 → v14 keybindings rows, through the real UI-main
+ * upgrade path. The case FR-118 exists for is a config root the maintainer already has: marker 13,
+ * holding exactly what version 13 wrote. `shipped-defaults-upgrade-v14-keybindings.test.ts` proves
+ * the guard; this proves the wiring and the idempotent re-run over the real file store.
+ */
+describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (046 FR-118)', () => {
+  /** What version 13 wrote for the five rows FR-117 moves. */
+  const V13_FIVE: Record<string, string[]> = {
+    'focus.notice': ['Ctrl+Shift+Alt+M'],
+    'view.toggleProjects': ['Ctrl+Shift+Alt+B'],
+    'view.toggleExplorer': ['Ctrl+Shift+Alt+N'],
+    'focus.explorer': ['Ctrl+Shift+Alt+F'],
+    'focus.projects': ['Ctrl+Shift+Alt+P'],
+  };
+
+  /** A config root stamped 13, holding version 13's keybindings document (no `focus.workspace`). */
+  function v13KeybindingsInstall(overrides: Record<string, string[]> = {}): { root: string; store: FileConfigStore } {
+    const root = freshRoot();
+    const store = new FileConfigStore(root);
+    const bindings = { ...structuredClone(DEFAULT_KEYBINDINGS.bindings), ...V13_FIVE, ...overrides };
+    delete (bindings as Record<string, string[]>)['focus.workspace'];
+    writeFileSync(
+      join(root, 'keybindings.json'),
+      `${JSON.stringify({ version: 13, bindings }, null, 2)}\n`,
+      'utf8',
+    );
+    writeFileSync(join(root, 'defaults-state.json'), `${JSON.stringify({ version: 13 }, null, 2)}\n`, 'utf8');
+    return { root, store };
+  }
+  const bindingsOnDisk = (root: string): Record<string, string[]> =>
+    (readJson(join(root, 'keybindings.json')) as { bindings: Record<string, string[]> }).bindings;
+
+  it('moves the five rows to their shipped values and records marker 14', async () => {
+    const { root, store } = v13KeybindingsInstall();
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    expect(await service.upgrade()).toMatchObject({ ok: true });
+    const after = bindingsOnDisk(root);
+    expect(after['focus.notice']).toEqual(['Ctrl+Shift+Alt+V']);
+    expect(after['view.toggleProjects']).toEqual(['Ctrl+Shift+Alt+J']);
+    expect(after['view.toggleExplorer']).toEqual(['Ctrl+Shift+Alt+K']);
+    expect(after['focus.explorer']).toEqual(['Ctrl+Shift+Alt+M']);
+    expect(after['focus.projects']).toEqual(['Ctrl+Shift+Alt+B']);
+    expect('focus.workspace' in after, 'nothing kept N, so the per-read fill supplies it').toBe(false);
+    // Re-pinned: FR-124 bumps the marker to 15 (word wrap's Ctrl+E,W); the rows above are unchanged.
+    // Re-pinned again: FR-127 bumps the marker to 16 (the panel reset's Ctrl+Alt+0).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
+    expect(await service.readAppliedVersion()).toBe(16);
+  });
+
+  it('a second upgrade writes nothing', async () => {
+    const { root, store } = v13KeybindingsInstall();
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    await service.upgrade();
+    const afterFirst = readFileSync(join(root, 'keybindings.json'), 'utf8');
+    await service.upgrade();
+    expect(readFileSync(join(root, 'keybindings.json'), 'utf8')).toBe(afterFirst);
+  });
+
+  it('writes focus.workspace: [] where a kept binding holds N, and a second upgrade writes nothing', async () => {
+    const { root, store } = v13KeybindingsInstall({ 'view.toggleExplorer': ['Ctrl+Shift+Alt+N', 'F9'] });
+    const service = new ShippedDefaultsService(store, SHIPPED);
+    await service.upgrade();
+    const after = bindingsOnDisk(root);
+    expect(after['view.toggleExplorer']).toEqual(['Ctrl+Shift+Alt+N', 'F9']);
+    expect(after['focus.workspace']).toEqual([]);
+    const afterFirst = readFileSync(join(root, 'keybindings.json'), 'utf8');
+    await service.upgrade();
+    expect(readFileSync(join(root, 'keybindings.json'), 'utf8')).toBe(afterFirst);
   });
 });
