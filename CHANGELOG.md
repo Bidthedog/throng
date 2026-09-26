@@ -29,6 +29,75 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Project cycling and side-pane focus chords**
+  ([#332](https://github.com/Bidthedog/throng/issues/332)): **Next Project** / **Previous Project**
+  (Ctrl+Shift+Alt+PageDown / Ctrl+Shift+Alt+PageUp) step through the projects you can reach from
+  anywhere in the window, skipping a minimised category and stopping at either end; **Focus
+  Projects** / **Focus Workspace** / **Focus File Explorer** (Ctrl+Shift+Alt+B / Ctrl+Shift+Alt+N /
+  Ctrl+Shift+Alt+M, left to right) jump keyboard focus straight to the project list, back to the
+  active panel in the centre workspace, or to the file tree. Focus Workspace is keyboard-only and
+  changes no tab, panel or project. All five are listed, with their chords, in the Key Bindings
+  editor.
+- **A project right-click menu, with Unload**
+  ([#411](https://github.com/Bidthedog/throng/issues/411)): right-click a project (or Shift+F10 / the
+  context-menu key on a focused row) for Edit, Rename, Remove and two Unload rows — **Unload
+  Project**, and one naming the other terminal action — which close a project's tabs and panels
+  without forgetting its layout, category or settings. Neither row asks anything: keeping terminals
+  running keeps every terminal, idle shells included, to reattach when you next load the project,
+  and ending them ends every one. **Unload project: default terminal action** chooses what **Unload
+  Project** does (keeps terminals running by default). Unsaved editors are still offered for saving
+  first.
+- **Project categories** ([#292](https://github.com/Bidthedog/throng/issues/292)): group projects in
+  the Projects pane, with a default **In Progress** category that always exists, is always first,
+  and cannot be deleted or minimised. **Move to Category ▸ New Category…** on a project's menu creates
+  a category and moves that project into it; rename, delete, minimise or reorder one (**Move Category
+  Up** / **Move Category Down**, or drag its header) from its header. A duplicate category name is
+  refused, as a duplicate project name is. Drag a project between categories from anywhere on its
+  row; deleting a category returns its projects to the default one.
+
+### Changed
+- "Files & Folders" is now called File Explorer
+  ([#331](https://github.com/Bidthedog/throng/issues/331)). This line is exempt from the rename guard
+  the rest of the docs are held to.
+- **Default shortcuts follow one pattern now**: Ctrl+Shift+Alt for getting around and the whole
+  window, Ctrl+Alt or Ctrl+Shift for the focused panel, one modifier for content. These moved from
+  Ctrl+Alt to Ctrl+Shift+Alt: move focus (the Arrow keys) and the tab picker (T), on the same keys;
+  focus the latest notice, from Ctrl+Alt+M to Ctrl+Shift+Alt+V; and show/hide the Projects and File
+  Explorer panes, from Ctrl+Alt+B / N to Ctrl+Shift+Alt+J / K. An existing install is moved to
+  the new defaults only where you still had the old default; a binding you changed is left alone.
+- **The window zoom is Ctrl+Shift+Alt++ / Ctrl+Shift+Alt+- to step it, and Ctrl+Shift+Alt+Numpad0 —
+  the numeric keypad's zero, not the main-row key — to reset it.** Plain Ctrl++, Ctrl+-, Ctrl+= and
+  Ctrl+0 are no longer bound, and neither is the main-row zero on any modifier combination; there is
+  no mouse route to the window reset. This is how
+  [#390](https://github.com/Bidthedog/throng/issues/390)'s missing global zoom reset is answered: the
+  Ctrl+Shift+0 it asked for is not shipped.
+- **Ctrl+Wheel zooms the panel under the pointer**, not the whole window; **Ctrl+MiddleClick** over a
+  panel resets that panel's zoom. Over the title bar or a side pane neither does anything.
+- **The panel zoom resets with Ctrl+Alt+Numpad0** — the keypad zero — **Ctrl+Alt+0** on the main
+  row, or Ctrl+MiddleClick. The window zoom resets only from the keypad zero.
+- **Word wrap is Ctrl+E,W** — hold Ctrl, press E, then W — in place of Ctrl+Alt+W. The editor shows
+  that it is waiting for the second key. A chord of up to three keys under its modifiers is written
+  `Ctrl+E,W` or `Ctrl+E,W,Q` and recorded in the Key Bindings editor by pressing it the same way;
+  the recording finishes when every key is up.
+- **Moving into a panel moves the caret too.** Ctrl+Shift+Alt+Arrows onto an empty panel or Find in
+  Files puts the caret in that panel (its type picker, its search box, or whichever control last had
+  focus) instead of leaving it in the editor or terminal you left.
+- **Choosing a project from the Projects list keeps focus on the list**, even when its editor or
+  terminal was open earlier.
+- **The focused-panel outline shows only while the centre workspace has focus.** While the Projects
+  pane or the File Explorer has focus, only that pane is outlined; going back to the workspace
+  outlines the same panel again.
+- **Move focus (Ctrl+Shift+Alt+Arrows) works from the focused panel only**; while a side pane has
+  focus it does nothing.
+- **The keypad + and - are the same binding as the main-row keys**, and the Key Bindings editor
+  records either as the same chord.
+
+### Known issues
+- The Ctrl+Shift+Alt chords follow the key's position, so on a few layouts they take a character
+  typed with AltGr+Shift: Ń on Polish (programmer's), Ñ and Þ on US-International, Ț on Romanian
+  (Programmers). Rebind the chord if you type one; the quick start's keyboard reference lists them.
+
 ## 1.0.0-beta7 — 2026-09-22
 
 ### Fixed

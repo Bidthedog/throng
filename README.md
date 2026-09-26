@@ -38,9 +38,31 @@ goal is to pull all of that into a single, simple customisable workspace.
 ## Highlights
 
 - **Projects** — isolated per-project contexts, each bound to an exclusive root folder and a colour;
-  create, edit, switch and reorder them, stored locally per user.
+  create, edit, switch and reorder them, stored locally per user. Group them into **categories**:
+  every project starts in the default **In Progress** category, which cannot be deleted or
+  minimised (it can be renamed); a project's right-click menu — or **Shift+F10** / the context-menu
+  key on a focused row — offers **Move to Category ▸**, listing the other categories and **New
+  Category…**, which creates a category and moves the project into it. A category header's own menu
+  offers **Rename Category**, **Delete Category** and **Minimise Category**; a duplicate category
+  name is refused, as a duplicate project name is. Deleting a category returns its projects to the
+  default one. Categories reorder by dragging a header or with **Move Category Up** / **Move
+  Category Down**, the default category staying pinned first, and a project drags from anywhere on
+  its row. The same row menu offers **Edit**, **Rename**, **Remove** and two Unload rows —
+  **Unload Project**, and one naming the other terminal action (**Unload Project and End
+  Terminals** as shipped) — which close the project's tabs and panels without forgetting its
+  layout. Neither asks anything about terminals: each does what its label says, keeping every
+  terminal (idle shells included) to reattach next time you load the project, or ending them all
+  (see [Configuration](#configuration)). **Next Project** / **Previous Project**
+  (**Ctrl+Shift+Alt+PageDown** / **Ctrl+Shift+Alt+PageUp**) step through the reachable list from
+  anywhere in the window, skipping a minimised category and stopping at either end; **Focus
+  Projects** / **Focus Workspace** / **Focus File Explorer** (**Ctrl+Shift+Alt+B** /
+  **Ctrl+Shift+Alt+N** / **Ctrl+Shift+Alt+M**, left to right) jump keyboard focus straight to the
+  project list, back to the active panel in the centre, or to the file tree, and
+  **Ctrl+Shift+Alt+V** focuses the newest notice. All of them are listed, with their live chords, in
+  the Key Bindings editor.
 - **Dockable workspace** — three collapsible panes, unlimited tabs and drag-to-split panels; the full
-  per-project layout is saved and restored every session.
+  per-project layout is saved and restored every session. **Ctrl+Shift+Alt+J** / **Ctrl+Shift+Alt+K**
+  collapse and expand the Projects pane and the File Explorer pane.
 - **Multi-window sub-workspaces** — tear tabs or panels off into separate OS windows that stay in
   sync and move as one focus group.
 - **Terminal panels** — PowerShell, Git Bash, CMD and custom shell flavours run inline on **detached,
@@ -79,7 +101,16 @@ goal is to pull all of that into a single, simple customisable workspace.
   one chord and says in words where it will open it; Go To Line jumps by number; and the tree's own
   menu opens a terminal in any folder or tidies one branch of the subtree.
 - **Focus and zoom** — one visible active panel per window, movable from the keyboard, with text zoom
-  set independently per panel and panel names that are unique across the whole application.
+  set independently per panel and panel names that are unique across the whole application. The
+  window zoom is **Ctrl+Shift+Alt++** / **Ctrl+Shift+Alt+-** (the **+**/**-** keys, or the keypad's)
+  to step it, and **Ctrl+Shift+Alt+Numpad0** — the keypad zero specifically, not the main row — to
+  reset it; there is no mouse route to the window reset. A panel zooms with **Ctrl+Alt++** /
+  **Ctrl+Alt+-**, resets with **Ctrl+Alt+Numpad0**, **Ctrl+Alt+0** or **Ctrl+MiddleClick**, and **Ctrl+Wheel** zooms
+  the panel under the pointer. A keyboard with no numeric keypad has no keyboard route to reset the
+  window zoom; the panel resets with Ctrl+Alt+0 or Ctrl+MiddleClick. Default chords follow one pattern —
+  **Ctrl+Shift+Alt** for getting around and the window, **Ctrl+Alt** or **Ctrl+Shift** for the focused
+  panel, one modifier for content — set out, with its exceptions and what it means on non-UK layouts,
+  in the [quick start's keyboard reference](docs/quick-start.md#keyboard-reference).
 - **Preferences** — a single window with visual Settings, Key Bindings and Themes editors: typeahead
   search, immediate apply, a raw-JSON toggle that applies when you leave it, and reset scopes from
   one item up to everything.
@@ -88,7 +119,7 @@ goal is to pull all of that into a single, simple customisable workspace.
 - **Failures that name their cause** — errors say what is actually holding a locked file, raise one
   message per underlying problem, and leave a daemon-restart control in the status bar if it stops.
 - **File previews** — a read-only, rendered view of a file beside its editor: opened from the
-  editor's status bar, its right-click menu, or Files & Folders' **Open In → Preview**. It follows
+  editor's status bar, its right-click menu, or File Explorer's **Open In → Preview**. It follows
   the editor's buffer live as you type — no save needed — and the file on disk when opened on its
   own, with scrolling **synchronised both ways** between a parented preview and its editor —
   whichever side you scroll drives the other — and at the same block granularity either way:
@@ -280,6 +311,15 @@ area. `terminals.advertiseHyperlinks` (under
 print hyperlinks; a `FORCE_HYPERLINK` the launching environment already carries is never overridden
 in either direction, the setting applies to terminals started afterwards rather than to one already
 running, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`.
+
+**Unloading a project** is tuned by one setting. `projects.unloadTerminalAction` (**Keep terminals
+running** as shipped, or **End terminals**) chooses what the project menu's **Unload Project** row does
+to the project's terminals, and the menu's second Unload row does the other — **Unload Project and End
+Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep
+terminals running leaves every terminal alive, idle shells included, and reattaches each one when the
+project is next loaded; End terminals ends every terminal, running processes included. Neither row asks
+for confirmation: each names what it does. The only prompt Unload can show is the usual one for unsaved
+editors.
 
 **Logs and crash reports** are written to a `logs` folder under the user-data directory (`throng`
 when installed, `throng-dev` for a dev run), so a crash that closes the window leaves evidence
