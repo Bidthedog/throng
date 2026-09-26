@@ -9,7 +9,8 @@
  * WHY FAIL-FAST MATTERS HERE, AND NOT ONLY AS TIDINESS
  *
  * The E2E stage costs roughly half an hour locally — 28.4 minutes measured 2026-08-17
- * at 246 spec files, against a pre-034 baseline of 46.9; see docs/testing.md, which
+ * at 246 spec files, against a pre-034 baseline of 46.9; see
+ * .claude/skills/throng-testing/references/tiers-and-workers.md, which
  * carries the current figure and names the measurement behind it. Do not re-quote a
  * number here: this comment has already gone stale twice, and a duration in a place
  * nobody re-measures is how the published 24.7 came to understate the truth by half.

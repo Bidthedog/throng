@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/045-clickable-file-links/plan.md
+at specs/046-side-panes-and-project-list/plan.md
 <!-- SPECKIT END -->
 
 ## Verifying done-ness
@@ -54,7 +54,7 @@ Three rules about using it:
   and **throng-testing** when the failure is an E2E flake rather than a defect. Do not queue up more
   work on top of a red gate.
 - **Never bypass the E2E stage to make the gate finish sooner.** E2E is ~18 minutes locally (measured
-  2026-08-20 at 207 spec files / 548 declarations; see `docs/testing.md`), and that expense is
+  2026-08-20 at 207 spec files / 548 declarations; see `.claude/skills/throng-testing/references/tiers-and-workers.md`), and that expense is
   exactly why it is inside the gate rather than optional:
   the cheap stages run first precisely so the expensive one is only ever reached by code that has
   already earned it. Running the individual `npm run test:*` scripts while iterating is fine and
@@ -174,7 +174,24 @@ skill and `release-manager` agent, which know nothing about this repo's declared
 
 Two things it will not do for you: it asks for the version rather than guessing one, and the QA
 sign-off on the `release` Environment is a human act no automation can satisfy.
-`docs/releasing.md` remains the reasoning behind the process; the skill is the procedure.
+`docs/releasing.md` is the overview; the reasoning behind each step lives in the skill's `references/`.
+
+## Documentation
+
+**The `throng-docs` skill owns the documentation set; load it before writing, moving or reviewing
+any doc.** The maintainer's rules (2026-09-27), which the skill spells out file by file:
+
+- `README.md` is a short, enticing entry point — the pitch, the problems throng solves, one line per
+  feature, how to start, a pointer to `CONTRIBUTING.md`. It never explains how anything works.
+- Every other topic has **one home** under `docs/` — installation, quick-start, key-bindings,
+  preferences, environment, architecture, testing, releasing — indexed by `docs/README.md`. A fact
+  lives in its home; everywhere else gets one clause and a link.
+- Every docs page opens with a breadcrumb, and pages cross-link inline.
+
+**Run the skill's audit before every `gh pr create` / `gh pr edit` and before every release tag**
+(`throng-release` calls it). `packages/ui/tests/unit/docs-currency.test.ts` is its mechanical half and
+runs in the gate: a new binding, setting or `THRONG_*` variable without its line in the right doc,
+a broken link or anchor, or a page missing its breadcrumb fails the build.
 
 ## Specialist agents
 
@@ -193,7 +210,7 @@ parallel tier 2.4 min at 6 workers, serial tier 15.7 min at 1). Against the pre-
 minutes that is a **61% cut**. The serial tier is **86% of the runtime** and is menus, preferences
 windows and real shells, which is the work that cannot move down a layer — so that ratio, rather than
 the total, is the number worth watching. Every timing here names its measurement; see
-`docs/testing.md`. Pushing to find out whether something works spends other people's runner minutes
+`.claude/skills/throng-testing/references/tiers-and-workers.md`. Pushing to find out whether something works spends other people's runner minutes
 to learn what one local command would have told you — and CI is slower to answer, not faster.
 
 **One thing that measurement cost, and it is worth knowing the machine can do it.** The gate run
@@ -244,7 +261,7 @@ deleted; `tier-plan.test.ts` is what survived, and it guards the local tiers.
 
 `npm run test:e2e` runs the parallel tier at several workers, then the serial tier
 at one. The serial tier is roughly two-thirds of the wall-clock and is the reliable
-half; see the Budgets section of `docs/testing.md` before assuming a red at six
+half; see `.claude/skills/throng-testing/references/budgets.md` and `tiers-and-workers.md` before assuming a red at six
 workers is a defect.
 
 **Adding a spec that opens the preferences window or drives a context menu means
@@ -253,11 +270,11 @@ fails the build if you don't: such a spec steals focus, and throng closes menus 
 blur, so it would make some *unrelated* test flake. The same applies to a spec that
 drives a long-running real shell, which starves at high worker counts.
 
-CI is deliberately different — one worker, one job, no tiers. See `docs/testing.md`.
+CI is deliberately different — one worker, one job, no tiers. See `.claude/skills/throng-testing/references/tiers-and-workers.md`.
 
 ### A shared app per file, where the tests allow it
 
 Every `runApp()` is an Electron launch, a daemon and often a real shell — around two seconds on CI.
 Where a file's tests do not seed state *before* the app starts, share one app via `openApp()` in
-`beforeAll`; see `docs/testing.md`. A test that needs a seeded config root or database keeps its own
+`beforeAll`; see `.claude/skills/throng-testing/references/writing-e2e.md`. A test that needs a seeded config root or database keeps its own
 app and says so with `runOwnApp`.

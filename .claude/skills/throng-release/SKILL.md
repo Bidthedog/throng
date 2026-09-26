@@ -5,8 +5,10 @@ description: Cut a throng release end to end — settle the version, write the r
 
 # Releasing throng
 
-`docs/releasing.md` explains *why* the pipeline is shaped the way it is and is worth reading once.
-This is the running order, the commands, and the things that have actually gone wrong.
+This is the running order, the commands, and the things that have actually gone wrong. *Why* the
+pipeline is shaped the way it is lives in [`references/`](references/) — see
+[Where the detail lives](#where-the-detail-lives); `docs/releasing.md` is the maintainer-facing
+overview.
 
 ## Settle the version first
 
@@ -24,9 +26,7 @@ Ask the user unless the request settles it beyond doubt:
   no prerelease suffix publishes as the repository's *latest* release and the install docs point
   people at it.
 
-Prereleases use a SemVer suffix (`1.0.0-alpha5`, `1.0.0-rc.2`) and publish as GitHub prereleases.
-The suffix is part of the version's identity and is compared exactly; it does not affect
-upgrade/downgrade ordering, which compares `MAJOR.MINOR.PATCH` only.
+How prerelease suffixes are compared and published: [references/versioning.md](references/versioning.md#prereleases).
 
 ## The shape of it
 
@@ -36,10 +36,10 @@ preflight → branch → CHANGELOG → version bump → dependency audit → doc
   → package → reconcile → verify ×3 → render body) → human sign-off → publish
 ```
 
-Publication is refused unless five things hold — a real version, a reconciled artifact set, a
-passed verdict for **every** artifact, notes bound to this exact version, and a recorded human
-sign-off. There is no override path. The four cheap ones are evaluated before the human one, so a
-doomed release does not first consume an approval.
+Publication is refused unless all five conditions in
+[`docs/releasing.md` → What fails a release](../../../docs/releasing.md#what-fails-a-release) hold.
+There is no override path; how they are evaluated is
+[references/publishing.md](references/publishing.md).
 
 ## 1. Preflight
 
@@ -125,10 +125,8 @@ That rewrites the root and all six workspace manifests. Confirm the lockfile mov
 `git diff --stat` must show `package-lock.json` alongside the seven manifests; if it did not, run
 `npm install --package-lock-only` and check again.
 
-Nothing else carries the version. The app reads the root `package.json` in main (deliberately, not
-`app.getVersion()`, which returns Electron's version unpackaged), a generated constant in the
-daemon, and the preload bridge in the renderer. **Do not confuse it with `BUILD_ID`**, which is a
-content hash for retiring a stale daemon.
+Nothing else carries the version, and it is **not** `BUILD_ID` — how each process reads it, and
+why the two differ: [references/versioning.md](references/versioning.md).
 
 ## 5. Audit the dependencies, and take what fits
 
@@ -182,21 +180,18 @@ saying so in the commit message is enough.
 
 ## 6. Documentation currency — the step that gets skipped
 
-The constitution requires README, CONTRIBUTING and the affected `docs/` guides to be current with
-any user-facing, setup, architecture or capability change, and the code-review gate checks it. A
-release is the last place that debt can be repaid cheaply.
+The constitution requires the docs to be current with any user-facing, setup, architecture or
+capability change, and a release is the last place that debt can be repaid cheaply. Do it on the
+release branch, **before the gate and the tag**.
 
-Work through this, and say in the PR which ones needed nothing:
+**Load the `throng-docs` skill and run its audit** — it owns what each doc must hold and how to check
+it. Say in the PR which files needed nothing.
 
-| Surface | What to check |
-|---|---|
-| `README.md` | Features listed match what ships. The release badge is dynamic — never hardcode a version. |
-| `docs/installation.md` | New artifact, new install route, changed first-run behaviour, changed warning text. |
-| `docs/quick-start.md` | A new capability a new user would meet in their first ten minutes. |
-| `docs/testing.md` | New tiers, budgets or measured timings quoted in this release's work. |
-| `docs/releasing.md` | Only if the *pipeline itself* changed. If it did, update this skill too. |
-| `CONTRIBUTING.md` | New scripts, new gates, a changed workflow. |
-| New settings | Every configurable option added this cycle is exposed in the preferences editors and named in the changelog entry. |
+Two things the audit does not cover, because they belong to this skill:
+
+- If the *pipeline itself* changed this cycle, this skill and its `references/` move in the same
+  change (see [Keeping this skill true](#keeping-this-skill-true)).
+- Every configurable option added this cycle is named in the changelog entry.
 
 ## 7. Prove it locally before spending a runner
 
@@ -298,17 +293,11 @@ gh run download <tag-run-id> --name verification-verdict --dir <scratch>
 That artifact carries the three verdicts and `release-body-preview.md` together. Read the body
 before asking anyone to approve it.
 
-The declared set is three artifacts, and the declaration in
-`packages/core/src/config/release-artifacts.ts` is the contract:
-
-| Role | Filename | What it is |
-|---|---|---|
-| `setup` | `throng-setup-<version>.exe` | Per-user NSIS wizard, no admin rights, into `%LOCALAPPDATA%\Programs\throng`. |
-| `portable` | `throng-portable-<version>.exe` | Self-extracting single executable; installs nothing. |
-| `archive` | `throng-<version>.zip` | Ordinary archive, extracted and run from anywhere. |
-
-Nothing globs and nothing resolves by extension — `nsis` and `portable` both produce a `.exe`, which
-is exactly why `ls dist/installer/*.exe | head -n1` was removed from three places in `release.yml`.
+The declared roles are listed in
+[`docs/releasing.md` → The artifact set](../../../docs/releasing.md#the-artifact-set); why nothing
+globs or resolves by extension is [references/artifact-set.md](references/artifact-set.md). What
+each verification step proves, and the three-outcome verdict model, is
+[references/verification.md](references/verification.md).
 
 ## 11. The human QA sign-off
 
@@ -351,8 +340,8 @@ Then say it plainly: the version, the release URL, the gate run URL, and anythin
 | Publish gate: version mismatch | The four-way match failed | Tag, manifest, filename and reported version must agree exactly, suffix included. |
 | Publish gate: already published | The version exists | Published bytes are immutable. Cut the next version; never delete and re-push a tag. |
 | A single E2E fails in the full lane | Possibly a flake | The **throng-testing** skill owns this. The lane retries once only on an infrastructure fault (0 unexpected, 0 flaky). |
-| Verification fails locally but passes on CI | Almost always the harness colliding with your session | The launch probe needs its own `--user-data-dir`; the residue scan attributes processes by path. See `docs/releasing.md` §3. |
-| The portable role fails verification | Three known traps | Copy the unpacked tree *before* stopping the launcher, wait for it to settle, and pass **no** `PORTABLE_EXECUTABLE_*` variables. |
+| Verification fails locally but passes on CI | Almost always the harness colliding with your session | The launch probe needs its own `--user-data-dir`; the residue scan attributes processes by path. See [references/verification.md](references/verification.md#running-it-on-a-developer-machine). |
+| The portable role fails verification | Three known traps | Copy the unpacked tree *before* stopping the launcher, wait for it to settle, and pass **no** `PORTABLE_EXECUTABLE_*` variables. Why: [references/verification.md](references/verification.md#the-portable-role). |
 
 **Rehearsing without releasing** — a dispatch with `publish: false` runs the full suite, packages,
 reconciles, verifies every artifact and renders the body, releasing nothing:
@@ -383,7 +372,8 @@ Use it when the pipeline itself is what is being fixed.
 The pipeline changes, and a stale runbook is worse than none — it reads as verified. When work lands
 that touches `release.yml`, `electron-builder.yml`, `release-artifacts.ts`, `artifact-set.mjs`,
 `publish-gates.mjs`, `verify-installer.mjs`, `release-notes.mjs`, `CHANGELOG.md`'s format or the
-version guards, update this file in the same PR — and `docs/releasing.md` with it.
+version guards, update this file and the affected `references/` file in the same PR — and
+`docs/releasing.md` too if the overview it gives is no longer true.
 
 Open work that will change this: [#118](https://github.com/Bidthedog/throng/issues/118) code
 signing, [#119](https://github.com/Bidthedog/throng/issues/119) automatic update,
@@ -393,7 +383,21 @@ changes a role in the declared set or a step in this runbook.
 
 ## Where the detail lives
 
-- `docs/releasing.md` — the reasoning, the measurements, the verification model.
+- `docs/releasing.md` — the maintainer-facing overview: versions, the artifact set, notes, gates,
+  sign-off, publish. The home of the role table and the five refusal conditions.
+- `references/` — the reasoning and measurements behind each stage, loaded when that stage is the
+  question:
+  - [versioning.md](references/versioning.md) — the single version, `BUILD_ID`, prereleases.
+  - [artifact-set.md](references/artifact-set.md) — the declaration, `artifact-set.mjs`,
+    `reconcile`, what ships inside an artifact, downgrade refusal.
+  - [verification.md](references/verification.md) — what is proved, the three-outcome verdict,
+    start-up costs, developer-machine caveats, the portable rules, `--keep-residue`.
+  - [release-notes.md](references/release-notes.md) — how the body is composed and why it never
+    falls back.
+  - [publishing.md](references/publishing.md) — how the gates are evaluated, what publication
+    does, what runs where, what only a real release proves.
+  - [signing-and-reproducibility.md](references/signing-and-reproducibility.md) — why a checksum
+    and not a signature; the SC-008 claim.
 - `.claude/agents/throng-build-release.md` — packaging constraints (`npmRebuild: false`,
   `asar: false`, the bundled host-Node runtime) and the CI shape.
 - `specs/020-application-packaging/`, `specs/042-release-notes-and-artifacts/` — the requirements

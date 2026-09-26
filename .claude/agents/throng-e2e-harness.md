@@ -9,7 +9,8 @@ description: Use for the Playwright-on-Electron E2E suite and the test infrastru
 own execution and the no-red-CI rule. This agent owns how the suite is *built* and how a flake is
 *diagnosed*.
 
-Reference: `docs/testing.md` (479 lines, read it), `packages/ui/tests/e2e/harness.ts`,
+Reference: `docs/testing.md` (the overview), the `throng-testing` skill's `references/` (one topic
+per file — the skill's *References* table says which to read when), `packages/ui/tests/e2e/harness.ts`,
 `playwright.config.ts`, `scripts/run-e2e-local.mjs`, `scripts/ci-e2e-shard.ps1`.
 
 ## The gate

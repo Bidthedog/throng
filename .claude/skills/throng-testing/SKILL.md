@@ -78,7 +78,7 @@ gh run view "$RUN" --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
 Say the expected cost in one line before starting the watch: *"Waiting on gate run `<id>`, expected
-75-90 min."*
+~35 min."*
 
 **`gh run watch --exit-status` detaches early, and its exit code then lies in both directions.**
 Observed twice on this repo's runner in one afternoon:
@@ -114,25 +114,26 @@ take the full gate once at the end, because that is the run that says done.
 **It is triggered against a REF**, so it proves that *commit* — not a working tree that has moved on
 since. Quote the run URL and the SHA when reporting done, not just the stage summary.
 
-**Performance SLAs are not adjudicated there.** The runner is not reference hardware, so those five
-ceilings are recorded rather than asserted — see *Where a performance SLA is measured* in
-`docs/testing.md`. A green gate is not a statement about the product's speed.
+**Performance SLAs are not adjudicated there.** The runner is not reference hardware, so those
+ceilings are recorded rather than asserted — see [references/performance-sla.md](references/performance-sla.md).
+A green gate is not a statement about the product's speed.
 
 The tempting thought is *"just this once, locally, it'll be quicker"*. It will not be quicker. It
-will be ninety minutes during which nothing else on the machine works, which is the entire reason
-the runner exists.
+will be the better part of an hour during which nothing else on the machine works, which is the
+entire reason the runner exists.
 
 ### Which lane runs where
 
 | lane | machine | when |
 |---|---|---|
 | `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
-| `gate.yml` dispatch — the full gate | Self-hosted runner | On demand, the loop above |
+| `gate.yml` dispatch — the full gate | GitHub-hosted | On demand, the loop above |
 | `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
 
-The nightly is hosted deliberately: an unattended health check must not depend on one machine being
-powered on and logged in, because a nightly that goes quiet looks exactly like one that keeps
-passing.
+Why all three are hosted — and why the self-hosted VM that once ran the dispatch lane was retired —
+is in [references/gate.md](references/gate.md), with the stage order's reasoning. The nightly in
+particular must stay hosted: an unattended health check must not depend on one machine being powered
+on and logged in, because a nightly that goes quiet looks exactly like one that keeps passing.
 
 ## Never guess. Measure, then change one thing
 
@@ -323,7 +324,10 @@ preference** — Constitution Principle V, and the build enforces the consequenc
 
 **What qualifies for E2E**, and nothing else does: real window lifecycle and multiple windows, focus
 and z-order, native menus and dialogs, OS drag-and-drop, PTY/ConPTY keyboard and rendering fidelity,
-and process-tree hygiene. If your assertion is not in that list, it belongs lower down.
+process-tree hygiene, real keyboard and input dispatch, and real layout and rendered appearance. If
+your assertion is not in that list, it belongs lower down. The reserve's traps, the `@reserve:*` tag
+each test carries, and the replace-before-delete rule are in
+[references/e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md).
 
 **Before you write an E2E, answer this in one sentence: what would a unit, component or integration
 test be unable to see?** If you cannot answer it, you are writing the test at the wrong layer. Two
@@ -346,15 +350,9 @@ npx vitest run --project unit --project component --project integration --projec
 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
-**Pass the full path, with the `.e2e.ts` — a bare stem runs all 207 files.** `npx playwright test
-editor-status-bar` selects **573 tests in 207 files**; add the suffix and it selects 2. Nothing warns
-you, because the command is valid and the run starts normally — the only symptom is eighteen minutes
-of a suite you did not want, answering a question you did not ask. It has cost that once already.
-Check any filter before a long run; `--list` launches nothing:
-
-```bash
-npx playwright test <your filter> --list | tail -1     # "Total: N tests in M files"
-```
+**Pass the full path, with the `.e2e.ts` — a bare stem runs the whole suite.** Check any filter
+before a long run with `npx playwright test <your filter> --list | tail -1`, which launches nothing;
+the measurement is in [references/measuring-durations.md](references/measuring-durations.md).
 
 ## When an E2E passes but the user says it is broken
 
@@ -452,8 +450,10 @@ THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=6
 ```
 
 A pass rate that falls as workers rise is starvation; a defect fails the *same* test every time. If
-it is starvation, the answer is a budget or a tier — **not** an entry here. See *Budgets* in
-`docs/testing.md`, which records the five that were undersized and what each is derived from.
+it is starvation, the answer is a budget or a tier — **not** an entry here. See
+[references/budgets.md](references/budgets.md), which records the six clocks and what each is
+derived from, and [references/tiers-and-workers.md](references/tiers-and-workers.md) for the tier
+boundary.
 
 ### When the starvation test cannot answer
 
@@ -483,3 +483,28 @@ consolidated notice was simply absent. That artifact answered in one read what a
 not have answered at all.
 
 A green CI is still not proof for `@admin` specs, which only verify when elevated.
+
+## References — read the one the task needs
+
+Each holds one topic in full; this file only points at them. `docs/testing.md` is the contributor
+overview.
+
+| Reference | Read it when |
+|---|---|
+| [e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md) | adding, demoting or deleting an E2E; choosing its `@reserve:*` tag |
+| [budget-history.md](references/budget-history.md) | a spec adds or removes E2E declarations and you want the precedent for moving the budget, `reserve-tag-debt.json` and `parallel-plan.json` |
+| [build-guards.md](references/build-guards.md) | a renderer↔main channel changes, or the bridge-parity or renderer-typecheck guard goes red |
+| [gate.md](references/gate.md) | you need why the gate is ordered and hosted as it is (the loop is above) |
+| [performance-sla.md](references/performance-sla.md) | writing or changing a wall-clock assertion; an `sla-not-measured` annotation appears |
+| [no-headless.md](references/no-headless.md) | someone proposes hidden or off-screen E2E windows |
+| [environment-variables.md](references/environment-variables.md) | a run needs a `THRONG_*` knob, or a spec depends on one the harness sets |
+| [tiers-and-workers.md](references/tiers-and-workers.md) | choosing a tier or worker count, placing a spec in the serial tier, quoting a suite timing |
+| [elevation.md](references/elevation.md) | a spec depends on admin rights; adding `skipIfElevated()`; elevated and non-elevated runs disagree |
+| [writing-e2e.md](references/writing-e2e.md) | writing or converting a spec: config-root writes, one app per file, the harness helpers |
+| [flakes.md](references/flakes.md) | a test passes on retry; before stress-testing one spec |
+| [flake-case-studies.md](references/flake-case-studies.md) | a waited-for value is empty or stale; a flake vanishes under instrumentation; a terminal spec asserts DEC modes |
+| [budgets.md](references/budgets.md) | before raising any E2E timeout |
+| [measuring-durations.md](references/measuring-durations.md) | before quoting a spec file's cost, or starting a long run with a positional filter |
+| [quarantine.md](references/quarantine.md) | before tagging `@quarantine`; "what are we not testing?" |
+| [global-os-resources.md](references/global-os-resources.md) | a spec launches Electron directly, or a run touches the clipboard or shell history |
+| [temp-files.md](references/temp-files.md) | a run leaves a `throng_e2e_<runhash>` folder behind |

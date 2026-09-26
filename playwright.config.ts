@@ -17,7 +17,7 @@ function runnerElevated(): boolean {
   }
 }
 
-// Default 6 workers (the benchmarked knee, see docs/testing.md), overridable via
+// Default 6 workers (the benchmarked knee, see .claude/skills/throng-testing/references/tiers-and-workers.md), overridable via
 // THRONG_E2E_WORKERS. BUT cap to 2 on an elevated runner (unless explicitly
 // overridden): an elevated daemon routes terminals through the de-elevated agent
 // (FR-025c), which — together with slower app/watcher teardown under contention —
