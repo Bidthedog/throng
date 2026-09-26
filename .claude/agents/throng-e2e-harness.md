@@ -1,5 +1,6 @@
 ---
 name: throng-e2e-harness
+model: opus
 description: Use for the Playwright-on-Electron E2E suite and the test infrastructure around it — the harness helpers, the shard and parallel plans, the two local tiers, the strict flaky-test gate, @admin and quarantine, temp-file lifecycle, and diagnosing a flake. Triggers include writing or converting an E2E spec, a test that passes on retry, a hung teardown or wedged app, "which layer should this be tested at", a spec that steals focus or drives a real shell, orphaned processes after a run, and CI shard timing or blob-report problems.
 ---
 

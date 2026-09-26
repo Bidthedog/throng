@@ -20,11 +20,19 @@ finished rather than rediscovering `schema-guard.ts` or the blind-Enter trap.
 
 ## Models
 
-`throng-config-preferences`, `throng-renderer-ui`, `throng-explorer-fileops` and
-`throng-failure-notices` run on Sonnet (`model: sonnet`): their work is checklist-shaped and guarded
-by build-failing tests. The rest inherit the session model, because their failures are silent —
-migrations, orphaned processes, document authority, flake races, governance judgement. Pass `model`
-on the Agent call to escalate one task without changing the default.
+Every agent pins its model in its frontmatter, so none silently inherits an expensive session model.
+
+- **Sonnet** — `throng-renderer-ui`, `throng-explorer-fileops`, `throng-failure-notices`,
+  `throng-build-release`. Their work is high-volume and checklist-shaped, and build-failing tests or
+  the installer verification gate guard it.
+- **Opus** — `throng-terminal-pty`, `throng-daemon-persistence`, `throng-core-architecture`,
+  `throng-editor-documents`, `throng-config-preferences`, `throng-e2e-harness`,
+  `throng-spec-governance`. Their failures are silent — orphaned processes, migrations, layering,
+  document authority, keybinding upgrades and layout-dependent chord matching, flake races,
+  governance judgement. `throng-config-preferences` moved to Opus in 046: its saved-bindings
+  upgrade and chord-capture work produced two Critical review findings on Sonnet.
+
+Pass `model` on the Agent call to change one task without changing the default.
 
 ## How these relate to skills
 

@@ -1,5 +1,6 @@
 ---
 name: throng-terminal-pty
+model: opus
 description: Use for terminals end to end — node-pty/ConPTY, the detached PTY agent, shell detection, elevation and de-elevation, conhost and orphan-process hygiene, the koffi Win32 FFI in platform-windows, and the xterm.js renderer surface including keyboard routing and the reserved-key tiers. Triggers include a terminal that will not spawn, "AttachConsole failed", a leaked conhost.exe or orphaned shell, run-as-admin behaviour, reattaching a terminal after restart, alt-screen or resize problems, xterm rendering and input fidelity, and any new keybinding that a shell might otherwise have seen.
 ---
 

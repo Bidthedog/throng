@@ -1,5 +1,6 @@
 ---
 name: throng-daemon-persistence
+model: opus
 description: Use for the detached daemon process, the named-pipe RPC between it and the Electron main process, the @throng/ipc-contract message shapes, and everything SQLite — schema, migrations, repositories, the schema-drift guard. Triggers include adding or changing an RPC method, "no such column", a migration that needs writing or re-running, daemon startup/shutdown/supervision/respawn, a foreign or elevated daemon instance, pipe-name or BUILD_ID mismatches, and persisted state that survives (or fails to survive) a restart.
 ---
 
