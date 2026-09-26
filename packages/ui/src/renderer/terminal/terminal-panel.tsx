@@ -12,7 +12,6 @@ import {
   formatDroppedPaths,
   isWslExecutable,
   firstBinding,
-  resolveAction,
   resolveColour,
   zoomFactor,
   captureDecision,
@@ -86,7 +85,7 @@ import { useTerminal, type TerminalApi } from './use-terminal.js';
 import { useTerminalReconnect } from './use-terminal-reconnect.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
-import { reservedByTerminal } from '../search/search-actions.js';
+import { terminalReservesKeydown } from '../search/search-actions.js';
 import { isFindShowingOn, updateCount } from '../search/search-store.js';
 import type { SearchCount } from '../search/search-model.js';
 import './terminal.css';
@@ -342,15 +341,9 @@ export function TerminalPanel({
   const keybindings = useKeybindings();
   const reserveKey = useCallback(
     (e: KeyboardEvent, programOwnsKeyboard: boolean) =>
-      reservedByTerminal(
-        // The TERMINAL scope, by construction: this reservation runs inside a terminal panel's
-        // own key handler. Resolving scope-blind here would let an editor-only command claim a
-        // key the shell owns (016, FR-017d).
-        resolveAction(
-          keybindings,
-          { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-          'terminal',
-        ),
+      terminalReservesKeydown(
+        keybindings,
+        e,
         // THIS panel's bar, not "whichever bar is up" (043 FR-003/FR-004): Escape and F3 are
         // throng's only while this terminal is the one showing a find bar, and the shell's
         // otherwise.
@@ -493,7 +486,7 @@ export function TerminalPanel({
     return () => markTerminalStopped(panel.id);
   }, [panel.id]);
 
-  // 024 US2 (#155): drop a file/folder from Files & Folders onto this terminal → insert its path(s)
+  // 024 US2 (#155): drop a file/folder from File Explorer onto this terminal → insert its path(s)
   // at the shell cursor, followed by a trailing space with the cursor left BEFORE it (the ESC[D
   // Left-arrow), and never submit the line (FR-004b). Reachable natively (real drag) and via the
   // throng:tree-drop CustomEvent (the e2e seam, mirroring throng:os-drop).

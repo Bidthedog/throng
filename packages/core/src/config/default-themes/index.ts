@@ -409,6 +409,10 @@ function makeTheme(name: string, p: Palette): Theme {
       success: p.success ?? '#3fb950',
       warning: p.warning ?? '#d29922',
       railBg: p.sidebar ?? p.bg,
+      // `categoryHeaderBackground` (046, FR-072) is NOT set here — it is a carved-out role that
+      // follows `surfaceActive` (see TOKEN_PARENT), derived below via `splitRolesFrom` exactly the
+      // way `linkHintBackground` already is, so it stays visibly distinct from `sidebarBg`/`railBg`
+      // (review finding IMPORTANT 5) rather than painted the same colour as the pane body.
       border: p.border ?? p.surface,
       statusBarBg: p.statusBar ?? p.bg,
       terminalBg: p.terminalBg ?? p.bg,

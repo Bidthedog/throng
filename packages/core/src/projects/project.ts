@@ -27,6 +27,12 @@ export interface Project {
   /** Root-relative paths hidden from the file tree, in addition to the global
    *  excludeGlobs (004). Project-scoped; editable later. */
   hiddenPaths: string[];
+  /**
+   * The category the project is listed under (046 FR-059). A store resolves `''` or an id naming no
+   * category of the owner to the default category before handing the project out, so a project read
+   * back is never uncategorised (R9 heal rule).
+   */
+  categoryId: string;
   /** ISO-8601 bookkeeping timestamps. */
   createdAt: string;
   updatedAt: string;
@@ -46,7 +52,7 @@ const HEX_COLOUR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 export class ProjectValidationError extends Error {
   constructor(
     message: string,
-    readonly field: 'name' | 'colour' | 'rootFolder',
+    readonly field: 'name' | 'colour' | 'rootFolder' | 'id' | 'category' | 'orderedIds',
   ) {
     super(message);
     this.name = 'ProjectValidationError';
@@ -164,6 +170,18 @@ export interface ProjectCreationContext {
   now: string;
   /** Whether this project starts active (defaults to false). */
   isActive?: boolean;
+  /** The category it starts in (046 FR-059). `''` leaves it to the store's heal rule: the default. */
+  categoryId?: string;
+}
+
+/**
+ * Assert a project order from an untyped caller is an array of strings — the check `reorder` and
+ * `move` share (046 FR-055). Throws {@link ProjectValidationError}.
+ */
+export function assertOrderedIds(value: unknown): asserts value is string[] {
+  if (!Array.isArray(value) || !value.every((id) => typeof id === 'string')) {
+    throw new ProjectValidationError('"orderedIds" must be an array of strings', 'orderedIds');
+  }
 }
 
 /** Build a validated Project from input + injected identity/timestamps. */
@@ -177,6 +195,7 @@ export function createProject(input: ProjectInput, ctx: ProjectCreationContext):
     rootFolder: normalised.rootFolder,
     isActive: ctx.isActive ?? false,
     hiddenPaths: [],
+    categoryId: ctx.categoryId ?? '',
     createdAt: ctx.now,
     updatedAt: ctx.now,
   };

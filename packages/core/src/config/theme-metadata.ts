@@ -242,6 +242,8 @@ const COLOUR_AREA: Record<string, string> = {
   activePanelBorderInactive: 'Main panel / workspace',
   railBg: 'Main panel / workspace',
   sidebarBg: 'Projects / sidebar',
+  // 046 iterate round 1 (FR-072) — the Projects pane's category header strip.
+  categoryHeaderBackground: 'Projects / sidebar',
 };
 
 /**

@@ -18,7 +18,8 @@
  * - The replace commands are never a terminal's: replace is an editor affordance, and their
  *   default chords (Ctrl+H, Alt+Enter) mean something at a shell.
  */
-import type { ActionId } from '@throng/core';
+import { resolveAction, type ActionId, type Keybindings } from '@throng/core';
+import { resolveKeydown } from '../config/chord-key.js';
 
 export const SEARCH_ACTIONS: readonly ActionId[] = [
   'search.find',
@@ -108,4 +109,20 @@ export function reservedByTerminal(
   if (programOwnsKeyboard && SCROLLBACK_ACTIONS.includes(action)) return false;
   if (ALWAYS_OURS.has(action)) return true;
   return findOpen && OURS_WHILE_FINDING.has(action);
+}
+
+/**
+ * Whether a TERMINAL keeps this keydown for throng: the chord resolved in the terminal scope, then
+ * {@link reservedByTerminal}. The terminal scope by construction: this runs inside a terminal panel's
+ * own key handler, and resolving scope-blind would let an editor-only command claim a key the shell
+ * owns (016, FR-017d).
+ */
+export function terminalReservesKeydown(
+  keybindings: Keybindings,
+  e: KeyboardEvent,
+  findOpen: boolean,
+  programOwnsKeyboard: boolean,
+): boolean {
+  const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, 'terminal'));
+  return reservedByTerminal(action, findOpen, programOwnsKeyboard);
 }

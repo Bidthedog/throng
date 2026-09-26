@@ -335,3 +335,21 @@
 :where(body:not([data-window-blurred])) .language-picker__item--current:hover {
   color: var(--throng-colour-accentText, #06101f);
 }
+
+/* The pending indication for a two-stroke chord (046 FR-092), portalled into the waiting editor's
+ * CodeMirror root (which CodeMirror positions). Bottom-right, above the text, in the status strip's colours,
+ * and never taking the pointer: it is a status, not something the user must dismiss. */
+.editor-pending-chord {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 6;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 4px;
+  background: var(--throng-colour-editorStatusStripBg, #151a23);
+  color: var(--throng-colour-editorStatusStripFg, #a7b4c8);
+  font-size: 12px;
+  pointer-events: none;
+}

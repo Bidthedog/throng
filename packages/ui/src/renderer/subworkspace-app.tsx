@@ -10,6 +10,7 @@ import { SubWorkspaceWorkspaceClient } from './state/subworkspace-window-client.
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
+import { MouseZoomHandler } from './workspace/mouse-zoom.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { FindInFilesChrome } from './find-in-files/find-in-files-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
@@ -133,6 +134,10 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <PanelRenameSync />
           <PanelDestroySync />
           <PanelStateSync />
+          {/* 046 iterate round 1 (T118/T119, FR-106) — the second of this registration's two mounts:
+              a sub-workspace window is its own renderer realm, so the gesture would be dead here
+              otherwise (Assumption 6). */}
+          <MouseZoomHandler />
           <EditorChrome isSubWorkspace />
           {/* 043 — the second of this registration's two mounts, for the reason below: a chord live
               only in the main window would be dead in a sub-workspace. */}

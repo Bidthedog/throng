@@ -89,7 +89,7 @@ export function EditorOpenListener(): null {
       const detail = (e as CustomEvent).detail as
         | { absPath?: string; projectId?: string; headingFragment?: string }
         | undefined;
-      // 044 FR-090d — a preview link to a file no preview claims opens here, as from Files & Folders; its
+      // 044 FR-090d — a preview link to a file no preview claims opens here, as from File Explorer; its
       // `#heading` places the caret on that heading's line where the file's language can find one.
       // 044 FR-052 — through the default open action router: a file whose provider says Preview opens its
       // preview. The link case above can never be one (main sends it here only with no enabled provider).

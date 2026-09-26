@@ -14,7 +14,7 @@ export function EditorInputs({ rootless = false }: { rootless?: boolean }): Reac
       location{' '}
       {rootless
         ? 'anywhere outside your open projects (this editor belongs to the sub-workspace, not a project).'
-        : 'within this project; open files from the Files & Folders tree.'}
+        : 'within this project; open files from the File Explorer tree.'}
     </p>
   );
 }

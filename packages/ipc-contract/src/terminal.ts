@@ -282,6 +282,11 @@ export interface TerminalSessionInfo {
   status: 'running' | 'exited';
   /** Whether a command is running; only meaningful when listed with includeBusy. */
   busy: boolean;
+  /**
+   * A sub-workspace-owned terminal with no project root (046). A project-scoped `closeIdle` /
+   * `killAll` never touches it, so Unload neither counts nor names it.
+   */
+  rootless?: boolean;
   /** Display metadata captured at (re)attach, for the app-close warning. */
   meta?: TerminalMeta;
   /**
@@ -297,6 +302,32 @@ export interface TerminalSessionInfo {
 
 export interface TerminalListResult {
   sessions: TerminalSessionInfo[];
+}
+
+/**
+ * `terminal.closeIdle` / `terminal.killAll` (FR-015b/e; 046 FR-034, FR-037).
+ *
+ * With no `projectId` the call covers every session — app close sends `killAll {}` and that must stay
+ * "every session, no exceptions". With a `projectId` (Unload), the call covers that project's
+ * sessions EXCEPT the panels in `exceptPanelIds` (held by a sub-workspace window) and `rootless`
+ * sessions (owned by a sub-workspace window, not by the project). `exceptPanelIds` is ignored without
+ * a `projectId`.
+ */
+export interface TerminalCloseIdleParams {
+  projectId?: string;
+  exceptPanelIds?: string[];
+}
+
+export type TerminalKillAllParams = TerminalCloseIdleParams;
+
+export interface TerminalCloseIdleResult {
+  /** The panelIds whose idle shells were closed. */
+  closed: string[];
+}
+
+export interface TerminalKillAllResult {
+  /** The panelIds whose sessions were ended. */
+  killed: string[];
 }
 
 export interface TerminalOkResult {

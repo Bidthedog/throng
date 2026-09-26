@@ -31,7 +31,9 @@ export type AgentEvent =
   | { ev: 'error'; key: number; message: string }
   | { ev: 'data'; key: number; data: string }
   | { ev: 'exit'; key: number; code: number | null; signal?: string }
-  | { ev: 'childpids'; key: number; reqId: number; pids: number[] }
+  // `failed`: the agent could not read the process table (046). `pids` is then meaningless — it is
+  // NOT "no children", and the daemon treats the terminal as busy.
+  | { ev: 'childpids'; key: number; reqId: number; pids: number[]; failed?: true }
   | { ev: 'childprocs'; key: number; reqId: number; procs: ChildProcess[] };
 
 /** Frame one message as a protocol line. */

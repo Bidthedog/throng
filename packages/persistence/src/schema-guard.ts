@@ -21,12 +21,49 @@ import type { ThrongDatabase } from './database.js';
  *
  * INVARIANT: every `ALTER TABLE … ADD COLUMN` introduced by a migration MUST be
  * registered here (and applied via {@link addColumnsFor}); otherwise the guard
- * cannot heal a DB that skipped it.
+ * cannot heal a DB that skipped it. A new table that an existing read path joins
+ * is registered too (GUARDED_TABLES, applied via {@link ensureTableFor}).
  */
 export interface ColumnRepair {
   table: string;
+  /** The column added, or `'*'` when the whole table (with its indexes) was recreated. */
   column: string;
 }
+
+interface GuardedTable {
+  table: string;
+  /** `CREATE TABLE IF NOT EXISTS …` then every `CREATE [UNIQUE] INDEX IF NOT EXISTS …` it needs. */
+  ddl: string;
+}
+
+/**
+ * Tables the guard recreates when a store stamped past their migration lacks them. Registered here
+ * only when an existing read path depends on the table, so a drifted store fails EVERY read of
+ * that path rather than only the writes. `project_categories` is joined by every project read
+ * (the category heal rule), so without it `projects.list` throws "no such table" and no project
+ * list loads. The migration that introduces a table creates it through {@link ensureTableFor}, so
+ * there is one definition.
+ */
+const GUARDED_TABLES: readonly GuardedTable[] = [
+  // v9 — project categories (046). The partial unique index makes "one default per owner" a
+  // database fact, so it is part of the table, not an optimisation.
+  {
+    table: 'project_categories',
+    ddl: `
+      CREATE TABLE IF NOT EXISTS project_categories (
+        id          TEXT PRIMARY KEY,
+        owner_user  TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        is_default  INTEGER NOT NULL DEFAULT 0,
+        minimised   INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_categories_owner ON project_categories(owner_user);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_project_categories_one_default
+        ON project_categories(owner_user) WHERE is_default = 1;`,
+  },
+];
 
 interface AdditiveColumn {
   table: string;
@@ -63,6 +100,21 @@ const ADDITIVE_COLUMNS: readonly AdditiveColumn[] = [
     table: 'projects',
     column: 'hidden_paths',
     ddl: `ALTER TABLE projects ADD COLUMN hidden_paths TEXT NOT NULL DEFAULT '[]'`,
+  },
+  // v9 — the category a project is listed under (046). '' is resolved to the owner's default
+  // category at read time, so a healed column is never an uncategorised project.
+  {
+    table: 'projects',
+    column: 'category_id',
+    ddl: `ALTER TABLE projects ADD COLUMN category_id TEXT NOT NULL DEFAULT ''`,
+  },
+  // v10 — a user-set order for the non-default categories (046 iterate round 1, FR-083 / FR-084).
+  // A healed column reads 0 everywhere; the list then falls back to its `id` tie-break, with the
+  // default still first, rather than throwing "no such column: position".
+  {
+    table: 'project_categories',
+    column: 'position',
+    ddl: `ALTER TABLE project_categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0`,
   },
 ];
 
@@ -104,13 +156,29 @@ export function addColumnsFor(db: ThrongDatabase, table: string, columns: readon
 }
 
 /**
- * Reconcile additive-column drift: ensure every registered column exists on its
- * (already-created) table, adding any that are missing. Returns the repairs
- * applied — empty on a healthy database. A no-op when a table is absent (that is a
- * version-migration concern, not additive drift).
+ * Create a registered table and its indexes if absent (used by the migration that introduces it).
+ * Idempotent; returns true when the table itself was missing.
+ */
+export function ensureTableFor(db: ThrongDatabase, table: string): boolean {
+  const spec = GUARDED_TABLES.find((t) => t.table === table);
+  if (!spec) throw new Error(`No registered guarded table ${table} (schema-guard.ts)`);
+  const missing = !tableExists(db, spec.table);
+  // Always run: every statement is IF NOT EXISTS, so this also restores a dropped index.
+  db.exec(spec.ddl);
+  return missing;
+}
+
+/**
+ * Reconcile schema drift: recreate every guarded table that is missing, then ensure every
+ * registered column exists on its (already-created) table, adding any that are missing. Returns
+ * the repairs applied — empty on a healthy database. An additive column is skipped when its table
+ * is absent (that is a version-migration concern, not additive drift).
  */
 export function reconcileSchema(db: ThrongDatabase): ColumnRepair[] {
   const repairs: ColumnRepair[] = [];
+  for (const spec of GUARDED_TABLES) {
+    if (ensureTableFor(db, spec.table)) repairs.push({ table: spec.table, column: '*' });
+  }
   for (const spec of ADDITIVE_COLUMNS) {
     if (addColumn(db, spec)) repairs.push({ table: spec.table, column: spec.column });
   }

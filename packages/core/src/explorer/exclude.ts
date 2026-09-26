@@ -12,7 +12,7 @@ import picomatch from 'picomatch';
  * constant shipped as up to and including shipped-defaults version 4.
  *
  * The seventh is throng's own, added by 033 FR-070 and NOT part of the VS Code list. It changes the
- * Files & Folders tree for every project on the shipped default, which is the intent rather than a
+ * File Explorer tree for every project on the shipped default, which is the intent rather than a
  * side effect: FR-006's whole claim is that there is one answer to "is this file hidden?", and a
  * dependency tree the user never edits was the loudest place that answer was the wrong one.
  *

@@ -13,11 +13,11 @@
  * |--------------|------------------------------------------------------------------------------------|
  * | Content      | Rename, Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All        |
  * | Destroy      | the panel's destroy verb                                                            |
- * | Navigate     | Reveal File in Files & Folders, Open in OS Explorer, Send to Tab, Sync to           |
+ * | Navigate     | Reveal File in File Explorer, Open in OS Explorer, Send to Tab, Sync to           |
  * | View & state | Reset Name, Zoom, Synchronise Scrolling, Try again, Copy details, Clear panel type, |
  * |              | Refresh / redraw                                                                    |
  *
- * *Destroy Panel* moves from last to the middle — the same shape the Files & Folders menu has always
+ * *Destroy Panel* moves from last to the middle — the same shape the File Explorer menu has always
  * had. *Reset Name* leaves Rename's side for View & state, where the constitution names it
  * explicitly. The editor and terminal conditionals are unchanged: an absent item is simply absent
  * from its group, and an empty group draws no divider.
@@ -341,7 +341,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    */
   if (isPreview) {
     items.push({
-      label: 'Reveal File in Files & Folders',
+      label: 'Reveal File in File Explorer',
       section: 'navigate',
       onClick: () => actions.revealInTree(),
     });
@@ -467,10 +467,10 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
 
     // US6 (#137) — for a panel backed by an on-disk file: reveal it in throng's own
-    // Files & Folders tree, and open its folder in the OS file manager (via the seam).
+    // File Explorer tree, and open its folder in the OS file manager (via the seam).
     if (editor?.hasFilePath) {
       items.push({
-        label: 'Reveal File in Files & Folders',
+        label: 'Reveal File in File Explorer',
         section: 'navigate',
         onClick: () => actions.revealInTree(),
       });

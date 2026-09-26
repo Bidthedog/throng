@@ -21,6 +21,7 @@ import process from 'node:process';
 import { NodePtyHost } from '@throng/platform-windows';
 import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
+import { answerChildPids } from './pty-agent-childpids.js';
 import { createAgentLogger } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
@@ -208,16 +209,10 @@ function onCommand(msg: AgentCommand): void {
       if (h) pty.kill(h);
       break;
     }
+    // 046: async, so the agent keeps serving its other terminals while the snapshot is taken, and a
+    // failure is reported as one rather than as an idle-looking empty list (pty-agent-childpids.ts).
     case 'childpids': {
-      const h = handles.get(msg.key);
-      let pids: number[];
-      try {
-        pids = h ? pty.listChildPids(h) : [];
-      } catch (error) {
-        log(`childpids error key=${msg.key}: ${errText(error)}`);
-        pids = [];
-      }
-      send({ ev: 'childpids', key: msg.key, reqId: msg.reqId, pids });
+      void answerChildPids((h) => pty.probeChildPids(h), handles.get(msg.key), msg, log).then(send);
       break;
     }
     // 025 FR-022: the same descendants, with command lines, for command memory. Async so the

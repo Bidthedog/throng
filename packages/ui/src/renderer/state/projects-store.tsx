@@ -10,12 +10,24 @@ import {
   type ReactNode,
 } from 'react';
 import type { NoticeSubject } from '@throng/core';
-import type { ProjectDto, ProjectsCreateParams, ProjectsUpdateParams } from '@throng/ipc-contract';
+import type {
+  ProjectCategoryDto,
+  ProjectDto,
+  ProjectsCreateParams,
+  ProjectsUpdateParams,
+} from '@throng/ipc-contract';
 import { RpcError } from './bridge.js';
 import type { ProjectsClient } from './projects-client.js';
+import {
+  clearProjectSwitchPending,
+  getActivePane,
+  markProjectSwitchPending,
+} from '../workspace/active-pane.js';
 
 export interface ProjectsContextValue {
   projects: ProjectDto[];
+  /** Project categories (046 FR-050 – FR-057), in list order — default category first. */
+  categories: ProjectCategoryDto[];
   activeProject: ProjectDto | null;
   /** Ids of projects opened (loaded into memory) this session (Lazy loading). */
   loadedIds: ReadonlySet<string>;
@@ -45,9 +57,71 @@ export interface ProjectsContextValue {
   reorderProjects(orderedIds: string[]): Promise<void>;
   /** Replace a project's hidden-paths list (004 file-tree hide). */
   setProjectHidden(id: string, hiddenPaths: string[]): Promise<void>;
+  /**
+   * Release the main window's view of a project without forgetting anything (046 US4, FR-032,
+   * FR-036). Removes `id` from `loadedIds` and, only when it is the ACTIVE project, clears
+   * `openedId` — the workspace unmounts and no project is active, exactly as at startup. Never
+   * touches the daemon's persisted `is_active` (contracts/unload.md §5): purely a client-side
+   * transition, session-only, and it never throws.
+   */
+  unloadProject(id: string): void;
+  /**
+   * Report a failure whose operation ran OUTSIDE `run()` — Unload's terminal step (046, contracts/
+   * unload.md §2 "Failure") and Remove's Save-All guard, neither of which is a `client.*` RPC this
+   * store owns. Goes through the SAME `fail` path and notice surface every other refusal here uses,
+   * with the project as subject.
+   *
+   * `action` completes the notice's heading exactly as `run()`'s own `label` does
+   * (`notice-text.ts#noticeHeading`: `Couldn't ${action} ${subject}`) — defaulted to `'unload'`
+   * because that was this method's only caller until Remove's Save-All guard (branch review C1)
+   * gained one too. A caller that does not pass it keeps saying "unload"; Remove says "remove".
+   */
+  reportFailure(message: string, projectName: string, action?: string): void;
+
+  // ── Project categories (046, contracts/project-categories.md §1, §4) ───────────────────────────
+  /**
+   * Resolves the created category on success, `null` if the create was refused (empty or duplicate
+   * name). Not a bare boolean (046 FR-053 controller ruling): choosing New Category… from a
+   * project's Move to Category submenu needs the new category's id to move that project into it,
+   * and every existing caller's `if (ok)` truthiness check is unaffected by the wider type.
+   */
+  createCategory(name: string): Promise<ProjectCategoryDto | null>;
+  /** Resolves true on success, false if the rename was refused. */
+  renameCategory(id: string, name: string): Promise<boolean>;
+  /** Resolves true on success, false if the delete was refused (the default category). */
+  deleteCategory(id: string): Promise<boolean>;
+  /** Resolves true on success, false if the toggle was refused (the default category). */
+  setCategoryMinimised(id: string, minimised: boolean): Promise<boolean>;
+  /** Move a project into a category at a position in the owner's global order. */
+  moveProject(id: string, categoryId: string, orderedIds: string[]): Promise<boolean>;
+  /**
+   * Reorder the NON-default categories (046 iterate round 1, FR-083,
+   * contracts/project-categories.md §5). `orderedIds` names every non-default category exactly
+   * once; the default always stays first. Resolves true on success, false if the reorder was
+   * refused (an unknown id, a missing/duplicated id, or the default category's id).
+   */
+  reorderCategories(orderedIds: string[]): Promise<boolean>;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
+
+/**
+ * The `errorAction` labels a successful `refresh()` is allowed to clear on its own (fix round on
+ * a7ad4767; 030 "one condition, one notice").
+ *
+ * `refresh()` is not only the mount-time load: it also runs from the CROSS-WINDOW `onChanged`
+ * listener, so a successful refresh can be triggered by someone else's edit in another window,
+ * with nothing to do with whatever error this window is currently showing. A mutation refusal (from
+ * `run()`) carries a different label and must persist until the user dismisses it or a later
+ * mutation in THIS window supersedes it — `run()`'s own success path already calls `fail(null)`
+ * directly for that case. Without this distinction, window A refuses a delete, leaves the notice
+ * unread, window B renames an unrelated project, and A's still-unread refusal silently vanishes the
+ * moment A's `onChanged` listener re-fetches and succeeds.
+ */
+const REFRESH_LOAD_ACTIONS: ReadonlySet<string> = new Set([
+  'load your projects',
+  'load your project categories',
+]);
 
 function messageOf(error: unknown): string {
   if (error instanceof RpcError) return error.message;
@@ -69,6 +143,7 @@ export function ProjectsProvider({
   children: ReactNode;
 }): ReactElement {
   const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [categories, setCategories] = useState<ProjectCategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
@@ -121,16 +196,42 @@ export function ProjectsProvider({
   // the list — the same reason the two refs above exist.
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
+  // Read by `refresh` (a failed categories fetch keeps the last known value) and `categorySubject`.
+  const categoriesRef = useRef(categories);
+  categoriesRef.current = categories;
+  // Read by `refresh`, to tell ITS OWN load errors from a mutation refusal it must not clear.
+  const errorActionRef = useRef(errorAction);
+  errorActionRef.current = errorAction;
 
+  /*
+   * Projects and categories load ALONGSIDE each other, gated on the same `loading` flag, so a
+   * caller that waits for loading to settle sees both together — never projects with categories
+   * still to come. But the two fetches are resolved INDEPENDENTLY (`allSettled`, not `all`): a
+   * genuine `projects.categories.list` failure must surface — through `fail()`, the one path every
+   * other refusal in this store goes through — and not be swallowed, while the project list is a
+   * completely different RPC and must not go down with it. A user whose categories fetch is broken
+   * still needs to see, open and switch between their projects.
+   *
+   * `projects.list` failing takes priority when both fail at once: it is the more severe loss (no
+   * projects at all), and the existing "load your projects" wording already covers it.
+   */
   const refresh = useCallback(async () => {
-    try {
-      setProjects(await client.list());
+    const [projectsResult, categoriesResult] = await Promise.allSettled([
+      client.list(),
+      client.listCategories(),
+    ]);
+    if (projectsResult.status === 'fulfilled') setProjects(projectsResult.value);
+    if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
+    if (projectsResult.status === 'rejected') {
+      fail(messageOf(projectsResult.reason), 'load your projects');
+    } else if (categoriesResult.status === 'rejected') {
+      fail(messageOf(categoriesResult.reason), 'load your project categories');
+    } else if (errorActionRef.current === null || REFRESH_LOAD_ACTIONS.has(errorActionRef.current)) {
+      // Only clear an error refresh() itself could have raised. A mutation refusal (`run()`) is
+      // none of those labels, so it survives this unrelated, successful load untouched.
       fail(null);
-    } catch (err) {
-      fail(messageOf(err), 'load your projects');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, [client, fail]);
 
   useEffect(() => {
@@ -191,9 +292,22 @@ export function ProjectsProvider({
     [],
   );
 
+  /**
+   * The category an operation is about, as a subject (046, contracts/project-categories.md §1
+   * "Failures") — the same reasoning as {@link projectSubject}, one pane along.
+   */
+  const categorySubject = useCallback(
+    (id: string): NoticeSubject => {
+      const name = categoriesRef.current.find((c) => c.id === id)?.name;
+      return name ? { kind: 'category', name } : { kind: 'none' };
+    },
+    [],
+  );
+
   const value = useMemo<ProjectsContextValue>(
     () => ({
       projects,
+      categories,
       activeProject,
       loadedIds,
       loading,
@@ -243,12 +357,44 @@ export function ProjectsProvider({
          */
         const previousId = openedIdRef.current;
         const wasLoaded = loadedIdsRef.current.has(id);
+        /*
+         * FR-082, narrowed by Supersession S26 (spec 046, controller ruling `bb0e3e85`) — only mark
+         * when this switch will actually MOVE the active project (`id !== previousId`, see
+         * `active-pane.ts`'s `markProjectSwitchPending` doc comment) AND the Projects list is the
+         * active pane AT THE MOMENT OF THIS CALL. `switchProject` is the one place both a
+         * list-initiated switch (a click/Enter on a row) and a chord (`project.next`/`previous`, from
+         * either pane) arrive, and `getActivePane()` here is the only thing that tells them apart.
+         *
+         * A live product defect (E2E) — marking unconditionally, chord-from-the-workspace included,
+         * suppressed that route's OWN focus delivery: open a project's editor, click another
+         * project's row, click its panel (active pane now 'workspace'), then project.previous — the
+         * mark was set, `PanelFocusSync` consumed it and returned before
+         * `setActivePane('workspace')`/`requestPanelFocus` ran, so `getActivePane()` still reported
+         * 'workspace' (nothing had MOVED it away) while DOM focus landed in no panel at all — typing
+         * went nowhere. 023 FR-030/#144 (`editor-caret-persist.e2e.ts:173`) requires that route to
+         * keep delivering real focus into the new project's active panel, exactly as before FR-082.
+         *
+         * `id === previousId` is ALSO still excluded — a redundant click, or Enter, on the row that
+         * is already active never changes `activeTabId`, so `PanelFocusSync` never gets a chance to
+         * consume a mark set for it; marking it anyway left the mark stuck until the NEXT, entirely
+         * unrelated `activeTabId` change (e.g. the tab picker's own same-project tab switch, which
+         * carries no `setActivePane` call of its own), which then wrongly skipped
+         * `setActivePane('workspace')`/`requestPanelFocus` too — the 52d8f13d/FR-014 Ctrl+S
+         * regression that fix round guarded against, and still does here.
+         */
+        const willChangeProject = id !== previousId;
+        if (willChangeProject && getActivePane() === 'projects') markProjectSwitchPending(id);
         setOpenedId(id); // open on demand (lazy)
         markLoaded(id);
         const opened = await run('open', projectSubject(id), () => client.setActive(id));
         if (!opened) {
           setOpenedId(previousId);
           if (!wasLoaded) unmarkLoaded(id);
+          // A failed switch must not leave the mark stuck either — drain it explicitly rather than
+          // relying on an activeTabId/layout change to have already consumed it, which is not
+          // guaranteed (workspace-store.tsx never clears `layout` while a load is in flight, so a
+          // switch that fails fast enough can leave it observably unchanged throughout).
+          clearProjectSwitchPending();
         }
       },
       reorderProjects: async (orderedIds) => {
@@ -259,8 +405,62 @@ export function ProjectsProvider({
       setProjectHidden: async (id, hiddenPaths) => {
         await run('change what is hidden in', projectSubject(id), () => client.setHidden(id, hiddenPaths));
       },
+      unloadProject: (id) => {
+        unmarkLoaded(id);
+        setOpenedId((cur) => (cur === id ? null : cur));
+      },
+      reportFailure: (message, projectName, action = 'unload') => {
+        fail(message, action, projectName ? { kind: 'project', name: projectName } : { kind: 'none' });
+      },
+      // ── Project categories (046) — each calls its RPC, then refreshes and notifies other windows,
+      // exactly as every project mutation above does. A refusal fails through `categorySubject`/the
+      // typed-name subject and neither refreshes nor notifies (§1 "Failures").
+      //
+      // `createCategory` is NOT routed through `run()` (unlike its siblings below): `run()` discards
+      // the action's own return value, and the caller needs the created category's id (046 FR-053
+      // controller ruling — New Category… from a project's menu also moves that project into it).
+      createCategory: async (name) => {
+        try {
+          const created = await client.createCategory(name);
+          fail(null);
+          await refresh();
+          window.throng?.projects?.notifyChanged?.();
+          return created;
+        } catch (err) {
+          fail(messageOf(err), 'create', { kind: 'category', name });
+          return null;
+        }
+      },
+      renameCategory: (id, name) =>
+        run('rename', categorySubject(id), () => client.renameCategory(id, name)),
+      deleteCategory: (id) => run('delete', categorySubject(id), () => client.deleteCategory(id)),
+      setCategoryMinimised: (id, minimised) =>
+        run('change', categorySubject(id), () => client.setCategoryMinimised(id, minimised)),
+      moveProject: (id, categoryId, orderedIds) =>
+        run('move', projectSubject(id), () => client.moveProject(id, categoryId, orderedIds)),
+      // NO SUBJECT — a category reorder is about the LIST, not any one category (FR-027), the same
+      // reasoning `reorderProjects` above already uses.
+      reorderCategories: (orderedIds) =>
+        run('reorder your categories', { kind: 'none' }, () => client.reorderCategories(orderedIds)),
     }),
-    [projects, activeProject, loadedIds, markLoaded, unmarkLoaded, loading, error, errorAction, errorSubject, fail, refresh, run, projectSubject, client],
+    [
+      projects,
+      categories,
+      activeProject,
+      loadedIds,
+      markLoaded,
+      unmarkLoaded,
+      loading,
+      error,
+      errorAction,
+      errorSubject,
+      fail,
+      refresh,
+      run,
+      projectSubject,
+      categorySubject,
+      client,
+    ],
   );
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;

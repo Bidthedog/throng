@@ -6,6 +6,9 @@ export const DAEMON_TYPES = {
   UserContext: Symbol.for('throng:IUserContext'),
   Database: Symbol.for('throng:ThrongDatabase'),
   ProjectStore: Symbol.for('throng:IProjectStore'),
+  // Project categories (046).
+  ProjectCategoryStore: Symbol.for('throng:IProjectCategoryStore'),
+  ProjectCategoryService: Symbol.for('throng:ProjectCategoryService'),
   RpcRouter: Symbol.for('throng:RpcRouter'),
   IpcServer: Symbol.for('throng:IpcServer'),
   // Terminal layer (005 Phase C).

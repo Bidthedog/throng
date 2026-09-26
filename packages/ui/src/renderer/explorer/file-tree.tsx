@@ -156,14 +156,49 @@ export function FileTree({
   // what it was acting on (`use-explorer-data.ts`), exactly as `errorAction` and `errorCause` do.
   useErrorNotice(error, 'explorer-error', errorSubject ?? { kind: 'none' }, clearError, errorAction, errorCause);
 
+  const { ref, width, height } = useSize();
   // 024 US3 (#85): make undo/redo reachable whenever this PANE is the active one, not only while a
   // DOM element inside the tree happens to hold focus — see explorer-commands.ts.
+  /*
+   * 046 US2 (FR-017): `focusSelectedOrFirst` joins them — the selected row if there is one, else
+   * react-arborist's own `firstNode`, so `focus.explorer` lands somewhere real either way.
+   *
+   * `api.focus()` (and `api.select()`) only move react-arborist's OWN internal highlight — the
+   * library keeps real DOM/keyboard focus on the tree's CONTAINER (`role="tree"`, roving focus),
+   * never on a row, which is exactly what `app.tsx`'s `menu.open` handler already works around by
+   * reading `[data-tree-focused="true"]` rather than `document.activeElement`. So the highlight and
+   * the real DOM focus are moved in two separate calls here: the highlight lands on the right row,
+   * and the container is what actually takes the caret — which is what lets a following F2 reach
+   * the tree's own keydown handler at all.
+   */
+  const focusSelectedOrFirst = useCallback(() => {
+    const api = treeRef.current;
+    if (!api) return;
+    const target = api.selectedNodes[0] ?? api.firstNode;
+    if (target) api.focus(target);
+    ref.current?.querySelector<HTMLElement>('[role="tree"]')?.focus();
+  }, [ref]);
   useEffect(() => {
-    const commands = { undoFileOp, redoFileOp };
+    /*
+     * Gated on `ready && width > 0 && height > 0` — the EXACT condition `<Tree>` itself renders on
+     * below — unlike the undo/redo registration before it — a pending `focus.explorer` request
+     * (`requestExplorerFocus`) is consumed by the FIRST registration it sees, and a registration made
+     * before the tree has SIZE finds `treeRef.current` still null: `focusSelectedOrFirst` would
+     * silently no-op, the pending flag would already be spent, and the request would never be
+     * retried once the tree actually mounted.
+     *
+     * Gating on `ready` alone (review finding 4) was not enough: `ready` comes from the file-listing
+     * PROMISE settling (a microtask), while width/height come from `ResizeObserver` — which reports
+     * back on its own later turn, never synchronously with `observe()`. A real browser can settle
+     * `ready` a full tick before the observer's first callback, and a registration made in that
+     * window is exactly the no-op above. A user cannot interact with a tree that has not rendered yet
+     * either way, so undo/redo waiting the same split second costs nothing real.
+     */
+    if (!ready || width <= 0 || height <= 0) return undefined;
+    const commands = { undoFileOp, redoFileOp, focusSelectedOrFirst };
     registerExplorerCommands(commands);
     return () => unregisterExplorerCommands(commands);
-  }, [undoFileOp, redoFileOp]);
-  const { ref, width, height } = useSize();
+  }, [ready, width, height, undoFileOp, redoFileOp, focusSelectedOrFirst]);
   const { openMenu } = useContextMenu();
   const keybindings = useKeybindings(); // US1 (#125): file.* shortcuts shown on the menu items
   const ws = useWorkspace();

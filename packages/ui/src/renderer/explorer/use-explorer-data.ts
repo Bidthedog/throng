@@ -623,7 +623,7 @@ export function useExplorerData(
       // row renderer `.focus()`es that row in an effect whenever the node is focused — so this
       // programmatic sync (which runs on every load, project switch and tab switch, to keep the tree
       // highlight in step with the active editor) would yank DOM focus OUT of the editor and into
-      // "Files & Folders" every time, overriding the active-panel focus. Selection is a highlight; it
+      // "File Explorer" every time, overriding the active-panel focus. Selection is a highlight; it
       // must not steal the caret.
       api?.select(id, { focus: false });
     }, 50);

@@ -43,6 +43,7 @@ import { useFileIndex } from './use-file-index.js';
 import { QuickOpen } from './quick-open.js';
 import { GotoLine } from './goto-line.js';
 import { navigateFocusedHistory } from '../navigation/navigate-history.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 const QUICK_OPEN: ActionId = 'navigate.quickOpen';
 const GOTO_LINE: ActionId = 'navigate.gotoLine';
@@ -202,7 +203,7 @@ export function NavigationChrome(): ReactElement | null {
   /*
    * FR-011 — was the chord pressed from inside an EDITOR panel? That, and only that, decides whether
    * the target control is drawn, and it is captured at OPEN time (data-model.md §7). The active pane
-   * matters as much as the panel kind: with the Files & Folders pane active the user is in the tree,
+   * matters as much as the panel kind: with the File Explorer pane active the user is in the tree,
    * whatever panel the workspace last had.
    */
   const openFrom = (): { editorPanelId: string } | null =>
@@ -246,11 +247,7 @@ export function NavigationChrome(): ReactElement | null {
   useEffect(() => {
     if (!isSubWorkspace) return;
     const onKeyDown = (e: KeyboardEvent): void => {
-      const action = resolveAction(
-        keybindings,
-        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-        scopeFromKind(activeKind),
-      );
+      const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, scopeFromKind(activeKind)));
       /*
        * 044 US7b fix round 2, item 2 — the same focus guard `resolveScoped` applies in the main window
        * (FR-017f). Without it, Alt+Left/Right typed into an editor's find bar, or into Quick Open's own

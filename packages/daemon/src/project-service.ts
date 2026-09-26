@@ -6,10 +6,18 @@ import {
   PROJECTS_SET_ACTIVE_METHOD,
   PROJECTS_REORDER_METHOD,
   PROJECTS_SET_HIDDEN_METHOD,
+  PROJECTS_CATEGORIES_LIST_METHOD,
+  PROJECTS_CATEGORIES_CREATE_METHOD,
+  PROJECTS_CATEGORIES_RENAME_METHOD,
+  PROJECTS_CATEGORIES_DELETE_METHOD,
+  PROJECTS_CATEGORIES_SET_MINIMISED_METHOD,
+  PROJECTS_CATEGORIES_REORDER_METHOD,
+  PROJECTS_MOVE_METHOD,
   JSON_RPC_INVALID_PARAMS,
+  type ProjectCategoryDto,
   type ProjectDto,
 } from '@throng/ipc-contract';
-import type { Project, ProjectService } from '@throng/core';
+import type { Project, ProjectCategory, ProjectCategoryService, ProjectService } from '@throng/core';
 import { RpcError, type RpcRouter } from './rpc-router.js';
 
 function toDto(project: Project): ProjectDto {
@@ -20,8 +28,21 @@ function toDto(project: Project): ProjectDto {
     rootFolder: project.rootFolder,
     isActive: project.isActive,
     hiddenPaths: project.hiddenPaths,
+    categoryId: project.categoryId,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+  };
+}
+
+function toCategoryDto(category: ProjectCategory): ProjectCategoryDto {
+  return {
+    id: category.id,
+    name: category.name,
+    isDefault: category.isDefault,
+    minimised: category.minimised,
+    position: category.position,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
   };
 }
 
@@ -64,6 +85,8 @@ export class ProjectIpcService {
     private readonly hasOpenTerminals?: (projectId: string) => boolean,
     /** Kill a deleted project's terminals so their OS hosts aren't orphaned (005). */
     private readonly killProjectTerminals?: (projectId: string) => void,
+    /** Project categories (046). Without it the `projects.categories.*` methods are not served. */
+    private readonly categories?: ProjectCategoryService,
   ) {}
 
   register(router: RpcRouter): void {
@@ -114,11 +137,11 @@ export class ProjectIpcService {
       this.service.setActive(requireId(params)),
     );
 
+    // arch review #5. orderedIds's shape is refused by core (`assertOrderedIds`, the same
+    // ProjectValidationError → -32602 mapping `projects.move` already relies on below) — a daemon
+    // pre-check here would only duplicate that one rule.
     router.register(PROJECTS_REORDER_METHOD, (params) => {
       const orderedIds = asObject(params).orderedIds;
-      if (!Array.isArray(orderedIds) || !orderedIds.every((id) => typeof id === 'string')) {
-        throw new RpcError('"orderedIds" must be an array of strings', JSON_RPC_INVALID_PARAMS);
-      }
       return this.service.reorder(orderedIds as string[]);
     });
 
@@ -130,5 +153,60 @@ export class ProjectIpcService {
       }
       return { project: toDto(this.service.setHidden(id, hiddenPaths as string[])) };
     });
+
+    // 046 FR-055. orderedIds and an unknown project or category are refused by core, as
+    // ProjectValidationErrors (-32602); only the category id's shape is checked here.
+    router.register(PROJECTS_MOVE_METHOD, (params) => {
+      const id = requireId(params);
+      const p = asObject(params);
+      if (typeof p.categoryId !== 'string' || p.categoryId.length === 0) {
+        throw new RpcError('A non-empty "categoryId" is required', JSON_RPC_INVALID_PARAMS);
+      }
+      return this.service.move(id, p.categoryId, p.orderedIds as string[]);
+    });
+
+    this.registerCategories(router);
+  }
+
+  /**
+   * `projects.categories.*` (046, contracts/project-categories.md §1). The rules — naming, the
+   * default category being neither deletable nor minimisable — live in core; every refusal is a
+   * ProjectCategoryError, which the router answers as invalid params (-32602).
+   */
+  private registerCategories(router: RpcRouter): void {
+    const categories = this.categories;
+    if (!categories) return;
+
+    router.register(PROJECTS_CATEGORIES_LIST_METHOD, () => ({
+      categories: categories.list().map(toCategoryDto),
+    }));
+
+    router.register(PROJECTS_CATEGORIES_CREATE_METHOD, (params) => ({
+      category: toCategoryDto(categories.create(asString(asObject(params).name))),
+    }));
+
+    router.register(PROJECTS_CATEGORIES_RENAME_METHOD, (params) => {
+      const id = requireId(params);
+      return { category: toCategoryDto(categories.rename(id, asString(asObject(params).name))) };
+    });
+
+    router.register(PROJECTS_CATEGORIES_DELETE_METHOD, (params) => categories.delete(requireId(params)));
+
+    router.register(PROJECTS_CATEGORIES_SET_MINIMISED_METHOD, (params) => {
+      const id = requireId(params);
+      const minimised = asObject(params).minimised;
+      if (typeof minimised !== 'boolean') {
+        throw new RpcError('"minimised" must be a boolean', JSON_RPC_INVALID_PARAMS);
+      }
+      return { category: toCategoryDto(categories.setMinimised(id, minimised)) };
+    });
+
+    // 046 FR-083 (contracts/project-categories.md §5). Every refusal — a non-string array, the
+    // default's id, an unknown, missing or duplicated id — is core's, as a ProjectValidationError.
+    router.register(PROJECTS_CATEGORIES_REORDER_METHOD, (params) => ({
+      categories: categories
+        .reorder(asObject(params).orderedIds as string[])
+        .map(toCategoryDto),
+    }));
   }
 }

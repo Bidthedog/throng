@@ -125,6 +125,13 @@ const SVG_SHAPES: Record<string, string> = {
   windowMaximise: '<rect x="5" y="5" width="14" height="14" rx="1"/>',
   windowRestore: '<rect x="5" y="8" width="11" height="11" rx="1"/><path d="M8 8V5h11v11h-3"/>',
   windowClose: '<path d="M6 6l12 12M18 6L6 18"/>',
+  // 046 (FR-061, R11) — the Projects pane's category headers and the Unload menu. An eject shape
+  // for `unload` (detach, don't delete), a tag for `category` (a label on a row, not the row
+  // itself). A third shape, `projectList` — a stack of folders for the pane's own panel-type marker
+  // — shipped alongside these two but was retired (branch-review finding, 046 iterate round 2):
+  // `THRONG_THEME.icons` no longer defines the token, so nothing resolves it here any more.
+  unload: '<path d="M12 4l6 8H6z"/><path d="M6 18h12"/>',
+  category: '<path d="M4 6l8-2 8 6-8 10z"/><circle cx="9" cy="9" r="1.4"/>',
 };
 
 const GENERIC_SHAPE = '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="2.5"/>';
