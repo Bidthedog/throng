@@ -861,7 +861,7 @@ export const TERMINAL_OUTPUT_TIMEOUT_MS = 30_000;
  * box at any worker count. It failed once, at the end of a seventeen-minute serial tier, on a
  * machine that had already run the parallel tier.
  *
- * That is the shape `docs/testing.md` names starvation rather than a defect, and it arrives by a
+ * That is the shape `.claude/skills/throng-testing/references/budgets.md` names starvation rather than a defect, and it arrives by a
  * route the five 034 budgets did not cover: not concurrent workers, but a box that has been busy for
  * a quarter of an hour.
  *

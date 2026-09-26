@@ -34,7 +34,7 @@ load-bearing decisions:
 `packaged-runtime-deps.test.ts` and `daemon-runtime-path.test.ts` guard the packaged layout — a new
 runtime dependency means checking both.
 
-## Release (docs/releasing.md)
+## Release (overview: docs/releasing.md; reasoning: .claude/skills/throng-release/references/)
 
 **Cutting one is the `throng-release` skill's job, not this agent's** — it holds the running order,
 the version question and the sign-off. What follows is the area knowledge that runbook assumes.

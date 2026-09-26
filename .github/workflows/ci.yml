@@ -114,7 +114,8 @@ jobs:
     timeout-minutes: 45
     env:
       # SINGLE WORKER — the invariant the whole approach rests on. Each worker is a full Electron
-      # app + detached daemon + real shells; per docs/testing.md failures RISE with worker count on
+      # app + detached daemon + real shells; per .claude/skills/throng-testing/references/
+      # tiers-and-workers.md (the worker benchmark) failures RISE with worker count on
       # this constrained runner. A smaller suite is not a reason to reopen a question that was
       # measured shut.
       THRONG_E2E_WORKERS: 1
@@ -159,7 +160,8 @@ jobs:
       # runner was attempted and measured impossible (UAC is disabled, so `schtasks /RL LIMITED` has
       # no filtered token to fall back to — run 30947653266). What made the guarded specs run here
       # was narrowing the guard itself, from 85 spec files to 22, leaving 25 genuinely
-      # integrity-dependent tests that still self-skip. See docs/testing.md.
+      # integrity-dependent tests that still self-skip. See
+      # .claude/skills/throng-testing/references/elevation.md.
       #
       # NOT `--shard=i/N` — that splits by test COUNT in file order, which let the alphabet put every
       # terminal-* spec in one third (measured 3.7 / 8.3 / 36 min, the last killed by the timeout).

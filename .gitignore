@@ -27,7 +27,7 @@ playwright-report/
 blob-report/
 all-blob-reports/
 .last-run.json
-# The JSON run report. `docs/testing.md` tells developers to write this to the repo root to get
+# The JSON run report. `.claude/skills/throng-testing/references/measuring-durations.md` tells developers to write this to the repo root to get
 # per-file durations (034 SC-015), and `release.yml` writes it on CI — so the documented procedure
 # produces it by design, and without this line it would sit untracked waiting to be committed by
 # accident. It is a measurement of a run, not source.
