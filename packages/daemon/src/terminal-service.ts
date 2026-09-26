@@ -33,7 +33,9 @@ import {
   type TerminalAttachParams,
   type TerminalAttachResult,
   type TerminalCapabilitiesResult,
+  type TerminalCloseIdleResult,
   type TerminalDetachParams,
+  type TerminalKillAllResult,
   type TerminalKillParams,
   type TerminalRepaintParams,
   type TerminalListParams,
@@ -854,16 +856,25 @@ export class TerminalService {
     // FR-013 — a caller naming a lock holder cannot use a cwd that is up to a second old; see
     // `refreshCwd`. Everyone else is served from the poll, unchanged and free.
     if (params.refreshCwd) await this.refreshCwds();
+    const listed = [...this.sessions.values()].filter(
+      (session) => !params.projectId || session.projectId === params.projectId,
+    );
+    // Probing child pids is expensive (per-session ConPTY helper) — only when explicitly
+    // requested, so a plain count (e.g. the app-close prompt) is fast. When requested, the probe is
+    // AWAITED (046): Unload decides from this whether to ask before ending anything.
+    const busy = params.includeBusy
+      ? await Promise.all(listed.map((session) => this.probeBusy(session)))
+      : listed.map(() => false);
     const sessions = [];
-    for (const session of this.sessions.values()) {
-      if (params.projectId && session.projectId !== params.projectId) continue;
+    for (const [i, session] of listed.entries()) {
       sessions.push({
         panelId: session.panelId,
         projectId: session.projectId,
         status: session.status,
-        // Probing child pids is expensive (per-session ConPTY helper) — only when
-        // explicitly requested, so a plain count (e.g. the app-close prompt) is fast.
-        busy: params.includeBusy ? this.isBusy(session) : false,
+        busy: busy[i] ?? false,
+        // 046: a rootless session belongs to a sub-workspace window, not the project, and a
+        // project-scoped closeIdle/killAll never touches it — so Unload must not count or name it.
+        rootless: session.rootless,
         meta: session.meta,
         /*
          * 029 FR-013 — where this terminal is actually working.
@@ -889,33 +900,57 @@ export class TerminalService {
   }
 
   /**
+   * The busy classification from a CURRENT answer (046), for Unload's count and `closeIdle`. Both
+   * production hosts offer `probeChildPids`: the agent's synchronous answer can be stale, and the
+   * local host's blocks the event loop for a whole process-table scan per terminal. Awaited all
+   * together, the local host serves them from ONE snapshot. A probe that fails or times out counts as
+   * busy — never silently treat a possibly-busy shell as idle. A host without it is asked through
+   * {@link isBusy}, where a throw means the same.
+   */
+  private async probeBusy(session: Session): Promise<boolean> {
+    if (session.status !== 'running') return false;
+    const probe = session.host.probeChildPids?.bind(session.host);
+    if (!probe) return this.isBusy(session);
+    try {
+      return isBusy(await probe(session.handle));
+    } catch {
+      return true;
+    }
+  }
+
+  /**
    * Close idle sessions (no running command) — busy ones keep running in the
    * background (FR-015b / Principle III). Optionally scoped to one project. Used on
-   * project/app close. Returns the panelIds closed.
+   * project/app close and by Unload's Keep running (046 FR-034). Returns the panelIds closed.
+   *
+   * The busy probe runs HERE, at call time, not when the renderer counted busy sessions for its
+   * dialog: a process that ended while the dialog was open leaves an idle shell, and that shell is
+   * closed like any other rather than kept alive on a stale count (Principle III).
    */
-  private closeIdle(rawParams: unknown): { closed: string[] } {
-    const projectId = asProjectId(rawParams);
+  private async closeIdle(rawParams: unknown): Promise<TerminalCloseIdleResult> {
+    const inScope = sessionScope(rawParams);
+    const candidates = [...this.sessions.values()].filter((s) => inScope(s) && s.status === 'running');
+    const busy = await Promise.all(candidates.map((session) => this.probeBusy(session)));
     const closed: string[] = [];
-    for (const session of [...this.sessions.values()]) {
-      if (projectId && session.projectId !== projectId) continue;
-      if (session.status === 'running' && !this.isBusy(session)) {
-        session.userKilled = true;
-        session.host.kill(session.handle);
-        closed.push(session.panelId);
-      }
+    for (const [i, session] of candidates.entries()) {
+      // Re-checked after the await: the session may have exited, or been replaced, meanwhile.
+      if (busy[i] || session.status !== 'running' || this.sessions.get(session.panelId) !== session) continue;
+      session.userKilled = true;
+      session.host.kill(session.handle);
+      closed.push(session.panelId);
     }
     return { closed };
   }
 
   /**
    * Kill every session (the app-close "terminate all" choice, FR-015e). Optionally
-   * scoped to one project. Returns the panelIds killed.
+   * scoped to one project — Unload's End terminals (046 FR-034). Returns the panelIds killed.
    */
-  private killAll(rawParams: unknown): { killed: string[] } {
-    const projectId = asProjectId(rawParams);
+  private killAll(rawParams: unknown): TerminalKillAllResult {
+    const inScope = sessionScope(rawParams);
     const killed: string[] = [];
     for (const session of [...this.sessions.values()]) {
-      if (projectId && session.projectId !== projectId) continue;
+      if (!inScope(session)) continue;
       if (session.status === 'running') {
         session.userKilled = true;
         session.host.kill(session.handle);
@@ -924,6 +959,29 @@ export class TerminalService {
     }
     return { killed };
   }
+}
+
+/**
+ * Which sessions a `closeIdle` / `killAll` call covers (contracts/unload.md §3).
+ *
+ * No `projectId` → every session, rootless included and `exceptPanelIds` ignored: that is app
+ * close, and anything it skipped would outlive throng (Principle III). With a `projectId` (Unload) →
+ * that project's sessions, minus the panels a sub-workspace window holds (`exceptPanelIds`, FR-037)
+ * and minus `rootless` sessions, which belong to a sub-workspace window rather than to the project.
+ */
+function sessionScope(params: unknown): (session: Pick<Session, 'projectId' | 'panelId' | 'rootless'>) => boolean {
+  const projectId = asProjectId(params);
+  if (!projectId) return () => true;
+  const except = new Set(asExceptPanelIds(params));
+  return (session) => session.projectId === projectId && !session.rootless && !except.has(session.panelId);
+}
+
+function asExceptPanelIds(params: unknown): string[] {
+  if (params && typeof params === 'object' && 'exceptPanelIds' in params) {
+    const ids = (params as { exceptPanelIds?: unknown }).exceptPanelIds;
+    if (Array.isArray(ids)) return ids.filter((id): id is string => typeof id === 'string');
+  }
+  return [];
 }
 
 function asProjectId(params: unknown): string | undefined {

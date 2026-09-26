@@ -43,6 +43,9 @@ export class PtyAgentHost implements IPtyHost {
   /** 025: in-flight `childprocs` requests, resolved when the agent answers. */
   private readonly childprocWaiters = new Map<number, (procs: ChildProcess[]) => void>();
   private childprocReqId = 1;
+  /** 046: in-flight AWAITED `childpids` requests (reqId ≥ 1; reqId 0 is the fire-and-forget refresh). */
+  private readonly childpidWaiters = new Map<number, (answer: number[] | Error) => void>();
+  private childpidReqId = 1;
   /** Every key `start`ed and not yet ended — the set a failure must fail (not merely the
    *  keys that happen to have a listener registered yet, which would be a race). */
   private readonly liveKeys = new Set<number>();
@@ -233,9 +236,17 @@ export class PtyAgentHost implements IPtyHost {
         this.exitCbs.get(ev.key)?.forEach((cb) => cb({ code: 1 }));
         this.forgetKey(ev.key);
         break;
-      case 'childpids':
-        this.childpids.set(ev.key, ev.pids);
+      case 'childpids': {
+        // A FAILED probe is not "no children" (046): it neither overwrites the cache nor resolves a
+        // waiter with an idle-looking empty list — the waiter rejects, and the caller counts busy.
+        if (!ev.failed) this.childpids.set(ev.key, ev.pids);
+        const waiter = this.childpidWaiters.get(ev.reqId);
+        if (waiter) {
+          this.childpidWaiters.delete(ev.reqId);
+          waiter(ev.failed ? new Error(`the PTY agent could not read child processes for terminal ${ev.key}`) : ev.pids);
+        }
         break;
+      }
       case 'childprocs': {
         const waiter = this.childprocWaiters.get(ev.reqId);
         if (waiter) {
@@ -325,6 +336,29 @@ export class PtyAgentHost implements IPtyHost {
   listChildPids(handle: PtyHandle): number[] {
     this.sendCmd({ op: 'childpids', key: handle.pid, reqId: 0 });
     return this.childpids.get(handle.pid) ?? [];
+  }
+
+  /**
+   * 046 (Unload): the agent's CURRENT answer, awaited. `listChildPids` above returns the previous
+   * reply — nothing at all for a session never asked — so a close decision made on it would end a
+   * running process. Rejects when the agent does not answer in time (wedged, gone, or the terminal
+   * already ended), and the caller treats that as busy.
+   */
+  probeChildPids(handle: PtyHandle): Promise<number[]> {
+    const reqId = this.childpidReqId++;
+    return new Promise<number[]>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.childpidWaiters.delete(reqId);
+        reject(new Error(`the PTY agent did not report child processes for terminal ${handle.pid}`));
+      }, 5000);
+      timer.unref?.();
+      this.childpidWaiters.set(reqId, (answer) => {
+        clearTimeout(timer);
+        if (answer instanceof Error) reject(answer);
+        else resolve(answer);
+      });
+      this.sendCmd({ op: 'childpids', key: handle.pid, reqId });
+    });
   }
 
   /**

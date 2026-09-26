@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
-import { formatGrouped, languageName } from '@throng/core';
+import { firstBinding, formatGrouped, languageName } from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
 import { useEditorHoveredLink } from './editor-hovered-link-store.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
@@ -20,7 +20,7 @@ import { useFocusTrap } from '../common/focus-trap.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useEditorState } from './editor-state.js';
 import { focusPanel } from '../workspace/panel-focus.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { IconButton } from '../common/icon-button.js';
 import { previewDisabledTitle, useEditorPreviewAffordance } from './editor-preview.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
@@ -319,6 +319,9 @@ export function StatusStrip({
   // 024 US1: the word-wrap toggle. Keyed by the open file's path (per document, Principle XI) so it
   // and the editor view read the one value; seeded from the editor default preference.
   const wrapSeed = useAppSettings().editor.defaultWordWrap;
+  // 046 FR-091 / Principle X: the title names the LIVE chord (two-stroke shown as `Ctrl+E,W`, FR-124), never a
+  // literal — and no chord at all when the command is unbound.
+  const wrapChord = firstBinding(useKeybindings(), 'editor.toggleWordWrap');
   const filePath = useEditorState(panelId)?.filePath ?? null;
   const wrapDocKey = wordWrapDocKey(filePath, panelId);
   const wrapOn = useDocumentWordWrap(wrapDocKey, wrapSeed);
@@ -600,7 +603,7 @@ export function StatusStrip({
           type="button"
           className="editor-status-strip__wrap"
           data-testid={`editor-word-wrap-${panelId}`}
-          title="Toggle word wrap (Ctrl+Alt+W)"
+          title={wrapChord ? `Toggle word wrap (${wrapChord})` : 'Toggle word wrap'}
           aria-pressed={wrapOn}
           onClick={() => toggleDocumentWordWrap(wrapDocKey, wrapSeed, panelId)}
         >

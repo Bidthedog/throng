@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -14,6 +16,7 @@ import { useKeybindings } from '../config/config-store.js';
 import { IconButton } from '../common/icon-button.js';
 import { ProjectSettingsDialog } from '../project-settings/project-settings-dialog.js';
 import { setActivePane, useActivePane } from '../workspace/active-pane.js';
+import { registerExplorerCommands, unregisterExplorerCommands } from '../explorer/explorer-commands.js';
 
 /**
  * Inner content of the right-hand File Explorer Pane (FR-004/006): a draggable
@@ -32,9 +35,29 @@ export function FileExplorerPane({
   const { activeProject, setProjectHidden } = useProjects();
   const keybindings = useKeybindings();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The Files & Folders pane becomes the active pane on click, gating panel
+  // The File Explorer pane becomes the active pane on click, gating panel
   // shortcuts (Ctrl+S no-ops here) and showing a highlight (FR-015/SC-006).
   const filesActive = useActivePane() === 'files';
+
+  /*
+   * 046 US2 (FR-017) — the empty-state placeholder registers itself as the explorer's focus target
+   * while no project is active, so `focus.explorer` has SOMETHING to focus either way (contract §1).
+   * `FileTree` registers its own, richer version (undo/redo + the selected/first row) the moment a
+   * project opens; only one of the two branches is ever mounted, so there is never a race between
+   * them — see `explorer-commands.ts`.
+   */
+  const emptyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (activeProject) return undefined;
+    const commands = {
+      undoFileOp: () => {},
+      redoFileOp: () => {},
+      focusSelectedOrFirst: () => emptyRef.current?.focus(),
+    };
+    registerExplorerCommands(commands);
+    return () => unregisterExplorerCommands(commands);
+  }, [activeProject]);
+
   return (
     <>
       <div
@@ -56,10 +79,15 @@ export function FileExplorerPane({
             : undefined
         }
         onPointerDown={() => setActivePane('files')}
+        // 046 US2 (FR-017, R3) — `focusin` joins `pointerdown`: `focus.explorer` moves DOM focus into
+        // the pane WITHOUT a preceding click, and without this the active-pane indicator (and the
+        // panel-scope gate it drives) would lag one interaction behind the highlight it is meant to
+        // explain.
+        onFocus={() => setActivePane('files')}
       >
         <div className="panel">
           <header className="panel__header">
-            <span className="panel__title">Files &amp; Folders</span>
+            <span className="panel__title">File Explorer</span>
             <span className="panel__header-actions">
               {/* 018 / US8 (FR-041) — the way into the project settings dialog, and the only way back
                   out of "Hide in this project", which until now was a one-way door.
@@ -117,7 +145,12 @@ export function FileExplorerPane({
                    DRAWN AND DISABLED rather than disappearing. */
                 findInFilesEnabled={false}
               />
-              <div className="pane-explorer__empty" data-testid="file-explorer-empty">
+              <div
+                className="pane-explorer__empty"
+                data-testid="file-explorer-empty"
+                ref={emptyRef}
+                tabIndex={-1}
+              >
                 <p>No files to display yet.</p>
               </div>
             </>

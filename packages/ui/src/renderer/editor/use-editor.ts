@@ -45,6 +45,7 @@ import {
 import { registerEditorActions, unregisterEditorActions, type EditorLoadNavigation } from './editor-actions.js';
 import { setPanelHistory } from '../navigation/history-store.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
+import { getActivePane } from '../workspace/active-pane.js';
 import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
 import { destroyPanelSearch, updateCount } from '../search/search-store.js';
 import {
@@ -263,7 +264,8 @@ function commandsFor(deps: {
     'editor.columnSelectDown': columnSelectDown,
     'editor.columnSelectLeft': columnSelectLeft,
     'editor.columnSelectRight': columnSelectRight,
-    // 024 US1: Ctrl+Alt+W toggles the focused editor's document wrap; the compartment reconfigure
+    // 024 US1: the wrap chord (`Ctrl+E,W` by default, 046 FR-091, FR-124) toggles the focused editor's
+    // document wrap; the compartment reconfigure
     // effect reflows every view of that document.
     'editor.toggleWordWrap': () => {
       deps.toggleWrap();
@@ -1876,8 +1878,9 @@ export function useEditor(params: UseEditorParams): void {
       // single-clicking a file in the tree) has no saved state, and there the tree must
       // keep focus so F2-rename still reaches it (an editor open does not move DOM focus).
       // Also gated on being the active panel so a background tab / inactive split never
-      // steals focus.
-      if (savedView && isActivePanelRef.current) view.focus();
+      // steals focus. And gated on the workspace holding the active pane: a switch made from the
+      // Projects list keeps focus on the chosen row (046 FR-082), so a restore under it stays quiet.
+      if (savedView && isActivePanelRef.current && getActivePane() === 'workspace') view.focus();
     };
 
     /*

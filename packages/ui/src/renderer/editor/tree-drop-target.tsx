@@ -8,7 +8,7 @@ import {
 } from '../explorer/tree-drag-store.js';
 
 /**
- * Dropping a file dragged from Files & Folders onto a panel (024 US4, #114 and its follow-ups).
+ * Dropping a file dragged from File Explorer onto a panel (024 US4, #114 and its follow-ups).
  *
  * This is the counterpart to {@link PanelDropTarget}, which serves drags that come in from the
  * OPERATING SYSTEM. A drag that starts inside throng's own tree runs on react-arborist's react-dnd

@@ -13,7 +13,7 @@
 }
 
 /* The left sidebar's gutter sits before its body; the right explorer's after. */
-/* 021 (FR-025) — the Files & Folders pane is the Side Panel too, so it takes the same Side Panel
+/* 021 (FR-025) — the File Explorer pane is the Side Panel too, so it takes the same Side Panel
    Background (`sidebarBg`) as `.pane--sidebar` rather than the workspace panel `surface`. */
 .pane--explorer {
   background: var(--throng-colour-sidebarBg);
@@ -30,7 +30,7 @@
   overflow: hidden;
 }
 
-/* Active Files & Folders pane highlight (006, FR-015/SC-006). Drawn as an overlay
+/* Active File Explorer pane highlight (006, FR-015/SC-006). Drawn as an overlay
  * pseudo-element so the border renders ABOVE the tree-row selection box rather than
  * behind it (a parent's inset box-shadow paints under child backgrounds) — FR-071.
  *
@@ -38,13 +38,26 @@
  * app-wide), and it follows the same rule (Principle I): when a project is open the pane sets
  * `--active-pane-colour` to that project's colour inline, so the border takes the project colour;
  * with no project it falls through to the shared `activePanelBorder` token. */
-.pane-explorer__body--active::after {
+/*
+ * 046 US2 (FR-015, FR-018, T040) — the SAME active-pane highlight, one pane along: the Projects
+ * panel's body draws the identical outline while it holds the active pane, so a user who has just
+ * learned "an outlined pane is the one my keyboard acts on" from the File Explorer sees the same
+ * cue here. No project-colour override — the Projects panel lists every project, not one.
+ */
+.pane-explorer__body--active::after,
+.projects-panel--active::after {
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px solid var(--active-pane-colour, var(--throng-colour-activePanelBorder, #6aa3ff));
+  /* 046 iterate round 1 (FR-073) — as thin as the panes' own default border (1px, `.pane--explorer`'s
+   * `border-left` below), not the 2px the workspace panels' active outline uses (theme.css). */
+  border: 1px solid var(--active-pane-colour, var(--throng-colour-activePanelBorder, #6aa3ff));
   pointer-events: none;
   z-index: 5;
+}
+
+.projects-panel {
+  position: relative;
 }
 
 .pane-explorer__empty {

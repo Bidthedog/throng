@@ -82,6 +82,23 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
   return out;
 }
 
+/**
+ * Icon tokens 046 (iterate round 2, branch-review finding) retires: `projectList` named the title
+ * bar's cog-menu "Focus Projects" row — a row FR-074/FR-107 had already retired before the
+ * description was ever written, so the token drew nothing from the day this comment's predecessor
+ * shipped it. Dropped unconditionally on load, the same as {@link REMOVED_COLOUR_TOKENS}, so an
+ * install that received it via the version-12 shipped-defaults seed loses the stale key rather than
+ * carrying it forever.
+ */
+const REMOVED_ICON_TOKENS = ['projectList'] as const;
+
+/** Migrate one theme's `icons` to the 046 iterate round 2 model: drop {@link REMOVED_ICON_TOKENS}. */
+export function migrateThemeIcons(icons: Record<string, string>): Record<string, string> {
+  const out = { ...icons };
+  for (const token of REMOVED_ICON_TOKENS) delete out[token];
+  return out;
+}
+
 /** The default base weights a role's `bold` boolean used to resolve to (theme.ts `fonts.weights`). */
 const DEFAULT_BOLD_WEIGHT = 600;
 const DEFAULT_NORMAL_WEIGHT = 400;
@@ -124,17 +141,20 @@ export function migrateThemeTypography(
 }
 
 /**
- * Migrate a whole theme document read from disk to the 021 model (FR-031/032). Pure, idempotent,
- * lossless. Applied on the theme LOAD path so any user theme authored before 021 gains the typed
- * button tokens and sheds the removed surfaces before it is used.
+ * Migrate a whole theme document read from disk to the current model (FR-031/032, and 046's icon
+ * retirement). Pure, idempotent, lossless for every surviving token. Applied on the theme LOAD path
+ * so any user theme authored before 021 gains the typed button tokens and sheds the removed
+ * surfaces, and any theme carrying a retired icon token (`projectList`) sheds that too, before it is
+ * used.
  */
 export function migrateTheme(raw: Theme): Theme {
   const colours = (raw.colours ?? {}) as Record<string, string>;
+  const icons = (raw.icons ?? {}) as Record<string, string>;
   const typography = migrateThemeTypography(
     raw.typography as Record<string, Record<string, unknown>> | undefined,
     raw.fonts,
   );
-  const next: Theme = { ...raw, colours: migrateThemeColours(colours) };
+  const next: Theme = { ...raw, colours: migrateThemeColours(colours), icons: migrateThemeIcons(icons) };
   if (typography === undefined) delete (next as { typography?: unknown }).typography;
   else next.typography = typography as Theme['typography'];
   return next;

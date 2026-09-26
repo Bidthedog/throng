@@ -19,30 +19,33 @@ function chord(key: ActionId, group: string, label: string, description: string)
 }
 
 export const KEYBINDINGS_METADATA: MetadataRegistry = [
-  // Zoom
+  // Zoom — 046 iterate round 2 (FR-113): the title bar's cog menu carries no Zoom row (the
+  // maintainer's own words, mid-build: "Remove the new 'Zoom' options from the menu"). These three
+  // chords are the window zoom's ONLY route — keyboard-only, no mouse or menu route at all.
   chord('zoom.in', 'Zoom', 'Zoom in', 'Increase the interface zoom level.'),
   chord('zoom.out', 'Zoom', 'Zoom out', 'Decrease the interface zoom level.'),
   chord('zoom.reset', 'Zoom', 'Reset zoom', 'Return the interface zoom to 100%.'),
 
   // Focus & Zoom (012) — per-panel-type text zoom, routed to the active panel's
-  // type; distinct from the app-wide zoom above.
+  // type; distinct from the app-wide zoom above. 046 iterate round 1 (FR-106): each also answers
+  // to holding Ctrl and using the mouse wheel or middle-click over a panel, never the window zoom.
   chord(
     'panel.zoomIn',
     'Focus & Zoom',
     'Zoom panel type in',
-    "Increase the text size of every panel of the active panel's type.",
+    "Increase the text size of every panel of the active panel's type. Also reachable by holding Ctrl and scrolling up over a panel.",
   ),
   chord(
     'panel.zoomOut',
     'Focus & Zoom',
     'Zoom panel type out',
-    "Decrease the text size of every panel of the active panel's type.",
+    "Decrease the text size of every panel of the active panel's type. Also reachable by holding Ctrl and scrolling down over a panel.",
   ),
   chord(
     'panel.zoomReset',
     'Focus & Zoom',
     'Reset panel type zoom',
-    "Return the active panel's type to its default text size.",
+    "Return the active panel's type to its default text size. Also reachable by holding Ctrl and clicking a panel with the middle mouse button.",
   ),
   chord(
     'focus.left',
@@ -86,6 +89,29 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Focus the most recent notice',
     'Move focus to the newest notice on screen so its list can be read and scrolled by keyboard. Does nothing when there is no notice.',
   ),
+  // 046 iterate round 1 (FR-087) — beside every other `focus.*` command, rather than in `View` with
+  // the pane toggles and the project-cycling pair: a user hunting for "jump focus somewhere" finds
+  // all of them in one place.
+  chord(
+    'focus.explorer',
+    'Focus & Zoom',
+    'Focus File Explorer',
+    'Move keyboard focus straight to the File Explorer pane.',
+  ),
+  chord(
+    'focus.projects',
+    'Focus & Zoom',
+    'Focus Projects',
+    'Move keyboard focus straight to the Projects pane.',
+  ),
+  // 046 iterate round 3 (FR-116) — keyboard-only, so this row is its one discoverable home. The
+  // description names no chord (FR-119): a rebind would make it false.
+  chord(
+    'focus.workspace',
+    'Focus & Zoom',
+    'Focus Workspace',
+    'Move keyboard focus back to the active panel in the centre workspace, without switching tab, panel or project.',
+  ),
 
   // View
   chord('view.fullscreen', 'View', 'Toggle fullscreen', 'Enter or leave fullscreen mode.'),
@@ -99,7 +125,21 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'view.toggleExplorer',
     'View',
     'Toggle File Explorer',
-    'Show or hide the Files & Folders pane.',
+    'Show or hide the File Explorer pane.',
+  ),
+  // 046 US2 (FR-015/019/020/022) — step the active project, or jump focus straight to a side pane,
+  // from anywhere in the window.
+  chord(
+    'project.next',
+    'View',
+    'Next Project',
+    'Switch to the next project in the Projects pane, skipping any minimised category.',
+  ),
+  chord(
+    'project.previous',
+    'View',
+    'Previous Project',
+    'Switch to the previous project in the Projects pane, skipping any minimised category.',
   ),
   chord(
     'menu.open',
@@ -149,7 +189,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'preview.open',
     'Navigate',
     'Open Preview',
-    'Open a rendered preview of the focused editor’s file, or of the file selected in Files & Folders. Unbound by default.',
+    'Open a rendered preview of the focused editor’s file, or of the file selected in File Explorer. Unbound by default.',
   ),
   chord(
     'navigate.back',

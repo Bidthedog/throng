@@ -164,8 +164,9 @@ export async function writeConfigPatch(
      * reasoning was that G1 says "a key absent from `changes` has the same value after the write as
      * it had on disk before it", so dropping an unmodelled key looked like a violation.
      *
-     * IT IS NOT, AND 007 FR-023 SAYS SO IN AS MANY WORDS. `preferences-settings.e2e.ts` (#95, C1)
-     * asserts that a hand-written unknown key is STRIPPED by the next ordinary write, and its own
+     * IT IS NOT. 019 FR-023 set the precedent for a retired key (not 007 FR-023, which is the
+     * Reset to Defaults control and says nothing about unmodelled keys), and
+     * `preferences-settings.e2e.ts` (#95, C1) asserts that a hand-written unknown key is STRIPPED by the next ordinary write, and its own
      * comment states the mechanism: "the key simply does not survive a parse, so the first ordinary
      * write drops it". That is a shipped, tested decision about what a settings write means, taken
      * before this feature existed — and G1 was never about unmodelled keys. It is about the keys

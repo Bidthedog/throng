@@ -1,7 +1,7 @@
 /**
  * NodeFileWatcher — the UI-main concrete {@link IFileWatcher} (T029). Watches a
  * directory (recursively) for create/modify/delete and reports changes, debounced,
- * to drive config hot-reload (research D3) and the Files & Folders tree (US2).
+ * to drive config hot-reload (research D3) and the File Explorer tree (US2).
  * Uses node's `fs.watch` with `{ recursive: true }` (supported on Windows, the
  * first target) so no extra dependency is needed; the OS detail stays behind the
  * IFileWatcher abstraction (Principle II).

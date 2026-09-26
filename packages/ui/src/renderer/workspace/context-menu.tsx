@@ -12,11 +12,17 @@ import { eventToToken, normalizeToken, type MenuSection } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { withDividers } from './menu-dividers.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 /** Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts. */
-function chordMatchesShortcut(e: React.KeyboardEvent, shortcut: string): boolean {
-  const token = eventToToken({ key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
-  return token !== null && normalizeToken(token) === normalizeToken(shortcut);
+export function chordMatchesShortcut(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'shiftKey' | 'altKey'>, shortcut: string): boolean {
+  const wanted = normalizeToken(shortcut);
+  return (
+    resolveKeydown(e, (ev) => {
+      const token = eventToToken(ev);
+      return token !== null && normalizeToken(token) === wanted ? true : null;
+    }) === true
+  );
 }
 
 /**
@@ -464,7 +470,7 @@ export function ContextMenu({
   /** Root test id. A menu folded into this one keeps its own (e.g. `cog-menu`) — see FR-053. */
   testId?: string;
   /**
-   * The element focused when the menu opened (the invoking surface, e.g. the Files & Folders tree).
+   * The element focused when the menu opened (the invoking surface, e.g. the File Explorer tree).
    * On a KEYBOARD close (Escape) or after an ACTION, focus returns to it so the pane is usable again
    * with its highlighted item intact (#157 follow-up). An outside CLICK does NOT restore — focus
    * belongs wherever the user clicked.

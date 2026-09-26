@@ -1783,7 +1783,7 @@ export class EditorCoordinator {
       // delete: keep the buffer, mark dirty + file-missing (FR-099). `markDeleted` itself leaves an
       // untyped `neverRead` document alone (the FR-106d stand-in, a failed restore): its file was already
       // gone, so there is no buffer to keep, and a file that later appears is still adopted by the
-      // `res.ok` branch above. One rule for the watch and for Files & Folders' delete.
+      // `res.ok` branch above. One rule for the watch and for File Explorer's delete.
       if (!doc.fileMissing) this.markDeleted([doc.absPath]);
       return;
     }

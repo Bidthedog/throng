@@ -12,7 +12,16 @@ import {
   type AppSettings,
   type FindInFilesSettings,
 } from './app-settings.js';
-import { DEFAULT_KEYBINDINGS, type Keybindings } from './keybindings.js';
+import {
+  COMMAND_SCOPES,
+  DEFAULT_KEYBINDINGS,
+  normalizeToken,
+  sameBindingToken,
+  scopesIntersect,
+  splitStrokes,
+  type ActionId,
+  type Keybindings,
+} from './keybindings.js';
 import { ALL_DEFAULT_THEMES } from './default-themes/index.js';
 import { THRONG_THEME, type Theme } from './theme.js';
 import { setAtPath } from './metadata.js';
@@ -174,11 +183,94 @@ import { setAtPath } from './metadata.js';
 // rebuilt block. That is this file's own round-four ruling for `defaultAction` and
 // `existenceCheckTimeoutMs`, and it applies unchanged here.
 //
-// A bump to 12 was written and then reverted. It would have carried no payload — nothing waiting on
-// a theme file, no frozen record to guard a rewrite against — so every install would have paid an
-// upgrade pass to learn nothing. The version means "there is something here you have not got"; moving
-// it when there is not is how it stops meaning that.
-export const SHIPPED_DEFAULTS_VERSION = 11;
+// A bump to 12 was written and then reverted (see below — the slot did not stay empty). It would
+// have carried no payload — nothing waiting on a theme file, no frozen record to guard a rewrite
+// against — so every install would have paid an upgrade pass to learn nothing. The version means
+// "there is something here you have not got"; moving it when there is not is how it stops meaning
+// that.
+//
+// Bumped by 046 (11 → 12): three icon tokens, `unload`, `category` and `projectList` — the Unload
+// menu, the Projects pane's category header and the pane's own panel-type marker (FR-061, R11).
+// Additive only, the same shape as every bump above: without it an existing install's theme files
+// never receive the three glyphs and each renders as nothing (an icon token absent from a theme
+// draws no fallback glyph of its own — see `icon-tokens-exist.test.ts`'s header comment). No colour
+// token moves alongside it.
+//
+// `projectList` was ITSELF retired by 046 iterate round 2 (branch-review finding): its description
+// named a cog-menu row FR-074/FR-107 had already retired before the description was written, and no
+// call site ever drew it. No new SHIPPED_DEFAULTS_VERSION bump was needed to undo this — unlike the
+// additive case above, dropping a token needs no version gate; `theme-ops.ts`'s `migrateTheme` sheds
+// a stray `projectList` key unconditionally, on every load, the same way it already drops 021's
+// removed colour tokens.
+//
+// The same bump also carries a VALUE that moves, on the keybindings side this time: `zoom.reset`
+// gains Ctrl+Shift+0 (FR-025). This is the 043 R28 shape, not 015/016/018/044's additive one —
+// `seed()` writes `zoom.reset`'s TWO-chord array into every install's `keybindings.json` at first
+// run, so it is never MISSING the way a brand-new action would be, and `parseKeybindings`'s
+// per-read fill (which only supplies an absent action) does nothing for it. Without a guarded
+// rewrite here, an existing install's file stays frozen at the old two-chord array forever and
+// Ctrl+Shift+0 does nothing for every user who has ever run the app before this release — exactly
+// the population no fresh-install E2E can see, the same trap this comment has recorded five times
+// over. `planKeybindingsUpgrade` guards it the {@link V6_SEARCH_IN_FILES_SETTINGS} way: a rewrite
+// ONLY where the on-disk array is still set-identical to {@link V11_ZOOM_RESET_BINDING}, so a user
+// who rebound `zoom.reset` keeps exactly what they set. It ALSO refuses the rewrite when another
+// action already binds {@link COLLIDING_ZOOM_RESET_TOKENS} — a review finding: `resolveKeydown`
+// tries the physical Ctrl+Shift+0 candidate first, so adding it here could otherwise steal that
+// physical key from whatever already owned it, invisibly to Preferences.
+//
+// Bumped by 046 iterate round 1 (12 → 13): TWO PAYLOADS, one on each side this file's history has
+// already seen separately.
+//
+// The THEME side is 015/016/018/044/045's additive case again: one colour token,
+// `categoryHeaderBackground` (FR-072), the Projects pane's category header strip. Without the bump
+// an existing install's theme files never receive it and the header draws on whatever the pane
+// body already was.
+//
+// The KEYBINDINGS side is 046's OWN v11 → v12 case (this file, just above), arriving for FIFTEEN
+// rows at once rather than one: every FR-102 *changes* row — the whole Ctrl+Shift+Alt navigation
+// tier this round introduces, plus the panel-zoom gestures and the `editor.toggleWordWrap`
+// two-stroke chord — is a value that MOVES on disk, not a key that simply appears. `seed()` wrote
+// every one of these bindings into `keybindings.json` at first run, so none of them is ever
+// MISSING and `parseKeybindings`'s per-read fill does nothing for any of them. `planKeybindingsUpgrade`
+// is extended below with FR-108's guarded rows: each one moves only when the saved array is still
+// set-identical to a NAMED earlier version's value (v11's, or — for the five actions v12 already
+// touched — v12's too), using the same {@link sameBindingToken} collision guard `zoom.reset`'s v12
+// rewrite introduced, so a new default is never applied on top of a chord the user already owns
+// under its "same binding" spelling.
+//
+// Bumped by 046 iterate round 3 (13 → 14): a KEYBINDINGS payload only, no theme token. FR-117 moves
+// five rows version 13 had just written — `focus.notice` to Ctrl+Shift+Alt+V, the pane toggles to J
+// and K, `focus.projects` / `focus.explorer` to B and M — so that B / N / M focus the three surfaces
+// left to right. It is the 12 → 13 case again, for five rows: `seed()` wrote every one of them, so
+// none is ever missing and the per-read fill does nothing for any. {@link V13_KEYBINDINGS} joins
+// FR-108's guard sources, and every row's target is still the LIVE shipped value, so an install at
+// 11 or 12 lands on FR-117's chord in one pass and no version-13 chord is ever written by it.
+//
+// Version 13 is not edited to carry this instead, for 043's (6 → 7) and 044's (8 → 9) reason: the
+// maintainer's development config and every hand-testing build of this branch already hold a 13
+// marker, and `main.ts` runs the upgrade only when the saved marker differs from the shipped one — a
+// change to 13 would never reach exactly the installs it exists for.
+//
+// The same bump carries one NEW-ACTION rule, and it is the first this file has needed. A brand-new
+// command normally rides no bump at all (the per-read fill supplies it), but `focus.workspace` ships
+// on Ctrl+Shift+Alt+N — the chord `view.toggleExplorer` held at 13. Where that row does not move (a
+// customised array that kept N, or a move the collision guard refused), the fill would silently give
+// the new command the user's own chord. So version 14 writes `focus.workspace: []` in exactly that
+// case, which the Key Bindings editor then shows as unbound, and otherwise leaves the action absent.
+//
+// Bumped by 046 iterate round 5 (14 → 15): a KEYBINDINGS payload only. FR-124 writes a two-stroke
+// chord as `Mods+K1,K2`, so `editor.toggleWordWrap` ships `Ctrl+E,W` where versions 13 and 14 wrote
+// `Ctrl+E W`. `seed()` wrote that value, so it is present and the per-read fill never touches it;
+// {@link V14_KEYBINDINGS} joins FR-108's guard sources and the row moves only while it is still
+// exactly that default. Version 14 is not edited, for the reason version 13 was not.
+//
+// Bumped by 046 iterate round 7 (15 → 16): a KEYBINDINGS payload only. FR-127 gives
+// `panel.zoomReset` the main-row `Ctrl+Alt+0` as a second keyboard chord. Every install holds
+// version 15's `['Ctrl+Alt+Numpad0', 'Ctrl+MiddleClick']`, so the row is present and the per-read
+// fill never touches it; {@link V15_KEYBINDINGS} joins FR-108's guard sources, the row moves only
+// while it is still exactly that default, and a binding the user kept on `Ctrl+Alt+0` refuses it.
+// Version 15 is not edited.
+export const SHIPPED_DEFAULTS_VERSION = 16;
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`
@@ -471,6 +563,350 @@ export function applySettingsUpgrade(
     next = setAtPath(next as Record<string, unknown>, leaf.path, leaf.value);
   }
   return next;
+}
+
+/**
+ * `zoom.reset`'s binding as every install up to version 11 shipped it (010) — the value
+ * {@link planKeybindingsUpgrade} guards on.
+ *
+ * A frozen COPY, for {@link V4_EXCLUDE_GLOBS}'s reason: `DEFAULT_KEYBINDINGS.bindings['zoom.reset']`
+ * has moved on (046 FR-025 adds `Ctrl+Shift+0`), so this must not follow it. If it did, the guard
+ * would compare the live default against itself, match every untouched install forever, and never
+ * plan a rewrite — a migration that is silently inert.
+ */
+export const V11_ZOOM_RESET_BINDING: readonly string[] = Object.freeze(['Ctrl+0', 'Ctrl+MiddleClick']);
+
+/**
+ * FR-108's version-11 guard sources: every action whose binding {@link planKeybindingsUpgrade} may
+ * move to its 046 iterate-round-1 value — frozen copies of what shipped-defaults version 11 wrote
+ * into every install's `keybindings.json`, for {@link V4_EXCLUDE_GLOBS}'s reason: `DEFAULT_KEYBINDINGS`
+ * has moved on, so a guard reading it live would compare the current default against itself and
+ * match nothing, ever.
+ *
+ * `zoom.reset` is INCLUDED here (review finding, CRITICAL 1 on the first cut of this file) rather
+ * than hand-rolled in a separate block: it has TWO possible guard sources — this v11 pair, and
+ * {@link V12_KEYBINDINGS}'s v12 triple below — and both must go through the SAME generic,
+ * scope-aware, same-binding-normalised collision check as every other row, or a v11 install with
+ * something already bound to the real v13 target (`Ctrl+Shift+Alt+Numpad0`, 046 iterate round 2
+ * FR-114) is never checked against it.
+ */
+export const V11_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'zoom.in': ['Ctrl+=', 'Ctrl++', 'Ctrl+WheelUp'],
+  'zoom.out': ['Ctrl+-', 'Ctrl+WheelDown'],
+  'zoom.reset': [...V11_ZOOM_RESET_BINDING],
+  'focus.left': ['Ctrl+Alt+ArrowLeft'],
+  'focus.right': ['Ctrl+Alt+ArrowRight'],
+  'focus.up': ['Ctrl+Alt+ArrowUp'],
+  'focus.down': ['Ctrl+Alt+ArrowDown'],
+  'focus.notice': ['Ctrl+Alt+M'],
+  'view.toggleProjects': ['Ctrl+Alt+B'],
+  'view.toggleExplorer': ['Ctrl+Alt+N'],
+  'tabs.openPicker': ['Ctrl+Alt+T'],
+  'panel.zoomIn': ['Ctrl+Alt+=', 'Ctrl+Alt++'],
+  'panel.zoomOut': ['Ctrl+Alt+-'],
+  'panel.zoomReset': ['Ctrl+Alt+0'],
+  'editor.toggleWordWrap': ['Ctrl+Alt+W'],
+});
+
+/**
+ * FR-108's version-12 guard sources (046, unreleased): the value five actions held at
+ * shipped-defaults version 12, the only population that ever materialised it — version 12 never
+ * shipped to a released install, so this serves only a hand-tested build of this branch that ran
+ * `seed()` between the two bumps. `zoom.reset`'s v11 source lives in {@link V11_KEYBINDINGS} above;
+ * the other four are brand new at v12, so their ONLY possible guard source is this one.
+ */
+export const V12_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'zoom.reset': ['Ctrl+0', 'Ctrl+Shift+0', 'Ctrl+MiddleClick'],
+  'project.next': ['Ctrl+Alt+PageDown'],
+  'project.previous': ['Ctrl+Alt+PageUp'],
+  'focus.explorer': ['Ctrl+Alt+F'],
+  'focus.projects': ['Ctrl+Alt+P'],
+});
+
+/**
+ * FR-118's version-13 guard sources (046 iterate round 3, unreleased): what shipped-defaults version
+ * 13 wrote for the five rows FR-117 moves — FR-102's tier-1 values. A frozen COPY, never a reference
+ * to `DEFAULT_KEYBINDINGS`, for {@link V4_EXCLUDE_GLOBS}'s reason: the live constant has already
+ * moved on, and a guard reading it would compare the current default against itself.
+ */
+export const V13_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'focus.notice': ['Ctrl+Shift+Alt+M'],
+  'view.toggleProjects': ['Ctrl+Shift+Alt+B'],
+  'view.toggleExplorer': ['Ctrl+Shift+Alt+N'],
+  'focus.explorer': ['Ctrl+Shift+Alt+F'],
+  'focus.projects': ['Ctrl+Shift+Alt+P'],
+});
+
+/**
+ * FR-124's version-14 guard source (046 iterate round 5, unreleased): the space-separated
+ * two-stroke token versions 13 and 14 wrote for word wrap, before FR-124's `Mods+K1,K2` form. A
+ * frozen COPY, for {@link V13_KEYBINDINGS}'s reason.
+ */
+export const V14_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'editor.toggleWordWrap': ['Ctrl+E W'],
+});
+
+/**
+ * FR-127's version-15 guard source (046 iterate round 7, unreleased): what versions 13 – 15 wrote for
+ * the panel zoom reset, before it gained the main-row `Ctrl+Alt+0`. A frozen COPY, for
+ * {@link V13_KEYBINDINGS}'s reason.
+ */
+export const V15_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'panel.zoomReset': ['Ctrl+Alt+Numpad0', 'Ctrl+MiddleClick'],
+});
+
+/** The command FR-116 adds — the one FR-118's new-action fill rule guards. */
+const FOCUS_WORKSPACE = 'focus.workspace';
+
+/**
+ * The two tokens a saved `Ctrl+Shift+Digit0` press can be recorded as, under the physical-first
+ * resolver `resolveKeydown` (`packages/ui/src/renderer/config/chord-key.ts`) every renderer
+ * resolver now uses: the PHYSICAL token, `Ctrl+Shift+0` — what a capture records on ANY layout
+ * today, including a layout (e.g. AZERTY) whose "master capture" already recorded the physical
+ * digit before this feature existed — and the PRODUCED token a US or UK layout typed for that same
+ * physical press, `Ctrl+Shift+)`, which is what a pre-046 capture on those layouts recorded, since
+ * only the produced character was matched then.
+ *
+ * `chordCandidates` tries the physical token FIRST. So if another action already owns either form,
+ * adding `Ctrl+Shift+0` to `zoom.reset` would make every physical Ctrl+Shift+Digit0 press resolve to
+ * `zoom.reset` regardless of which of the two tokens the other action holds — silently stealing the
+ * key, invisibly to Preferences (the saved strings differ from `zoom.reset`'s own).
+ *
+ * ══ WHY ONLY THESE TWO, NOT EVERY LAYOUT'S SHIFT+0 SYMBOL ══
+ *
+ * Modelling every layout's produced character for Shift+0 is exactly the table `chordCandidates`
+ * was built to avoid needing (German types `=`, and so on without end — see
+ * `contracts/keybindings-and-focus.md` §2, whose own example table stops at US/UK's `)`). These two
+ * are the forms provably in use: the physical token is what EVERY layout captures going forward, and
+ * `)` is the one produced form this feature's own contract documents and tests. Widening this list
+ * is a decision for a specific reported collision on a specific layout, not a preemptive guess — the
+ * guard is conservative in the direction of SKIPPING the addition, so a collision this set misses
+ * costs a user the NEW chord rather than costing them an EXISTING one.
+ */
+/** One key binding to rewrite, addressed by its `ActionId`. */
+export interface KeybindingsLeafUpgrade {
+  action: string;
+  value: string[];
+}
+
+/**
+ * True iff `value` is an array of exactly the strings in `expected` — same members, same count,
+ * ORDER IGNORED. A binding array is a SET of alternative chords a command answers to, not a
+ * sequence, so `['Ctrl+MiddleClick', 'Ctrl+0']` is the same customisation-evidence as
+ * `['Ctrl+0', 'Ctrl+MiddleClick']` — unlike {@link sameStringList}, which `explorer.excludeGlobs`
+ * uses and where order genuinely is part of the value.
+ */
+function sameStringSet(value: unknown, expected: readonly string[]): boolean {
+  if (!Array.isArray(value) || value.length !== expected.length) return false;
+  if (!value.every((entry): entry is string => typeof entry === 'string')) return false;
+  const a = [...value].sort();
+  const b = [...expected].sort();
+  return a.every((entry, i) => entry === b[i]);
+}
+
+/**
+ * True iff `shippedToken` and `otherToken` (both already run through `normalizeToken` then
+ * `sameBindingToken`) are the SAME CHORD for FR-108's collision purposes — either literally equal,
+ * or one is a two-stroke token whose FIRST STROKE equals the other's whole token (FR-092: pressing
+ * that shared prefix is genuinely ambiguous between "fire the other command now" and "wait for the
+ * second stroke", review finding IMPORTANT 3). Two two-stroke tokens merely sharing a first stroke
+ * are NOT a match here — a shared prefix between two DIFFERENT two-stroke commands is legitimate,
+ * the same distinction `chordCollisions` (keybindings.ts) draws for the live resolver.
+ */
+function sameChordOrAmbiguousPrefix(shippedToken: string, otherToken: string): boolean {
+  if (shippedToken === otherToken) return true;
+  // Strokes as written in the comma form (FR-124) — never a split on ' ' or ',', since `Ctrl+,`
+  // is one stroke. Either token being a PROPER prefix of the other is ambiguous (FR-092's
+  // first-stroke rule, widened to any shorter chord by FR-126).
+  const shippedStrokes = splitStrokes(shippedToken);
+  const otherStrokes = splitStrokes(otherToken);
+  if (!shippedStrokes || !otherStrokes || shippedStrokes.length === otherStrokes.length) return false;
+  const [shorter, longer] =
+    shippedStrokes.length < otherStrokes.length ? [shippedStrokes, otherStrokes] : [otherStrokes, shippedStrokes];
+  return shorter.every((s, i) => longer[i] === s);
+}
+
+/**
+ * True iff some action OTHER than `except`, and not itself in `moving`, already binds a token that
+ * collides with one of `shippedTokens` under {@link sameChordOrAmbiguousPrefix} — and only when the
+ * two actions' scopes actually INTERSECT (review finding IMPORTANT 10: FR-108 says "any action
+ * whose saved array is not being rewritten", scoped to where both commands are actually live,
+ * mirroring the scope-aware rule `chordCollisions` already applies to the live resolver).
+ *
+ * `moving` is what makes this safe to call inside a BATCH of guarded rewrites rather than one at a
+ * time: FR-108's own words are "any action whose saved array is not being rewritten", and a whole
+ * FAMILY of actions is being rewritten here in one pass — `zoom.in`'s v11 default happens to include
+ * `Ctrl+WheelUp`, the exact gesture `panel.zoomIn`'s v13 value is ABOUT TO GAIN, and without this
+ * exclusion `panel.zoomIn`'s own move would be refused for colliding with a value `zoom.in` is
+ * simultaneously giving up. `moving` MUST be the FIXED POINT of "rows that actually end up moving"
+ * ({@link planFR108Rows} computes it that way) — review finding CRITICAL 2: a row that matches a
+ * source but is ITSELF refused never loses its old tokens, and a one-shot "saved matches source"
+ * set wrongly exempted it anyway, which is how two commands both ended up bound to
+ * `Ctrl+MiddleClick`.
+ */
+function collidesWithAnotherAction(
+  bindings: Record<string, unknown>,
+  shippedTokens: readonly string[],
+  except: string,
+  moving: ReadonlySet<string>,
+): boolean {
+  const exceptScopes = COMMAND_SCOPES[except as ActionId];
+  const targets = shippedTokens.map((t) => sameBindingToken(normalizeToken(t)));
+  if (targets.length === 0) return false;
+  for (const [action, value] of Object.entries(bindings)) {
+    if (action === except || moving.has(action) || !Array.isArray(value)) continue;
+    if (!scopesIntersect(exceptScopes, COMMAND_SCOPES[action as ActionId])) continue;
+    for (const raw of value) {
+      if (typeof raw !== 'string') continue;
+      const otherToken = sameBindingToken(normalizeToken(raw));
+      if (targets.some((t) => sameChordOrAmbiguousPrefix(t, otherToken))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * FR-108's whole guarded batch, computed as a FIXED POINT (review finding CRITICAL 2).
+ *
+ * `zoom.reset` has TWO possible guard sources — {@link V11_KEYBINDINGS}'s v11 pair and
+ * {@link V12_KEYBINDINGS}'s v12 triple — because 046's own earlier keybindings version already
+ * touched it once (unreleased); every other action has exactly one. Each row's CANDIDATE status is
+ * decided first: its saved array is set-identical to a named source, and the shipped v13 value
+ * differs from it. The candidate set then SHRINKS to a fixed point: a candidate is dropped when it
+ * would collide with something not itself moving ({@link collidesWithAnotherAction}), and dropping
+ * one candidate can re-expose its old tokens to a DIFFERENT candidate's check — so the pass repeats
+ * until nothing changes. What survives is exactly what actually moves; what {@link
+ * applyKeybindingsUpgrade} writes is each surviving action's shipped value.
+ *
+ * 046 iterate round 3 (FR-118) adds {@link V13_KEYBINDINGS} as a third source, so five actions now
+ * have two or three — the `candidates.has(action)` skip already takes the first match. After the
+ * fixed point it also plans `focus.workspace: []` where that brand-new action's shipped chord would
+ * collide with a binding that is not moving, and the saved file does not already name the action.
+ */
+function planFR108Rows(
+  bindings: Record<string, unknown>,
+  d: ShippedDefaults,
+): KeybindingsLeafUpgrade[] {
+  const guardedRows: Array<[string, readonly string[]]> = [
+    ...Object.entries(V11_KEYBINDINGS),
+    ...Object.entries(V12_KEYBINDINGS),
+    ...Object.entries(V13_KEYBINDINGS),
+    ...Object.entries(V14_KEYBINDINGS),
+    ...Object.entries(V15_KEYBINDINGS),
+  ];
+  const shippedBindings = d.keybindings.bindings as Record<string, string[]>;
+
+  const candidates = new Map<string, string[]>();
+  for (const [action, source] of guardedRows) {
+    if (candidates.has(action)) continue; // zoom.reset matches at most one of its two sources
+    if (!sameStringSet(bindings[action], source)) continue;
+    const shipped = shippedBindings[action] ?? [];
+    if (sameStringSet(bindings[action], shipped)) continue; // already at the shipped value
+    candidates.set(action, shipped);
+  }
+
+  const moving = new Set(candidates.keys());
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const action of [...moving]) {
+      if (collidesWithAnotherAction(bindings, candidates.get(action)!, action, moving)) {
+        moving.delete(action);
+        changed = true;
+      }
+    }
+  }
+
+  const plan = [...moving].map((action) => ({ action, value: [...candidates.get(action)!] }));
+
+  // FR-118's new-action fill rule, evaluated only once the fixed point has settled: `moving` is
+  // final, so "a binding that is not moving" means exactly what stays on disk after this pass.
+  const workspace = shippedBindings[FOCUS_WORKSPACE] ?? [];
+  if (
+    !Object.prototype.hasOwnProperty.call(bindings, FOCUS_WORKSPACE) &&
+    collidesWithAnotherAction(bindings, workspace, FOCUS_WORKSPACE, moving)
+  ) {
+    plan.push({ action: FOCUS_WORKSPACE, value: [] });
+  }
+  return plan;
+}
+
+/**
+ * The keybindings counterpart of {@link planSettingsUpgrade} — a guarded rewrite of FR-108's
+ * fifteen rows and the four 046 commands v12 introduced, which FR-118 extends with a version-13
+ * source for five of them plus one `focus.workspace: []` fill, and the ONLY place a saved keybinding
+ * is allowed to move (046 FR-025, FR-023, FR-108, FR-118).
+ *
+ * ══ WHY THIS EXISTS AT ALL, WHEN `parseKeybindings` ALREADY FILLS ABSENT ACTIONS ══
+ *
+ * That fill (`shipped-defaults.ts`'s own version-bump history cites it repeatedly) only helps an
+ * action MISSING from the saved file — a brand-new command an old install never had. Every FR-108
+ * row is not that: `seed()` wrote each one's array into every install's `keybindings.json` at first
+ * run, so it is always PRESENT, and a present value is never touched by the tolerant per-read fill.
+ * Without this, the whole Ctrl+Shift+Alt navigation tier would reach fresh installs only.
+ *
+ * ══ WHY THIS IS 043's PRECEDENT AND NOT 026 FR-030's ══
+ *
+ * 026 FR-030 moved the pane-toggle chords (`Ctrl+B` → `Ctrl+Alt+B`) by leaving every existing
+ * install's file untouched, permanently — a saved single value is indistinguishable between "never
+ * touched" and "chosen on purpose", so it erred toward never guessing. Every FR-108 row is an
+ * ADDITION or a REPLACEMENT of a value that is still EXACTLY a NAMED earlier version's array
+ * (order-insensitive) — the same strength of evidence `planSettingsUpgrade`'s `search.inFiles`
+ * guard already relies on: byte-identical to what a named earlier version shipped is far more
+ * likely "never opened this" than "deliberately reconstructed the default". Any other saved value
+ * is left exactly as the user set it.
+ *
+ * Idempotent for {@link V4_EXCLUDE_GLOBS}'s reason: after a row moves its array equals the shipped
+ * value, which set-equals none of its guard sources, so a second run plans nothing for it. A written
+ * `focus.workspace: []` makes the action PRESENT, and the fill rule only ever fires for an absent one.
+ *
+ * ══ THE COLLISION GUARD, AND WHY IT IS ONE PATH FOR EVERY ROW (review findings CRITICAL 1/2,
+ * IMPORTANT 3/10) ══
+ *
+ * `zoom.reset` used to be hand-rolled separately from the other FR-108 rows, guarded by a literal
+ * check for two specific tokens (`Ctrl+Shift+0` / `Ctrl+Shift+)`) that were only ever the RIGHT
+ * thing to check while the intended target was `Ctrl+Shift+0` itself. Once the round's own
+ * FR-102/FR-107 changes moved the real v13 target to `Ctrl+Shift+Alt+0` (and 046 iterate round 2's
+ * FR-114 moved it again, to `Ctrl+Shift+Alt+Numpad0`), that literal check was silently checking the
+ * WRONG tokens — a v11 install with something already bound to the real target was never examined,
+ * and a v12 install with something bound to the now-retired `Ctrl+Shift+0` was refused a value that
+ * no longer contains it, staying stuck on the retired `Ctrl+0`. Routing `zoom.reset` through
+ * {@link planFR108Rows} like every other row fixes that: the
+ * collision check is against the REAL shipped value, is scope-aware, treats a two-stroke shipped
+ * chord's first stroke as colliding with a plain chord it would swallow, and computes which rows
+ * actually move as a fixed point rather than trusting "matches a source" alone.
+ */
+export function planKeybindingsUpgrade(
+  document: unknown,
+  d: ShippedDefaults = buildShippedDefaults(),
+): KeybindingsLeafUpgrade[] {
+  const bindings = isPlainObject(document) ? document.bindings : undefined;
+  if (!isPlainObject(bindings)) return [];
+  return planFR108Rows(bindings, d);
+}
+
+/**
+ * Apply {@link planKeybindingsUpgrade} to a raw keybindings document, returning a fresh object.
+ *
+ * Reads and rewrites the RAW document rather than a parsed `Keybindings`, for {@link
+ * planSettingsUpgrade}'s reason: a parse round-trip would go through `parseKeybindings`, which
+ * fills every OTHER action from the shipped defaults too — rewriting far more of the file than the
+ * one leaf this upgrade owes, and doing so unattended at startup (FR-023). Every sibling binding,
+ * and any key the schema does not model, survives untouched.
+ *
+ * Returns the input unchanged (by value) when nothing is owed, so a caller can compare and skip the
+ * write entirely — the same contract {@link applySettingsUpgrade} makes.
+ */
+export function applyKeybindingsUpgrade(
+  document: unknown,
+  d: ShippedDefaults = buildShippedDefaults(),
+): unknown {
+  const leaves = planKeybindingsUpgrade(document, d);
+  if (leaves.length === 0) return document;
+  const base = isPlainObject(document) ? document : {};
+  const bindings = isPlainObject(base.bindings) ? { ...base.bindings } : {};
+  for (const leaf of leaves) bindings[leaf.action] = leaf.value;
+  return { ...base, bindings };
 }
 
 /** The authoritative shipped-defaults record (immutable/frozen once built). */

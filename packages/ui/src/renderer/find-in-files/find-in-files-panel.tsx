@@ -86,6 +86,7 @@ import {
   type FindInFilesPanelState,
 } from './find-in-files-store.js';
 import { findInFilesConfigOf, findInFilesQueryFrom } from './panel-config.js';
+import { usePanelFocusTarget } from '../workspace/panel-focus.js';
 import './find-in-files.css';
 
 /**
@@ -327,6 +328,8 @@ export function FindInFilesPanel({
   const replacementRef = useRef<HTMLInputElement | null>(null);
   /** FR-030 — the menu's Change scope row is this field's route; it has no command of its own. */
   const scopeRef = useRef<HTMLInputElement | null>(null);
+  /** 046 FR-125 — the panel's focus target: the control last focused in it, else the search box. */
+  const panelFocusTarget = usePanelFocusTarget(panelId);
 
   /*
    * FR-025a — the panel's own menu. Read LIVE, both of them: `openMenu` because the app hosts one
@@ -561,7 +564,7 @@ export function FindInFilesPanel({
   if (state === null || results === null) {
     // Unreachable: the initialiser above created this panel before the snapshot was read. Handled
     // rather than asserted so a future change fails visibly instead of throwing mid-render.
-    return <div className="fif-panel" data-testid={`fif-panel-${panelId}`} style={zoomStyle} />;
+    return <div className="fif-panel" data-testid={`fif-panel-${panelId}`} style={zoomStyle} {...panelFocusTarget} />;
   }
 
   const running = results.status === 'running';
@@ -818,6 +821,7 @@ export function FindInFilesPanel({
          size by. Only the TEXT goes through CSS: the row height is already a whole number of pixels
          by the time it reaches the list (see `rowHeightPx` above and research R26). */
       style={zoomStyle}
+      {...panelFocusTarget}
     >
       <div className="fif-toolbar">
         <div className="fif-controls fif-controls--field">

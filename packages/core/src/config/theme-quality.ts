@@ -243,8 +243,16 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * theme (a card surface, its body text, a hairline), so three more near-identical terms pull the mean
  * DOWN by construction, with no theme becoming more alike in character. The threshold is untouched at
  * 4.3, and the closest pair still clears it with 1.87 of headroom.
+ *
+ * Re-measured by 046 iterate round 1 (FR-072), which added `categoryHeaderBackground` to every
+ * theme, equal to that theme's `surfaceActive` (review finding IMPORTANT 5 moved it off `sidebarBg`,
+ * which had failed to read as a visibly distinct header strip): 6.173849811284115 →
+ * 6.169180177612861. `warning`'s case again: `linkHintBackground` already follows `surfaceActive`
+ * too, so this is a FOURTH near-identical term alongside it, pulling the mean DOWN by construction,
+ * with no theme becoming more alike in character. The threshold is untouched at 4.3, and the
+ * closest pair still clears it with comfortable headroom.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.173849811284115;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.169180177612861;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

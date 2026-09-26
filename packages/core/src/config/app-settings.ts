@@ -29,6 +29,18 @@ import {
 /** Confirmation depth for a destroy action: none / single / double (wry second). */
 export type ConfirmLevel = 'none' | 'single' | 'double';
 
+/**
+ * What Unload does to a project's terminals (046 FR-034, FR-034a). `keepRunning` closes idle shells
+ * and leaves running processes to reattach on the next load; `endTerminals` ends every one.
+ */
+export type UnloadTerminalAction = 'keepRunning' | 'endTerminals';
+
+/** Project-behaviour preferences (046). Not `panes.projects`, which is the pane's geometry. */
+export interface ProjectsSettings {
+  /** The action Unload applies with no dialog, and the dialog's default button (FR-034a). */
+  unloadTerminalAction: UnloadTerminalAction;
+}
+
 /** File delete behaviour: OS Recycle Bin (default, recoverable) or permanent (004, FR-018). */
 export type DeleteMode = 'recycle' | 'permanent';
 
@@ -393,6 +405,7 @@ export interface NewProjectSettings {
 const STARTING_FOLDER_MODES: readonly StartingFolderMode[] = ['profile', 'lastViewed', 'override'];
 
 const CONFIRM_LEVELS: readonly ConfirmLevel[] = ['none', 'single', 'double'];
+const UNLOAD_TERMINAL_ACTIONS: readonly UnloadTerminalAction[] = ['keepRunning', 'endTerminals'];
 const EDITOR_OPEN_ON_CLICK: readonly EditorOpenOnClick[] = ['single', 'double', 'none'];
 const EDITOR_OPEN_TARGETS: readonly EditorOpenTarget[] = ['lastActive', 'new'];
 const SAVE_ALL_SCOPES: readonly SaveAllScopeSetting[] = ['tab', 'project', 'all'];
@@ -417,9 +430,13 @@ export interface AppSettings {
     destroyTab: ConfirmLevel;
     destroyPanel: ConfirmLevel;
     destroySubWorkspace: ConfirmLevel;
+    // 046 FR-111 withdrew `unloadProject` (FR-034b): no Unload row asks anything, so the level had
+    // nothing to govern. A saved value is an unmodelled key, dropped by the next write (019 FR-023).
   };
+  /** Project behaviour (046). */
+  projects: ProjectsSettings;
   /** Per-pane config. Visibility is not stored here — it is a live per-window
-   *  preference (Projects shown by default; Files & Folders only inside a project). */
+   *  preference (Projects shown by default; File Explorer only inside a project). */
   panes: {
     projects: PaneState;
     fileExplorer: PaneState;
@@ -671,6 +688,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroyPanel: 'double',
     destroySubWorkspace: 'double',
   },
+  projects: { unloadTerminalAction: 'keepRunning' },
   panes: {
     projects: { maxWidth: DEFAULT_PROJECTS_MAX_WIDTH },
     fileExplorer: { maxWidth: DEFAULT_EXPLORER_MAX_WIDTH },
@@ -947,6 +965,15 @@ function findInFilesSettings(raw: unknown, d: FindInFilesSettings): FindInFilesS
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function projectsSettings(raw: unknown, d: ProjectsSettings): ProjectsSettings {
+  const p = isRecord(raw) ? raw : {};
+  return {
+    unloadTerminalAction: UNLOAD_TERMINAL_ACTIONS.includes(p.unloadTerminalAction as UnloadTerminalAction)
+      ? (p.unloadTerminalAction as UnloadTerminalAction)
+      : d.unloadTerminalAction,
+  };
 }
 
 function confirmLevel(v: unknown, fallback: ConfirmLevel): ConfirmLevel {
@@ -1466,6 +1493,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
         d.confirmations.destroySubWorkspace,
       ),
     },
+    projects: projectsSettings(raw.projects, d.projects),
     panes: {
       projects: paneState(panes.projects, d.panes.projects),
       fileExplorer: paneState(panes.fileExplorer, d.panes.fileExplorer),
@@ -1501,6 +1529,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     version: s.version,
     appearance: { ...s.appearance },
     confirmations: { ...s.confirmations },
+    projects: { ...s.projects },
     panes: {
       projects: { ...s.panes.projects },
       fileExplorer: { ...s.panes.fileExplorer },

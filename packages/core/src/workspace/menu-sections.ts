@@ -44,7 +44,7 @@ export type MenuSection =
 /**
  * The fixed order every menu draws its sections in. Stated once, here.
  * Destroy is third — ahead of Navigate and View & state — as the constitution
- * and FR-047 both have it, and as the Files & Folders menu the vocabulary was
+ * and FR-047 both have it, and as the File Explorer menu the vocabulary was
  * derived from has always shipped.
  */
 const ORDER = [

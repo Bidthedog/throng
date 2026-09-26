@@ -55,7 +55,7 @@
  *
  * and main's answer: `shown` applies the update and scrolls to the fragment once the body has drawn the
  * new file — or raises `link-missing-heading` when that file has no such heading (FR-090e, second
- * sentence); `focusedOther` changes nothing (FR-090c); `openedInEditor` goes down the Files & Folders open
+ * sentence); `focusedOther` changes nothing (FR-090c); `openedInEditor` goes down the File Explorer open
  * path, carrying the fragment so the caret can land on the heading (FR-090d); `refused` raises main's
  * notice (FR-090e).
  *
@@ -762,7 +762,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
             case 'openedInEditor':
               // A successful follow: a notice about an earlier link describes nothing now.
               clearLinkNotice();
-              // FR-090d — exactly as if opened from Files & Folders; the fragment places the caret.
+              // FR-090d — exactly as if opened from File Explorer; the fragment places the caret.
               window.dispatchEvent(
                 new CustomEvent('throng:open-file', {
                   detail: {

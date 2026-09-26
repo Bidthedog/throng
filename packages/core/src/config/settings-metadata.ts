@@ -169,6 +169,22 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'Remove a project',
     'How many confirmations before a project is removed (unregistered; no files are deleted).',
   ),
+  // 046 FR-034a / FR-081 — what the plain Unload Project row does; the menu's second Unload row
+  // does the other. FR-111 withdrew `confirmations.unloadProject`, which used to sit here: no Unload
+  // row asks anything any more.
+  {
+    key: 'projects.unloadTerminalAction',
+    label: 'Unload project: default terminal action',
+    description:
+      'What the Unload Project menu item does to the project\'s terminals; the second Unload item in the same menu does the other. Keep terminals running leaves every terminal alive, to reattach when the project is next loaded; End terminals ends them all.',
+    group: 'Confirmations',
+    control: 'select',
+    allowedValues: ['keepRunning', 'endTerminals'],
+    optionLabels: {
+      keepRunning: 'Keep terminals running',
+      endTerminals: 'End terminals',
+    },
+  },
   confirmDescriptor(
     'confirmations.destroyTab',
     'Destroy a tab',
@@ -199,7 +215,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'panes.fileExplorer.maxWidth',
     label: 'File Explorer pane max width',
-    description: 'The widest (px) the Files & Folders pane can be dragged.',
+    description: 'The widest (px) the File Explorer pane can be dragged.',
     group: 'Panes',
     control: 'slider',
     min: 200,
@@ -392,7 +408,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'explorer.autoRevealActiveFile',
     label: 'Follow the active editor',
     description:
-      "Automatically select the currently active editor's file in Files & Folders, expanding its folders.",
+      "Automatically select the currently active editor's file in File Explorer, expanding its folders.",
     group: 'File Explorer',
     control: 'toggle',
   },
@@ -535,7 +551,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'editor.defaultWordWrap',
     label: 'Editor default word wrap',
-    description: 'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or Ctrl+Alt+W.',
+    description:
+      'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or the Toggle Word Wrap key binding.',
     group: 'Editor',
     control: 'toggle',
   },
@@ -580,7 +597,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'editor.showStatusBar',
     label: 'Show editor status bar',
     description:
-      'Show the bar along the bottom of each editor panel: the language control, the word-wrap toggle, the cursor position, and the character and word counts. Hiding it hides all of them, whatever the two settings below say — the wrap command and the language picker stay reachable from the content menu and Ctrl+Alt+W.',
+      'Show the bar along the bottom of each editor panel: the language control, the word-wrap toggle, the cursor position, and the character and word counts. Hiding it hides all of them, whatever the two settings below say — the wrap command and the language picker stay reachable from the content menu and the Toggle Word Wrap key binding.',
     group: 'Editor',
     subgroup: 'Status Bar',
     control: 'toggle',

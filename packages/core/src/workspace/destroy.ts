@@ -5,6 +5,8 @@
  * dialogs to show and whether a project destroy is blocked. No OS/DOM.
  */
 import type { ConfirmLevel } from '../config/app-settings.js';
+import { collectPanels } from './invariants.js';
+import type { Tab } from './model.js';
 
 export type DestroyTarget = 'tab' | 'panel' | 'project' | 'subWorkspace';
 
@@ -87,6 +89,26 @@ export function findProjectPanelsInSubWorkspaces(
     }
   }
   return blocking;
+}
+
+/**
+ * The ids of a project's panels that a sub-workspace window holds, at any depth of any tab (046
+ * FR-037). Unload spares exactly these — their editors stay open and their terminals keep running —
+ * and passes them to the daemon as `exceptPanelIds`. Each id appears once.
+ */
+export function projectPanelIdsInSubWorkspaces(
+  projectId: string,
+  subWorkspaces: ReadonlyArray<{ readonly tabs: ReadonlyArray<Tab> }>,
+): string[] {
+  const ids = new Set<string>();
+  for (const sub of subWorkspaces) {
+    for (const tab of sub.tabs) {
+      for (const panel of collectPanels(tab.root)) {
+        if (panel.originProjectId === projectId) ids.add(panel.id);
+      }
+    }
+  }
+  return [...ids];
 }
 
 /** True when a project may be destroyed (no panels of it remain in any sub-workspace). */

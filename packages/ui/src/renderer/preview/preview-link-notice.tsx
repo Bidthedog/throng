@@ -20,7 +20,7 @@
  *
  * The heading is what was attempted, in which panel ({@link linkNoticeAction} with the panel subject); the
  * message is what is wrong, naming the target — never what the reader may not do. A path is shown relative
- * to the project, the way Files & Folders names it.
+ * to the project, the way File Explorer names it.
  */
 import { relativeToRoot, type PreviewNotice } from '@throng/core';
 import { stripBidiControls } from './link-dom.js';

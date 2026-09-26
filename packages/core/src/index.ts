@@ -184,6 +184,8 @@ export type { FileIndexView, FileIndexUpdateView } from './explorer/index.js';
 export type {
   AppSettings,
   ConfirmLevel,
+  UnloadTerminalAction,
+  ProjectsSettings,
   PaneState,
   ExplorerSettings,
   DeleteMode,
@@ -288,6 +290,7 @@ export type {
   ChordCollision,
   ColumnSelectModifier,
   PlatformBindings,
+  TwoStrokeTerminalViolation,
 } from './config/keybindings.js';
 export {
   DEFAULT_KEYBINDINGS,
@@ -305,6 +308,20 @@ export {
   normalizeToken,
   resolveAction,
   firstBinding,
+  // 046 iterate round 1 (FR-091, FR-092, FR-105) — two-stroke chord tokens and the same-binding fold.
+  isTwoStrokeToken,
+  parseTwoStroke,
+  isValidTwoStrokeToken,
+  isValidTwoStrokeFirstStroke,
+  twoStrokeTerminalViolations,
+  sameBindingToken,
+  // 046 iterate round 5 (FR-124) — the `Mods+K1,K2` form: its strokes as written, and its writer.
+  splitStrokes,
+  formatTwoStroke,
+  // 046 iterate round 6 (FR-126) — one to three keys under the held modifiers.
+  parseChordStrokes,
+  formatChord,
+  MAX_CHORD_KEYS,
 } from './config/keybindings.js';
 export type { Theme, ThemeFonts, IconValue, TextCase, TypographyRole, ThemeFontRole, ThemeBootstrap } from './config/theme.js';
 export {
@@ -387,6 +404,7 @@ export type {
   ThemeValueUpgrade,
   SearchMatchColours,
   SettingsLeafUpgrade,
+  KeybindingsLeafUpgrade,
 } from './config/shipped-defaults.js';
 export {
   SHIPPED_DEFAULTS_VERSION,
@@ -401,6 +419,11 @@ export {
   planThemeValueUpgrade,
   planSettingsUpgrade,
   applySettingsUpgrade,
+  // 046 FR-025 — the keybindings counterpart: the guarded rewrite of `zoom.reset`'s binding, and
+  // the frozen record of what version 11 shipped that it compares an installed file against.
+  V11_ZOOM_RESET_BINDING,
+  planKeybindingsUpgrade,
+  applyKeybindingsUpgrade,
   buildShippedDefaults,
   serializeShippedDefaults,
   reservedThemeNames,
@@ -460,15 +483,21 @@ export { KEYBINDINGS_METADATA } from './config/keybindings-metadata.js';
 export type { CaptureEvent } from './config/chord-capture.js';
 export {
   captureToken,
+  captureTwoStrokeToken,
+  captureChordToken,
   isBindableChord,
   isReservedChord,
   RESERVED_CHORDS,
   EXCLUDED_KEYS,
   findConflict,
+  isPrefixOfChord,
   applyReplace,
   applyReassign,
   applyAdd,
   applyRemove,
+  sameBindingSymbolOfCode,
+  tier1PhysicalKey,
+  keypadHidesShift,
 } from './config/chord-capture.js';
 
 // Project domain (Principle I).
@@ -486,9 +515,37 @@ export {
   assertFolderExclusive,
   sanitiseHiddenPaths,
   applyHiddenPaths,
+  assertOrderedIds,
 } from './projects/project.js';
 export { ProjectService } from './projects/project-service.js';
 export type { ProjectServiceDeps, DeleteResult } from './projects/project-service.js';
+// 046 — project categories and the Projects pane's list model.
+export {
+  SHIPPED_DEFAULT_CATEGORY_NAME,
+  ProjectCategoryError,
+  ProjectCategoryService,
+} from './projects/categories.js';
+export type {
+  ProjectCategory,
+  DefaultCategorySeed,
+  IProjectCategoryStore,
+  ProjectCategoryRefusal,
+  ProjectCategoryServiceDeps,
+} from './projects/categories.js';
+export {
+  listRows,
+  reachableProjectIds,
+  stepProject,
+  validateCategoryName,
+  mergeIntoDefault,
+  healCategoryId,
+} from './projects/project-list.js';
+export type {
+  ListRow,
+  ListableProject,
+  ListableCategory,
+  CategoryNameResult,
+} from './projects/project-list.js';
 
 // Workspace docking domain (Principle XI). Invariants + operations arrive with US2.
 export type {
@@ -802,8 +859,11 @@ export type { SubWorkspaceIdentity } from './workspace/sub-workspace.js';
 export {
   planConfirmations,
   findProjectPanelsInSubWorkspaces,
+  projectPanelIdsInSubWorkspaces,
   canDestroyProject,
 } from './workspace/destroy.js';
+export { planUnload } from './workspace/unload.js';
+export type { UnloadInput, UnloadStep } from './workspace/unload.js';
 export type {
   DestroyTarget,
   ConfirmPlan,

@@ -11,11 +11,13 @@ import type {
   IDaemonSettings,
   IPersistenceSettings,
   IPlatformInfo,
+  IProjectCategoryStore,
   IProjectStore,
   IUserContext,
 } from '@throng/core';
 import {
   DEFAULT_APP_SETTINGS,
+  ProjectCategoryService,
   ProjectService,
   countPanels,
   defaultPipeName,
@@ -33,6 +35,7 @@ import {
 import {
   openDatabase,
   ProjectRepository,
+  ProjectCategoryRepository,
   WorkspaceRepository,
   SubWorkspaceRepository,
   DocumentStateRepository,
@@ -162,12 +165,31 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // Project domain: repository (port impl) → pure core service.
   const projectStore = new ProjectRepository(database);
   container.bind<IProjectStore>(DAEMON_TYPES.ProjectStore).toConstantValue(projectStore);
+  // Project categories (046): the store is shared, so a new project lands in the default category
+  // the category service lists.
+  const categoryStore = new ProjectCategoryRepository(database);
+  container
+    .bind<IProjectCategoryStore>(DAEMON_TYPES.ProjectCategoryStore)
+    .toConstantValue(categoryStore);
+  const newId = (): string => randomUUID();
+  const now = (): string => new Date().toISOString();
   const projectService = new ProjectService({
     store: projectStore,
+    categories: categoryStore,
     userContext,
-    newId: () => randomUUID(),
-    now: () => new Date().toISOString(),
+    newId,
+    now,
   });
+  const categoryService = new ProjectCategoryService({
+    store: categoryStore,
+    projectStore,
+    userContext,
+    newId,
+    now,
+  });
+  container
+    .bind<ProjectCategoryService>(DAEMON_TYPES.ProjectCategoryService)
+    .toConstantValue(categoryService);
 
   // Workspace domain: per-project layout + sub-workspace store (research D4/D5).
   const workspaceStore = new WorkspaceRepository(database);
@@ -265,6 +287,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     countLayout,
     (projectId) => terminalService.hasOpenTerminals(projectId),
     (projectId) => terminalService.killForProject(projectId),
+    categoryService,
   ).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
   new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);

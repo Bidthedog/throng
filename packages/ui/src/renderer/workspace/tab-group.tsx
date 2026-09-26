@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { holdPanelFocus, releasePanelFocus } from './panel-focus.js';
 import {
   DndContext,
   PointerSensor,
@@ -131,7 +132,7 @@ function TabChip({
   const panelOver = drop.isOver && draggingPanelId !== null;
 
   /*
-   * 024 US4 follow-up — a file dragged from Files & Folders over a tab chip.
+   * 024 US4 follow-up — a file dragged from File Explorer over a tab chip.
    *
    * A tree drag is a NATIVE HTML5 drag, not a dnd-kit one, so none of the panel-drag machinery above
    * sees it. It gets the same two affordances a panel drag has, for the same reason: dwelling on a
@@ -714,7 +715,28 @@ export function TabGroup(): ReactElement {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [indicatorX, setIndicatorX] = useState<number | null>(null);
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  /*
+   * 046 FR-125 against rename-on-create — the tab the New Tab control just created, while its name box
+   * is open. The same click activates the tab, and `PanelFocusSync` answers by asking for focus in its
+   * panel; delivered at once, that would blur the name box and close it. So delivery is HELD while the
+   * box is open and released a frame after it closes (after the Enter/Escape keystroke has finished,
+   * `panel-placeholder.tsx` `endRename`'s reason), when focus moves into the new tab's panel.
+   */
+  const createdTabId = useRef<string | null>(null);
+  useEffect(() => {
+    if (createdTabId.current === null || renamingTabId === createdTabId.current) return;
+    createdTabId.current = null;
+    const frame = requestAnimationFrame(() => releasePanelFocus());
+    return () => cancelAnimationFrame(frame);
+  }, [renamingTabId]);
+  // Never leave a hold behind this group (the window closing, the project switching away).
+  useEffect(
+    () => () => {
+      if (createdTabId.current !== null) releasePanelFocus();
+    },
+    [],
+  );
+  const sensors =useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   /*
    * 031 US1 (#225) — the strip's scroll lives on a TRACK inside it, and this is that track.
    *
@@ -1441,7 +1463,7 @@ export function TabGroup(): ReactElement {
           // FR-050 — the width cap in force, in characters, for anything that needs to state it.
           data-max-width={maxWidth}
           ref={stripRef}
-          // Reaching for a tab is using the WORKSPACE, so it stops being the Files & Folders pane's
+          // Reaching for a tab is using the WORKSPACE, so it stops being the File Explorer pane's
           // turn — otherwise the tree kept its selection highlight lit while the user was plainly
           // somewhere else, and two surfaces claimed to be current at once. Panels already do this
           // on pointerdown; the strip above them was the gap.
@@ -1575,7 +1597,14 @@ export function TabGroup(): ReactElement {
               />
             </div>
           ) : null}
-          <NewTabButton onNewTab={() => setRenamingTabId(ws.addTab())} />
+          <NewTabButton
+            onNewTab={() => {
+              holdPanelFocus(); // released when the new tab's name box closes (see `createdTabId`)
+              const id = ws.addTab();
+              createdTabId.current = id;
+              setRenamingTabId(id);
+            }}
+          />
         </div>
         {/* T5 — opens at ANY tab count, including when nothing overflows, because the chord can ask
             for it. Rendered outside the strip: it is a full-viewport overlay, not strip chrome. */}

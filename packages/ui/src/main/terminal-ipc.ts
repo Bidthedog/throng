@@ -16,7 +16,11 @@ import {
   type FailureCause,
   type TerminalSettings,
 } from '@throng/core';
-import type { TerminalAttachResult } from '@throng/ipc-contract';
+import type {
+  TerminalAttachResult,
+  TerminalCloseIdleParams,
+  TerminalKillAllParams,
+} from '@throng/ipc-contract';
 import { RpcTimeoutError, type DaemonClient } from './daemon-client.js';
 import type { ShellDetectionService } from './shell-detection-service.js';
 import { createSerializer } from './attach-serializer.js';
@@ -84,6 +88,39 @@ function isFailureCause(value: unknown): value is FailureCause {
   if (typeof value !== 'object' || value === null) return false;
   const c = value as Partial<FailureCause>;
   return typeof c.kind === 'string' && typeof c.subject === 'string' && typeof c.raw === 'string';
+}
+
+/**
+ * 046 — the budget for Unload's three daemon calls (`list {includeBusy}`, `closeIdle`, `killAll`).
+ *
+ * The default per-call budget is the health ping's 2 s, and each of these takes a process snapshot:
+ * measured at 0.55–0.7 s a snapshot on a quiet machine (`Get-CimInstance Win32_Process`, five cold
+ * runs), and the daemon caps one at 5 s before it gives up and counts the terminal busy. The daemon
+ * shares one snapshot across a call's terminals, so a call costs one snapshot, not one per terminal.
+ * 10 s is twice that 5 s cap: a slow machine still gets its answer, and a call that exceeds even
+ * this is a daemon that is not answering, which the renderer reports rather than waits on.
+ */
+export const UNLOAD_RPC_TIMEOUT_MS = 10_000;
+
+/**
+ * 046 — the params a renderer may send to `closeIdle` / `killAll`, or a throw (which the renderer
+ * receives as a rejection).
+ *
+ * The daemon reads a missing or empty `projectId` as EVERY session. That is app close, which main
+ * sends itself; from the renderer it can only be a mistake, and it would end terminals in every
+ * project. An `exceptPanelIds` that is not a list of strings is refused rather than dropped, since
+ * dropping it would end the sub-workspace terminals it names (FR-037).
+ */
+function projectScopedParams(method: string, params: unknown): TerminalCloseIdleParams & TerminalKillAllParams {
+  const p = (typeof params === 'object' && params !== null ? params : {}) as Record<string, unknown>;
+  if (typeof p.projectId !== 'string' || p.projectId.length === 0) {
+    throw new Error(`terminal.${method} from the renderer needs a projectId`);
+  }
+  const except = p.exceptPanelIds;
+  if (except !== undefined && !(Array.isArray(except) && except.every((id) => typeof id === 'string'))) {
+    throw new Error(`terminal.${method}: exceptPanelIds must be a list of panel ids`);
+  }
+  return except === undefined ? { projectId: p.projectId } : { projectId: p.projectId, exceptPanelIds: except };
 }
 
 /**
@@ -439,8 +476,28 @@ export function registerTerminalIpc(deps: {
     writeQueues.delete(panelId); // the panel is gone; its queue must not outlive it
     return daemonClient.call('terminal.kill', { panelId }).catch(() => ({ ok: false }));
   });
-  ipcMain.handle('throng:terminal:list', (_e, projectId?: string) =>
-    daemonClient.call('terminal.list', { projectId }).catch(() => ({ sessions: [] })),
+  ipcMain.handle('throng:terminal:list', (_e, projectId?: string, opts?: { includeBusy?: boolean }) => {
+    // 046 FR-034c: Unload counts busy sessions to decide whether to ask before ending anything, so a
+    // busy probe that FAILED must not read as "nothing busy" — that would skip the dialog and apply
+    // End terminals unasked. It rejects instead. The plain list keeps its empty fallback: every
+    // existing caller treats "no sessions" as the safe answer.
+    if (opts?.includeBusy === true) {
+      return daemonClient.call('terminal.list', { projectId, includeBusy: true }, UNLOAD_RPC_TIMEOUT_MS);
+    }
+    return daemonClient.call('terminal.list', { projectId }).catch(() => ({ sessions: [] }));
+  });
+  /*
+   * 046 FR-034, FR-037 — Unload's release step (contracts/unload.md §2 step 6). The params are
+   * forwarded exactly, `exceptPanelIds` included: dropping it would end a terminal a sub-workspace
+   * window is showing. A daemon failure REJECTS rather than resolving an empty `{closed: []}`, so the
+   * caller's `fail` path sees it; an empty success would say "nothing to do" while every terminal kept
+   * running.
+   */
+  ipcMain.handle('throng:terminal:closeIdle', (_e, params: unknown) =>
+    daemonClient.call('terminal.closeIdle', projectScopedParams('closeIdle', params), UNLOAD_RPC_TIMEOUT_MS),
+  );
+  ipcMain.handle('throng:terminal:killAll', (_e, params: unknown) =>
+    daemonClient.call('terminal.killAll', projectScopedParams('killAll', params), UNLOAD_RPC_TIMEOUT_MS),
   );
 
   // Daemon capabilities (FR-025a): whether the terminal-hosting daemon is elevated,

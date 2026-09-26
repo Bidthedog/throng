@@ -107,8 +107,9 @@ contextBridge.exposeInMainWorld('throng', {
     ipcRenderer.invoke('throng:pickFolder', opts),
   // Set the window title to a workspace summary (FR-040).
   setTitle: (title: string) => ipcRenderer.send('throng:setTitle', title),
-  // Mouse-driven zoom: the renderer can't reach webContents from the sandbox,
-  // so it relays Ctrl+wheel / Ctrl+middle-click to the main process.
+  // Window zoom: the renderer can't reach webContents from the sandbox, so the keyboard chords
+  // (zoom.in/out/reset) relay through the main process. Ctrl+wheel / Ctrl+middle-click zoom the
+  // PANEL under the pointer instead (FR-106, `workspace/mouse-zoom.ts`) and never reach these.
   zoomBy: (steps: number) => ipcRenderer.send('throng:zoomBy', steps),
   zoomReset: () => ipcRenderer.send('throng:zoomReset'),
   // Toggle fullscreen for the sending window (keybinding action, FR-033).
@@ -431,7 +432,13 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.invoke('throng:terminal:detach', panelId, viewId),
     repaint: (panelId: string) => ipcRenderer.invoke('throng:terminal:repaint', panelId),
     kill: (panelId: string) => ipcRenderer.invoke('throng:terminal:kill', panelId),
-    list: (projectId?: string) => ipcRenderer.invoke('throng:terminal:list', projectId),
+    list: (projectId?: string, opts?: { includeBusy?: boolean }) =>
+      ipcRenderer.invoke('throng:terminal:list', projectId, opts),
+    // 046 FR-034, FR-037 — Unload's release step; `exceptPanelIds` spares sub-workspace panels.
+    closeIdle: (params: { projectId: string; exceptPanelIds?: string[] }) =>
+      ipcRenderer.invoke('throng:terminal:closeIdle', params),
+    killAll: (params: { projectId: string; exceptPanelIds?: string[] }) =>
+      ipcRenderer.invoke('throng:terminal:killAll', params),
     // Daemon capabilities (FR-025a): { elevated } — gates the "run as admin" control.
     capabilities: () => ipcRenderer.invoke('throng:terminal:capabilities'),
     // OSC 52 clipboard-write from a program running inside the terminal (Claude

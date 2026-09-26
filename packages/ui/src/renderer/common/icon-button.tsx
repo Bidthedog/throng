@@ -88,6 +88,20 @@ export interface IconButtonProps {
    * `Back (Alt+ArrowLeft)`, its name is `Back`). Omitted, the title is both — the common case.
    */
   ariaLabel?: string;
+  /**
+   * Opt this control OUT of Tab order (046 T090, review finding 5's fix applied here too) — a control
+   * nested inside a WAI-ARIA tree row, reached by activating the row rather than by tabbing past it.
+   * Omitted, the button keeps its native default (a real Tab stop), which is every other caller's
+   * unchanged behaviour.
+   */
+  tabIndex?: number;
+  /**
+   * Override the button's implicit ARIA role (046 fix round, MINOR review finding) — a control
+   * grouped with siblings inside a `role="group"` row (the cog menu's Zoom row) is itself
+   * `role="menuitem"`, WAI-ARIA's own pattern for several related actions inside one menu. Omitted,
+   * the button keeps its native "button" role, which is every other caller's unchanged behaviour.
+   */
+  role?: string;
 }
 
 export function IconButton({
@@ -109,6 +123,8 @@ export function IconButton({
   nodeRef,
   ariaPressed,
   ariaLabel,
+  tabIndex,
+  role,
 }: IconButtonProps): ReactElement {
   /*
    * The pill is the SAME class the per-tab panel-count pill wears (031 FR-052b) — reused, not
@@ -128,8 +144,10 @@ export function IconButton({
       className={className}
       data-testid={testId}
       title={title}
+      role={role}
       aria-label={ariaLabel ?? title}
       aria-pressed={ariaPressed}
+      tabIndex={tabIndex}
       disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

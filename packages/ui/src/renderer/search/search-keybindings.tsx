@@ -29,6 +29,7 @@ import {
   findNext,
   findPrevious,
   followActivePanel,
+  getFindSession,
   isFindShowingOn,
   openFind,
   replaceAll,
@@ -36,6 +37,7 @@ import {
   openFind as openFindOn,
   type FindPanelKind,
 } from './search-store.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 /** Only these actions are ours; every other chord falls through untouched. */
 const HANDLED = new Set<ActionId>([
@@ -83,11 +85,7 @@ export function SearchKeybindings(): null {
       // to a scope rather than resolving it a second time. The find bar's own commands are never
       // suppressed by the focus guard — Escape must close it and Enter must find next, from
       // inside the bar (FR-017f protects the DOCUMENT from the bar, not the bar from itself).
-      const action = resolveAction(
-        keybindings,
-        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-        scopeFromKind(activeKind),
-      );
+      const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, scopeFromKind(activeKind)));
       if (!action || !HANDLED.has(action)) return;
       // Panel commands only apply while the workspace (not the file tree) is active.
       if (getActivePane() !== 'workspace') return;
@@ -152,13 +150,23 @@ export function SearchKeybindings(): null {
           return;
 
         case 'search.replaceCurrent':
+          // The same replace-section gate as replaceAll below (FR-093, derived for this command):
+          // collapsing the row keeps the session's replacement, so a hidden field must not replace.
           if (!findOpen || activeKind !== 'editor') return;
+          if (!getFindSession(activePanelId)?.replaceShown) return;
           e.preventDefault();
           replaceCurrent(activePanelId);
           return;
 
         case 'search.replaceAll':
+          /*
+           * 046 FR-093 (T140/T141) — only while the replace section is SHOWN. With the bar open on
+           * find only, or the row collapsed again by its disclosure arrow, the session still holds
+           * the last replacement string, and running the chord replaced every match with that
+           * hidden, stale value. Hidden means not ours: a no-op that passes the key on.
+           */
           if (!findOpen || activeKind !== 'editor') return;
+          if (!getFindSession(activePanelId)?.replaceShown) return;
           e.preventDefault();
           replaceAll(activePanelId);
           return;

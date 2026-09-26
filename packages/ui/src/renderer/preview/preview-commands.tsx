@@ -6,9 +6,9 @@
  * the failure 033's Assumption 6 names. It holds six things and renders nothing:
  *
  * 1. **The `preview.open` command.** Registered as this window's opener (`registerPreviewOpener`), so
- *    the status-bar button, the editor's two menus and Files & Folders all run the same action (FR-005).
+ *    the status-bar button, the editor's two menus and File Explorer all run the same action (FR-005).
  * 2. **Its chord in an editor.** `preview.open` ships unbound; when a user binds it, the chord opens the
- *    preview of the focused editor's file. Files & Folders dispatches the same command for its own
+ *    preview of the focused editor's file. File Explorer dispatches the same command for its own
  *    selection from its pane handler (`explorer-keybindings.ts`), which is where that selection lives.
  * 3. **`place` and `focus`** — main asking this window to put a preview beside a parent it holds, or to
  *    bring one forward (`open-preview.ts`).
@@ -52,6 +52,7 @@ import {
   requestPreviewOpen,
   type PreviewPlacementWorkspace,
 } from './open-preview.js';
+import { resolveKeydown } from '../config/chord-key.js';
 
 /**
  * Whether `panel` shows the Synchronise Scrolling toggle (FR-122a), decided as its surfaces decide it: an
@@ -136,12 +137,10 @@ export function PreviewCommands(): null {
       // A key something closer to the focus already handled — a find bar, a picker, CodeMirror — is theirs.
       if (e.defaultPrevented) return;
       const layout = wsRef.current.layout;
-      const action = resolveScoped(
-        keybindings,
-        { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey },
-        { tabs: layout?.tabs, activeTabId: layout?.activeTabId ?? null },
+      const action = resolveKeydown(e, (ev) =>
+        resolveScoped(keybindings, ev, { tabs: layout?.tabs, activeTabId: layout?.activeTabId ?? null }),
       );
-      // With Files & Folders active the tree's own handler owns the chord, for its selection.
+      // With File Explorer active the tree's own handler owns the chord, for its selection.
       if (
         (action !== 'preview.open' && action !== 'preview.followLink' && action !== 'preview.toggleSyncScroll') ||
         !layout ||

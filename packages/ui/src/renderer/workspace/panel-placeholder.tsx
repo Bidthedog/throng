@@ -60,7 +60,7 @@ import { useDetach } from './detach-context.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
-import { setActivePane } from './active-pane.js';
+import { setActivePane, useActivePane } from './active-pane.js';
 import { focusPanel } from './panel-focus.js';
 import { registerPanelRename, unregisterPanelRename } from './panel-rename.js';
 import { useWindowFocus } from './use-window-focus.js';
@@ -176,7 +176,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // dimmed inactive treatment when it is background — it persists in both, never
   // disappearing (SC-001a). Distinct from the OS focus/raise group.
   const windowForeground = useWindowFocus();
-  const isActiveDimmed = isActive && !windowForeground;
+  // 046 FR-121 (S28) — the treatment (both states) shows only while the WORKSPACE holds the active
+  // pane; from the Projects pane or the File Explorer the side pane's own outline is the only active
+  // indication. The tab's active panel id is untouched, so every route back lights this same panel.
+  // A torn-off window never sets the active pane, so it stays 'workspace' there.
+  const workspaceHoldsPane = useActivePane() === 'workspace';
+  const showsActive = isActive && workspaceHoldsPane;
+  const isActiveDimmed = showsActive && !windowForeground;
   // The terminal's live working directory (012), shown in the header so the path is
   // visible even when a full-screen program hides the prompt. Undefined for
   // non-terminal panels (no cwd is ever pushed for their id).
@@ -588,9 +594,15 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
 
   return (
     <div
-      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${isActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}`}
+      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${showsActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}`}
       data-testid={`panel-${panel.id}`}
       data-panel-id={panel.id}
+      /* 046 fix round (IMPORTANT review finding) — a marker ONLY the panel host itself emits, for
+         `mouse-zoom.ts`'s `closest()` lookup. `data-panel-id` is also a test hook elsewhere in the
+         app (`notification.tsx`'s notice rows, FR-038) — an element that carries it purely to be
+         found by a test is not a panel, and a Ctrl+wheel over it must not zoom whatever panel it
+         names. Same value, so nothing downstream needs a second read. */
+      data-panel-host={panel.id}
       data-active={isActive}
       data-active-dimmed={isActiveDimmed}
       data-zoom={panelZoomLevel(panel)}
@@ -637,7 +649,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       // The dominant project/owner colour marks the active panel only while the
       // window is foreground (Principle VI); when the window is background the
       // CSS dimmed-inactive token takes over so no runtime colour hides it.
-      style={isActive && windowForeground && activeColour ? { outlineColor: activeColour } : undefined}
+      style={showsActive && windowForeground && activeColour ? { outlineColor: activeColour } : undefined}
     >
       <div
         ref={setNodeRef}

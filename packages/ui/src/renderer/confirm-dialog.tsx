@@ -75,6 +75,15 @@ export interface ConfirmOptions {
    * dirty-close prompt's three, the unsaved-open prompt's four.
    */
   choices?: readonly ConfirmChoice[];
+  /**
+   * Which `choices` value's button should take initial focus (046 US4, T073).
+   *
+   * Without this, the dialog always focused the LAST choice — correct for the binary case (the
+   * primary action is last), but wrong once a caller's default action is neither first nor last:
+   * Unload's three-button dialog (Keep running / End terminals / Cancel) must focus whichever of
+   * the first two is the user's own configured default, not always Cancel.
+   */
+  initialFocusValue?: string;
   /** A details region — e.g. the app-close prompt's table of running terminals. */
   details?: ReactNode;
   /** Override the root/message identifiers, so a folded-in surface keeps the ones its tests use. */
@@ -210,7 +219,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }): ReactEle
                         : undefined
                   }
                   data-testid={c.testId}
-                  autoFocus={i === choices.length - 1}
+                  autoFocus={
+                    pending.initialFocusValue !== undefined
+                      ? c.value === pending.initialFocusValue
+                      : i === choices.length - 1
+                  }
                   onClick={() => settle(c.value)}
                 >
                   {c.label}

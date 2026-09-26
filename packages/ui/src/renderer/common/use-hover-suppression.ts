@@ -5,7 +5,7 @@ import { useEffect, type ReactElement } from 'react';
  *
  * Native CSS `:hover` sticks to whatever the pointer is over until the pointer MOVES. When an overlay
  * closes over an element and focus leaves for another window without any pointer movement — the exact
- * shape of the bug: the cog menu's "Themes" item sits over the Files & Folders root, clicking it opens
+ * shape of the bug: the cog menu's "Themes" item sits over the File Explorer root, clicking it opens
  * the Preferences window (which takes focus and blurs the main window), the menu closes, and the root
  * is left painted with its hover background even though the pointer is nowhere near "actively hovering"
  * — the hover just hangs there.

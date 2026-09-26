@@ -4,7 +4,7 @@
  *
  * ══ WHICH OPENS IT ROUTES ══
  *
- * Exactly two gestures ask "what does opening this file do?": a Files & Folders click or Enter
+ * Exactly two gestures ask "what does opening this file do?": a File Explorer click or Enter
  * (`EditorOpenListener`'s `throng:open-file`) and a Quick Open pick. A default open action of Preview is
  * a REFINEMENT of 006 FR-011/FR-012/FR-013 and 033 FR-009 for those two (FR-052) — the file's preview
  * opens instead of an editor — and nothing else is routed here:
@@ -79,7 +79,7 @@ async function openedAsPreview(absPath: string, route: OpenRoute): Promise<boole
 }
 
 /**
- * A Files & Folders click or Enter (FR-052, FR-053): the preview, or the active tab's editor route.
+ * A File Explorer click or Enter (FR-052, FR-053): the preview, or the active tab's editor route.
  *
  * `true` when something was opened: a preview request counts, since main places or focuses it
  * (a refusal there is main's to report, as for every other `preview.open`).

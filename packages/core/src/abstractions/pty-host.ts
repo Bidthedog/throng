@@ -70,8 +70,25 @@ export interface IPtyHost {
   onData(handle: PtyHandle, cb: (chunk: string) => void): () => void;
   /** Subscribe to process exit; returns an unsubscribe function. */
   onExit(handle: PtyHandle, cb: (e: PtyExit) => void): () => void;
-  /** Live non-shell descendant pids — drives idle/busy classification (FR-015b). */
+  /**
+   * Live non-shell descendant pids — drives idle/busy classification (FR-015b). THROWS when the
+   * answer is unknown; an empty array means "no children" and nothing else (046).
+   */
   listChildPids(handle: PtyHandle): number[];
+  /**
+   * The same pids as {@link listChildPids}, but an AWAITED, current answer that never blocks the
+   * caller's event loop (046, Unload). Close decisions use this.
+   *
+   * - The de-elevated agent answers over a pipe, so its `listChildPids` returns the PREVIOUS reply
+   *   (nothing, for a session never asked) — a running process would read as idle.
+   * - The local host's `listChildPids` scans the whole process table synchronously; here the scan is
+   *   async and shared by every terminal asked about together.
+   *
+   * REJECTS when the answer is unknown (the table could not be read, or no reply arrived), never
+   * resolves `[]` for it: the caller fails safe and treats the terminal as busy. A host without it
+   * is asked through `listChildPids`, whose throw means the same.
+   */
+  probeChildPids?(handle: PtyHandle): Promise<number[]>;
   /**
    * Live descendant processes **with their command lines** (025 FR-019/FR-022) — what a Panel's
    * command memory captures.

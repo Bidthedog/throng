@@ -77,6 +77,7 @@ import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
 /** #290 debug — the DEC modes worth a log line: the screens, alternate scroll, and mouse reporting. */
 const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
+import { getActivePane } from '../workspace/active-pane.js';
 
 /*
  * 045 round five — the terminal's own floating hover tooltip is GONE, and with it
@@ -355,9 +356,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
   // active panel, not the one at mount time (issue 144).
   const isActiveRef = useRef(opts.isActive);
   isActiveRef.current = opts.isActive;
-  /** Focus the terminal ONLY when it is the active panel (issue 144). Default true when unset. */
+  /**
+   * Focus the terminal ONLY when it is the active panel (issue 144) — default true when unset — AND
+   * the workspace holds the active pane. A switch made from the Projects list leaves the list as the
+   * active pane with focus on the chosen row (046 FR-082), so a terminal mounting or attaching under
+   * it must not take the caret; the workspace's own routes (#144) still hand it over.
+   */
   const focusIfActive = (term: Terminal): void => {
-    if (isActiveRef.current?.() ?? true) term.focus();
+    if ((isActiveRef.current?.() ?? true) && getActivePane() === 'workspace') term.focus();
   };
 
   const termRef = useRef<Terminal | null>(null);
@@ -927,7 +933,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
         e.preventDefault();
         return false;
       }
-      // zoom → the window-level zoom binding owns it; program → xterm forwards it as a mouse event;
+      // zoom → the PANEL zoom gesture owns it now (046 iterate round 1, FR-106 — `mouse-zoom.ts`,
+      // formerly the window-level zoom binding); program → xterm forwards it as a mouse event;
       // viewport → xterm scrolls. All three are xterm's or the app's existing behaviour, untouched.
       return route !== 'zoom';
     });

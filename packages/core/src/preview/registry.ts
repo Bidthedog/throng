@@ -2,7 +2,7 @@
  * The preview provider registry, and the one decision every preview affordance is drawn from (044,
  * FR-001 – FR-004, FR-012, FR-062, FR-070 – FR-073, data-model §1 – §2).
  *
- * This is the FR-070 seam. A surface — the status bar, a menu, Files & Folders, the layout restore —
+ * This is the FR-070 seam. A surface — the status bar, a menu, File Explorer, the layout restore —
  * asks the registry and `previewAffordance`; none of them names a provider. Adding one is writing its
  * descriptor and adding it to `providers/index.ts`.
  *

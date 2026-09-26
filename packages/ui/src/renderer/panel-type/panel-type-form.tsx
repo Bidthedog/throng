@@ -26,6 +26,7 @@ import {
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import { useNotify } from '../common/notification.js';
 import { terminalSubject, usePanelPlace } from '../common/panel-subject.js';
+import { usePanelFocusTarget } from '../workspace/panel-focus.js';
 import './panel-type.css';
 
 /**
@@ -59,6 +60,7 @@ export function PanelTypeForm({
   terminalMemory?: TerminalMemory;
 }): ReactElement {
   const ws = useWorkspace();
+  const focusTarget = usePanelFocusTarget(panelId);
   const flavours = useFlavours();
   const { elevated } = useCapabilities();
   const registry = defaultPanelTypeRegistry;
@@ -181,7 +183,8 @@ export function PanelTypeForm({
   }, [lastExit, panelId, notify]);
 
   return (
-    <div className="panel-type-form" data-testid={`panel-type-form-${panelId}`}>
+    // 046 FR-125 — the untyped panel's focus target: its type picker, or the control last focused here.
+    <div className="panel-type-form" data-testid={`panel-type-form-${panelId}`} {...focusTarget}>
       {/* 018 / FR-051 — the last of the four copy-pasted error strips. It is the shared notification
           model now (see the effect above), and its per-panel identifiers are preserved. */}
       <label className="panel-type-form__field">

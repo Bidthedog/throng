@@ -232,7 +232,21 @@ declare global {
          */
         repaint?: (panelId: string) => Promise<unknown>;
         kill: (panelId: string) => Promise<unknown>;
-        list: (projectId?: string) => Promise<{ sessions: TerminalSessionDto[] }>;
+        /**
+         * `includeBusy` probes each session's child processes (expensive), so only a caller that
+         * needs `busy` asks for it. With it, a failure REJECTS rather than listing nothing (046).
+         */
+        list: (
+          projectId?: string,
+          opts?: { includeBusy?: boolean },
+        ) => Promise<{ sessions: TerminalSessionDto[] }>;
+        /**
+         * 046 Unload (FR-034, FR-037): close this project's idle shells / end all its terminals,
+         * sparing `exceptPanelIds` (panels a sub-workspace window holds) and rootless sessions.
+         * Rejects when the daemon call fails.
+         */
+        closeIdle: (params: { projectId: string; exceptPanelIds?: string[] }) => Promise<{ closed: string[] }>;
+        killAll: (params: { projectId: string; exceptPanelIds?: string[] }) => Promise<{ killed: string[] }>;
         // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
         capabilities: () => Promise<{ elevated: boolean }>;
         // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
@@ -748,6 +762,10 @@ export interface TerminalSessionDto {
   projectId: string;
   status: 'running' | 'exited';
   busy: boolean;
+  /** A sub-workspace-owned terminal a project-scoped closeIdle/killAll never touches (046). */
+  rootless?: boolean;
+  /** Display metadata the daemon holds for the session (`TerminalMeta`), when set. */
+  meta?: { projectName?: string; tabName?: string; panelName?: string; flavourLabel?: string };
 }
 
 /** One immediate child returned by `window.throng.files.list` (mirrors core DirEntry). */

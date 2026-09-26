@@ -87,7 +87,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
   const nextOpId = useRef(0);
   const openMenu = useCallback(
     (x: number, y: number, items: MenuAction[], options?: OpenMenuOptions): number => {
-      // Capture the surface that had focus (e.g. the Files & Folders tree) BEFORE the menu grabs it,
+      // Capture the surface that had focus (e.g. the File Explorer tree) BEFORE the menu grabs it,
       // so a keyboard/action close can hand focus back with its highlighted item intact (#157 follow-up).
       const opener = document.activeElement as HTMLElement | null;
       const opId = ++nextOpId.current;

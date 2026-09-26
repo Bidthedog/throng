@@ -21,7 +21,7 @@
  * ══ ONE COMMAND, REGISTERED ══
  *
  * FR-005: every entry point performs the same action. The status-bar button, the editor's two menus,
- * the chord and Files & Folders cannot all reach the workspace store, so `PreviewCommands` registers
+ * the chord and File Explorer cannot all reach the workspace store, so `PreviewCommands` registers
  * how to open for its window and everyone asks through `requestPreviewOpen` — the arrangement
  * `find-in-files/open-find-in-files.ts` documents for the identical problem.
  */
@@ -207,7 +207,7 @@ export async function openPreview({ ws: wsOrGetter, bridge, intent }: OpenPrevie
        * Beside the document's panel when this window holds it. Main names the panel its editor registry
        * recorded; if that id is not in this layout (the registry recorded another window's view of the
        * document), the editor that asked stands in, then any editor here showing the file — the case of
-       * a request with no requester, from Files & Folders. With none of them the preview opens
+       * a request with no requester, from File Explorer. With none of them the preview opens
        * standalone rather than not at all.
        */
       const held = (id: string | null | undefined): id is string =>

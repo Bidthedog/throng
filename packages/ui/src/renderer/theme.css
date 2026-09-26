@@ -41,7 +41,7 @@
      FONT tokens still route through `--throng-font-button-*` at each call site. */
   --sidebar-width: 260px;
   --min-pane: 160px;
-  /* Shared header height so the Projects / tab-strip / Files & Folders bottom
+  /* Shared header height so the Projects / tab-strip / File Explorer bottom
      borders line up across all three panes (#6). */
   --pane-header-height: 34px;
   font-synthesis: none;
@@ -384,7 +384,7 @@ textarea,
   border-bottom: 1px solid var(--border);
 }
 
-/* Pane title (PROJECTS / TERMINALS / FILES & FOLDERS) — paneTitle font role
+/* Pane title (PROJECTS / TERMINALS / FILE EXPLORER) — paneTitle font role
    (case/italic/underline come from the theme). */
 .panel__title {
   letter-spacing: 0.08em;
@@ -516,6 +516,74 @@ textarea,
   gap: 4px;
   padding: 0 8px 0 4px;
   border-left: 3px solid transparent;
+}
+
+/*
+ * 046 US2 (T040) — the category header row and the roving-tabindex focus ring, shared by both
+ * `treeitem` kinds (the header and a project row alike): one visible outline for "this is where
+ * Arrow/Home/End/Enter act next", matching the file tree's own `[role='treeitem']:focus-visible`
+ * rule (`explorer.css`) rather than inventing a second convention for the same idea.
+ */
+.category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-dim);
+  /* 046 iterate round 1 (FR-072, T137) — every header, the default's included, draws this
+   * highlighted background; the uppercase/letter-spacing above are display styles only and never
+   * touch the stored name or count. */
+  background: var(--throng-colour-categoryHeaderBackground);
+}
+
+.category-header__count {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* 046 US5 (FR-051, FR-061) — the minimise/expand chevron, and the space it leaves for the default
+   header (which draws none), so every header's name lines up in the same column. */
+.category-header__toggle {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex: 0 0 auto;
+  transition: transform 0.1s ease;
+}
+
+/* Branch review M11 — the chevron carried one glyph for both states, so minimised and expanded were
+   visually identical. Rotated open, matching the file explorer's own `.tree-twisty--open` (`explorer.css`)
+   rather than inventing a second convention for the same disclosure affordance. */
+.category-header__toggle--open {
+  transform: rotate(90deg);
+}
+
+.category-header__toggle--spacer {
+  display: inline-block;
+}
+
+.category-header__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 046 US5 (FR-053) — the New Category / Rename Category field, shares the inline-rename look. */
+.category-header__name-input {
+  flex: 1 1 auto;
+}
+
+.project-list [role='treeitem']:focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder, #6aa3ff);
+  outline-offset: -2px;
 }
 
 .project-item--active {
@@ -1376,7 +1444,8 @@ textarea,
 /* --- Inline rename inputs (FR-036/037) ------------------------------- */
 .tab-chip__rename,
 .panel-box__rename,
-.project-item__rename {
+.project-item__rename,
+.category-header__name-input {
   background: var(--bg);
   border: 1px solid var(--accent);
   color: var(--text);

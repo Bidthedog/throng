@@ -46,14 +46,18 @@ function activePanelKind(input: ScopeInput): string | undefined {
 /**
  * The scope the keyboard is currently in.
  *
- * The Files & Folders pane is the `explorer` scope; a workspace panel is scoped by its TYPE. The
- * fallback is `explorer` — the one scope in which no text-editing command is live — because a
- * workspace pane showing a placeholder panel is not a text surface, and the safe answer to "is
- * Ctrl+X cut-line here?" is no. Window-level commands (zoom, focus movement, view toggles) are
- * live in EVERY scope, so they are unaffected by which fallback is chosen.
+ * The File Explorer pane is the `explorer` scope; the Projects pane is the `projects` scope (046
+ * FR-015) — only `EVERYWHERE` commands are live there, so `Ctrl+X` in the Projects pane never
+ * reaches the File Explorer's `file.cut`. A workspace panel is scoped by its TYPE. The fallback is
+ * `explorer` — the one scope in which no text-editing command is live — because a workspace pane
+ * showing a placeholder panel is not a text surface, and the safe answer to "is Ctrl+X cut-line
+ * here?" is no. Window-level commands (zoom, focus movement, view toggles) are live in EVERY
+ * scope, so they are unaffected by which fallback is chosen.
  */
 export function currentScope(input: ScopeInput): DispatchScope {
-  if (getActivePane() !== 'workspace') return 'explorer';
+  const pane = getActivePane();
+  if (pane === 'projects') return 'projects';
+  if (pane !== 'workspace') return 'explorer';
   return scopeFromKind(activePanelKind(input));
 }
 
@@ -166,6 +170,30 @@ export function opensTransientOverlay(action: ActionId): boolean {
 }
 
 /**
+ * EVERYWHERE commands this file deliberately leaves panel-scoped rather than exempting in
+ * {@link isPanelScoped} (046 iterate round 1, T109/T113, FR-110).
+ *
+ * Every `ActionId` whose `COMMAND_SCOPES` entry is EVERYWHERE is a window command by construction —
+ * `isPanelScoped`'s own doc comment says so — so a new one landing on neither this list nor that
+ * function's exemptions is a command that will be SILENTLY dead the moment a transient input surface
+ * (a find bar, a terminal's own focused textarea) has focus: `resolveScoped` returns `null` rather
+ * than throwing, so nothing marks the gap. `scope.test.ts`'s FR-110 audit fails the build for that
+ * case; this is the other half of the answer — the finite set of times the audit's own answer is
+ * "yes, on purpose", each with the reason recorded here rather than only in a comment beside it.
+ *
+ * `menu.open` (Shift+F10 / ContextMenu) is the one member: a terminal panel already owns a native
+ * right-click `contextmenu` handler (`terminal-content-menu.ts`), and Shift+F10 is the browser's own
+ * gesture for "open a context menu" — throng's synthetic re-dispatch would be redundant there, so
+ * leaving it silenced by a focused transient surface costs nothing a user can reach.
+ */
+export const DELIBERATELY_PANEL_SCOPED: Readonly<Partial<Record<ActionId, string>>> = {
+  'menu.open':
+    "a terminal panel already has its own native right-click contextmenu handler, and Shift+F10 is " +
+    "the browser's own gesture for opening one — throng's synthetic re-dispatch over the panel " +
+    'would be redundant there',
+};
+
+/**
  * Window-level commands (012) outrank everything (FR-024b). Everything else acts on a panel's
  * content and must yield to a focused input surface.
  */
@@ -187,6 +215,9 @@ export function isPanelScoped(action: ActionId): boolean {
     // An exact match, NOT a `navigate.` prefix: `navigate.gotoLine` (US2) acts inside one editor's
     // document and is panel-scoped, so a prefix here would silently widen to it.
     action === 'navigate.quickOpen' ||
+    // 031 FR-032a — the tab picker, for the same reason. It was named as a window command in the
+    // comment above and never listed, so `Ctrl+Alt+T` was dead whenever a terminal held the focus.
+    action === 'tabs.openPicker' ||
     /*
      * 043 (#220, #153) — find and replace in files are WINDOW commands, for Quick Open's reason.
      *
@@ -201,7 +232,17 @@ export function isPanelScoped(action: ActionId): boolean {
      * would widen to all of them and re-open the defect that guard was written for.
      */
     action === 'search.findInFiles' ||
-    action === 'search.replaceInFiles'
+    action === 'search.replaceInFiles' ||
+    /*
+     * 046 US2 (data-model §4) — stepping the active project is a WINDOW command, Quick Open's
+     * reason: it must survive a focused transient surface (a terminal, an editor's find bar) exactly
+     * as `navigate.quickOpen` does. Exact matches, NOT a `project.` prefix — `navigate.gotoLine` is
+     * deliberately excluded from `navigate.quickOpen`'s exemption for the same reason a future
+     * `project.`-prefixed command that acts on one project's content must not be silently swept in
+     * here.
+     */
+    action === 'project.next' ||
+    action === 'project.previous'
   );
 }
 

@@ -59,7 +59,7 @@ export interface ThemeSizes {
 
 /** The named text sections that can be styled independently (FR-030/FR-074). */
 export type TypographyRole =
-  | 'paneTitle' // PROJECTS / TERMINALS / FILES & FOLDERS
+  | 'paneTitle' // PROJECTS / TERMINALS / FILE EXPLORER
   | 'tab' // tab name
   | 'panel' // panel name
   | 'paneText' // inner pane/panel text (empty states etc.)
@@ -220,6 +220,12 @@ export const THRONG_THEME: Theme = {
     scrollbarTrack: '#10131a',
     scrollbarThumb: '#2a3344',
     railBg: '#161b25',
+    // 046 iterate round 1 (FR-072) — the Projects pane's category header strip. Bold and uppercase
+    // already mark it; this raises it off the sidebar body a shade so it reads as its own strip
+    // (review finding IMPORTANT 5: painting it the same as `sidebarBg` failed to meet that). Follows
+    // `surfaceActive` for a theme authored before this token existed (see TOKEN_PARENT) — the same
+    // raised-surface role `linkHintBackground` already follows.
+    categoryHeaderBackground: '#222c3d',
     border: '#2a3344',
     statusBarBg: '#10131a',
     // Inline terminal (005, xterm.js) — themeable surface/foreground/cursor/selection.
@@ -419,7 +425,7 @@ export const THRONG_THEME: Theme = {
     expandAll: '⊞',
     collapseAll: '⊟',
     newFolder: '📁',
-    // 033 US1 (#219, FR-018b) — the Files & Folders toolbar's Quick Open control. A magnifier over a
+    // 033 US1 (#219, FR-018b) — the File Explorer toolbar's Quick Open control. A magnifier over a
     // document: the gesture is "find a FILE", which the bare magnifier (`search`, the find bar) does
     // not say. Two tokens because they are two actions, not one action drawn twice.
     quickOpen: '🔎',
@@ -557,6 +563,16 @@ export const THRONG_THEME: Theme = {
        opposed vertical arrows: two views moving together, either one leading. Not `moveUp` ↑ /
        `moveDown` ↓ (reorder a list), nor `replace` ⇄ (swap a match), nor `preview` 👓 beside it. */
     syncScroll: '⇅',
+    /* 046 (FR-061, R11) — two tokens for two distinct things, on the same rule the block above
+       states: an ACTION (`unload`) and a structural row in a list (`category`).
+       `projectList`, a third token for a panel-type marker, shipped alongside these two but was
+       retired (branch-review finding, 046 iterate round 2): its description named the title bar's
+       cog-menu "Focus Projects" row, a row FR-074/FR-107 had already retired before the description
+       was ever written, and no call site in the renderer ever drew the token. `theme-ops.ts`'s
+       `migrateTheme` drops a stray `projectList` key from a theme that received it via the
+       version-12 seed. */
+    unload: '⏏',
+    category: '🏷',
   },
 };
 
@@ -650,6 +666,11 @@ export const TOKEN_PARENT: Readonly<Record<string, string>> = Object.freeze({
   linkHintBackground: 'surfaceActive',
   linkHintText: 'text',
   linkHintBorder: 'border',
+  // 046 iterate round 1 (FR-072) — the Projects pane's category header. Follows `surfaceActive`, the
+  // same raised-surface role `linkHintBackground` already follows, so a theme authored before this
+  // token existed draws a header strip visibly lifted off the sidebar body it sits on, rather than
+  // painted the same colour as it (review finding IMPORTANT 5).
+  categoryHeaderBackground: 'surfaceActive',
 });
 
 /**
