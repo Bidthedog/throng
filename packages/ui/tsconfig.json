@@ -10,6 +10,9 @@
   "include": ["src/main/**/*", "src/preload/**/*"],
   "references": [
     { "path": "../core" },
-    { "path": "../ipc-contract" }
+    { "path": "../ipc-contract" },
+    // src/main imports it. TS 7 builds unreferenced projects in parallel, so leaving this out
+    // races platform-windows' emit — see project-references-cover-imports.test.ts.
+    { "path": "../platform-windows" }
   ]
 }
