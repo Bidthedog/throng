@@ -59,7 +59,7 @@ beforeEach(async () => {
     (owner, id) => projectStore.getById(owner, id)?.rootFolder ?? null,
   ).register(router);
   pipeName = uniquePipeName();
-  server = new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router);
+  server = new IpcServer({ pipeName }, router);
   await server.start();
 
   // A REAL folder: prune resolves each row against the project root on disk, so a fake path would

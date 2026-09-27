@@ -48,7 +48,7 @@ beforeEach(async () => {
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
   new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
   pipeName = uniquePipeName();
-  server = new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router);
+  server = new IpcServer({ pipeName }, router);
   await server.start();
 });
 

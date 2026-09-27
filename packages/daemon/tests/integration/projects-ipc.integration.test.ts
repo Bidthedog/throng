@@ -41,7 +41,7 @@ beforeEach(async () => {
   new HealthService().register(router);
   new ProjectIpcService(service).register(router);
   pipeName = uniquePipeName();
-  server = new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router);
+  server = new IpcServer({ pipeName }, router);
   await server.start();
 });
 

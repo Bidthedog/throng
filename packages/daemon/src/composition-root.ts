@@ -72,7 +72,6 @@ export { DAEMON_TYPES } from './tokens.js';
  * guards a direct `readDaemonSettings` call that omits the fallback.
  */
 const DEFAULT_PIPE_NAME = '\\\\.\\pipe\\throng.daemon';
-const DEFAULT_STARTUP_TIMEOUT_MS = 5000;
 
 function numberFromEnv(value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
@@ -91,7 +90,6 @@ function readDaemonSettings(
 ): IDaemonSettings {
   return {
     pipeName: env.THRONG_PIPE_NAME ?? fallbackPipeName,
-    startupTimeoutMs: numberFromEnv(env.THRONG_STARTUP_TIMEOUT_MS, DEFAULT_STARTUP_TIMEOUT_MS),
     agentConnectTimeoutMs: numberFromEnv(
       env.THRONG_AGENT_CONNECT_TIMEOUT_MS,
       DEFAULT_AGENT_BUDGETS.connectMs,

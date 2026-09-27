@@ -16,8 +16,6 @@ export interface IPersistenceSettings {
 export interface IDaemonSettings {
   /** Named-pipe address the daemon listens on (e.g. `\\.\pipe\throng.daemon`). */
   pipeName: string;
-  /** Maximum time, in milliseconds, the daemon may take to become ready. */
-  startupTimeoutMs: number;
   /** Time, in milliseconds, the de-elevated PTY agent has to connect before the launch is
    *  declared failed (019 FR-012). */
   agentConnectTimeoutMs: number;
