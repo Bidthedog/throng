@@ -36,7 +36,7 @@ export async function startTerminalDaemon(opts: { elevated?: boolean } = {}): Pr
   const service = new TerminalService(new NodePtyHost(), events, lockManager, elevation);
   const router = new RpcRouter();
   service.register(router);
-  const server = new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router, events);
+  const server = new IpcServer({ pipeName }, router, events);
   await server.start();
   return { pipeName, events, service, lockManager, router, server, stop: () => server.stop() };
 }

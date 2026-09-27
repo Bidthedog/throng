@@ -11,7 +11,7 @@ const startedServers: IpcServer[] = [];
 function makeServer(pipeName: string): IpcServer {
   const router = new RpcRouter();
   new HealthService().register(router);
-  return new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router);
+  return new IpcServer({ pipeName }, router);
 }
 
 function uniquePipeName(): string {

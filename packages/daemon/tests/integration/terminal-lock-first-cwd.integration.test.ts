@@ -79,7 +79,7 @@ beforeEach(async () => {
   terminalService.register(router);
   counter += 1;
   pipeName = `\\\\.\\pipe\\throng-firstcwd-${process.pid}-${counter}`;
-  server = new IpcServer({ pipeName, startupTimeoutMs: 5000 }, router, events);
+  server = new IpcServer({ pipeName }, router, events);
   await server.start();
 });
 

@@ -27,7 +27,7 @@ export class IpcServer {
     // but this class has no business with (say) the PTY agent's budgets, and narrowing
     // keeps it constructible from just what it uses.
     @inject(DAEMON_TYPES.DaemonSettings)
-    private readonly settings: Pick<IDaemonSettings, 'pipeName' | 'startupTimeoutMs'>,
+    private readonly settings: Pick<IDaemonSettings, 'pipeName'>,
     @inject(DAEMON_TYPES.RpcRouter) private readonly router: RpcRouter,
     // Injected by the container; defaulted so tests can construct the server with
     // just settings + router (the terminal events channel is exercised separately).
