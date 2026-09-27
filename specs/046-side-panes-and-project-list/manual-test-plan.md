@@ -12,18 +12,18 @@ terminal. US keyboard, physical keypad for MT-05 and MT-07.
 
 | ID | Group | Status | Signed off at | Date | Note |
 |---|---|---|---|---|---|
-| MT-01 | File Explorer name | untested | | | |
-| MT-02 | Getting around: project and pane chords | untested | | | |
-| MT-03 | Focus in the workspace: outline, arrows, caret | untested | | | |
-| MT-04 | Choosing a project from the list | untested | | | |
-| MT-05 | Zoom | untested | | | |
-| MT-06 | Multi-key chords in the editor | untested | | | |
-| MT-07 | Key Bindings capture box | untested | | | |
-| MT-08 | Saved key bindings upgrade | untested | | | |
-| MT-09 | Project menu and Unload | untested | | | |
-| MT-10 | Project categories | untested | | | |
-| MT-11 | Find bar Replace | untested | | | |
-| MT-12 | Keyboard probes (maintainer hardware) | untested | | | |
+| MT-01 | File Explorer name | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-02 | Getting around: project and pane chords | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-03 | Focus in the workspace: outline, arrows, caret | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-04 | Choosing a project from the list | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-05 | Zoom | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-06 | Multi-key chords in the editor | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-07 | Key Bindings capture box | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-08 | Saved key bindings upgrade | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-09 | Project menu and Unload | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-10 | Project categories | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-11 | Find bar Replace | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
+| MT-12 | Keyboard probes (maintainer hardware) | signed off | 03a0a728 | 2026-09-27 | maintainer, before merge of #440 |
 
 ---
 
