@@ -857,7 +857,7 @@ layouts.
     the T022 guard.
 
   (FR-071; the file's header states the add-to-Unreleased convention)
-- [ ] T088 Validate by hand against `specs/046-side-panes-and-project-list/quickstart.md` §1 – §5 in
+- [x] T088 Validate by hand against `specs/046-side-panes-and-project-list/quickstart.md` §1 – §5 in
   the dev build, after a clean dev state, including §2 step 9: the live `bind -p` check that closes
   research O3. Record the O3 result in the PR description. This is a human step, and nothing here
   runs it on the user's behalf. (handed to the maintainer: see the final report's manual test steps)
@@ -1602,7 +1602,7 @@ Starts after T098 – T100.
   IV's AltGr check names, from the published layout tables. Carry the result into
   `docs/quick-start.md`'s keyboard notes after T144. This is constitution v5.6.0 IV's disclosure
   duty. (FR-104)
-- [ ] T149 Maintainer hand checks. Nothing here runs them on the user's behalf.
+- [x] T149 Maintainer hand checks. Nothing here runs them on the user's behalf.
   - In the dev build, validate [quickstart.md](./quickstart.md) §5a, including its step 10.
   - Run the two probes research R22 owes:
     - the `CSI 1;8` arrows: `bind -p | grep '1;8'` in Git Bash, and `Get-PSReadLineKeyHandler` in
@@ -2219,7 +2219,7 @@ so no task has to re-derive them:
   - T149's NumLock result and FR-120 are recorded as an open defect, not as fixed.
 
   Read the body back for attribution lines before `gh pr edit`. (FR-119, FR-120)
-- [ ] T188 Maintainer hand check. Nothing here runs it on the user's behalf. In the dev build, whose
+- [x] T188 Maintainer hand check. Nothing here runs it on the user's behalf. In the dev build, whose
   config already holds a version-13 marker (the case FR-118 exists for), validate
   [quickstart.md](./quickstart.md) §5b. That covers the upgrade on the existing config, Ctrl+Shift+Alt+B / N / M from each
   surface, J / K, V, and F / P doing nothing. Record the result in the PR description. (SC-018)
