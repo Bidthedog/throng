@@ -96,6 +96,12 @@ What changed in each release of throng, written for someone deciding whether to 
 - **The keypad + and - are the same binding as the main-row keys**, and the Key Bindings editor
   records either as the same chord.
 
+### Fixed
+- **A background-service crash report now names the throng version** instead of `unknown`.
+
+### Removed
+- **`THRONG_STARTUP_TIMEOUT_MS`**, which was read but never used.
+
 ### Known issues
 - The Ctrl+Shift+Alt chords follow the key's position, so on a few layouts they take a character
   typed with AltGr+Shift: Ń on Polish (programmer's), Ñ and Þ on US-International, Ț on Romanian

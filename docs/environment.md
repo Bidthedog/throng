@@ -24,7 +24,6 @@ never picks up the identity of the throng that hosts it.
 | `THRONG_PING_TIMEOUT_MS` | How long the app waits for the daemon to answer a health-check ping. | `2000` |
 | `THRONG_ATTACH_TIMEOUT_MS` | How long the app waits for a terminal to attach — sized for launching an interactive shell. | `15000` |
 | `THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS` | On close, the longest the app waits for a window to confirm its pending writes are done, so an unresponsive window cannot hold the app open. | `5000` |
-| `THRONG_STARTUP_TIMEOUT_MS` | The daemon's start-up budget. | `5000` |
 | `THRONG_AGENT_CONNECT_TIMEOUT_MS` / `THRONG_AGENT_READY_TIMEOUT_MS` | How long an elevated daemon waits for its de-elevated terminal agent to connect, then to report ready. | `15000` / `15000` |
 
 `--user-data-dir=<folder>` (a command-line switch, not a variable) moves Electron's user-data folder —
@@ -50,7 +49,7 @@ They are set by throng; each only mirrors a preference, so change the preference
 | `THRONG_LOCK_DIR` | Tells the helper process that holds a project's root folder open which folder to hold. |
 | `THRONG_RESTORE_TARGET` | The original path of a file being restored from the Recycle Bin by an undo. |
 | `THRONG_START_DIR` | The start folder handed to a shell whose launcher cannot start in it directly (Git Bash); the shell moves there and unsets it. |
-| `THRONG_VERSION` | The version recorded in a daemon crash report; `unknown` when unset. |
+| `THRONG_VERSION` | The product version the app hands the daemon it starts, recorded in the daemon's crash report; `unknown` for a daemon started by hand. |
 | `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` | Set by the portable build's launcher; its presence is what gives the portable build its own pipe. |
 
 ## Running a dev build beside an installed throng
