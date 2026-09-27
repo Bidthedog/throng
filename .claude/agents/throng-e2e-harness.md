@@ -12,7 +12,7 @@ own execution and the no-red-CI rule. This agent owns how the suite is *built* a
 
 Reference: `docs/testing.md` (the overview), the `throng-testing` skill's `references/` (one topic
 per file — the skill's *References* table says which to read when), `packages/ui/tests/e2e/harness.ts`,
-`playwright.config.ts`, `scripts/run-e2e-local.mjs`, `scripts/ci-e2e-shard.ps1`.
+`playwright.config.ts`, `scripts/run-e2e-local.mjs`, `scripts/ci-e2e-run.ps1`.
 
 ## The gate
 

@@ -46,7 +46,7 @@
 #>
 [CmdletBinding()]
 param(
-  # The command line to run, e.g. './scripts/ci-e2e-shard.ps1 -Shard "1/3"'
+  # The command line to run, e.g. './scripts/ci-e2e-run.ps1'
   [Parameter(Mandatory = $true, ValueFromRemainingArguments = $true)]
   [string[]] $CommandParts
 )
