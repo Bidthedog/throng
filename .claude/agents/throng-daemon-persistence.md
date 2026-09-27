@@ -19,7 +19,7 @@ process, the wire between it and Electron main, and the SQLite store behind it.
   package, both sides, and the contract tests. It is the only thing preventing a silent skew between
   a daemon build and a UI build.
 - `packages/persistence/src` — `database.ts`, `migration-runner.ts`, `schema-guard.ts`, the
-  `*-repository.ts` implementations of `core`'s ports, and `migrations/v2…v8`.
+  `*-repository.ts` implementations of `core`'s ports, and `migrations/v2…v10`.
 
 The UI side of the wire lives in `packages/ui/src/main/daemon-client.ts`,
 `daemon-lifecycle.ts`, `daemon-supervisor.ts`, `daemon-events.ts` — read those before changing the
@@ -43,7 +43,7 @@ re-run is a no-op.
 ## Environment the daemon reads
 
 `THRONG_PIPE_NAME`, `THRONG_DATABASE_PATH`, `THRONG_CONFIG_ROOT`, `THRONG_LOCK_DIR`, `THRONG_LOG_DIR`
-/ `THRONG_LOG_LEVEL` / `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP`, `THRONG_STARTUP_TIMEOUT_MS`,
+/ `THRONG_LOG_LEVEL` / `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP`,
 `THRONG_PING_TIMEOUT_MS`, `THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS`, `THRONG_NO_ORPHAN_REAP`. Tests set these
 to isolate a run; production defaults come from the user profile. Never hardcode a pipe name or a
 database path in a test — take it from the harness.
