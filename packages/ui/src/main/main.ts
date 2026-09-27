@@ -688,6 +688,12 @@ if (isPrimaryInstance)
   // call finds it up. Detached + unref'd, it outlives this UI (Principle III: open
   // terminals keep running). A failure here is non-fatal: the app still runs and
   // getDaemonStatus will report unavailable.
+  // The product version (020 FR-001): the About dialog shows it, and the daemon's crash report
+  // records it (THRONG_VERSION below).
+  const productInfo = readProductInfo([
+    resolveFromHere('../../../../package.json'),
+    join(app.getAppPath(), 'package.json'),
+  ]);
   /*
    * HOW THIS APP SPAWNS ITS DAEMON — stated ONCE (029 / Principle X).
    *
@@ -724,6 +730,7 @@ if (isPrimaryInstance)
       THRONG_LOG_LEVEL: startupLogLevel,
       THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
       THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),
+      THRONG_VERSION: productInfo.version,
     },
   });
 
@@ -960,11 +967,8 @@ if (isPrimaryInstance)
   // package.json (the single source, FR-001) — deliberately NOT app.getVersion(), which
   // returns Electron's own version when unpackaged (see readProductInfo); the build id
   // from the daemon's stamped BUILD_ID (FR-006); and the full AGPL-3.0 licence from the
-  // bundled LICENSE (FR-003a). None of these is hardcoded in the renderer.
-  const productInfo = readProductInfo([
-    resolveFromHere('../../../../package.json'),
-    join(app.getAppPath(), 'package.json'),
-  ]);
+  // bundled LICENSE (FR-003a). None of these is hardcoded in the renderer. `productInfo` is read
+  // above, before the daemon is spawned, because the daemon's crash report records the version too.
   // US4 (#139) — the STATIC identity paints the About dialog immediately; the third-party
   // packages list is read separately, on demand, so the dialog never blocks on it.
   const aboutStatic = {
