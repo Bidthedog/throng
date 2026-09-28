@@ -1,6 +1,6 @@
 ---
 name: throng-testing
-description: Run throng's tests and hands-on sessions without leaving processes behind. Use this EVERY time you are about to run E2E tests, launch the app to check something by hand, or drive a real terminal — and use it the moment something is "still running", a data folder will not delete, a port or pipe is taken, a test hangs on teardown, or a run behaves differently from the last one for no visible reason. Also use it when choosing WHICH layer to test at (unit vs integration vs E2E vs a real hands-on session), and when an E2E passes but the app still misbehaves for the user.
+description: Run throng's tests and hands-on sessions without leaving processes behind. Use this EVERY time you are about to run E2E tests, launch the app to check something by hand, or drive a real terminal — and use it the moment something is "still running", a data folder will not delete, a port or pipe is taken, a test hangs on teardown, or a run behaves differently from the last one for no visible reason. Also use it when choosing WHICH layer to test at (unit vs integration vs E2E vs a real hands-on session), and when an E2E passes but the app still misbehaves for the user. It also carries the E2E suite's area knowledge — writing or converting a spec, the harness helpers, the tier and parallel plans, @admin and quarantine, temp-file lifecycle, a test that passes on retry, a hung teardown or orphaned processes.
 ---
 
 # Testing throng without leaving a mess
@@ -491,6 +491,7 @@ overview.
 
 | Reference | Read it when |
 |---|---|
+| [e2e-harness.md](references/e2e-harness.md) | writing or converting an E2E spec, the harness helpers, the tier and parallel plans, diagnosing a flake — the area knowledge behind this skill's process |
 | [e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md) | adding, demoting or deleting an E2E; choosing its `@reserve:*` tag |
 | [budget-history.md](references/budget-history.md) | a spec adds or removes E2E declarations and you want the precedent for moving the budget, `reserve-tag-debt.json` and `parallel-plan.json` |
 | [build-guards.md](references/build-guards.md) | a renderer↔main channel changes, or the bridge-parity or renderer-typecheck guard goes red |

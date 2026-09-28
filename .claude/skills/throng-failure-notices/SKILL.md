@@ -1,7 +1,6 @@
 ---
 name: throng-failure-notices
-model: sonnet
-description: Use for how failures reach the user — the shared failure-cause model, notifications and notices, panel banners, exit notices and terminal exit codes, daemon-death reporting, notice suppression and de-duplication, and diagnostics logging. Triggers include a raw error string appearing in the UI, a failure that vanishes silently, duplicate or stacked notifications, "what should this say", an operation that half-fails, and log rotation or log level work.
+description: Load before working on how failures reach the user — the shared failure-cause model, notifications and notices, panel banners, exit notices and terminal exit codes, daemon-death reporting, notice suppression and de-duplication, and diagnostics logging. Triggers include a raw error string appearing in the UI, a failure that vanishes silently, duplicate or stacked notifications, "what should this say", an operation that half-fails, and log rotation or log level work.
 ---
 
 # throng — failure presentation and diagnostics
@@ -74,7 +73,7 @@ about it but which elements to emit. The renderer's own: `notice-models`, `notic
   renders, how it stacks, what it announces and where focus goes inside it is a **component test**;
   that it was written to the diagnostics log is an **integration test**. Reserve E2E for a notice
   whose behaviour needs a real window — and if such a spec is clickable or focus-stealing, check the
-  parallel-plan rules with `throng-e2e-harness`.
+  parallel-plan rules in `throng-testing` (its `references/e2e-harness.md`).
 - **Never dump a raw thrown string into a notice** as a shortcut. That is the exact defect 029 was
   written to close. The raw error still reaches the user — through Copy and the diagnostics log
   (030 FR-034/FR-048a) — but never through the rendered text.

@@ -1,7 +1,6 @@
 ---
 name: throng-renderer-ui
-model: sonnet
-description: Use for the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-has-a-menu-item rules.
+description: Load before working on the React renderer — panes, tabs, panels and the docking model, the sidebar, title bar, status bars, explorer tree, context menus, notifications, dialogs, theming and icon controls, focus and keyboard scope, and renderer state clients. Triggers include adding or changing any visible UI, "where does this component go", a context menu or menu item, a theme token or icon, drag/tear-off/sub-workspace behaviour, focus or z-order problems, and any change that must satisfy the themeable-icon-control or every-panel-action-has-a-menu-item rules.
 ---
 
 # throng — React renderer and the docking workspace
@@ -99,4 +98,4 @@ test to an E2E for something the component test can see.
 
 CodeMirror internals and document state → `throng-editor-documents`. xterm/terminal input →
 `throng-terminal-pty`. Settings/keybindings/theme model and the preferences completeness gate →
-`throng-config-preferences`. Harness and shard plans → `throng-e2e-harness`.
+`throng-config-preferences`. Harness and shard plans → `throng-testing` (its `references/e2e-harness.md`).
