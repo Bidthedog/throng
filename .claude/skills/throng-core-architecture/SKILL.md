@@ -1,7 +1,6 @@
 ---
 name: throng-core-architecture
-model: opus
-description: Use for work in packages/core — the OS-agnostic domain layer, its abstractions/ports, the InversifyJS composition roots and DI tokens in all three processes, and any decision about which package a piece of code belongs in. Triggers include adding or changing an abstraction with an OS-specific implementation, wiring a new service, "where should this live", a circular or upward dependency between packages, a direct OS call appearing in core, and reviews against Principles II (Platform-Abstracted Core), VIII (SOLID/DRY/YAGNI), IX (DI & Composition Root) and X (Externalised Configuration).
+description: Load before working in packages/core — the OS-agnostic domain layer, its abstractions/ports, the InversifyJS composition roots and DI tokens in all three processes, and any decision about which package a piece of code belongs in. Triggers include adding or changing an abstraction with an OS-specific implementation, wiring a new service, "where should this live", a circular or upward dependency between packages, a direct OS call appearing in core, and reviews against Principles II (Platform-Abstracted Core), VIII (SOLID/DRY/YAGNI), IX (DI & Composition Root) and X (Externalised Configuration).
 ---
 
 # throng — core domain, abstractions and dependency injection
@@ -32,7 +31,7 @@ An arrow the other way is a defect, not a refactor opportunity. `core` importing
 - `ports/` — storage-side contracts (`project-store`, `workspace-store`, `subworkspace-store`),
   implemented by `persistence` repositories.
 - `config/` — the settings, keybindings, theme and icon-pack models plus their editor-metadata
-  registries. See the `throng-config-preferences` agent before touching these.
+  registries. Load the `throng-config-preferences` skill before touching these.
 - `panel-type/`, `terminal/`, `editor/`, `explorer/`, `display/`, `projects/`, `workspace/`,
   `failure/`, `fileop-undo/`, `diagnostics/`, `fs/` — pure domain logic and state machines.
 - `testing/` — shared fakes, exported separately as `@throng/core/testing`.

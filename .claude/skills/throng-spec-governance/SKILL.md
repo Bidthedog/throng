@@ -1,7 +1,6 @@
 ---
 name: throng-spec-governance
-model: opus
-description: Use for Spec Kit artifacts and project governance — writing or amending a spec, plan, tasks, data-model, contracts, quickstart or checklist under specs/NNN-*/, the Constitution Check gate, constitution amendments and their version bump, functional-requirement numbering and traceability, and the docs-currency and incremental-delivery rules. Triggers include "write a spec", clarify/analyze findings, "which spec does this work belong to", a rule that needs to become constitutional, an FR that contradicts another, and reconciling a spec with what actually shipped.
+description: Load before working on Spec Kit artifacts and project governance — writing or amending a spec, plan, tasks, data-model, contracts, quickstart or checklist under specs/NNN-*/, the Constitution Check gate, constitution amendments and their version bump, functional-requirement numbering and traceability, and the docs-currency and incremental-delivery rules. Triggers include "write a spec", clarify/analyze findings, "which spec does this work belong to", a rule that needs to become constitutional, an FR that contradicts another, and reconciling a spec with what actually shipped.
 ---
 
 # throng — specs, constitution and governance
@@ -14,7 +13,7 @@ several principles are wired to tests that fail the build.
 **The slash commands do the work** — `/speckit-specify`, `/speckit-clarify`, `/speckit-plan`,
 `/speckit-tasks`, `/speckit-analyze`, `/speckit-implement`, `/speckit-converge`,
 `/speckit-constitution`, `/speckit-checklist`. Use them rather than hand-rolling the artifacts. This
-agent carries the judgement they assume.
+skill carries the judgement they assume.
 
 ## Artifact set per feature
 
@@ -84,5 +83,5 @@ on one. Both are already installed; do not improvise an issue body.
 
 ## Not yours
 
-Implementation in any package → the owning area agent. Running the suites → `throng-e2e-harness` plus
-the `throng-testing` / `running-tests` skills.
+Implementation in any package → the owning area skill. Running the suites → the `throng-testing` /
+`running-tests` skills.

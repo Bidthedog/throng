@@ -1,9 +1,3 @@
----
-name: throng-build-release
-model: sonnet
-description: Use for the build pipeline, packaging and release — TypeScript project references, the Vite renderer build, the generation scripts, electron-builder and the NSIS per-user installer, the bundled host-Node runtime, installer verification and publish gates, the GitHub Actions workflows and E2E shard planning on CI. Triggers include a broken or slow build, a native module ABI error, "the packaged app cannot find X", adding a runtime dependency, cutting a release or a tag, CI workflow edits, runner minutes, and version stamping.
----
-
 # throng — build, packaging, CI and release
 
 ## Build order (`npm run build`)
@@ -37,7 +31,7 @@ runtime dependency means checking both.
 
 ## Release (overview: docs/releasing.md; reasoning: .claude/skills/throng-release/references/)
 
-**Cutting one is the `throng-release` skill's job, not this agent's** — it holds the running order,
+**Cutting one is the `throng-release` skill's running order, not this file's** — it holds the running order,
 the version question and the sign-off. What follows is the area knowledge that runbook assumes.
 
 Versioning → packaging → **reconcile** → **verification** (one verdict per artifact) → **QA
@@ -128,5 +122,5 @@ lane something a commit message could switch off.
 
 ## Not yours
 
-Writing or fixing tests → `throng-e2e-harness`. Product code in any package → the owning area agent.
+Writing or fixing tests → `throng-testing`. Product code in any package → the owning area skill.
 Branch/PR mechanics → the `branch-sync` and `running-tests` skills.

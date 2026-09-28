@@ -193,14 +193,17 @@ any doc.** The maintainer's rules (2026-09-27), which the skill spells out file 
 runs in the gate: a new binding, setting or `THRONG_*` variable without its line in the right doc,
 a broken link or anchor, or a page missing its breadcrumb fails the build.
 
-## Specialist agents
+## Area skills
 
-`.claude/agents/` holds eleven repo-local subagents, one per area of this codebase — core/DI, daemon
-and persistence, terminals and PTY, renderer, editor, config and preferences, explorer and file ops,
-failure presentation, E2E harness, spec governance, build and release. Each carries that area's file
-map, the constitutional rules that bind it, and the traps it has already produced. Delegate to the
-owning agent rather than re-deriving an area from scratch; see `.claude/agents/README.md` for the
-routing table and how they defer to skills.
+Each area of this codebase has a repo-local skill carrying its file map, the constitutional rules that
+bind it, and the traps it has already produced: core/DI, daemon and persistence, terminals and PTY,
+renderer, editor, config and preferences, explorer and file ops, failure presentation, and spec
+governance. E2E harness knowledge lives in `throng-testing`, build and packaging in `throng-release`.
+**Load the owning skill in the session doing the work** rather than re-deriving the area. They were
+subagents until 2026-09-28, and routing every task through one spawned far more agents than the work
+needed. A subagent is now a deliberate choice for isolation or real parallelism, and its brief names
+the skill to load. `.claude/skills/README.md` holds the routing table and the model guidance for
+delegating.
 
 ## E2E on CI
 

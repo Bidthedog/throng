@@ -3,8 +3,8 @@
 The three roles, their filenames and what each one is are listed in
 [`docs/releasing.md`](../../../../docs/releasing.md#the-artifact-set) — that is their home. This file
 holds how the set is declared and enforced, and what every artifact contains. Packaging constraints
-(`npmRebuild: false`, `asar: false`, the bundled host-Node runtime) are the `throng-build-release`
-agent's, in [`.claude/agents/throng-build-release.md`](../../../agents/throng-build-release.md).
+(`npmRebuild: false`, `asar: false`, the bundled host-Node runtime) live in
+[build-and-packaging.md](build-and-packaging.md).
 
 ## Declared, not discovered
 

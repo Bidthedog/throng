@@ -1,7 +1,6 @@
 ---
 name: throng-config-preferences
-model: opus
-description: Use for anything configurable — app settings, key bindings, themes and theme tokens, icon packs, their metadata registries in @throng/core, the shipped defaults generator, the config store on disk with its hot-reload and atomic writes, and the visual preferences editors. Triggers include adding or renaming a setting, changing a default or a bounds/clamp, adding a keybinding or command, adding or editing a theme token, "the preferences editor does not expose this", a config file that fails to write or reload, and reset/revert behaviour.
+description: Load before working on anything configurable — app settings, key bindings, themes and theme tokens, icon packs, their metadata registries in @throng/core, the shipped defaults generator, the config store on disk with its hot-reload and atomic writes, and the visual preferences editors. Triggers include adding or renaming a setting, changing a default or a bounds/clamp, adding a keybinding or command, adding or editing a theme token, "the preferences editor does not expose this", a config file that fails to write or reload, and reset/revert behaviour.
 ---
 
 # throng — configuration, keybindings, themes and the preferences editors
@@ -103,4 +102,4 @@ window at all, it does not belong at that layer.
 
 Preference *window* focus/layout behaviour → `throng-renderer-ui` (and remember: any spec opening the
 preferences window belongs in `parallel-plan.json`). Config file location semantics under an
-installed build → `throng-build-release`.
+installed build → `throng-release` (its `references/build-and-packaging.md`).
