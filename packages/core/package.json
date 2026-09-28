@@ -1,6 +1,6 @@
 {
   "name": "@throng/core",
-  "version": "1.0.0-beta7",
+  "version": "1.0.0-alpha7",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
