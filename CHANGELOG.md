@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha7 — 2026-09-28
+
 ### Added
 - **Project cycling and side-pane focus chords**
   ([#332](https://github.com/Bidthedog/throng/issues/332)): **Next Project** / **Previous Project**
@@ -58,11 +60,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Changed
 - "Files & Folders" is now called File Explorer
-  ([#331](https://github.com/Bidthedog/throng/issues/331)). This line is exempt from the rename guard
-  the rest of the docs are held to.
+  ([#331](https://github.com/Bidthedog/throng/issues/331)).
 - **The documentation is reorganised.** The README is a short introduction; each topic has one home
   under `docs/` — installation, a shorter quick start, and new pages for key bindings, preferences,
-  environment variables and architecture — listed in the [docs index](docs/README.md).
+  environment variables and architecture — listed in the [docs index](https://github.com/Bidthedog/throng/blob/master/docs/README.md).
 - **Default shortcuts follow one pattern now**: Ctrl+Shift+Alt for getting around and the whole
   window, Ctrl+Alt or Ctrl+Shift for the focused panel, one modifier for content. These moved from
   Ctrl+Alt to Ctrl+Shift+Alt: move focus (the Arrow keys) and the tab picker (T), on the same keys;
@@ -95,8 +96,16 @@ What changed in each release of throng, written for someone deciding whether to 
   focus it does nothing.
 - **The keypad + and - are the same binding as the main-row keys**, and the Key Bindings editor
   records either as the same chord.
+- **throng now runs on Electron 44** ([#417](https://github.com/Bidthedog/throng/issues/417)).
 
 ### Fixed
+- **Running the portable build no longer breaks terminals in an installed throng**
+  ([#429](https://github.com/Bidthedog/throng/issues/429)). The portable build deletes its
+  temporary folder when it closes, but its background terminal service kept running from it, and
+  the next throng to start adopted that service: every terminal then failed with "Failed to load
+  native module: conpty.node". The portable build now keeps to its own service, and throng
+  replaces any service whose files have been deleted instead of adopting it. This fix was first
+  published as 1.0.0-beta7, which was withdrawn because throng is still in alpha.
 - **A background-service crash report now names the throng version** instead of `unknown`.
 
 ### Removed
@@ -106,16 +115,6 @@ What changed in each release of throng, written for someone deciding whether to 
 - The Ctrl+Shift+Alt chords follow the key's position, so on a few layouts they take a character
   typed with AltGr+Shift: Ń on Polish (programmer's), Ñ and Þ on US-International, Ț on Romanian
   (Programmers). Rebind the chord if you type one; the quick start's keyboard reference lists them.
-
-## 1.0.0-beta7 — 2026-09-22
-
-### Fixed
-- **Running the portable build no longer breaks terminals in an installed throng**
-  ([#429](https://github.com/Bidthedog/throng/issues/429)). The portable build deletes its
-  temporary folder when it closes, but its background terminal service kept running from it, and
-  the next throng to start adopted that service: every terminal then failed with "Failed to load
-  native module: conpty.node". The portable build now keeps to its own service, and throng
-  replaces any service whose files have been deleted instead of adopting it.
 
 ## 1.0.0-alpha6 — 2026-09-21
 
