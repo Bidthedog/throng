@@ -99,6 +99,7 @@ explicitly.
 | **Type** (exactly one) | `bug`, `enhancement`, `tweak`, `documentation` | The type decides the template and the title prefix. |
 | **Area** (one or more) | `area:editor`, `area:explorer`, `area:terminal`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform` | Where the work lands. Add every area the change touches. |
 | **Milestone** | `v1.0.0`, `v1.0.1`, `vNext` etc | Maintainers schedule this. `vNext` is a **placeholder for unscheduled work**, not the next release. |
+| **Status** (when it applies) | `needs-info` | A maintainer has asked the reporter for something, usually a rewrite against the issue template, in a comment. The issue is **blocked**: nobody plans, specs or picks it up until the reporter answers that comment and a maintainer removes the label. If your issue carries it, reply there. |
 
 Choosing the type — stop at the first that matches:
 
