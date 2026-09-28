@@ -4,6 +4,14 @@
     "deny": [],
     "ask": []
   },
+  "hooks": {
+    "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [{ "type": "command", "command": "node .claude/hooks/docs-audit-before-pr.mjs", "timeout": 120 }]
+        }
+    ]
+  },
   "enabledPlugins": {},
   "enabledMcpjsonServers": []
 }
