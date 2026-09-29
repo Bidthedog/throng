@@ -19,8 +19,6 @@ import {
 import {
   columnAt,
   cutLine,
-  eventToToken,
-  formatChord,
   normalizeToken,
   parseChordStrokes,
   indentUnitOf,
@@ -37,16 +35,8 @@ import {
   type RowSpan,
 } from '@throng/core';
 import { editorChordsFor } from '../keybindings/scope.js';
-import {
-  carriedModifiers,
-  holdsCarried,
-  NO_CARRIED,
-  releasesCarried,
-  resolveKeydown,
-  type CarriedModifiers,
-  type ChordEventLike,
-} from '../config/chord-key.js';
-import { clearPendingChord, getPendingChord, setPendingChord } from './pending-chord.js';
+import { ChordEngine } from '../keybindings/chord-engine.js';
+import { clearPendingChord, setPendingChord } from './pending-chord.js';
 
 /**
  * The editor's own commands, bound INSIDE CodeMirror (016, US3 · FR-016).
@@ -633,40 +623,20 @@ interface ChordBinding {
 const FIRST_STROKE_SCOPE = 'throng-chord-first';
 const nextStrokeScope = (prefix: number): string => `throng-chord-next-${prefix}`;
 
-/** How long a prefix stays pending (FR-092: CodeMirror's own `PrefixTimeout`). */
-export const TWO_STROKE_TIMEOUT_MS = 4000;
-/** How long "the key combination … is not bound" stays up after an unbound key. */
-export const UNBOUND_NOTICE_MS = 2500;
-
-/** `keyCode`s of a modifier pressed alone — the same list CodeMirror uses to hold a stored prefix. */
-const MODIFIER_KEY_CODES = new Set([16, 17, 18, 20, 91, 92, 224, 225]);
-const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph', 'OS']);
-
 /**
- * The multi-key chord engine (046 FR-091, FR-092, FR-124, FR-126; research R19).
+ * The editor's host over the shared {@link ChordEngine} (047 research R5) — one CodeMirror plugin
+ * instance per view, thin by construction: it does no matching of its own. `runScopeHandlers` IS the
+ * matcher, over the private per-prefix scopes below, exactly as before this was extracted; the engine
+ * (`keybindings/chord-engine.js`) now owns the timeout, Escape, blur, modifier-carrying and indicator
+ * logic that used to live in this file, so the editor and a preview panel (047 T049) share ONE
+ * implementation of it (Principle VIII) rather than two.
  *
- * ## Why not CodeMirror's own prefix engine
- *
- * `keymap.of([{ key: 'Ctrl-e w' }])` would give a stored prefix and a 4 s timeout for free, and gets
- * two of FR-092's endings wrong for this app — with no way to correct them from outside, because the
- * stored prefix is a module-level variable in `@codemirror/view`:
- * - **Focus leaving.** The stored prefix survives a blur. Tab away and back inside 4 s, press W, and
- *   the chord completes in an editor showing no prefix at all.
- * - **Escape.** It is consumed but not stopped, so the window-level `search.close` still sees it and
- *   closes an open find bar. FR-092: Escape "cancels and is consumed without closing any bar".
- *
- * So the prefix state lives HERE, per view, and CodeMirror is still what MATCHES each stroke: the
- * chords form a tree of PREFIXES, each with its own scope of the keys that may follow it — a key that
- * completes a chord runs its command, a key that extends the prefix (the second of three, FR-126)
- * moves the engine to the longer prefix. Scopes run through `runScopeHandlers` only while this engine
- * says so, so each stroke is named by the same `toCodeMirrorKey` rules, and matched by the same code,
- * as every other editor binding — including CodeMirror's Windows AltGr guard.
- *
- * One continuous press (FR-124, FR-126): every key after the first must still hold every modifier the
- * FIRST key held; letting go of one ends the prefix silently, whichever key is awaited.
- *
- * Everything the engine takes is consumed AND stopped: the strokes of a chord belong to the chord,
- * and no window-level listener gets a second go at them.
+ * The chords form a tree of PREFIXES, each with its own scope of the keys that may follow it — a key
+ * that completes a chord runs its command, a key that extends the prefix (the second of three, FR-126)
+ * calls {@link ChordEngine.begin} to move the engine to the longer prefix. Scopes run through
+ * `runScopeHandlers` only while the engine says so, so each stroke is named by the same
+ * `toCodeMirrorKey` rules, and matched by the same code, as every other editor binding — including
+ * CodeMirror's Windows AltGr guard.
  */
 function multiStrokeChords(bindings: readonly ChordBinding[]): Extension {
   if (bindings.length === 0) return [];
@@ -685,7 +655,7 @@ function multiStrokeChords(bindings: readonly ChordBinding[]): Extension {
       scope: parentScope,
       preventDefault: true,
       run: (view) => {
-        view.plugin(engine)?.begin(index);
+        view.plugin(enginePlugin)?.engine.begin(index, prefixes[index].physical);
         return true;
       },
     });
@@ -697,88 +667,40 @@ function multiStrokeChords(bindings: readonly ChordBinding[]): Extension {
     scoped.push({ key: cm[cm.length - 1], scope: nextStrokeScope(prefix), preventDefault: true, run: b.run });
   }
 
-  class ChordEngine {
-    private pending: number | null = null;
-    /** Set by {@link begin} while a key is being matched: the key EXTENDED the prefix, it completed nothing. */
-    private extended = false;
-    private timer: ReturnType<typeof setTimeout> | undefined;
-    /** FR-124 — the modifiers the first key held, which must stay held through every key after it. */
-    private carried: CarriedModifiers = NO_CARRIED;
+  /** The thin host: `matchFirst`/`matchNext` are `runScopeHandlers` over this view's own scopes. */
+  class ChordEngineHostPlugin {
+    readonly engine: ChordEngine<number>;
 
-    constructor(private readonly view: EditorView) {}
-
-    begin(prefix: number): void {
-      this.pending = prefix;
-      this.extended = true;
-      this.arm(TWO_STROKE_TIMEOUT_MS);
-      setPendingChord({ kind: 'pending', host: this.view.dom, keys: chordLabel(prefixes[prefix].physical) });
-    }
-
-    /** End the prefix (and any notice), for every FR-092 ending but an unbound key. */
-    end(): void {
-      this.pending = null;
-      this.carried = NO_CARRIED;
-      clearTimeout(this.timer);
-      this.timer = undefined;
-      clearPendingChord(this.view.dom);
+    constructor(view: EditorView) {
+      this.engine = new ChordEngine<number>({
+        matchFirst: (e) => runScopeHandlers(view, e as unknown as KeyboardEvent, FIRST_STROKE_SCOPE),
+        matchNext: (e, prefix) =>
+          runScopeHandlers(view, e as unknown as KeyboardEvent, nextStrokeScope(prefix)),
+        onIndicator: (indicator) => {
+          if (indicator) setPendingChord({ kind: indicator.kind, host: view.dom, keys: indicator.keys });
+          else clearPendingChord(view.dom);
+        },
+      });
     }
 
     keydown(e: KeyboardEvent): boolean {
-      if (this.pending === null) {
-        // A notice from the last unbound key goes with the next key, whatever that key is.
-        if (getPendingChord()?.host === this.view.dom) this.end();
-        const began = runScopeHandlers(this.view, e, FIRST_STROKE_SCOPE);
-        // FR-124 — the modifiers the first key held; releasing any of them ends the prefix.
-        if (began) this.carried = carriedModifiers(e);
-        return began && consume(e);
-      }
-      // A modifier on its own is the user reaching for Shift+W, not the next key.
-      if (MODIFIER_KEY_CODES.has(e.keyCode) || MODIFIER_KEYS.has(e.key)) return false;
-
-      const prefix = this.pending;
-      if (e.key === 'Escape') {
-        this.end();
-        return consume(e);
-      }
-      // FR-124 — a first-key modifier no longer held (its keyup went elsewhere) ended the prefix
-      // already: end it silently, and this key is handled as it would be with no prefix.
-      if (!holdsCarried(e, this.carried)) {
-        this.end();
-        return this.keydown(e);
-      }
-      // FR-124, FR-126 — matched EXACTLY as pressed, against the next key as physically pressed
-      // (`Ctrl+E,W`'s second is `Ctrl+W`). A modifier added for a key is part of that key.
-      this.extended = false;
-      if (runScopeHandlers(this.view, e, nextStrokeScope(prefix))) {
-        if (!this.extended) this.end(); // completed — a key that extended the prefix leaves it pending
-        return consume(e);
-      }
-      // Completes nothing: consumed, typed nowhere, and reported (VS Code's behaviour) — every key
-      // pressed, named as the Key Bindings editor writes the chord (`Ctrl+E,W,X`).
-      const keys = chordLabel([...prefixes[prefix].physical, strokeLabel(e)]);
-      this.pending = null;
-      this.carried = NO_CARRIED;
-      this.arm(UNBOUND_NOTICE_MS);
-      setPendingChord({ kind: 'unbound', host: this.view.dom, keys });
-      return consume(e);
+      return this.engine.keydown(e);
     }
 
-    /** FR-124 — letting go of a first-key modifier while pending ends the prefix, silently. */
     keyup(e: KeyboardEvent): void {
-      if (this.pending !== null && releasesCarried(this.carried, e)) this.end();
+      this.engine.keyup(e);
+    }
+
+    blur(): void {
+      this.engine.blur();
     }
 
     destroy(): void {
-      this.end();
-    }
-
-    private arm(ms: number): void {
-      clearTimeout(this.timer);
-      this.timer = setTimeout(() => this.end(), ms);
+      this.engine.destroy();
     }
   }
 
-  const engine = ViewPlugin.fromClass(ChordEngine, {
+  const enginePlugin = ViewPlugin.fromClass(ChordEngineHostPlugin, {
     eventHandlers: {
       keydown(e) {
         return this.keydown(e);
@@ -787,7 +709,7 @@ function multiStrokeChords(bindings: readonly ChordBinding[]): Extension {
     eventObservers: {
       // FR-092: focus leaving the editor ends the prefix — the indication, and the chord with it.
       blur() {
-        this.end();
+        this.blur();
       },
       keyup(e) {
         this.keyup(e);
@@ -796,35 +718,7 @@ function multiStrokeChords(bindings: readonly ChordBinding[]): Extension {
   });
 
   // `Prec.highest`, so a pending prefix sees its next key (and Escape) before any keymap does.
-  return [keymap.of(scoped), Prec.highest(engine)];
-}
-
-/**
- * The keys pressed so far, the way the `Mods+K1,K2,K3` token writes them (046 FR-124, FR-126):
- * `Ctrl+E`, `Ctrl+E,W`, `Ctrl+E,W,X` — through core's `formatChord`, so the indication and the Key
- * Bindings editor cannot disagree. Falls back to the strokes as pressed if core refuses them.
- */
-function chordLabel(physical: readonly string[]): string {
-  return (physical.length === 1 ? physical[0] : formatChord([...physical])) ?? physical.join(', ');
-}
-
-function consume(e: KeyboardEvent): true {
-  e.preventDefault();
-  e.stopPropagation();
-  return true;
-}
-
-/**
- * A keydown as the Key Bindings editor spells a stroke (`X`, `Shift+W`, `Ctrl+Shift+1`) — through
- * `resolveKeydown`, so a digit is named physically, the way the capture modal would record it.
- */
-function strokeLabel(e: ChordEventLike): string {
-  return (
-    resolveKeydown(e, (ev) => {
-      const token = eventToToken(ev);
-      return token ? normalizeToken(token) : null;
-    }) ?? e.key
-  );
+  return [keymap.of(scoped), Prec.highest(enginePlugin)];
 }
 
 /**

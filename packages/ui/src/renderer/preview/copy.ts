@@ -55,18 +55,33 @@ export function selectionRangeIn(host: HTMLElement): Range | null {
 }
 
 /**
+ * 047 T045/T066, R6 — `throng`-drawn chrome, never part of the document a reader wrote: the Markdown
+ * fold gutter's toggle button (sits INSIDE its heading, the heading's first child — a selection or a
+ * Select All spanning that heading would otherwise carry its icon glyph as if the author had typed it)
+ * and a table's column resize handle (sits inside its header cell the same way). Named here, in the
+ * provider-agnostic copy path, so a later provider's own throng-drawn control is excluded the same way.
+ */
+const THRONG_CHROME_SELECTOR = '.preview-fold-toggle, .preview-table-resize-handle';
+
+/**
  * Snapshot the selection inside `host`, or `null` when there is none.
  *
  * A selection with no TEXT — an image alone, or a link whose only content is an image — is still a
  * selection of the document, and is captured. Treating it as none let the platform copy through untouched,
  * carrying `data-throng-link` (an absolute project path) and the `throng-preview:` address (adversarial
  * review M1). Its plain text is what the export profile turns it into: each image's alt text, or nothing.
+ *
+ * Both `text` and `fragment` are read from the SAME cleaned clone, so a `throng`-drawn control excluded
+ * from one is excluded from the other by construction — `range.toString()` has no such filter, so the
+ * text is now the clone's `textContent` instead, which `Range.toString()` is defined to equal absent any
+ * filtering (MDN: "essentially the concatenation of the textContent of all the nodes... in the Range").
  */
 export function captureSelection(host: HTMLElement): CapturedSelection | null {
   const range = selectionRangeIn(host);
   if (range === null) return null;
   const fragment = range.cloneContents();
-  const text = range.toString();
+  for (const chrome of fragment.querySelectorAll(THRONG_CHROME_SELECTOR)) chrome.remove();
+  const text = fragment.textContent ?? '';
   if (text.length > 0) return { text, fragment };
   const alt = [...fragment.querySelectorAll('img')].map((img) => img.getAttribute('alt') ?? '').join('');
   return { text: alt, fragment };

@@ -353,3 +353,34 @@
   font-size: 12px;
   pointer-events: none;
 }
+
+/* Section folding (047 US3, research R4) — the heading-only gutter and CodeMirror's own fold
+ * placeholder, both themed. The gutter's markers are `foldSectionExpanded`/`foldSectionCollapsed`
+ * icon tokens (`markdown-fold.ts`); this only positions and colours the marker's box and the
+ * placeholder text a collapsed section leaves in the document, from theme tokens only. */
+.cm-throng-fold-gutter {
+  cursor: pointer;
+}
+
+.cm-throng-fold-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--throng-colour-textMuted, #93a0b4);
+}
+
+.cm-throng-fold-marker:hover {
+  color: var(--throng-colour-text, #e6ebf2);
+}
+
+.cm-foldPlaceholder {
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  /* `surfaceActive`, not `surface` (the pane token): an inline chip, not a pane or dialog card body
+     (surface-token-roles.test.ts, 018 FR-001). */
+  background: var(--throng-colour-surfaceActive);
+  color: var(--throng-colour-textMuted, #93a0b4);
+  cursor: pointer;
+}

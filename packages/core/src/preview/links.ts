@@ -26,6 +26,7 @@ import { isUnderPath } from '../fs/path-id.js';
 import { relPathUnderRoot } from '../explorer/path-rules.js';
 import { LANGUAGES, PLAIN_TEXT_ID, languageById } from '../editor/languages.js';
 import { directoryOf, resolveAgainst, separatorOf } from './path-resolve.js';
+import { wikiCandidates, type WikiTarget } from './wiki-links.js';
 
 export type PreviewLink =
   /** `http:`, `https:`, `mailto:` (FR-091). */
@@ -134,6 +135,43 @@ function resolveReference(path: string, ctx: { docPath: string; projectRoot: str
   return resolveAgainst(base, path, sep);
 }
 
+/**
+ * The scheme the pipeline's `throng_wikilinks` inline rule encodes a resolved `[[Target]]` as
+ * (047, research R12): `throng-wiki:<path>#<fragment>`, a leading `/` on `<path>` marking it
+ * ROOTED — the same convention `resolveReference` above already reads a plain href with.
+ */
+const WIKI_SCHEME = 'throng-wiki';
+
+/**
+ * A `throng-wiki:` href → its `PreviewLink` (047, FR-050 – FR-056). `wikiCandidates` (`wiki-links.ts`,
+ * FR-052c) gives the ordered candidates; the FIRST is what classification and navigation target —
+ * which one actually EXISTS needs the filesystem, so main answers that separately
+ * (contracts/preview-ipc-047.md §3) and the render pass marks the rest unresolved. An empty
+ * `ctx.projectRoot` means "no owning project" (a sub-workspace preview), the same sentinel
+ * `wikiCandidates` reads as `null` (FR-052b).
+ */
+function classifyWiki(rest: string, originalText: string, ctx: { docPath: string; projectRoot: string }): PreviewLink {
+  const hashIndex = rest.indexOf('#');
+  const rawPath = decodePercent(hashIndex < 0 ? rest : rest.slice(0, hashIndex));
+  const rawFragment = decodePercent(hashIndex < 0 ? '' : rest.slice(hashIndex + 1));
+  if (rawPath === null || rawFragment === null) return { kind: 'inert' };
+
+  if (rawPath.length === 0) {
+    return rawFragment.length > 0 ? { kind: 'heading', fragment: rawFragment } : { kind: 'inert' };
+  }
+
+  const rooted = /^[\\/]/.test(rawPath);
+  const target: WikiTarget = { path: rooted ? rawPath.slice(1) : rawPath, rooted, fragment: null, alias: null };
+  const projectRoot = ctx.projectRoot.length > 0 ? ctx.projectRoot : null;
+  const sep = separatorOf(projectRoot ?? ctx.docPath);
+  const docDir = directoryOf(ctx.docPath, sep);
+
+  const absPath = wikiCandidates(target, docDir, projectRoot)[0];
+  if (absPath === undefined) return { kind: 'inert' };
+  if (!isUnderPath(absPath, ctx.projectRoot)) return { kind: 'outside', target: originalText };
+  return rawFragment.length > 0 ? { kind: 'file', absPath, fragment: rawFragment } : { kind: 'file', absPath };
+}
+
 export function classifyPreviewLink(
   href: string,
   ctx: { docPath: string; projectRoot: string },
@@ -142,6 +180,7 @@ export function classifyPreviewLink(
   if (prepared === null) return { kind: 'inert' };
   const { text, scheme } = prepared;
 
+  if (scheme === WIKI_SCHEME) return classifyWiki(text.slice(WIKI_SCHEME.length + 1), text, ctx);
   if (scheme !== null) {
     return EXTERNAL_SCHEMES.has(scheme) ? { kind: 'external', url: text } : { kind: 'inert' };
   }

@@ -49,3 +49,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * 047 US1, research.md R1 — Find in a preview's `::highlight(throng-preview-match)` /
+ * `::highlight(throng-preview-match-current)` rules live in `../search/find-bar.css`, beside the
+ * editor's and Find in Files' own match-highlight CSS (search styling's home, not this
+ * chrome-only, provider-neutral file — see the file header). Not repeated here.
+ */

@@ -579,6 +579,21 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   /*
+   * 047 (research R3, data-model.md "Settings") — NO subgroup, deliberately: it seeds a document's
+   * fold state (`initialFold`), governing the EDITOR as well as any preview, so it must not be
+   * disabled or hidden by anything under `Editor → Previews`. It belongs beside `showGutter` above
+   * for the same reason that one has no subgroup — both are about how the editor draws a document.
+   */
+  {
+    key: 'editor.markdownSectionsOpen',
+    label: 'Markdown sections open',
+    description:
+      'How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.',
+    group: 'Editor',
+    control: 'select',
+    allowedValues: ['expanded', 'collapsed'],
+  },
+  /*
    * The status bar (040 FR-037) — three settings, one subsection.
    *
    * `editor.showStatusBar` keeps its shipped KEY. Moving it under `editor.statusBar.*` to match its

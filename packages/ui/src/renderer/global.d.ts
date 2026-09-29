@@ -492,6 +492,15 @@ declare global {
         isOpen: (absPath: string) => Promise<boolean>;
         /** Every path with an open preview, in compare form — the window's open-set seed (§1, FR-012/FR-014). */
         openPaths: () => Promise<string[]>;
+        /**
+         * 047 R12 (contracts/preview-ipc-047.md §3) — which `[[wikilink]]` targets name a real file,
+         * resolved from THIS panel's own document folder and project root (never one the caller names —
+         * Principle I). At most 500 per call; a longer list needs a second call for the remainder.
+         */
+        resolveWikiTargets: (
+          panelId: string,
+          targets: { path: string; rooted: boolean }[],
+        ) => Promise<{ resolved: (string | null)[] }>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
         publishEditorTitle: (panelId: string, title: string) => void;
         /** FR-010 — this window's layout does not hold the parent a `place` named. */
@@ -533,6 +542,16 @@ declare global {
         redo: (req: { panelId: string; viewId: string }) => void;
         setWordWrap: (panelId: string, on: boolean) => void;
         wordWrap: (panelId: string, seedDefault: boolean) => Promise<boolean>;
+        /**
+         * 047 R3 (contracts/preview-ipc-047.md §5) — fold state, beside word wrap. `panelId` names an
+         * editor OR a preview; main resolves which document key it shares (an editor / parented preview
+         * → `file:<path>`; a standalone preview → `panel:<id>`).
+         */
+        setFoldState: (panelId: string, state: import('@throng/core').FoldState) => void;
+        foldState: (
+          panelId: string,
+          seed: 'expanded' | 'collapsed',
+        ) => Promise<import('@throng/core').FoldState>;
         revert: (panelId: string) => Promise<boolean>;
         /** Re-read the document's path from disk (027 / #161). */
         reload: (
@@ -613,6 +632,8 @@ declare global {
             wordWrap?: boolean;
             /** throng moved the file: the document's new absolute path (019, FR-002). */
             movedTo?: string;
+            /** 047 R3 — a document or standalone preview's fold state changed; `key`, not `panelId`, names it. */
+            foldState?: { key: string; state: import('@throng/core').FoldState };
             /**
              * The `verifyPath` this view asked for on mount has ANSWERED (#369).
              *

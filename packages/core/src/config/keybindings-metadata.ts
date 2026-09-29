@@ -216,6 +216,15 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Open Link',
     'Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor’s own meaning. Not live in a terminal, where Ctrl+Enter reaches the program.',
   ),
+  // 047 (research R7) — opens the Go to Heading pop-down, preview-only. Shares Ctrl+G with
+  // navigate.gotoLine on a disjoint scope, the same "no clash" story navigate.gotoLine already has
+  // with a terminal's own Ctrl+G.
+  chord(
+    'preview.goToHeading',
+    'Navigate',
+    'Go to Heading…',
+    'Open a searchable list of the preview’s headings and jump to one. Live in a preview only.',
+  ),
 
   // File Explorer (resolved while the File Explorer pane has focus)
   chord('file.rename', 'File Explorer', 'Rename', 'Rename the selected file or folder.'),
@@ -299,6 +308,37 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Synchronise Scrolling',
     'Turn synchronised scrolling between editors and their previews on or off, everywhere. Live in an editor or a preview. Unbound by default.',
   ),
+
+  // Markdown (047, research R5) — section folding, live in a Markdown editor and a preview, on the
+  // same chord and id in both. Toggle This Section and Toggle All have no menu item of their own
+  // (contracts/menus-commands-controls.md "Commands" — reachable through their Collapse/Expand
+  // equivalents, which is what Principle VI's rule asks for).
+  chord(
+    'markdown.toggleSection',
+    'Markdown',
+    'Toggle this section',
+    'Collapse or expand the section containing the caret (editor) or the top of the view (preview).',
+  ),
+  chord(
+    'markdown.toggleAll',
+    'Markdown',
+    'Toggle all sections',
+    'Collapse every section if any is expanded, otherwise expand every section.',
+  ),
+  chord(
+    'markdown.collapseSection',
+    'Markdown',
+    'Collapse this section',
+    'Collapse the section containing the caret (editor) or the top of the view (preview).',
+  ),
+  chord(
+    'markdown.expandSection',
+    'Markdown',
+    'Expand this section',
+    'Expand the section containing the caret (editor) or the top of the view (preview).',
+  ),
+  chord('markdown.collapseAll', 'Markdown', 'Collapse all sections', 'Collapse every heading section.'),
+  chord('markdown.expandAll', 'Markdown', 'Expand all sections', 'Expand every heading section.'),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal
   // searches its scrollback (read-only); an editor searches and replaces its file.

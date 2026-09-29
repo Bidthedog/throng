@@ -22,6 +22,8 @@ export interface PreviewPanelHandles {
    * the history intent and the view state being left, then main's reply handled in the panel.
    */
   navigateHistory(target: { index: number; filePath: string }): void;
+  /** 047 US4 (research R7) — open this panel's Go to Heading pop-down (`preview.goToHeading`). */
+  openHeadingOutline(): void;
 }
 
 const registry = new Map<string, PreviewPanelHandles>();
@@ -55,5 +57,13 @@ export function revealPreviewFragment(panelId: string, fragment: string): boolea
   const handles = registry.get(panelId);
   if (!handles) return false;
   handles.revealFragment(fragment);
+  return true;
+}
+
+/** `preview.goToHeading` (047 US4). `false` when the panel is not mounted here. */
+export function openPreviewHeadingOutline(panelId: string): boolean {
+  const handles = registry.get(panelId);
+  if (!handles) return false;
+  handles.openHeadingOutline();
   return true;
 }

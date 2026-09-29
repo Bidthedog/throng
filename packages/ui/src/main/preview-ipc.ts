@@ -57,6 +57,7 @@ export type PreviewIpcService = Pick<
   | 'openPaths'
   | 'publishEditorTitle'
   | 'placeDeclined'
+  | 'resolveWikiTargets'
 >;
 
 const OPEN_FAILED: PreviewOpenResponse = { kind: 'refused', reason: 'no-file' };
@@ -69,6 +70,18 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 const record = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 
+/**
+ * 047 R8, contracts/preview-ipc-047.md §1 — `target` is entirely optional (absent behaves exactly as
+ * 044); a malformed one is dropped rather than refusing the whole open, since `open` without it is
+ * still a perfectly good request (FR-011's ordinary standalone placement).
+ */
+function asTarget(value: unknown): PreviewOpenRequest['target'] {
+  const t = record(value);
+  if (t.mode !== 'lastActive' && t.mode !== 'new') return undefined;
+  const reusePanelId = text(t.reusePanelId);
+  return { mode: t.mode, reusePanelId };
+}
+
 function asOpen(payload: unknown): PreviewOpenRequest | null {
   const p = record(payload);
   const absPath = text(p.absPath);
@@ -77,6 +90,10 @@ function asOpen(payload: unknown): PreviewOpenRequest | null {
   const req: PreviewOpenRequest = { absPath, projectId, hasParentLocally: p.hasParentLocally === true };
   const requester = text(p.requesterPanelId);
   if (requester !== null) req.requesterPanelId = requester;
+  const target = asTarget(p.target);
+  if (target !== undefined) req.target = target;
+  // 047 FR-081 — only a literal `true` counts; anything else is the ordinary open that takes the keyboard.
+  if (p.keepFocus === true) req.keepFocus = true;
   return req;
 }
 
@@ -112,6 +129,11 @@ function asNavigate(payload: unknown): PreviewNavigateRequest | { invalid: strin
   else if (intent.kind === 'history' && Number.isInteger(intent.index)) {
     parsedIntent = { kind: 'history', index: intent.index as number };
   } else if (intent.kind === 'heading') parsedIntent = { kind: 'heading' };
+  // 047 R8/R9 (contracts/preview-ipc-047.md §2) — `open` (Last Active reuse) and `drop` (a file
+  // dropped on the panel): behave as `link` for history and parenting, so the service's generic
+  // (non-heading, non-history) branch already handles them with no dispatch of its own needed.
+  else if (intent.kind === 'open') parsedIntent = { kind: 'open' };
+  else if (intent.kind === 'drop') parsedIntent = { kind: 'drop' };
   else return { invalid: absPath };
   const req: PreviewNavigateRequest = { panelId, target: { absPath }, intent: parsedIntent };
   const fragment = text(target.fragment);
@@ -120,6 +142,20 @@ function asNavigate(payload: unknown): PreviewNavigateRequest | { invalid: strin
   // Where a jump landed means something for a heading only (FR-115); it reaches no other intent.
   if (parsedIntent.kind === 'heading' && p.arrivingViewState !== undefined) req.arrivingViewState = p.arrivingViewState;
   return req;
+}
+
+/**
+ * 047 §3 — `{ path: string; rooted: boolean }[]`, capped at 500 by main's own service (never trimmed
+ * here: a malformed ENTRY is dropped in place — `{path:'', rooted:false}` — rather than refusing the
+ * whole call over one bad item in an otherwise good batch).
+ */
+function asWikiTargets(payload: unknown): { path: string; rooted: boolean }[] | null {
+  const p = record(payload);
+  if (!Array.isArray(p.targets)) return null;
+  return p.targets.map((raw) => {
+    const t = record(raw);
+    return { path: typeof t.path === 'string' ? t.path : '', rooted: t.rooted === true };
+  });
 }
 
 const navigateRefused = (target: string): PreviewNavigateResponse => ({
@@ -205,6 +241,20 @@ export function registerPreviewIpc(ipc: PreviewIpcMain, service: PreviewIpcServi
       return service.openPaths();
     } catch {
       return [];
+    }
+  });
+
+  // 047 §3 — which wiki targets name a real file. `panelId` says WHICH run's project and document
+  // folder to resolve from; a malformed payload (no `panelId`, no `targets` array) answers every
+  // target `null` rather than refusing the call outright — a batched, best-effort lookup, not a verdict.
+  ipc.handle('throng:preview:resolveWikiTargets', async (_event, payload) => {
+    const panelId = text(record(payload).panelId);
+    const targets = asWikiTargets(payload);
+    if (panelId === null || targets === null) return { resolved: [] };
+    try {
+      return await service.resolveWikiTargets(panelId, targets);
+    } catch {
+      return { resolved: targets.map(() => null) };
     }
   });
 

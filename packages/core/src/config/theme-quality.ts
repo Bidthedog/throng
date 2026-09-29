@@ -251,8 +251,14 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * too, so this is a FOURTH near-identical term alongside it, pulling the mean DOWN by construction,
  * with no theme becoming more alike in character. The threshold is untouched at 4.3, and the
  * closest pair still clears it with comfortable headroom.
+ *
+ * Re-measured by 047 FR-074, which added `searchMatchBorder` — the ordinary find match's outline, a
+ * neutral tint of each theme's editor text — to every theme: 6.169180177612861 → 6.155814166374773.
+ * `warning`'s case once more: a neutral grey sits close to its counterparts across themes, so the
+ * mean drops by construction with no theme becoming more alike in character. The threshold is
+ * untouched at 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.169180177612861;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.155814166374773;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

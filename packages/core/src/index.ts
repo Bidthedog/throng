@@ -204,6 +204,8 @@ export type {
   EditorPathDisplay,
   NewProjectSettings,
   StartingFolderMode,
+  // 047 (research R3, data-model.md "Settings") — a Markdown document's fold-state seed.
+  MarkdownSectionsOpen,
   // 043 FR-059 — the Find in Files preferences and their three closed value sets.
   SearchSettings,
   FindInFilesSettings,
@@ -973,6 +975,25 @@ export type { ScopeInput } from './search/scope-input.js';
 export { FIND_IN_FILES_KIND, findInFilesPanelType } from './find-in-files/panel-type.js';
 export type { FindInFilesValues } from './find-in-files/panel-type.js';
 
+// 047 — the heading model shared by the preview outline, fold points and #375's editor outline
+// (data-model.md "DocumentSymbol", research R2).
+export { buildSymbolTree } from './outline/document-symbol.js';
+export type { DocumentSymbol, HeadingRecord } from './outline/document-symbol.js';
+// 047 — one fold state per document or standalone preview (data-model.md "FoldState", research R3).
+export {
+  collapseAll,
+  expandAll,
+  initialFold,
+  isCollapsed,
+  prune,
+  revealing,
+  setSection,
+  toggleAll,
+  toggleSection,
+  visibleSections,
+} from './outline/fold-state.js';
+export type { FoldState } from './outline/fold-state.js';
+
 // 044 — file previews (#10). The provider seam (descriptor types, the registry and the one decision
 // every affordance is drawn from), the shipped registration, and the pure policies the renderer's
 // sanitiser hook and main's request filter and protocol call.
@@ -985,6 +1006,8 @@ export type {
 export type {
   PreviewCopyFormat,
   DefaultOpenAction,
+  // 047 (research R8/R11, FR-015a) — where a standalone preview opens.
+  PreviewOpenTarget,
   ProviderSettings,
   PreviewSettings,
 } from './preview/settings-types.js';
@@ -1001,12 +1024,18 @@ export {
   // The Markdown provider's FR-090d heading grammar (fix round 1, item 3): forwarded through the
   // registration index, the one file outside a provider's own folder allowed to import from it.
   markdownHeadingLine,
+  // 047 (research R2) — a Markdown heading's RENDERED text, so the editor's own heading extractor
+  // (#375, T007) can slug from the same text the pipeline slugs, through the same `headingSlug`.
+  // Forwarded the same way `markdownHeadingLine` is, above.
+  markdownInlineText,
 } from './preview/providers/index.js';
 // The `editor.previews` defaults, descriptors and parse, generated from a registry (data-model §3),
 // and the decisions main and the renderer read from them.
 export {
   PREVIEW_COPY_FORMATS,
   DEFAULT_OPEN_ACTIONS,
+  // 047 (research R8/R11, FR-015a).
+  PREVIEW_OPEN_TARGETS,
   previewSettingsDefaults,
   previewSettingsDescriptors,
   parsePreviewSettings,
@@ -1045,6 +1074,14 @@ export type {
 } from './preview/wire-types.js';
 export { splitFrontMatter } from './preview/front-matter.js';
 export type { FrontMatterSplit } from './preview/front-matter.js';
+// 047 (data-model.md "WikiTarget", research R12, FR-050 – FR-056) — `[[Target]]` wikilinks. Main
+// needs `wikiCandidates` for `throng:preview:resolveWikiTargets` (contracts/preview-ipc-047.md §3).
+export { parseWikilink, wikiCandidates } from './preview/wiki-links.js';
+export type { WikiTarget } from './preview/wiki-links.js';
+// 047 (data-model.md "ColumnProfile / fair widths", research R13, FR-060 – FR-062) — water-filling
+// table-column widths. The renderer's two-pass measurement (`table-layout.ts`) feeds this.
+export { fairColumnWidths } from './preview/table-widths.js';
+export type { ColumnProfile, FairColumnWidthsResult } from './preview/table-widths.js';
 // Registered in `defaultPanelTypeRegistry`, `offered: false` — the Find in Files arrangement above.
 export { PREVIEW_KIND, previewPanelType } from './preview/panel-type.js';
 export type { PreviewValues } from './preview/panel-type.js';

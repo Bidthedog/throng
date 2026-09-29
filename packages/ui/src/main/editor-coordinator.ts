@@ -26,6 +26,7 @@ import { dirname } from 'node:path';
 import {
   createOpenRegistry,
   editorsInScope,
+  initialFold,
   isMissingReason,
   isOpenAnywhere,
   isUnderPath,
@@ -41,6 +42,7 @@ import {
   type Disposable,
   type EditorOwnerKind,
   type EncodingId,
+  type FoldState,
   type IFileWatcher,
   type LineEndingId,
   type Match,
@@ -291,6 +293,17 @@ export interface EditorSyncMsg {
    * forever, and the only alternative was to guess at a duration — which is exactly the defect.
    */
   verified?: boolean;
+  /**
+   * 047 R3, contracts/preview-ipc-047.md §5 — a document or standalone preview's fold state changed.
+   *
+   * Unlike every other field here, this does NOT describe `panelId` (which is carried only because the
+   * interface requires it, and is otherwise unused by this variant — set to the panel that triggered
+   * the change). `key` is the fold map's own key (`file:<path>` or `panel:<id>`), because one key can
+   * be shown by an editor panel and a preview panel with a DIFFERENT id, in windows this coordinator
+   * does not enumerate previews for. Every renderer with a panel on `key` applies `state` to it,
+   * rather than main trying to list every viewer across the editor and preview registries.
+   */
+  foldState?: { key: string; state: FoldState };
 }
 
 export interface CoordinatorDeps {
@@ -1325,7 +1338,7 @@ export class EditorCoordinator {
   private readonly wordWrap = new Map<string, boolean>();
 
   private wrapKey(doc: CoordDoc): string {
-    return doc.absPath ? `file:${doc.absPath.replace(/\\/g, '/').toLowerCase()}` : `panel:${doc.panelId}`;
+    return doc.absPath ? fileKey(doc.absPath) : `panel:${doc.panelId}`;
   }
 
   /** The document's wrap, seeded from the `editor.defaultWordWrap` preference on first sight. */
@@ -1366,6 +1379,100 @@ export class EditorCoordinator {
   private forgetWordWrapIfClosed(key: string): void {
     for (const doc of this.docs.values()) if (this.wrapKey(doc) === key) return;
     this.wordWrap.delete(key);
+  }
+
+  // ── Fold state, beside word wrap (047 R3, data-model.md "FoldState", contracts/preview-ipc-047.md §5) ──
+  //
+  // One map, keyed like `wordWrap` — `file:<path>` for a document, extended here to a PREVIEW's own
+  // `panel:<id>` too. A preview is not a `CoordDoc`, so unlike `wordWrap` this map is not read through
+  // `this.docs`: the caller (`editor-ipc.ts`, for an editor panel via `foldKeyForPanel`; `PreviewService`,
+  // for a preview panel via its own `foldKeyFor`) resolves a panelId to a KEY first, and every method
+  // below takes that key directly.
+
+  private readonly fold = new Map<string, FoldState>();
+
+  /** Seeds `key` with `initialFold(seed)` if absent (the word-wrap `seedDefault` precedent) and returns it. */
+  foldStateFor(key: string, seed: 'expanded' | 'collapsed'): FoldState {
+    const cur = this.fold.get(key);
+    if (cur) return cur;
+    const seeded = initialFold(seed);
+    this.fold.set(key, seeded);
+    return seeded;
+  }
+
+  /** `key`'s CURRENT fold state, or `undefined` — unlike {@link foldStateFor}, NEVER seeds: a read must
+   *  not create state (047 FR-041d, `PreviewService`'s per-entry snapshot, which must not manufacture a
+   *  fold to remember merely by asking what the run currently shows). */
+  readFold(key: string): FoldState | undefined {
+    return this.fold.get(key);
+  }
+
+  /** The `file:<path>` key for an EDITOR panel (an unpathed document's own `panel:<id>`), or `undefined`
+   *  when `panelId` names no open document — the counterpart to `PreviewService.foldKeyFor`. */
+  foldKeyForPanel(panelId: string): string | undefined {
+    const doc = this.docs.get(panelId);
+    return doc ? this.wrapKey(doc) : undefined;
+  }
+
+  /**
+   * Set `key`'s fold state and relay it to every window (the word-wrap `setWordWrap` precedent, with no
+   * echo to `excludeWebContentsId` — the sender already applied it locally, the `applyWordWrapFromSync`
+   * precedent). A no-op update relays nothing: `FoldState` compares by value, and `flipped` is always
+   * kept sorted and de-duplicated by its caller (`outline/fold-state.ts`), so two states reaching the
+   * same set compare equal with a plain `toEqual`.
+   *
+   * The relay carries the KEY, not a list of panelIds — see {@link EditorSyncMsg.foldState}.
+   */
+  setFoldState(key: string, state: FoldState, excludeWebContentsId: number): void {
+    const cur = this.fold.get(key);
+    if (cur && sameFold(cur, state)) return;
+    this.fold.set(key, state);
+    this.deps.relaySync(excludeWebContentsId, { panelId: key, foldState: { key, state } });
+  }
+
+  /**
+   * A preview transitioned parented ⇄ standalone (R3, contract §5, `PreviewService.makeParented` /
+   * `makeStandalone`): re-key its fold entry.
+   *
+   * Becoming PARENTED (`parented: true`) drops the preview's `panel:<id>` entry, and the document's
+   * `file:` entry governs from then on. Which state that entry holds depends on whether one exists:
+   *
+   * - It exists — an editor already showed the document — so its state applies unchanged (FR-034).
+   * - It does not — the editor whose registration parented this preview is the document's FIRST view
+   *   (an editor's fold key only resolves once its document is loaded, so its own seed request cannot
+   *   have created it) — so the document ADOPTS the preview's state, and it is relayed to every window
+   *   so the new editor's view, already seeded with the preference, follows it (047 FR-078, MT-04).
+   *
+   * Becoming STANDALONE (`parented: false`) seeds a fresh `panel:<id>` entry from `fileKey`'s CURRENT
+   * state, so the preview keeps what it showed. Only when no `panel:` entry exists yet: a transition
+   * delivered twice (the lifecycle listener's `registered`/`unregistered` are not exactly-once across
+   * every edge, `docstring at file top`) must not clobber a fold the reader has since changed.
+   */
+  reparentFold(previewPanelId: string, fileKey: string, parented: boolean): void {
+    const previewKey = `panel:${previewPanelId}`;
+    if (parented) {
+      const shown = this.fold.get(previewKey);
+      this.fold.delete(previewKey);
+      if (shown && !this.fold.has(fileKey)) this.setFoldState(fileKey, shown, -1);
+      return;
+    }
+    if (this.fold.has(previewKey)) return;
+    const current = this.fold.get(fileKey);
+    if (current) this.fold.set(previewKey, current);
+  }
+
+  /** Unconditionally forgets `key` (a STANDALONE preview's `panel:<id>` on `PreviewService.dropRun`) —
+   *  unlike {@link forgetFoldIfUnused}, nothing else can hold a `panel:` key, so no check is needed. */
+  forgetFold(key: string): void {
+    this.fold.delete(key);
+  }
+
+  /** Drop a document's `file:` fold entry once no EDITOR panel anywhere still shows it (the word-wrap
+   *  `forgetWordWrapIfClosed` precedent) — called after every lifecycle listener has re-keyed a preview
+   *  that was parented to it, so `reparentFold`'s seed-from-current-state still finds the entry. */
+  private forgetFoldIfUnused(key: string): void {
+    for (const doc of this.docs.values()) if (this.wrapKey(doc) === key) return;
+    this.fold.delete(key);
   }
 
   /**
@@ -1607,6 +1714,11 @@ export class EditorCoordinator {
     const told = doc.reported.path;
     doc.reported.path = null;
     if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, panelId));
+    // 047 R3 — AFTER `unregistered`, not beside `forgetWordWrapIfClosed` above: a preview parented to
+    // THIS panel falls back to standalone from that very listener call (`PreviewService.unregistered` →
+    // `makeStandalone` → `reparentFold(…, wrapKey, false)`), which seeds its new `panel:<id>` entry by
+    // reading `wrapKey`'s CURRENT fold state. Forgetting it any earlier would seed from nothing.
+    this.forgetFoldIfUnused(wrapKey);
   }
 
   /**
@@ -1909,4 +2021,19 @@ export function movedPathOf(absPath: string, moves: readonly MovePair[]): string
     }
   }
   return null;
+}
+
+/**
+ * The `file:<path>` half of `wrapKey`'s form — forward-slashed, lower-cased, so `App.ts` and `app.ts`
+ * are one key (word wrap's Windows-case rule, above). Exported for `PreviewService` (047 R3), whose
+ * runs are not `CoordDoc`s and so compute a document's fold key from `run.filePath` directly, rather
+ * than through this coordinator's `docs` registry.
+ */
+export function fileKey(absPath: string): string {
+  return `file:${absPath.replace(/\\/g, '/').toLowerCase()}`;
+}
+
+/** Value equality for `FoldState`: `flipped` is kept sorted and de-duplicated by its caller. */
+function sameFold(a: FoldState, b: FoldState): boolean {
+  return a.base === b.base && a.flipped.length === b.flipped.length && a.flipped.every((s, i) => s === b.flipped[i]);
 }

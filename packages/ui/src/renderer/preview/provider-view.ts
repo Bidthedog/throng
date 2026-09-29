@@ -13,7 +13,7 @@
  * a link or raise a notice rather than doing either itself.
  */
 import type { ComponentType } from 'react';
-import type { PreviewContent, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
+import type { DocumentSymbol, FoldState, PreviewContent, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
 import type { PreviewLinkWording } from './link-dom.js';
 
 export interface PreviewBodyProps {
@@ -129,6 +129,53 @@ export interface PreviewBodyProps {
    * load across mounts.
    */
   onBodyFailure(error: unknown): void;
+
+  /*
+   * ── 047 US3 — Markdown section folding (research R3, R6; data-model.md "FoldState"; Principle XI) ──
+   *
+   * Every prop below is optional: a provider with no headings to fold (today, every provider but
+   * Markdown) simply never calls or reads any of them, exactly as `syncLine`/`onTopLineChange` are
+   * ignored by a provider with no source lines to follow.
+   *
+   * PRINCIPLE XI — THE BODY NEVER HOLDS ITS OWN FOLD STATE. `foldState` is the chrome's own copy of
+   * what main's fold store holds for this run (R3: `file:<path>` for a parented preview, `panel:<id>`
+   * for a standalone one) — read-only as far as the body is concerned. A reader's click on a gutter
+   * marker calls `onFoldChange` with the NEXT state (computed from `foldState` plus the toggle, e.g.
+   * `core`'s `toggleSection`/`toggleAll`); the chrome relays it to main and gets the SAME state back
+   * on the next `foldState` prop once main's broadcast lands — never applied locally first. A body
+   * that painted its own guess ahead of that round-trip would be the second original Principle XI
+   * forbids the moment main's answer disagreed with it.
+   */
+
+  /** This document's current fold state, or `null` before the chrome has one to hand down. */
+  foldState?: FoldState | null;
+  /** The reader toggled a section or Collapse/Expand All in the gutter or status bar — see above. */
+  onFoldChange?(next: FoldState): void;
+  /** `editor.previews.providers.markdown.gutter` — whether the fold gutter draws at all (FR-032b). */
+  gutter?: boolean;
+  /**
+   * This render's heading tree (R2), reported after every draw — the SAME call `onDrawn` accompanies,
+   * so the outline pop-down (T052/T053) and the chrome's fold/reveal logic follow edits live. An empty
+   * array is a real answer (a document with no headings), not an omission.
+   */
+  onHeadings?(symbols: readonly DocumentSymbol[]): void;
+  /**
+   * FR-040 — the body hands the chrome a way to reveal one section (expand its collapsed ancestors and
+   * itself) and scroll to it, for a link followed, a find match landed on, or a heading jumped to
+   * inside a fold. The `onViewStateCapture`/`onTopLineRead` idiom (a registered callback, not a DOM
+   * ref) rather than `forwardRef`: this file already reaches every body capability this way, and a
+   * capability a provider does not have is simply never registered.
+   */
+  onRevealSection?(reveal: (slug: string) => void): void;
+
+  /**
+   * 047 US6 (T063) — resolve a batch of wikilink targets against this run's document folder and
+   * project root, for the unresolved-link styling. A pure passthrough to
+   * `window.throng.preview.resolveWikiTargets(panelId, targets)`: unlike `onFollow`/`onFoldChange`
+   * there is no chrome-level decision to make, so the chrome supplies nothing but the wired channel.
+   * Optional: a provider that draws no wikilinks never calls it.
+   */
+  resolveWikiTargets?(targets: readonly { path: string; rooted: boolean }[]): Promise<{ resolved: (string | null)[] }>;
 }
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;

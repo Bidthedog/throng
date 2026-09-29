@@ -32,7 +32,7 @@ import {
   type PreviewProviderRegistry,
   type PreviewSettings,
 } from '@throng/core';
-import { followFocusedPreviewLink } from './preview-panel-handles.js';
+import { followFocusedPreviewLink, openPreviewHeadingOutline } from './preview-panel-handles.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { currentEditorPreviewAffordance } from '../editor/editor-preview.js';
 import { getPreviewState } from './preview-store.js';
@@ -102,7 +102,14 @@ export function PreviewCommands(): null {
     registerPreviewOpener((intent) =>
       // A getter, not `wsRef.current`: main's answer arrives renders later, and the placement must read
       // the layout as it is then.
-      openPreview({ ws: () => wsRef.current, bridge: window.throng?.preview, intent }).catch((error: unknown) => {
+      openPreview({
+        ws: () => wsRef.current,
+        bridge: window.throng?.preview,
+        intent,
+        // 047 US2 — the setting's live value, read at CALL time so a settings change while the window
+        // is open applies to the next open rather than the one already in flight.
+        defaultOpenTarget: settingsRef.current.editor.previews.openTarget,
+      }).catch((error: unknown) => {
         // A bridge that threw is a broken bridge (failures are returned, never thrown, across it). The
         // affordance the user chose stays as it was; the cause goes to the console for diagnosis, and the
         // caller reads this exactly as a refusal — nothing opened (044 US4 fix round 1, item 5).
@@ -142,7 +149,10 @@ export function PreviewCommands(): null {
       );
       // With File Explorer active the tree's own handler owns the chord, for its selection.
       if (
-        (action !== 'preview.open' && action !== 'preview.followLink' && action !== 'preview.toggleSyncScroll') ||
+        (action !== 'preview.open' &&
+          action !== 'preview.followLink' &&
+          action !== 'preview.toggleSyncScroll' &&
+          action !== 'preview.goToHeading') ||
         !layout ||
         getActivePane() !== 'workspace'
       ) {
@@ -162,6 +172,11 @@ export function PreviewCommands(): null {
         // 5 — FR-096c: Ctrl+click for the keyboard, on the link focused in the active preview. The key is
         // taken only when a link was followed, so Ctrl+Enter anywhere else in the preview is untouched.
         if (panel?.kind === PREVIEW_KIND && followFocusedPreviewLink(panel.id)) e.preventDefault();
+        return;
+      }
+      if (action === 'preview.goToHeading') {
+        // 047 US4 (research R7) — opens the active preview's own Go to Heading pop-down.
+        if (panel?.kind === PREVIEW_KIND && openPreviewHeadingOutline(panel.id)) e.preventDefault();
         return;
       }
       if (panel?.kind !== 'editor') return;

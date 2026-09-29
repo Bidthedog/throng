@@ -53,8 +53,9 @@
 import MarkdownIt from 'markdown-it';
 import type { Env, MarkdownIt as MarkdownItInstance, StateCore, Token } from 'markdown-it';
 import { isMap, isScalar, parseDocument, Scalar, type Node as YamlNode } from 'yaml';
-import { headingSlug, splitFrontMatter } from '@throng/core';
+import { headingSlug, splitFrontMatter, type HeadingRecord } from '@throng/core';
 import type { PreviewLinkWording } from '../../link-dom.js';
+import { decodeWikiHref, installWikilinks, WIKI_HREF_ATTRIBUTE, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
 
 /**
  * The document a render is FOR — what the sanitiser's link and image hooks resolve against
@@ -106,17 +107,33 @@ export interface PipelineContext {
  */
 export type Sanitiser<R> = (html: string, context: PipelineContext) => R;
 
+/** One wikilink `render()` collected (047 T061/T063, R12) — enough for `main`'s `resolveWikiTargets`. */
+export interface WikiHrefTarget {
+  readonly path: string;
+  readonly rooted: boolean;
+}
+
+/** What `render()` returns (047 T004/T005, T063): the sanitised content, this render's heading list, and its wikilinks. */
+export interface MarkdownRenderResult<R> {
+  readonly fragment: R;
+  readonly headings: readonly HeadingRecord[];
+  /** In document order, one per wikilink — index `i` is the `<a>` carrying `data-throng-wiki-index="i"` (`wikilinks.ts`). */
+  readonly wikiTargets: readonly WikiHrefTarget[];
+}
+
 export interface MarkdownPipeline<R> {
   /** The configured markdown-it instance. Exposed for tests; the app calls `render`. */
   readonly md: MarkdownItInstance;
   /** Render a whole document — front matter included — for `environment` (see {@link RenderEnvironment}). */
-  render(text: string, environment?: RenderEnvironment): R;
+  render(text: string, environment?: RenderEnvironment): MarkdownRenderResult<R>;
 }
 
 /** Per-render state, kept in markdown-it's `env` so a render never sees the previous one's slugs. */
 interface RenderState {
   readonly taken: Set<string>;
   readonly headingSlugs: Map<number, string>;
+  readonly headings: HeadingRecord[];
+  readonly wikiTargets: WikiHrefTarget[];
   readonly lineOffset: number;
   readonly nonce: string;
 }
@@ -132,7 +149,14 @@ function newNonce(): string {
 function renderState(env: Env, lineOffset = 0): RenderState {
   const existing = env[RENDER_STATE] as RenderState | undefined;
   if (existing) return existing;
-  const created: RenderState = { taken: new Set(), headingSlugs: new Map(), lineOffset, nonce: newNonce() };
+  const created: RenderState = {
+    taken: new Set(),
+    headingSlugs: new Map(),
+    headings: [],
+    wikiTargets: [],
+    lineOffset,
+    nonce: newNonce(),
+  };
   env[RENDER_STATE] = created;
   return created;
 }
@@ -305,15 +329,35 @@ function blockAttributes(state: StateCore): void {
       }
     }
 
+    // 047 T061/T063 — every wikilink in this block's inline content, in document order. Decoded from
+    // the attribute `wikilinks.ts` already built, never re-derived from the source: the pipeline's OWN
+    // `throng_wikilinks` rule is the only thing that sets `WIKI_HREF_ATTRIBUTE` — an ORDINARY link
+    // token carries none, so `attrGet` returning `null` (not an empty body) is what tells them apart.
+    if (token.type === 'inline' && token.children) {
+      for (const child of token.children) {
+        if (child.type !== 'link_open') continue;
+        const body = child.attrGet(WIKI_HREF_ATTRIBUTE);
+        if (body === null) continue;
+        const decoded = decodeWikiHref(String(body));
+        if (decoded === null) continue;
+        child.attrSet(WIKI_INDEX_ATTRIBUTE, String(render.wikiTargets.length));
+        render.wikiTargets.push(decoded);
+      }
+    }
+
     if (!token.block || !token.map || !(token.nesting === 1 || ANCHORED_LEAVES.has(token.type))) continue;
     const line = token.map[0] + render.lineOffset;
     token.attrSet('data-source-line', line);
 
     if (token.type === 'heading_open') {
-      const slug = headingSlug(headingText(tokens[i + 1]), render.taken);
+      const text = headingText(tokens[i + 1]);
+      const slug = headingSlug(text, render.taken);
       token.attrSet('data-heading-slug', slug);
       token.attrSet('data-heading-nonce', render.nonce);
       render.headingSlugs.set(line, slug);
+      // `token.tag` is 'h1'..'h6' for both ATX and setext headings — markdown-it never produces another.
+      const level = Number(token.tag.slice(1)) as HeadingRecord['level'];
+      render.headings.push({ level, text, slug, line });
     }
   }
 }
@@ -321,6 +365,7 @@ function blockAttributes(state: StateCore): void {
 function createMarkdownIt(): MarkdownItInstance {
   const md = new MarkdownIt({ html: true, linkify: true, typographer: false, breaks: false });
 
+  installWikilinks(md);
   md.core.ruler.push('throng_task_lists', taskLists);
   md.core.ruler.push('throng_block_attributes', blockAttributes);
 
@@ -339,18 +384,19 @@ export function createMarkdownPipeline<R>(sanitise: Sanitiser<R>): MarkdownPipel
   const md = createMarkdownIt();
   return {
     md,
-    render(text: string, environment?: RenderEnvironment): R {
+    render(text: string, environment?: RenderEnvironment): MarkdownRenderResult<R> {
       const { source, body, bodyLineOffset } = splitFrontMatter(text);
       const env: Env = {};
       // The body keeps the offset whether or not the block is shown, so its lines stay the document's (FR-117).
       const state = renderState(env, bodyLineOffset);
       const showBlock = source !== null && environment?.frontMatter !== false;
       const html = (showBlock ? renderFrontMatter(source) : '') + md.render(body, env);
-      return sanitise(html, {
+      const fragment = sanitise(html, {
         headingSlugs: state.headingSlugs,
         headingNonce: state.nonce,
         ...(environment !== undefined ? { environment } : {}),
       });
+      return { fragment, headings: state.headings, wikiTargets: state.wikiTargets };
     },
   };
 }

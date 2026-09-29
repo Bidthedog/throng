@@ -109,6 +109,51 @@
   font-size: 1em;
 }
 
+/*
+ * ── Fold gutter (047 FR-032a/b, R6, fold-gutter.ts) ───────────────────────────────────────────────
+ *
+ * A GENERIC slot: this class only reserves the width and shifts the document, so a later control can
+ * share it without implying folding is the only thing a gutter can hold (R6). Its toggle is a child
+ * of the heading it folds — `position: relative` on every heading is what lets the toggle's absolute
+ * offset anchor to ITS heading rather than to `.preview-markdown` as a whole, so it always sits beside
+ * the heading it controls even as headings of different sizes wrap onto more than one line.
+ */
+.preview-markdown--gutter {
+  padding-inline-start: 2em;
+}
+
+.preview-markdown--gutter h1,
+.preview-markdown--gutter h2,
+.preview-markdown--gutter h3,
+.preview-markdown--gutter h4,
+.preview-markdown--gutter h5,
+.preview-markdown--gutter h6 {
+  position: relative;
+}
+
+.preview-fold-toggle {
+  position: absolute;
+  left: -1.5em;
+  top: 0.15em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  padding: 0;
+  border: none;
+  /* Same as the page itself: blends in exactly as `background: none` would, within the tokens this
+     file is held to (`preview-css-tokens.test.ts`: every background here is `editorBg`). */
+  background: var(--throng-colour-editorBg);
+  color: var(--throng-colour-editorFg);
+  cursor: pointer;
+}
+
+/* `accent` is the focus indicator's outline and nothing else (constitution 5.5.0, preview-css-tokens.test.ts). */
+.preview-fold-toggle:focus-visible {
+  outline: 2px solid var(--throng-colour-accent);
+}
+
 .preview-markdown p,
 .preview-markdown ul,
 .preview-markdown ol,
@@ -188,6 +233,15 @@
   outline-offset: 1px;
 }
 
+/* 047 T063, FR-055 — an unresolved wikilink (`wikilinks.ts`'s `applyWikiResolution`): visibly distinct
+   from a working one, in `syntaxInvalid` — the token `theme-quality.ts` already pairs with `editorBg`
+   for exactly this "something is wrong here" reading, on every shipped theme. Overrides the ordinary
+   link rule above by specificity; the hover rule still applies, so the reader can still see it react. */
+.preview-markdown [data-throng-link].preview-link--unresolved {
+  color: var(--throng-colour-syntaxInvalid);
+  text-decoration-style: dashed;
+}
+
 /* ── Block quotes ───────────────────────────────────────────────────────────────────────────────── */
 
 /* Somebody else's words: the editor's quote treatment (highlight-style.ts:58), ruled with `border`. */
@@ -229,21 +283,33 @@
   padding: 0 0.25em;
 }
 
-/* ── Tables (FR-080) ────────────────────────────────────────────────────────────────────────────── */
+/* ── Tables (FR-080, FR-060 – FR-068, R13, table-layout.ts) ────────────────────────────────────────
+ *
+ * `table-layout.ts` owns SIZING (the `<colgroup>`, `table-layout: fixed`, and the wrapper below) — this
+ * file only owns the table's ordinary appearance, which applies whether or not that module has run yet
+ * (a document with no table pays nothing, and the very first paint, before layout runs, still looks
+ * like a table rather than unstyled markup).
+ */
 
 .preview-markdown table {
   border-collapse: collapse;
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
 }
 
+/* A cell's content wraps rather than pushing its FIXED column wider than `table-layout.ts` gave it —
+   including the front matter's key column, which no longer forces `nowrap` past its own minimum. */
 .preview-markdown th,
 .preview-markdown td {
   border: 1px solid var(--throng-colour-border);
   padding: 0.3em 0.7em;
   text-align: left;
   vertical-align: top;
+  /* FR-073 — a word breaks only when it cannot fit a line, and unlike `anywhere` that leaves a column's
+     min-content at its widest word. `table-layout.ts` holds hyphenated tokens whole. */
+  overflow-wrap: break-word;
+}
+
+.preview-table-nowrap {
+  white-space: nowrap;
 }
 
 .preview-markdown th {
@@ -262,12 +328,41 @@
   text-align: right;
 }
 
+/* The wrapper `table-layout.ts` inserts ONLY when a table's own minimums exceed the panel (FR-062) — a
+   fitting table sits in the flow with no wrapper at all, so this never clips or scrolls a table that
+   does not need it. */
+.preview-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* A throng-drawn resize handle (FR-063/064) — never derived from the document (R6's rule, applied here
+   too), excluded from copy and find (`copy.ts`). `border` is the only colour this file may put on it
+   outside the focus indicator (`preview-css-tokens.test.ts`); opacity alone carries "at rest" versus
+   "hovered or dragged", so the token itself never changes. */
+.preview-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  border-right: 2px solid var(--throng-colour-border);
+  opacity: 0;
+}
+
+.preview-table-resize-handle:hover,
+.preview-table-resize-handle:active {
+  opacity: 1;
+}
+
 /* ── Front matter (FR-085) ──────────────────────────────────────────────────────────────────────── */
 
-/* A key/value table above the document: keys in their own column, a nested value as its YAML source. */
-.preview-markdown .preview-markdown__front-matter th {
-  white-space: nowrap;
-}
+/* A key/value table above the document: keys in their own column, a nested value as its YAML source.
+ * 047 T066 — the key column no longer forces `nowrap` past its own minimum: `table-layout.ts` already
+ * measures its true min/max content width and gives it exactly that (or less, if the panel is narrow),
+ * and a `nowrap` cell inside a FIXED column narrower than its content would only overflow the cell
+ * instead of wrapping into it, which is what the cells' `overflow-wrap: break-word` already handles. */
 
 .preview-markdown .preview-markdown__front-matter td > pre {
   margin: 0;

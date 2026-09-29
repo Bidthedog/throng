@@ -167,7 +167,7 @@ function searchHighlights(
   editorBg: string,
   editorFg: string,
   overlaid: readonly string[] = [],
-): { match: string; current: string; border: string } {
+): { match: string; current: string; border: string; outline: string } {
   // What is drawn ON a match is not editorFg — it is SYNTAX-COLOURED CODE (016, FR-007a). So the
   // tint must be weak enough that every one of those colours stays readable through it, not just
   // the plain body text. Constraining the SURFACE is what preserves the code's colours; the
@@ -229,7 +229,23 @@ function searchHighlights(
   for (let t = 0; t <= 1 && contrastRatio(border, current) < 3; t += 0.1) {
     border = blend(accent, editorFg, t);
   }
-  return { match, current, border };
+
+  // 047 FR-074 (MT-01) — the ORDINARY match's outline. A fill alone did not read clearly enough, so
+  // every match now carries a 1px frame, and this is its colour. It sits on the neutral ray the
+  // ordinary fill already uses, so it reads as that match's edge rather than as a second accent
+  // competing with the current match's outline, and it is walked up from the page only until it
+  // clears the non-text floor (3:1) against BOTH things it borders — the page outside, and the fill
+  // inside. The first tint that does is taken: the outline is a boundary, not an emphasis, and the
+  // current match must stay the louder of the two.
+  let outline = editorFg;
+  for (let step = 1; step <= ORDINARY_MATCH_GRID; step += 1) {
+    const candidate = blend(editorBg, editorFg, step / ORDINARY_MATCH_GRID);
+    if (contrastRatio(candidate, editorBg) >= 3 && contrastRatio(candidate, match) >= 3) {
+      outline = candidate;
+      break;
+    }
+  }
+  return { match, current, border, outline };
 }
 
 /**
@@ -287,7 +303,13 @@ function syntaxAndSearch(
   editorBg: string,
   editorFg: string,
   accent: string,
-): { syntax: Record<string, string>; match: string; current: string; border: string } {
+): {
+  syntax: Record<string, string>;
+  match: string;
+  current: string;
+  border: string;
+  outline: string;
+} {
   // Lifted to 6:1 on the body, not the bare 4.5:1 floor. The extra 1.5 is HEADROOM, and it is what
   // pays for a visible search highlight: a match surface can only be tinted as far as the weakest
   // syntax colour still clears 4.5:1 on it, so a comment authored at exactly 4.5 on the body leaves
@@ -298,7 +320,7 @@ function syntaxAndSearch(
     Object.entries(seeds).map(([k, c]) => [k, legibleOn(c, [editorBg], editorFg, 6)]),
   ) as Record<keyof SyntaxSeeds, string>;
 
-  const { match, current, border } = searchHighlights(
+  const { match, current, border, outline } = searchHighlights(
     accent,
     editorBg,
     editorFg,
@@ -325,6 +347,7 @@ function syntaxAndSearch(
     match,
     current,
     border,
+    outline,
   };
 }
 
@@ -434,6 +457,7 @@ function makeTheme(name: string, p: Palette): Theme {
       searchMatch: code.match,
       searchMatchCurrent: code.current,
       searchMatchCurrentBorder: code.border,
+      searchMatchBorder: code.outline,
       // Active-pane highlight (012, FR-002 / SC-001; 021 consolidated the File Explorer's separate
       // highlight onto this one token): a contrast-guaranteed accent marks the active pane/panel when
       // the window is foreground; a dimmed variant marks it when the window is background — still

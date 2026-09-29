@@ -12,6 +12,12 @@ export type PreviewCopyFormat = 'rich' | 'plain';
 /** What opening a file of a text provider does by default (FR-050). */
 export type DefaultOpenAction = 'editor' | 'preview';
 
+/**
+ * 047 (data-model.md "Settings", research R8/R11, FR-015a) — where a STANDALONE preview opens:
+ * reuse the last active preview panel in the visible tab, or always open a new one.
+ */
+export type PreviewOpenTarget = 'lastActive' | 'new';
+
 /** One provider's settings under `editor.previews.providers.<id>`. */
 export interface ProviderSettings {
   /** FR-065: Markdown ships `true`. */
@@ -34,6 +40,8 @@ export interface PreviewSettings {
    * FR-114). Applies to every text provider, so no provider's enabled toggle governs it.
    */
   syncScroll: boolean;
+  /** Where a STANDALONE preview opens — `'lastActive'` (047 FR-015a). Belongs to no provider. */
+  openTarget: PreviewOpenTarget;
   /** Keyed by provider id. */
   providers: Record<string, ProviderSettings>;
 }

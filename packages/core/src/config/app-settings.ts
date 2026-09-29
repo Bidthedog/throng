@@ -170,6 +170,14 @@ export type EditorOpenOnClick = 'single' | 'double' | 'none';
 /** Default target when opening a file (US7, #141): reuse the last active editor, or a new one. */
 export type EditorOpenTarget = 'lastActive' | 'new';
 
+/**
+ * 047 (research R3, data-model.md "Settings") — a Markdown document's heading sections' starting
+ * state: `initialFold(pref)` seeds a document's `FoldState` with this, in both the editor and a
+ * fresh preview (FR-039). NOT a provider leaf: it governs the editor as well, so it must not be
+ * disabled while Markdown previews are off.
+ */
+export type MarkdownSectionsOpen = 'expanded' | 'collapsed';
+
 /** Scope a `Ctrl+Shift+S` Save-All covers (006, FR-023). */
 export type SaveAllScopeSetting = 'tab' | 'project' | 'all';
 
@@ -310,6 +318,11 @@ export interface EditorSettings {
    * editors: the panels and the standalone editor the preferences and theme editors mount (FR-042).
    */
   showGutter: boolean;
+  /**
+   * 047 (research R3, data-model.md "Settings") — a Markdown document's heading sections' starting
+   * state, in the editor and in a fresh preview alike. Default `'expanded'`.
+   */
+  markdownSectionsOpen: MarkdownSectionsOpen;
   /** 040: what the status bar REPORTS, when it is shown at all (`Editor → Status Bar`). */
   statusBar: EditorStatusBarSettings;
   /** 033: the navigation modals' own preferences (`Editor · Navigation`). */
@@ -408,6 +421,7 @@ const CONFIRM_LEVELS: readonly ConfirmLevel[] = ['none', 'single', 'double'];
 const UNLOAD_TERMINAL_ACTIONS: readonly UnloadTerminalAction[] = ['keepRunning', 'endTerminals'];
 const EDITOR_OPEN_ON_CLICK: readonly EditorOpenOnClick[] = ['single', 'double', 'none'];
 const EDITOR_OPEN_TARGETS: readonly EditorOpenTarget[] = ['lastActive', 'new'];
+const MARKDOWN_SECTIONS_OPEN: readonly MarkdownSectionsOpen[] = ['expanded', 'collapsed'];
 const SAVE_ALL_SCOPES: readonly SaveAllScopeSetting[] = ['tab', 'project', 'all'];
 const LINE_ENDINGS: readonly DefaultLineEnding[] = ['lf', 'crlf', 'cr'];
 const PATH_DISPLAYS: readonly EditorPathDisplay[] = ['full', 'name'];
@@ -750,6 +764,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     // a preference that reclaims width is opt-IN: shipping it off would change what today's users
     // see on upgrade without anyone having asked for it.
     showGutter: true,
+    // 047 FR-039 — a Markdown document's sections start expanded.
+    markdownSectionsOpen: 'expanded',
     // 040 FR-030/FR-031 — both readout groups ship ON. The bar already has to earn its row; a
     // reader who does not want the figures switches them off, rather than a reader who does having
     // to discover they exist.
@@ -1197,6 +1213,9 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   const showGutter = typeof v.showGutter === 'boolean' ? v.showGutter : fallback.showGutter;
+  const markdownSectionsOpen = MARKDOWN_SECTIONS_OPEN.includes(v.markdownSectionsOpen as MarkdownSectionsOpen)
+    ? (v.markdownSectionsOpen as MarkdownSectionsOpen)
+    : fallback.markdownSectionsOpen;
   return {
     openOnClick,
     openTarget,
@@ -1219,6 +1238,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     // NOT in this hand-listed literal compiles, ships, and is silently dropped on every read — the
     // user's `false` comes back as the default `true` and nothing anywhere says so.
     showGutter,
+    // 047 FR-039 — same trap, same fix: the local above is dead without this line.
+    markdownSectionsOpen,
     statusBar: statusBarSettings(v.statusBar, fallback.statusBar),
     navigation: navigationSettings(v.navigation, fallback.navigation),
     // 044 — tolerant per leaf, and it keeps an unknown provider id (see `parsePreviewSettings`).

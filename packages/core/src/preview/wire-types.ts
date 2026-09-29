@@ -59,6 +59,18 @@ export interface PreviewOpenRequest {
   projectId: string;
   requesterPanelId?: string;
   hasParentLocally: boolean;
+  /**
+   * 047 (contracts/preview-ipc-047.md §1, FR-010 – FR-016) — where a STANDALONE open should land.
+   * Absent behaves exactly as before this spec (every existing caller keeps working). `reusePanelId`
+   * naming a panel in another window, or no live run at all, is ignored — never an error.
+   */
+  target?: { mode: 'lastActive' | 'new'; reusePanelId: string | null };
+  /**
+   * 047 FR-081 (contracts/preview-ipc-047.md §1) — the open came from File Explorer: show the preview but
+   * leave the keyboard where it is. Main echoes it on the `focus` or `place` message the open sends, since
+   * the window acts on those as well as on this answer. Absent means the preview takes the keyboard.
+   */
+  keepFocus?: true;
 }
 
 export type PreviewOpenResponse =
@@ -70,6 +82,12 @@ export type PreviewOpenResponse =
   | { kind: 'focused'; panelId: string | null }
   | { kind: 'placeLocally'; reservation: string; besidePanelId: string | null }
   | { kind: 'placedElsewhere' }
+  /**
+   * 047 (contracts/preview-ipc-047.md §1, FR-015) — `target.mode === 'lastActive'` found a live
+   * standalone run in `reusePanelId`: main moved it to `absPath` instead of placing a new panel. The
+   * renderer focuses that panel (it is already in the visible tab, so no tab-to-front is needed).
+   */
+  | { kind: 'navigated'; panelId: string }
   | { kind: 'refused'; reason: 'no-provider' | 'disabled' | 'outside-project' | 'no-file' };
 
 export interface PreviewAttachRequest {
@@ -98,8 +116,12 @@ export interface PreviewNavigateRequest {
    * `heading` (FR-115, iteration 2026-09-15): the renderer found a heading in the file it already shows and
    * scrolled to it. Main records a jump when `target.absPath` is the run's current file; it reads nothing
    * and answers `shown` with the run's unchanged snapshot either way.
+   *
+   * 047 (contracts/preview-ipc-047.md §2, FR-011, FR-020) — `open` (Last Active reuse, R8) and `drop`
+   * (a file dropped on the panel, R9) behave as `link` does for history (truncate forward entries,
+   * append, FR-103) and for parenting (re-bind and un-parent, FR-090a, FR-016).
    */
-  intent: { kind: 'link' } | { kind: 'history'; index: number } | { kind: 'heading' };
+  intent: { kind: 'link' } | { kind: 'history'; index: number } | { kind: 'heading' } | { kind: 'open' } | { kind: 'drop' };
   /** Stored on the entry being left (FR-107). For `heading`, always sent: the top is `{ line: 0, offsetRatio: 0 }`. */
   leavingViewState?: unknown;
   /** `heading` only: where the jump landed (FR-115). Always sent with it; never `null`. */
@@ -143,6 +165,8 @@ export interface PreviewPathChanged {
 export interface PreviewFocusMessage {
   panelId: string;
   fragment?: string;
+  /** 047 FR-081 — echoed from the `open` that sent this: bring the panel forward without the keyboard. */
+  keepFocus?: true;
 }
 
 /** `throng:preview:place` — to one window (FR-010). */
@@ -156,4 +180,6 @@ export interface PreviewPlaceMessage {
    */
   besidePanelId: string | null;
   reservation: string;
+  /** 047 FR-081 — echoed from the `open` that sent this: place the preview without giving it the keyboard. */
+  keepFocus?: true;
 }

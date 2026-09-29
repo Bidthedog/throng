@@ -53,6 +53,12 @@ export interface PreviewStatusBarProps {
   onToggleSyncScroll: () => void;
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
+  /**
+   * 047 US3 (FR-038, contracts/menus-commands-controls.md "Status bar") — the Collapse All / Expand
+   * All toggle, LEFT of the scroll-sync toggle. `null`/omitted: a non-Markdown provider, so the
+   * control is absent (never merely disabled — there is nothing here to fold at all).
+   */
+  fold?: { anyExpanded: boolean; chord?: string; onToggleAll: () => void } | null;
 }
 
 export function PreviewStatusBar({
@@ -63,6 +69,7 @@ export function PreviewStatusBar({
   syncScroll,
   onToggleSyncScroll,
   readout,
+  fold,
 }: PreviewStatusBarProps): ReactElement | null {
   if (providerKind !== 'text') return null;
   const title = parented ? 'Go to Editor' : 'Open in Editor';
@@ -78,6 +85,18 @@ export function PreviewStatusBar({
         className="editor-status-strip__group editor-status-strip__group--controls"
         data-testid={`preview-status-controls-${panelId}`}
       >
+        {/* 047 US3 (FR-038) — Collapse All / Expand All, left of the scroll-sync toggle; absent for a
+            non-Markdown provider. Never `aria-pressed`: it is an action, not a state to hold. */}
+        {fold ? (
+          <IconButton
+            token={fold.anyExpanded ? 'collapseAll' : 'expandAll'}
+            className="editor-status-strip__preview"
+            testId={`preview-fold-toggle-${panelId}`}
+            title={fold.chord ? `${fold.anyExpanded ? 'Collapse All' : 'Expand All'} (${fold.chord})` : fold.anyExpanded ? 'Collapse All' : 'Expand All'}
+            ariaPressed={false}
+            onClick={fold.onToggleAll}
+          />
+        ) : null}
         {/* FR-122c — the scroll-sync toggle, immediately before the route, on every text preview. */}
         <SyncScrollButton testId={`preview-sync-scroll-${panelId}`} on={syncScroll} onToggle={onToggleSyncScroll} />
         <IconButton

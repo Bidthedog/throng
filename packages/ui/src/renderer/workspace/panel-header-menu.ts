@@ -158,8 +158,10 @@ export interface PanelHeaderMenuActions {
   redraw: () => void;
   sendToNewTab: () => void;
   sendToTab: (tabId: string) => void;
-  /** 043 FR-015 — open this panel's find bar. Editors and terminals both search. */
+  /** 043 FR-015 — open this panel's find bar. Editors, terminals and (047) previews all search. */
   find: () => void;
+  /** 047 US4 — open this preview's Go to Heading pop-down (`preview.goToHeading`). */
+  goToHeading: () => void;
   /** 043 FR-015 — open it with the replace row revealed. Editor only (FR-013). */
   replace: () => void;
   /** 043 FR-015 — replace every match in this panel's document. Editor only (FR-013). */
@@ -335,9 +337,13 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * too — Send to Tab and Sync to are emitted last, so they still close the section.
    *
    * Content is EMPTY by construction: a preview is read-only (FR-020) and not renamable (FR-030), so
-   * nothing that edits text or a name belongs to it — Rename, Save, Revert, Reload and Find are all
-   * absent rather than disabled. A preview always shows a file, so the two reveal rows are
-   * unconditional.
+   * nothing that edits text or a name belongs to it — Rename, Save, Revert and Reload are all absent
+   * rather than disabled. A preview always shows a file, so the two reveal rows are unconditional.
+   *
+   * 047 US1 (FR-007) — Find… IS offered, in `navigate` rather than `content`: a preview's find bar
+   * moves through rendered text, not a document to edit, so it sits with the other ways to get
+   * somewhere in the panel (contracts/menus-commands-controls.md "Preview header menu") rather than
+   * beside a Save/Revert group this panel does not have.
    */
   if (isPreview) {
     items.push({
@@ -359,6 +365,19 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
           : { label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: () => actions.openInEditor() },
       );
     }
+    items.push({
+      label: 'Find…',
+      icon: 'search',
+      section: 'navigate',
+      shortcut: firstBinding(keybindings, 'search.find'),
+      onClick: () => actions.find(),
+    });
+    items.push({
+      label: 'Go to Heading…',
+      section: 'navigate',
+      shortcut: firstBinding(keybindings, 'preview.goToHeading'),
+      onClick: () => actions.goToHeading(),
+    });
     items.push(...historyItems(args.history, keybindings, actions));
     items.push({
       label: 'Refresh',

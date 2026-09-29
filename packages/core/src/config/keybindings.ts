@@ -169,7 +169,25 @@ export type ActionId =
    * preview. Every surface that shows the toggle — four menu items, two status-bar buttons — runs this
    * command, and it ships unbound, as `preview.open` does.
    */
-  | 'preview.toggleSyncScroll';
+  | 'preview.toggleSyncScroll'
+  /*
+   * 047 (data-model.md "Key bindings", contracts/menus-commands-controls.md "Commands", research R5)
+   * — Markdown section folding. Live in a Markdown editor AND a preview (`MARKDOWN_SURFACES`), on the
+   * SAME chord and the same id in both, so the reader's muscle memory carries over. Never in a
+   * terminal (046 FR-021 passes by scope, exactly as `navigate.gotoLine`'s `Ctrl+G` does): `Ctrl+M` is
+   * a carriage return to a shell, but these six commands are never live there.
+   */
+  | 'markdown.toggleSection'
+  | 'markdown.toggleAll'
+  | 'markdown.collapseSection'
+  | 'markdown.expandSection'
+  | 'markdown.collapseAll'
+  | 'markdown.expandAll'
+  /*
+   * 047 (research R7) — opens the Go to Heading pop-down. `preview`-only: the editor's own outline is
+   * #375's, not this spec's.
+   */
+  | 'preview.goToHeading';
 
 export interface Keybindings {
   version: number;
@@ -192,7 +210,9 @@ export type CommandScopes = Readonly<Record<ActionId, ReadonlySet<DispatchScope>
  * `explorer` for a kind it does not know, and over a preview that would make Delete, F2, Ctrl+X and
  * Ctrl+C act on the file tree's selection (FR-021). It joins EVERYWHERE because zoom, focus movement
  * and the view toggles must keep working there (FR-034); it joins neither PANELS (a preview has no
- * document to save and no find bar) nor ANY_PANEL (a preview cannot be renamed, FR-030).
+ * document to save) nor ANY_PANEL (a preview cannot be renamed, FR-030). It DOES join `FIND_SURFACES`
+ * below — 047 (research R1) gives a preview its own find bar, so this file's "no find bar" is no
+ * longer true; only `search.replace*`, which stayed on `PANELS`, keeps a preview out.
  *
  * 046 R3 (FR-015) — `projects` is the SIXTH, one pane along and for the same reason: the renderer
  * answered `explorer` for any pane that was not the workspace, so with the Projects pane focused F2
@@ -233,6 +253,23 @@ const TERMINAL_ONLY = new Set<DispatchScope>(['terminal']);
 const EXPLORER_ONLY = new Set<DispatchScope>(['explorer']);
 /** Panels, but not the file tree: a find bar and a save belong to whatever panel is showing. */
 const PANELS = new Set<DispatchScope>(['editor', 'terminal']);
+/**
+ * 047 (research R1, FR-004) — `PANELS` widened by one surface for FOUR of the seven `search.*` bar
+ * commands: a preview now mounts its own find bar (`PreviewSearchController`), so `search.find`,
+ * `search.findNext`, `search.findPrevious` and `search.close` are live there too. The three replace
+ * commands stay on `PANELS` — a preview has nothing to replace, and this keeps `Alt+Enter` /
+ * `Ctrl+Alt+Enter` clear of the preview's own chords (`preview.followLink`'s `Ctrl+Enter` neighbours).
+ */
+const FIND_SURFACES = new Set<DispatchScope>(['editor', 'terminal', 'preview']);
+/**
+ * 047 (data-model.md "Key bindings", research R5) — the six Markdown section-folding commands: live
+ * in a Markdown editor and a preview, nowhere else. Distinct from `HISTORY_PANELS`/`LINK_SURFACES`
+ * (which happen to share the same two members today) for the same reason those two are kept apart:
+ * a future change to one must not silently move this one.
+ */
+const MARKDOWN_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
+/** 047 (research R7) — Go to Heading opens the preview's own pop-down; nowhere else. */
+const GO_TO_HEADING_SURFACES = new Set<DispatchScope>(['preview']);
 /**
  * Every panel kind, INCLUDING the ones that hold no document of their own (043 R14).
  *
@@ -328,11 +365,13 @@ export const COMMAND_SCOPES: CommandScopes = {
   'editor.save': PANELS,
   'editor.saveAll': PANELS,
   'editor.saveAs': PANELS,
-  // One find bar, routed to the active panel (013): a terminal searches its scrollback.
-  'search.find': PANELS,
-  'search.findNext': PANELS,
-  'search.findPrevious': PANELS,
-  'search.close': PANELS,
+  // One find bar, routed to the active panel (013): a terminal searches its scrollback. 047 widens
+  // four of the seven to `FIND_SURFACES` — a preview mounts the same find bar (research R1) — while
+  // the replace trio stays on `PANELS`, which has nothing for a preview to act on.
+  'search.find': FIND_SURFACES,
+  'search.findNext': FIND_SURFACES,
+  'search.findPrevious': FIND_SURFACES,
+  'search.close': FIND_SURFACES,
   'search.replace': PANELS,
   'search.replaceCurrent': PANELS,
   'search.replaceAll': PANELS,
@@ -366,6 +405,15 @@ export const COMMAND_SCOPES: CommandScopes = {
   'editor.columnSelectLeft': EDITOR_ONLY,
   'editor.columnSelectRight': EDITOR_ONLY,
   'editor.toggleWordWrap': EDITOR_ONLY,
+  // 047 (research R5) — Markdown section folding: a Markdown editor and a preview, never a terminal.
+  'markdown.toggleSection': MARKDOWN_SURFACES,
+  'markdown.toggleAll': MARKDOWN_SURFACES,
+  'markdown.collapseSection': MARKDOWN_SURFACES,
+  'markdown.expandSection': MARKDOWN_SURFACES,
+  'markdown.collapseAll': MARKDOWN_SURFACES,
+  'markdown.expandAll': MARKDOWN_SURFACES,
+  // 047 (research R7) — the Go to Heading pop-down, preview-only.
+  'preview.goToHeading': GO_TO_HEADING_SURFACES,
 };
 
 /** The modifier held to drag a rectangular selection. Platform-keyed, like the chords (FR-017e). */
@@ -506,6 +554,29 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'preview.followLink': ['Ctrl+Enter'],
     // FR-122d — unbound, like `preview.open`: every surface is a menu item or a button.
     'preview.toggleSyncScroll': [],
+    /*
+     * 047 (data-model.md "Key bindings", research R5) — `Ctrl+M` two-stroke, the `Mods+K1,K2` form
+     * (046 FR-124). Displaces CodeMirror's own `Ctrl-m` (`toggleTabFocusMode`, `@codemirror/commands`
+     * defaultKeymap) ONLY in a Markdown editor — the fold chords are contributed through the fold
+     * compartment, so `Ctrl-m` keeps working in every other language (the 044 FR-105 precedent for an
+     * editor-only displacement). `Ctrl+M` is a carriage return to a shell, but `MARKDOWN_SURFACES`
+     * never includes `terminal`, so 046 FR-021's guard passes by scope.
+     */
+    'markdown.toggleSection': ['Ctrl+M,M'],
+    'markdown.toggleAll': ['Ctrl+M,L'],
+    'markdown.collapseSection': ['Ctrl+M,S'],
+    // Unbound by the maintainer's review (2026-09-28): the context menus carry both, and a chord for
+    // them adds nothing Ctrl+M,M and Ctrl+M,L do not already toggle.
+    'markdown.expandSection': [],
+    'markdown.collapseAll': ['Ctrl+M,A'],
+    'markdown.expandAll': [],
+    /*
+     * 047 (research R7) — Go to Heading. `Ctrl+G` is readline's `abort`, same as `navigate.gotoLine`
+     * above; the two share the literal chord on DISJOINT scopes ({editor} vs {preview}), which
+     * `chordCollisions` treats as no clash at all (scope-aware, `scopeClashes`), and the shell keeps
+     * receiving `^G` in a terminal because neither scope includes it.
+     */
+    'preview.goToHeading': ['Ctrl+G'],
     'file.rename': ['F2'],
     'file.cut': ['Ctrl+X'],
     'file.copy': ['Ctrl+C'],

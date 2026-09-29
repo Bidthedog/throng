@@ -98,15 +98,26 @@ import {
   type ReactElement,
 } from 'react';
 import {
+  collapseAll as foldCollapseAll,
   defaultOpenActionFor,
+  enabledProviderFor,
+  expandAll as foldExpandAll,
   firstBinding,
+  initialFold,
+  isCollapsed,
   normaliseForCompare,
   noticeLogRecord,
   panelZoomLevel,
+  parseChordStrokes,
   previewPathOf,
   samePath,
+  setSection,
   toDisplayPath,
+  toggleAll as foldToggleAll,
+  visibleSections,
   zoomFactor,
+  type DocumentSymbol,
+  type FoldState,
   type Panel,
   type PreviewAttachRequest,
   type PreviewContent,
@@ -124,9 +135,30 @@ import { positionRevealTarget } from '../editor/reveal-range.js';
 import { linkFailureReport, osLinkActions, type LinkActionDeps } from '../links/link-actions.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { findHeading, linkOf } from './link-dom.js';
-import { previewContentMenu, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
+import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
 import { openPreviewLinkMenu } from './preview-link-menu.js';
-import { requestPreviewOpen } from './open-preview.js';
+import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
+import { FindBar } from '../search/find-bar.js';
+import { closeFind, getFindSession, openFind } from '../search/search-store.js';
+import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
+import { createCssHighlightPainter, createDomFramePainter, createPreviewSearchController } from './preview-search.js';
+import { recordLastActivePreview } from './last-active-preview.js';
+import { HeadingOutline } from './heading-outline.js';
+import { flattenHeadings, currentHeadingSlug, type HeadingPosition } from './heading-outline-model.js';
+import { sectionAtPoint } from './fold-menu-section.js';
+import { ChordEngine, strokeLabel, type ChordEngineHost } from '../keybindings/chord-engine.js';
+import { setPendingChord, clearPendingChord } from '../editor/pending-chord.js';
+import { tweenScrollTop } from './scroll-tween.js';
+import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
+import { TreeDropTarget } from '../editor/tree-drop-target.js';
+import { getTreeDrag } from '../explorer/tree-drag-store.js';
+import { wordWrapDocKey } from '../editor/word-wrap-store.js';
+import {
+  applyFoldStateFromSync,
+  relayedKeyMatches,
+  setDocumentFoldState,
+  useDocumentFoldState,
+} from '../editor/fold-state-store.js';
 import {
   isLinkNotice,
   linkNoticeAction,
@@ -175,6 +207,7 @@ import { clearPreviewReservation, previewReservationFor } from './preview-reserv
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
 import './preview.css';
+import './match-frames.css';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -259,6 +292,59 @@ type AttachResult = { outcome: 'ok' | 'refused' } | { outcome: 'failed'; error?:
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/*
+ * 047 US3 (T049, FR-037, FR-038, contracts "Commands") — the `markdown.*` fold chords, hosted on this
+ * panel's own body host rather than window-level (`preview-commands.tsx`): the SAME `ChordEngine`
+ * `editor/commands.ts`'s `multiStrokeChords` hosts per CodeMirror view (Principle VIII), but matched
+ * here with a plain lookup trie instead of CodeMirror's `runScopeHandlers` — a preview panel has no
+ * CodeMirror scopes underneath it. Attaching the engine directly to the panel that received the keydown
+ * is what makes "act on ... a FOCUSED preview's view" (FR-037) true without a separate scope
+ * resolution: only the panel a keydown actually reaches can ever match one of these chords.
+ */
+const MARKDOWN_FOLD_ACTIONS = [
+  'markdown.toggleSection',
+  'markdown.toggleAll',
+  'markdown.collapseSection',
+  'markdown.expandSection',
+  'markdown.collapseAll',
+  'markdown.expandAll',
+] as const;
+type MarkdownFoldActionId = (typeof MARKDOWN_FOLD_ACTIONS)[number];
+
+/** A node in the stroke trie: either another prefix to extend, or the action its last stroke completes. */
+type ChordTrieNode = { readonly action: MarkdownFoldActionId } | { readonly children: Map<string, ChordTrieNode> };
+
+const isChordLeaf = (node: ChordTrieNode): node is { readonly action: MarkdownFoldActionId } => 'action' in node;
+
+/** Every bound chord for the six `markdown.*` fold actions, read into one lookup trie. */
+function buildMarkdownFoldChordTrie(bindings: Readonly<Record<string, readonly string[]>>): Map<string, ChordTrieNode> {
+  const root = new Map<string, ChordTrieNode>();
+  for (const action of MARKDOWN_FOLD_ACTIONS) {
+    for (const token of bindings[action] ?? []) {
+      const strokes = parseChordStrokes(token);
+      if (!strokes || strokes.length === 0) continue;
+      let level = root;
+      strokes.forEach((stroke, i) => {
+        if (i === strokes.length - 1) {
+          level.set(stroke, { action });
+          return;
+        }
+        const existing = level.get(stroke);
+        const next = existing && !isChordLeaf(existing) ? existing.children : new Map<string, ChordTrieNode>();
+        level.set(stroke, { children: next });
+        level = next;
+      });
+    }
+  }
+  return root;
+}
+
+/** One step of the trie walk: the strokes typed so far, and where to look for the next one. */
+interface ChordPrefix {
+  readonly children: Map<string, ChordTrieNode>;
+  readonly physical: readonly string[];
+}
+
 export interface PreviewPanelProps {
   panel: Panel;
   /** The panel's origin project root, or `null` while it is unknown. */
@@ -280,14 +366,29 @@ export interface PreviewPanelProps {
    * menu's row calls the same function. Omitted where no workspace can place an editor: neither is drawn.
    */
   onEditorRoute?: () => void;
+  /**
+   * 047 US5 (T057/T058, contracts/preview-ipc-047.md §4) — the SAME confinement context
+   * `panel-body.tsx` already builds for the editor and the untyped panel; a preview's drop is judged
+   * against exactly the same facts (main's `resolveDrop`, unchanged, FR-022).
+   */
+  dropCtx: DropContext;
 }
 
-export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClose, onEditorRoute }: PreviewPanelProps): ReactElement {
+export function PreviewPanel({
+  panel,
+  projectRoot,
+  onRefused,
+  onClearType,
+  onClose,
+  onEditorRoute,
+  dropCtx,
+}: PreviewPanelProps): ReactElement {
   const panelId = panel.id;
   const state = usePreviewState(panelId);
   const failure = usePreviewFailure(panelId);
   const { views, registry } = usePreviewProviders();
   const settings = useAppSettings();
+  const keybindings = useKeybindings();
   const place = usePanelPlace(panelId);
   const placeRef = useRef(place);
   placeRef.current = place;
@@ -516,6 +617,49 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     return () => unregisterPanelFocus(panelId);
   }, [panelId]);
 
+  /* ── Find (047 US1, research R1) ──────────────────────────────────────────────────────────────── */
+
+  /**
+   * FR-040 (T050) — reveal the section containing the current match's node before it is scrolled to. A
+   * ref so the controller (created once, below) always calls the LATEST implementation without being
+   * recreated itself (the `onRefused` ref pattern above); reassigned every render, once `foldState` and
+   * the body's own `reveal` are in scope, near the rest of the fold wiring.
+   */
+  const revealBeforeScrollRef = useRef<(node: Node) => boolean | void>(() => false);
+  /** Reassigned once `scrollToHeading` exists, below — declared here so the reveal effect (which runs
+   *  before `scrollToHeading`'s own declaration in source order) can call the LATEST version of it. */
+  const scrollToHeadingRef = useRef<(fragment: string, animateMs?: number) => boolean>(() => false);
+  const searchControllerRef = useRef<ReturnType<typeof createPreviewSearchController> | null>(null);
+  /**
+   * 047 FR-074 (R16) — the match-frame layer: a sibling of the body, never inside it, so what the sanitiser
+   * produced, what copy reads and what find's text model walks are all untouched by the outlines it draws.
+   */
+  const matchFrameLayerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const controller = createPreviewSearchController({
+      host: () => bodyHostRef.current,
+      painter: createCssHighlightPainter(),
+      frames: createDomFramePainter(() => matchFrameLayerRef.current),
+      revealBeforeScroll: (node) => revealBeforeScrollRef.current(node),
+    });
+    searchControllerRef.current = controller;
+    registerPanelSearch(panelId, controller);
+    // The frames sit still while the text moves under them: repaint on the body's scroll and on any resize of
+    // it (the panel, the zoom), through the controller's one requestAnimationFrame. A redraw repaints through
+    // `refresh()` (`onDrawn`).
+    const body = bodyHostRef.current;
+    const repaint = (): void => controller.repaintFrames();
+    body?.addEventListener('scroll', repaint, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repaint);
+    if (body) observer?.observe(body);
+    return () => {
+      body?.removeEventListener('scroll', repaint);
+      observer?.disconnect();
+      searchControllerRef.current = null;
+      unregisterPanelSearch(panelId);
+    };
+  }, [panelId]);
+
   /* ── Link notices (FR-090e, FR-090f, FR-123) ─────────────────────────────────────────────────── */
 
   /*
@@ -576,6 +720,21 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   }, [shownFile]);
   const linkReadout = linkTargets.hover ?? linkTargets.focus;
 
+  /*
+   * MT-02 (review, 2026-09-28) — a NAVIGATION onto another file (a Last Active open, a followed link, a
+   * history step) closes this panel's find bar and discards its query: the search was for the file that
+   * left. A live update or a rename of the same run moves no `navigationSeq` and keeps it (FR-005).
+   */
+  const shownNavigation = state?.navigationSeq;
+  const findFileRef = useRef<{ file: string | undefined; seq: number | undefined }>({ file: shownFile, seq: shownNavigation });
+  useEffect(() => {
+    const before = findFileRef.current;
+    findFileRef.current = { file: shownFile, seq: shownNavigation };
+    if (before.file === undefined || shownFile === undefined || before.seq === shownNavigation) return;
+    if (samePath(before.file, shownFile)) return;
+    if (getFindSession(panelId)) closeFind(panelId);
+  }, [panelId, shownFile, shownNavigation]);
+
   /* ── Fragments (FR-090b, FR-090c, FR-090f) ───────────────────────────────────────────────────── */
 
   /**
@@ -591,14 +750,43 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   stateRef.current = state;
 
   /** Scroll the heading `fragment` names to the top of the body. Returns whether there was one. */
+  /**
+   * `animateMs`, given, tweens over that many ms (047 US4, research R7 — the Go to Heading pop-down's
+   * own jump, `providers.markdown.headingJumpMs`); omitted (every OTHER caller: a followed
+   * same-document heading link, `revealFragmentIn`) sets `scrollTop` once, synchronously, exactly as
+   * before this feature existed. Two behaviours on one function rather than a second copy of the
+   * heading-finding half.
+   */
+  /** The fold state as of the last render — read by `scrollToHeading`, which is memoised above it. */
+  const foldStateRef = useRef<FoldState>(initialFold('expanded'));
   const scrollToHeading = useCallback(
-    (fragment: string): boolean => {
+    (fragment: string, animateMs?: number, expandTarget = false): boolean => {
       const host = bodyHostRef.current;
       const heading = host ? findHeading(host, fragment) : null;
       if (host && heading) {
+        // FR-040 (T050) — the heading is inside a collapsed section: reveal it (and its ancestors)
+        // first, then finish the scroll once the reveal's `useEffect` sees the DOM reflect it. A
+        // heading with no `reveal` registered (no headings reported yet, or not a foldable provider)
+        // falls through unchanged — measuring a `hidden` element's zero rect, exactly as before FR-040.
+        // `expandTarget` (Go to Heading, maintainer review 2026-09-28): a heading picked from the
+        // pop-down is opened too when its OWN section is collapsed.
+        //
+        // The reveal is keyed by the heading's SLUG, read off the element. The fragment is not one: Go
+        // to Heading passes the heading's name ("Three"), which names no section, so the reveal
+        // changed nothing and the deferred scroll never ran.
+        const slug = heading.getAttribute('data-heading-slug');
+        const needsReveal = heading.hidden || (expandTarget && slug !== null && isCollapsed(foldStateRef.current, slug));
+        if (needsReveal && slug !== null && revealRef.current) {
+          pendingReveal.current = { kind: 'heading', fragment, animateMs };
+          revealRef.current(slug);
+          clearLinkNotice();
+          return true;
+        }
         // The heading to the top of THIS body host — host-relative arithmetic, as `open-preview.ts` does,
         // rather than `scrollIntoView`, which would also scroll every scrollable ancestor of the panel.
-        host.scrollTop += heading.getBoundingClientRect().top - host.getBoundingClientRect().top;
+        const delta = heading.getBoundingClientRect().top - host.getBoundingClientRect().top;
+        if (animateMs !== undefined) tweenScrollTop(host, host.scrollTop + delta, animateMs);
+        else host.scrollTop += delta;
         // The link was followed: a notice about an earlier one no longer describes anything (item 13).
         clearLinkNotice();
         return true;
@@ -608,6 +796,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     },
     [raiseLinkNotice, clearLinkNotice],
   );
+  scrollToHeadingRef.current = scrollToHeading;
 
   /**
    * 044 FR-115 — a followed same-document heading: read where the reader is, scroll, read where they landed, and
@@ -627,9 +816,9 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   }, []);
 
   const jumpToHeading = useCallback(
-    (filePath: string, fragment: string): void => {
+    (filePath: string, fragment: string, animateMs?: number, expandTarget = false): void => {
       const leavingViewState = placeLeft() ?? TOP_OF_DOCUMENT;
-      if (!scrollToHeading(fragment)) return;
+      if (!scrollToHeading(fragment, animateMs, expandTarget)) return;
       const arrivingViewState = placeLeft() ?? TOP_OF_DOCUMENT;
       const bridge = window.throng?.preview;
       if (!bridge) return;
@@ -654,6 +843,312 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     },
     [panelId, scrollToHeading, placeLeft],
   );
+
+  /* ── Go to Heading (047 US4, research R7) ────────────────────────────────────────────────────── */
+
+  /** This render's heading tree (`PreviewBodyProps.onHeadings`), for the pop-down and `onJump`. */
+  const [headings, setHeadings] = useState<readonly DocumentSymbol[]>([]);
+  const headingsRef = useRef<readonly DocumentSymbol[]>(headings);
+  headingsRef.current = headings;
+  const onHeadings = useCallback((symbols: readonly DocumentSymbol[]): void => {
+    setHeadings(symbols);
+  }, []);
+
+  const [headingOutlineOpen, setHeadingOutlineOpen] = useState(false);
+  /** Sampled once, when the pop-down opens (R7) — never recomputed while it is up. */
+  const [headingOutlineCurrentSlug, setHeadingOutlineCurrentSlug] = useState<string | null>(null);
+
+  /** The heading whose section holds the block at the top of the view right now, or `null`. */
+  const computeCurrentHeadingSlug = useCallback((): string | null => {
+    const host = bodyHostRef.current;
+    if (!host) return null;
+    const hostTop = host.getBoundingClientRect().top;
+    const positions: HeadingPosition[] = [...host.querySelectorAll<HTMLElement>('[data-heading-slug]')].map((el) => ({
+      slug: el.getAttribute('data-heading-slug') ?? '',
+      top: el.getBoundingClientRect().top - hostTop,
+    }));
+    return currentHeadingSlug(positions, 0);
+  }, []);
+
+  const openHeadingOutlineHandler = useCallback((): void => {
+    setHeadingOutlineCurrentSlug(computeCurrentHeadingSlug());
+    setHeadingOutlineOpen(true);
+  }, [computeCurrentHeadingSlug]);
+
+  const onHeadingOutlineClose = useCallback((): void => {
+    setHeadingOutlineOpen(false);
+    bodyHostRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  /**
+   * The reader picked a heading in the pop-down: reuse the SAME jump `onFollow`'s heading case uses
+   * (`jumpToHeading` — records history exactly as a followed same-document heading link, 044 FR-115).
+   *
+   * FR-040: a target inside a collapsed section is revealed first, and the target's own section is
+   * opened too (`expandTarget`) — picking a heading means wanting to read it.
+   */
+  const onHeadingOutlineJump = useCallback(
+    (slug: string): void => {
+      const symbol = flattenHeadings(headingsRef.current).find((f) => f.symbol.slug === slug)?.symbol;
+      const current = stateRef.current;
+      if (!symbol || !current) return;
+      const rawDuration = settings.editor.previews.providers.markdown?.headingJumpMs;
+      jumpToHeading(current.filePath, symbol.name, typeof rawDuration === 'number' ? rawDuration : 0, true);
+    },
+    [jumpToHeading, settings],
+  );
+
+  /* ── Fold state (047 US3, research R3, Principle XI) ─────────────────────────────────────────────
+   *
+   * THE PANEL NEVER HOLDS ITS OWN FOLD STATE. It reads and writes through `fold-state-store.ts` —
+   * the SAME per-window cache `use-editor.ts` uses for an editor view — exactly the way it reads and
+   * writes word wrap (`wordWrapDocKey`, reused here unchanged for the key rule): a PARENTED preview
+   * resolves to `file:<path>`, the SAME key its editor uses, so the two fold together; a STANDALONE
+   * preview resolves to `panel:<id>`, its own entry, however many windows view it (R3). The cache is
+   * never the authority — main's fold map beside word wrap is — so a toggle here updates the cache
+   * optimistically, tells main, and main relays it to every OTHER view on the same key.
+   */
+  const isFoldableProvider = state?.providerId === 'markdown';
+  const foldParented = state?.parent != null;
+  const foldDocKey = wordWrapDocKey(foldParented ? (state?.filePath ?? null) : null, panelId);
+  const foldSeed = initialFold(settings.editor.markdownSectionsOpen);
+  const foldState = useDocumentFoldState(foldDocKey, foldSeed);
+  foldStateRef.current = foldState;
+
+  // Seed this key from the authority once, whenever the KEY changes — becoming parented or standalone
+  // re-keys (R3), and each key gets its own seed round trip exactly as word wrap's does.
+  useEffect(() => {
+    if (!isFoldableProvider) return;
+    // A bridge with no `foldState` method at all (a test, a torn-down window) is not a rejection to
+    // catch — calling `.then` on the `undefined` an optional CALL answers would throw synchronously,
+    // which is not "no authority to ask", it is a crash of this effect. The local seed stands either way.
+    const foldStateOf = window.throng?.editor?.foldState;
+    if (!foldStateOf) return;
+    let live = true;
+    const key = foldDocKey;
+    foldStateOf(panelId, settings.editor.markdownSectionsOpen)
+      .then((next) => {
+        if (live && next) applyFoldStateFromSync(key, next);
+      })
+      .catch(() => {
+        /* The authority failed to answer (a torn-down window): the local seed stands. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [isFoldableProvider, foldDocKey, panelId, settings.editor.markdownSectionsOpen]);
+
+  // The relay is carried on `onSync`'s `foldState`, keyed by the DOCUMENT key rather than by
+  // `panelId` (contracts/preview-ipc-047.md §5) — one document, however many views, one broadcast.
+  useEffect(() => {
+    if (!isFoldableProvider) return;
+    const off = window.throng?.editor?.onSync?.((msg) => {
+      if (msg.foldState && relayedKeyMatches(msg.foldState.key, foldDocKey)) {
+        applyFoldStateFromSync(foldDocKey, msg.foldState.state);
+      }
+    });
+    return () => off?.();
+  }, [isFoldableProvider, foldDocKey]);
+
+  const onFoldChange = useCallback(
+    (next: FoldState): void => {
+      setDocumentFoldState(foldDocKey, next, panelId);
+    },
+    [foldDocKey, panelId],
+  );
+
+  /**
+   * 047 US3 (T050, FR-040) — the body's own `reveal(slug)`, registered once via `onRevealSection`
+   * below: expands `slug`'s section and every collapsed ancestor (core's `revealing`), via the SAME
+   * `onFoldChange` a gutter click uses — the panel never re-derives the ancestor walk itself.
+   */
+  const revealRef = useRef<((slug: string) => void) | null>(null);
+
+  /**
+   * A scroll (a followed heading, or a search match) waiting on a reveal it just started: the fold
+   * state change reaches the DOM only on the NEXT render, via the body's own effect reacting to the
+   * `foldState` prop — so this is finished from the `useEffect` below rather than inline. `MarkdownBody`
+   * is a CHILD of this panel, and React fires a child's passive effects before its parent's OWN ones in
+   * the same commit, so the body's fold-gutter DOM update has already happened by the time the effect
+   * watching `foldState` here runs.
+   */
+  const pendingReveal = useRef<{ kind: 'heading'; fragment: string; animateMs?: number } | { kind: 'search'; node: Node } | null>(null);
+
+  /** `node`'s own element (`preview-search.ts`'s own derivation, duplicated here to finish its scroll). */
+  const elementOf = (node: Node): Element | null => (node.nodeType === 1 ? (node as Element) : node.parentElement);
+
+  revealBeforeScrollRef.current = (node: Node): boolean => {
+    if (!isFoldableProvider || !revealRef.current) return false;
+    const host = bodyHostRef.current;
+    const slug = host ? sectionAtPoint(host, node) : null;
+    if (slug === null) return false;
+    if (visibleSections(foldState, headingsRef.current).has(slug)) return false; // already shown — scroll now
+    pendingReveal.current = { kind: 'search', node };
+    revealRef.current(slug);
+    return true;
+  };
+
+  useEffect(() => {
+    const pending = pendingReveal.current;
+    if (!pending) return;
+    pendingReveal.current = null;
+    if (pending.kind === 'search') {
+      elementOf(pending.node)?.scrollIntoView({ block: 'center' });
+    } else {
+      // Re-run the whole check: if the target is STILL hidden (an edge case — another fold change
+      // landed first), this defers again rather than scrolling to a hidden element's zero rect.
+      scrollToHeadingRef.current(pending.fragment, pending.animateMs);
+    }
+    // Deliberately keyed on `foldState` alone (both refs are refs, correctly omitted): a pending
+    // reveal is finished once the fold state that unblocks it has reached this render.
+  }, [foldState]);
+
+  /**
+   * 047 US3 (T048, FR-036, FR-038, contracts "Preview body menu" / "Status bar") — the fold rows and
+   * the status-bar toggle, both built from the SAME `foldState`/`onFoldChange`/`headingsRef` this
+   * panel already holds (never a second original, Principle XI).
+   */
+  const foldMenuChords = useMemo(
+    () => ({
+      collapseSection: firstBinding(keybindings, 'markdown.collapseSection'),
+      expandSection: firstBinding(keybindings, 'markdown.expandSection'),
+      collapseAll: firstBinding(keybindings, 'markdown.collapseAll'),
+      expandAll: firstBinding(keybindings, 'markdown.expandAll'),
+    }),
+    [keybindings],
+  );
+
+  /**
+   * `target` is the DOM node the body menu opened AT (the real contextmenu event's own `e.target`);
+   * `null` when the caller has none (the Link-menu path, whose event carries a synthetic point with
+   * no useful DOM target) — treated the same as a point before the first heading (FR-036: the
+   * This-Section row is then simply absent, Collapse All / Expand All unaffected).
+   */
+  const buildFoldMenuArgs = useCallback(
+    (target: Node | null): PreviewContentMenuArgs['fold'] => {
+      if (!isFoldableProvider) return null;
+      const host = bodyHostRef.current;
+      const slug = host ? sectionAtPoint(host, target) : null;
+      const flat = flattenHeadings(headingsRef.current);
+      const found = slug !== null ? flat.find((f) => f.symbol.slug === slug) : undefined;
+      const section = found ? { level: found.symbol.level, collapsed: isCollapsed(foldState, found.symbol.slug) } : null;
+      return {
+        section,
+        hasSections: flat.length > 0,
+        collapseSection: () => {
+          if (found) onFoldChange(setSection(foldState, found.symbol.slug, true));
+        },
+        expandSection: () => {
+          if (found) onFoldChange(setSection(foldState, found.symbol.slug, false));
+        },
+        collapseAll: () => onFoldChange(foldCollapseAll(foldState)),
+        expandAll: () => onFoldChange(foldExpandAll(foldState)),
+        chords: foldMenuChords,
+      };
+    },
+    [isFoldableProvider, foldState, onFoldChange, foldMenuChords],
+  );
+
+  /** The status bar's own toggle (contracts "Status bar", FR-038) — `null` for a non-Markdown provider. */
+  const statusBarFold = useMemo(() => {
+    if (!isFoldableProvider) return null;
+    const anyExpanded = flattenHeadings(headings).some((f) => !isCollapsed(foldState, f.symbol.slug));
+    return {
+      anyExpanded,
+      chord: anyExpanded ? foldMenuChords.collapseAll : foldMenuChords.expandAll,
+      onToggleAll: () => onFoldChange(anyExpanded ? foldCollapseAll(foldState) : foldExpandAll(foldState)),
+    };
+  }, [isFoldableProvider, headings, foldState, onFoldChange, foldMenuChords]);
+
+  /**
+   * 047 US3 (T049, FR-037, contracts "Commands") — what each `markdown.*` chord DOES, resolved at the
+   * moment it completes rather than baked into the trie (which only needs rebuilding when the
+   * keybindings change): *This Section* acts on whichever heading `computeCurrentHeadingSlug` reports
+   * for the top of the current view — a no-op before the first heading, exactly the editor's own guard
+   * for "This Section" with no headings; *All* acts on the whole document, always.
+   */
+  const runMarkdownFoldAction = useCallback(
+    (action: MarkdownFoldActionId): void => {
+      if (!isFoldableProvider) return;
+      if (action === 'markdown.collapseAll') {
+        onFoldChange(foldCollapseAll(foldState));
+        return;
+      }
+      if (action === 'markdown.expandAll') {
+        onFoldChange(foldExpandAll(foldState));
+        return;
+      }
+      if (action === 'markdown.toggleAll') {
+        const slugs = flattenHeadings(headingsRef.current).map((f) => f.symbol.slug);
+        onFoldChange(foldToggleAll(foldState, slugs));
+        return;
+      }
+      const slug = computeCurrentHeadingSlug();
+      if (slug === null) return;
+      if (action === 'markdown.collapseSection') onFoldChange(setSection(foldState, slug, true));
+      else if (action === 'markdown.expandSection') onFoldChange(setSection(foldState, slug, false));
+      else onFoldChange(setSection(foldState, slug, !isCollapsed(foldState, slug)));
+    },
+    [isFoldableProvider, foldState, onFoldChange, computeCurrentHeadingSlug],
+  );
+  const runMarkdownFoldActionRef = useRef(runMarkdownFoldAction);
+  runMarkdownFoldActionRef.current = runMarkdownFoldAction;
+
+  /** Rebuilt only when the bound chords change — the trie SHAPE, never what each leaf does. */
+  const chordTrie = useMemo(
+    () => (isFoldableProvider ? buildMarkdownFoldChordTrie(keybindings.bindings) : new Map<string, ChordTrieNode>()),
+    [isFoldableProvider, keybindings],
+  );
+  const chordTrieRef = useRef(chordTrie);
+  chordTrieRef.current = chordTrie;
+
+  /** One engine per panel instance (Principle VIII, shared with the editor) — created once, never rebuilt. */
+  const chordEngineRef = useRef<ChordEngine<ChordPrefix> | null>(null);
+  if (chordEngineRef.current === null) {
+    const host: ChordEngineHost<ChordPrefix> = {
+      matchFirst: (e) => {
+        const stroke = strokeLabel(e);
+        const found = chordTrieRef.current.get(stroke);
+        if (!found) return false;
+        if (isChordLeaf(found)) {
+          runMarkdownFoldActionRef.current(found.action);
+          return true;
+        }
+        chordEngineRef.current!.begin({ children: found.children, physical: [stroke] }, [stroke]);
+        return true;
+      },
+      matchNext: (e, prefix) => {
+        const stroke = strokeLabel(e);
+        const found = prefix.children.get(stroke);
+        if (!found) return false;
+        if (isChordLeaf(found)) {
+          runMarkdownFoldActionRef.current(found.action);
+          return true;
+        }
+        const physical = [...prefix.physical, stroke];
+        chordEngineRef.current!.begin({ children: found.children, physical }, physical);
+        return true;
+      },
+      onIndicator: (indicator) => {
+        const bodyHost = bodyHostRef.current;
+        if (!bodyHost) return;
+        if (indicator) setPendingChord({ kind: indicator.kind, host: bodyHost, keys: indicator.keys });
+        else clearPendingChord(bodyHost);
+      },
+    };
+    chordEngineRef.current = new ChordEngine<ChordPrefix>(host);
+  }
+  useEffect(() => {
+    // Captured now, not read at cleanup time: React nulls a ref prop during the commit's mutation
+    // phase, BEFORE this passive effect's own cleanup runs — `destroy()`'s own `onIndicator(null)`
+    // would find `bodyHostRef.current` already `null` and silently skip the clear, leaving a stale
+    // indicator up for a panel that no longer exists.
+    const host = bodyHostRef.current;
+    return () => {
+      chordEngineRef.current?.destroy();
+      if (host) clearPendingChord(host);
+    };
+  }, []);
 
   /**
    * Scroll to `fragment` in `filePath` — now if the body shows that file, else once it has drawn it. `jump`: a
@@ -686,6 +1181,9 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
       }
       // A redraw retry waiting on this body has its answer: it drew (see `redraw`).
       settleRedraw(true);
+      // FR-005 — the body just redrew under any open find session's feet; re-run its active query
+      // (a no-op with none) so the reader keeps their place in the search rather than losing it.
+      searchControllerRef.current?.refresh();
       const pending = pendingFragment.current;
       if (pending !== null && samePath(pending.filePath, filePath)) {
         pendingFragment.current = null;
@@ -864,6 +1362,81 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     [panelId, raiseLinkNotice, clearLinkNotice, placeLeft],
   );
 
+  /* ── Drops (047 US5, research R9, contracts/preview-ipc-047.md §4) ──────────────────────────────── */
+
+  /**
+   * Step 2 — a confinement-approved path this window's provider registry has no ENABLED provider for
+   * is refused HERE, silently (no notice): main never sees it, and main's confinement decision is
+   * untouched for a provider that fires up disabled tomorrow.
+   */
+  const dropAccepts = useCallback(
+    (absPath: string): boolean => enabledProviderFor(registry, settings.editor.previews, absPath) !== undefined,
+    [registry, settings],
+  );
+
+  /** Step 3/4 — the FIRST accepted path in one drop navigates THIS panel; every later one opens new. */
+  const dropBatchFirst = useRef(true);
+  const onDropBatchStart = useCallback((): void => {
+    dropBatchFirst.current = true;
+  }, []);
+
+  const onDropAccepted = useCallback(
+    (absPath: string): void => {
+      if (!dropBatchFirst.current) {
+        void requestPreviewOpen({ absPath, projectId: panel.originProjectId, target: { mode: 'new' } });
+        return;
+      }
+      dropBatchFirst.current = false;
+      // MT-03 (review, 2026-09-28) — the panel dropped on takes the keyboard, and the workspace pane
+      // becomes the active one: a drag from the explorer left both on the Files pane.
+      if (ws.layout) focusLocalPanel(ws, ws.layout, panelId);
+      const bridge = window.throng?.preview;
+      if (!bridge) return;
+      const leavingViewState = placeLeft();
+      void bridge
+        .navigate({
+          panelId,
+          target: { absPath },
+          intent: { kind: 'drop' },
+          ...(leavingViewState !== undefined ? { leavingViewState } : {}),
+        })
+        .then((res) => {
+          if (!mounted.current) return;
+          switch (res.kind) {
+            case 'shown': {
+              const current = stateRef.current;
+              const moved = current === undefined || !samePath(res.update.filePath, current.filePath);
+              const applied = applyPreviewUpdate(
+                moved && res.update.content === null ? { ...res.update, content: CLEARED_CONTENT } : res.update,
+              );
+              if (applied && moved) clearLinkNotice();
+              return;
+            }
+            case 'refused':
+              // `throng:preview:navigate`'s `drop` intent answers `refused` with the same reason text
+              // `throng:editor:resolveDrop` produced (contract §2) — reuse the same link-notice path.
+              if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
+              return;
+            default:
+              // `focusedOther` (FR-023, 044 FR-090c) — main focused the preview already showing it.
+              clearLinkNotice();
+              return;
+          }
+        })
+        .catch((error: unknown) => {
+          window.throng?.notices?.log?.(
+            noticeLogRecord({
+              severity: 'error',
+              message: 'A file dropped on a preview could not be shown.',
+              subject: panelSubject(placeRef.current),
+              detail: messageOf(error),
+            }),
+          );
+        });
+    },
+    [panelId, placeLeft, clearLinkNotice, raiseLinkNotice, panel.originProjectId, ws],
+  );
+
   /*
    * §6 — a view that DETACHES (a tab switch, a move, an unmount) stores the reader's place on its current
    * entry first, so a re-attach restores where they were rather than where they last left that entry. A
@@ -913,7 +1486,6 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   /* ── The body menu (FR-015b, FR-035, FR-095, FR-096d) ────────────────────────────────────────── */
 
   const { openMenu, updateMenu } = useContextMenu();
-  const keybindings = useKeybindings();
   const textSelection = view?.textSelection ?? false;
   const providerKind =
     (state ? registry.get(state.providerId) : undefined)?.kind ?? registry.forPath(mountFile.current)?.kind ?? 'text';
@@ -1152,7 +1724,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
    * was selected when the menu opened, whatever pressing the row does to the live selection.
    */
   const openBodyMenu = useCallback(
-    (link: PreviewLink | null, point: { x: number; y: number }): void => {
+    (link: PreviewLink | null, point: { x: number; y: number }, target: Node | null = null): void => {
       const host = bodyHostRef.current;
       const captured = host === null ? null : captureSelection(host);
       const selectionEmpty = captured === null;
@@ -1181,10 +1753,30 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
                 chord: firstBinding(keybindings, 'preview.toggleSyncScroll'),
               }
             : null,
+        // 047 US1 (FR-007) — always offered, whatever is under the pointer.
+        find: { run: () => openFind(panelId, 'preview'), chord: firstBinding(keybindings, 'search.find') },
+        // 047 US4 — always offered too, even with no headings (the pop-down itself says so).
+        goToHeading: { run: openHeadingOutlineHandler, chord: firstBinding(keybindings, 'preview.goToHeading') },
+        // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
+        fold: buildFoldMenuArgs(target),
       });
       if (items.length > 0) openMenu(point.x, point.y, items);
     },
-    [openLinkMenuOverPreview, textSelection, copySelection, selectAll, providerKind, onEditorRoute, parented, keybindings, openMenu, onToggleSyncScroll],
+    [
+      openLinkMenuOverPreview,
+      textSelection,
+      copySelection,
+      selectAll,
+      providerKind,
+      onEditorRoute,
+      parented,
+      keybindings,
+      openMenu,
+      onToggleSyncScroll,
+      panelId,
+      openHeadingOutlineHandler,
+      buildFoldMenuArgs,
+    ],
   );
 
   /** The body's own report: the reader asked for a LINK's menu, with nothing selected (FR-095). */
@@ -1197,7 +1789,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
   const onHostContextMenu = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>): void => {
       e.preventDefault();
-      openBodyMenu(null, { x: e.clientX, y: e.clientY });
+      openBodyMenu(null, { x: e.clientX, y: e.clientY }, e.target as Node);
     },
     [openBodyMenu],
   );
@@ -1234,9 +1826,26 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     e.stopPropagation();
   }, []);
 
+  /**
+   * 047 US5 — the body's OWN drop handler, narrowed to non-file drops (FR-021). A file drag (OS or
+   * tree) is meant for the `TreeDropTarget`/`PanelDropTarget` WRAPPING this body: their own `onDrop`
+   * calls `stopPropagation` once they claim it, but that only works if this one does not claim it
+   * FIRST — React's bubble phase reaches the innermost element (this body) before its ancestors.
+   */
+  const onBodyDrop = useCallback(
+    (e: ReactDragEvent<HTMLDivElement>): void => {
+      const isFileDrag = Array.from(e.dataTransfer?.types ?? []).includes('Files');
+      if (isFileDrag || getTreeDrag() !== null) return; // let the ancestor drop targets handle it
+      refuse(e);
+    },
+    [refuse],
+  );
+
   /** Ctrl+A selects the body, not the window. */
   const onHostKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+      // 047 T049 — the markdown.* fold chords, consumed before anything else on this key.
+      if (chordEngineRef.current?.keydown(e)) return;
       if (!textSelection) return;
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
@@ -1245,6 +1854,14 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     },
     [textSelection, selectAll],
   );
+
+  /** FR-124 — releasing a held chord modifier ends the prefix; FR-092 — losing focus ends it too. */
+  const onHostKeyUp = useCallback((e: ReactKeyboardEvent<HTMLDivElement>): void => {
+    chordEngineRef.current?.keyup(e);
+  }, []);
+  const onHostBlur = useCallback((): void => {
+    chordEngineRef.current?.blur();
+  }, []);
 
   // What the window's key handler and main's `focus` reach this panel through (FR-096c, FR-090c).
   useEffect(
@@ -1263,8 +1880,9 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           if (current) revealFragmentIn(current.filePath, fragment);
         },
         navigateHistory: onHistoryStep,
+        openHeadingOutline: openHeadingOutlineHandler,
       }),
-    [panelId, onFollow, revealFragmentIn, onHistoryStep],
+    [panelId, onFollow, revealFragmentIn, onHistoryStep, openHeadingOutlineHandler],
   );
 
   // FR-034 — this panel's own zoom, published for `preview.css` to multiply the body text with.
@@ -1305,6 +1923,17 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
     else host.removeAttribute('inert');
   }, [bodyCovered]);
 
+  /*
+   * 047 US2 (FR-015, research R8) — this panel just became the reader's most recently active preview
+   * in its tab, for `open-preview.ts`'s "reuse the last active preview" to find. Both pointerdown AND
+   * focus record — unlike `last-active-editor.ts`'s keyboard gap, a preview can be brought to the front
+   * by Tab alone (no click), and that must count too.
+   */
+  const recordActive = useCallback((): void => {
+    const tabId = ws.layout?.activeTabId;
+    if (tabId) recordLastActivePreview(tabId, panelId);
+  }, [ws, panelId]);
+
   return (
     <div
       className="preview-panel"
@@ -1312,6 +1941,8 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
       style={zoomStyle}
       ref={panelRootRef}
       onCopy={onRootCopy}
+      onPointerDown={recordActive}
+      onFocus={recordActive}
     >
       {shown?.source === 'notice' && state ? (
         <PreviewFileNotice
@@ -1336,19 +1967,33 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           onCancel={onClearType}
         />
       ) : null}
-      <div
-        className="preview-panel__body"
-        data-testid={`preview-body-${panelId}`}
-        ref={bodyHostRef}
-        tabIndex={-1}
-        // Covered, not hidden — see the note on the `inert` effect above.
-        style={bodyCovered ? { visibility: 'hidden' } : undefined}
-        onContextMenu={onHostContextMenu}
-        onCut={refuse}
-        onPaste={refuse}
-        onDrop={refuse}
-        onKeyDown={onHostKeyDown}
+      <TreeDropTarget
+        panelId={panelId}
+        accepts={(paths, singleFile) => singleFile && paths.length === 1 && dropAccepts(paths[0]!)}
+        onDrop={(paths) => {
+          onDropBatchStart();
+          onDropAccepted(paths[0]!);
+        }}
       >
+        <PanelDropTarget ctx={dropCtx} onOpen={onDropAccepted} onBatchStart={onDropBatchStart} accepts={dropAccepts}>
+          <div
+            className="preview-panel__body"
+            data-testid={`preview-body-${panelId}`}
+            ref={bodyHostRef}
+            tabIndex={-1}
+            // Covered, not hidden — see the note on the `inert` effect above.
+            style={bodyCovered ? { visibility: 'hidden' } : undefined}
+            onContextMenu={onHostContextMenu}
+            onCut={refuse}
+            onPaste={refuse}
+            // 047 US5 — narrowed to non-file drops (FR-021): a file drag is handled by the drop
+            // targets WRAPPING this body, whose own onDrop stops the event before it bubbles here;
+            // anything else (a browser text/HTML drag) still lands here and is refused as before.
+            onDrop={onBodyDrop}
+            onKeyDown={onHostKeyDown}
+            onKeyUp={onHostKeyUp}
+            onBlur={onHostBlur}
+          >
         {Body !== null && state?.content ? (
           <Body
             key={bodyGeneration}
@@ -1372,9 +2017,47 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
             onLinkTarget={onLinkTarget}
             onDrawn={onDrawn}
             onBodyFailure={onBodyFailure}
+            // 047 US6 (T063) — a pure passthrough to main's channel; no chrome-level decision (see
+            // provider-view.ts's doc comment on why this one differs from onFollow/onFoldChange).
+            resolveWikiTargets={(targets) =>
+              window.throng?.preview?.resolveWikiTargets(panelId, [...targets]) ?? Promise.resolve({ resolved: targets.map(() => null) })
+            }
+            // 047 US4 (R2) — this render's heading tree, for the Go to Heading pop-down.
+            onHeadings={onHeadings}
+            // 047 US3 (R3, Principle XI) — the cache's current value, never a local copy.
+            foldState={isFoldableProvider ? foldState : null}
+            onFoldChange={onFoldChange}
+            gutter={settings.editor.previews.providers.markdown?.gutter === true}
+            // 047 US3 (T050, FR-040) — the body's own reveal(slug): expand a collapsed target on jump/find.
+            onRevealSection={(reveal) => {
+              revealRef.current = reveal;
+            }}
           />
         ) : null}
-      </div>
+          </div>
+        </PanelDropTarget>
+      </TreeDropTarget>
+      {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a
+          layer of its own because `::highlight()` takes no outline. Outside the body (the sanitised
+          content), aria-hidden, no pointer events (match-frames.css); covered with the body. */}
+      <div
+        className="preview-match-frames"
+        data-testid={`preview-match-frames-${panelId}`}
+        aria-hidden="true"
+        ref={matchFrameLayerRef}
+        style={bodyCovered ? { visibility: 'hidden' } : undefined}
+      />
+      {/* 047 US1 (FR-007) — the one shared find bar; renders only while find is open on this panel. */}
+      <FindBar panelId={panelId} />
+      {/* 047 US4 (research R7) — the Go to Heading pop-down; renders only while open. */}
+      <HeadingOutline
+        panelId={panelId}
+        open={headingOutlineOpen}
+        headings={headings}
+        currentSlug={headingOutlineCurrentSlug}
+        onJump={onHeadingOutlineJump}
+        onClose={onHeadingOutlineClose}
+      />
       {/* FR-015a — the editor's bar, under the editor's setting; FR-015e — none for a binary provider. FR-118 —
           its one readout, the hovered or focused link's target, is shown only while the bar is. */}
       {settings.editor.showStatusBar && onEditorRoute !== undefined ? (
@@ -1386,6 +2069,7 @@ export function PreviewPanel({ panel, projectRoot, onRefused, onClearType, onClo
           syncScroll={settings.editor.previews.syncScroll}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
+          fold={statusBarFold}
         />
       ) : null}
     </div>

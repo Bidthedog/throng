@@ -32,6 +32,7 @@ import type {
 import type {
   DefaultOpenAction,
   PreviewCopyFormat,
+  PreviewOpenTarget,
   PreviewSettings,
   ProviderSettings,
 } from '../preview/settings-types.js';
@@ -62,6 +63,10 @@ const COPY_FORMAT_SHIPPED: PreviewCopyFormat = 'rich';
 /** FR-114: editor → preview scroll sync ships on. */
 const SYNC_SCROLL_SHIPPED = true;
 const DEFAULT_OPEN_ACTION_SHIPPED: DefaultOpenAction = 'editor';
+/** 047 FR-015a — a standalone preview reuses the last active one by default. */
+const OPEN_TARGET_SHIPPED: PreviewOpenTarget = 'lastActive';
+/** The two values, in the order the control offers them. */
+export const PREVIEW_OPEN_TARGETS: readonly PreviewOpenTarget[] = ['lastActive', 'new'];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -88,6 +93,7 @@ export function previewSettingsDefaults(registry: PreviewProviderRegistry): Prev
     maxWaitMs: MAX_WAIT.shipped,
     copyFormat: COPY_FORMAT_SHIPPED,
     syncScroll: SYNC_SCROLL_SHIPPED,
+    openTarget: OPEN_TARGET_SHIPPED,
     providers: Object.fromEntries(registry.list().map((p) => [p.id, providerDefaults(p)])),
   };
 }
@@ -176,6 +182,20 @@ export function previewSettingsDescriptors(registry: PreviewProviderRegistry): F
       subgroup: SUBGROUP,
       control: 'toggle',
     },
+    // 047 FR-015a (research R8) — a STATIC leaf, like syncScroll above: it belongs to no provider and
+    // is never drawn disabled by one. Governs where a STANDALONE open lands; a file already previewed
+    // is always focused instead (FR-013), whatever this says.
+    {
+      key: `${PREFIX}.openTarget`,
+      label: 'Open previews in',
+      description:
+        'Last Active reuses the most recently used preview in the tab you are looking at; otherwise a new preview opens.',
+      group: GROUP,
+      subgroup: SUBGROUP,
+      control: 'select',
+      allowedValues: PREVIEW_OPEN_TARGETS,
+      optionLabels: { lastActive: 'Last Active', new: 'New Preview Panel' },
+    },
   ];
 
   for (const provider of registry.list()) {
@@ -263,6 +283,9 @@ export function parsePreviewSettings(raw: unknown, registry: PreviewProviderRegi
       ? (raw.copyFormat as PreviewCopyFormat)
       : COPY_FORMAT_SHIPPED,
     syncScroll: typeof raw.syncScroll === 'boolean' ? raw.syncScroll : SYNC_SCROLL_SHIPPED,
+    openTarget: PREVIEW_OPEN_TARGETS.includes(raw.openTarget as PreviewOpenTarget)
+      ? (raw.openTarget as PreviewOpenTarget)
+      : OPEN_TARGET_SHIPPED,
     providers,
   };
 }

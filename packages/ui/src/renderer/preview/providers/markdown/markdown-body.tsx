@@ -80,11 +80,20 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
-import { splitFrontMatter } from '@throng/core';
+import {
+  buildSymbolTree,
+  initialFold,
+  resolveIconAsset,
+  revealing,
+  splitFrontMatter,
+  toggleSection,
+  type HeadingRecord,
+} from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
+import { useActiveTheme, useIconPacks } from '../../../config/config-store.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
 import {
@@ -96,6 +105,16 @@ import {
   type ScrollAnchor,
 } from './scroll-anchor.js';
 import { highlightCodeBlocks } from './highlight.js';
+import { applyFoldGutter } from './fold-gutter.js';
+import { applyWikiResolution } from './wikilinks.js';
+import {
+  applyTableLayout,
+  chToPx,
+  measureColumns,
+  measureTables,
+  relayoutTables,
+  type TableHandSet,
+} from '../../table-layout.js';
 // The rendered document's own styles (fix round 1, item 2): loaded with this body's chunk, not with
 // the panel chrome's `preview.css`, which never mentions a provider (FR-070).
 import './markdown.css';
@@ -126,6 +145,14 @@ function markdownRenderer(): Promise<MarkdownRenderer> {
 export const FOCUSED_LINK_CLASS = 'preview-markdown__link--focused';
 
 /** The class a front matter block carries once inserted, for `markdown.css`. */
+/**
+ * Principle XII — how long a draw's table layout waits for the next draw (a keystroke in a parented
+ * editor), and how long a resize waits for the resizing to pause. Rendering yields to input: the reader
+ * sees the table a moment later rather than the panel lagging.
+ */
+const TABLE_LAYOUT_DEBOUNCE_MS = 120;
+const TABLE_RESIZE_DEBOUNCE_MS = 150;
+
 const FRONT_MATTER_CLASS = 'preview-markdown__front-matter';
 
 /** An image that could not be shown, as its alternative text (FR-084). */
@@ -185,6 +212,14 @@ function selectionIsEmpty(doc: Document): boolean {
   return selection === null || selection.rangeCount === 0 || selection.isCollapsed;
 }
 
+/** The element carrying `data-heading-slug="slug"` among `body`'s headings, or `null`. */
+function headingElementBySlug(body: HTMLElement, slug: string): HTMLElement | null {
+  for (const el of body.querySelectorAll<HTMLElement>('[data-heading-slug]')) {
+    if (el.getAttribute('data-heading-slug') === slug) return el;
+  }
+  return null;
+}
+
 export function MarkdownBody({
   panelId,
   content,
@@ -205,6 +240,12 @@ export function MarkdownBody({
   onDrawn,
   onBodyFailure,
   linkWording,
+  foldState,
+  onFoldChange,
+  gutter,
+  onHeadings,
+  onRevealSection,
+  resolveWikiTargets,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
@@ -225,6 +266,91 @@ export function MarkdownBody({
   onDrawnRef.current = onDrawn;
   const onLinkTargetRef = useRef(onLinkTarget);
   onLinkTargetRef.current = onLinkTarget;
+  /*
+   * ── 047 US3 — fold gutter (R6, provider-view.ts "Markdown section folding") ──
+   *
+   * Read through refs, like every other live collaborator here: none of them should re-run the
+   * (expensive, re-parsing) draw effect below. `foldStateRef` is Principle XI's read-only copy of
+   * what main holds; this body computes a NEXT state from it and hands that to `onFoldChange`, and
+   * only ever draws what `foldState` itself says once the chrome's next prop confirms it.
+   */
+  const foldStateRef = useRef(foldState);
+  foldStateRef.current = foldState;
+  const gutterRef = useRef(gutter);
+  gutterRef.current = gutter;
+  const onFoldChangeRef = useRef(onFoldChange);
+  onFoldChangeRef.current = onFoldChange;
+  const onHeadingsRef = useRef(onHeadings);
+  onHeadingsRef.current = onHeadings;
+  const resolveWikiTargetsRef = useRef(resolveWikiTargets);
+  resolveWikiTargetsRef.current = resolveWikiTargets;
+  /** This render's flat heading list (R2), for the fold gutter and `onRevealSection`. */
+  const lastHeadingsRef = useRef<readonly HeadingRecord[]>([]);
+  /**
+   * 047 T065/T066, FR-064 — a reader's drag on a column border, by table index within THIS document.
+   * Survives an UPDATE (the same map is handed to every `applyTableLayout` call); a NEW file starts a
+   * fresh one, in the same place the draw effect already tells an update from a navigation.
+   */
+  const tableHandSetRef = useRef(new Map<number, TableHandSet>());
+  const theme = useActiveTheme();
+  const packs = useIconPacks();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const packsRef = useRef(packs);
+  packsRef.current = packs;
+  /**
+   * Insert/remove the gutter's toggles and hide a collapsed section's blocks over `body`'s CURRENT
+   * children — never `replaceChildren`, so calling this from a fold-only update (no new render) never
+   * disturbs the reader's scroll position or selection (FR-035).
+   */
+  const drawFoldGutter = useCallback((body: HTMLElement, headings: readonly HeadingRecord[]): void => {
+    applyFoldGutter(body, headings, {
+      // Absent reads as off, like `remoteImages`/`frontMatter` above: a harness that does not know
+      // about this prop yet gets exactly what it got before this feature landed, not a guess at the
+      // shipped setting's default (the chrome is what actually reads `editor.previews.providers.
+      // markdown.gutter` and always passes a concrete value once it is wired).
+      gutter: gutterRef.current === true,
+      foldState: foldStateRef.current ?? initialFold('expanded'),
+      onToggle: (slug) => {
+        const current = foldStateRef.current ?? initialFold('expanded');
+        onFoldChangeRef.current?.(toggleSection(current, slug));
+      },
+      iconFor: (token) => resolveIconAsset(themeRef.current, packsRef.current, token),
+    });
+  }, []);
+  /**
+   * 047 T065/T066, R13 — fair column widths for every table under `body` (provider-agnostic;
+   * `table-layout.ts` names no provider). Reapplying over the SAME `tableHandSetRef` map is what lets
+   * a reader's drag survive an update to the same file; a fresh map (drawn whenever a NEW file lands,
+   * below) is what "dropped on navigation" (FR-064) means.
+   */
+  const tableLayoutOptions = useCallback(
+    () => ({ measure: measureColumns, measureAll: measureTables, minLegiblePx: chToPx, handSet: tableHandSetRef.current }),
+    [],
+  );
+  /**
+   * Principle XII — the tables are laid out AFTER the draw has painted, never inside it: the reader sees
+   * the document (its tables at their natural widths for a moment) and input is never held behind the
+   * measuring. Debounced, so a parented preview re-rendering on every keystroke measures once when the
+   * typing pauses rather than once per key; a newer draw supersedes a pending one.
+   */
+  const tableLayoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawTableLayout = useCallback(
+    (body: HTMLElement): void => {
+      if (tableLayoutTimer.current !== null) clearTimeout(tableLayoutTimer.current);
+      tableLayoutTimer.current = setTimeout(() => {
+        tableLayoutTimer.current = null;
+        if (bodyRef.current === body && body.isConnected) applyTableLayout(body, tableLayoutOptions());
+      }, TABLE_LAYOUT_DEBOUNCE_MS);
+    },
+    [tableLayoutOptions],
+  );
+  useEffect(
+    () => () => {
+      if (tableLayoutTimer.current !== null) clearTimeout(tableLayoutTimer.current);
+    },
+    [],
+  );
   /**
    * What the body currently SHOWS — the text, file and navigation count of the last render that reached
    * the DOM — so the next render can tell an update (same file: keep the reader's place, FR-024) from a
@@ -461,7 +587,8 @@ export function MarkdownBody({
         const body = bodyRef.current;
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
-        const fragment = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {} });
+        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {} });
+        lastHeadingsRef.current = headings;
         // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
         // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
         // text below moved up under the reader, and at the preview's end the engine's clamp read as the
@@ -508,6 +635,8 @@ export function MarkdownBody({
           }
         } else {
           body.replaceChildren(fragment);
+          // 047 FR-064 — a different file drops every hand-set table width the reader dragged.
+          tableHandSetRef.current = new Map();
           // A different file is shown from its top (FR-024's second sentence, FR-090b)…
           if (previous !== null) scroller.scrollTop = 0;
           // …unless main named the place to return to: an attach, or a Back / Forward step (FR-107), which
@@ -528,12 +657,38 @@ export function MarkdownBody({
         // so the update path above keeps its captured anchor.
         applyPendingSync(scroller);
         shown.current = { text, filePath: file, ...(navigated !== undefined ? { navigationSeq: navigated } : {}) };
+        // 047 R6 — the gutter's toggles and a collapsed section's hidden blocks, over what THIS draw just
+        // inserted. After the place above, not before: a toggle's own gutter offset must never be measured
+        // as part of the scroll anchor's layout.
+        drawFoldGutter(body, headings);
+        // 047 R13 — fair column widths, same reasoning: after the place has already settled.
+        drawTableLayout(body);
 
         // FR-118 — a focused link this draw replaced no longer holds focus, and its removal sent no blur.
         const active = body.ownerDocument.activeElement;
         onLinkTargetRef.current?.('focus', active !== null && body.contains(active) ? linkTargetOf(active) : null);
         // Highlighting only rebuilds code elements' children, so it can land after the anchor restore.
         void highlightCodeBlocks(body).catch(() => undefined);
+        // 047 R2 — this render's heading tree, the same moment as onDrawn (data-model §13 amended).
+        onHeadingsRef.current?.(buildSymbolTree(headings));
+        /*
+         * 047 T061/T063 (R12) — a BATCHED call, never blocking the draw above: the reader sees the
+         * document immediately, and an unresolved wikilink's styling lands once main answers. Guarded
+         * by the same `cancelled` this whole effect already closes over, so an answer for a superseded
+         * render can never mark a LATER render's links — the body it would apply to may not even be
+         * this file's any more.
+         */
+        if (wikiTargets.length > 0 && resolveWikiTargetsRef.current) {
+          resolveWikiTargetsRef
+            .current(wikiTargets)
+            .then(({ resolved }) => {
+              if (cancelled) return;
+              const current = bodyRef.current;
+              if (current === null) return;
+              applyWikiResolution(current, resolved);
+            })
+            .catch(() => undefined); // main unreachable: links stay unmarked rather than failing the draw
+        }
         // Exactly one of `onDrawn` / `onBodyFailure` per draw (data-model §13): this is the draw's report.
         onDrawnRef.current(file);
       })
@@ -550,7 +705,70 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout]);
+
+  /*
+   * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
+   * moved, with NO new text to draw. Re-applies over the body's CURRENT children — never
+   * `replaceChildren` — so nothing here can move the reader's scroll or disturb a selection (FR-035).
+   * A guard on `shown.current`: before the first draw there is nothing to fold yet, and the draw effect
+   * above already calls `drawFoldGutter` once that first render lands.
+   */
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body === null || shown.current === null) return;
+    drawFoldGutter(body, lastHeadingsRef.current);
+  }, [foldState, gutter, theme, packs, drawFoldGutter]);
+
+  /*
+   * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to
+   * view: a link followed into a fold, a find match inside one, a heading jumped to. `revealing` is
+   * pure and deterministic, so applying its result to THIS render's DOM ahead of main's confirmation
+   * is not a second source of truth (Principle XI) — it is the SAME state main's round-trip will hand
+   * back, applied once now so the scroll below has something visible to land on rather than waiting a
+   * frame for it.
+   */
+  useEffect(() => {
+    onRevealSection?.((slug: string): void => {
+      const body = bodyRef.current;
+      if (body === null) return;
+      const current = foldStateRef.current ?? initialFold('expanded');
+      const tree = buildSymbolTree(lastHeadingsRef.current);
+      const next = revealing(current, tree, slug);
+      if (next !== current) {
+        onFoldChangeRef.current?.(next);
+        drawFoldGutter(body, lastHeadingsRef.current);
+      }
+      headingElementBySlug(body, slug)?.scrollIntoView({ block: 'start' });
+    });
+  }, [onRevealSection, drawFoldGutter]);
+
+  /*
+   * 047 T065/T066, R13 — the panel resizing (a split, a window resize, zoom) changes every fitting
+   * table's fair share and an overflowing one's need to scroll at all. Principle XII: a resize RE-SHARES
+   * the widths its last draw measured (`relayoutTables`) — it measures nothing — and only once the
+   * resizing pauses. A notification whose width did not change (the tables' own height changing, say)
+   * does nothing, so the layout can never feed its own trigger. A draw still pending will measure at the
+   * new width anyway, so a resize defers to it.
+   */
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body === null || typeof ResizeObserver === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const observer = new ResizeObserver(() => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        const current = bodyRef.current;
+        if (current !== null && tableLayoutTimer.current === null) relayoutTables(current, tableLayoutOptions());
+      }, TABLE_RESIZE_DEBOUNCE_MS);
+    });
+    observer.observe(body);
+    return () => {
+      observer.disconnect();
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [tableLayoutOptions]);
 
   // FR-084 — an image that fails to load shows its alternative text. `error` does not bubble: captured.
   useEffect(() => {

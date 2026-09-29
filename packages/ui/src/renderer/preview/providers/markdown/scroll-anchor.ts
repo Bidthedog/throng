@@ -54,11 +54,17 @@ interface Measured {
   height: number;
 }
 
-/** Every source-mapped block, in document order, measured against the container's viewport. */
+/**
+ * Every source-mapped block, in document order, measured against the container's viewport — EXCEPT a
+ * block a collapsed ancestor section hides (047 FR-041a, R6). A hidden block keeps its
+ * `data-source-line` and stays in the DOM, but is not what the reader sees; its layout rect (typically
+ * collapsed to zero, or stale wherever it last was) must not be read as the block at the top.
+ */
 function measure(container: AnchorContainer): Measured[] {
   const viewportTop = container.getBoundingClientRect().top;
   const out: Measured[] = [];
   for (const el of container.querySelectorAll(SELECTOR)) {
+    if (el.getAttribute('hidden') !== null) continue;
     const line = Number(el.getAttribute('data-source-line'));
     if (!Number.isFinite(line)) continue;
     const rect = el.getBoundingClientRect();

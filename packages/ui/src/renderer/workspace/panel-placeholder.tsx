@@ -64,6 +64,7 @@ import { setActivePane, useActivePane } from './active-pane.js';
 import { focusPanel } from './panel-focus.js';
 import { registerPanelRename, unregisterPanelRename } from './panel-rename.js';
 import { useWindowFocus } from './use-window-focus.js';
+import { usePanelFlash } from './panel-flash.js';
 import { useTerminalCwd } from '../terminal/cwd-store.js';
 import { useTerminalTitle } from '../terminal/title-store.js';
 import { useEditorFailure } from '../editor/editor-failure.js';
@@ -73,6 +74,7 @@ import { getEditorActions } from '../editor/editor-actions.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
+import { openPreviewHeadingOutline } from '../preview/preview-panel-handles.js';
 import { destroyFindInFilesPanel } from '../find-in-files/find-in-files-store.js';
 import { clearTerminalViewState } from '../terminal/terminal-view-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -176,6 +178,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // dimmed inactive treatment when it is background — it persists in both, never
   // disappearing (SC-001a). Distinct from the OS focus/raise group.
   const windowForeground = useWindowFocus();
+  // 047 FR-083 — a file opened from File Explorer landed here: flash the border to say so.
+  const flashKey = usePanelFlash(panel.id);
   // 046 FR-121 (S28) — the treatment (both states) shows only while the WORKSPACE holds the active
   // pane; from the Projects pane or the File Explorer the side pane's own outline is the only active
   // indication. The tab's active panel id is untouched, so every route back lights this same panel.
@@ -858,19 +862,25 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 find: () => {
                   /*
                    * `PanelKind` is an OPEN string — custom panel kinds exist — so comparing it to
-                   * the two literals narrows nothing on its own. The membership is captured as a
+                   * the three literals narrows nothing on its own. The membership is captured as a
                    * value TypeScript can carry into `openFind`, exactly as
-                   * `search-keybindings.tsx` does for the chord route.
+                   * `search-keybindings.tsx` does for the chord route. 047 US1 adds `preview`.
                    */
                   const findKind: FindPanelKind | null =
                     panel.kind === 'editor'
                       ? 'editor'
                       : panel.kind === 'terminal'
                         ? 'terminal'
-                        : null;
+                        : panel.kind === PREVIEW_KIND
+                          ? 'preview'
+                          : null;
                   if (findKind) openFind(panel.id, findKind);
                 },
                 replace: () => openFind(panel.id, 'editor', { replace: true }),
+                // 047 US4 — the same handle `preview.goToHeading`'s chord dispatch uses.
+                goToHeading: () => {
+                  openPreviewHeadingOutline(panel.id);
+                },
                 /*
                  * Replace All needs a term and a replacement, and with no bar open there is
                  * neither. So the menu row OPENS the bar in that case rather than firing a
@@ -1080,6 +1090,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             <EdgeDropZone key={edge} panelId={panel.id} edge={edge} />
           ))}
         </div>
+      ) : null}
+      {flashKey !== null ? (
+        // Keyed per request, so a second flash while one plays restarts the animation.
+        <div key={flashKey} className="panel-box__flash" data-testid={`panel-flash-${panel.id}`} aria-hidden="true" />
       ) : null}
     </div>
   );

@@ -62,6 +62,39 @@ export interface PreviewContentMenuArgs {
    * chord. Omitted or `null`: no such section (a binary provider, FR-122a).
    */
   syncScroll?: { on: boolean; toggle: () => void; chord?: string } | null;
+  /**
+   * 047 US1 (FR-007, contracts/menus-commands-controls.md "Preview body menu") — always present,
+   * whatever the provider or what is under the pointer: every preview offers `search.find` from its
+   * own menu, the way a click-only reader reaches it.
+   */
+  find: { run: () => void; chord?: string };
+  /**
+   * 047 US4 (contract "Preview body menu") — always present, even with no headings at all (the
+   * pop-down itself says "No headings" then, rather than this row disappearing).
+   */
+  goToHeading: { run: () => void; chord?: string };
+  /**
+   * 047 US3 (FR-036, contract "Preview body menu") — the fold rows, present only for a Markdown
+   * document; omitted or `null` draws none of them. Mirrors the editor's own `markdownFold` arg
+   * (`editor/content-menu.ts`) exactly: `section` is the innermost section containing the point the
+   * menu was opened at, `null` before the first heading — that is when the This-Section row is
+   * ABSENT (FR-036), not disabled. Collapse All / Expand All are always present but DISABLED when
+   * the document has no headings at all.
+   */
+  fold?: {
+    section: { level: number; collapsed: boolean } | null;
+    hasSections: boolean;
+    collapseSection: () => void;
+    expandSection: () => void;
+    collapseAll: () => void;
+    expandAll: () => void;
+    chords?: {
+      collapseSection?: string;
+      expandSection?: string;
+      collapseAll?: string;
+      expandAll?: string;
+    };
+  } | null;
 }
 
 /**
@@ -86,8 +119,24 @@ export function linkAddress(link: PreviewLink, docPath: string): string {
 }
 
 export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
-  const { selectionEmpty, content, editorRoute, syncScroll } = args;
+  const { selectionEmpty, content, editorRoute, syncScroll, find, goToHeading, fold } = args;
   const items: MenuAction[] = [];
+
+  items.push({
+    label: 'Find…',
+    icon: 'search',
+    section: 'navigate',
+    ...(find.chord !== undefined ? { shortcut: find.chord } : {}),
+    onClick: () => find.run(),
+  });
+  items.push({
+    // No icon token, matching the editor's Go To Line… precedent (`editor/content-menu.ts`) — a
+    // "move you somewhere in the document" row draws its shortcut, not a glyph, when it has none apt.
+    label: 'Go to Heading…',
+    section: 'navigate',
+    ...(goToHeading.chord !== undefined ? { shortcut: goToHeading.chord } : {}),
+    onClick: () => goToHeading.run(),
+  });
 
   if (content) {
     items.push({
@@ -138,6 +187,46 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       section: 'viewState',
       ...(syncScroll.chord !== undefined ? { shortcut: syncScroll.chord } : {}),
       onClick: () => syncScroll.toggle(),
+    });
+  }
+
+  /*
+   * 047 US3 (FR-036, contracts "Preview body menu") — the fold rows, Markdown documents only. Exactly
+   * one of Collapse/Expand This Section is drawn (never both — `section.collapsed` decides which),
+   * absent entirely before the first heading; Collapse All / Expand All are always drawn but disabled
+   * with no headings to act on. Mirrors the editor's own `editor/content-menu.ts` exactly.
+   */
+  if (fold) {
+    if (fold.section) {
+      items.push(
+        fold.section.collapsed
+          ? {
+              label: `Expand This H${fold.section.level}`,
+              section: 'viewState',
+              ...(fold.chords?.expandSection !== undefined ? { shortcut: fold.chords.expandSection } : {}),
+              onClick: () => fold.expandSection(),
+            }
+          : {
+              label: `Collapse This H${fold.section.level}`,
+              section: 'viewState',
+              ...(fold.chords?.collapseSection !== undefined ? { shortcut: fold.chords.collapseSection } : {}),
+              onClick: () => fold.collapseSection(),
+            },
+      );
+    }
+    items.push({
+      label: 'Collapse All',
+      section: 'viewState',
+      disabled: !fold.hasSections,
+      ...(fold.chords?.collapseAll !== undefined ? { shortcut: fold.chords.collapseAll } : {}),
+      onClick: () => fold.collapseAll(),
+    });
+    items.push({
+      label: 'Expand All',
+      section: 'viewState',
+      disabled: !fold.hasSections,
+      ...(fold.chords?.expandAll !== undefined ? { shortcut: fold.chords.expandAll } : {}),
+      onClick: () => fold.expandAll(),
     });
   }
 

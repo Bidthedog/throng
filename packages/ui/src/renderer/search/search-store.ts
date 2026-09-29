@@ -29,7 +29,7 @@ import { useSyncExternalStore } from 'react';
 import { getPanelSearch, unregisterPanelSearch } from './search-controller.js';
 import { NO_MATCHES, NO_MODES, type MatchModes, type SearchCount } from './search-model.js';
 
-export type FindPanelKind = 'editor' | 'terminal';
+export type FindPanelKind = 'editor' | 'terminal' | 'preview';
 
 /** One panel's find session. Its lifetime is that panel's (FR-001 / FR-006). */
 export interface FindSession {
