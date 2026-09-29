@@ -1,6 +1,23 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.6.0 → 5.7.0
+Bump rationale: MINOR — a new principle, XII "Responsive UI (NON-NEGOTIABLE)", approved by the
+                maintainer on 2026-09-29 during 047's manual testing ("Performance of the UI is a
+                non-negotiable"; "I would prefer to delay rendering / debounce updates (and only
+                update when layout changes) than delay UI responsiveness").
+Modified principles: none.
+Added sections: Core Principles › XII. Responsive UI (NON-NEGOTIABLE).
+Removed sections: none.
+Existing work flagged: 047's preview table layout (re-measures on every resize frame; being fixed
+                on the 047 branch under this principle).
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no before/after_constitution hooks registered.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.5.2 → 5.6.0
 Bump rationale: MINOR — three rules the maintainer approved on 2026-09-23 while hand-testing spec 046
                 (iterate round 1), each argued against the project's own test.
@@ -2697,6 +2714,31 @@ Separating the **document** from the **view** is what keeps that shapeability *s
 workspace whose whole purpose is to let one artefact appear in many places at once MUST NOT
 let it acquire many conflicting truths.
 
+### XII. Responsive UI (NON-NEGOTIABLE)
+
+The UI MUST stay responsive to input at all times. Scrolling, typing, clicking, resizing and
+closing MUST never wait on rendering work.
+
+- **Rendering yields to input.** Expensive rendering work — layout measurement, re-rendering, and
+  derived visual work such as table layout, highlighting and outlines — MUST be deferred,
+  debounced, batched or done incrementally rather than block the input thread. Showing content a
+  moment later is always preferred over delaying the UI.
+- **Re-run only on a real change.** Such work MUST re-run only when its inputs actually change —
+  a width that changed, not every resize notification — and MUST NOT feed back into its own
+  trigger (work that resizes the element whose resize started it is a loop).
+- **Batch layout reads.** Forced synchronous layout reads MUST be batched — read everything, then
+  write everything — never interleaved per item. One read per table, per cell or per token on a
+  large document is a full layout each time.
+- **Measured, not assumed.** A change that adds rendering work on an input path (resize, scroll,
+  keystroke, draw) MUST carry a measurement in its tests or its PR — long-task time or forced
+  layout reads per event — taken on a representative, large input, not a one-line fixture.
+
+Rationale: a person notices lag long before a test does, and nothing in the product earns it
+back. Principle adopted from 047's manual testing (2026-09-29): table layout re-measured every
+table on every resize frame — ~176ms blocked per resize step on a 21-table document, the 045 and
+046 specs stopped answering, and a resize feedback loop flashed the window — while every unit,
+component and E2E test passed, because none of them measured the cost.
+
 ## Technology & Architecture Constraints
 
 - **Baseline stack (chosen):** Electron + TypeScript for the UI, an xterm.js-family
@@ -2908,7 +2950,7 @@ let it acquire many conflicting truths.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.6.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-26
+**Version**: 5.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-29
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
