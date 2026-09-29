@@ -121,6 +121,7 @@ when it writes the file; a retired key it once used is dropped.
 | Warn on missing file | `editor.warnOnMissingFile` | on | on · off | Report an editor whose file is missing or deleted. |
 | Editor default word wrap | `editor.defaultWordWrap` | on | on · off | Wrap long lines by default in new editors. Each editor toggles its own from its status bar, its content menu or [`Ctrl+E,W`](key-bindings.md#editor). |
 | Show the editor gutter | `editor.showGutter` | on | on · off | The strip of line numbers down each editor's left side. Hiding it gives that width back to the document. |
+| Markdown sections open | `editor.markdownSectionsOpen` | `expanded` | `expanded` · `collapsed` | Whether a Markdown document opens with its heading sections expanded or collapsed, in the editor and its preview alike. Sections are then folded from the gutter, the right-click menu or the [Markdown bindings](key-bindings.md#markdown). |
 | Keep undo history after a crash | `editor.persistUndoHistory` | on | on · off | Restore the undo history along with unsaved changes when throng reopens after a crash. Removed text lives in the recovery file until then. |
 
 ### Status Bar
@@ -144,10 +145,13 @@ other settings rather than hiding them.
 | Preview maximum wait | `editor.previews.maxWaitMs` | 1,000 | 0 – 10,000 ms, step 100 | The longest a preview goes without catching up while you keep typing. A value below the update delay behaves as the update delay. |
 | Preview copy format | `editor.previews.copyFormat` | `rich` | `rich` (Rich text) · `plain` (Plain text) | What Copy from a preview puts on the clipboard: formatted text that keeps headings, lists and links, or plain text. |
 | Synchronise preview and editor scrolling | `editor.previews.syncScroll` | on | on · off | Keep a preview and its editor at the same place, both ways: scrolling either scrolls the other, block by block. Also switched from either panel's right-click menu, the **Synchronise Scrolling** status-bar button, or the [`preview.toggleSyncScroll`](key-bindings.md#editor) command. |
+| Open previews in | `editor.previews.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New) | Last Active reuses the most recently used preview in the tab you are looking at, adding to its Back history; otherwise a new preview opens. New opens every preview in a panel of its own. File Explorer's **Open In → Last Preview Panel / New Preview Panel** choose explicitly. |
 | Markdown: Enabled | `editor.previews.providers.markdown.enabled` | on | on · off | Offer previews of `.md` and `.markdown` files. Off, every such preview closes and the preview commands are shown disabled. |
 | Markdown: Default open action | `editor.previews.providers.markdown.defaultOpenAction` | `editor` | `editor` · `preview` | What opening a Markdown file from File Explorer or Quick Open does. Find in Files results and **Open In** always open an editor. |
 | Markdown: Load remote images | `editor.previews.providers.markdown.loadRemoteImages` | on | on · off | Show images a document links from the web over HTTPS, such as build badges. Off, each shows its alternative text and nothing is requested. |
 | Markdown: Show front matter | `editor.previews.providers.markdown.showFrontMatter` | on | on · off | Show the metadata block at the top of a document as a table. Off, the block is not shown at all. |
+| Markdown: Preview gutter | `editor.previews.providers.markdown.gutter` | on | on · off | A narrow strip down a Markdown preview's left edge holding a fold arrow beside each heading; the document moves right to make room. Off, the strip and its arrows are gone and folding stays available from the menus and bindings. |
+| Markdown: Heading jump scroll duration (ms) | `editor.previews.providers.markdown.headingJumpMs` | 200 | 0 – 2,000 ms, step 50 | How long a jump from [Go to Heading](key-bindings.md#navigate) takes to scroll there. Zero jumps instantly. |
 
 ### Links
 

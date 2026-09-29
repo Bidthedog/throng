@@ -118,6 +118,7 @@ pane has focus; the caret moves with focus, into whichever control in that panel
 | Back | `navigate.back` | `Alt+ArrowLeft` | Editor · Preview | Show the previous file in the focused editor or preview's history. In an editor this takes the key from moving by syntax. |
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
 | Open Link | `preview.followLink` | `Ctrl+Enter` | Editor · Preview | Open the link under the caret in an editor, or the focused link in a preview, exactly as Ctrl+click does. In an editor with no link under the caret it keeps the editor's own meaning. |
+| Go to Heading | `preview.goToHeading` | `Ctrl+G` | Preview | Open a searchable list of the preview's headings over the document and jump to one. Pressed again while the list is open, it returns to the list's search box. |
 
 The mouse's own back and forward buttons do the same as **Back** and **Forward** over an editor or
 preview panel; they are not a rebindable chord.
@@ -162,18 +163,38 @@ Cut, Copy, Paste, Select All, Undo and Redo inside an editor keep their native b
 (`Ctrl+X`/`C`/`V`/`A`/`Z`/`Y`) and are not listed in the editor. A rectangular selection can also be
 dragged with **Alt** held.
 
-## Search
+## Markdown
 
-The find bar is one control routed to the active panel: in an editor it finds and replaces in the
-file; in a terminal it searches the scrollback, read-only, and never types at the shell. Find in
-Files searches the whole project from any surface.
+Folding a Markdown document's sections under their headings. Live in a Markdown editor and in a
+Markdown preview; the editor and its preview share one fold state, so folding in either folds both.
+In an editor *this section* is the one holding the caret; in a preview, the one at the top of the
+view. Collapsing a section keeps the state of the sections inside it.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
-| Find | `search.find` | `Ctrl+F` | Editor · Terminal | Open find on the active panel. |
-| Find next | `search.findNext` | `F3` | Editor · Terminal | Move to the next match, wrapping at the end. |
-| Find previous | `search.findPrevious` | `Shift+F3` | Editor · Terminal | Move to the previous match, wrapping at the start. |
-| Close find | `search.close` | `Escape` | Editor · Terminal | Close the find bar and clear its highlights. |
+| Toggle this section | `markdown.toggleSection` | `Ctrl+M,M` | Editor · Preview | Collapse or expand the current section. |
+| Toggle all sections | `markdown.toggleAll` | `Ctrl+M,L` | Editor · Preview | Collapse every section if any is expanded, otherwise expand every section. |
+| Collapse this section | `markdown.collapseSection` | `Ctrl+M,S` | Editor · Preview | Collapse the current section. |
+| Expand this section | `markdown.expandSection` | *(unbound)* | Editor · Preview | Expand the current section. |
+| Collapse all sections | `markdown.collapseAll` | `Ctrl+M,A` | Editor · Preview | Collapse every section, at every level. |
+| Expand all sections | `markdown.expandAll` | *(unbound)* | Editor · Preview | Expand every section, at every level. |
+
+In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
+with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
+
+## Search
+
+The find bar is one control routed to the active panel: in an editor it finds and replaces in the
+file; in a Markdown preview it finds in the rendered text, read-only; in a terminal it searches the
+scrollback, read-only, and never types at the shell. Find in Files searches the whole project from
+any surface.
+
+| Command | Action id | Default | Scope | What it does |
+|---|---|---|---|---|
+| Find | `search.find` | `Ctrl+F` | Editor · Terminal · Preview | Open find on the active panel. |
+| Find next | `search.findNext` | `F3` | Editor · Terminal · Preview | Move to the next match, wrapping at the end. |
+| Find previous | `search.findPrevious` | `Shift+F3` | Editor · Terminal · Preview | Move to the previous match, wrapping at the start. |
+| Close find | `search.close` | `Escape` | Editor · Terminal · Preview | Close the find bar and clear its highlights. |
 | Replace | `search.replace` | `Ctrl+H` | Editor · Terminal | Open find with replace on the active editor. |
 | Replace match | `search.replaceCurrent` | `Alt+Enter` | Editor · Terminal | Replace the current match and move to the next one. |
 | Replace all | `search.replaceAll` | `Ctrl+Alt+Enter` | Editor · Terminal | Replace every match in the file as a single undoable step. |
