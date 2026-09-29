@@ -31,6 +31,7 @@ Closes #
      assumption is not. -->
 
 - [ ] **This PR is a REPRODUCTION and its new test is meant to be RED** — the failing output below is the deliverable, and the stages that cover it are expected to fail until the fix lands. Tick this and the stage boxes are N/A; everything else in this section still applies.
+- [ ] `npm run build` — green, with **no renderer chunk over 500 kB**. The build fails on one (`packages/ui/vite.config.ts`); split it with a `chunkFor` rule, never by raising the limit.
 - [ ] `npm run test:unit` — green
 - [ ] `npm run test:integration` — green
 - [ ] `npm run test:contract` — green

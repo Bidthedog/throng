@@ -1,6 +1,35 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+
+/**
+ * Vite's "Some chunks are larger than 500 kB" is only a WARNING, so it scrolled past on every build
+ * while the app chunk grew through it (047 took it to 525 kB). This makes the same condition, at
+ * Vite's own `chunkSizeWarningLimit`, fail the build — and so the gate's build stage and every PR.
+ * The fix is a chunk rule in `chunkFor` below, never a raised limit.
+ */
+function failOnOversizedChunks(): Plugin {
+  let limitKb = 500;
+  return {
+    name: 'throng:fail-on-oversized-chunks',
+    apply: 'build',
+    configResolved(config) {
+      limitKb = config.build.chunkSizeWarningLimit;
+    },
+    generateBundle(_options, bundle) {
+      const oversized = Object.values(bundle)
+        .filter((out) => out.type === 'chunk')
+        .map((chunk) => ({ name: chunk.fileName, kb: Buffer.byteLength(chunk.code) / 1000 }))
+        .filter((c) => c.kb > limitKb);
+      if (oversized.length > 0) {
+        this.error(
+          `chunks over ${limitKb} kB — split them with a rule in chunkFor (vite.config.ts): ` +
+            oversized.map((c) => `${c.name} ${c.kb.toFixed(2)} kB`).join(', '),
+        );
+      }
+    },
+  };
+}
 
 /**
  * The `@lezer/*` packages that are the parser RUNTIME rather than a language: the LR engine, the
@@ -16,7 +45,7 @@ const SHARED_LEZER = new Set(['common', 'lr', 'highlight']);
 export default defineConfig({
   root: fileURLToPath(new URL('./src/renderer', import.meta.url)),
   base: './',
-  plugins: [react()],
+  plugins: [react(), failOnOversizedChunks()],
   // Force a single React/ReactDOM instance regardless of how npm hoists the
   // workspace tree. Without this, a stale nested `react` in a package's
   // node_modules bundles a second React copy, leaving hook consumers (e.g.
@@ -64,6 +93,9 @@ function chunkFor(rawId: string): string | null {
   // metadata. Its own chunk, like a vendor, so no window's app chunk carries it (044: the workspace
   // chunk passed 500 kB).
   if (/\/packages\/core\//.test(id)) return 'core';
+  // The preview panel and its providers — the app's own code, but its largest self-contained area.
+  // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).
+  if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
   if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
