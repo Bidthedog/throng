@@ -603,8 +603,10 @@ describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (04
     expect('focus.workspace' in after, 'nothing kept N, so the per-read fill supplies it').toBe(false);
     // Re-pinned: FR-124 bumps the marker to 15 (word wrap's Ctrl+E,W); the rows above are unchanged.
     // Re-pinned again: FR-127 bumps the marker to 16 (the panel reset's Ctrl+Alt+0).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
-    expect(await service.readAppliedVersion()).toBe(16);
+    // And 047 bumps it to 17 (the Markdown fold chords, Ctrl+M,*, and Go to Heading's Ctrl+G), then
+    // to 18 (`searchMatchBorder`, FR-074).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
+    expect(await service.readAppliedVersion()).toBe(18);
   });
 
   it('a second upgrade writes nothing', async () => {

@@ -31,6 +31,8 @@ interface Block {
   line: number;
   y: number;
   h: number;
+  /** 047 FR-041a — a block a collapsed ancestor section hides (R6's `hidden` attribute). */
+  hidden?: boolean;
 }
 
 /**
@@ -46,7 +48,8 @@ function container(blocks: Block[], scrollTop: number): AnchorContainer & { bloc
     querySelectorAll: (selector: string): AnchorElement[] => {
       expect(selector).toBe('[data-source-line]');
       return self.blocks.map((b) => ({
-        getAttribute: (name: string) => (name === 'data-source-line' ? String(b.line) : null),
+        getAttribute: (name: string) =>
+          name === 'data-source-line' ? String(b.line) : name === 'hidden' && b.hidden === true ? '' : null,
         getBoundingClientRect: () => ({ top: VIEWPORT_TOP + b.y - self.scrollTop, height: b.h }),
       }));
     },
@@ -290,6 +293,57 @@ describe('the blocks two-way sync compares (FR-121g)', () => {
     expect(isTopOfDocument({ line: 0, offsetRatio: 0.5 })).toBe(false);
     expect(isTopOfDocument({ line: 2, offsetRatio: 0 })).toBe(false);
     expect(isTopOfDocument('top')).toBe(false);
+  });
+});
+
+/*
+ * 047 T051 (FR-041a, R6) — a collapsed section's blocks carry `hidden` (the fold gutter's own attribute,
+ * `fold-gutter.ts`) but stay in the DOM with their `data-source-line` untouched, so folding elsewhere
+ * must not corrupt which block scroll sync names for the top of the viewport. A hidden block is excluded
+ * from measurement altogether — it is not drawn, so it cannot be what the reader sees at the top, however
+ * its stale layout rect (commonly collapsed to zero, or wherever it last was) might otherwise straddle
+ * the edge.
+ */
+describe('hidden blocks are skipped by measurement (FR-041a)', () => {
+  it('captureScrollAnchor never names a hidden block, even one whose rect straddles the top edge', () => {
+    const blocks: Block[] = [
+      { line: 0, y: 0, h: 100 },
+      { line: 2, y: 100, h: 100, hidden: true }, // a collapsed section's block; unhidden it would straddle
+      { line: 4, y: 200, h: 100 },
+    ];
+    // scrollTop 150: line 2's rect (top -50, height 100) is the only one that would straddle the edge — it
+    // is skipped, and the edge falls in the margin below it, so line 4 is named instead (the block below
+    // the margin), 50px short of its own top.
+    expect(captureScrollAnchor(container(blocks, 150))).toEqual({ line: 4, offsetRatio: -0.5 });
+  });
+
+  it('topBlockLine skips a hidden block and names the next visible one', () => {
+    const blocks: Block[] = [
+      { line: 0, y: 0, h: 50, hidden: true }, // unhidden this would straddle the edge at scrollTop 25
+      { line: 2, y: 50, h: 50 },
+    ];
+    expect(topBlockLine(container(blocks, 25))).toBe(2);
+  });
+
+  it('restoreScrollAnchor never targets a hidden block, even one on or before the anchored line', () => {
+    const blocks: Block[] = [
+      { line: 0, y: 0, h: 50 },
+      { line: 4, y: 50, h: 50, hidden: true }, // the section the anchor's line 6 falls inside is collapsed
+      { line: 8, y: 100, h: 50 },
+    ];
+    const c = container(blocks, 0);
+    restoreScrollAnchor(c, { line: 6, offsetRatio: 0 });
+    // Line 4's block is hidden: the nearest VISIBLE block at or before line 6 is line 0.
+    expect(c.scrollTop).toBe(0);
+  });
+
+  it('a fully hidden body (every block collapsed) measures as empty, like a body with none', () => {
+    const blocks: Block[] = [
+      { line: 0, y: 0, h: 50, hidden: true },
+      { line: 2, y: 50, h: 50, hidden: true },
+    ];
+    expect(captureScrollAnchor(container(blocks, 60))).toBeNull();
+    expect(topBlockLine(container(blocks, 60))).toBeNull();
   });
 });
 

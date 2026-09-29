@@ -22,7 +22,7 @@ const HOSTILE_ENV = { panelId: 'pv-hostile', docPath: 'D:/proj/docs/hostile.md',
 
 /** The production wiring: the pipeline bound to the real sanitiser, exactly as the panel gets it. */
 function render(text: string): DocumentFragment {
-  return createMarkdownRenderer().render(text);
+  return createMarkdownRenderer().render(text).fragment;
 }
 
 function elements(fragment: DocumentFragment): Element[] {
@@ -54,7 +54,7 @@ describe('hostile.md through the pipeline and the sanitiser (FR-081, FR-082, SC-
     }
     // With a real document, project and remote images ON — the production path, where the image and link
     // hooks actually resolve rather than failing closed for want of an environment (fix round 1, item 2).
-    fragment = createMarkdownRenderer().render(text, HOSTILE_ENV);
+    fragment = createMarkdownRenderer().render(text, HOSTILE_ENV).fragment;
     all = elements(fragment);
   });
 
@@ -274,7 +274,7 @@ describe('fix round 1 — the heading nonce and the hooks’ single registration
     const fragment = createMarkdownRenderer().render(
       '<h2 data-source-line="2" data-heading-slug="real">spoof</h2>\n\n# Real\n',
       ENV,
-    );
+    ).fragment;
     const spoof = [...fragment.querySelectorAll('h2')].find((h) => h.textContent === 'spoof');
     expect(spoof?.hasAttribute('data-heading-slug')).toBe(false);
     expect(fragment.querySelector('h1')?.getAttribute('data-heading-slug')).toBe('real');
@@ -282,7 +282,7 @@ describe('fix round 1 — the heading nonce and the hooks’ single registration
   });
 
   it('the pipeline’s verification attribute never reaches the DOM', () => {
-    const fragment = createMarkdownRenderer().render('# One\n\n## Two\n', ENV);
+    const fragment = createMarkdownRenderer().render('# One\n\n## Two\n', ENV).fragment;
     for (const el of fragment.querySelectorAll('*')) {
       for (const { name } of [...el.attributes]) expect(name, el.outerHTML).not.toMatch(/nonce/i);
     }
@@ -293,7 +293,7 @@ describe('fix round 1 — the heading nonce and the hooks’ single registration
     const renderer = createMarkdownRenderer();
     const text = '# T\n\n[Site](https://example.com/)\n';
     renderer.render(text, ENV);
-    const second = renderer.render(text, ENV);
+    const second = renderer.render(text, ENV).fragment;
     const a = second.querySelector('a');
     expect(a?.getAttribute('title')).toBe('https://example.com/');
     expect(a?.getAttribute('data-throng-link')).toBe('{"kind":"external","url":"https://example.com/"}');
@@ -322,7 +322,7 @@ describe('nothing inside a followable link can show a title of its own (adversar
     ['a raw span title inside a raw link', `<a href="https://evil.example/"><span title="${FORGED}">click</span></a>`],
     ['a raw title nested two deep', `<a href="https://evil.example/"><em><span title="${FORGED}">click</span></em></a>`],
   ])('%s', (_name, text) => {
-    const fragment = createMarkdownRenderer().render(text, ENV);
+    const fragment = createMarkdownRenderer().render(text, ENV).fragment;
     const link = fragment.querySelector('[data-throng-link]');
     // Positive control: the link really is followable, and its own title names the real target.
     expect(link).not.toBeNull();
@@ -334,7 +334,7 @@ describe('nothing inside a followable link can show a title of its own (adversar
 
   // Amended for FR-120 (iteration 2026-09-15): the authored title is kept, after the source as written.
   it('an image title OUTSIDE any link is the document’s own tooltip and is kept, after the image’s source', () => {
-    const fragment = createMarkdownRenderer().render('![logo](logo.png "The logo")', ENV);
+    const fragment = createMarkdownRenderer().render('![logo](logo.png "The logo")', ENV).fragment;
     expect(fragment.querySelector('img')?.getAttribute('title')).toBe('logo.png — The logo');
   });
 });

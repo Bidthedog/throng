@@ -154,11 +154,16 @@ describe('the file-tree chords are NOT live over a Find in Files panel (043 R14)
  *
  * A preview is a document the user reads and scrolls, and the fallback would put it in the
  * EXPLORER's scope: Delete, F2, Ctrl+X and Ctrl+C would all act on the file tree's selection while
- * the user's attention is on the rendered page. FR-021 also makes save and find inert there — a
- * preview has no document of its own to save and no find bar — and both are editor/panel commands,
- * so the `preview` scope gives them nothing to resolve to.
+ * the user's attention is on the rendered page. FR-021 also makes save inert there — a preview has
+ * no document of its own to save — an editor/panel command the `preview` scope gives nothing to
+ * resolve to.
+ *
+ * 047 FR-004 supersedes FR-021's FIND half only (research R1): a preview now mounts the same find
+ * bar as an editor, so `search.find`/`findNext`/`findPrevious`/`close` join `FIND_SURFACES` and
+ * resolve over `preview`. Replace stays off it by construction — `search.replace*` never left
+ * `PANELS` (`{editor, terminal}`) — so its own describe block below is unchanged.
  */
-describe('the file, save and find chords resolve to nothing over a preview (044 FR-021)', () => {
+describe('the file and save chords resolve to nothing over a preview (044 FR-021)', () => {
   const quiet = { transientFocus: false, overlayOpen: false };
   const over = (kind: string): { tabs: Tab[]; activeTabId: string } => ({
     tabs: [tabWith(kind)],
@@ -177,7 +182,6 @@ describe('the file, save and find chords resolve to nothing over a preview (044 
     { chord: 'Ctrl+X', ev: { key: 'x', ctrl: true }, action: 'file.cut', live: 'placeholder' },
     { chord: 'Ctrl+C', ev: { key: 'c', ctrl: true }, action: 'file.copy', live: 'placeholder' },
     { chord: 'Ctrl+S', ev: { key: 's', ctrl: true }, action: 'editor.save', live: 'editor' },
-    { chord: 'Ctrl+F', ev: { key: 'f', ctrl: true }, action: 'search.find', live: 'editor' },
   ];
 
   for (const { chord, ev, action, live } of INERT) {
@@ -201,6 +205,64 @@ describe('the file, save and find chords resolve to nothing over a preview (044 
         quiet,
       ),
     ).toBe('focus.left');
+  });
+});
+
+/**
+ * 047 FR-004 (research R1) — find, but not replace, is live over a preview.
+ *
+ * `Ctrl+F`/`F3`/`Shift+F3`/`Escape` (`search.find`/`findNext`/`findPrevious`/`close`) now resolve
+ * over `preview` exactly as they do over `editor` — `FIND_SURFACES` in core's `COMMAND_SCOPES`.
+ * `Ctrl+H`/`Alt+Enter`/`Ctrl+Alt+Enter` (`search.replace`/`replaceCurrent`/`replaceAll`) stay on
+ * `PANELS` and resolve to nothing there: a preview has no document to overtype, so the bar it mounts
+ * (`preview-search.ts`) is find-only by construction, and this scope resolution is the reason a
+ * replace chord reaching it does nothing rather than opening a row with no field behind it.
+ */
+describe('find resolves over a preview; replace still does not (047 FR-004)', () => {
+  const quiet = { transientFocus: false, overlayOpen: false };
+  const over = (kind: string): { tabs: Tab[]; activeTabId: string } => ({
+    tabs: [tabWith(kind)],
+    activeTabId: 't1',
+  });
+
+  type Ev = Parameters<typeof resolveScoped>[1];
+  const FIND: Array<{ chord: string; ev: Ev; action: string }> = [
+    { chord: 'Ctrl+F', ev: { key: 'f', ctrl: true }, action: 'search.find' },
+    { chord: 'F3', ev: { key: 'F3' }, action: 'search.findNext' },
+    { chord: 'Shift+F3', ev: { key: 'F3', shift: true }, action: 'search.findPrevious' },
+    { chord: 'Escape', ev: { key: 'Escape' }, action: 'search.close' },
+  ];
+
+  for (const { chord, ev, action } of FIND) {
+    it(`${chord} resolves to ${action} over a preview, exactly as over an editor`, () => {
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, ev, over('editor'), quiet)).toBe(action);
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, ev, over('preview'), quiet)).toBe(action);
+    });
+  }
+
+  const REPLACE: Array<{ chord: string; ev: Ev; action: string }> = [
+    { chord: 'Ctrl+H', ev: { key: 'h', ctrl: true }, action: 'search.replace' },
+    { chord: 'Alt+Enter', ev: { key: 'Enter', alt: true }, action: 'search.replaceCurrent' },
+    { chord: 'Ctrl+Alt+Enter', ev: { key: 'Enter', ctrl: true, alt: true }, action: 'search.replaceAll' },
+  ];
+
+  for (const { chord, ev, action } of REPLACE) {
+    it(`${chord} resolves to ${action} over an editor, and to NOTHING over a preview`, () => {
+      expect(resolveScoped(DEFAULT_KEYBINDINGS, ev, over('editor'), quiet)).toBe(action);
+      expect(
+        resolveScoped(DEFAULT_KEYBINDINGS, ev, over('preview'), quiet),
+        `${chord} resolved over a preview panel`,
+      ).toBeNull();
+    });
+  }
+
+  it('COMMAND_SCOPES: the four find actions carry preview; the three replace actions do not', () => {
+    for (const action of ['search.find', 'search.findNext', 'search.findPrevious', 'search.close']) {
+      expect(COMMAND_SCOPES[action as ActionId]?.has('preview'), action).toBe(true);
+    }
+    for (const action of ['search.replace', 'search.replaceCurrent', 'search.replaceAll']) {
+      expect(COMMAND_SCOPES[action as ActionId]?.has('preview'), action).toBe(false);
+    }
   });
 });
 

@@ -261,11 +261,41 @@ describe('the shipped registration (FR-065, FR-080)', () => {
     expect(md.sourceMimeTypes).toBeUndefined();
   });
 
-  it('declares exactly its two own settings, Load remote images then Show front matter, both toggles shipping on (FR-092, FR-117)', () => {
+  it('declares exactly its four own settings — Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — the first two toggles shipping on (FR-092, FR-117)', () => {
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
-    expect(md.settings?.map((s) => s.leaf)).toEqual(['loadRemoteImages', 'showFrontMatter']);
+    expect(md.settings?.map((s) => s.leaf)).toEqual([
+      'loadRemoteImages',
+      'showFrontMatter',
+      'gutter',
+      'headingJumpMs',
+    ]);
     const frontMatter = md.settings?.find((s) => s.leaf === 'showFrontMatter');
     expect(frontMatter).toMatchObject({ label: 'Show front matter', control: 'toggle', default: true });
     expect(frontMatter?.description.trim().length).toBeGreaterThan(0);
+  });
+
+  /*
+   * 047 FR-032b/FR-042d — the preview gutter (a toggle, shipping on) and the heading-jump scroll
+   * duration (a bounded number, shipping at 200ms). Both are provider leaves like the two 044
+   * settings above, so both are drawn disabled while Markdown previews are off.
+   */
+  it('declares its own Preview gutter toggle, shipping on (FR-032b)', () => {
+    const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
+    const gutter = md.settings?.find((s) => s.leaf === 'gutter');
+    expect(gutter).toMatchObject({ label: 'Preview gutter', control: 'toggle', default: true });
+    expect(gutter?.description.trim().length).toBeGreaterThan(0);
+  });
+
+  it('declares its own Heading jump scroll duration, bounded 0-2000, shipping at 200ms (FR-042d)', () => {
+    const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
+    const jump = md.settings?.find((s) => s.leaf === 'headingJumpMs');
+    expect(jump).toMatchObject({
+      label: 'Heading jump scroll duration (ms)',
+      control: 'number',
+      default: 200,
+      min: 0,
+      max: 2000,
+    });
+    expect(jump?.description.trim().length).toBeGreaterThan(0);
   });
 });

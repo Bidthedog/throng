@@ -24,7 +24,7 @@ function spyPipeline() {
 }
 
 function html(text: string): string {
-  return spyPipeline().pipeline.render(text);
+  return spyPipeline().pipeline.render(text).fragment;
 }
 
 /** Every opening tag in `out` whose name is `tag`, as the tag text. */
@@ -113,7 +113,7 @@ describe('data-heading-slug from headingSlug, never an id (FR-090b, FR-090d, FR-
   it('starts the de-duplication afresh on every render', () => {
     const { pipeline } = spyPipeline();
     pipeline.render(doc);
-    const second = pipeline.render(doc);
+    const second = pipeline.render(doc).fragment;
     expect(attr(openTags(second, 'h1')[0], 'data-heading-slug')).toBe('install');
   });
 
@@ -252,7 +252,7 @@ describe('the sanitiser is in the path (FR-081)', () => {
 
     const result = pipeline.render(text);
 
-    expect(result).toBe(sentinel);
+    expect(result.fragment).toBe(sentinel);
     expect(sanitise).toHaveBeenCalledTimes(1);
     // Each render draws its own random heading nonce (fix round 1), so the two renders agree except there.
     const withoutNonce = (html: string): string => html.replace(/ data-heading-nonce="[0-9a-f]+"/g, '');
@@ -277,7 +277,7 @@ describe('front matter hidden (FR-117)', () => {
   const ENV = { panelId: 'p1', docPath: 'D:/proj/README.md', projectRoot: 'D:/proj', remoteImages: false };
 
   const renderWith = (text: string, frontMatter: boolean): string =>
-    spyPipeline().pipeline.render(text, { ...ENV, frontMatter });
+    spyPipeline().pipeline.render(text, { ...ENV, frontMatter }).fragment;
 
   it('front-matter.md renders no table, no rule and none of its keys or values', () => {
     const text = fixture('front-matter.md');
@@ -319,7 +319,7 @@ describe('front matter hidden (FR-117)', () => {
   it('true — and an environment that does not say — is unchanged: the table renders', () => {
     const text = fixture('front-matter.md');
     expect(openTags(renderWith(text, true), 'table')).toHaveLength(1);
-    expect(openTags(spyPipeline().pipeline.render(text, ENV), 'table')).toHaveLength(1);
+    expect(openTags(spyPipeline().pipeline.render(text, ENV).fragment, 'table')).toHaveLength(1);
     expect(openTags(renderWith(fixture('front-matter-invalid.md'), true), 'pre')).toHaveLength(1);
   });
 });

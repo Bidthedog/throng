@@ -119,7 +119,8 @@ afterEach(() => {
 describe('a default open action of Preview opens the preview, not an editor (FR-052, FR-053)', () => {
   it('openFromTree asks preview.open for the file in its project, and opens no editor', async () => {
     const result = await openFromTree(sliceWs(), README, 'lastActive', route(PREVIEW));
-    expect(opened).toEqual([{ absPath: README, projectId: PROJECT }]);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: README, projectId: PROJECT, keepFocus: true, flash: true }]);
     expect(openFileInTab).not.toHaveBeenCalled();
     expect(result).toBe(true);
   });
@@ -141,7 +142,8 @@ describe('a default open action of Preview opens the preview, not an editor (FR-
 
     await openFromTree(ws, README, 'lastActive', route(PREVIEW));
 
-    expect(opened).toEqual([{ absPath: README, projectId: PROJECT }]);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: README, projectId: PROJECT, keepFocus: true, flash: true }]);
     expect(opened[0]).not.toHaveProperty('requesterPanelId');
     expect(openFileInTab).not.toHaveBeenCalled();
   });
@@ -164,8 +166,10 @@ describe('a refusal from main falls through to the editor route, not a false "op
 
     const result = await openFromTree(sliceWs(), README, 'lastActive', route(PREVIEW));
 
-    expect(opened).toEqual([{ absPath: README, projectId: PROJECT }]);
-    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'lastActive', undefined);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: README, projectId: PROJECT, keepFocus: true, flash: true }]);
+    // 047 FR-083 — and flashes the editor it landed in.
+    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'lastActive', undefined, { flash: true });
     expect(result).toBe(true);
   });
 
@@ -190,13 +194,13 @@ describe('an editor where Preview is not the answer (FR-050, FR-062)', () => {
   it('a disabled provider suspends Preview: the file opens in an editor', async () => {
     await openFromTree(sliceWs(), README, 'lastActive', route(PREVIEW_OFF));
     expect(opened).toEqual([]);
-    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'lastActive', undefined);
+    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'lastActive', undefined, { flash: true });
   });
 
   it('the shipped default (Editor) calls openFileInTab exactly as before', async () => {
     await openFromTree(sliceWs(), README, 'new', route({}));
     expect(opened).toEqual([]);
-    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'new', undefined);
+    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'new', undefined, { flash: true });
   });
 
   it('a file no provider claims opens in an editor', async () => {
@@ -249,6 +253,12 @@ describe('Find in Files and Open In always open an editor (FR-054, FR-055)', () 
     await performOpenIn({ ws: sliceWs(), absPath: README, target: { kind: 'new' } });
     expect(opened).toEqual([]);
     expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', README, 'new', undefined);
+  });
+
+  it('Open In from File Explorer flashes the editor it lands in; from elsewhere it does not (047 FR-083)', async () => {
+    await performOpenIn({ ws: sliceWs(), absPath: README, target: { kind: 'new' }, flash: true });
+    await performOpenIn({ ws: sliceWs(), absPath: README, target: { kind: 'tab', tabId: 'tab-1' }, flash: true });
+    expect(openFileInTab.mock.calls.map((c) => (c as unknown[])[5])).toEqual([{ flash: true }, { flash: true }]);
   });
 
   it('Open In → Last Active Editor opens an editor', async () => {
@@ -372,7 +382,8 @@ describe('File Explorer click and Enter go through the router (T135)', () => {
 
     await treeOpen(README);
 
-    expect(opened).toEqual([{ absPath: README, projectId: PROJECT }]);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: README, projectId: PROJECT, keepFocus: true, flash: true }]);
     // The editor route's first act is the one-buffer question to main; it was never asked.
     expect(openInto).not.toHaveBeenCalled();
     const panels = collectPanels(captured.ws!.layout!.tabs[0].root);

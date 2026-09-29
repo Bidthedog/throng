@@ -71,6 +71,9 @@ const EXPECTED: PreviewOpenRequest = {
   projectId: 'proj-editor',
   requesterPanelId: PANEL,
   hasParentLocally: true,
+  // 047 US2 (R8) — sent on every request now; no candidate recorded in any of these mounts, so
+  // `null`, and no test here overrides `editor.previews.openTarget`'s shipped default.
+  target: { mode: 'lastActive', reusePanelId: null },
 };
 
 beforeEach(() => {

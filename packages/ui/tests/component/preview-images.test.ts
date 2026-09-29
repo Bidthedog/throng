@@ -22,7 +22,7 @@ const ROOT = 'D:/proj';
 const DOC = `${ROOT}/docs/guide.md`;
 
 function renderImages(text: string, remoteImages = true): DocumentFragment {
-  return createMarkdownRenderer().render(text, { panelId: 'pv-1', docPath: DOC, projectRoot: ROOT, remoteImages });
+  return createMarkdownRenderer().render(text, { panelId: 'pv-1', docPath: DOC, projectRoot: ROOT, remoteImages }).fragment;
 }
 
 const img = (fragment: DocumentFragment): HTMLImageElement => {
@@ -49,7 +49,7 @@ describe('a relative image resolves against the document and is served by throng
       docPath: DOC,
       projectRoot: ROOT,
       remoteImages: true,
-    });
+    }).fragment;
     expect(img(out).getAttribute('src')).toBe('throng-preview://asset/pv%201/docs/my%20pics/a%20b.png');
   });
 

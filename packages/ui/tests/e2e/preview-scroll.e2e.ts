@@ -88,7 +88,7 @@ async function headingPlace(win: Page, previewId: string, heading: string): Prom
       ({ id, text }) => {
         const host = document.querySelector<HTMLElement>(`[data-testid="preview-body-${id}"]`);
         if (host === null) return null;
-        const h = [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => el.textContent?.trim() === text);
+        const h = [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => (el.getAttribute('aria-label') ?? el.textContent)?.trim() === text);
         if (h === undefined) return null;
         return { top: h.getBoundingClientRect().top - host.getBoundingClientRect().top, scrollTop: host.scrollTop };
       },
@@ -120,7 +120,7 @@ async function scrollHeadingTo(win: Page, previewId: string, heading: string, of
   await win.evaluate(
     ({ id, text, px }) => {
       const host = document.querySelector<HTMLElement>(`[data-testid="preview-body-${id}"]`)!;
-      const h = [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => el.textContent?.trim() === text)!;
+      const h = [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => (el.getAttribute('aria-label') ?? el.textContent)?.trim() === text)!;
       host.scrollTop += h.getBoundingClientRect().top - host.getBoundingClientRect().top - px;
     },
     { id: previewId, text: heading, px: offset },
@@ -219,7 +219,7 @@ test('Back twice then Forward once returns a preview to the place the reader lef
     const before = await previewIds(win);
     await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
     await win.getByTestId('menu-item-Open In').click();
-    await win.getByTestId('menu-item-Preview').click();
+    await win.getByTestId('menu-item-New Preview Panel').click();
     const previewId = await newPreviewId(win, before);
     const preview = win.getByTestId(`preview-markdown-${previewId}`);
     await expect(preview).toContainText('Links fixture');
@@ -316,7 +316,7 @@ test('a mouse drag selects preview text across paragraphs, and a Ctrl+drag on a 
     const before = await previewIds(win);
     await tree.getByText('selection.md', { exact: true }).click({ button: 'right' });
     await win.getByTestId('menu-item-Open In').click();
-    await win.getByTestId('menu-item-Preview').click();
+    await win.getByTestId('menu-item-New Preview Panel').click();
     const previewId = await newPreviewId(win, before);
     const preview = win.getByTestId(`preview-markdown-${previewId}`);
     await expect(preview).toContainText('Charlie paragraph');
@@ -488,7 +488,7 @@ async function headingBox(win: Page, previewId: string, heading: string): Promis
     win.evaluate(
       ({ id, text }) => {
         const host = document.querySelector<HTMLElement>(`[data-testid="preview-body-${id}"]`);
-        const h = host === null ? undefined : [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => el.textContent?.trim() === text);
+        const h = host === null ? undefined : [...host.querySelectorAll('h1,h2,h3,h4,h5,h6')].find((el) => (el.getAttribute('aria-label') ?? el.textContent)?.trim() === text);
         if (host === null || h === undefined) return null;
         const r = h.getBoundingClientRect();
         return { top: r.top - host.getBoundingClientRect().top, height: r.height };
@@ -544,7 +544,7 @@ async function wheelHeadingJustBelowTop(win: Page, previewId: string, heading: s
         ({ id, text }) => {
           const host = document.querySelector<HTMLElement>(`[data-testid="preview-body-${id}"]`)!;
           const blocks = [...host.querySelectorAll<HTMLElement>('[data-source-line]')];
-          const at = blocks.findIndex((el) => el.textContent?.trim() === text);
+          const at = blocks.findIndex((el) => (el.getAttribute('aria-label') ?? el.textContent)?.trim() === text);
           return blocks[at - 1]!.getBoundingClientRect().bottom - host.getBoundingClientRect().top;
         },
         { id: previewId, text: heading },

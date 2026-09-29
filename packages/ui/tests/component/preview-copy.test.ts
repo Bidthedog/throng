@@ -25,6 +25,7 @@ import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
+import { applyTableLayout } from '../../src/renderer/preview/table-layout.js';
 import { COLD, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
 const DOC = [
@@ -329,11 +330,21 @@ function selectRange(start: [Node, number], end: [Node, number]): void {
   selection.addRange(range);
 }
 
-/** The first text node under `el`. */
+/**
+ * The first text node under `el` that a reader could actually put a caret in — skipping any node
+ * inside `aria-hidden` chrome (047 T045: the fold gutter's toggle, an icon glyph among them, is now
+ * a heading's FIRST child; it is `aria-hidden` like every icon in this app, decorative and never part
+ * of a real drag-select, so `textIn` must walk past it to the heading's own authored text).
+ */
 function textIn(el: Element): Text {
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const hidden = node.parentElement?.closest('[aria-hidden="true"]');
+      return hidden && el.contains(hidden) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    },
+  });
   const node = walker.nextNode();
-  if (node === null) throw new Error(`no text under <${el.tagName.toLowerCase()}>`);
+  if (node === null) throw new Error(`no visible text under <${el.tagName.toLowerCase()}>`);
   return node as Text;
 }
 
@@ -568,5 +579,49 @@ describe('fix round 1 (item 5) — a partial range across blocks copies balanced
     expect(html).not.toMatch(/\sclass=/);
     expect(richText().startsWith('ease notes')).toBe(true);
     expect(richText().trimEnd().endsWith('first')).toBe(true);
+  });
+});
+
+describe('a table whose hyphenated tokens are held whole (T075, FR-073, R15)', () => {
+  const NOWRAP = '.preview-table-nowrap';
+  const TABLE = ['| ID | Status |', '| --- | --- |', '| MT-01 | needs retest |', '| MT-02 | see [the doc](https://example.com) |', ''].join('\n');
+
+  async function copyWhole(): Promise<{ text: string; html: string; selected: string }> {
+    selectWhole(markdown());
+    const selected = document.getSelection()!.toString();
+    const event = new Event('copy', { bubbles: true, cancelable: true });
+    act(() => {
+      host().dispatchEvent(event);
+    });
+    await waitFor(() => expect(m!.writeRich).toHaveBeenCalled());
+    return { text: richText(), html: richHtml(), selected };
+  }
+
+  it('copies the same text, and finds the same text, with or without the nowrap spans', async () => {
+    m = await mountMarkdownPreview(TABLE);
+    await screen.findByText('needs retest', {}, COLD);
+    markdown().querySelectorAll(NOWRAP).forEach((s) => s.replaceWith(...s.childNodes));
+    markdown().normalize();
+    const before = await copyWhole();
+    const textBefore = markdown().textContent;
+    m.writeRich.mockClear();
+
+    Object.defineProperty(markdown(), 'clientWidth', { value: 600, configurable: true });
+    applyTableLayout(markdown(), {
+      measure: (t) => [...t.rows[0]!.cells].map(() => ({ min: 20, max: 100 })),
+      minLegiblePx: () => 60,
+      handSet: new Map(),
+      measureToken: (text) => text.length * 10,
+    });
+    expect(markdown().querySelectorAll(NOWRAP).length).toBeGreaterThan(0);
+    const after = await copyWhole();
+
+    expect(after.text).toBe(before.text);
+    expect(after.selected).toBe(before.selected);
+    expect(after.text).toContain('MT-01');
+    expect(after.html).not.toMatch(/nowrap/);
+    expect(after.html).not.toMatch(/\sclass=/);
+    // Find reads the body's text: the same characters, span or no span.
+    expect(markdown().textContent).toBe(textBefore);
   });
 });

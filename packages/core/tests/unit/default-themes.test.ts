@@ -26,7 +26,9 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 //
 // 74 since 046 iterate round 1 (FR-072) added `categoryHeaderBackground` — the Projects pane's
 // category header strip, inheriting `sidebarBg` (see TOKEN_PARENT).
-const EXPECTED_COLOUR_TOKEN_COUNT = 74;
+//
+// 75 since 047 FR-074 added `searchMatchBorder` — the outline every ordinary find match carries.
+const EXPECTED_COLOUR_TOKEN_COUNT = 75;
 /**
  * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
  * `searchScope` (FR-029a/FR-029b, FR-030).
@@ -49,9 +51,21 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 74;
 // menu's "Focus Projects" row — a row FR-074/FR-107 had already retired before the description was
 // ever written, and nothing in the renderer has drawn the token at any point. `migrateTheme` drops a
 // stray `projectList` key from a theme that received it via the version-12 seed (theme-ops.ts).
-const EXPECTED_ICON_TOKEN_COUNT = 72;
+//
+// 76 since 047 (research R10): `foldSectionExpanded`, `foldSectionCollapsed`, `foldPreviewExpanded`
+// and `foldPreviewCollapsed` — the editor's fold-gutter marker and the preview's disclosure triangle,
+// each in its expanded/collapsed pair, none a reuse of `collapseAll`/`expandAll` (see the comment
+// beside them in theme.ts).
+const EXPECTED_ICON_TOKEN_COUNT = 76;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
+/** The icon tokens 047 adds (research R10); named, for the same reason. */
+const FOLD_ICON_TOKENS = [
+  'foldSectionExpanded',
+  'foldSectionCollapsed',
+  'foldPreviewExpanded',
+  'foldPreviewCollapsed',
+] as const;
 /** Tokens removed AFTER the fixture was captured — stripped from the fixture before non-drift compare. */
 const REMOVED_SINCE_FIXTURE = ['activePaneHighlight'];
 /**
@@ -70,6 +84,7 @@ const ADDED_SINCE_FIXTURE = [
   'linkHintText',
   'linkHintBorder',
   'categoryHeaderBackground',
+  'searchMatchBorder',
 ];
 
 const EXPECTED = [
@@ -160,6 +175,17 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     }
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
       for (const token of PREVIEW_ICON_TOKENS) {
+        expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('every bundled theme carries the four 047 Markdown fold icon tokens (research R10)', () => {
+    for (const token of FOLD_ICON_TOKENS) {
+      expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
+    }
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      for (const token of FOLD_ICON_TOKENS) {
         expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
       }
     }

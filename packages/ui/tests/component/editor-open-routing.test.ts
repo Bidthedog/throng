@@ -60,6 +60,7 @@ import { setLastActiveEditor, forgetEditor } from '../../src/renderer/editor/las
 import { useUnsavedOpenRequest, type UnsavedOpenChoice } from '../../src/renderer/editor/unsaved-open-store.js';
 import { openFileInTab, openFileInPanel, EditorOpenListener } from '../../src/renderer/editor/editor-open.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
+import { __resetPanelFlash, panelFlashRequest } from '../../src/renderer/workspace/panel-flash.js';
 
 const PROJECT = 'project-1';
 const FILE_A = 'D:/proj/a.txt';
@@ -277,6 +278,69 @@ describe('a file already open somewhere is focused, never opened twice (FR-011a)
     expect(editorPanels(live())).toHaveLength(target);
   });
 });
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 047 FR-083 — a File Explorer open flashes the panel the file landed in
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('openFileInTab flashes where the file landed, when asked (FR-083)', () => {
+  afterEach(() => __resetPanelFlash());
+
+  it('the editor that already held it', async () => {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    const holder = panelsIn(ws)[0].id;
+    act(() => ws.setPanelType(holder, 'editor', { filePath: FILE_A }));
+    asEditor(holder);
+    Reflect.set(window, 'throng', {
+      editor: { openInto: () => Promise.resolve({ action: 'focus', panelId: holder }) },
+      panel: { notifyTyped: () => {} },
+    });
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { flash: true });
+    });
+
+    expect(panelFlashRequest(holder) ?? flashedOnMount(holder)).toBeTruthy();
+  });
+
+  it('the dedicated editor created for it, and the last active editor it replaced into', async () => {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { flash: true });
+    });
+    const created = editorPanels(live())[0].id;
+    expect(panelFlashRequest(created) ?? flashedOnMount(created)).toBeTruthy();
+
+    __resetPanelFlash();
+    asEditor(created);
+    setLastActiveEditor(tabId, created);
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_B, 'lastActive', undefined, { flash: true });
+    });
+    expect(panelFlashRequest(created) ?? flashedOnMount(created)).toBeTruthy();
+  });
+
+  it('control: without the option nothing flashes', async () => {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A);
+    });
+
+    const created = editorPanels(live())[0].id;
+    expect(panelFlashRequest(created)).toBeUndefined();
+  });
+});
+
+/** A request the mounted panel already consumed shows as its overlay instead. */
+const flashedOnMount = (panelId: string): HTMLElement | null => screen.queryByTestId(`panel-flash-${panelId}`);
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * Which editor a TREE open lands in

@@ -76,9 +76,14 @@ describe('the sweep reads real files', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the gutter has exactly one control, and it is app-wide (FR-046)', () => {
-  it('declares exactly one gutter setting', () => {
+  it('declares the editor gutter setting, and since 047 the preview gutter beside it', () => {
+    // 047 FR-031 supersedes FR-046 in part. The preview gutter (047 FR-032b) is a separate strip in
+    // the preview, not an override of the editor's, so its key is the one other gutter-named leaf.
     const gutterKeys = settingsLeaves().filter((k) => /gutter/i.test(k));
-    expect(gutterKeys).toEqual(['editor.showGutter']);
+    expect([...gutterKeys].sort()).toEqual([
+      'editor.previews.providers.markdown.gutter',
+      'editor.showGutter',
+    ]);
   });
 
   it('adds no per-language gutter map to the editor section', () => {
@@ -109,12 +114,20 @@ describe('the gutter has exactly one control, and it is app-wide (FR-046)', () =
  * FR-046 — the gutter holds line numbers and nothing else
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('no other gutter content is introduced (FR-046)', () => {
-  it('registers no fold gutter and no code folding', () => {
+/**
+ * 047 FR-031 supersedes FR-046 in part: the Markdown fold markers are the gutter's one other content,
+ * and they live in exactly this file. Anything else reaching for a fold gutter or a marker is still
+ * the creep FR-046 forbids.
+ */
+const FOLD_MARKERS = '/packages/ui/src/renderer/editor/markdown-fold.ts';
+
+describe('no other gutter content is introduced (FR-046, as superseded by 047 FR-031)', () => {
+  it('registers no fold gutter and no code folding outside the Markdown fold markers', () => {
     for (const symbol of ['foldGutter', 'codeFolding', 'foldService']) {
-      expect(hits(symbol), `${symbol} would add content to the gutter throng does not draw`).toEqual(
-        [],
-      );
+      expect(
+        hits(symbol).filter((f) => f !== FOLD_MARKERS),
+        `${symbol} would add content to the gutter throng does not draw`,
+      ).toEqual([]);
     }
   });
 
@@ -127,7 +140,10 @@ describe('no other gutter content is introduced (FR-046)', () => {
   it('defines no gutter markers of its own', () => {
     // `GutterMarker` is how a caller draws anything other than a line number in the strip.
     for (const symbol of ['GutterMarker', 'gutterLineClass', 'gutterWidgetClass']) {
-      expect(hits(symbol), `${symbol} draws non-line-number gutter content`).toEqual([]);
+      expect(
+        hits(symbol).filter((f) => f !== FOLD_MARKERS),
+        `${symbol} draws non-line-number gutter content`,
+      ).toEqual([]);
     }
   });
 });

@@ -27,7 +27,7 @@ describe('front matter the YAML parser throws on (FR-085)', () => {
   it('renders as an escaped code block of its source, and the body still renders beneath it', () => {
     const sanitise = vi.fn((out: string, _context: PipelineContext) => out);
     const source = 'deep: [[[[<b>x</b>]]]]';
-    const out = createMarkdownPipeline(sanitise).render(`---\n${source}\n---\n\n# Body\n`);
+    const out = createMarkdownPipeline(sanitise).render(`---\n${source}\n---\n\n# Body\n`).fragment;
 
     expect(out).toContain(`<pre data-source-line="0">${renderFence('yaml', source)}</pre>`);
     expect(out).not.toContain('<b>');

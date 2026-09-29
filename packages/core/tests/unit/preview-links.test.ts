@@ -75,6 +75,61 @@ describe('classifyPreviewLink — same-document headings (FR-090f)', () => {
   });
 });
 
+/*
+ * 047 T060 (research R12, FR-050 – FR-056) — the wiki case. The pipeline encodes a parsed
+ * `WikiTarget` as `throng-wiki:<path>#<fragment>`, a leading `/` on `<path>` marking it rooted (the
+ * same convention an ordinary link already uses, `resolveReference`'s own test) — `parseWikilink`
+ * itself is exercised in `wiki-links.test.ts`; this covers ONLY what `classifyPreviewLink` does with
+ * the encoded href it hands off.
+ */
+describe('classifyPreviewLink — wikilinks (047, FR-050 – FR-056, research R12)', () => {
+  it('resolves relative to the DOCUMENT folder, preferring .md (FR-052a, FR-052c)', () => {
+    expect(classifyPreviewLink('throng-wiki:Note', win)).toEqual({
+      kind: 'file',
+      absPath: 'C:\\proj\\docs\\Note.md',
+    });
+  });
+
+  it('resolves a rooted target from the PROJECT root (FR-052b)', () => {
+    expect(classifyPreviewLink('throng-wiki:/docs/README', win)).toEqual({
+      kind: 'file',
+      absPath: 'C:\\proj\\docs\\README.md',
+    });
+  });
+
+  it('carries a fragment through as an ordinary file link would', () => {
+    expect(classifyPreviewLink('throng-wiki:Note#Install', win)).toEqual({
+      kind: 'file',
+      absPath: 'C:\\proj\\docs\\Note.md',
+      fragment: 'Install',
+    });
+  });
+
+  it('an empty path with a fragment is a same-document heading, exactly as #Heading is (FR-090f)', () => {
+    expect(classifyPreviewLink('throng-wiki:#Install', win)).toEqual({ kind: 'heading', fragment: 'Install' });
+  });
+
+  it('a target resolving outside the project is `outside`, named as written (FR-054, FR-090e)', () => {
+    expect(classifyPreviewLink('throng-wiki:../../outside', win)).toEqual({
+      kind: 'outside',
+      target: 'throng-wiki:../../outside',
+    });
+  });
+
+  it('a rooted target with no project root is unresolved — inert (FR-052b)', () => {
+    expect(classifyPreviewLink('throng-wiki:/docs/README', { docPath: win.docPath, projectRoot: '' })).toEqual({
+      kind: 'inert',
+    });
+  });
+
+  it('an explicit extension matches only that exact file, no .md/.markdown preference (FR-052c)', () => {
+    expect(classifyPreviewLink('throng-wiki:notes.txt', win)).toEqual({
+      kind: 'file',
+      absPath: 'C:\\proj\\docs\\notes.txt',
+    });
+  });
+});
+
 describe('classifyPreviewLink — outside the project (FR-090e)', () => {
   it.each(['../../outside.md', '../../../Windows/win.ini', '%2e%2e/%2e%2e/outside.md', '/../outside.md'])(
     '%j is outside, naming the target as written',

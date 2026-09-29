@@ -32,8 +32,8 @@ function after(doc: Doc): Doc {
 }
 
 describe('the v15 keybindings upgrade (FR-124)', () => {
-  it('is shipped-defaults version 15 or later (re-pinned: FR-127 bumps it to 16)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
+  it('is shipped-defaults version 15 or later (re-pinned: FR-127 bumps it to 16, 047 to 17, then 18)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
   });
 
   it('word wrap ships Ctrl+E,W, or the cases below are vacuous', () => {

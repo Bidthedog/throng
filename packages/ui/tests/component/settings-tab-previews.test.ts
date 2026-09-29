@@ -88,10 +88,15 @@ describe('the Previews subsection draws every preview setting (FR-060, FR-060a, 
       'setting-editor.previews.copyFormat',
       // Iteration 2026-09-15 — FR-114, then FR-117 as Markdown's second own setting.
       'setting-editor.previews.syncScroll',
+      // 047 FR-010 — Open previews in, a static leaf beside the other shared ones.
+      'setting-editor.previews.openTarget',
       `setting-${MD}.enabled`,
       `setting-${MD}.defaultOpenAction`,
       `setting-${MD}.loadRemoteImages`,
       `setting-${MD}.showFrontMatter`,
+      // 047 FR-032b and FR-042d — Markdown's preview gutter and heading jump duration.
+      `setting-${MD}.gutter`,
+      `setting-${MD}.headingJumpMs`,
     ]);
   });
 

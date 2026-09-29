@@ -254,41 +254,45 @@ describe('S1 / S6a — File Explorer offers Open In → Preview for both test pr
 
   const disabled = (row: HTMLElement): string | null => row.getAttribute('aria-disabled');
 
-  it('offers an enabled Preview for the text provider’s file', async () => {
+  // 047 FR-075 — the plain Preview row is gone; New Preview Panel carries the same availability rule, so the
+  // seam (one row per provider-claimed file, driven by core's affordance) is asserted through it.
+  it('offers an enabled New Preview Panel for the text provider’s file, and no plain Preview (FR-075)', async () => {
     const { user, tree } = await mountTree(testPreviewSettings());
     const flyout = await openInFlyout(user, tree, 'a.prvtxt');
-    expect(disabled(within(flyout).getByTestId('menu-item-Preview'))).toBe('false');
-  });
-
-  it('offers an enabled Preview for the binary provider’s file, and choosing it runs preview.open (FR-073 permits the explorer)', async () => {
-    const { user, tree } = await mountTree(testPreviewSettings());
-    const flyout = await openInFlyout(user, tree, 'a.prvbin');
-    const row = within(flyout).getByTestId('menu-item-Preview');
-    expect(disabled(row)).toBe('false');
-    await user.click(row);
-    expect(opened).toEqual([{ absPath: BINARY_FILE, projectId: PROJECT }]);
-  });
-
-  it('offers no Preview for a file neither provider claims', async () => {
-    const { user, tree } = await mountTree(testPreviewSettings());
-    const flyout = await openInFlyout(user, tree, 'a.txt');
-    expect(within(flyout).getByTestId('menu-item-New Editor')).toBeInTheDocument();
+    expect(disabled(within(flyout).getByTestId('menu-item-New Preview Panel'))).toBe('false');
     expect(within(flyout).queryByTestId('menu-item-Preview')).toBeNull();
   });
 
-  it('S6a — draws Preview DISABLED for the text provider’s file while testText is off, and opens nothing', async () => {
+  it('offers an enabled New Preview Panel for the binary provider’s file, and choosing it runs preview.open (FR-073 permits the explorer)', async () => {
+    const { user, tree } = await mountTree(testPreviewSettings());
+    const flyout = await openInFlyout(user, tree, 'a.prvbin');
+    const row = within(flyout).getByTestId('menu-item-New Preview Panel');
+    expect(disabled(row)).toBe('false');
+    await user.click(row);
+    // 047 FR-083 — an Open In from File Explorer flashes the preview it lands in.
+    expect(opened).toEqual([{ absPath: BINARY_FILE, projectId: PROJECT, target: { mode: 'new' }, flash: true }]);
+  });
+
+  it('offers no preview row for a file neither provider claims', async () => {
+    const { user, tree } = await mountTree(testPreviewSettings());
+    const flyout = await openInFlyout(user, tree, 'a.txt');
+    expect(within(flyout).getByTestId('menu-item-New Editor')).toBeInTheDocument();
+    expect(within(flyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
+  });
+
+  it('S6a — draws New Preview Panel DISABLED for the text provider’s file while testText is off, and opens nothing', async () => {
     const { user, tree } = await mountTree(TEXT_OFF);
     const flyout = await openInFlyout(user, tree, 'a.prvtxt');
-    const row = within(flyout).getByTestId('menu-item-Preview');
+    const row = within(flyout).getByTestId('menu-item-New Preview Panel');
     expect(disabled(row)).toBe('true');
     await user.click(row);
     expect(opened).toEqual([]);
   });
 
-  it('S6a — draws Preview DISABLED for the binary provider’s file while testBinary is off', async () => {
+  it('S6a — draws New Preview Panel DISABLED for the binary provider’s file while testBinary is off', async () => {
     const { user, tree } = await mountTree(BINARY_OFF);
     const flyout = await openInFlyout(user, tree, 'a.prvbin');
-    expect(disabled(within(flyout).getByTestId('menu-item-Preview'))).toBe('true');
+    expect(disabled(within(flyout).getByTestId('menu-item-New Preview Panel'))).toBe('true');
   });
 });
 
@@ -415,7 +419,8 @@ describe('the default open action follows the provider’s kind (FR-050, FR-051,
   it('opens the binary provider’s file as a preview while it is enabled — it has no open action to set (FR-051)', async () => {
     const { openInto } = mountListener(testPreviewSettings());
     await treeOpen(BINARY_FILE);
-    expect(opened).toEqual([{ absPath: BINARY_FILE, projectId: PROJECT }]);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: BINARY_FILE, projectId: PROJECT, keepFocus: true, flash: true }]);
     expect(openInto).not.toHaveBeenCalled();
   });
 
@@ -436,7 +441,8 @@ describe('the default open action follows the provider’s kind (FR-050, FR-051,
   it('…and as a preview once testText’s default open action is Preview', async () => {
     const { openInto } = mountListener(testPreviewSettings({ testText: { defaultOpenAction: 'preview' } }));
     await treeOpen(TEXT_FILE);
-    expect(opened).toEqual([{ absPath: TEXT_FILE, projectId: PROJECT }]);
+    // 047 FR-081 — a tree open keeps the keyboard in the tree.
+    expect(opened).toEqual([{ absPath: TEXT_FILE, projectId: PROJECT, keepFocus: true, flash: true }]);
     expect(openInto).not.toHaveBeenCalled();
   });
 });
@@ -641,6 +647,8 @@ describe('S4 / S6a — the settings tab draws each provider’s generated settin
       'setting-editor.previews.copyFormat',
       // 044 FR-114 (iteration 2026-09-15) — static, so a test registry draws it too.
       'setting-editor.previews.syncScroll',
+      // 047 US2 (T014) — the reuse-target setting, also static.
+      'setting-editor.previews.openTarget',
       `setting-${TEXT_KEY}.enabled`,
       `setting-${TEXT_KEY}.defaultOpenAction`,
       `setting-${TEXT_KEY}.shout`,

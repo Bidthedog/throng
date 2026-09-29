@@ -7,10 +7,12 @@
  * 1. **Input in the body.** Typing, paste and drop. The body is not editable, so typing has nothing to
  *    change; paste and drop are REFUSED outright (their default prevented) so no surface underneath — a
  *    window-level drop handler, a future editable body — can act on them, and no editor bridge is called.
- * 2. **Commands resolved by chord.** With a preview active, Ctrl+S, Delete, F2, Ctrl+X, Ctrl+C and Ctrl+F
- *    resolve to nothing file-, save-, rename- or find-shaped. The preview has its own keyboard scope
+ * 2. **Commands resolved by chord.** With a preview active, Ctrl+S, Delete, F2, Ctrl+X and Ctrl+C
+ *    resolve to nothing file-, save- or rename-shaped. The preview has its own keyboard scope
  *    (044 R16), so they cannot fall back to the File Explorer scope and act on the TREE's selection
- *    while the reader looks at the page (FR-021).
+ *    while the reader looks at the page (FR-021). Ctrl+F is NO LONGER in this list (047 US1, FR-004
+ *    supersession): a preview now mounts its own find bar, so `search.find` resolves live there —
+ *    proved the OTHER way in the table below, and end-to-end in `preview-find.test.ts`.
  * 3. **Renaming the panel.** The rename chord has no starter to reach and a header double-click opens no
  *    box (FR-030).
  */
@@ -150,8 +152,7 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
     ['F2', 'F2', {}, 'explorer', 'file.rename'],
     ['Ctrl+X', 'x', { ctrl: true }, 'explorer', 'file.cut'],
     ['Ctrl+C', 'c', { ctrl: true }, 'explorer', 'file.copy'],
-    ['Ctrl+F', 'f', { ctrl: true }, 'editor', 'search.find'],
-  ] as const)('%s resolves to no save, file, rename or find command', async (_name, key, mods, elsewhere, meansThere) => {
+  ] as const)('%s resolves to no save, file or rename command', async (_name, key, mods, elsewhere, meansThere) => {
     const { id } = await mountText();
     // The preview is the active panel of the active tab, in the workspace pane.
     expect(effectiveActivePanelId(m!.ws().layout!.tabs[0])).toBe(id);
@@ -164,6 +165,21 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
     const action = resolve(key, mods);
 
     expect(action === null || !/^(editor\.save|file\.|panel\.rename|search\.)/.test(action)).toBe(true);
+  });
+
+  /*
+   * 047 US1 (FR-004 supersession) — Ctrl+F is NO LONGER on the table above: a preview now mounts its
+   * own find bar (research R1), so `search.find` resolves live in preview scope. The positive control
+   * that used to sit inside the shared row now stands alone, so a reader of this file sees exactly
+   * why Ctrl+F left the "must resolve to nothing" list rather than just disappearing.
+   */
+  it('Ctrl+F now DOES resolve — to search.find, live in preview scope (047 US1)', async () => {
+    const { id } = await mountText();
+    expect(effectiveActivePanelId(m!.ws().layout!.tabs[0])).toBe(id);
+
+    const action = resolve('f', { ctrl: true });
+
+    expect(action).toBe('search.find');
   });
 
   /*

@@ -133,6 +133,12 @@ export interface EditorHarness {
   readonly calls: Record<string, ReturnType<typeof vi.fn>>;
   /** Unmount the whole tree — for a test about what its listeners leave behind. */
   unmount(): void;
+  /**
+   * Replace the editor's component instance with a new one for the SAME panel, as a layout change that
+   * re-parents the panel does (a split beside it): the new instance renders before the old one's
+   * cleanup runs. Wrap the call in `act()`.
+   */
+  remount(): void;
 }
 
 const PROJECT = 'proj-editor';
@@ -209,6 +215,8 @@ export function mountEditor(opts: {
   registerProject?: boolean;
   /** Keybindings delivered with the settings, as `config.get` would — merged over the defaults. */
   keybindings?: Record<string, string[]>;
+  /** 047 R3 — what the fold authority answers for this document: a state some other view already set. */
+  foldAuthority?: { base: 'expanded' | 'collapsed'; flipped: string[] };
   /** Extra `window.throng` members (a fake `preview` bridge, say), merged over the harness's own. */
   throng?: Record<string, unknown>;
   /** 044 US7 — window-level components mounted beside the panel (a key handler, say), each with its own key. */
@@ -342,6 +350,17 @@ export function mountEditor(opts: {
         };
       },
       dispatch: (msg: unknown) => dispatched.push(msg),
+      /*
+       * 047 R3 — the fold-state seed round trip in miniature: answers whatever `seed` it was asked
+       * for, at CALL time. `use-editor.ts`'s seed-fetch effect re-fires once the real settings have
+       * loaded (its deps include the live preference), so a test seeding a NON-default
+       * `editor.markdownSectionsOpen` still settles correctly — the same self-correction word wrap's
+       * own `wordWrap` fetch relies on, `applyFoldStateFromSync` overwriting the optimistic guess a
+       * panel's first render made before settings arrived (issue #335's class).
+       */
+      foldState: (_panelId: string, seed: 'expanded' | 'collapsed') =>
+        Promise.resolve(opts.foldAuthority ?? { base: seed, flipped: [] }),
+      setFoldState: () => {},
     },
     ...opts.throng,
   });
@@ -434,6 +453,8 @@ export function mountEditor(opts: {
     return null;
   };
 
+  /** Bumped by {@link EditorHarness.remount}: a new key is a new component instance for the same panel. */
+  let mountKey = 0;
   const tree = (): ReactElement =>
     createElement(
       ConfigProvider,
@@ -461,8 +482,9 @@ export function mountEditor(opts: {
                     Fragment,
                     null,
                     opts.withHeader
-                      ? createElement(PanelPlaceholder, { panel, tabId: 't1' })
+                      ? createElement(PanelPlaceholder, { key: mountKey, panel, tabId: 't1' })
                       : createElement(EditorPanel, {
+                          key: mountKey,
                           panel,
                           tabId: 't1',
                           projectRoot,
@@ -487,6 +509,10 @@ export function mountEditor(opts: {
     dispatched,
     calls,
     unmount: () => rendered.unmount(),
+    remount: () => {
+      mountKey += 1;
+      rendered.rerender(tree());
+    },
     pushReset(doc: EditorDoc) {
       current = { ...current, ...doc };
       broadcastReset(doc);

@@ -64,7 +64,7 @@
  *     their hooks THROW without them. `useConfirm` is called unconditionally at
  *     `use-explorer-data.ts:218` even though nothing here confirms anything.
  */
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -751,6 +751,86 @@ describe('open-on-click (006 FR-009, migrated from explorer.e2e.ts:515 and :545)
 
       await waitFor(() => expect(opens.detail).toHaveLength(1));
       expect(opens.detail[0].relPath).toBe('a.txt');
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('in single-click mode a double click opens once, not once per click (047 round 4)', async () => {
+    /*
+     * The maintainer's report, once FR-083's flash made it visible: double-clicking a file with
+     * open-on-click set to single activated its editor twice. The browser delivers click, click and
+     * dblclick for one double click, and each reached the open.
+     */
+    const { tree, user } = await mount({
+      settings: { version: 1, editor: { openOnClick: 'single' } },
+    });
+    const opens = openIntents();
+
+    try {
+      await user.dblClick(within(tree).getByText('a.txt'));
+
+      await waitFor(() => expect(opens.detail.length).toBeGreaterThan(0));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(opens.detail.map((d) => d.relPath)).toEqual(['a.txt']);
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('in single-click mode a NEW click on the same file opens it again, however soon (editor-open.e2e.ts:161)', async () => {
+    /*
+     * Cancel the unsaved-changes prompt, then click the file again: a second, deliberate click, and it
+     * must open. What tells it from the second click of a double click is the browser's click count
+     * (`detail`), not the time between them — a 400ms window swallowed this one and failed the gate.
+     */
+    const { tree } = await mount({
+      settings: { version: 1, editor: { openOnClick: 'single' } },
+    });
+    const opens = openIntents();
+
+    try {
+      const row = within(tree).getByText('a.txt');
+      fireEvent.click(row, { detail: 1 });
+      fireEvent.click(row, { detail: 1 });
+
+      await waitFor(() => expect(opens.detail.map((d) => d.relPath)).toEqual(['a.txt', 'a.txt']));
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('in single-click mode the events of one double click (click 1, click 2, dblclick) open once', async () => {
+    const { tree } = await mount({
+      settings: { version: 1, editor: { openOnClick: 'single' } },
+    });
+    const opens = openIntents();
+
+    try {
+      const row = within(tree).getByText('a.txt');
+      fireEvent.click(row, { detail: 1 });
+      fireEvent.click(row, { detail: 2 });
+      fireEvent.doubleClick(row, { detail: 2 });
+
+      await waitFor(() => expect(opens.detail.length).toBeGreaterThan(0));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(opens.detail.map((d) => d.relPath)).toEqual(['a.txt']);
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('control: in single-click mode a DIFFERENT file clicked straight after still opens', async () => {
+    const { tree, user } = await mount({
+      settings: { version: 1, editor: { openOnClick: 'single' } },
+    });
+    const opens = openIntents();
+
+    try {
+      await user.click(within(tree).getByText('a.txt'));
+      await user.click(within(tree).getByText('README.md'));
+
+      await waitFor(() => expect(opens.detail.map((d) => d.relPath)).toEqual(['a.txt', 'README.md']));
     } finally {
       opens.stop();
     }

@@ -450,6 +450,10 @@ const previewBodyMenu = (over: {
     editorRoute: over.route === 'binary' ? null : { parented: over.route === 'parented', run: noop },
     // 044 FR-122b — every text-provider preview carries Synchronise Scrolling; a binary one does not.
     syncScroll: over.route === 'binary' ? null : { on: false, toggle: noop },
+    // 047 US1 (FR-007) — always present, whatever the provider.
+    find: { run: noop },
+    // 047 US4 — always present too.
+    goToHeading: { run: noop },
   });
 
 /*
@@ -491,7 +495,7 @@ const explorerAffordance = (over: { previewOpen?: boolean; enabled?: boolean; pa
     surface: 'explorer',
   });
 };
-const explorerFileWithPreview = (affordance: PreviewAffordance): MenuAction[] =>
+const explorerFileWithPreview = (affordance: PreviewAffordance, lastPreviewTitle: string | null = null): MenuAction[] =>
   buildContextMenuItems({
     node: { relPath: 'README.md', kind: 'file' },
     selectedRelPaths: ['README.md'],
@@ -501,7 +505,7 @@ const explorerFileWithPreview = (affordance: PreviewAffordance): MenuAction[] =>
       { label: 'Last Active Editor', icon: 'add', section: 'navigate', onClick: noop },
       { label: 'New Editor', icon: 'add', section: 'navigate', onClick: noop },
     ],
-    preview: { affordance, open: noop },
+    preview: { affordance, openLastActive: noop, openNew: noop, lastPreviewTitle },
     keybindings: DEFAULT_KEYBINDINGS,
     projectRoot: 'D:/project',
     undoState: { canUndo: false, canRedo: false },
@@ -709,46 +713,85 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
 });
 
 /*
- * 044 US2 fix round 1 (item 5) — the Files & Folders file row's Open In flyout with Preview
- * (contracts/menus-and-controls.md §5). `shapeOf` reads one level, so the flyout is pinned on its own:
- * Preview after the editor targets and before Terminal, OS File Explorer still first, and the top-level
- * shape untouched by its presence.
+ * 044 US2 fix round 1 (item 5), superseded in part by 047 FR-075 — the Files & Folders file row's Open In
+ * flyout (contracts/menus-and-controls.md §5). `shapeOf` reads one level, so the flyout is pinned on its
+ * own: the plain Preview row is GONE; Last Preview Panel and New Preview Panel sit after the editor
+ * targets and before Terminal, OS File Explorer still first, and the top-level shape untouched.
  */
-describe('044 — Files & Folders Open In → Preview, in each of its four states (FR-003, FR-012, FR-062)', () => {
+describe('044/047 — Files & Folders Open In → the preview rows, in each of its four states (FR-003, FR-012, FR-062, FR-075)', () => {
   const flyout = (items: MenuAction[]): MenuAction[] => items.find((i) => i.label === 'Open In')?.submenu ?? [];
-  const preview = (items: MenuAction[]): MenuAction | undefined => flyout(items).find((i) => i.label === 'Preview');
+  const lastPreview = (items: MenuAction[]): MenuAction | undefined =>
+    flyout(items).find((i) => i.label.startsWith('Last Preview Panel'));
+  const newPreview = (items: MenuAction[]): MenuAction | undefined =>
+    flyout(items).find((i) => i.label === 'New Preview Panel');
 
-  it('enabled: the flyout draws Preview between the editor targets and Terminal', () => {
+  it('enabled: the flyout draws Last Preview Panel, New Preview Panel, then Terminal — and no Preview (FR-075)', () => {
     const items = explorerFileWithPreview(explorerAffordance());
     expect(shapeOf(flyout(items))).toEqual([
       'OS File Explorer',
       'Last Active Editor',
       'New Editor',
-      'Preview',
+      'Last Preview Panel',
+      'New Preview Panel',
       'Terminal',
       'Search',
     ]);
-    expect(preview(items)?.section).toBe('navigate');
-    expect(preview(items)?.disabled).toBe(false);
+    expect(flyout(items).map((i) => i.label)).not.toContain('Preview');
+    expect(newPreview(items)?.section).toBe('navigate');
+    expect(newPreview(items)?.disabled).toBe(false);
+    // No candidate for this builder's (fixture-only) call — Last Preview Panel disables on its OWN
+    // extra rule even though the affordance itself is enabled, and stays unnamed (FR-076).
+    expect(lastPreview(items)?.label).toBe('Last Preview Panel');
+    expect(lastPreview(items)?.disabled).toBe(true);
   });
 
-  it('disabled `preview-open`: the same shape, Preview drawn disabled', () => {
+  it('a candidate names its panel: Last Preview Panel (<title>), enabled (FR-076)', () => {
+    const items = explorerFileWithPreview(explorerAffordance(), 'notes - Preview');
+    expect(lastPreview(items)?.label).toBe('Last Preview Panel (notes - Preview)');
+    expect(lastPreview(items)?.disabled).toBe(false);
+  });
+
+  it('a candidate is named but still disabled when the affordance is (FR-076)', () => {
+    const items = explorerFileWithPreview(explorerAffordance({ enabled: false }), 'notes - Preview');
+    expect(lastPreview(items)?.label).toBe('Last Preview Panel (notes - Preview)');
+    expect(lastPreview(items)?.disabled).toBe(true);
+  });
+
+  it('disabled `preview-open`: the same shape, both preview rows drawn disabled', () => {
     const affordance = explorerAffordance({ previewOpen: true });
     expect(affordance).toMatchObject({ state: 'disabled', reason: 'preview-open' });
     const items = explorerFileWithPreview(affordance);
-    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Preview', 'Terminal', 'Search']);
-    expect(preview(items)?.disabled).toBe(true);
+    expect(shapeOf(flyout(items))).toEqual([
+      'OS File Explorer',
+      'Last Active Editor',
+      'New Editor',
+      'Last Preview Panel',
+      'New Preview Panel',
+      'Terminal',
+      'Search',
+    ]);
+    expect(lastPreview(items)?.disabled).toBe(true);
+    expect(newPreview(items)?.disabled).toBe(true);
   });
 
-  it('disabled `provider-disabled`: the same shape, Preview drawn disabled', () => {
+  it('disabled `provider-disabled`: the same shape, both preview rows drawn disabled', () => {
     const affordance = explorerAffordance({ enabled: false });
     expect(affordance).toMatchObject({ state: 'disabled', reason: 'provider-disabled' });
     const items = explorerFileWithPreview(affordance);
-    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Preview', 'Terminal', 'Search']);
-    expect(preview(items)?.disabled).toBe(true);
+    expect(shapeOf(flyout(items))).toEqual([
+      'OS File Explorer',
+      'Last Active Editor',
+      'New Editor',
+      'Last Preview Panel',
+      'New Preview Panel',
+      'Terminal',
+      'Search',
+    ]);
+    expect(lastPreview(items)?.disabled).toBe(true);
+    expect(newPreview(items)?.disabled).toBe(true);
   });
 
-  it('absent: no Preview row, and nothing else moves', () => {
+  it('absent: no Preview row and no new rows, and nothing else moves', () => {
     const affordance = explorerAffordance({ path: 'D:/project/notes.txt' });
     expect(affordance.state).toBe('absent');
     const items = explorerFileWithPreview(affordance);
@@ -1201,6 +1244,10 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Open in Editor',
+      // 047 US1/US4 (FR-007) — always present, beside Back/Forward (contracts/menus-commands-controls.md
+      // "Preview header menu").
+      'Find…',
+      'Go to Heading…',
       'Back',
       'Forward',
       'Send to Tab',
@@ -1221,6 +1268,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Go to Editor',
+      'Find…',
+      'Go to Heading…',
       'Back',
       'Forward',
       'Send to Tab',
@@ -1238,6 +1287,10 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      // 047 US1/US4 — Find… and Go to Heading… are offered whatever the provider kind (unlike Open in
+      // Editor, FR-015e).
+      'Find…',
+      'Go to Heading…',
       'Back',
       'Forward',
       'Send to Tab',
@@ -1255,13 +1308,16 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(labels).not.toContain('Destroy Panel');
   });
 
-  it('never presents Rename, Reset Name, Save, Save As…, Revert, Reload from disk or Find (FR-030, FR-033)', () => {
+  it('never presents Rename, Reset Name, Save, Save As…, Revert, Reload from disk, Replace or Replace All (FR-030, FR-033)', () => {
+    // 047 US1 (FR-007) supersedes the old "or Find" half of this: a preview HAS a Find… now
+    // (contracts/menus-commands-controls.md "Preview header menu"), asserted present above.
     const labels = panelHeader({ panel: previewPanel(), preview: textPreview(true), panelFailure: true }).map(
       (i) => i.label,
     );
-    for (const absent of ['Rename', 'Reset Name', 'Save', 'Save As…', 'Revert', 'Reload from disk', 'Find', 'Replace', 'Replace All']) {
+    for (const absent of ['Rename', 'Reset Name', 'Save', 'Save As…', 'Revert', 'Reload from disk', 'Replace', 'Replace All']) {
       expect(labels, absent).not.toContain(absent);
     }
+    expect(labels).toContain('Find…');
   });
 
   it('carries Try again, Copy details and Clear panel type in View & state while its banner is up', () => {
@@ -1272,6 +1328,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Reveal File in File Explorer',
       'Open in OS Explorer',
       'Open in Editor',
+      'Find…',
+      'Go to Heading…',
       'Back',
       'Forward',
       'Send to Tab',
@@ -1495,13 +1553,16 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
   const labelsOf = (items: MenuAction[]): string[] =>
     withDividers(items).map((i) => (isSeparator(i) ? '—' : (i.label ?? '')));
 
-  it('with text selected: Content (the three copies and Select All), then Navigate, then View & state', () => {
+  it('with text selected: Content (the three copies and Select All), then Navigate (Find…, Open in Editor), then View & state', () => {
     expect(labelsOf(previewBodyMenu({ route: 'standalone' }))).toEqual([
       'Copy',
       'Copy as Rich Text',
       'Copy as Plain Text',
       'Select All',
       '—',
+      // 047 US1/US4 (FR-007) — always present, ahead of the editor route in Navigate.
+      'Find…',
+      'Go to Heading…',
       'Open in Editor',
       // 044 FR-122b — the View & state section, last (§4, §10).
       '—',
@@ -1509,13 +1570,15 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     ]);
   });
 
-  it('with nothing selected, parented: Content (disabled), then Navigate reads Go to Editor', () => {
+  it('with nothing selected, parented: Content (disabled), then Navigate reads Find…, Go to Heading…, Go to Editor', () => {
     expect(labelsOf(previewBodyMenu({ selectionEmpty: true, route: 'parented' }))).toEqual([
       'Copy',
       'Copy as Rich Text',
       'Copy as Plain Text',
       'Select All',
       '—',
+      'Find…',
+      'Go to Heading…',
       'Go to Editor',
       '—',
       'Synchronise Scrolling',
@@ -1528,19 +1591,23 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
       previewContentMenu({
         selectionEmpty: true,
         syncScroll: { on, toggle: () => void (toggle.calls += 1), ...(chord !== undefined ? { chord } : {}) },
+        find: { run: noop },
+        goToHeading: { run: noop },
       });
     const on = build(true, 'Ctrl+Alt+F8');
-    expect(on).toHaveLength(1);
-    expect(on[0]).toMatchObject({
+    // 047 US1/US4 — Find… and Go to Heading… are always present now, beside Synchronise Scrolling.
+    expect(on).toHaveLength(3);
+    const syncItem = (items: MenuAction[]): MenuAction | undefined => items.find((i) => i.icon === 'syncScroll');
+    expect(syncItem(on)).toMatchObject({
       label: 'Synchronise Scrolling ✓',
       testId: 'menu-item-Synchronise Scrolling',
       icon: 'syncScroll',
       section: 'viewState',
       shortcut: 'Ctrl+Alt+F8',
     });
-    expect(build(false)[0]?.label).toBe('Synchronise Scrolling');
-    expect(build(false)[0]?.shortcut).toBeUndefined();
-    on[0]?.onClick?.();
+    expect(syncItem(build(false))?.label).toBe('Synchronise Scrolling');
+    expect(syncItem(build(false))?.shortcut).toBeUndefined();
+    syncItem(on)?.onClick?.();
     expect(toggle.calls).toBe(1);
   });
 
@@ -1553,13 +1620,17 @@ describe('the preview body menu in full (044 FR-035, FR-035c, FR-015b, FR-015e)'
     expect(state('Select All') ?? false).toBe(false);
   });
 
-  it('a binary provider with no selectable text draws neither Content nor Navigate', () => {
-    expect(previewBodyMenu({ textSelection: false, route: 'binary' })).toEqual([]);
+  it('a binary provider with no selectable text draws no Content and no route — only Find… and Go to Heading… (FR-007, always present)', () => {
+    expect(labelsOf(previewBodyMenu({ textSelection: false, route: 'binary' }))).toEqual(['Find…', 'Go to Heading…']);
   });
 
-  it('the icons are theme tokens: copy for the copies, selectAll, and editorPanel for the route', () => {
+  it('the icons are theme tokens: search for Find…, none for Go to Heading… (Go To Line…\'s precedent), copy for the copies, selectAll, and editorPanel for the route', () => {
+    // Raw push order (`previewContentMenu` pushes Find… and Go to Heading… first) — unlike `labelsOf`
+    // above, this reads the builder's own array, not the section-regrouped one `withDividers` produces.
     const items = previewBodyMenu({ route: 'standalone' });
     expect(items.map((i) => [i.label, i.icon])).toEqual([
+      ['Find…', 'search'],
+      ['Go to Heading…', undefined],
       ['Copy', 'copy'],
       ['Copy as Rich Text', 'copy'],
       ['Copy as Plain Text', 'copy'],

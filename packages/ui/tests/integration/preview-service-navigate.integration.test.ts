@@ -93,6 +93,12 @@ const link = (panelId: string, absPath: string, fragment?: string, leavingViewSt
     ...(leavingViewState !== undefined ? { leavingViewState } : {}),
   });
 
+/** 047 R9 (T056) — a file dropped on the panel: `contracts/preview-ipc-047.md §2` says it behaves as
+ *  `link` does for history and parenting. Confinement is decided in the RENDERER before this is ever
+ *  sent (§4) — nothing about that belongs in this suite. */
+const drop = (panelId: string, absPath: string) =>
+  previews.navigate(VIEWER, { panelId, target: { absPath }, intent: { kind: 'drop' } });
+
 const updatesFor = (panelId: string) => push.updates.filter((u) => u.update.panelId === panelId).map((u) => u.update);
 
 beforeEach(async () => {
@@ -817,5 +823,56 @@ describe('heading intent and same-file history steps (FR-115)', () => {
       [readme, AT_4],
       [setup, undefined],
     ]);
+  });
+});
+
+describe('the DROP intent behaves as LINK does (047 R9, T056, contracts/preview-ipc-047.md §2, FR-020)', () => {
+  it('a dropped file is a new history entry — recordOpen, exactly like a followed link', async () => {
+    await attach('v1', readme);
+    history.calls.length = 0;
+
+    const res = await drop('v1', setup);
+
+    expect(res).toMatchObject({ kind: 'shown', update: { filePath: setup } });
+    expect(history.calls).toEqual([['recordOpen', 'v1', setup]]);
+  });
+
+  it('a PARENTED run is unbound by a drop, just as a link unbinds it (FR-090a)', async () => {
+    await openEditor('ed-readme', readme);
+    const first = await attach('v1', readme);
+    expect(first.parent).toMatchObject({ panelId: 'ed-readme' });
+
+    const dropped = await drop('v1', setup); // setup has no editor of its own
+
+    expect(dropped.kind === 'shown' && dropped.update.parent).toBeNull();
+    expect(previews.run('v1')?.filePath).toBe(setup);
+  });
+
+  it('a dropped file already previewed elsewhere answers focusedOther, like a followed link (FR-090c)', async () => {
+    await attach('v1', readme);
+    await attach('v2', setup, OTHER_WINDOW);
+
+    const res = await drop('v1', setup);
+
+    expect(res).toMatchObject({ kind: 'focusedOther', panelId: 'v2' });
+    expect(previews.run('v1')?.filePath).toBe(readme); // v1 itself is untouched
+    expect(windows.raised).toContain(OTHER_WINDOW);
+  });
+
+  it('a drop onto a file no enabled provider claims answers openedInEditor, not a refusal (FR-090d)', async () => {
+    await attach('v1', readme);
+
+    const res = await drop('v1', app); // app.ts: no preview provider
+
+    expect(res).toEqual({ kind: 'openedInEditor' });
+    expect(previews.run('v1')?.filePath).toBe(readme); // unchanged
+  });
+
+  it('a drop onto a file outside the project is refused, exactly as a link would be (FR-090e)', async () => {
+    await attach('v1', readme);
+
+    const res = await drop('v1', join(outside, 'secret.md'));
+
+    expect(res).toMatchObject({ kind: 'refused', notice: { kind: 'link-outside' } });
   });
 });

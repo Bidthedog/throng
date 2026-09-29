@@ -31,6 +31,7 @@ import {
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { PreviewPanel } from '../../src/renderer/preview/preview-panel.js';
+import type { DropContext } from '../../src/renderer/editor/drop-target.js';
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
 import { __resetPreviewStore, getPreviewFailure } from '../../src/renderer/preview/preview-store.js';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
@@ -183,6 +184,15 @@ function renderPanel(
               onRefused: opts.onRefused ?? (() => {}),
               onClearType: () => {},
               onClose: () => {},
+              // 047 US5 (T057/T058) — this file exercises attach/load/redraw, not drops; a plain
+              // fixture is enough to satisfy the prop.
+              dropCtx: {
+                panelId: previewPanel().id,
+                tabId: 't1',
+                projectRoot: 'D:/proj',
+                rootless: false,
+                allProjectRoots: ['D:/proj'],
+              } satisfies DropContext,
             }),
           ),
         ),
@@ -286,8 +296,10 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
 
     await user.click(screen.getByTitle('Try again'));
 
+    // 047 US3 — the shipped-default fold gutter draws a toggle INSIDE the heading now (see the other
+    // test in this file), so its own text is asserted rather than the element's whole textContent.
     await waitFor(
-      () => expect(screen.getByTestId('preview-markdown-p1').querySelector('h1')?.textContent).toBe('Heading'),
+      () => expect(screen.getByTestId('preview-markdown-p1').querySelector('h1')?.textContent).toContain('Heading'),
       COLD,
     );
     await waitFor(() => expect(screen.queryByTestId('panel-failure-p1')).toBeNull());
@@ -337,7 +349,9 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
     await user.click(screen.getByTitle('Try again'));
 
     await waitFor(() => expect(screen.queryByTestId('panel-failure-p1')).toBeNull(), COLD);
-    expect(screen.getByTestId('preview-markdown-p1').querySelector('h1')?.textContent).toBe('Heading');
+    // 047 US3 — the shipped-default fold gutter draws a toggle INSIDE the heading now, so its own
+    // text is asserted rather than the element's whole textContent (which also carries the glyph).
+    expect(screen.getByTestId('preview-markdown-p1').querySelector('h1')?.textContent).toContain('Heading');
     expect(banner.querySelector('.panel-failure__retry-failed')).toBeNull();
   });
 });

@@ -108,6 +108,8 @@ describe('previewSettingsDefaults (FR-035b, FR-050, FR-060, FR-060a, FR-065, FR-
       copyFormat: 'rich',
       // FR-114 — ships on.
       syncScroll: true,
+      // 047 FR-015a — ships 'lastActive' (research R8).
+      openTarget: 'lastActive',
       providers: {
         markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
       },
@@ -214,6 +216,66 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
     expect(previewSettingsDefaults(shipped).providers.markdown.showFrontMatter).toBe(true);
   });
 
+  /*
+   * 047 T013 (data-model.md "Settings", research R6, FR-032b) — the Markdown preview gutter. A
+   * PROVIDER leaf (generated, FR-070/FR-071), so no preferences-editor edit is needed and it is drawn
+   * disabled while Markdown is off, exactly like `showFrontMatter` above.
+   */
+  it('generates Markdown: Preview gutter from the shipped Markdown descriptor — toggle, on, disabled while Markdown is off (FR-032b)', () => {
+    const shipped = registryOf(markdownProvider);
+    const d = byKey(previewSettingsDescriptors(shipped), 'editor.previews.providers.markdown.gutter');
+    expect(d).toMatchObject({
+      control: 'toggle',
+      group: 'Editor',
+      subgroup: 'Previews',
+      label: 'Markdown: Preview gutter',
+    });
+    expect(d.description.trim().length).toBeGreaterThan(0);
+    expect(d.enabledWhen).toEqual({ key: 'editor.previews.providers.markdown.enabled', is: true });
+    expect(previewSettingsDefaults(shipped).providers.markdown.gutter).toBe(true);
+  });
+
+  /*
+   * 047 T013 (data-model.md "Settings", research R7, FR-042d) — the heading-jump scroll duration.
+   * Another provider leaf, a bounded number (0–2000 ms), shipping at 200.
+   */
+  it('generates Markdown: Heading jump scroll duration from the shipped Markdown descriptor — bounded number, 200ms, disabled while Markdown is off (FR-042d)', () => {
+    const shipped = registryOf(markdownProvider);
+    const d = byKey(previewSettingsDescriptors(shipped), 'editor.previews.providers.markdown.headingJumpMs');
+    // A bounded number takes the slider (018 SC-007's converse guard: bounds imply the control).
+    expect(d).toMatchObject({
+      control: 'slider',
+      group: 'Editor',
+      subgroup: 'Previews',
+      label: 'Markdown: Heading jump scroll duration (ms)',
+      min: 0,
+      max: 2000,
+    });
+    expect(d.description.trim().length).toBeGreaterThan(0);
+    expect(d.enabledWhen).toEqual({ key: 'editor.previews.providers.markdown.enabled', is: true });
+    expect(previewSettingsDefaults(shipped).providers.markdown.headingJumpMs).toBe(200);
+  });
+
+  /*
+   * 047 T013 (data-model.md "Settings", research R8/R11, FR-015a) — `openTarget` is a STATIC leaf
+   * (belongs to no provider), like `syncScroll`: it decides where a STANDALONE preview opens.
+   */
+  it('describes openTarget as a select, "Open previews in", with FR-015a’s sentence, never disabled by a provider', () => {
+    const openTarget = byKey(descriptors, 'editor.previews.openTarget');
+    expect(openTarget).toMatchObject({
+      control: 'select',
+      group: 'Editor',
+      subgroup: 'Previews',
+      label: 'Open previews in',
+      allowedValues: ['lastActive', 'new'],
+    });
+    expect(openTarget.description).toContain('Last Active reuses the most recently used preview');
+    expect(openTarget.description).toContain('otherwise a new preview opens');
+    expect(openTarget.enabledWhen).toBeUndefined();
+    // Emitted whatever the registry holds — it is not generated per provider, like syncScroll.
+    expect(previewSettingsDescriptors(TEST_REGISTRY).map((d) => d.key)).toContain('editor.previews.openTarget');
+  });
+
   it('puts both shipped delays exactly on a slider stop', () => {
     const defaults = previewSettingsDefaults(SHIPPED_LIKE);
     for (const [key, shipped] of [
@@ -312,6 +374,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
         maxWaitMs: 4000,
         copyFormat: 'plain',
         syncScroll: false,
+        openTarget: 'new',
         providers: {
           markdown: { enabled: false, defaultOpenAction: 'preview', loadRemoteImages: false, showFrontMatter: false },
         },
@@ -323,6 +386,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 4000,
       copyFormat: 'plain',
       syncScroll: false,
+      openTarget: 'new',
       providers: {
         markdown: { enabled: false, defaultOpenAction: 'preview', loadRemoteImages: false, showFrontMatter: false },
       },
@@ -345,6 +409,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
         maxWaitMs: 2000,
         copyFormat: 'html',
         syncScroll: 'yes',
+        openTarget: 'sideways',
         providers: {
           markdown: { enabled: 'yes', defaultOpenAction: 'window', loadRemoteImages: false, showFrontMatter: 'no' },
         },
@@ -356,6 +421,7 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 2000,
       copyFormat: 'rich',
       syncScroll: true,
+      openTarget: 'lastActive',
       providers: {
         markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: false, showFrontMatter: true },
       },
