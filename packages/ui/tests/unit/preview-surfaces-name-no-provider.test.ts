@@ -244,6 +244,21 @@ interface Allowed {
 const EDITOR_LANGUAGE =
   'Markdown the EDITOR LANGUAGE (core/src/editor/languages.ts), not the preview provider: a new provider needs no edit here';
 const FILE_ICON = 'the File Explorer file-type ICON for .md files, keyed by extension: unrelated to previews';
+const SECTION_FOLDING =
+  'Markdown section folding (047 FR-030 – FR-039), a feature of the Markdown EDITOR LANGUAGE: a new preview provider needs no edit here';
+const FOLD_COMMANDS = [
+  'markdown.collapseSection',
+  'markdown.expandSection',
+  'markdown.toggleSection',
+  'markdown.collapseAll',
+  'markdown.expandAll',
+  'markdown.toggleAll',
+];
+
+/** One allowance per token, all sharing a file, kind and reason. */
+function allow(file: string, kind: HitKind, tokens: readonly string[], reason: string): Allowed[] {
+  return tokens.map((token) => ({ file, kind, token, reason }));
+}
 
 const ALLOWED: readonly Allowed[] = [
   /* The editor language registry and its grammar loader. */
@@ -303,6 +318,86 @@ const ALLOWED: readonly Allowed[] = [
    * for `preview-markdown*` is needed any more. `preview/preview.css` now holds only panel chrome
    * (`.preview-panel`, `.preview-panel__body`), which names no provider.
    */
+
+  /*
+   * 047 US3/US4 — Markdown SECTION FOLDING (FR-030 – FR-041), the fold gutter (FR-032) and the
+   * heading-jump duration (FR-052) are features the SPEC gives to Markdown documents alone, whichever
+   * provider renders them; the chrome that hosts a preview panel is not "a provider" in FR-070's
+   * sense here, it is where a document-scoped, Markdown-only feature necessarily reads its own
+   * per-provider settings leaf (`editor.previews.providers.markdown.gutter`/`.headingJumpMs`) and
+   * gates on `providerId === 'markdown'` so a provider with no folding draws no fold UI. A new
+   * preview provider needs no edit here — it simply never sets that id, exactly the bar EDITOR_LANGUAGE
+   * above is held to.
+   */
+  { file: `${UI_SRC}/renderer/preview/preview-panel.tsx`, kind: 'identifier', token: 'markdown', reason: 'reads the Markdown provider\'s own per-provider preview settings leaf (`.providers.markdown.headingJumpMs`/`.gutter`) — a new provider needs no edit here' },
+  { file: `${UI_SRC}/renderer/preview/preview-panel.tsx`, kind: 'literal', token: 'markdown', reason: 'gates the fold-state wiring on `providerId === \'markdown\'` (047 Principle XI) — Markdown is the only provider with a FoldState today; a provider with none draws no fold UI' },
+  { file: `${UI_SRC}/renderer/preview/preview-panel.tsx`, kind: 'identifier', token: 'markdownSectionsOpen', reason: "reads `editor.markdownSectionsOpen` (FR-039), the seed a never-before-seen Markdown document's fold state starts from — a document-scoped preference, not a provider selection" },
+  /*
+   * T049 — the preview panel hosts the SAME `markdown.*` fold chord engine an editor view does
+   * (Principle VIII, `keybindings/chord-engine.ts`), matched with a plain stroke trie built from
+   * these six action ids and their bound chords; none of it selects a preview provider.
+   */
+  ...allow(`${UI_SRC}/renderer/preview/preview-panel.tsx`, 'literal', FOLD_COMMANDS, 'the `markdown.*` fold command ids (contracts "Commands") the panel\'s own chord trie is built from — action ids shared with the editor, not a provider reference'),
+  ...allow(`${UI_SRC}/renderer/preview/preview-panel.tsx`, 'identifier', [
+    'MARKDOWN_FOLD_ACTIONS',
+    'MarkdownFoldActionId',
+    'buildMarkdownFoldChordTrie',
+    'runMarkdownFoldAction',
+    'runMarkdownFoldActionRef',
+  ], 'the panel\'s own fold-chord engine (T049) — the action-id list its trie is built from, and the handler that runs whichever one a chord completes'),
+
+  /*
+   * 047 US3 in the EDITOR and in core config — Markdown section folding is a feature of the Markdown
+   * editor LANGUAGE (FR-030 – FR-039): the editor's fold markers, menu rows and `markdown.*` commands,
+   * the `editor.markdownSectionsOpen` setting that seeds them, its descriptor and theme copy, and the
+   * shared heading text helper. None of it selects or names a preview provider.
+   */
+  ...allow(`${CORE_SRC}/config/app-settings.ts`, 'identifier', ['MARKDOWN_SECTIONS_OPEN', 'MarkdownSectionsOpen', 'markdownSectionsOpen'], `${SECTION_FOLDING} — the \`editor.markdownSectionsOpen\` setting (FR-039) and its values`),
+  ...allow(`${CORE_SRC}/index.ts`, 'identifier', ['MarkdownSectionsOpen'], `${SECTION_FOLDING} — the barrel re-export of the setting's value type`),
+  ...allow(`${CORE_SRC}/index.ts`, 'identifier', ['markdownInlineText'], `${EDITOR_LANGUAGE} — the barrel re-export of the heading text helper editor and preview share (FR-042)`),
+  ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'literal', [
+    'editor.markdownSectionsOpen',
+    'Markdown sections open',
+    'How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.',
+  ], `${SECTION_FOLDING} — the setting's descriptor and its user-facing copy`),
+  ...allow(`${CORE_SRC}/config/keybindings.ts`, 'identifier', ['MARKDOWN_SURFACES'], `${SECTION_FOLDING} — the surfaces the \`markdown.*\` fold chords are live on`),
+  ...allow(`${CORE_SRC}/config/keybindings.ts`, 'literal', FOLD_COMMANDS, `${SECTION_FOLDING} — the fold command ids and their default chords`),
+  ...allow(`${CORE_SRC}/config/keybindings-metadata.ts`, 'literal', [...FOLD_COMMANDS, 'Markdown'], `${SECTION_FOLDING} — the fold commands' descriptors and their group name`),
+  ...allow(`${CORE_SRC}/config/theme-copy.ts`, 'literal', [
+    'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',
+    'The disclosure triangle beside an expanded heading in a Markdown preview’s fold gutter. Clicking it collapses the section.',
+    "The marker on a collapsed heading's line in a Markdown editor's fold gutter. Clicking it expands the section.",
+    "The marker on an expanded heading's line in a Markdown editor's fold gutter. Clicking it collapses the section.",
+  ], `${SECTION_FOLDING} — user-facing copy for the four fold icon tokens`),
+  ...allow(`${UI_SRC}/renderer/editor/content-menu.ts`, 'identifier', ['markdownFold'], `${SECTION_FOLDING} — the editor body menu's fold rows`),
+  ...allow(`${UI_SRC}/renderer/editor/markdown-fold.ts`, 'identifier', [
+    'MarkdownFoldDeps',
+    'markdownFoldCommand',
+    'markdownFoldExtension',
+    'markdownHeadingGutter',
+    'markdownHeadingRecords',
+    'markdownSections',
+  ], `${SECTION_FOLDING} — the editor's fold markers and commands`),
+  ...allow(`${UI_SRC}/renderer/editor/markdown-fold.ts`, 'literal', ['./markdown-headings.js'], `${SECTION_FOLDING} — the import of the editor's heading scanner`),
+  ...allow(`${UI_SRC}/renderer/editor/markdown-headings.ts`, 'identifier', ['markdownHeadingRecords', 'markdownInlineText'], `${EDITOR_LANGUAGE} — the editor's heading scanner`),
+  ...allow(`${UI_SRC}/renderer/editor/use-editor.ts`, 'identifier', [
+    'isMarkdown',
+    'markdownFold',
+    'markdownFoldCommand',
+    'markdownFoldDeps',
+    'markdownFoldExtension',
+    'markdownHeadingRecords',
+    'markdownSections',
+    'markdownSectionsOpen',
+  ], `${SECTION_FOLDING} — the editor wiring its fold markers, menu rows and commands`),
+  ...allow(`${UI_SRC}/renderer/editor/use-editor.ts`, 'literal', ['markdown', './markdown-fold.js', './markdown-headings.js', ...FOLD_COMMANDS], `${SECTION_FOLDING} — gated on the editor language id, and dispatching the fold command ids`),
+
+  /*
+   * 047 FR-048 – FR-050 — a wikilink names a Markdown note, so resolving one tries the Markdown
+   * extensions. Wikilinks are Markdown syntax, parsed only by the Markdown provider; a new preview
+   * provider needs no edit here.
+   */
+  ...allow(`${CORE_SRC}/preview/wiki-links.ts`, 'literal', ['.md', '.markdown'], 'the note extensions a `[[wikilink]]` target resolves to (047 FR-048) — Markdown syntax, not a provider selection'),
 ];
 
 const isAllowed = (hit: Hit): boolean =>

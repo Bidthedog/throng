@@ -128,10 +128,17 @@ describe("'preview' is a dispatch scope", () => {
     expect(scopeNames(COMMAND_SCOPES['preview.followLink'])).toEqual(['Editor', 'Preview']);
   });
 
-  it('leaves the file, save, find and rename commands dead in a preview (FR-021, FR-030)', () => {
-    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.save', 'search.find', 'panel.rename']) {
+  it('leaves the file, save and rename commands dead in a preview (FR-021, FR-030)', () => {
+    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.save', 'panel.rename']) {
       expect(COMMAND_SCOPES[action as ActionId].has('preview'), action).toBe(false);
     }
+  });
+
+  // 047 FR-004 (research R1) supersedes the ABOVE for `search.find`: a preview now has its own find
+  // bar (`FIND_SURFACES`), so the find/next/previous/close quartet joins `preview` while the replace
+  // trio stays out — see `keybindings-047.test.ts` for the full FIND_SURFACES coverage.
+  it('joins search.find to the preview scope — a preview now has its own find bar (047 FR-004)', () => {
+    expect(COMMAND_SCOPES['search.find' as ActionId].has('preview')).toBe(true);
   });
 });
 

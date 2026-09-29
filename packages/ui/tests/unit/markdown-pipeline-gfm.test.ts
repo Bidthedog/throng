@@ -22,7 +22,7 @@ const fixture = (name: string): string => readFileSync(`${FIXTURES}${name}`, 'ut
 
 function html(text: string): string {
   const sanitise = vi.fn((out: string, _context: PipelineContext) => out);
-  return createMarkdownPipeline(sanitise).render(text);
+  return createMarkdownPipeline(sanitise).render(text).fragment;
 }
 
 /** Every opening tag in `out` whose name matches `tag`, as the tag text. */

@@ -294,6 +294,8 @@ describe('Synchronise Scrolling wears the syncScroll glyph on every menu that of
         previewContentMenu({
           selectionEmpty: true,
           syncScroll: { on: true, toggle: noop },
+          find: { run: noop },
+          goToHeading: { run: noop },
         }),
     },
     {

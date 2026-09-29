@@ -69,6 +69,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.title-bar': 'chrome — pinned to the top of the window',
   '.throng-status-bar': 'chrome — pinned to the bottom of the window',
   '.find-bar': 'chrome — pinned inside its panel, clamped by the panel',
+  '.heading-outline':
+    'preview/heading-outline.css (047 US4, research R7) — the Go to Heading pop-down. Centred over its own preview panel at a FIXED height/width, never measuring the viewport or flipping sides — there is no edge to run off. `.heading-outline__list` scrolls on its own, clamped to the pop-down\'s own fixed height; the preview body\'s scrollTop is untouched.',
   '.pane-collapse': 'chrome — a rail button pinned to its pane',
   '.resize-handle': 'chrome — a drag edge pinned to its pane',
   '.resize-handle--leading': 'chrome — the same drag edge, leading side',
@@ -77,6 +79,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — the SAME active-pane highlight one pane along (046 US2, T040), sharing the identical '
     + '::after rule with .pane-explorer__body--active (panes.css)',
   '.terminal-panel__starting': 'chrome — a status overlay filling its own panel',
+  '.panel-box__flash':
+    'chrome — 047 FR-083\'s border flash (workspace/panel-flash.ts): inset:0 over its own panel, clamped to it by construction, `pointer-events: none`; anchored to nothing, so nothing to flip away from',
   '.editor-pending-chord':
     'chrome — the two-stroke chord indication (046 FR-092), pinned to the bottom-right of its own editor and clamped to it by max-width; anchored to nothing, so nothing to flip away from',
   '.tab-strip':

@@ -78,6 +78,10 @@ function recordingService(overrides: Partial<PreviewIpcService> = {}): PreviewIp
       calls.push(['openPaths']);
       return ['d:/p/a.md'];
     },
+    resolveWikiTargets: async (panelId, targets) => {
+      calls.push(['resolveWikiTargets', panelId, targets]);
+      return { resolved: targets.map(() => null) };
+    },
     publishEditorTitle: (panelId, title) => void calls.push(['publishEditorTitle', panelId, title]),
     placeDeclined: (requestId) => void calls.push(['placeDeclined', requestId]),
     ...overrides,
@@ -93,7 +97,7 @@ function source(relative: string): string {
 }
 
 describe('throng:preview:* — channels and kinds (§1)', () => {
-  it('registers the six invokes and the four sends, and nothing else', () => {
+  it('registers the seven invokes and the four sends, and nothing else', () => {
     const ipc = fakeIpc();
     registerPreviewIpc(ipc, recordingService());
 
@@ -104,6 +108,7 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
       'throng:preview:open',
       'throng:preview:openPaths',
       'throng:preview:refresh',
+      'throng:preview:resolveWikiTargets',
     ]);
     expect([...ipc.ons.keys()].sort()).toEqual([
       'throng:preview:destroyed',
@@ -116,7 +121,7 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
   it('the preload and the renderer declaration name every channel', () => {
     const preload = source('../../src/preload/preload.cts');
     const globals = source('../../src/renderer/global.d.ts');
-    for (const channel of ['open', 'attach', 'navigate', 'refresh', 'isOpen', 'openPaths']) {
+    for (const channel of ['open', 'attach', 'navigate', 'refresh', 'isOpen', 'openPaths', 'resolveWikiTargets']) {
       expect(preload).toContain(`ipcRenderer.invoke('throng:preview:${channel}'`);
     }
     for (const channel of ['detach', 'destroyed', 'publishEditorTitle', 'placeDeclined']) {
@@ -136,6 +141,7 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
       'refresh:',
       'isOpen:',
       'openPaths:',
+      'resolveWikiTargets:',
       'publishEditorTitle:',
       'placeDeclined:',
       'onUpdate:',
@@ -144,6 +150,19 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
       'onFocus:',
       'onPlace:',
     ]) {
+      expect(globals).toContain(member);
+    }
+  });
+});
+
+describe('throng:editor:setFoldState / throng:editor:foldState — the wire (047, contracts/preview-ipc-047.md §5)', () => {
+  it('the preload and the renderer declaration name both channels and the sync field', () => {
+    const preload = source('../../src/preload/preload.cts');
+    const globals = source('../../src/renderer/global.d.ts');
+    expect(preload).toContain(`ipcRenderer.send('throng:editor:setFoldState'`);
+    expect(preload).toContain(`ipcRenderer.invoke('throng:editor:foldState'`);
+    expect(preload).toContain('foldState?:');
+    for (const member of ['setFoldState:', 'foldState:', 'foldState?:']) {
       expect(globals).toContain(member);
     }
   });
@@ -160,6 +179,56 @@ describe('renderer → main: request shapes and forwarding (§1)', () => {
 
     expect(res).toEqual({ kind: 'placeLocally', reservation: 'r1', besidePanelId: null });
     expect(service.calls).toEqual([['open', 4, req]]);
+  });
+
+  it('open forwards `target`, and `navigated` passes straight back through (047 R8, §1)', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService({
+      open: async (from, req) => {
+        service.calls.push(['open', from, req]);
+        return { kind: 'navigated', panelId: 'v1' };
+      },
+    });
+    registerPreviewIpc(ipc, service);
+    const req = {
+      absPath: 'D:/p/b.md',
+      projectId: 'P',
+      hasParentLocally: false,
+      target: { mode: 'lastActive', reusePanelId: 'v1' },
+    };
+
+    const res = await ipc.handles.get('throng:preview:open')!(event(4), req);
+
+    expect(res).toEqual({ kind: 'navigated', panelId: 'v1' });
+    expect(service.calls).toEqual([['open', 4, req]]);
+  });
+
+  it('open with no `target` forwards a request with none — absent, not `undefined`-valued (backward compatible)', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService();
+    registerPreviewIpc(ipc, service);
+
+    await ipc.handles.get('throng:preview:open')!(event(4), { absPath: 'D:/p/a.md', projectId: 'P', hasParentLocally: false });
+
+    expect(service.calls).toEqual([
+      ['open', 4, { absPath: 'D:/p/a.md', projectId: 'P', hasParentLocally: false }],
+    ]);
+    expect('target' in (service.calls[0]![2] as object)).toBe(false);
+  });
+
+  it('open forwards `keepFocus: true`, and drops any other value (047 FR-081, §1)', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService();
+    registerPreviewIpc(ipc, service);
+    const base = { absPath: 'D:/p/a.md', projectId: 'P', hasParentLocally: false };
+
+    await ipc.handles.get('throng:preview:open')!(event(4), { ...base, keepFocus: true });
+    await ipc.handles.get('throng:preview:open')!(event(4), { ...base, keepFocus: 'yes' });
+
+    expect(service.calls).toEqual([
+      ['open', 4, { ...base, keepFocus: true }],
+      ['open', 4, base],
+    ]);
   });
 
   it('open refuses a malformed request without asking the service', async () => {
@@ -242,6 +311,22 @@ describe('renderer → main: request shapes and forwarding (§1)', () => {
     expect(refused).toMatchObject({ kind: 'refused', notice: { kind: 'link-missing-file', target: 'D:/p/b.md' } });
   });
 
+  it('navigate forwards OPEN and DROP intents (047 R8/R9, contracts/preview-ipc-047.md §2)', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService();
+    registerPreviewIpc(ipc, service);
+    const opened = { panelId: 'v1', target: { absPath: 'D:/p/b.md' }, intent: { kind: 'open' } };
+    const dropped = { panelId: 'v1', target: { absPath: 'D:/p/c.md' }, intent: { kind: 'drop' } };
+
+    expect(await ipc.handles.get('throng:preview:navigate')!(event(6), opened)).toEqual({ kind: 'shown', update: UPDATE });
+    expect(await ipc.handles.get('throng:preview:navigate')!(event(6), dropped)).toEqual({ kind: 'shown', update: UPDATE });
+
+    expect(service.calls).toEqual([
+      ['navigate', 6, opened],
+      ['navigate', 6, dropped],
+    ]);
+  });
+
   it('navigate forwards a HEADING intent with both view states; arrivingViewState reaches no other intent (FR-115)', async () => {
     const ipc = fakeIpc();
     const service = recordingService();
@@ -300,6 +385,32 @@ describe('renderer → main: request shapes and forwarding (§1)', () => {
     registerPreviewIpc(ipc, recordingService({ openPaths: boom }));
     // `ipcMain.handle` resolves a plain return value exactly as it resolves a promise.
     expect(await ipc.handles.get('throng:preview:openPaths')!(event(2), undefined)).toEqual([]);
+  });
+
+  it('resolveWikiTargets forwards panelId and targets, and returns the service’s answer (047 §3)', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService();
+    registerPreviewIpc(ipc, service);
+    const targets = [{ path: 'docs/setup', rooted: false }, { path: 'top', rooted: true }];
+
+    const res = await ipc.handles.get('throng:preview:resolveWikiTargets')!(event(2), { panelId: 'v1', targets });
+
+    expect(res).toEqual({ resolved: [null, null] });
+    expect(service.calls).toEqual([['resolveWikiTargets', 'v1', targets]]);
+  });
+
+  it('resolveWikiTargets answers every target null, never throws, on a malformed payload or a service failure', async () => {
+    const ipc = fakeIpc();
+    const service = recordingService({ resolveWikiTargets: boom });
+    registerPreviewIpc(ipc, service);
+
+    expect(await ipc.handles.get('throng:preview:resolveWikiTargets')!(event(2), null)).toEqual({ resolved: [] });
+    expect(await ipc.handles.get('throng:preview:resolveWikiTargets')!(event(2), { targets: [{ path: 'a', rooted: false }] })).toEqual({
+      resolved: [],
+    });
+    expect(
+      await ipc.handles.get('throng:preview:resolveWikiTargets')!(event(2), { panelId: 'v1', targets: [{ path: 'a', rooted: false }] }),
+    ).toEqual({ resolved: [null] });
   });
 
   it('the four sends forward event.sender where it matters and ignore malformed payloads', () => {

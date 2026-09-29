@@ -328,6 +328,31 @@ describe('open — where the preview goes (FR-010, FR-011, FR-012, FR-014)', () 
     expect(push.focus).toEqual([{ to: 9, payload: { panelId: 'v1' } }]);
   });
 
+  /*
+   * 047 FR-081 — a file activated in File Explorer shows its preview without taking the keyboard. The
+   * window places or focuses from main's MESSAGES as well as from its own answer, so the request's
+   * `keepFocus` rides on both, or the message moves the keyboard the answer was careful to leave alone.
+   */
+  it('echoes keepFocus on the focus message for an open from File Explorer (FR-081)', async () => {
+    const a = await file(root, 'a.md');
+    await previews.attach(9, { panelId: 'v1', projectId: 'P', filePath: a });
+
+    await previews.open(REQUESTER, { absPath: a, projectId: 'P', hasParentLocally: false, keepFocus: true });
+
+    expect(push.focus).toEqual([{ to: 9, payload: { panelId: 'v1', keepFocus: true } }]);
+  });
+
+  it('echoes keepFocus on the place message for an open from File Explorer (FR-081)', async () => {
+    const a = await file(root, 'a.md');
+    await coord.load({ ...meta('ed1', a), absPath: a });
+
+    expect(await previews.open(REQUESTER, { absPath: a, projectId: 'P', hasParentLocally: false, keepFocus: true })).toEqual({
+      kind: 'placedElsewhere',
+    });
+
+    expect(push.place.map((p) => p.payload.keepFocus)).toEqual([true]);
+  });
+
   it('answers focused with panelId null, and sends no focus, when only a reservation exists', async () => {
     const a = await file(root, 'a.md');
     await open(a, { from: 4 });

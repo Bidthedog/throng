@@ -54,20 +54,37 @@ afterEach(() => {
 /* ── `previewContentMenu` — the ordinary body menu, no link row at all (FR-169) ─────────────────── */
 
 describe('previewContentMenu carries no Contextual section any more (FR-169)', () => {
-  it('draws only Content, Navigate and View & state — never Open Link or Copy Link to Clipboard', () => {
+  it('draws only Navigate (Find…, Go to Heading…), Content, Navigate and View & state — never Open Link or Copy Link to Clipboard', () => {
     const items = previewContentMenu({
       selectionEmpty: false,
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
       editorRoute: { parented: false, run: vi.fn() },
       syncScroll: { on: true, toggle: vi.fn() },
+      find: { run: vi.fn() },
+      goToHeading: { run: vi.fn() },
     });
-    expect(items.map((i) => i.section)).toEqual(['content', 'content', 'content', 'content', 'navigate', 'viewState']);
+    // 047 US1/US4 (FR-007) — Find… and Go to Heading… are pushed first (`content-menu.ts`'s own raw
+    // order), ahead of Content.
+    expect(items.map((i) => i.section)).toEqual([
+      'navigate',
+      'navigate',
+      'content',
+      'content',
+      'content',
+      'content',
+      'navigate',
+      'viewState',
+    ]);
     expect(items.some((i) => i.label === 'Open Link')).toBe(false);
     expect(items.some((i) => i.label.startsWith('Copy Link'))).toBe(false);
   });
 
-  it('with nothing to draw at all, the menu is empty', () => {
-    expect(previewContentMenu({ selectionEmpty: true })).toEqual([]);
+  it('with nothing else to draw, the menu still carries Find… and Go to Heading… (FR-007, always present)', () => {
+    const items = previewContentMenu({ selectionEmpty: true, find: { run: vi.fn() }, goToHeading: { run: vi.fn() } });
+    expect(items).toEqual([
+      expect.objectContaining({ label: 'Find…', section: 'navigate' }),
+      expect.objectContaining({ label: 'Go to Heading…', section: 'navigate' }),
+    ]);
   });
 });
 
@@ -112,12 +129,19 @@ describe('Synchronise Scrolling on the body menu (FR-122b)', () => {
       content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
       editorRoute: { parented: false, run: vi.fn() },
       syncScroll: { on: true, toggle: vi.fn() },
+      find: { run: vi.fn() },
+      goToHeading: { run: vi.fn() },
     });
     expect(items.at(-1)).toMatchObject({ testId: SYNC, section: 'viewState', label: 'Synchronise Scrolling ✓' });
   });
 
   it('is absent when the panel hands the builder none (a binary provider)', () => {
-    const items = previewContentMenu({ selectionEmpty: true, syncScroll: null });
+    const items = previewContentMenu({
+      selectionEmpty: true,
+      syncScroll: null,
+      find: { run: vi.fn() },
+      goToHeading: { run: vi.fn() },
+    });
     expect(items.find((i) => i.testId === SYNC)).toBeUndefined();
   });
 });

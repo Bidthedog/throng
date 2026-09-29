@@ -60,6 +60,13 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'panel.zoomOut': 'tier2',
   'panel.zoomReset': 'tier2',
   'editor.toggleWordWrap': 'tier2', // recorded exception (multi-stroke, FR-091/FR-092)
+  // 047 (research R5) — the six Markdown fold commands, the same multi-stroke exception as word wrap.
+  'markdown.toggleSection': 'tier2', // recorded exception (multi-stroke)
+  'markdown.toggleAll': 'tier2', // recorded exception (multi-stroke)
+  'markdown.collapseSection': 'tier2', // recorded exception (multi-stroke)
+  'markdown.expandSection': 'tier2', // recorded exception (multi-stroke)
+  'markdown.collapseAll': 'tier2', // recorded exception (multi-stroke)
+  'markdown.expandAll': 'tier2', // recorded exception (multi-stroke)
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -76,6 +83,7 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'search.replace': 'tier3',
   'search.replaceCurrent': 'tier3',
   'navigate.gotoLine': 'tier3',
+  'preview.goToHeading': 'tier3', // 047 research R7 — shares Ctrl+G with navigate.gotoLine on a disjoint scope
   'navigate.back': 'tier3',
   'navigate.forward': 'tier3',
   'preview.followLink': 'tier3',
@@ -137,6 +145,22 @@ const TIER_EXCEPTIONS: ReadonlySet<string> = new Set([
   'editor.columnSelectRight|Shift+Alt+ArrowRight',
 ]);
 
+/**
+ * Every action whose shipped default is a genuinely two-stroke chord (046 FR-091/FR-092; 047
+ * research R5) — named rather than inferred from the token's shape, so a FUTURE two-stroke default
+ * shipped on some OTHER action outside its tier still fails the tier check (review finding MINOR 6's
+ * reasoning, widened from the single-action check this replaces).
+ */
+const TWO_STROKE_EXEMPT_ACTIONS: ReadonlySet<string> = new Set([
+  'editor.toggleWordWrap',
+  'markdown.toggleSection',
+  'markdown.toggleAll',
+  'markdown.collapseSection',
+  'markdown.expandSection',
+  'markdown.collapseAll',
+  'markdown.expandAll',
+]);
+
 const GESTURE_NAMES = new Set(['WheelUp', 'WheelDown', 'MiddleClick']);
 
 function isGestureToken(token: string): boolean {
@@ -183,10 +207,10 @@ describe('the FR-101 tier guard', () => {
       if (tier === 'outside') continue;
       for (const token of DEFAULT_KEYBINDINGS.bindings[action] ?? []) {
         if (isGestureToken(token)) continue;
-        // The two-stroke exception is scoped to the ONE action FR-103 actually names — not a
-        // blanket "any two-stroke token is fine" that would hide a future two-stroke default
-        // shipped on some OTHER action outside its tier (review finding MINOR 6).
-        if (isTwoStrokeToken(token) && action === 'editor.toggleWordWrap') continue;
+        // The two-stroke exception is scoped to the NAMED actions FR-103 (and 047 research R5)
+        // actually list — not a blanket "any two-stroke token is fine" that would hide a future
+        // two-stroke default shipped on some OTHER action outside its tier (review finding MINOR 6).
+        if (isTwoStrokeToken(token) && TWO_STROKE_EXEMPT_ACTIONS.has(action)) continue;
         const normalised = normalizeToken(token);
         if (TIER_EXCEPTIONS.has(`${action}|${normalised}`)) continue;
         if (!matchesTier(tier, normalised)) {
@@ -323,6 +347,14 @@ describe('the FR-101 tier guard', () => {
       'editor.columnSelectRight': ['Shift+Alt+ArrowRight'],
       'editor.toggleWordWrap': ['Ctrl+E,W'], // re-pinned for FR-124 (Mods+K1,K2)
       'panel.rename': ['F2'],
+      // 047 (research R5, R7) — Markdown section folding and Go to Heading.
+      'markdown.toggleSection': ['Ctrl+M,M'],
+      'markdown.toggleAll': ['Ctrl+M,L'],
+      'markdown.collapseSection': ['Ctrl+M,S'],
+      'markdown.expandSection': [], // unbound by review, 2026-09-28
+      'markdown.collapseAll': ['Ctrl+M,A'],
+      'markdown.expandAll': [], // unbound by review, 2026-09-28
+      'preview.goToHeading': ['Ctrl+G'],
     };
     expect(DEFAULT_KEYBINDINGS.bindings).toEqual(EXPECTED);
   });

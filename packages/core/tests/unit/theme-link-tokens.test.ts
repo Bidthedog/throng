@@ -192,7 +192,10 @@ describe('shipped-defaults version 11 — the link hint tokens reach existing in
   it('is version 14 (046 iterate round 3, T175 bumps it again for FR-118s B / N / M remap, after iterate round 1s 13)', () => {
     // Re-pinned: 046 iterate round 5 (FR-124) bumps it to 15 for word wrap's Ctrl+E,W.
     // Re-pinned: 046 iterate round 7 (FR-127) bumps it to 16 for the panel reset's Ctrl+Alt+0.
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
+    // Re-pinned: 047 bumps it to 17 for the four Markdown fold icon tokens (research R10) — see
+    // `theme-icons-047.test.ts`.
+    // Re-pinned: 047's second round bumps it to 18 for `searchMatchBorder` (FR-074).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
   });
 
   it('fills all three tokens into a version-10 built-in theme', () => {

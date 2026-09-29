@@ -71,8 +71,8 @@ function after(doc: Doc): Doc {
 }
 
 describe('the v14 keybindings upgrade (FR-118)', () => {
-  it('is shipped-defaults version 14 or later (re-pinned: FR-124 bumps it to 15, FR-127 to 16)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(16);
+  it('is shipped-defaults version 14 or later (re-pinned: FR-124 bumps it to 15, FR-127 to 16, 047 to 17, then 18)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
   });
 
   it('the shipped set carries FR-117s six values, or the cases below are vacuous', () => {

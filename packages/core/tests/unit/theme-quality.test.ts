@@ -116,6 +116,42 @@ describe('search-match distinctness — the M1 measurement (FR-067)', () => {
   });
 });
 
+/**
+ * 047 FR-074 (MT-01) — every find match carries an outline, not only the current one. The ordinary
+ * match's outline is `searchMatchBorder`: a non-text mark, so it must clear 3:1 against the page it
+ * sits on — `editorBg` in an editor, and the preview body, which `markdown.css` also paints
+ * `editorBg` — and it must not be mistakable for the current match's own outline.
+ */
+describe('searchMatchBorder — the ordinary match outline (047 FR-074)', () => {
+  const themes: Record<string, Theme> = { throng: THRONG_THEME, ...ALL_DEFAULT_THEMES };
+
+  it('every shipped theme sets it, at ≥ 3:1 against the editor and preview background', () => {
+    const failing: string[] = [];
+    for (const [name, theme] of Object.entries(themes)) {
+      const outline = theme.colours.searchMatchBorder;
+      if (!outline) {
+        failing.push(`${name}: not set`);
+        continue;
+      }
+      const ratio = contrastRatio(outline, theme.colours.editorBg);
+      if (ratio < 3) failing.push(`${name}: ${ratio.toFixed(2)}:1`);
+    }
+    expect(failing).toEqual([]);
+  });
+
+  it('is distinct from the current match outline on every shipped theme', () => {
+    const failing: string[] = [];
+    for (const [name, theme] of Object.entries(themes)) {
+      const outline = theme.colours.searchMatchBorder;
+      const current = theme.colours.searchMatchCurrentBorder;
+      if (!outline || !current) continue;
+      const delta = ciede2000(rgbToLab(hexToRgb(outline)), rgbToLab(hexToRgb(current)));
+      if (delta < MATCH_DISTINCTNESS_THRESHOLD) failing.push(`${name}: ΔE00 ${delta.toFixed(2)}`);
+    }
+    expect(failing).toEqual([]);
+  });
+});
+
 describe('contrast (WCAG 2.1 AA over enumerated pairings)', () => {
   const themes = Object.values(ALL_DEFAULT_THEMES);
 

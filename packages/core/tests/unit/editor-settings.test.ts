@@ -27,6 +27,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,
+      // 047 FR-039 — a Markdown document's sections start expanded, in the editor and a fresh
+      // preview alike. Exhaustive assertion, same reason as the neighbours around it.
+      markdownSectionsOpen: 'expanded',
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
       // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
@@ -55,9 +58,20 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        // 047 FR-015a — a standalone preview reuses the last active one, shipped ON.
+        openTarget: 'lastActive',
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
-          markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
+          // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
+          // (shipped 200ms).
+          markdown: {
+            enabled: true,
+            defaultOpenAction: 'editor',
+            loadRemoteImages: true,
+            showFrontMatter: true,
+            gutter: true,
+            headingJumpMs: 200,
+          },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
@@ -152,6 +166,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       defaultOpenAction: 'editor',
       loadRemoteImages: true,
       showFrontMatter: true,
+      gutter: true,
+      headingJumpMs: 200,
     });
     // FR-114 / FR-117 — an explicit `false` survives both the bare parse and the guarded read.
     const off = { editor: { previews: { syncScroll: false, providers: { markdown: { showFrontMatter: false } } } } };
@@ -223,6 +239,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,
+      // 047 FR-039 — a Markdown document's sections start expanded, in the editor and a fresh
+      // preview alike. Exhaustive assertion, same reason as the neighbours around it.
+      markdownSectionsOpen: 'expanded',
       // 033 FR-069b — the navigation block. Shipped ON: Quick Open starts by excluding what the
       // project hides, so the modal and the tree give one answer.
       // 033 FR-058 — and the two remember toggles, both shipped OFF. Their own key-by-key parsing
@@ -251,9 +270,20 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
+        // 047 FR-015a — a standalone preview reuses the last active one, shipped ON.
+        openTarget: 'lastActive',
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
-          markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
+          // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
+          // (shipped 200ms).
+          markdown: {
+            enabled: true,
+            defaultOpenAction: 'editor',
+            loadRemoteImages: true,
+            showFrontMatter: true,
+            gutter: true,
+            headingJumpMs: 200,
+          },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
