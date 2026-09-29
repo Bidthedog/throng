@@ -37,7 +37,8 @@ goes away.
 - **Editor panels** — a fast code editor with syntax highlighting for 31 languages, crash recovery and one buffer per file across every window.
 - **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
-- **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync.
+- **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
+  a heading outline, section folding shared with the editor, and wikilinks.
 - **Clickable links** — paths, URLs and hyperlinks in terminals, editors and previews open where they belong.
 - **Keyboard-first** — every pane, panel and project reachable from one consistent set of chords, all rebindable.
 - **Make it yours** — a visual preferences window, 14 bundled themes, icon packs and live-reloading config files.

@@ -78,7 +78,8 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 ## 4. Edit files
 
 Click a file in the **File Explorer** to open it in the last active editor, or drag one in from
-Windows Explorer.
+Windows Explorer. The panel it opens in flashes briefly, and the keyboard stays in the tree, so you
+can keep browsing or press **F2** to rename the file.
 
 - **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
 - **31 languages** are highlighted; the language picker in the status bar corrects a wrong guess.
@@ -89,12 +90,23 @@ Windows Explorer.
 - The same file open in two places is **one document**, with one undo history, and unsaved edits
   survive a crash.
 - **Preview** a Markdown file beside its editor from the status bar's preview button; it follows your
-  typing and scrolls with the editor.
+  typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
+  the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
+  can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
+  way **Default open action** says. Right-click a note and choose **Open In › Last Preview Panel** to
+  show it in the preview named beside the item, or **New Preview Panel** for a fresh one.
+- **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu,
+  or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor and its preview fold
+  together.
+- In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
+  `[[wikilinks]]` follow like any other link.
 - **Back** and **Forward** (**Alt+Left** / **Alt+Right**) step through the files a panel has shown.
 
 ## 5. Find things
 
-- **Ctrl+F** finds (and in an editor, **Ctrl+H** replaces) inside the active panel.
+- **Ctrl+F** finds (and in an editor, **Ctrl+H** replaces) inside the active panel — an editor, a
+  terminal's scrollback, or a Markdown preview's rendered text. Every match is outlined, and the one
+  you are on is filled more strongly.
 - **Ctrl+Shift+F** searches every file in the project as you type; **Ctrl+Shift+H** adds replace,
   one match, one file or everything at once. Right-click a folder in the tree to search just there.
 - **Ctrl+Shift+T** is **Quick Open**: type any part of a name or path to jump to a file.

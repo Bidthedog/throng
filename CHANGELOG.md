@@ -29,6 +29,21 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Find in Markdown previews** ([#420](https://github.com/Bidthedog/throng/issues/420)): Ctrl+F opens the editor's find bar in a preview and searches the rendered text; replace stays off. Every match, in an editor or a preview, now carries an outline in the new **Search Match Border** theme colour.
+- **Open previews in place** ([#405](https://github.com/Bidthedog/throng/issues/405)): a new **Open previews in** setting reuses the last preview in the tab you are looking at, and File Explorer's Open In offers **Last Preview Panel (*name*)** and **New Preview Panel** in place of the plain Preview item.
+- **Drop Markdown files onto a preview** ([#428](https://github.com/Bidthedog/throng/issues/428)) to show them there; several files open one in place and the rest in new previews. A file dropped onto an empty panel opens the way **Default open action** says.
+- **Section folding and Go to Heading** ([#413](https://github.com/Bidthedog/throng/issues/413)): fold a Markdown document's sections from a gutter, the right-click menu or Ctrl+M chords, linked between an editor and its preview, with a **Markdown sections open** setting; Ctrl+G in a preview opens a searchable heading list.
+- **Wikilinks in previews** ([#424](https://github.com/Bidthedog/throng/issues/424)): `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` follow like ordinary links, resolved from the current folder (or the project root with a leading `/`).
+- **Tables that fit** ([#432](https://github.com/Bidthedog/throng/issues/432)): preview tables share the width fairly, keep short columns on one line and wrap long cells between words, and a column border can be dragged to resize it.
+
+### Changed
+- **Opening a file from File Explorer leaves the keyboard in File Explorer**, so you can keep moving through the tree or press F2 to rename the file you just opened. The panel it opened in flashes its border briefly to show where it went.
+- With files set to open on a **single click**, double-clicking a file opens it once rather than once per click.
+
+### Fixed
+- **Markdown file links in a terminal** ([#451](https://github.com/Bidthedog/throng/issues/451)), as Claude Code prints them, open the file on Ctrl+click and show their target on hover, as a bare path does.
+
 ## 1.0.0-alpha7 — 2026-09-28
 
 ### Added
