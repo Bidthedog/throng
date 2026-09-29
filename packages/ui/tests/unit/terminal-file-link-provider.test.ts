@@ -369,6 +369,32 @@ describe('T176 / FR-130 – FR-133 — wrapped links', () => {
     });
   }
 
+  // A real path a Claude Code session printed, reported working on one row and dead when wrapped:
+  // dot-folders and a `+` in the file name, long enough to wrap over several rows.
+  const REPORTED =
+    'D:/git/throng/.claude/worktrees/S047-markdown-preview-enhancements/.claude/.manual-test-plans/feature+S047-markdown-preview-enhancements.md';
+
+  it('the reported long path, SOFT-wrapped by the terminal, is one link on every row it occupies', () => {
+    const terminal = new WrappingTerminal();
+    const first = terminal.print(REPORTED);
+    const expected = rangeOf(first, 0, REPORTED.length);
+    expect(expected.end.y - expected.start.y + 1).toBeGreaterThan(2);
+
+    for (let row = expected.start.y; row <= expected.end.y; row += 1) {
+      expect(
+        linksOn(terminal, row).map((l) => ({ text: l.text, range: l.range })),
+        `provideLinks for row ${row}`,
+      ).toEqual([{ text: REPORTED, range: expected }]);
+    }
+  });
+
+  it('the reported long path, HARD-broken by the program that printed it, is not rejoined (FR-132)', () => {
+    const cut = 60;
+    const terminal = new WrappingTerminal();
+    terminal.printHardBroken(REPORTED.slice(0, cut), REPORTED.slice(cut));
+    expect(linksOn(terminal, 1).map((l) => l.text)).toEqual([REPORTED.slice(0, cut)]);
+  });
+
   for (const rowsSpanned of [2, 3] as const) {
     it(`a web URL wrapped across ${rowsSpanned} rows is ONE link, served by this provider for every row`, () => {
       const url =

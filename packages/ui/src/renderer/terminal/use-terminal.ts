@@ -46,7 +46,7 @@ import {
   type TerminalLinkSite,
 } from './terminal-link-activation.js';
 import { hideLinkHintFor, showLinkHint } from '../links/link-hint-store.js';
-import { createFileLinkProvider, type ProvidedLink } from './file-link-provider.js';
+import { createFileLinkProvider, pathLinkUnder, type FileLinkProvider, type ProvidedLink } from './file-link-provider.js';
 import { linkMarkRefreshKey, useLinkMarkRefresh } from './link-mark-refresh.js';
 import { createLinkViewMarks, terminalViewScan, type LinkViewMarks } from './link-view-marks.js';
 import { linkScanOptions } from '../links/link-scan-options.js';
@@ -545,6 +545,17 @@ export function useTerminal(opts: UseTerminalOptions): void {
         deps: linkActionsRef.current ?? NO_LINK_DESTINATIONS,
       });
     };
+    /**
+     * #451 — the path link under an UNFOLLOWABLE hyperlink, or `null`. xterm's OSC 8 provider claims a
+     * hyperlink's cells ahead of `fileLinkProvider` (below), so a scheme-less target — Claude Code's
+     * Markdown `[path](path)` — would otherwise leave a perfectly good detected path styled and dead.
+     * The provider is created after the terminal, and these handlers only ever run after that.
+     */
+    let pathLinks: FileLinkProvider | null = null;
+    const shadowedPath = (uri: string, range: ProvidedLink['range']): ProvidedLink | null =>
+      pathLinks !== null && linksEnabled() && hyperlinkTargetKind(uri, currentAllowlist()) === null
+        ? pathLinkUnder(pathLinks, range)
+        : null;
     const term = new Terminal({
       convertEol: false,
       cursorBlink: true,
@@ -558,8 +569,16 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // xterm's default (which calls window.open → an in-app BrowserWindow, the reported bug). Gated
       // on Ctrl/Cmd (FR-019c); the main process re-validates the scheme and denies any window.
       linkHandler: {
-        activate: (event, uri) => openTerminalLink(event, uri),
-        hover: (_event, uri, range) => setHoveredUri(uri, range),
+        activate: (event, uri, range) => {
+          const path = shadowedPath(uri, range);
+          if (path !== null) path.activate(event, path.text);
+          else openTerminalLink(event, uri);
+        },
+        hover: (event, uri, range) => {
+          const path = shadowedPath(uri, range);
+          if (path !== null) path.hover(event, path.text);
+          else setHoveredUri(uri, range);
+        },
         leave: () => setHoveredUri(undefined),
         /*
          * 045 FR-011 – FR-013 — without this, xterm never hands over a `file:` hyperlink at all.
@@ -1071,6 +1090,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // The same options the view pass scans with, so the hover and the mark at rest agree on a span.
       scanOptions: () => linkScanOptions(readLinkSettings()),
     });
+    pathLinks = fileLinkProvider;
     const fileLinks = term.registerLinkProvider(fileLinkProvider);
 
     // In-panel find over the retained scrollback (013). Read-only: the addon reads the

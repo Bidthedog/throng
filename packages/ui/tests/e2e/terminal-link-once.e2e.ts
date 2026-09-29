@@ -938,7 +938,16 @@ function writeMouseLinkFixture(
    * 045 T122 — the two FILE link kinds, printed by the SAME mouse-owning program so all three share
    * one armed ConPTY rather than three fixtures that each have to be measured to arm.
    */
-  files: { readonly detectedPath: string; readonly folderUri: string; readonly folderText: string },
+  files: {
+    readonly detectedPath: string;
+    readonly folderUri: string;
+    readonly folderText: string;
+    /**
+     * #451 — a path the program wrapped in an OSC 8 hyperlink whose target is the same path with NO
+     * scheme, which is what Claude Code prints for a Markdown `[path](path)` link.
+     */
+    readonly shadowedPath: string;
+  },
 ): void {
   const ESC = String.fromCharCode(27);
   const ST = ESC + String.fromCharCode(92);
@@ -960,6 +969,7 @@ function writeMouseLinkFixture(
     // the link rather than on whatever preceded it.
     `process.stdout.write(${JSON.stringify(files.detectedPath + '\r\n')});`,
     `process.stdout.write(${JSON.stringify(osc8(files.folderUri, files.folderText) + '\r\n')});`,
+    `process.stdout.write(${JSON.stringify(osc8(files.shadowedPath, files.shadowedPath) + '\r\n')});`,
     "process.stdout.write('MOUSELINK_READY\\r\\n');",
     'setInterval(() => {}, 1000);',
   ];
@@ -1131,7 +1141,10 @@ test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not a
   const detectedPath = '../outside.txt';
   const folderText = 'FOLDERLINKTEXT';
   const folderUri = `file:///${folder.replace(/\\/g, '/')}`;
-  writeMouseLinkFixture(root, logPath, uri, { detectedPath, folderUri, folderText });
+  const shadowedFile = join(base, 'shadowed.txt');
+  writeFileSync(shadowedFile, 'a path inside a scheme-less hyperlink\n', 'utf8');
+  const shadowedPath = '../shadowed.txt';
+  writeMouseLinkFixture(root, logPath, uri, { detectedPath, folderUri, folderText, shadowedPath });
   try {
     await runApp(async (app, win) => {
       const opens = await captureOpens(app);
@@ -1253,6 +1266,24 @@ test('Ctrl+clicking a link in a program that OWNS THE MOUSE opens it once, not a
         leftPresses(receivedBytes(logPath)),
         'the Ctrl+click on a file hyperlink was forwarded to the program as well',
       ).toHaveLength(3);
+
+      /*
+       * The third kind, reported against Claude Code: a path the program wrapped in an OSC 8
+       * hyperlink whose target is that path with NO scheme (a Markdown `[path](path)` link). The
+       * target is unfollowable (FR-154), and the path under it is a perfectly good detected path —
+       * drawn as a link by the marks. What the user saw: styled like every other link, no hover, and
+       * a Ctrl+click that did nothing, because xterm's own OSC 8 provider claimed the cells first.
+       * The detected path must win them: it hovers, and one Ctrl+click opens it once.
+       */
+      const shadowedAt = await armFileLink(win, shadowedPath);
+      await resetOpenedPaths(app);
+      await pressAt(win, shadowedAt, { ctrl: true });
+      await expect.poll(() => openedPaths(app), { timeout: 5000 }).toHaveLength(1);
+      const afterShadowed = await openedPaths(app);
+      expect(
+        samePathish(afterShadowed[0], shadowedFile),
+        `the path under a scheme-less hyperlink opened ${afterShadowed[0]}, not ${shadowedFile}`,
+      ).toBe(true);
     });
   } finally {
     cleanupTemp(base);
