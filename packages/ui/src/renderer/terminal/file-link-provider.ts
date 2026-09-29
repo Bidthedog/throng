@@ -237,6 +237,28 @@ function fileLinkFor(candidate: LinkCandidate, range: ProvidedLink['range'], dep
   };
 }
 
+/**
+ * #451 — the detected-path link lying under an OSC 8 hyperlink's cells, or `null`.
+ *
+ * xterm serves its own OSC 8 provider first and uses the first provider that answers for a cell, so a
+ * hyperlink claims its cells ahead of this provider whatever its target. When that target is
+ * unfollowable (FR-154) — a scheme-less path, which is what the Claude Code CLI emits for a Markdown
+ * `[path](path)` link — the hyperlink is inert, and the gesture belongs to the path the text spells.
+ * Only a FILE link is recovered: a web url is never a scheme-less target's text.
+ */
+export function pathLinkUnder(
+  provider: Pick<FileLinkProvider, 'linksOnLine'>,
+  range: ProvidedLink['range'],
+): ProvidedLink | null {
+  const before = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+    a.y < b.y || (a.y === b.y && a.x <= b.x);
+  return (
+    provider
+      .linksOnLine(range.start.y)
+      .find((l) => l.kind === 'file' && before(l.range.start, range.end) && before(range.start, l.range.end)) ?? null
+  );
+}
+
 function overlapsAny(span: Span, ranges: readonly Span[]): boolean {
   return ranges.some((r) => span.start < r.end && r.start < span.end);
 }
