@@ -43,8 +43,10 @@ import {
   normaliseForCompare,
   previewPathOf,
   samePath,
+  wikiCandidates,
   type AppSettings,
   type Disposable,
+  type FoldState,
   type IFileSystem,
   type IFileWatcher,
   type NavigationHistory,
@@ -66,8 +68,9 @@ import {
   type PreviewUpdate,
   type SettleClock,
   type SettleScheduler,
+  type WikiTarget,
 } from '@throng/core';
-import { movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
+import { fileKey, movedPathOf, type DocumentLifecycleListener } from './editor-coordinator.js';
 import type { EditorService, LoadResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { PreviewLookup, PreviewRunRef } from './preview-protocol.js';
@@ -144,6 +147,24 @@ export interface PreviewHistoryHooks {
   recordJump(panelId: string, leaving: unknown, arriving: unknown): void;
 }
 
+/**
+ * 047 R3, contracts/preview-ipc-047.md §5 — fold-state re-keying on parented/standalone transitions.
+ * `EditorCoordinator` satisfies it (`reparentFold`, `forgetFold`). Optional: a suite that does not
+ * exercise fold state omits it, exactly like {@link PreviewHistoryHooks}.
+ */
+export interface PreviewFoldHooks {
+  /** The run just became parented (`fileKey` governs now) or standalone (seed `panel:<id>` from it). */
+  reparent(previewPanelId: string, fileKey: string, parented: boolean): void;
+  /** The run's OWN `panel:<id>` entry is gone for good (`dropRun`) — unconditional, nothing else holds it. */
+  forget(key: string): void;
+  /** FR-041d — `key`'s CURRENT fold state, to snapshot before a run leaves a history entry. `undefined`
+   *  when none is set yet — a read must never CREATE state (unlike `EditorCoordinator.foldStateFor`). */
+  read(key: string): FoldState | undefined;
+  /** FR-041d — restore a standalone run's `key` entry from a snapshot on Back/Forward, relayed like any
+   *  other change (`EditorCoordinator.setFoldState` with no sender to exclude). */
+  restore(key: string, state: FoldState): void;
+}
+
 export interface PreviewServiceDeps {
   documents: PreviewDocuments;
   /** `EditorService.load` — the standalone read path (FR-025). */
@@ -159,6 +180,7 @@ export interface PreviewServiceDeps {
   windows: PreviewWindows;
   clock?: SettleClock;
   history?: PreviewHistoryHooks;
+  foldRekey?: PreviewFoldHooks;
 }
 
 type RunSource = { kind: 'document'; documentPanelId: string } | { kind: 'disk'; watch: Disposable };
@@ -241,6 +263,16 @@ const canon = (path: string): string => normaliseForCompare(path);
 
 export class PreviewService implements DocumentLifecycleListener, PreviewLookup {
   private readonly runs = new Map<string, PreviewRun>();
+  /**
+   * 047 FR-041d, data-model.md "FoldState" — the per-history-entry fold snapshot: what a run's fold
+   * state was on the entry it is LEAVING, so Back/Forward can restore it. Held here, not in
+   * `NavigationHistoryService`'s own entries and never written to `Panel.config.history` (044 FR-109
+   * unaffected) — it is main's own memory of a reading position, not part of the document. Purged
+   * WHOLESALE with the panel (`dropRun`), never pruned per entry: a stale snapshot for an index history
+   * has since overwritten is harmless, because `restoreFoldOnArrive` cross-checks the entry's file path
+   * before applying it.
+   */
+  private readonly foldSnapshots = new Map<string, Map<number, { filePath: string; fold: FoldState }>>();
   private readonly byPath = new Map<string, string>();
   private readonly pending = new Map<string, Reservation>();
   private readonly places = new Map<string, PendingPlace>();
@@ -270,12 +302,69 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   }
 
   /**
+   * 047 R3, contracts/preview-ipc-047.md §5 — the fold key a PREVIEW panel maps to right now: the
+   * document's `file:<path>` while parented (so it shares the editor's entry), or its own `panel:<id>`
+   * while standalone. `undefined` when `panelId` names no preview run — `editor-ipc.ts`'s counterpart
+   * to `EditorCoordinator.foldKeyForPanel`.
+   */
+  foldKeyFor(panelId: string): string | undefined {
+    const run = this.runs.get(panelId);
+    if (!run) return undefined;
+    return run.source.kind === 'document' ? fileKey(run.filePath) : `panel:${panelId}`;
+  }
+
+  /**
    * Every path with a run, in compare form (§1 `openPaths`, FR-012, FR-014) — the seed a window created
    * after those previews opened starts its open set from. `byPath` holds exactly one key per open path
    * however many runs share it, and a reservation is not a run, so nothing still being placed is listed.
    */
   openPaths(): string[] {
     return [...this.byPath.keys()];
+  }
+
+  /**
+   * 047 US6, R12, contracts/preview-ipc-047.md §3 — which of `targets` name a real file, resolved from
+   * THIS run's own document folder and project root: never a root the renderer supplies (Principle I),
+   * because a wiki target is a path fragment with no project of its own until main says whose it is.
+   *
+   * `panelId` names no run → every target `null` (a stale or racing call, never an error). Capped at
+   * 500 per call (FR-052 note): the first 500 are resolved, the rest answer `null` without ever being
+   * looked up — a hostile document with an enormous target list cannot make main `stat` unboundedly; the
+   * renderer issues a second call for the remainder.
+   *
+   * `wikiCandidates` (core) gives the ORDERED candidates — `.md`, `.markdown`, exact, or exact-only for
+   * a target already carrying an extension; `[]` for a rooted target with no project root. Only the
+   * FIRST candidate that exists is answered; a target matching none resolves `null`.
+   */
+  async resolveWikiTargets(
+    panelId: string,
+    targets: readonly { path: string; rooted: boolean }[],
+  ): Promise<{ resolved: (string | null)[] }> {
+    const capped = targets.slice(0, 500);
+    const overflow = new Array(Math.max(0, targets.length - capped.length)).fill(null) as null[];
+    const run = this.runs.get(panelId);
+    if (!run) return { resolved: [...capped.map(() => null), ...overflow] };
+    const docDir = dirname(run.filePath);
+    const resolved = await Promise.all(capped.map((t) => this.resolveOneWikiTarget(t, docDir, run.projectRoot)));
+    return { resolved: [...resolved, ...overflow] };
+  }
+
+  private async resolveOneWikiTarget(
+    t: { path: string; rooted: boolean },
+    docDir: string,
+    projectRoot: string,
+  ): Promise<string | null> {
+    // `fragment`/`alias` play no part in candidate resolution (`wiki-links.ts`'s own doc comment) — a
+    // resolveWikiTargets request carries neither, so they are filled in as absent.
+    const target: WikiTarget = { path: t.path, rooted: t.rooted, fragment: null, alias: null };
+    for (const candidate of wikiCandidates(target, docDir, projectRoot)) {
+      // FR-054 — outside the project it is an ordinary outside link (044 FR-090e): answered unlooked-at,
+      // so main never tells a renderer whether a file exists beyond the project (Principle I), and
+      // `navigate` refuses it with the outside notice when followed.
+      if (!isUnderPath(candidate, projectRoot)) return candidate;
+      if (await this.isFile(candidate)) return candidate;
+    }
+    return null;
   }
 
   // ── open (§1) ─────────────────────────────────────────────────────────────────────────────────
@@ -297,13 +386,15 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
 
     // Everything below is one synchronous turn, so two opens racing for a path cannot both reserve it.
     const key = canon(absPath);
+    // 047 FR-081 — echoed on whichever message this open sends, which the window acts on too.
+    const keepFocus = req.keepFocus === true ? ({ keepFocus: true } as const) : {};
 
     // 2. A preview of this file exists, or is being placed (FR-012, FR-014).
     const existing = this.runForPath(key);
     if (existing) {
       const target = existing.viewers.size > 0 ? [...existing.viewers][0]! : existing.lastViewer;
       this.deps.windows.raise(target);
-      this.deps.push.sendFocus(target, { panelId: existing.panelId });
+      this.deps.push.sendFocus(target, { panelId: existing.panelId, ...keepFocus });
       return { kind: 'focused', panelId: existing.panelId };
     }
     const reserved = this.pending.get(key);
@@ -330,6 +421,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         projectId: req.projectId,
         besidePanelId: doc.panelId,
         reservation,
+        ...keepFocus,
       };
       this.reserve(key, reservation, first, true);
       const place: PendingPlace = {
@@ -356,6 +448,27 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     }
 
     // 4. No document: standalone, where a new editor would go (FR-011).
+    //
+    // 047 US2, R8 (contracts/preview-ipc-047.md §1, FR-010–FR-016) — Last Active reuse first: a live
+    // run named by `target.reusePanelId`, VIEWED BY THE REQUESTING WINDOW, is moved to `absPath` in
+    // place rather than a new panel placed. `target` plays no part in steps 1–3 above (FR-012): a
+    // parented placement is exactly what it was before this spec.
+    if (req.target?.mode === 'lastActive' && req.target.reusePanelId) {
+      const reuse = this.runs.get(req.target.reusePanelId);
+      if (reuse && reuse.viewers.has(fromWebContentsId)) {
+        // The SAME move a followed link makes (moveRun, history append, FR-103; unbind FR-090a/FR-016)
+        // — `navigate`'s generic branch already treats `open` exactly like `link`.
+        const moved = await this.navigate(fromWebContentsId, {
+          panelId: reuse.panelId,
+          target: { absPath },
+          intent: { kind: 'open' },
+        });
+        if (moved.kind === 'shown') return { kind: 'navigated', panelId: reuse.panelId };
+        // Every precondition for a move was already checked above (provider, containment, a real
+        // file) — a refusal here is not expected, but this is not the place to surface one the
+        // renderer has no `navigated`-branch handling for. Fall through to a fresh placement.
+      }
+    }
     this.reserve(key, reservation, fromWebContentsId, false);
     return { kind: 'placeLocally', reservation, besidePanelId: null };
   }
@@ -602,7 +715,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       const leaving = req.leavingViewState;
       this.tellHistory('setCurrentViewState', (h) => h.setCurrentViewState(run.panelId, leaving));
     }
-    this.moveRun(run, target, doc && docContent ? { panelId: doc.panelId, content: docContent } : null, read);
+    // 047 FR-041d — the entry being left, read BEFORE `recordOpen` appends the new one.
+    const leavingIndex = this.historyOf(run.panelId)?.index;
+    this.moveRun(run, target, doc && docContent ? { panelId: doc.panelId, content: docContent } : null, read, leavingIndex);
     this.tellHistory('recordOpen', (h) => h.recordOpen(run.panelId, target));
     return withFragment({ kind: 'shown' as const, update: this.emit(run, run.lastSent) });
   }
@@ -719,11 +834,18 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     const raced = this.runForPath(canon(target));
     if (raced && raced !== run) return this.focusOtherPreview(raced, undefined);
 
+    // 047 FR-041d — the entry being left, read BEFORE `moveTo` below advances the history's current
+    // index to the ARRIVING entry (`index`) — a read after that point would name the wrong one.
+    const leavingIndex = this.historyOf(run.panelId)?.index;
     // The history may have changed during the read: move only if the entry still names the target.
     if (this.tellHistory('moveTo', (h) => h.moveTo(run.panelId, index, target)) !== true) {
       return { kind: 'shown', update: this.snapshot(run) };
     }
-    this.moveRun(run, target, doc && docContent ? { panelId: doc.panelId, content: docContent } : null, read);
+    this.moveRun(run, target, doc && docContent ? { panelId: doc.panelId, content: docContent } : null, read, leavingIndex);
+    // 047 FR-041d — ONLY here, not in `navigate`'s link/open/drop branch: a followed link always lands
+    // on an entry Back/Forward has never visited before (a brand-new append), so there is nothing to
+    // restore; only stepping onto a PAST entry can have a snapshot for it.
+    this.restoreFoldOnArrive(run, index);
     return { kind: 'shown', update: this.emit(run, run.lastSent, run.notice, this.stepPlace(run.panelId)) };
   }
 
@@ -738,7 +860,16 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     target: string,
     doc: { panelId: string; content: PreviewDocumentContent } | null,
     read: DiskRead,
+    /**
+     * 047 FR-041d — the history entry index being LEFT, supplied by the caller rather than read live
+     * here: `navigateHistory` calls `moveTo` (which already advances the history's current index to the
+     * ARRIVING entry) BEFORE this runs, so a live read inside `moveRun` would name the wrong entry. A
+     * followed link/open/drop has no such ordering hazard (its `recordOpen` runs AFTER this), but takes
+     * the same explicit parameter so this one rule lives in one place.
+     */
+    leavingIndex: number | undefined,
   ): void {
+    this.snapshotFoldOnLeave(run, leavingIndex);
     run.scheduler?.cancel();
     run.scheduler = null;
     run.timing = null;
@@ -766,6 +897,46 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       run.lastSent = CLEARED_CONTENT;
       run.notice = read.notice;
     }
+  }
+
+  /**
+   * 047 FR-041d — read the run's CURRENT fold state (whatever `foldKeyFor` names for it as it stands,
+   * still true a moment before `moveRun` changes anything) and remember it against the history entry
+   * being left. A no-op with nothing configured (`foldRekey` unset), no history hooks, or nothing folded
+   * yet to remember (`read` answers `undefined` — never seeded here; a snapshot is a MEMORY, not a
+   * manufactured default).
+   */
+  private snapshotFoldOnLeave(run: PreviewRun, leavingIndex: number | undefined): void {
+    const hooks = this.deps.foldRekey;
+    if (!hooks || leavingIndex === undefined || leavingIndex < 0) return;
+    const key = this.foldKeyFor(run.panelId);
+    if (key === undefined) return;
+    const fold = hooks.read(key);
+    if (fold === undefined) return;
+    let byIndex = this.foldSnapshots.get(run.panelId);
+    if (!byIndex) {
+      byIndex = new Map();
+      this.foldSnapshots.set(run.panelId, byIndex);
+    }
+    byIndex.set(leavingIndex, { filePath: run.filePath, fold });
+  }
+
+  /**
+   * 047 FR-041d — Back/Forward landed on `index`: restore ITS snapshot, but only when the run ended up
+   * STANDALONE (`run.source.kind !== 'document'`) and the snapshot's file still matches what the run now
+   * shows. A run that RE-PAIRED takes the document's live state instead (research R3) — the document may
+   * have been folded differently while the run was away, and that current state is the one true answer
+   * for a key shared with an editor. The file-path check absorbs a snapshot left over from an index
+   * history has since reused for a different file (no per-entry pruning; see the map's own comment).
+   */
+  private restoreFoldOnArrive(run: PreviewRun, index: number): void {
+    const hooks = this.deps.foldRekey;
+    if (!hooks || run.source.kind === 'document') return;
+    const snap = this.foldSnapshots.get(run.panelId)?.get(index);
+    if (!snap || !samePath(snap.filePath, run.filePath)) return;
+    const key = this.foldKeyFor(run.panelId);
+    if (key === undefined) return;
+    hooks.restore(key, snap.fold);
   }
 
   /**
@@ -1191,6 +1362,12 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     const key = canon(run.filePath);
     this.release(key);
     this.leavePath(key, run);
+    // 047 R3 — the run's OWN `panel:<id>` fold entry, if it ever had one (a parented run never did:
+    // `foldKeyFor` names the document's `file:` key for it instead). Unconditional: nothing else can
+    // hold a `panel:` key for this id.
+    this.deps.foldRekey?.forget(`panel:${run.panelId}`);
+    // 047 FR-041d — the per-entry snapshot is purged WHOLESALE with the panel, never per entry.
+    this.foldSnapshots.delete(run.panelId);
   }
 
   private parentOf(run: PreviewRun): PreviewUpdate['parent'] {
@@ -1322,6 +1499,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.readSeq += 1;
     run.movePending = false;
     run.source = { kind: 'document', documentPanelId };
+    // 047 R3 — the fold map re-keys HERE, not on some later emit: `panel:<id>` is dropped and the
+    // document's `file:` entry (already there once any panel has shown it) governs from this point.
+    this.deps.foldRekey?.reparent(run.panelId, fileKey(run.filePath), true);
     // `registered` carries no dirtyChanged: the initial state is read, not assumed (§3).
     const current = this.deps.documents.getContent(documentPanelId);
     run.dirty = current?.dirty ?? false;
@@ -1343,6 +1523,9 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     run.scheduler?.cancel();
     run.dirty = false;
     run.documentContentless = false;
+    // 047 R3 — seed a fresh `panel:<id>` from the document's `file:` entry as it stands right NOW,
+    // before anything else about the run changes: the preview keeps what it showed.
+    this.deps.foldRekey?.reparent(run.panelId, fileKey(run.filePath), false);
     this.watchDisk(run);
     void this.readAndApply(run, { force: true, repeat: false });
   }

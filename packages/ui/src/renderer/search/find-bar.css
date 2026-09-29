@@ -137,9 +137,25 @@
  * the bundled themes derive them to guarantee it (SC-005). */
 .cm-editor .throng-search-match {
   background: var(--throng-colour-searchMatch, #1c2f4d);
+  /* 047 FR-074 — every match is framed, not only the current one, so each stands clear of the page. */
+  outline: 1px solid var(--throng-colour-searchMatchBorder, #6f747e);
 }
 
 .cm-editor .throng-search-match--current {
   background: var(--throng-colour-searchMatchCurrent, #2c4a7a);
   outline: 1px solid var(--throng-colour-searchMatchCurrentBorder, #6aa3ff);
+}
+
+/* 047 US1 (FR-006) — a preview's matches, painted through the CSS Custom Highlight API rather than
+ * the sanitised DOM (research R1): a preview has no `.cm-editor` wrapper for the rule above to key
+ * off, and wrapping matches in an element would mutate content the sanitiser and scroll anchors both
+ * depend on. Same tokens as the editor's own highlights, so a theme repaints both together. The
+ * `::highlight()` pseudo accepts only a narrow property set — no `outline` — so the current match is
+ * distinguished by a stronger background alone. */
+::highlight(throng-preview-match) {
+  background-color: var(--throng-colour-searchMatch, #1c2f4d);
+}
+
+::highlight(throng-preview-match-current) {
+  background-color: var(--throng-colour-searchMatchCurrent, #2c4a7a);
 }

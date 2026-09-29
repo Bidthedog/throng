@@ -270,7 +270,21 @@ import { setAtPath } from './metadata.js';
 // fill never touches it; {@link V15_KEYBINDINGS} joins FR-108's guard sources, the row moves only
 // while it is still exactly that default, and a binding the user kept on `Ctrl+Alt+0` refuses it.
 // Version 15 is not edited.
-export const SHIPPED_DEFAULTS_VERSION = 16;
+//
+// Bumped by 047 (16 → 17): four icon tokens (`foldSectionExpanded`, `foldSectionCollapsed`,
+// `foldPreviewExpanded`, `foldPreviewCollapsed`) for Markdown section folding (research R10). This is
+// 044's 7 → 8 case again and nothing more: every payload ARRIVES, no existing value moves, so there
+// is no frozen version-16 record to guard a rewrite against. Without the bump an existing install's
+// theme files never receive the four tokens, and the editor's and preview's fold gutters render with
+// no marker for exactly the users no fresh-install test represents. `editor.markdownSectionsOpen`
+// and the two Markdown-provider leaves this spec adds need no bump, for the reason given at 044's
+// 7 → 8: `parseSettingsGuarded` fills an absent settings key with its shipped default on every read.
+//
+// Bumped by 047's second manual-test round (17 → 18): one colour token, `searchMatchBorder`, the
+// outline every ordinary find match now carries (FR-074). The additive case again. Version 17 is not
+// edited to carry it, for the reason version 13 was not: the maintainer's hand-testing install
+// already holds a 17 marker, and would never receive the token.
+export const SHIPPED_DEFAULTS_VERSION = 18;
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`

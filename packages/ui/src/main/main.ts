@@ -1538,6 +1538,14 @@ if (isPrimaryInstance)
         win.focus();
       },
     },
+    // 047 R3, FR-041d (contracts/preview-ipc-047.md §5) — fold-state re-keying on parented/standalone
+    // transitions and the per-history-entry snapshot, both owned by the coordinator's ONE fold map.
+    foldRekey: {
+      reparent: (panelId, key, parented) => editorCoordinator.reparentFold(panelId, key, parented),
+      forget: (key) => editorCoordinator.forgetFold(key),
+      read: (key) => editorCoordinator.readFold(key),
+      restore: (key, state) => editorCoordinator.setFoldState(key, state, -1),
+    },
   });
   previewService = previews;
   registerPreviewIpc(ipcMain, previews);
@@ -1624,6 +1632,9 @@ if (isPrimaryInstance)
       await refreshProjectsCache();
       return [...projectsByRoot.values()].map((p) => ({ id: p.id, rootFolder: p.rootFolder }));
     },
+    // 047 R3 (contracts/preview-ipc-047.md §5) — resolves a PREVIEW panelId's fold key; an editor
+    // panelId is resolved by the coordinator itself and never reaches this.
+    previewFold: previews,
   });
   // The OS clipboard, behind the seam (016, FR-013a) — one app-global record of what throng last
   // copied and what SHAPE it was, so a block cut in one window pastes as a block in another.

@@ -84,16 +84,19 @@ export async function performOpenIn(args: {
   absPath: string;
   target: OpenInTarget;
   range?: RevealRange;
+  /** 047 FR-083 — flash the editor the file lands in: File Explorer's Open In sets it. */
+  flash?: boolean;
 }): Promise<boolean> {
   const { ws, absPath, target, range } = args;
+  const extra: [] | [{ flash: true }] = args.flash === true ? [{ flash: true }] : [];
 
   if (target.kind === 'tab') {
     // A named tab reuses THAT tab's last active editor, which is what the explorer's Other Tab has
     // always done. `openFileInTab` activates the tab on the way.
-    return target.tabId ? openFileInTab(ws, target.tabId, absPath, 'lastActive', range) : false;
+    return target.tabId ? openFileInTab(ws, target.tabId, absPath, 'lastActive', range, ...extra) : false;
   }
 
   const activeTabId = ws.layout?.activeTabId;
   if (!activeTabId) return false;
-  return openFileInTab(ws, activeTabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range);
+  return openFileInTab(ws, activeTabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range, ...extra);
 }

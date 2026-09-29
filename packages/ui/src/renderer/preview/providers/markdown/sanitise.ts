@@ -72,6 +72,7 @@ import {
   stripBidiControls,
 } from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
+import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX } from './wikilinks.js';
 
 type Profile = Config & { RETURN_DOM_FRAGMENT: true };
 
@@ -86,6 +87,8 @@ export const PROFILE = Object.freeze({
     'href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan',
     'data-source-line', 'data-lang', 'data-align', 'data-heading-slug',
     'data-heading-nonce',   // admitted only so the heading hook can verify it; the hook removes it from every element
+    'data-throng-wiki-index', // 047 T061/T063 — onLink reads it to mark an unresolved wikilink (R12)
+    'data-throng-wiki-href', // 047 T061 — a wikilink's href BODY, with no scheme in the value (wikilinks.ts)
   ],
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
@@ -156,7 +159,15 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
   };
 
   const onLink = (node: Element): void => {
-    const href = node.getAttribute('href');
+    // 047 T061 — a wikilink's href BODY travelled in this data attribute with no scheme on it at all
+    // (`wikilinks.ts`'s `WIKI_HREF_ATTRIBUTE`): DOMPurify checks every allowed attribute's VALUE
+    // against `ALLOWED_URI_REGEXP` below, not only attributes it recognises by name as URI-bearing, so
+    // a bespoke `throng-wiki:` scheme written anywhere in markdown-it's OUTPUT would have been
+    // stripped before this hook ever ran. The scheme is prepended back here, in code, never as HTML —
+    // exactly where `classify` needs it and nowhere DOMPurify's own pass can see it.
+    const wikiBody = node.getAttribute(WIKI_HREF_ATTRIBUTE);
+    node.removeAttribute(WIKI_HREF_ATTRIBUTE);
+    const href = wikiBody !== null ? `${WIKI_SCHEME_PREFIX}${wikiBody}` : node.getAttribute('href');
     node.removeAttribute('href');
     node.removeAttribute('title');
     const link = classify(href);

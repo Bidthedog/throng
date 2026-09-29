@@ -146,16 +146,17 @@ export function createDedicatedEditor(ws: WorkspaceApi, tabId: string, absPath: 
   return newId;
 }
 
-/** If the given panel is in this window's layout, activate it (local focus). */
-export function focusPanelIfLocal(ws: WorkspaceApi, panelId: string): void {
+/** If the given panel is in this window's layout, activate it (local focus). Returns whether it was. */
+export function focusPanelIfLocal(ws: WorkspaceApi, panelId: string): boolean {
   const layout = ws.layout;
-  if (!layout) return;
+  if (!layout) return false;
   for (const tab of layout.tabs) {
     if (collectPanels(tab.root).some((p) => p.id === panelId)) {
       ws.setActiveTab(tab.id);
       ws.setActivePanel(tab.id, panelId);
       setLastActiveEditor(tab.id, panelId);
-      return;
+      return true;
     }
   }
+  return false;
 }

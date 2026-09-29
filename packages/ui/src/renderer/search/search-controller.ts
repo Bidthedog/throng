@@ -9,7 +9,7 @@
  */
 import type { MatchModes, SearchCount } from './search-model.js';
 
-interface BaseSearchController {
+export interface BaseSearchController {
   /** A non-empty single-line selection to seed the find input with (FR-002b); '' if none. */
   seedFromSelection(): string;
   /** Set the query and recompute matches. Never mutates panel content (FR-003). */
@@ -48,7 +48,17 @@ export interface TerminalSearchController extends BaseSearchController {
   onCountChange(cb: (count: SearchCount) => void): () => void;
 }
 
-export type SearchController = EditorSearchController | TerminalSearchController;
+/**
+ * Preview: find only, no replace and no scrollback navigation (047 US1, research R1) — the same
+ * shape as {@link BaseSearchController} with nothing added, because a preview has neither replace
+ * (excluded by construction: `search-store.ts`/`find-bar.tsx` gate replace on `panelKind === 'editor'`)
+ * nor a terminal's scrollback to step through.
+ */
+export interface PreviewSearchController extends BaseSearchController {
+  readonly panelKind: 'preview';
+}
+
+export type SearchController = EditorSearchController | TerminalSearchController | PreviewSearchController;
 
 const registry = new Map<string, SearchController>();
 

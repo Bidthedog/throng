@@ -53,6 +53,8 @@ export type EditorOpenRoute = (
   absPath: string,
   openTarget: EditorOpenTarget,
   range?: RevealTarget,
+  /** 047 FR-083 — flash the panel the file lands in: set by the File Explorer routes only. */
+  opts?: { flash?: boolean },
 ) => Promise<boolean>;
 
 export interface OpenRoute {
@@ -72,10 +74,11 @@ export interface OpenRoute {
  * when it does but main REFUSES it (044 US4 fix round 1, item 5) — a refusal is not an open, and a
  * caller like Quick Open (FR-061) must not treat it as one.
  */
-async function openedAsPreview(absPath: string, route: OpenRoute): Promise<boolean> {
+async function openedAsPreview(absPath: string, route: OpenRoute, keepFocus = false): Promise<boolean> {
   if (!route.projectId) return false;
   if (defaultOpenActionFor(route.registry, route.previews, absPath) !== 'preview') return false;
-  return requestPreviewOpen({ absPath, projectId: route.projectId });
+  // 047 FR-081, FR-083 — from File Explorer: the tree keeps the keyboard, and the preview flashes instead.
+  return requestPreviewOpen({ absPath, projectId: route.projectId, ...(keepFocus ? { keepFocus, flash: true } : {}) });
 }
 
 /**
@@ -91,10 +94,11 @@ export async function openFromTree(
   route: OpenRoute,
   range?: RevealTarget,
 ): Promise<boolean> {
-  if (await openedAsPreview(absPath, route)) return true;
+  // 047 FR-081 — the tree keeps the keyboard, whether the file opens as a preview or in an editor.
+  if (await openedAsPreview(absPath, route, true)) return true;
   const tabId = ws.layout?.activeTabId;
   if (!tabId) return false;
-  return route.openInEditor(ws, tabId, absPath, openTarget, range);
+  return route.openInEditor(ws, tabId, absPath, openTarget, range, { flash: true });
 }
 
 /**

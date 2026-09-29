@@ -5,7 +5,7 @@
  * EditorCoordinator}; the renderer never touches the filesystem or the lock.
  */
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import type { SaveAllScope, SerialisedHistory } from '@throng/core';
+import type { FoldState, SaveAllScope, SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
 import { editorLoadHistoryFields } from './navigation-history-ipc.js';
@@ -35,10 +35,46 @@ export interface OwnedProject {
  */
 export interface EditorIpcDeps {
   listProjects: () => Promise<readonly OwnedProject[]>;
+  /**
+   * 047 R3, contracts/preview-ipc-047.md §5 — resolves a PREVIEW panel to its fold key.
+   * `PreviewService.foldKeyFor` satisfies it. Optional: a suite that never names a preview panelId
+   * omits it, and a panelId this cannot resolve either falls through to `coordinator.foldKeyForPanel`.
+   */
+  previewFold?: { foldKeyFor(panelId: string): string | undefined };
 }
 
 function windowIdOf(event: IpcMainInvokeEvent | IpcMainEvent): string {
   return String(senderWebContentsId(event.sender) ?? 0);
+}
+
+/**
+ * 047 R3, contracts/preview-ipc-047.md §5 — `panelId` names an editor OR a preview; try the
+ * coordinator's registry first (an editor panel, or a document an editor holds), then the injected
+ * preview lookup. `undefined` when neither knows the id.
+ */
+function resolveFoldKey(
+  coordinator: EditorCoordinator,
+  previewFold: EditorIpcDeps['previewFold'],
+  panelId: string,
+): string | undefined {
+  return coordinator.foldKeyForPanel(panelId) ?? previewFold?.foldKeyFor(panelId);
+}
+
+/**
+ * 047 contracts/preview-ipc-047.md §5 — `FoldState` is validated in MAIN: `base` one of two values,
+ * `flipped` an array of at most 2,000 strings of at most 256 characters each. Anything else is
+ * dropped rather than stored, so a compromised or stale renderer cannot grow the map without bound.
+ */
+function asFoldState(value: unknown): FoldState | null {
+  const v = value as { base?: unknown; flipped?: unknown } | null;
+  if (!v || (v.base !== 'expanded' && v.base !== 'collapsed')) return null;
+  if (!Array.isArray(v.flipped) || v.flipped.length > 2000) return null;
+  const flipped: string[] = [];
+  for (const slug of v.flipped) {
+    if (typeof slug !== 'string' || slug.length > 256) return null;
+    flipped.push(slug);
+  }
+  return { base: v.base, flipped };
 }
 
 /** Build a DocMeta from a renderer payload, stamping the sender's window id. */
@@ -185,6 +221,30 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     const r = req as { panelId?: unknown; seedDefault?: unknown } | null;
     if (!r || typeof r.panelId !== 'string') return true;
     return coordinator.wordWrapFor(r.panelId, r.seedDefault !== false);
+  });
+
+  // 047 R3, contracts/preview-ipc-047.md §5 — fold state, beside word wrap: `panelId` names an editor
+  // OR a preview; main resolves it to a key and never trusts the renderer's own idea of one.
+  ipcMain.on('throng:editor:setFoldState', (event, raw: Record<string, unknown>) => {
+    const panelId = typeof raw.panelId === 'string' ? raw.panelId : null;
+    if (panelId === null) return;
+    const state = asFoldState(raw.state);
+    if (state === null) {
+      console.error(`[editor-ipc] setFoldState: invalid state for ${panelId}`);
+      return;
+    }
+    const key = resolveFoldKey(coordinator, deps.previewFold, panelId);
+    if (key === undefined) return;
+    coordinator.setFoldState(key, state, senderWebContentsId(event.sender) ?? -1);
+  });
+  ipcMain.handle('throng:editor:foldState', (_event, raw: Record<string, unknown>) => {
+    const panelId = typeof raw.panelId === 'string' ? raw.panelId : null;
+    const seed = raw.seed === 'collapsed' ? 'collapsed' : 'expanded';
+    const key = panelId === null ? undefined : resolveFoldKey(coordinator, deps.previewFold, panelId);
+    // An unresolvable panelId answers a plain seeded value without ever touching the map — never a
+    // stray entry under a key nothing can name again.
+    if (key === undefined) return { base: seed, flipped: [] } satisfies FoldState;
+    return coordinator.foldStateFor(key, seed);
   });
   ipcMain.handle('throng:editor:revert', (_event, panelId: unknown) =>
     typeof panelId === 'string' ? coordinator.revert(panelId) : false,

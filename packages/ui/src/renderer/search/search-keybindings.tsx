@@ -104,10 +104,18 @@ export function SearchKeybindings(): null {
         return;
       }
       // PanelKind is an open string (custom panel kinds exist), so a bare `!==` guard cannot
-      // narrow it to the two kinds the find/replace bar serves. Capture the membership as a
-      // value TypeScript can carry into openFind/openFindOn (search-store's FindPanelKind).
+      // narrow it to the three kinds the find/replace bar serves (047 US1 adds `preview`, find
+      // only — `search.replace` below is still gated to `activeKind === 'editor'`). Capture the
+      // membership as a value TypeScript can carry into openFind/openFindOn (search-store's
+      // FindPanelKind).
       const findKind: FindPanelKind | null =
-        activeKind === 'editor' ? 'editor' : activeKind === 'terminal' ? 'terminal' : null;
+        activeKind === 'editor'
+          ? 'editor'
+          : activeKind === 'terminal'
+            ? 'terminal'
+            : activeKind === 'preview'
+              ? 'preview'
+              : null;
       if (!activePanelId || !findKind) return;
 
       const controller = getPanelSearch(activePanelId);

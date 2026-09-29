@@ -25,6 +25,7 @@ import {
 } from './open-into-panel.js';
 import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
 import { openFromTree } from './open-router.js';
+import { requestPanelFlash } from '../workspace/panel-flash.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 
 /**
@@ -172,14 +173,24 @@ export async function openFileInTab(
    * the document once the editor holds it.
    */
   range?: RevealTarget,
+  /**
+   * 047 FR-083 — flash the panel the file lands in. Set by the File Explorer routes, whose opens leave the
+   * keyboard in the tree (FR-081) and so need another way to show where the file went.
+   */
+  opts: { flash?: boolean } = {},
 ): Promise<boolean> {
+  const landedAt = (panelId: string): string => {
+    if (opts.flash === true) requestPanelFlash(panelId);
+    return panelId;
+  };
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
   //    Counts as opened: the file the caller asked for is what the user is now looking at, whether
   //    this window raised it or UI-main raised the window holding it.
   const decision = await openDecisionFor(ws, absPath);
   if (decision?.action === 'focus') {
-    focusPanelIfLocal(ws, decision.panelId);
+    // A panel in another window is raised by main; only one here can be flashed.
+    if (focusPanelIfLocal(ws, decision.panelId)) landedAt(decision.panelId);
     // The one-buffer rule and the reveal are not in tension: the file is already open, so the match
     // is selected in the editor that holds it (FR-011a with FR-038). A panel in ANOTHER window is
     // raised by main and revealed there, not here, which is why this is gated on it being local.
@@ -204,7 +215,7 @@ export async function openFileInTab(
   // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
   // rather than reusing the tab's last active editor.
   if (openTarget === 'new') {
-    void revealRange(openFileInNewEditor(ws, tabId, absPath), range);
+    void revealRange(landedAt(openFileInNewEditor(ws, tabId, absPath)), range);
     return true;
   }
 
@@ -215,12 +226,12 @@ export async function openFileInTab(
   const targetId = last && editorsHere.includes(last) ? last : editorsHere[0];
 
   if (!targetId) {
-    void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
+    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath)), range);
     return true;
   }
 
   if (!getEditorActions(targetId)) {
-    void revealRange(createDedicatedEditor(ws, tabId, absPath), range);
+    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath)), range);
     return true;
   }
 
@@ -229,7 +240,7 @@ export async function openFileInTab(
   //    already taken above, so only the prompt-and-load half runs here.
   const { outcome, panelId: landed } = await replaceInEditorPanel(ws, targetId, absPath, { kind: 'open' });
   if (outcome === 'cancelled' || outcome === 'saveFailed') return false;
-  void revealRange(landed, range);
+  void revealRange(landedAt(landed), range);
   return true;
 }
 

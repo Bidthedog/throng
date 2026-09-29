@@ -365,6 +365,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The line drawn around the match you are presently on, keeping it identifiable even on a busy surface.',
   },
+  'colours.searchMatchBorder': {
+    label: 'Search Match Border',
+    description:
+      'The thin line drawn around every other match in an editor or a preview, so each one stands clear of the page around it.',
+  },
   'colours.activePanelBorder': {
     label: 'Active Pane Highlight',
     description:
@@ -803,6 +808,31 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Project category icon',
     description:
       "The glyph on a project's Move to Category context-menu row, which reassigns it to a different category.",
+  },
+  /*
+   * 047 (research R10, R4, R6) — Markdown section folding. Two pairs, not one shared toggle pair:
+   * the editor's gutter marker and the preview's disclosure triangle are drawn by different code and
+   * a reader may want to retheme one without the other.
+   */
+  'icons.foldSectionExpanded': {
+    label: 'Expanded section marker',
+    description:
+      "The marker on an expanded heading's line in a Markdown editor's fold gutter. Clicking it collapses the section.",
+  },
+  'icons.foldSectionCollapsed': {
+    label: 'Collapsed section marker',
+    description:
+      "The marker on a collapsed heading's line in a Markdown editor's fold gutter. Clicking it expands the section.",
+  },
+  'icons.foldPreviewExpanded': {
+    label: 'Expanded preview section marker',
+    description:
+      'The disclosure triangle beside an expanded heading in a Markdown preview’s fold gutter. Clicking it collapses the section.',
+  },
+  'icons.foldPreviewCollapsed': {
+    label: 'Collapsed preview section marker',
+    description:
+      'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',
   },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {

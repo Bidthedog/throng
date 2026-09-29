@@ -671,6 +671,9 @@ contextBridge.exposeInMainWorld('throng', {
     refresh: (panelId: string) => ipcRenderer.invoke('throng:preview:refresh', { panelId }),
     isOpen: (absPath: string) => ipcRenderer.invoke('throng:preview:isOpen', { absPath }),
     openPaths: () => ipcRenderer.invoke('throng:preview:openPaths'),
+    /** 047 R12 (contracts/preview-ipc-047.md §3) — which `[[wikilink]]` targets name a real file. */
+    resolveWikiTargets: (panelId: string, targets: { path: string; rooted: boolean }[]) =>
+      ipcRenderer.invoke('throng:preview:resolveWikiTargets', { panelId, targets }),
     publishEditorTitle: (panelId: string, title: string) =>
       ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
     placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),
@@ -745,6 +748,14 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.send('throng:editor:setWordWrap', { panelId, on }),
     wordWrap: (panelId: string, seedDefault: boolean) =>
       ipcRenderer.invoke('throng:editor:wordWrap', { panelId, seedDefault }),
+    /**
+     * 047 R3 (contracts/preview-ipc-047.md §5) — fold state, beside word wrap. `panelId` names an
+     * editor OR a preview; main resolves which document key it shares.
+     */
+    setFoldState: (panelId: string, state: unknown) =>
+      ipcRenderer.send('throng:editor:setFoldState', { panelId, state }),
+    foldState: (panelId: string, seed: 'expanded' | 'collapsed') =>
+      ipcRenderer.invoke('throng:editor:foldState', { panelId, seed }),
     revert: (panelId: string) => ipcRenderer.invoke('throng:editor:revert', panelId),
     /** Re-READ the path from disk — the operation `revert` deliberately is not (027 / #161). */
     reload: (panelId: string) => ipcRenderer.invoke('throng:editor:reload', panelId),
@@ -795,6 +806,8 @@ contextBridge.exposeInMainWorld('throng', {
         wordWrap?: boolean;
         /** throng moved the file: the document's new absolute path (019, FR-002). */
         movedTo?: string;
+        /** 047 R3 — a document or standalone preview's fold state changed. `key` names it, not `panelId`. */
+        foldState?: { key: string; state: unknown };
       }) => void,
     ) => {
       const handler = (
@@ -808,6 +821,7 @@ contextBridge.exposeInMainWorld('throng', {
           externalChange?: boolean;
         wordWrap?: boolean;
           movedTo?: string;
+          foldState?: { key: string; state: unknown };
         },
       ): void => cb(msg);
       ipcRenderer.on('throng:editor:sync', handler);

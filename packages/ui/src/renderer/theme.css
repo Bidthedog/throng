@@ -2128,6 +2128,39 @@ textarea,
   background: var(--throng-colour-surfaceActive);
 }
 
+/* 047 FR-083 — the flash marking where a file opened from File Explorer landed: the border blinks twice
+   in the accent and fades. An overlay above the body, animating opacity only (Constitution XII — no
+   layout, compositor-only), and never in the pointer's way. The panel-flash module removes it after
+   FLASH_DURATION_MS, which this duration matches. */
+.panel-box__flash {
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--accent);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  animation: panel-flash 900ms ease-out;
+}
+
+@keyframes panel-flash {
+  0% { opacity: 1; }
+  25% { opacity: 0.25; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Reduced motion: no blinking — the border shows once and fades. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-box__flash {
+    animation-name: panel-flash-still;
+  }
+  @keyframes panel-flash-still {
+    0%, 60% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
 /* Project form: validation-error field highlight + colour-picker label (US4). */
 .project-form__field--error {
   border-color: var(--throng-colour-danger, #d6485a);

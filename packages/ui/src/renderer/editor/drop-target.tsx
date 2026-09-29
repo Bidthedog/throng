@@ -62,12 +62,26 @@ function osPathOf(file: File): string {
 export function useDropHandler(
   ctx: DropContext,
   onOpen: (absPath: string) => void,
+  /**
+   * 047 US5 (T058) — called once, before the first path in a drop is judged. A preview accepting
+   * several files at once (contracts/preview-ipc-047.md §4) needs to tell its first accepted path
+   * apart from the rest, and this is the one place a whole drop BEGINS — never changing what any
+   * existing caller (the editor's, the untyped panel's) does, since none of them pass it.
+   */
+  onBatchStart?: () => void,
+  /**
+   * 047 US5 (T058) — a renderer-side accept filter, applied to a path AFTER main's confinement
+   * decision approves it (see the step-2 note below). Optional: omitted, every confinement-approved
+   * path opens, exactly as before this parameter existed.
+   */
+  accepts?: (absPath: string) => boolean,
 ): (paths: readonly string[]) => Promise<void> {
   const { notify } = useNotify();
   const key = JSON.stringify(ctx);
 
   return useCallback(
     async (paths: readonly string[]) => {
+      onBatchStart?.();
       const c = JSON.parse(key) as DropContext;
       // NEVER a silent no-op (FR-061). A drop that is refused and says nothing is indistinguishable
       // from a drop that missed, and the user simply tries again, harder. Each refusal gets its OWN
@@ -111,11 +125,20 @@ export function useDropHandler(
           refuse(absPath, 'throng could not check whether it may be opened here.');
           continue;
         }
-        if (decision.ok) onOpen(decision.absPath);
-        else refuse(absPath, decision.error);
+        if (!decision.ok) {
+          refuse(absPath, decision.error);
+          continue;
+        }
+        // 047 US5 (T058, contracts/preview-ipc-047.md §4 step 2) — a RENDERER-side filter on top of
+        // main's confinement decision: a preview refuses a confinement-approved path no enabled
+        // provider claims, SILENTLY (no notice) — "the same as a tree drag refused today". `accepts`
+        // is optional so the editor's and the untyped panel's own callers, which pass none, are
+        // unaffected: main's confinement decision remains the only gate for them.
+        if (accepts !== undefined && !accepts(decision.absPath)) continue;
+        onOpen(decision.absPath);
       }
     },
-    [key, onOpen, notify],
+    [key, onOpen, notify, onBatchStart, accepts],
   );
 }
 
@@ -129,13 +152,19 @@ export function useDropHandler(
 export function PanelDropTarget({
   ctx,
   onOpen,
+  onBatchStart,
+  accepts,
   children,
 }: {
   ctx: DropContext;
   onOpen: (absPath: string) => void;
+  /** 047 US5 (T058) — see {@link useDropHandler}. Omitted: unchanged editor/untyped-panel behaviour. */
+  onBatchStart?: () => void;
+  /** 047 US5 (T058) — see {@link useDropHandler}. Omitted: every confinement-approved path opens. */
+  accepts?: (absPath: string) => boolean;
   children: ReactNode;
 }): ReactElement {
-  const handle = useDropHandler(ctx, onOpen);
+  const handle = useDropHandler(ctx, onOpen, onBatchStart, accepts);
   const { notify } = useNotify();
   const [over, setOver] = useState(false);
   const panelId = ctx.panelId;

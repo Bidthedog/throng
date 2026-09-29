@@ -61,12 +61,21 @@ export function TreeRow({
     if (openOnClick === 'none') return; // a file click never opens here; use Enter or Open In
     if (action === 'open') row?.onOpenFile(data.relPath);
   };
+  /*
+   * 047 FR-084 — in single-click mode one double click arrives as click (detail 1), click (detail 2) and
+   * dblclick, and each used to open the file. Only the FIRST click of a run opens: the browser's click count
+   * tells the second click of a double click from a new click on the same file, which a time window cannot
+   * (a click after cancelling the unsaved-changes prompt is a new one, however soon, editor-open.e2e.ts:161).
+   */
+  const singleOpensFile = (row?.openOnClick ?? 'single') === 'single' && data.kind === 'file';
   const onClick = (e: MouseEvent): void => {
     if (e.ctrlKey || e.metaKey || e.shiftKey) return; // multi-select gesture
+    if (singleOpensFile && e.detail > 1) return;
     act(1);
   };
   const onDoubleClick = (e: MouseEvent): void => {
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (singleOpensFile) return;
     act(2);
   };
 

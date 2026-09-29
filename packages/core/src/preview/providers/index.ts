@@ -21,6 +21,9 @@ import { createPreviewProviderRegistry } from '../registry.js';
 import { markdownProvider } from './markdown.js';
 
 export { markdownHeadingLine } from './markdown/heading-line.js';
+// 047 (research R2) — forwarded the same way, for the editor's own heading extractor (#375, T007) to
+// slug from the same rendered text the pipeline slugs.
+export { markdownInlineText } from './markdown/inline-text.js';
 
 export const SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS: readonly PreviewProviderDescriptor[] = [markdownProvider];
 

@@ -34,6 +34,33 @@ export const markdownProvider: PreviewProviderDescriptor = {
       control: 'toggle',
       default: true,
     },
+    // 047 FR-032b. Declared here for the same reason as `showFrontMatter` above: generated (FR-071),
+    // drawn disabled while Markdown is off. The full dotted key is deliberately NOT written in this
+    // comment — `settings-inertness-047.test.ts` matches a property read of the leaf, and a comment
+    // spelling it out would count as a reader and pass that guard before anything consumes it.
+    {
+      leaf: 'gutter',
+      label: 'Preview gutter',
+      description:
+        'Show a narrow gutter beside each heading in a Markdown preview, with a fold arrow. It is the only control that shows or hides the gutter; folding stays available from the menus and key bindings while it is off.',
+      control: 'toggle',
+      default: true,
+    },
+    // 047 FR-042d. A jump to a heading (Go to Heading, a link) scrolls over this many milliseconds;
+    // 0 jumps instantly.
+    {
+      leaf: 'headingJumpMs',
+      label: 'Heading jump scroll duration (ms)',
+      description: 'How long a jump to a heading in a Markdown preview takes to scroll into view. 0 jumps instantly.',
+      control: 'number',
+      default: 200,
+      min: 0,
+      max: 2000,
+      // A bounded number takes the slider (018 SC-007's converse guard), so it needs a step: at
+      // least 1% of the range (`slider-descriptors.test.ts`), and the shipped 200 lands exactly on
+      // one — 0 + 50×4.
+      step: 50,
+    },
   ],
   remoteImagesSetting: 'loadRemoteImages',
 };

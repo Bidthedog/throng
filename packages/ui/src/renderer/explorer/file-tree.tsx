@@ -43,16 +43,24 @@ import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
 import {
   buildTreeDragPayload,
+  collectPanels,
+  panelDisplayTitle,
+  previewTitleParts,
+  truncateGraphemes,
+  wasTruncated,
   previewAffordance,
   relPathUnderRoot,
   resolveDragEffect,
   resolveTarget,
+  PREVIEW_KIND,
   type FlavourOption,
   type PreviewAffordance,
   type TargetNode,
   type TerminalPanelConfig,
 } from '@throng/core';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { candidateFor } from '../preview/last-active-preview.js';
+import { getPreviewState } from '../preview/preview-store.js';
 import { useFlavours } from '../panel-type/use-flavours.js';
 import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
@@ -61,6 +69,12 @@ import type { MenuAction } from '../workspace/context-menu.js';
 import { guardVisibleRowScroll } from './visible-row-scroll.js';
 
 const ROW_HEIGHT = 24;
+
+/**
+ * 047 FR-080 — Last Preview Panel's name: the panel's name without the header's " - Preview" (the item already
+ * says it), cut to this many characters whatever the tab limit.
+ */
+const LAST_PREVIEW_NAME_MAX = 16;
 
 /** Leaf folder name of an absolute root path (handles `/` and `\`). */
 function rootName(rootFolder: string): string {
@@ -468,7 +482,9 @@ export function FileTree({
        * untouched and still synchronous, which is FR-013d's other half and still stands.
        */
       let openIn: MenuAction[] | undefined;
-      let preview: { affordance: PreviewAffordance; open: () => void } | undefined;
+      let preview:
+        | { affordance: PreviewAffordance; openLastActive: () => void; openNew: () => void; lastPreviewTitle: string | null }
+        | undefined;
       if (node.data.kind === 'file' && node.data.relPath !== '') {
         const absPath = `${rootFolder}/${node.data.relPath}`;
         // Awaited BEFORE the facts are read, so the whole decision is sampled from one moment
@@ -480,10 +496,46 @@ export function FileTree({
         ]);
         openIn = openInMenuActions(
           describeOpenInTargets(readOpenInFacts(ws, absPath, alreadyOpen)),
-          (target) => void performOpenIn({ ws, absPath, target }),
+          // 047 FR-083 — the editor it lands in flashes.
+          (target) => void performOpenIn({ ws, absPath, target, flash: true }),
         );
         // 044 FR-003, FR-004, FR-062 — core decides; the menu draws. The live settings and the injected
         // registry are read through refs, so the answer is this moment's rather than the last render's.
+        //
+        // 047 US2 (FR-014) — whether there is a preview standing in the VISIBLE tab this window could
+        // reuse, for *Last Preview Panel*'s own extra disable. Read now, not memoised: a panel closing
+        // between renders must not leave the row offering a reuse that no longer exists.
+        const layout = ws.layout;
+        const tabId = layout?.activeTabId;
+        const activeTab = tabId !== undefined ? layout?.tabs.find((t) => t.id === tabId) : undefined;
+        //
+        // 047 FR-076 — and that panel's NAME, as its header shows it: `panelDisplayTitle` over the same
+        // sources the header hands it (the live path a followed link moved, or the parent editor's title).
+        const candidatePanel =
+          tabId !== undefined && activeTab !== undefined
+            ? (() => {
+                const panels = collectPanels(activeTab.root);
+                const id = candidateFor(tabId, (pid) => panels.some((p) => p.id === pid && p.kind === PREVIEW_KIND));
+                return id === null ? undefined : panels.find((p) => p.id === id);
+              })()
+            : undefined;
+        const candidateState = candidatePanel !== undefined ? getPreviewState(candidatePanel.id) : undefined;
+        const titleSources = {
+          previewFilePath: candidateState?.filePath,
+          previewParentTitle: candidateState?.parent?.title,
+        };
+        // FR-080 — the NAME only: the item already says "Preview Panel", so the header's " - Preview" goes; a cut
+        // name ends in an ellipsis.
+        const lastPreviewName =
+          candidatePanel === undefined
+            ? null
+            : (previewTitleParts(candidatePanel, titleSources)?.name ?? panelDisplayTitle(candidatePanel, titleSources));
+        const lastPreviewTitle =
+          lastPreviewName === null
+            ? null
+            : wasTruncated(lastPreviewName, LAST_PREVIEW_NAME_MAX)
+              ? `${truncateGraphemes(lastPreviewName, LAST_PREVIEW_NAME_MAX)}…`
+              : lastPreviewName;
         preview = {
           affordance: previewAffordance({
             registry: previewRegistryRef.current,
@@ -494,9 +546,12 @@ export function FileTree({
             previewOpen,
             surface: 'explorer',
           }),
-          // The one `preview.open` command, with no requester: main places it beside an editor already
-          // showing the file, or standalone (FR-010, FR-011).
-          open: () => void requestPreviewOpen({ absPath, projectId }),
+          // 047 US2 — the two explicit overrides (T037): the `preview.open` request with an EXPLICIT
+          // target. The plain, setting-driven Preview row is gone (FR-075). The preview flashes (FR-083).
+          openLastActive: () =>
+            void requestPreviewOpen({ absPath, projectId, target: { mode: 'lastActive' }, flash: true }),
+          openNew: () => void requestPreviewOpen({ absPath, projectId, target: { mode: 'new' }, flash: true }),
+          lastPreviewTitle,
         };
       }
       const items = buildContextMenuItems({

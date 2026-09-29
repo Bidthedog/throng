@@ -1,0 +1,135 @@
+/*
+ * The Go to Heading pop-down (047 US4, research R7). Registered in the floating-surfaces guard as
+ * chrome pinned inside its own panel: it opens centred over the body, at a FIXED height (a layout
+ * constant, not a themeable size — Complexity Tracking) rather than growing with the heading count.
+ * Its OWN list scrolls (own overflow-y); the preview body's scroll position is untouched. Nothing here
+ * measures the viewport or flips sides: it is always centred in its panel, so there is no edge to run
+ * off (contract: colours from theme tokens only).
+ *
+ * No file names or dotted words in this comment, and no class name after a comma: the
+ * floating-surfaces guard takes the first dot-prefixed word before a brace as the rule's class, and
+ * this comment sits before the first one.
+ */
+
+.heading-outline {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100% - 32px));
+  height: 320px;
+  /* `surfaceActive`, not `surface` (the pane token): this is a floating pop-down, the same role a
+     context menu has, never a pane or dialog card body (surface-token-roles.test.ts, 018 FR-001). */
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--throng-colour-border, #2a3344);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  overflow: hidden;
+}
+
+.heading-outline__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--throng-colour-border, #2a3344);
+  flex: 0 0 auto;
+}
+
+.heading-outline__search-icon {
+  display: flex;
+  color: var(--throng-colour-textMuted, #93a0b4);
+}
+
+.heading-outline__search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--throng-colour-text, #e6ebf2);
+  font-family: var(--throng-font-paneText-family);
+  font-size: var(--throng-font-paneText-size);
+}
+
+.heading-outline__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* 047 FR-079 — the global thumb (scrollbarThumb) is the same colour as this pop-down's surface on several
+   shipped themes and within 1.1:1 of it on most, so the list's bar disappeared into it. The thumb here is
+   textMuted, over a transparent track, so it is read against the pop-down itself. The choice and its
+   measurement are recorded in heading-outline-scrollbar.test.ts. */
+.heading-outline__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.heading-outline__list::-webkit-scrollbar-thumb {
+  background: var(--throng-colour-textMuted);
+}
+
+.heading-outline__empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--throng-colour-textMuted, #93a0b4);
+}
+
+.heading-outline__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 0;
+  cursor: pointer;
+  outline: none;
+  color: var(--throng-colour-text, #e6ebf2);
+}
+
+.heading-outline__row--context {
+  color: var(--throng-colour-textMuted, #93a0b4);
+}
+
+.heading-outline__row--current {
+  font-weight: 600;
+}
+
+.heading-outline__row--active {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* Gated on window focus (021/FR-035): a stranded `:hover` from before the window blurred must not
+   linger once it has — `hover-suppression-coverage.test.ts` discovers every rule painting this token. */
+:where(body:not([data-window-blurred])) .heading-outline__row:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.heading-outline__toggle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--throng-colour-textMuted, #93a0b4);
+  cursor: pointer;
+}
+
+.heading-outline__toggle--spacer {
+  cursor: default;
+}
+
+.heading-outline__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

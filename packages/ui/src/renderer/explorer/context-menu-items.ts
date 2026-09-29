@@ -92,8 +92,21 @@ export function buildContextMenuItems(args: {
    * Its OWN argument, deliberately not one of the `openIn` targets: those come from
    * `describeOpenInTargets`, which a Find in Files row also draws, and a result row always opens an
    * editor (FR-054, contracts/menus-and-controls.md §5). Absent, or an `absent` affordance, draws no row.
+   *
+   * 047 US2 (FR-014, contracts/menus-commands-controls.md, the Open In section for a file or folder) draws two
+   * rows: `openLastActive`/`openNew` send the explicit `target` override (`{mode:'lastActive'}` /
+   * `{mode:'new'}`) rather than letting *editor.previews.openTarget* decide, and carry the
+   * `affordance`-based absent/disabled rule — `lastPreviewTitle` is *Last Preview Panel*'s one EXTRA
+   * disable (`null`: nothing to reuse in the visible tab) and its label's name (FR-076). 047 FR-075
+   * removed the plain *Preview* row, so there is no `open` here.
    */
-  preview?: { affordance: PreviewAffordance; open: () => void };
+  preview?: {
+    affordance: PreviewAffordance;
+    openLastActive: () => void;
+    openNew: () => void;
+    /** The header title of the preview panel *Last Preview Panel* would reuse; `null` when there is none. */
+    lastPreviewTitle: string | null;
+  };
 }): MenuAction[] {
   const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot, undoState, flavours, preview } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
@@ -166,13 +179,27 @@ export function buildContextMenuItems(args: {
    * folder, a type no provider claims, outside the project — FR-003, FR-004).
    */
   if (preview !== undefined && node.kind === 'file' && preview.affordance.state !== 'absent') {
+    const previewDisabled = preview.affordance.state === 'disabled';
+    /*
+     * 047 US2 (FR-014, R8) — the two explicit reuse targets. 047 FR-075 removed the plain *Preview* row
+     * they used to sit beside: these replace it. *Last Preview Panel* carries the affordance's own
+     * disable PLUS its own — nothing standing in the visible tab to reuse — and names the panel it would
+     * reuse, as that panel's header shows it (FR-076); unnamed while there is none. *New Preview Panel*
+     * carries only the affordance's.
+     */
     openInItems.push({
-      label: 'Preview',
+      label: preview.lastPreviewTitle === null ? 'Last Preview Panel' : `Last Preview Panel (${preview.lastPreviewTitle})`,
       icon: 'preview',
       section: 'navigate',
-      shortcut: sc('preview.open'),
-      disabled: preview.affordance.state === 'disabled',
-      onClick: () => preview.open(),
+      disabled: previewDisabled || preview.lastPreviewTitle === null,
+      onClick: () => preview.openLastActive(),
+    });
+    openInItems.push({
+      label: 'New Preview Panel',
+      icon: 'preview',
+      section: 'navigate',
+      disabled: previewDisabled,
+      onClick: () => preview.openNew(),
     });
   }
   /*

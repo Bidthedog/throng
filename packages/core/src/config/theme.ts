@@ -301,6 +301,10 @@ export const THRONG_THEME: Theme = {
     searchMatch: '#262a32',
     searchMatchCurrent: '#213049',
     searchMatchCurrentBorder: '#6aa3ff',
+    // 047 FR-074 — the ORDINARY match's outline, `blend(editorBg, editorFg, 0.49)`: the first
+    // neutral tint the derivation's walk accepts, clearing 3:1 against the page (3.9:1) and against
+    // the ordinary fill (3.0:1). Hand-set for the reason above; re-measure it with the other three.
+    searchMatchBorder: '#6f747e',
     // The ACTIVE-PANE highlight — the outline marking the pane/panel you are working in (012, FR-002;
     // 021 consolidated the File Explorer's separate `activePaneHighlight` onto this one token so the
     // whole app marks the active pane the same way). While a project is open the highlight is painted
@@ -573,6 +577,17 @@ export const THRONG_THEME: Theme = {
        version-12 seed. */
     unload: '⏏',
     category: '🏷',
+    /* 047 (research R10, R4, R6) — four tokens for Markdown section folding.
+       `foldSectionExpanded`/`foldSectionCollapsed` mark the editor's heading-only gutter (R4);
+       `foldPreviewExpanded`/`foldPreviewCollapsed` mark the preview's soft gutter (R6). Two pairs,
+       not one, because the two gutters draw different affordances: the editor's is a fold MARKER a
+       user clicks to toggle a section, the preview's is a DISCLOSURE triangle rotated by state — the
+       same distinction VS Code and a native tree view each draw with. `collapseAll`/`expandAll`
+       above are REUSED for the status-bar Collapse/Expand All toggle; no fifth or sixth token. */
+    foldSectionExpanded: '−',
+    foldSectionCollapsed: '+',
+    foldPreviewExpanded: '▾',
+    foldPreviewCollapsed: '▸',
   },
 };
 

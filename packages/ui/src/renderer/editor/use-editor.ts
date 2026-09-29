@@ -11,6 +11,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
+import { ensureSyntaxTree } from '@codemirror/language';
 import {
   caretPosition,
   columnSelectHeld,
@@ -19,10 +20,14 @@ import {
   effectiveIndent,
   firstBinding,
   inferIndent,
+  initialFold,
+  isCollapsed,
   languageName,
   PLAIN_TEXT_ID,
+  resolveIconAsset,
   selectedCharacters,
   shippedBindingsFor,
+  toggleSection,
   type ActionId,
   type CanonicalChangeMsg,
   type IndentProfile,
@@ -35,7 +40,7 @@ import {
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useActiveTheme, useAppSettings, useIconPacks } from '../config/config-store.js';
 import {
   allEditorStates,
   getEditorState,
@@ -66,7 +71,24 @@ import {
   functionHighlightCompartment,
   languageCompartment,
   removePanelLanguage,
+  usePanelLanguage,
 } from './editor-language.js';
+import { markdownHeadingRecords } from './markdown-headings.js';
+import {
+  foldCompartment,
+  markdownFoldCommand,
+  markdownFoldExtension,
+  markdownSections,
+  sectionAtLine,
+  syncFoldRanges,
+  type FoldCommandDeps,
+} from './markdown-fold.js';
+import {
+  applyFoldStateFromSync,
+  relayedKeyMatches,
+  setDocumentFoldState,
+  useDocumentFoldState,
+} from './fold-state-store.js';
 import { loadDocumentOverride, toRelPath } from './language-override.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
 import {
@@ -255,6 +277,15 @@ function commandsFor(deps: {
   lineEnding: () => LineEndingId;
   indent: () => IndentProfile;
   toggleWrap: () => void;
+  /**
+   * 047 US3, research R5 — the six `markdown.*` fold actions, bound ONLY while `isMarkdown` is true
+   * at the moment `commandsFor` is called (the rebuild effect below re-runs whenever the panel's
+   * language changes, exactly as it does for a rebind). Omitting the keys entirely — not merely
+   * making the handlers no-ops — is what keeps CodeMirror's own `Ctrl-m` (`toggleTabFocusMode`) alive
+   * in every other language: an ABSENT action is never bound inside CodeMirror at all (`editorChordsFor`'s
+   * own reasoning, one level up).
+   */
+  markdownFold?: { isMarkdown: boolean } & FoldCommandDeps;
 }): Partial<Record<ActionId, ReturnType<typeof cutLineCommand>>> {
   return {
     'editor.cutLine': cutLineCommand(deps.lineEnding),
@@ -271,6 +302,16 @@ function commandsFor(deps: {
       deps.toggleWrap();
       return true;
     },
+    ...(deps.markdownFold?.isMarkdown
+      ? {
+          'markdown.toggleSection': markdownFoldCommand('toggleSection', deps.markdownFold),
+          'markdown.collapseSection': markdownFoldCommand('collapseSection', deps.markdownFold),
+          'markdown.expandSection': markdownFoldCommand('expandSection', deps.markdownFold),
+          'markdown.collapseAll': markdownFoldCommand('collapseAll', deps.markdownFold),
+          'markdown.expandAll': markdownFoldCommand('expandAll', deps.markdownFold),
+          'markdown.toggleAll': markdownFoldCommand('toggleAll', deps.markdownFold),
+        }
+      : {}),
   };
 }
 
@@ -337,6 +378,128 @@ export function useEditor(params: UseEditorParams): void {
       live = false;
     };
   }, [wrapDocKey, panel.id, settings.defaultWordWrap]);
+
+  /*
+   * 047 US3 (research R3) — fold state follows the SAME per-document key as word wrap: an editor or
+   * a parented preview both resolve to `file:<path>` in main's fold map, so a document folds together
+   * exactly as it wraps together (Principle XI). `foldStateValue` is the renderer's cache
+   * (`fold-state-store.ts`), seeded locally from `editor.markdownSectionsOpen` (FR-039) until the
+   * authority answers (below) — the same two-step seed word wrap uses, for the same reason (FR-001a):
+   * the document may already be open elsewhere with sections collapsed, and a local-only seed would
+   * disagree with it until the next toggle.
+   */
+  const languageId = usePanelLanguage(panel.id)?.languageId;
+  const isMarkdown = languageId === 'markdown';
+  const theme = useActiveTheme();
+  const iconPacks = useIconPacks();
+  const foldSeed = initialFold(settings.markdownSectionsOpen);
+  const foldStateValue = useDocumentFoldState(wrapDocKey, foldSeed);
+  // Read through a ref so the gutter's click handler (built in an effect that does NOT depend on
+  // `foldStateValue` — see below) always acts on the CURRENT state rather than the one captured when
+  // the gutter extension was last (re)built.
+  const foldStateValueRef = useRef(foldStateValue);
+  foldStateValueRef.current = foldStateValue;
+
+  /**
+   * `commandsFor()`'s fold deps (R5) — `isMarkdown` is THIS render's, so the rebuild effect that
+   * calls this must list it as a dependency; `docKey`/`seedDefault` read through refs, matching
+   * `currentLineEnding`/`currentIndent`'s own "read at call time" contract.
+   */
+  const markdownFoldDeps = useCallback((): { isMarkdown: boolean } & FoldCommandDeps => ({
+    isMarkdown,
+    docKey: () => wrapDocKeyRef.current,
+    panelId: panel.id,
+    seedDefault: () => initialFold(metaRef.current.settings.markdownSectionsOpen),
+  }), [isMarkdown, panel.id]);
+
+  useEffect(() => {
+    if (!isMarkdown) return;
+    let live = true;
+    const key = wrapDocKey;
+    void window.throng?.editor
+      ?.foldState?.(panel.id, settings.markdownSectionsOpen)
+      .then((state) => {
+        if (live && state) applyFoldStateFromSync(key, state);
+      })
+      .catch(() => {
+        /* No authority to ask (a torn-down window): the local seed stands. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [wrapDocKey, panel.id, isMarkdown, settings.markdownSectionsOpen]);
+
+  /*
+   * The fold relay is carried on `EditorSyncMsg.foldState`, keyed by the DOCUMENT key rather than by
+   * `panelId` (contracts/preview-ipc-047.md §5) — one document, however many views, one broadcast —
+   * so it cannot be filtered by the `msg.panelId !== panelId` guard the main `onSync` handler below
+   * uses for every other field. A second, independent subscription filters on the key instead.
+   */
+  useEffect(() => {
+    if (!isMarkdown) return;
+    const off = window.throng?.editor?.onSync?.((msg) => {
+      if (msg.foldState && relayedKeyMatches(msg.foldState.key, wrapDocKey)) {
+        applyFoldStateFromSync(wrapDocKey, msg.foldState.state);
+      }
+    });
+    return () => off?.();
+  }, [wrapDocKey, isMarkdown]);
+
+  // The fold mechanism reaches the live view through `foldCompartment` — CodeMirror's folding extension plus the
+  // heading gutter — populated only while Markdown (R4), the same way `languageCompartment` is.
+  // Rebuilt on a language change, a gutter-visibility change, or a theme/icon-pack change (the
+  // gutter's markers are drawn from theme icon tokens); NOT on `foldStateValue` — the effect below
+  // applies fold RANGES to whatever is already installed, which is cheaper than reinstalling the
+  // gutter on every toggle and is what makes a toggle repaint just the markers it touched.
+  //
+  // Also run by the mount effect once it has built a view (MT-04): a panel re-parented by a layout change
+  // (a preview split beside it) gets a NEW view while `isMarkdown` stays true, so this effect — which ran
+  // before that view existed — would never run again, and the rebuilt view had no folding at all.
+  const installFold = (): void => {
+    const view = viewRef.current;
+    if (!view) return;
+    if (!isMarkdown) {
+      view.dispatch({ effects: foldCompartment.reconfigure([]) });
+      return;
+    }
+    // Force the syntax tree fully parsed BEFORE installing the gutter: `ensureSyntaxTree` cannot do
+    // this reentrantly from within the gutter's own `lineMarker` (CodeMirror will not force a parse
+    // from inside a render pass), so a call from here — an ordinary function call, not a view update
+    // — is what the gutter's first render actually sees. `markdown-fold.ts`'s `lineMarkerChange`
+    // still recomputes the markers on a LATER edit that advances the tree further.
+    ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+    view.dispatch({
+      effects: foldCompartment.reconfigure(
+        markdownFoldExtension({
+          iconFor: (token) => resolveIconAsset(theme, iconPacks, token),
+          getFoldState: () => foldStateValueRef.current,
+          onToggle: (slug) => {
+            setDocumentFoldState(
+              wrapDocKeyRef.current,
+              toggleSection(foldStateValueRef.current, slug),
+              panel.id,
+            );
+          },
+          showGutter: metaRef.current.settings.showGutter,
+        }),
+      ),
+    });
+  };
+  const installFoldRef = useRef(installFold);
+  installFoldRef.current = installFold;
+  useEffect(() => {
+    installFoldRef.current();
+  }, [isMarkdown, settings.showGutter, theme, iconPacks, panel.id]);
+
+  // Make the view's CodeMirror fold ranges equal the derivation from the CURRENT FoldState (R4) —
+  // runs on every change, whichever view or window it came from (Principle XI: one document, one
+  // state, every view redraws the same way).
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !isMarkdown) return;
+    const sections = markdownSections(markdownHeadingRecords(view.state), view.state.doc.lines - 1);
+    syncFoldRanges(view, sections, foldStateValue);
+  }, [isMarkdown, foldStateValue]);
 
   // Latest values read through refs so the mount effect isn't torn down on every
   // render (mirrors the terminal view's approach). `tabTitle` is resolved from the
@@ -1208,11 +1371,16 @@ export function useEditor(params: UseEditorParams): void {
           // until the renderer was first typechecked — left `indent` undefined in the rebuilt
           // keymap, so Tab and Shift+Tab threw the moment the user changed ANY keybinding. Nothing
           // caught it: the renderer is compiled by Vite, which strips types without checking them.
-          commandsFor({ lineEnding: currentLineEnding, indent: currentIndent, toggleWrap }),
+          commandsFor({
+            lineEnding: currentLineEnding,
+            indent: currentIndent,
+            toggleWrap,
+            markdownFold: markdownFoldDeps(),
+          }),
         ),
       ),
     });
-  }, [keybindings, currentLineEnding, currentIndent, toggleWrap]);
+  }, [keybindings, currentLineEnding, currentIndent, toggleWrap, markdownFoldDeps]);
 
   // Mount the CodeMirror view and initialise content.
   useEffect(() => {
@@ -1386,7 +1554,12 @@ export function useEditor(params: UseEditorParams): void {
           commandKeymapCompartment.of(
             editorCommandKeymap(
               keybindingsRef.current,
-              commandsFor({ lineEnding: currentLineEnding, indent: currentIndent, toggleWrap }),
+              commandsFor({
+                lineEnding: currentLineEnding,
+                indent: currentIndent,
+                toggleWrap,
+                markdownFold: markdownFoldDeps(),
+              }),
             ),
           ),
           /**
@@ -1514,6 +1687,45 @@ export function useEditor(params: UseEditorParams): void {
                   // (detection settling, an override chosen), and a captured copy would name a
                   // language the document has since stopped being.
                   languageName: languageName(getPanelLanguage(panelId)?.languageId ?? 'plaintext'),
+                  /*
+                   * 047 US3 (FR-036, contracts "Editor body menu") — the fold rows, Markdown
+                   * documents only. `at` is the innermost section containing the CLICKED position:
+                   * `placeCaretForContextMenu` already moved the caret there, above. The handlers
+                   * reuse `markdownFoldCommand` exactly as the chords and the gutter do (R5's single
+                   * implementation, Principle VIII) rather than re-deriving the fold logic here.
+                   */
+                  markdownFold: isMarkdown
+                    ? (() => {
+                        const sections = markdownSections(
+                          markdownHeadingRecords(target.state),
+                          target.state.doc.lines - 1,
+                        );
+                        const cursorLine0 =
+                          target.state.doc.lineAt(target.state.selection.main.head).number - 1;
+                        const at = sectionAtLine(sections, cursorLine0);
+                        const deps = markdownFoldDeps();
+                        return {
+                          section: at
+                            ? {
+                                slug: at.slug,
+                                level: at.level,
+                                collapsed: isCollapsed(foldStateValueRef.current, at.slug),
+                              }
+                            : null,
+                          hasSections: sections.length > 0,
+                          collapseSection: () => void markdownFoldCommand('collapseSection', deps)(target),
+                          expandSection: () => void markdownFoldCommand('expandSection', deps)(target),
+                          collapseAll: () => void markdownFoldCommand('collapseAll', deps)(target),
+                          expandAll: () => void markdownFoldCommand('expandAll', deps)(target),
+                          chords: {
+                            collapseSection: firstBinding(keybindingsRef.current, 'markdown.collapseSection'),
+                            expandSection: firstBinding(keybindingsRef.current, 'markdown.expandSection'),
+                            collapseAll: firstBinding(keybindingsRef.current, 'markdown.collapseAll'),
+                            expandAll: firstBinding(keybindingsRef.current, 'markdown.expandAll'),
+                          },
+                        };
+                      })()
+                    : undefined,
                 }),
               );
               event.preventDefault();
@@ -1547,6 +1759,12 @@ export function useEditor(params: UseEditorParams): void {
           // the `variableName` colour underneath. Empty until a legacy language is applied
           // (`applyLanguage` reconfigures it); first-class grammars keep it empty.
           functionHighlightCompartment.of([]),
+          // Section folding (047 US3, research R4) — CodeMirror's folding extension plus the heading gutter, in a
+          // compartment so a language change (or `editor.showGutter`/a theme change) reaches the
+          // live view without reopening it. Starts empty: the language is not known at creation, and
+          // the effect that installs it runs once `isMarkdown` is (research R2's own reasoning for
+          // `languageCompartment`, one compartment along).
+          foldCompartment.of([]),
           /*
            * 045 FR-002 / FR-060 / FR-100 — file and web links, in a compartment so a change of
            * `editor.links.detectInEditors` rebuilds the marks on a live view. AFTER the
@@ -1589,6 +1807,9 @@ export function useEditor(params: UseEditorParams): void {
       }),
     });
     viewRef.current = view;
+    // MT-04 — the fold compartment starts empty; a view built after `isMarkdown` was already true
+    // (a re-parented panel) is filled here, since the install effect has no reason to run again.
+    installFoldRef.current();
     // Track the first visible line's DOCUMENT position so the scroll can be persisted on
     // unmount (issue #144). Reading `scrollDOM.scrollTop` in the unmount cleanup can come
     // back 0 (the element is being torn out of layout), so keep the last scrolled anchor

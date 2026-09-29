@@ -12,7 +12,10 @@ import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
 import { openFileInPanel } from '../editor/editor-open.js';
 import { findEditorPanelByPath } from '../editor/editor-state.js';
-import { collectPanels, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
+import { collectPanels, defaultOpenActionFor, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
+import { useAppSettings } from '../config/config-store.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel } from './panel-focus.js';
 import { PreviewPanel } from '../preview/preview-panel.js';
 import { releasePreviewView } from '../preview/forget-preview-panel.js';
@@ -189,6 +192,10 @@ export function PanelBody({
       <PreviewPanel
         panel={panel}
         projectRoot={root}
+        // 047 US5 (T057/T058) — the SAME confinement context built above for the editor and untyped
+        // panel: one component knows this panel's ownership, and a preview's drop is judged by
+        // exactly the same facts (contracts/preview-ipc-047.md §4 step 1 — main's `resolveDrop`).
+        dropCtx={dropCtx}
         // FR-067 / FR-064 — main says this preview must not exist here: the panel goes exactly as closing
         // it by hand would. Clearing the type first means the workspace's LAST panel, which `removePanel`
         // keeps, is left as an empty panel rather than as a preview of nothing.
@@ -287,13 +294,43 @@ function UntypedPanelBody({
   owningProjectFor: (absPath: string) => string | null;
 }): ReactElement {
   const ws = useWorkspace();
+  const previews = useAppSettings().editor.previews;
+  const { registry } = usePreviewProviders();
 
-  const openAsEditor = useCallback(
+  const typeAsEditor = useCallback(
     (absPath: string): void => {
       ws.setPanelType(panel.id, 'editor', { filePath: absPath });
       window.throng?.panel?.notifyTyped?.(panel.id, 'editor', { filePath: absPath });
     },
     [ws, panel.id],
+  );
+
+  /*
+   * 047 FR-077 (R18) — a file dropped here opens in the view its provider's DEFAULT OPEN ACTION names
+   * (044 FR-052; core's `defaultOpenActionFor`, which a disabled provider or an unclaimed file answers
+   * `editor`): a preview when that is Preview, an editor otherwise. The preview is asked for through
+   * the one `preview.open` command, `intoPanelId` naming THIS panel — a drop is a gesture at a place —
+   * and `mode: 'new'` so main never reuses another preview instead. With no project to ask on behalf
+   * of (a sub-workspace's own panel holding a path outside every project) it is an editor, exactly
+   * as `open-router.ts` falls back.
+   */
+  const previewProjectFor = useCallback(
+    (absPath: string): string | null => {
+      if (defaultOpenActionFor(registry, previews, absPath) !== 'preview') return null;
+      return dropCtx.ownerProjectId ?? owningProjectFor(absPath);
+    },
+    [dropCtx.ownerProjectId, owningProjectFor, registry, previews],
+  );
+  const openDropped = useCallback(
+    (absPath: string): void => {
+      const projectId = previewProjectFor(absPath);
+      if (projectId) {
+        void requestPreviewOpen({ absPath, projectId, target: { mode: 'new' }, intoPanelId: panel.id });
+        return;
+      }
+      typeAsEditor(absPath);
+    },
+    [previewProjectFor, panel.id, typeAsEditor],
   );
 
   const acceptTreeDrop = useCallback(
@@ -303,7 +340,9 @@ function UntypedPanelBody({
       // Already open elsewhere → reveal + focus THAT panel, leave this one untyped; never a second
       // view (FR-011b, one-document-one-state). Only focus across the same window; a panel in another
       // project's window is not focused across the boundary.
-      const existing = findEditorPanelByPath(absPath);
+      // A file whose default open action is Preview is not opened as an editor here at all (FR-077), so
+      // "already open in an editor elsewhere" says nothing about it: main places or focuses its preview.
+      const existing = previewProjectFor(absPath) ? undefined : findEditorPanelByPath(absPath);
       if (existing) {
         const layout = ws.layout;
         const tab = layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === existing));
@@ -318,9 +357,9 @@ function UntypedPanelBody({
         const owning = owningProjectFor(absPath);
         if (owning) ws.convertPanelToProject(panel.id, owning); // FR-012
       }
-      openAsEditor(absPath);
+      openDropped(absPath);
     },
-    [ws, panel.id, ownedBySub, owningProjectFor, openAsEditor],
+    [ws, panel.id, ownedBySub, owningProjectFor, previewProjectFor, openDropped],
   );
 
   return (
@@ -329,7 +368,7 @@ function UntypedPanelBody({
       accepts={(paths, singleFile) => singleFile && paths.length === 1}
       onDrop={(paths) => acceptTreeDrop(paths, true)}
     >
-      <PanelDropTarget ctx={dropCtx} onOpen={openAsEditor}>
+      <PanelDropTarget ctx={dropCtx} onOpen={openDropped}>
         <PanelTypeForm
           panelId={panel.id}
           projectRoot={root}
