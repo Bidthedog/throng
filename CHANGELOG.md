@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha8 — 2026-09-30
+
 ### Added
 - **Find in Markdown previews** ([#420](https://github.com/Bidthedog/throng/issues/420)): Ctrl+F opens the editor's find bar in a preview and searches the rendered text; replace stays off. Every match, in an editor or a preview, now carries an outline in the new **Search Match Border** theme colour.
 - **Open previews in place** ([#405](https://github.com/Bidthedog/throng/issues/405)): a new **Open previews in** setting reuses the last preview in the tab you are looking at, and File Explorer's Open In offers **Last Preview Panel (*name*)** and **New Preview Panel** in place of the plain Preview item.
