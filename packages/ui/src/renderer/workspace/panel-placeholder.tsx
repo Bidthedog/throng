@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { dragFromNonInteractive } from './drag-handle.js';
 import {
@@ -17,12 +17,15 @@ import {
   panelZoomLevel,
   findPanelLocations,
   planConfirmations,
-  renameCommit,
   type Edge,
   type Panel,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
-import { isRenamable, panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
+import { panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
+import { placeholderContentMenu, splitMenuItems } from './split-menu.js';
+import { useSplitMode } from './split-mode.js';
+import { registerPanelDestroy } from './panel-destroy.js';
+import { isKeyboardMenu } from './keyboard-menu.js';
 import { usePreviewFailure, usePreviewState } from '../preview/preview-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { releasePreviewView } from '../preview/forget-preview-panel.js';
@@ -36,7 +39,6 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
-import { useNotify } from '../common/notification.js';
 import { panelFailureText } from '../common/notice-text.js';
 import { retryPanelFailure } from '../common/panel-failure-banner.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
@@ -53,7 +55,6 @@ import { requestRedraw } from '../terminal/redraw.js';
 import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
-import { NameLimitField } from '../common/name-limit-field.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -61,8 +62,6 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
 import { setActivePane, useActivePane } from './active-pane.js';
-import { focusPanel } from './panel-focus.js';
-import { registerPanelRename, unregisterPanelRename } from './panel-rename.js';
 import { useWindowFocus } from './use-window-focus.js';
 import { usePanelFlash } from './panel-flash.js';
 import { useTerminalCwd } from '../terminal/cwd-store.js';
@@ -108,12 +107,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const ws = useWorkspace();
   const { activeProject, projects } = useProjects();
   const confirm = useConfirm();
-  const { openMenu } = useContextMenu();
+  const { openMenu, openId } = useContextMenu();
+  const addMenuWasOpen = useRef(false);
+  /** The opening id of the split menu THIS + last opened — only that one is the + 's to toggle shut (R6). */
+  const addMenuOpId = useRef<number | null>(null);
   const settings = useAppSettings();
   const detach = useDetach();
   const subWin = useSubWorkspaceWindow();
   const services = useServices();
-  const { notify } = useNotify();
   /** Where this panel lives, for any notice raised about it (030 FR-022). */
   const place = usePanelPlace(panel.id);
   const { elevated } = useCapabilities();
@@ -135,9 +136,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: panelDragId(panel.id),
   });
-  const [renaming, setRenaming] = useState(false);
 
-  const activeTabId = ws.layout?.activeTabId ?? '';
   const showZones = draggingPanelId !== null && draggingPanelId !== panel.id;
 
   // Editor Panels surface a `filename (relative folder)` pill + the shared unsaved
@@ -180,6 +179,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const windowForeground = useWindowFocus();
   // 047 FR-083 — a file opened from File Explorer landed here: flash the border to say so.
   const flashKey = usePanelFlash(panel.id);
+  const inSplitMode = useSplitMode(panel.id);
   // 046 FR-121 (S28) — the treatment (both states) shows only while the WORKSPACE holds the active
   // pane; from the Projects pane or the File Explorer the side pane's own outline is the only active
   // indication. The tab's active panel id is untouched, so every route back lights this same panel.
@@ -202,13 +202,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     editorUi?.filePath ?? (typeof panel.config?.filePath === 'string' ? panel.config.filePath : null);
   // The name shown in the header and its hover tooltip. The rule lives in core (`panelDisplayTitle`)
   // so it can be asserted without launching the application, and so the header, the tooltip and any
-  // future surface that has to name a panel cannot drift apart: a user rename outranks everything,
-  // then the live/secondary automatic source for the panel's kind, then the placeholder — which is
-  // correct only while the panel is untyped.
+  // future surface that has to name a panel cannot drift apart: the title is always derived — the
+  // live/secondary automatic source for the panel's kind (048: panels are not renamable), then the
+  // placeholder — which is correct only while the panel is untyped.
   //
   // 031 US4 (N8, T093) — the limit is applied HERE, at the one place every panel-name source is
-  // resolved. `panelDisplayTitle` bounds its RESULT, so a user override, a live shell title, a
-  // flavour label and a file path are all shortened by the same rule rather than by four of them.
+  // resolved. `panelDisplayTitle` bounds its RESULT, so a live shell title, a flavour
+  // label and a file path (there is no user override any more, 048) are all shortened by the same rule.
   // The unbounded form is computed alongside purely to decide whether the ellipsis is drawn; the
   // marker itself is a `::after` (FR-037c), so it never enters the value or anything persisted.
   const maxNameLength = settings.tabs.maxNameLength;
@@ -296,137 +296,6 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       hasOriginProject: originProject !== null,
     }),
   );
-
-  // The F2 chord (`panel.rename`) starts the rename. The header owns the box; the window-level
-  // keybinding handler owns the chord and knows only which panel is active — so it asks, here.
-  //
-  // 043 FR-061 — a Find in Files panel registers NOTHING, and that is the whole implementation of
-  // "the rename chord must do nothing when such a panel is active". `requestPanelRename` already
-  // returns a no-op for a panel nothing registered (`panel-rename.ts`), so the chord needs no branch
-  // in `app.tsx` and no new state: the registry answers the question it was built to answer.
-  const renamable = isRenamable(panel);
-  useEffect(() => {
-    if (!renamable) return;
-    registerPanelRename(panel.id, () => setRenaming(true));
-    return () => unregisterPanelRename(panel.id);
-  }, [panel.id, renamable]);
-
-  // A freshly added Panel opens directly in rename mode (FR-041 / new-panel UX).
-  useEffect(() => {
-    if (ws.lastAddedPanelId === panel.id) {
-      setRenaming(true);
-      ws.clearLastAddedPanel();
-    }
-  }, [ws, panel.id]);
-
-  /**
-   * What the open rename box was SEEDED with — the yardstick a commit is measured against.
-   *
-   * The input is uncontrolled (`defaultValue`), so it holds whatever it was given at mount for as
-   * long as it is open. `panel.title`, meanwhile, can change underneath it: `PanelNameSync` claims
-   * every panel's name as it appears and RETITLES the panel when the daemon moves it, which for a
-   * brand-new panel happens moments after the box opens — panels are numbered within their own
-   * layout, so a clash with another project is the norm rather than the exception (#184).
-   *
-   * Comparing the submitted value against a title that can move is what let an UNTOUCHED box commit:
-   * the box still held "Panel 9", the panel had become "Panel 9 (2)", the two differed, and clicking
-   * a panel-type button therefore renamed the panel the user had typed nothing into (#218 A2).
-   * Against the seed, an untouched box is always equal to itself, whatever else has happened.
-   *
-   * Recorded from the INPUT, in its focus handler, rather than from `panel.title` when the box is
-   * asked to open: the two can already differ by then, because the box opens from an effect and
-   * mounts on a later render. The element's own value is what the user is looking at, so it is the
-   * only honest yardstick for "did they change it?".
-   *
-   * 031 US4 moved the box itself into the shared {@link NameLimitField}, which now carries the seed
-   * to `commit` for exactly this reason — the rule is unchanged, it simply lives with the box.
-   */
-
-  /**
-   * Confirm (or dismiss) the inline rename box.
-   *
-   * Only a CHANGED name is a rename (024 US5/US10 follow-up). This matters far more than it looks: a
-   * newly added Panel opens straight into rename mode, so simply clicking away — to pick a panel
-   * type, to drag a file in — blurred the box and committed its unchanged default. That marked the
-   * Panel `titleIsCustom`, and a custom title outranks every automatic one, so the terminal's live
-   * window title and the editor's file name were suppressed on exactly the panels a user had just
-   * created. Running "Reset Name" cleared the mark and made them work, which is precisely the
-   * symptom that was reported. A user who typed nothing has renamed nothing.
-   */
-  const commit = (trimmed: string, seed: string): void => {
-    /*
-     * #297 — the decision moved to `renameCommit` in core, unchanged in every case that existed
-     * before and with one added: a BLANK box on an already-renamed panel clears the override, so
-     * the panel names itself again. It is the same route Reset Name takes rather than a second
-     * implementation of it, and it is gated on `titleIsCustom` precisely so the click-away path
-     * #176 closed stays closed. The rule's own file carries that reasoning.
-     */
-    const action = renameCommit(trimmed, seed, panel.titleIsCustom ?? false);
-
-    if (action.kind === 'reset') {
-      ws.resetPanelName(panel.id);
-    } else if (action.kind === 'rename') {
-      /*
-       * A panel's name is unique across the WHOLE application (024 follow-up) — every project and
-       * every sub-workspace — because the name is how a user refers to a panel: in the tab strip, in
-       * the window title, in the app-close warning listing what is still running, and out loud.
-       * Two panels called "Build" make every one of those a riddle.
-       *
-       * Only the daemon can see them all, so it grants the name. A taken name is ADJUSTED rather
-       * than refused — the rename always goes through — and the user is told, once, in a warning
-       * that dismisses itself: nothing was lost and there is nothing to decide.
-       */
-      void services.panelNames.claim(panel.id, action.name).then(({ granted, adjusted }) => {
-        ws.renamePanel(panel.id, granted);
-        // Clone-sync (003): rename the same Panel in every other window it appears in
-        // (its project + any sub-workspaces) in real time.
-        window.throng?.panel?.notifyRenamed?.(panel.id, granted);
-        if (adjusted) {
-          notify({
-            severity: 'warning',
-            /*
-             * 030 FR-022 — the panel is named `Project — Tab — Panel`, with the name it was ACTUALLY
-             * granted. Built here rather than read back from `usePanelPlace`, because `renamePanel`
-             * has only just been called and the layout this render closed over still holds the old
-             * title: the notice would name the panel by the name it no longer has.
-             *
-             * FR-023 then takes “${granted}” OUT of the sentence — the heading has just said it, and
-             * saying it twice is the stutter that requirement exists to stop. The name the user
-             * ASKED for stays, because that is a different fact and the only one left to explain.
-             */
-            subject: { kind: 'panel', name: granted, tab: place?.tab, project: place?.project },
-            message: `Another panel is already called “${action.name}”, so this one was renamed.`,
-            testId: 'panel-name-adjusted',
-          });
-        }
-      });
-    }
-    endRename();
-  };
-
-  /**
-   * Leave the rename box and hand the keyboard BACK to the panel.
-   *
-   * Renaming is a detour: the user was working in an editor or a terminal, pressed F2 (or picked
-   * Rename), typed a name, and is done. Leaving focus on a header that is no longer an input strands
-   * them — the next keystroke goes nowhere, and they have to click back into the thing they were
-   * already in. The panel's own view restores its caret when it takes focus, so the cursor lands
-   * where they left it rather than at the top of the document.
-   */
-  const endRename = (): void => {
-    setRenaming(false);
-    /*
-     * DEFERRED, and that is the whole point.
-     *
-     * Focusing the panel SYNCHRONOUSLY from inside the Enter keydown handler moved the caret into a
-     * terminal or an editor while that very keystroke was still being delivered — so the rest of the
-     * key's dispatch landed in the newly focused surface and typed a newline into it. Confirming a
-     * panel name must not put a blank line in someone's file, or a bare Enter at their shell.
-     *
-     * A frame later the keystroke is finished, and the panel takes focus with nothing following it.
-     */
-    requestAnimationFrame(() => focusPanel(panel.id));
-  };
 
   // Shared Destroy Panel flow (FR-020/022/023) used by the header ✕ and the
   // context menu. A confirmation is shown only when the Panel hosts a live
@@ -595,6 +464,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
     if (!inSubWorkspace) window.throng?.panel?.notifyDestroyed?.(panel.id);
   };
+  /*
+   * 048 FR-131 — the `panel.destroy` chord reaches THIS flow through the shared opener, never a copy
+   * of it. Registered once per panel id; the ref keeps the callback reading this render's state (the
+   * flow closes over settings, the layout and the sub-workspace context).
+   */
+  const destroyRef = useRef(destroyPanel);
+  destroyRef.current = destroyPanel;
+  useEffect(() => registerPanelDestroy(panel.id, () => void destroyRef.current()), [panel.id]);
 
   return (
     <div
@@ -671,11 +548,6 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          * tooltip would change meaning as the pointer moved two pixels sideways.
          */
         title={effectiveTitle}
-        // The THIRD route into a rename, and the one FR-061 does not name — which is exactly why it
-        // is gated on the same predicate rather than left alone. Closing the chord and the menu item
-        // while leaving this open would satisfy every clause of the requirement as written and leave
-        // the panel renamable by the gesture most users reach for first.
-        onDoubleClick={renamable ? () => setRenaming(true) : undefined}
         onContextMenu={(e) => {
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
@@ -742,8 +614,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                   }
                 : null,
               actions: {
-                beginRename: () => setRenaming(true),
-                resetName: () => ws.resetPanelName(panel.id),
+                split: (direction) => {
+                  ws.splitPanel(tabId, panel.id, direction);
+                },
                 zoomIn: () => ws.bumpZoom(panel.id, 1),
                 zoomOut: () => ws.bumpZoom(panel.id, -1),
                 resetZoom: () => ws.resetZoom(panel.id),
@@ -922,7 +795,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             }),
           );
         }}
-        {...(renaming ? {} : dragFromNonInteractive(listeners))}
+        {...dragFromNonInteractive(listeners)}
         {...attributes}
       >
         {/* 044 FR-104 — Back / Forward, top left, before the type icon, on editors and previews only (FR-100). */}
@@ -959,39 +832,24 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               );
             })()
           : null}
-        {renaming ? (
-          // FR-035g — the panel's rename cap is the tab's cap. One implementation, so they cannot
-          // drift into behaving differently for the same limit.
-          <NameLimitField
-            className="panel-box__rename"
-            testId={`panel-rename-input-${panel.id}`}
-            counterClassName="panel-box__rename-count"
-            counterTestId={`panel-rename-count-${panel.id}`}
-            initialValue={panel.title}
-            limit={maxNameLength}
-            onCommit={commit}
-            onCancel={endRename} // cancelled, but still not stranded
-          />
-        ) : (
-          <span
-            className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}`}
-            data-testid={`panel-title-${panel.id}`}
-          >
-            {previewTitle !== null ? (
-              // 044 FR-032 — the marker on the name half, the suffix whole after it.
-              <>
-                <span
-                  className={`panel-box__title-name${previewTitle.nameTruncated ? ' panel-box__title-name--truncated' : ''}`}
-                >
-                  {previewTitle.name}
-                </span>
-                <span className="panel-box__title-suffix">{previewTitle.suffix}</span>
-              </>
-            ) : (
-              effectiveTitle
-            )}
-          </span>
-        )}
+        <span
+          className={`panel-box__title${titleTruncated && previewTitle === null ? ' panel-box__title--truncated' : ''}`}
+          data-testid={`panel-title-${panel.id}`}
+        >
+          {previewTitle !== null ? (
+            // 044 FR-032 — the marker on the name half, the suffix whole after it.
+            <>
+              <span
+                className={`panel-box__title-name${previewTitle.nameTruncated ? ' panel-box__title-name--truncated' : ''}`}
+              >
+                {previewTitle.name}
+              </span>
+              <span className="panel-box__title-suffix">{previewTitle.suffix}</span>
+            </>
+          ) : (
+            effectiveTitle
+          )}
+        </span>
         {panel.kind === 'terminal' && terminalCwd ? (
           <span
             className="panel-box__cwd"
@@ -1063,12 +921,41 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             fourth instance of it in the commit that removes the other three would be absurd. This
             control needs no class of its own: `.panel-box__actions button` styles it by element.
           */}
+          {/*
+            048 FR-010/FR-011/FR-012/FR-014 — the + opens the split menu for THIS panel. It first makes
+            its own panel active, in its own tab (`tabId`, not the window's active tab), so the chosen
+            split applies to the panel whose button was clicked. Nothing is added until an item is
+            chosen. A real button, so Enter and Space open it and the menu's arrow keys do the rest.
+          */}
           <IconButton
             token="add"
-            title="Add panel"
+            title="Split panel…"
             className=""
             testId={`panel-add-${panel.id}`}
-            onClick={() => ws.addPanel(activeTabId)}
+            ariaHasPopup="menu"
+            // The provider closes an open menu on any `pointerdown`, before this click — so a click on
+            // the + while its menu is open would close and reopen it. Remember whether one was open when
+            // the press began, exactly as the cog does, so the + can close its own menu.
+            onPointerDown={() => {
+              // Only the menu THIS + opened is its to close: with some other menu open (a File Explorer
+              // context menu, say) the provider closes that one on this same press, and the click opens ours.
+              addMenuWasOpen.current = openId !== null && openId === addMenuOpId.current;
+            }}
+            onClick={(e) => {
+              const wasOpen = addMenuWasOpen.current;
+              addMenuWasOpen.current = false;
+              if (wasOpen) return;
+              ws.setActivePanel(tabId, panel.id);
+              setActivePane('workspace');
+              const rect = e.currentTarget.getBoundingClientRect();
+              addMenuOpId.current = openMenu(
+                rect.left,
+                rect.bottom,
+                splitMenuItems(panel.id, keybindings, (id, direction) => {
+                  ws.splitPanel(tabId, id, direction);
+                }),
+              );
+            }}
           />
           <button
             type="button"
@@ -1081,7 +968,34 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           </button>
         </span>
       </div>
-      <div className="panel-box__body" data-testid={`panel-body-${panel.id}`}>
+      <div
+        className="panel-box__body"
+        data-testid={`panel-body-${panel.id}`}
+        /*
+         * 048 FR-015 — the untyped placeholder's FIRST content menu: Split alone (one section, so no
+         * divider). Only an untyped panel: every typed body draws its own menu, which already carries
+         * Split (`withSplit`). A right-click on a text box keeps the operating system's own menu (copy,
+         * paste) — unless the menu was asked for from the keyboard, where the focused control is whatever
+         * the type form holds and there is no native alternative.
+         */
+        onContextMenu={
+          // A DORMANT terminal is the same case (T062): its body is a placeholder with no xterm and so no
+          // content menu of its own, and right-clicking inside it must still offer Split.
+          panel.kind === undefined || (panel.kind === 'terminal' && panel.dormant === true)
+            ? (e) => {
+                const target = e.target as HTMLElement;
+                if (
+                  !isKeyboardMenu() &&
+                  target.closest('input:not([type="checkbox"]):not([type="radio"]), textarea') !== null
+                ) {
+                  return;
+                }
+                e.preventDefault();
+                openMenu(e.clientX, e.clientY, placeholderContentMenu({ panelId: panel.id, keybindings }));
+              }
+            : undefined
+        }
+      >
         <PanelBody panel={panel} tabId={tabId} onDestroy={() => void destroyPanel()} />
       </div>
       {showZones ? (
@@ -1090,6 +1004,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             <EdgeDropZone key={edge} panelId={panel.id} edge={edge} />
           ))}
         </div>
+      ) : null}
+      {inSplitMode ? (
+        // 048 FR-026 — split mode's pulse: decorative, opacity-only, never in the pointer's way.
+        <div className="panel-box__split-mode" data-testid={`panel-split-mode-${panel.id}`} aria-hidden="true" />
       ) : null}
       {flashKey !== null ? (
         // Keyed per request, so a second flash while one plays restarts the animation.

@@ -22,6 +22,7 @@
  * which menu to open; this builder only ever draws the ordinary one.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
+import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
 export interface TerminalContentMenuActions {
   copySelection: () => void;
@@ -33,6 +34,8 @@ export interface TerminalContentMenuActions {
 }
 
 export interface TerminalContentMenuArgs {
+  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
+  split?: SplitMenuArgs;
   /** The xterm selection captured when the user right-clicked — the menu acts on that, not on later. */
   selection: string;
   /** The chord `terminal.redraw` is bound to right now, or undefined when it is unbound. */
@@ -123,5 +126,5 @@ export function terminalContentMenu(args: TerminalContentMenuArgs): MenuAction[]
     });
   }
 
-  return items;
+  return withSplit(items, args.split);
 }

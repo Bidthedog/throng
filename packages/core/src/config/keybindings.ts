@@ -15,6 +15,21 @@ export type ActionId =
   | 'panel.zoomIn'
   | 'panel.zoomOut'
   | 'panel.zoomReset'
+  /*
+   * 048 FR-001/FR-020 — split the active panel's slot 50/50, the new empty panel on the named side.
+   * Two-stroke window chords (`Ctrl+Shift+Alt+End`, then an arrow) whose first stroke is tier 1, so
+   * they are live in a terminal too (FR-024).
+   */
+  | 'panel.splitDown'
+  | 'panel.splitUp'
+  | 'panel.splitRight'
+  | 'panel.splitLeft'
+  /*
+   * 048 FR-131 (#461) — destroy the panel that holds focus, by the same flow its own Destroy menu item
+   * and header ✕ run. Live in every panel, a terminal included: Constitution v5.8.0 Principle IV
+   * records `Ctrl+Shift+Alt+F4` as an exception. Window-handled, so it never reaches the program.
+   */
+  | 'panel.destroy'
   // Keyboard move-focus (012, FR-015). Directional moves + a stable-layout-order
   // cycle over the active tab's panels; tokens use the produced key names.
   | 'focus.left'
@@ -118,10 +133,6 @@ export type ActionId =
   // 024 US6 (#157): open the focused item's context menu from the keyboard (Shift+F10 / the Menu key),
   // so a menu-driven UI is reachable without a mouse (FR-018c). Neither chord is a reserved terminal key.
   | 'menu.open'
-  // 024 follow-up: rename the ACTIVE PANEL from the keyboard. F2 is the rename key everywhere else
-  // in throng (the file tree's `file.rename`) and everywhere else in Windows, so a panel header that
-  // could only be renamed by double-click or a menu was the odd one out.
-  | 'panel.rename'
   // 031 US3 (#225): open the tab picker — a searchable list of every tab in the window. Ctrl+Alt+T,
   // in the Ctrl+Alt family throng already owns; in neither the reserved nor the shadowable tier
   // (constitution IV), so it displaces no line-editor binding and needs no recorded exception.
@@ -210,7 +221,7 @@ export type CommandScopes = Readonly<Record<ActionId, ReadonlySet<DispatchScope>
  * `explorer` for a kind it does not know, and over a preview that would make Delete, F2, Ctrl+X and
  * Ctrl+C act on the file tree's selection (FR-021). It joins EVERYWHERE because zoom, focus movement
  * and the view toggles must keep working there (FR-034); it joins neither PANELS (a preview has no
- * document to save) nor ANY_PANEL (a preview cannot be renamed, FR-030). It DOES join `FIND_SURFACES`
+ * document to save). It DOES join `FIND_SURFACES`
  * below — 047 (research R1) gives a preview its own find bar, so this file's "no find bar" is no
  * longer true; only `search.replace*`, which stayed on `PANELS`, keeps a preview out.
  *
@@ -271,22 +282,6 @@ const MARKDOWN_SURFACES = new Set<DispatchScope>(['editor', 'preview']);
 /** 047 (research R7) — Go to Heading opens the preview's own pop-down; nowhere else. */
 const GO_TO_HEADING_SURFACES = new Set<DispatchScope>(['preview']);
 /**
- * Every panel kind, INCLUDING the ones that hold no document of their own (043 R14).
- *
- * Distinct from {@link PANELS} because the two answer different questions. `PANELS` is "surfaces
- * with content a command can act on" — a save, a find bar — and a Find in Files panel has neither.
- * This is "surfaces that are a Panel", which is what `panel.rename` is about: a panel's NAME belongs
- * to the panel whatever it holds. Widening `PANELS` itself would have made `editor.save` and the
- * `search.*` bar chords live over a results panel, where they mean nothing.
- *
- * It is also half of a defect fix rather than a nicety. `scopeFromKind` falls through to `explorer`
- * for an unknown kind, so before the fourth scope existed F2 over a Find in Files panel resolved to
- * `file.rename` and renamed whatever the FILE TREE had selected — the same class of accident as
- * Delete over a results list.
- */
-const ANY_PANEL = new Set<DispatchScope>(['editor', 'terminal', 'findInFiles']);
-
-/**
  * The scope of every registered command (016, FR-017b0). Declared here, beside the chords, so a
  * new command cannot be added without answering "where is this live?" — the completeness test
  * fails if it is.
@@ -299,11 +294,17 @@ export const COMMAND_SCOPES: CommandScopes = {
   'panel.zoomIn': EVERYWHERE,
   'panel.zoomOut': EVERYWHERE,
   'panel.zoomReset': EVERYWHERE,
-  // A panel's NAME belongs to the panel, so this is live in EVERY panel kind and nowhere else — the
-  // file tree has its own F2 (`file.rename`), and the two never contend because their scopes are
-  // disjoint. `ANY_PANEL` rather than `PANELS`: 043's results panel is renameable like any other,
-  // and on the old set F2 there fell through to the explorer and renamed a FILE (R14).
-  'panel.rename': ANY_PANEL,
+  // 048 FR-021/FR-024 — EVERYWHERE, not panel kinds alone: the split acts on the ACTIVE panel whatever has
+  // focus, and the first stroke pulls focus to it from the File Explorer. An untyped placeholder
+  // dispatches at the `explorer` scope and a preview at `preview`, and both must split like any panel.
+  'panel.splitDown': EVERYWHERE,
+  'panel.splitUp': EVERYWHERE,
+  'panel.splitRight': EVERYWHERE,
+  'panel.splitLeft': EVERYWHERE,
+  // 048 FR-131 — every panel kind, the placeholder's `explorer` scope included. EVERYWHERE rather than a
+  // panel-only set for that reason; the window dispatcher, not the scope, decides that focus in a side
+  // pane (File Explorer, Projects) destroys nothing and leaves the key unconsumed.
+  'panel.destroy': EVERYWHERE,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -458,7 +459,17 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // fires it. `zoom.reset` is unchanged: the main-row 0 still resets no window zoom. Saved installs
     // gain it through shipped-defaults version 16.
     'panel.zoomReset': ['Ctrl+Alt+Numpad0', 'Ctrl+Alt+0', 'Ctrl+MiddleClick'],
-    'panel.rename': ['F2'],
+    // 048 FR-020 — two strokes: Ctrl+Shift+Alt+End (tier 1, matched on the physical key), then the
+    // arrow naming the side the new panel goes. The second stroke is relative, so holding the
+    // modifiers through it or releasing them both complete the chord (FR-020a).
+    'panel.splitDown': ['Ctrl+Shift+Alt+End,ArrowDown'],
+    'panel.splitUp': ['Ctrl+Shift+Alt+End,ArrowUp'],
+    'panel.splitRight': ['Ctrl+Shift+Alt+End,ArrowRight'],
+    'panel.splitLeft': ['Ctrl+Shift+Alt+End,ArrowLeft'],
+    // 048 FR-131 — the close family's key with all three modifiers: `Alt+F4` is the window manager's
+    // and `Ctrl+F4` a hosted program's, so this is the form that takes nothing anything else owns.
+    // A brand-new command on a chord no shipped row held: the per-read fill supplies it, no bump.
+    'panel.destroy': ['Ctrl+Shift+Alt+F4'],
     // Keyboard move-focus (012) — TIER 1 (046, FR-102): Ctrl+Shift+Alt+Arrow*, freeing the plain
     // Ctrl+Alt+Arrow family back to the editor/shell. Arrow tokens use the produced key names
     // (`Arrow*`). The cycle chords are a RECORDED EXCEPTION (FR-103) and keep their pre-round
@@ -704,7 +715,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * A two-stroke-SHAPED entry (046, FR-091/FR-092, review finding MINOR 4) is validated the same
  * way: a malformed shape (a bare first stroke, three-or-more strokes, a modifier-only stroke) is
  * dropped like any other invalid entry, and a well-formed two-stroke chord is ALSO dropped when the
- * action's own scope includes `terminal` — never legal there, whatever its shape. Without this, a
+ * action's own scope includes `terminal` and {@link terminalMultiStrokeAllowed} refuses it (048 FR-024,
+ * Constitution IV, review R5). Without this, a
  * hand-edited `keybindings.json` could carry a two-stroke token that simply never fires, silently
  * and with nothing to tell the user why.
  */
@@ -719,7 +731,7 @@ export function parseKeybindings(raw: unknown): Keybindings {
           if (typeof t !== 'string') return false;
           if (!isTwoStrokeToken(t)) return true;
           if (!isValidTwoStrokeToken(t)) return false;
-          return !COMMAND_SCOPES[action as ActionId]?.has('terminal');
+          return terminalMultiStrokeAllowed(action, t);
         })
         // A saved space-separated two-stroke token (unreleased 046 builds) reads as its comma
         // form (FR-124); every other token is kept exactly as written.
@@ -988,9 +1000,118 @@ export interface TwoStrokeTerminalViolation {
 }
 
 /**
- * Every two-stroke chord bound to a command whose {@link CommandScopes} entry contains `terminal`
- * (046 FR-092). A multi-stroke prefix key would be swallowed by the shell as ordinary keystrokes
- * the instant it became live there, so the rule is absolute rather than a collision to negotiate.
+ * Constitution IV's RESERVED tier: the Ctrl+letter chords with a dominant terminal meaning and no
+ * equivalent by another route. Taking one in a terminal-live scope is a defect, not a trade-off.
+ */
+export const RESERVED_TERMINAL_CHORDS: ReadonlySet<string> = new Set(
+  ['C', 'D', 'Z', 'A', 'E', 'W', 'U', 'K', 'R', 'L', 'Q'].map((k) => `Ctrl+${k}`),
+);
+
+/**
+ * Is a multi-stroke token's FIRST stroke in the reserved tier (048 FR-024, Constitution IV)? The
+ * first stroke is judged by the terminal tiers as though it were the whole chord: `Ctrl+E,W` is
+ * reserved, `Ctrl+Shift+Alt+End,ArrowDown` (tier 1) is not. False for a token that does not lex.
+ */
+export function firstStrokeIsReserved(token: string): boolean {
+  const first = parseChordStrokes(token)?.[0];
+  return first !== undefined && RESERVED_TERMINAL_CHORDS.has(first);
+}
+
+/**
+ * The actions the WINDOW owns — intercepted and stopped in the capture phase by the renderer's window
+ * dispatcher, so they fire wherever DOM focus happens to be. The single source of truth (048 T060):
+ * the dispatcher imports it, and {@link terminalMultiStrokeAllowed} reads it.
+ *
+ * Everything not listed is left for the focused widget, which is why `Ctrl+S` in an editor and
+ * `Ctrl+C` in a terminal still work.
+ *
+ * ══ WHY `file.undo` AND `file.redo` ARE HERE ══
+ *
+ * Because the explorer's undo must work from anywhere in the File Explorer pane, not only with a
+ * tree ROW focused. Rename through the context menu and dismiss it with the mouse, and focus is on
+ * the pane rather than on a row — at which point a scoped handler would hand `Ctrl+Z` to whatever
+ * widget had focus, and the user's rename would stand. That is the defect
+ * `fileop-undo.e2e.ts:117` was written for.
+ *
+ * The four `panel.split*` commands (048 FR-003) are here for a user who rebinds one to a SINGLE
+ * stroke; their two-stroke chords run through the window chord engine, as any window command's
+ * multi-stroke rebind does (FR-024).
+ *
+ * `panel.destroy` (048 FR-131) is here so the dispatcher captures it ahead of xterm: a focused
+ * terminal must never receive the chord.
+ *
+ * Written as one string literal per entry: `ui/tests/shared/window-chords.ts` reads this declaration
+ * as text.
+ */
+export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
+  'zoom.in',
+  'zoom.out',
+  'zoom.reset',
+  'panel.zoomIn',
+  'panel.zoomOut',
+  'panel.zoomReset',
+  'focus.left',
+  'focus.right',
+  'focus.up',
+  'focus.down',
+  'focus.cycle',
+  'focus.cycleBack',
+  'focus.notice',
+  'view.fullscreen',
+  'view.toggleProjects',
+  'view.toggleExplorer',
+  'menu.open',
+  'file.undo',
+  'file.redo',
+  'project.next',
+  'project.previous',
+  'focus.explorer',
+  'focus.projects',
+  'focus.workspace',
+  'tabs.openPicker',
+  'navigate.quickOpen',
+  'navigate.gotoLine',
+  'search.findInFiles',
+  'search.replaceInFiles',
+  'navigate.back',
+  'navigate.forward',
+  'panel.splitDown',
+  'panel.splitUp',
+  'panel.splitRight',
+  'panel.splitLeft',
+  'panel.destroy',
+]);
+
+/**
+ * The commands a multi-stroke chord can actually run on in a terminal (048 R4, widened by T060 /
+ * FR-024): every window-handled command, because the window chord engine sits in the dispatcher
+ * ahead of the terminal. The SAME set as {@link WINDOW_HANDLED_ACTIONS}, not a copy. Any OTHER
+ * terminal-live command given a multi-stroke chord would validate, never fire, and hand its first
+ * stroke to the shell (review R5).
+ */
+export const WINDOW_MULTI_STROKE_ACTIONS: ReadonlySet<ActionId> = WINDOW_HANDLED_ACTIONS;
+
+/**
+ * May `action` carry `token` as far as the terminal is concerned (046 FR-092, 048 FR-024)? The ONE
+ * rule `parseKeybindings`, {@link twoStrokeTerminalViolations} and the chord-capture UI share. True
+ * for a single-stroke token and for a command never live in a terminal; for a multi-stroke token on a
+ * terminal-live command, true only when the command has a window multi-stroke engine
+ * ({@link WINDOW_MULTI_STROKE_ACTIONS}) AND the first stroke is not in the reserved tier.
+ */
+export function terminalMultiStrokeAllowed(
+  action: string,
+  token: string,
+  scopes: CommandScopes = COMMAND_SCOPES,
+): boolean {
+  if (!isTwoStrokeToken(token) || !scopes[action as ActionId]?.has('terminal')) return true;
+  return WINDOW_MULTI_STROKE_ACTIONS.has(action as ActionId) && !firstStrokeIsReserved(token);
+}
+
+/**
+ * Every multi-stroke chord bound to a command whose {@link CommandScopes} entry contains `terminal`
+ * and that {@link terminalMultiStrokeAllowed} refuses (046 FR-092, narrowed by 048 FR-024 to what
+ * Constitution IV forbids). A reserved prefix key would be swallowed from the shell the instant it
+ * became live there; a tier-1 prefix such as `Ctrl+Shift+Alt+End` takes nothing a shell uses.
  */
 export function twoStrokeTerminalViolations(
   bindings: Record<string, string[]>,
@@ -998,9 +1119,8 @@ export function twoStrokeTerminalViolations(
 ): TwoStrokeTerminalViolation[] {
   const violations: TwoStrokeTerminalViolation[] = [];
   for (const [action, tokens] of Object.entries(bindings)) {
-    if (!scopes[action as ActionId]?.has('terminal')) continue;
     for (const token of tokens) {
-      if (isTwoStrokeToken(token)) violations.push({ action, token });
+      if (!terminalMultiStrokeAllowed(action, token, scopes)) violations.push({ action, token });
     }
   }
   return violations;

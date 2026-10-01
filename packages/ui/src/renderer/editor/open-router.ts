@@ -53,8 +53,11 @@ export type EditorOpenRoute = (
   absPath: string,
   openTarget: EditorOpenTarget,
   range?: RevealTarget,
-  /** 047 FR-083 — flash the panel the file lands in: set by the File Explorer routes only. */
-  opts?: { flash?: boolean },
+  /**
+   * 047 FR-083 — `flash` the panel the file lands in: set by the File Explorer routes only.
+   * 048 FR-129 — `ownerProjectId`, the project the file belongs to (see `openFileInTab`).
+   */
+  opts?: { flash?: boolean; ownerProjectId?: string },
 ) => Promise<boolean>;
 
 export interface OpenRoute {
@@ -113,5 +116,14 @@ export async function openFromQuickOpen(
   route: OpenRoute,
 ): Promise<boolean> {
   if (await openedAsPreview(absPath, route)) return true;
-  return route.openInEditor(ws, tabId, absPath, openTarget, undefined);
+  // 048 FR-129 — the file is under the root Quick Open listed, and `route.projectId` is that root's
+  // project; in a sub-workspace window the editor it creates must be that project's.
+  return route.openInEditor(
+    ws,
+    tabId,
+    absPath,
+    openTarget,
+    undefined,
+    route.projectId ? { ownerProjectId: route.projectId } : {},
+  );
 }

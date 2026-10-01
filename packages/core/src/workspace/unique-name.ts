@@ -40,31 +40,51 @@ export function uniquePanelName(desired: string, taken: Iterable<string>): strin
   }
 }
 
-/** The shape of a name throng generated: exactly "Panel <n>", nothing a user would have typed. */
-const DEFAULT_PANEL_NAME = /^panel (\d+)$/;
+/**
+ * The generated name an empty panel carries (048 FR-127): "Blank Panel", then "Blank Panel 2", … —
+ * the first is unnumbered because a lone empty panel needs no number to be told apart.
+ */
+export const BLANK_PANEL_NAME = 'Blank Panel';
+
+/** The shape of a name throng generates today: "Blank Panel" or "Blank Panel <n>". */
+const BLANK_PANEL_SHAPE = /^blank panel( \d+)?$/;
+
+/**
+ * The shape throng generated before FR-127: exactly "Panel <n>". Still recognised, so a saved one
+ * rejoins the sequence rather than growing a suffix, and so the load migration can find it (FR-128).
+ */
+export const LEGACY_DEFAULT_PANEL_NAME = /^panel \d+$/;
 
 /**
  * True when a name is one throng generated, and so may be renumbered freely.
  *
- * Deliberately strict. "Panel 1 (2)", "My Panel 2" and "Panel one" are all names a person could have
- * chosen, and silently renumbering one of those would take a name away from whoever picked it.
+ * Deliberately strict. "Blank Panel (2)", "My Blank Panel" and "Panel one" are all names a person
+ * could have chosen, and silently renumbering one of those would take a name away from whoever
+ * picked it.
  */
 export function isDefaultPanelName(name: string): boolean {
-  return DEFAULT_PANEL_NAME.test(key(name));
+  const k = key(name);
+  return BLANK_PANEL_SHAPE.test(k) || LEGACY_DEFAULT_PANEL_NAME.test(k);
+}
+
+/** The `n`th name in the sequence: 1 is the unnumbered "Blank Panel". */
+function blankPanelName(n: number): string {
+  return n === 1 ? BLANK_PANEL_NAME : `${BLANK_PANEL_NAME} ${n}`;
 }
 
 /**
- * The next free `"Panel <n>"`, counting from 1 across the WHOLE application — every project, every
- * sub-workspace, every tab. There is one sequence because there is one namespace.
+ * The next free generated name, across the WHOLE application — every project, every sub-workspace,
+ * every tab. There is one sequence because there is one namespace.
  *
- * The lowest free number wins, so deleting "Panel 2" and adding a panel reuses that number instead
- * of leaving a hole and climbing forever.
+ * The lowest free place wins, so deleting "Blank Panel 2" and adding a panel reuses that number
+ * instead of leaving a hole and climbing forever.
  */
 export function nextDefaultPanelName(taken: Iterable<string>): string {
   const used = new Set<string>();
   for (const name of taken) used.add(key(name));
   for (let n = 1; ; n += 1) {
-    if (!used.has(`panel ${n}`)) return `Panel ${n}`;
+    const candidate = blankPanelName(n);
+    if (!used.has(key(candidate))) return candidate;
   }
 }
 

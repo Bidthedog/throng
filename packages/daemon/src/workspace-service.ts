@@ -8,6 +8,7 @@ import {
 } from '@throng/ipc-contract';
 import {
   validateMainLayout,
+  migratePanelTitles,
   countPanels,
   ProjectNotFoundError,
   type IProjectStore,
@@ -63,16 +64,22 @@ export class WorkspaceIpcService {
     router.register(WORKSPACE_LOAD_METHOD, (params) => {
       const projectId = requireProjectId(params);
       this.requireExistingProject(projectId);
-      return this.deps.workspaceStore.load(this.owner, projectId);
+      const loaded = this.deps.workspaceStore.load(this.owner, projectId);
+      // 048 FR-035 — a layout saved before panel renaming was removed loads with its custom titles
+      // dropped. Idempotent, so every load may run it; the next save writes the clean document.
+      return { ...loaded, layout: migratePanelTitles(loaded.layout) };
     });
 
     router.register(WORKSPACE_SAVE_METHOD, (params) => {
       const projectId = requireProjectId(params);
       this.requireExistingProject(projectId);
-      const layout = asObject(params).layout as WorkspaceLayout | undefined;
-      if (!layout || typeof layout !== 'object') {
+      const raw = asObject(params).layout as WorkspaceLayout | undefined;
+      if (!raw || typeof raw !== 'object') {
         throw new RpcError('A "layout" document is required', JSON_RPC_INVALID_PARAMS);
       }
+      // 048 FR-035 — never write a custom panel title back (a window still holding a pre-048 layout).
+      // A malformed document passes through untouched, for `validateMainLayout` to report below.
+      const layout = migratePanelTitles(raw);
       if (layout.projectId !== projectId) {
         throw new RpcError('layout.projectId must match the target project', JSON_RPC_INVALID_PARAMS);
       }
@@ -95,8 +102,9 @@ export class WorkspaceIpcService {
       return { ok: true } as const;
     });
 
+    // 048 FR-035 — sub-workspaces (and so tear-offs) hold panels in tabs too: the same migration.
     router.register(WORKSPACE_LOAD_SUBS_METHOD, () => ({
-      subWorkspaces: this.deps.workspaceStore.loadSubWorkspaces(this.owner),
+      subWorkspaces: this.deps.workspaceStore.loadSubWorkspaces(this.owner).map(migratePanelTitles),
     }));
 
     router.register(WORKSPACE_PERSIST_SUBS_METHOD, (params) => {
@@ -104,7 +112,7 @@ export class WorkspaceIpcService {
       if (!Array.isArray(subWorkspaces)) {
         throw new RpcError('"subWorkspaces" must be an array', JSON_RPC_INVALID_PARAMS);
       }
-      this.deps.workspaceStore.persistSubWorkspaces(this.owner, subWorkspaces);
+      this.deps.workspaceStore.persistSubWorkspaces(this.owner, subWorkspaces.map(migratePanelTitles));
       return { ok: true } as const;
     });
 

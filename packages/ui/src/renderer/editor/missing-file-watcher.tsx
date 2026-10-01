@@ -106,7 +106,7 @@ export function MissingFileWatcher(): null {
           panelId: p.id,
           message: missingFileMessage('missing'),
           // The path rides as the row's own detail — copied and logged, never rendered (FR-034).
-          detail: missingFileDetail({ filePath: st.filePath, panelName: p.title, reason: 'missing' }, os),
+          detail: missingFileDetail({ filePath: st.filePath, reason: 'missing' }, os),
           /*
            * WHAT KIND OF FAILURE THIS IS (FR-029) — the half that was missing.
            *

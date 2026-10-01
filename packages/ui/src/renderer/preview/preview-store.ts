@@ -46,6 +46,12 @@ export interface PreviewPanelState {
    */
   viewStateSource?: ViewStateSource;
   /**
+   * 048 FR-083/FR-084 (review R3) — for a `'detach'` place, the content it was measured against. A hidden view
+   * hears no pushes, so its tab can come back to a NEWER text; the body re-anchors the place onto that text by
+   * its source line. Renderer-only; never sent over IPC.
+   */
+  viewStateBasis?: PreviewContent | null;
+  /**
    * 044 T177 — main's count of this run's navigations, as the last update that carried one named it. A
    * `filePath` that changes while this does not is a re-point (a rename, a move, a Save As), and the body
    * keeps the reader's place. Kept across updates that omit it, so a body is never told the count went
@@ -54,8 +60,12 @@ export interface PreviewPanelState {
   navigationSeq?: number;
 }
 
-/** Which call site applied a place (044 FR-121h; data-model §15.2). */
-export type ViewStateSource = 'attach' | 'update';
+/**
+ * Which call site applied a place (044 FR-121h; data-model §15.2). `'detach'` is this window's own view
+ * keeping the place it left at (048 FR-083, FR-084): a tab hidden and shown again is neither an opening
+ * nor a step, so the place is restored as it stands and drives nothing.
+ */
+export type ViewStateSource = 'attach' | 'update' | 'detach';
 
 const states = new Map<string, PreviewPanelState>();
 const listeners = new Set<() => void>();
@@ -95,13 +105,35 @@ export function applyPreviewUpdate(update: PreviewUpdate, source: ViewStateSourc
     update.viewState !== undefined &&
     !sameJson(update.viewState, previous.viewState)
   ) {
-    states.set(update.panelId, { ...previous, viewState: update.viewState, viewStateSource: source });
+    // Main's history is the authority on WHICH place; a view shown again still lands it as its own (048
+    // FR-084, review R3), on the same text it detached from.
+    const reshown = source === 'attach' && previous.viewStateSource === 'detach';
+    states.set(update.panelId, {
+      ...previous,
+      viewState: update.viewState,
+      viewStateSource: reshown ? 'detach' : source,
+      ...(reshown ? { viewStateBasis: previous.viewStateBasis ?? null } : {}),
+    });
     emit();
     return true;
   }
   if (previous !== undefined && update.revision <= previous.revision) return false;
   // 044 T177 — the count main last named; an update that carries none leaves the one held.
   const navigationSeq = update.navigationSeq ?? previous?.navigationSeq;
+  /*
+   * 048 FR-084 (review R3) — the attach answer to a view shown again, at a revision it missed while hidden. The
+   * place it carries is the one this view stored when it detached; tagged `'attach'` it would read as an
+   * opening's, and the editor's line would win. It stays the view's own, measured against the text it was taken
+   * on, so the body can carry it onto the new text.
+   */
+  const reattach =
+    source === 'attach' && previous?.viewStateSource === 'detach'
+      ? {
+          viewState: update.viewState ?? previous.viewState,
+          viewStateSource: 'detach' as const,
+          viewStateBasis: previous.viewStateBasis ?? null,
+        }
+      : null;
   const next: PreviewPanelState = {
     revision: update.revision,
     filePath: update.filePath,
@@ -111,7 +143,7 @@ export function applyPreviewUpdate(update: PreviewUpdate, source: ViewStateSourc
     parent: update.parent,
     notice: update.notice,
     // Present only when main set it; an update without one keeps the reader where they are (FR-024).
-    ...(update.viewState !== undefined ? { viewState: update.viewState, viewStateSource: source } : {}),
+    ...(reattach ?? (update.viewState !== undefined ? { viewState: update.viewState, viewStateSource: source } : {})),
     ...(navigationSeq !== undefined ? { navigationSeq } : {}),
   };
   states.set(update.panelId, next);
@@ -129,6 +161,20 @@ export function clearPreviewViewState(panelId: string): void {
   if (previous === undefined || previous.viewState === undefined) return;
   const { viewState: _dropped, viewStateSource: _droppedSource, ...rest } = previous;
   states.set(panelId, rest);
+  emit();
+}
+
+/**
+ * 048 FR-083 (#459) — a view DETACHING keeps the place it left at, as this window's place to show it at
+ * again. The same place goes to main's history (`throng:history:setViewState`), so the attach answer that
+ * follows a remount carries it too, and is dropped as the same place (above) — but the body no longer has
+ * to wait for that answer: it draws at its place at once. Waiting drew it at the TOP, and a view hidden
+ * again before the answer (a drag hovering tabs) stored the top as its place.
+ */
+export function keepDetachedViewState(panelId: string, viewState: unknown): void {
+  const previous = states.get(panelId);
+  if (previous === undefined) return;
+  states.set(panelId, { ...previous, viewState, viewStateSource: 'detach', viewStateBasis: previous.content });
   emit();
 }
 

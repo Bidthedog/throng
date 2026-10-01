@@ -203,8 +203,27 @@ function blockOf(body: HTMLElement, line: number): number | null {
   return Number.isFinite(first) ? first : null;
 }
 
-/** What the body does with a place it is handed (044 FR-107, FR-121e, FR-121h). */
-type PlaceAction = 'sync' | 'restore' | 'top' | 'none';
+/**
+ * What the body does with a place it is handed (044 FR-107, FR-121e, FR-121h). `keep` restores like `restore`
+ * but drives nothing: the view's own place, shown again (048 FR-084).
+ */
+type PlaceAction = 'sync' | 'restore' | 'keep' | 'top' | 'none';
+
+/**
+ * 048 FR-083 (#459) — a restored place that the content has not finished laying out under yet. The fold
+ * gutter hides collapsed sections after a draw places the reader, and the table pass lays tables out after
+ * that; either moves content above the place under a fixed `scrollTop`, and a programmatic scroll leaves the
+ * engine no scroll anchor of its own to compensate with. So the place stays pending, is re-applied at each of
+ * those settle points (once each, never per frame — Principle XII), and is dropped after the table pass, or as
+ * soon as the reader scrolls, or anything else places the view.
+ */
+const READER_INPUT = ['wheel', 'keydown', 'pointerdown', 'touchstart'] as const;
+
+interface PendingPlace {
+  anchor: ScrollAnchor;
+  /** Whether a re-application is reported to the editor (`restore`) or is this body's own (`keep`). */
+  report: boolean;
+}
 
 /** Whether the document's selection is empty — a click that selected text is a selection, not a follow. */
 function selectionIsEmpty(doc: Document): boolean {
@@ -227,6 +246,7 @@ export function MarkdownBody({
   projectRoot,
   providerSettings,
   initialViewState,
+  initialViewStateBasis,
   navigationSeq,
   syncLine,
   syncEcho,
@@ -335,12 +355,21 @@ export function MarkdownBody({
    * typing pauses rather than once per key; a newer draw supersedes a pending one.
    */
   const tableLayoutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 048 FR-083 — a restored place still waiting for the content to settle (see {@link PendingPlace}). */
+  const pendingPlace = useRef<PendingPlace | null>(null);
+  /** Re-apply a pending place; assigned below, once the reporting it needs is defined. */
+  const reanchorRef = useRef<(scroller: HTMLElement) => void>(() => undefined);
   const drawTableLayout = useCallback(
     (body: HTMLElement): void => {
       if (tableLayoutTimer.current !== null) clearTimeout(tableLayoutTimer.current);
       tableLayoutTimer.current = setTimeout(() => {
         tableLayoutTimer.current = null;
-        if (bodyRef.current === body && body.isConnected) applyTableLayout(body, tableLayoutOptions());
+        if (bodyRef.current === body && body.isConnected) {
+          applyTableLayout(body, tableLayoutOptions());
+          // The last settle point: the place lands under the final layout, and is no longer pending.
+          reanchorRef.current(scrollerOf(body));
+        }
+        pendingPlace.current = null;
       }, TABLE_LAYOUT_DEBOUNCE_MS);
     },
     [tableLayoutOptions],
@@ -363,6 +392,9 @@ export function MarkdownBody({
   /** FR-107 — the place main asked this body to restore, read when the file is first drawn. */
   const viewStateRef = useRef<unknown>(initialViewState);
   viewStateRef.current = initialViewState;
+  /** 048 review R3 — the text that place was measured on, when it may not be the text being drawn. */
+  const viewStateBasisRef = useRef(initialViewStateBasis);
+  viewStateBasisRef.current = initialViewStateBasis;
   /** The last place actually restored, so the same one is never applied twice. */
   const restoredRef = useRef<unknown>(undefined);
   /** T177 — main's navigation count as it is now, read by the draw (it never moves without the file). */
@@ -455,6 +487,8 @@ export function MarkdownBody({
     syncedRef.current = line;
     if (syncEchoRef.current) return;
     if (!shouldFollow({ previewTopBlock: topBlockLine(scroller), editorLineBlock: blockOf(body, line) })) return;
+    // The editor moved, and the preview follows it: a place still settling is no longer where it should be.
+    pendingPlace.current = null;
     restoreScrollAnchor(scroller, { line, offsetRatio: 0 });
     ownScrollTop.current = scroller.scrollTop;
   }, []);
@@ -473,6 +507,9 @@ export function MarkdownBody({
       case 'editorLine':
         // An opening or a restore: the editor's line decides when this window knows it (FR-121h).
         return line !== null ? 'sync' : restorable;
+      case 'keep':
+        // 048 FR-084 — shown again: its own place, whatever the editor's line, and the editor keeps its own.
+        return restorable === 'restore' ? 'keep' : 'none';
       default:
         return restorable;
     }
@@ -480,17 +517,36 @@ export function MarkdownBody({
 
   /** Apply `place` as `action` decided, to `scroller`. */
   const applyPlace = useCallback(
-    (scroller: HTMLElement, place: unknown, action: PlaceAction): void => {
+    (scroller: HTMLElement, place: unknown, action: PlaceAction, drawnText: string | null): void => {
       if (action === 'none') return;
       restoredRef.current = place;
+      pendingPlace.current = null;
+      // 048 review R3 — a place taken on another text (a view shown again after edits it did not hear) is carried
+      // onto the text drawn, by the edit between them, exactly as a live update carries the reader's anchor.
+      const basis = viewStateBasisRef.current;
+      if (isScrollAnchor(place) && basis?.kind === 'text' && drawnText !== null && basis.text !== drawnText) {
+        place = remapAnchorLine(place, basis.text, drawnText);
+      }
       if (action === 'sync') {
         // The editor's line places the preview, as a sync scroll: it drives nothing back (FR-121e, FR-121h).
         syncedRef.current = null;
         applyPendingSync(scroller);
         return;
       }
-      if (action === 'restore') restoreScrollAnchor(scroller, place as ScrollAnchor);
-      else scroller.scrollTop = 0;
+      if (action === 'keep') {
+        // 048 FR-084 — its own place, shown again. Claimed as this body's own position, so the scroll it causes
+        // reports nothing, and the editor's current line counts as applied, so it does not pull the view away.
+        const anchor = place as ScrollAnchor;
+        restoreScrollAnchor(scroller, anchor);
+        pendingPlace.current = { anchor, report: false };
+        syncedRef.current = syncLineRef.current;
+        ownScrollTop.current = scroller.scrollTop;
+        return;
+      }
+      if (action === 'restore') {
+        restoreScrollAnchor(scroller, place as ScrollAnchor);
+        pendingPlace.current = { anchor: place as ScrollAnchor, report: true };
+      } else scroller.scrollTop = 0;
       // The reader's place WINS over the editor's line (FR-107, FR-101): claim the line as already applied, so
       // the sync leaves this place alone until the editor really moves. Without this a Back onto a parented
       // file overwrites it whenever the run passed through a file with no editor — which stops sync, and
@@ -503,6 +559,23 @@ export function MarkdownBody({
     },
     [applyPendingSync, scheduleReport],
   );
+
+  /** 048 FR-083 — at a settle point, put a pending place back where it belongs under the layout as it now is. */
+  const reanchor = useCallback(
+    (scroller: HTMLElement): void => {
+      const pending = pendingPlace.current;
+      if (pending === null) return;
+      const before = scroller.scrollTop;
+      restoreScrollAnchor(scroller, pending.anchor);
+      if (!pending.report) ownScrollTop.current = scroller.scrollTop;
+      else if (scroller.scrollTop !== before) {
+        ownScrollTop.current = null;
+        scheduleReport();
+      }
+    },
+    [scheduleReport],
+  );
+  reanchorRef.current = reanchor;
 
   /*
    * FR-113 — the editor scrolled: follow it now, if the body already shows this file's text. Otherwise the
@@ -542,7 +615,9 @@ export function MarkdownBody({
     const drawn = shown.current;
     if (place === undefined || place === restoredRef.current || body === null) return;
     if (drawn === null || drawn.filePath !== filePath || drawn.text !== text) return; // the draw will apply it
-    applyPlace(scrollerOf(body), place, placeActionFor(place, false));
+    applyPlace(scrollerOf(body), place, placeActionFor(place, false), text);
+    // 048 FR-083 — already drawn and folded; only a table pass still to come can move the content under it.
+    if (tableLayoutTimer.current === null) pendingPlace.current = null;
   }, [initialViewState, filePath, text, applyPlace, placeActionFor]);
 
   /*
@@ -555,9 +630,15 @@ export function MarkdownBody({
     if (body === null) return;
     const scroller = scrollerOf(body);
     const onScroll = (): void => scheduleReport();
+    // 048 FR-083 — the reader's own wheel, key or scrollbar press ends a pending place: never fight the reader.
+    const onReaderInput = (): void => {
+      pendingPlace.current = null;
+    };
     scroller.addEventListener('scroll', onScroll, { passive: true });
+    for (const type of READER_INPUT) scroller.addEventListener(type, onReaderInput, { capture: true, passive: true });
     return () => {
       scroller.removeEventListener('scroll', onScroll);
+      for (const type of READER_INPUT) scroller.removeEventListener(type, onReaderInput, { capture: true });
       if (reportFrame.current !== null) body.ownerDocument.defaultView?.cancelAnimationFrame(reportFrame.current);
       reportFrame.current = null;
     };
@@ -575,6 +656,9 @@ export function MarkdownBody({
   useEffect(() => {
     onViewStateCapture(() => {
       const body = bodyRef.current;
+      // 048 FR-083 — a place still settling IS where the reader is: the layout under it is what has not
+      // finished, and reading it now would store a place the reader never had.
+      if (pendingPlace.current !== null) return pendingPlace.current.anchor;
       return body === null ? null : captureScrollAnchor(scrollerOf(body));
     });
   }, [onViewStateCapture]);
@@ -616,10 +700,13 @@ export function MarkdownBody({
         if (previous !== null && (previous.filePath === file || repointed)) {
           // FR-024 — an UPDATE. Capture, replace and restore in one synchronous turn, so no scroll the
           // user makes can fall between the two and be undone.
-          const anchor = captureScrollAnchor(scroller);
+          // 048 FR-083 — a place still settling is the reader's place, not the unsettled layout's.
+          const pending = pendingPlace.current;
+          const anchor = pending?.anchor ?? captureScrollAnchor(scroller);
           body.replaceChildren(fragment);
           const kept = anchor === null ? null : remapAnchorLine(anchor, previous.text, text);
           if (kept !== null) restoreScrollAnchor(scroller, kept);
+          if (pending !== null && kept !== null) pendingPlace.current = { ...pending, anchor: kept };
           if ((anchor !== null && kept !== null && kept.line !== anchor.line) || reportDeferred.current) {
             // FR-121f — a kept place whose block was renumbered drives the editor; so does a report the chrome
             // deferred while this text was on its way (U2).
@@ -635,6 +722,8 @@ export function MarkdownBody({
           }
         } else {
           body.replaceChildren(fragment);
+          // A different file: whatever place was settling belonged to the one it replaced.
+          pendingPlace.current = null;
           // 047 FR-064 — a different file drops every hand-set table width the reader dragged.
           tableHandSetRef.current = new Map();
           // A different file is shown from its top (FR-024's second sentence, FR-090b)…
@@ -644,7 +733,7 @@ export function MarkdownBody({
           const place = viewStateRef.current;
           const action = placeActionFor(place, true);
           if (action !== 'none') {
-            applyPlace(scroller, place, action);
+            applyPlace(scroller, place, action, text);
           } else if (previous !== null) {
             // A followed link (no place): its start position — or the fragment the chrome scrolls to next —
             // drives the new file's editor, and that editor's own line does not move it (FR-121f; analysis C2).
@@ -661,6 +750,9 @@ export function MarkdownBody({
         // inserted. After the place above, not before: a toggle's own gutter offset must never be measured
         // as part of the scroll anchor's layout.
         drawFoldGutter(body, headings);
+        // 048 FR-083 — the collapsed sections just hidden moved everything below them: a place applied above
+        // lands again under the folded layout. In the same task, so the reader never sees the unfolded one.
+        reanchor(scroller);
         // 047 R13 — fair column widths, same reasoning: after the place has already settled.
         drawTableLayout(body);
 
@@ -705,7 +797,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
@@ -718,7 +810,9 @@ export function MarkdownBody({
     const body = bodyRef.current;
     if (body === null || shown.current === null) return;
     drawFoldGutter(body, lastHeadingsRef.current);
-  }, [foldState, gutter, theme, packs, drawFoldGutter]);
+    // 048 FR-083 — fold state seeded late (main's answer after the draw) is a settle point too.
+    reanchor(scrollerOf(body));
+  }, [foldState, gutter, theme, packs, drawFoldGutter, reanchor]);
 
   /*
    * FR-040 — the chrome's way to expand one section's collapsed ancestors and itself, and bring it to

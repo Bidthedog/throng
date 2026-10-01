@@ -735,6 +735,7 @@ export function FindInFilesPanel({
       clientY,
       findInFilesContentMenu({
         running,
+        split: { panelId, keybindings },
         replaceEnabled: state.replaceEnabled,
         grouping: state.grouping,
         keybindings,

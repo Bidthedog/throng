@@ -2,8 +2,10 @@
  * Which name a Panel wears (#218) — one rule, in one place, pure.
  *
  * > A panel follows its terminal's name or its file's name, **unless** it is untyped (the
- * > "Select Panel Type" screen is showing) **or** the user has manually renamed it — in which case
- * > the override stands.
+ * > "Select Panel Type" screen is showing) — in which case its placeholder title stands.
+ *
+ * 048 FR-032 removed the other exception, a user's own rename: a panel is always named by what it
+ * holds (panel renaming is gone, and old custom titles migrate away — `panel-title-migration.ts`).
  *
  * This lived as a nested ternary inside the panel header's JSX, which had two costs. It could only
  * be asserted by launching the whole application, so the rule itself was never tested — only its
@@ -24,6 +26,7 @@ import { PREVIEW_KIND } from '../preview/panel-type.js';
 import { countGraphemes, truncateGraphemes } from '../text/grapheme.js';
 import type { Panel, PreviewPanelConfig } from './model.js';
 import { previewPathOf } from './persisted-paths.js';
+import { BLANK_PANEL_NAME, isDefaultPanelName } from './unique-name.js';
 
 /** The live values a panel's header can name itself from; all absent is normal. */
 export interface PanelTitleSources {
@@ -32,7 +35,7 @@ export interface PanelTitleSources {
   /** The file the editor holds — live editor state first, else the panel's persisted config. */
   editorFilePath?: string | null;
   /**
-   * What a PARENTED preview's parent editor currently displays, custom or derived (044 FR-031).
+   * What a PARENTED preview's parent editor currently displays (044 FR-031).
    * Absent or blank means the preview is standalone. An input rather than a lookup: a preview stores
    * no link to an editor (FR-013), so whoever knows the parent hands its title in.
    */
@@ -68,7 +71,7 @@ function usable(value: unknown): string | null {
  *
  * The bound is applied to the RESULT rather than to each source, which is the whole reason it lives
  * here. #218 made this function the one place a panel's name is decided, so a shell announcing a
- * 400-character window title, a file with a very long stem and a name the user typed all leave
+ * 400-character window title, a file with a very long stem and a long placeholder title all leave
  * through the same return — and each of them is a name that must fit the tab strip. Capping in the
  * header component instead would bound whichever source that component happened to be rendering.
  *
@@ -110,7 +113,7 @@ export interface PreviewTitleParts {
 
 /**
  * The halves of the title {@link panelDisplayTitle} gives a preview, or `null` for any panel it does
- * not compose one for — another kind, a renamed panel, or a preview with no file yet (the
+ * not compose one for — another kind, or a preview with no file yet (the
  * placeholder). `name + suffix` is always exactly `panelDisplayTitle`'s result, which is what lets a
  * header render the marker between them without deciding anything about the title itself.
  */
@@ -119,7 +122,7 @@ export function previewTitleParts(
   sources: PanelTitleSources = {},
   maxNameLength?: number,
 ): PreviewTitleParts | null {
-  const full = panel.titleIsCustom ? null : previewName(panel, sources);
+  const full = previewName(panel, sources);
   if (full === null) return null;
   const name = boundPreviewName(full, maxNameLength);
   return { name, suffix: PREVIEW_TITLE_SUFFIX, nameTruncated: name !== full };
@@ -156,22 +159,28 @@ function boundPreviewName(name: string, maxNameLength: number | undefined): stri
 }
 
 /** The unbounded precedence — the #218 rule itself, unchanged by the limit that now wraps it. */
-function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
-  // A name the user typed outranks everything, and survives a change of file or shell (#89/#97).
-  if (panel.titleIsCustom) return panel.title;
+/**
+ * The name a panel falls back to when nothing it holds names it (048 FR-130): its stored title, except
+ * that a GENERATED one ("Blank Panel 2", or a legacy "Panel 3") is shown as plain "Blank Panel". The
+ * number exists only to keep stored names unique (FR-033); the user never needs to see it.
+ */
+function fallbackTitle(panel: Panel): string {
+  return isDefaultPanelName(panel.title) ? BLANK_PANEL_NAME : panel.title;
+}
 
+function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
   if (panel.kind === 'terminal') {
     const live = usable(sources.terminalTitle);
     if (live) return live;
     // Prefer the captured flavour LABEL ("Command Prompt"); fall back to the flavour id for panels
     // typed before the label was persisted, exactly as the header's type icon does.
     const label = usable(panel.config?.flavourLabel) ?? usable(panel.config?.flavourId);
-    return label ?? panel.title;
+    return label ?? fallbackTitle(panel);
   }
 
   if (panel.kind === 'editor') {
     const path = usable(sources.editorFilePath);
-    return path ? editorAutoTitle(path) : panel.title;
+    return path ? editorAutoTitle(path) : fallbackTitle(panel);
   }
 
   /*
@@ -218,5 +227,5 @@ function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
   }
 
   // Untyped: the placeholder is what the placeholder is FOR.
-  return panel.title;
+  return fallbackTitle(panel);
 }

@@ -14,22 +14,16 @@
  * Quick Open in that window must offer the files of the project whose panel the user is standing in.
  *
  * That is also why the chord's route in is a REGISTRATION rather than a direct call. The window-level
- * keydown listener in `app.tsx` has no route into component state, and opening is conditional on the
+ * dispatcher (`keybindings/window-dispatcher.tsx`, in both windows) has no route into component state, and opening is conditional on the
  * root existing (FR-018, A5) — so the listener asks (`requestQuickOpen`) and this component answers.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import {
-  collectPanels,
-  effectiveActivePanelId,
-  resolveAction,
-  type ActionId,
-} from '@throng/core';
-import { transientOverlayOpen, useTransientOverlay } from '../common/transient-overlay.js';
+import { collectPanels, effectiveActivePanelId } from '@throng/core';
+import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
-import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import { useAppSettings } from '../config/config-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
-import { isPanelScoped, opensTransientOverlay, scopeFromKind, transientInputFocused } from '../keybindings/scope.js';
 import { useSubWorkspaceWindow } from '../workspace/subworkspace-window-context.js';
 import {
   applyRememberSettings,
@@ -42,23 +36,12 @@ import {
 import { useFileIndex } from './use-file-index.js';
 import { QuickOpen } from './quick-open.js';
 import { GotoLine } from './goto-line.js';
-import { navigateFocusedHistory } from '../navigation/navigate-history.js';
-import { resolveKeydown } from '../config/chord-key.js';
-
-const QUICK_OPEN: ActionId = 'navigate.quickOpen';
-const GOTO_LINE: ActionId = 'navigate.gotoLine';
-const NAVIGATE_BACK: ActionId = 'navigate.back';
-const NAVIGATE_FORWARD: ActionId = 'navigate.forward';
 
 export function NavigationChrome(): ReactElement | null {
   const modal = useNavigationModal();
   const { projects, activeProject } = useProjects();
   const ws = useWorkspace();
   const { layout } = ws;
-  // The sub-workspace listener below is installed once; a history step must read the layout as it is then.
-  const wsRef = useRef(ws);
-  wsRef.current = ws;
-  const keybindings = useKeybindings();
   const settings = useAppSettings();
   const subWin = useSubWorkspaceWindow();
 
@@ -216,10 +199,6 @@ export function NavigationChrome(): ReactElement | null {
   open.current = openFrom;
   const rootRef = useRef(root);
   rootRef.current = root;
-  // The panel Go To Line acts on, read the same way — the listener below is installed once and must
-  // not be re-subscribed every time the active panel changes.
-  const activePanelIdRef = useRef(activePanelId);
-  activePanelIdRef.current = activePanelId;
 
   useEffect(() => {
     const opener = (): boolean => {
@@ -232,76 +211,6 @@ export function NavigationChrome(): ReactElement | null {
     registerQuickOpen(opener);
     return () => registerQuickOpen(null);
   }, []);
-
-  /*
-   * The sub-workspace window's missing half of `KeybindingsHandler`.
-   *
-   * `app.tsx` mounts the window-level chord dispatcher; `subworkspace-app.tsx` does not, and never
-   * has — its shell carries `SearchKeybindings` and nothing else. So without this listener the
-   * Quick Open chord would be live in the main window and dead in every sub-workspace, which is
-   * exactly the failure Assumption 6 names. Installed ONLY here, so the main window keeps a single
-   * dispatcher and cannot handle the chord twice.
-   */
-  const isSubWorkspace = subWin !== null;
-  const activeKind = activePanel?.kind;
-  useEffect(() => {
-    if (!isSubWorkspace) return;
-    const onKeyDown = (e: KeyboardEvent): void => {
-      const action = resolveKeydown(e, (ev) => resolveAction(keybindings, ev, scopeFromKind(activeKind)));
-      /*
-       * 044 US7b fix round 2, item 2 — the same focus guard `resolveScoped` applies in the main window
-       * (FR-017f). Without it, Alt+Left/Right typed into an editor's find bar, or into Quick Open's own
-       * filter box, stepped the panel underneath instead of moving the caret in the input — and Ctrl+G
-       * opened Go To Line over it. `navigate.quickOpen` is not panel-scoped (`isPanelScoped` excludes it
-       * by name), so it is unaffected and keeps working from inside a focused input, same as `app.tsx`.
-       */
-      if (
-        action &&
-        isPanelScoped(action) &&
-        transientInputFocused() &&
-        !(transientOverlayOpen() && opensTransientOverlay(action))
-      ) {
-        return;
-      }
-      if (action === QUICK_OPEN) {
-        // Consumed whether or not it opens anything — a chord that reaches a terminal's shell after
-        // the application has claimed it is FR-001's failure, not a fallback.
-        e.preventDefault();
-        e.stopPropagation();
-        if (rootRef.current !== null && rootRef.current !== '') {
-          setNavigationModal({ kind: 'quickOpen', invokedFrom: open.current() });
-        }
-        return;
-      }
-      /*
-       * 033 US2 — Go To Line, in a sub-workspace window too (Assumption 6).
-       *
-       * `resolveAction` above is already scoped by the active panel's KIND, and the command is
-       * EDITOR_ONLY — so reaching this branch means an editor panel is active and there is a panel
-       * id to act on. A chord that worked in the main window and did nothing here is exactly the
-       * failure that mounts this component in both shells.
-       */
-      if (action === GOTO_LINE && activePanelIdRef.current !== null) {
-        e.preventDefault();
-        e.stopPropagation();
-        setNavigationModal({ kind: 'gotoLine', panelId: activePanelIdRef.current });
-        return;
-      }
-      /*
-       * 044 FR-105 — Back and Forward, in a sub-workspace window too. The scope above is the active panel's
-       * kind and the commands are HISTORY_PANELS, so this is reached only over an editor or a preview; the
-       * capture phase is what beats CodeMirror's move-by-syntax on the same keys, as `app.tsx` does in the
-       * main window. `resolveAction` is given Shift, so Shift+Alt+Arrow stays the editor's column select.
-       */
-      if (action === NAVIGATE_BACK || action === NAVIGATE_FORWARD) {
-        e.preventDefault();
-        e.stopPropagation();
-        void navigateFocusedHistory(wsRef.current, action === NAVIGATE_BACK ? 'back' : 'forward');
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isSubWorkspace, keybindings, activeKind]);
 
   /*
    * 033 US2 — Go To Line, from the same ONE slot (S1, S2).

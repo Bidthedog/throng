@@ -736,10 +736,6 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Show hidden entries icon',
     description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',
   },
-  'icons.resetName': {
-    label: 'Reset name icon',
-    description: 'The glyph on the menu row that returns a renamed tab or project to the name it started with.',
-  },
   /*
    * 031 / FR-032 — the tab strip's own controls. Named for the strip, not for tree state: the
    * collapse and expand entries above describe folding a pane, and a user re-skinning those must not

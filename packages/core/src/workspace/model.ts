@@ -156,19 +156,12 @@ export interface Panel {
   id: string;
   /** The Panel's original project — drives merge-to-origin (FR-023/024, INV-4/6). */
   originProjectId: string;
-  /** The panel's EFFECTIVE display label (e.g. "Panel 3", or a user rename). */
+  /**
+   * The panel's automatic fallback title ("Panel 3"), shown only when nothing it holds names it
+   * (`panelDisplayTitle`). 048 removed panel renaming: the pre-048 `titleIsCustom` / `defaultTitle`
+   * fields are no longer part of the model, and `dropCustomPanelTitles` takes them off old documents.
+   */
   title: string;
-  /**
-   * True once the user has renamed this panel (FR-037 follow-up). Distinguishes a deliberate name
-   * from the default placeholder so a terminal's live window title (#89) no longer overrides a
-   * rename, and so "Reset Name" knows there is something to undo. Absent on old layouts.
-   */
-  titleIsCustom?: boolean;
-  /**
-   * The placeholder the panel was created with, captured the FIRST time it is renamed so "Reset
-   * Name" can restore it (and a terminal can fall back to its live title). Absent until first rename.
-   */
-  defaultTitle?: string;
   /**
    * The Panel's assigned type (005 / FR-006). `undefined` = untyped placeholder
    * showing the type-selection form (back-compatible: old layouts deserialise

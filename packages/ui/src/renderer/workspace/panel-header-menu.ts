@@ -11,22 +11,24 @@
  *
  * | Section      | Items                                                                              |
  * |--------------|------------------------------------------------------------------------------------|
- * | Content      | Rename, Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All        |
+ * | Create       | Split ▸ (Split Down, Up, Right, Left — 048)                                         |
+ * | Content      | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All               |
  * | Destroy      | the panel's destroy verb                                                            |
  * | Navigate     | Reveal File in File Explorer, Open in OS Explorer, Send to Tab, Sync to           |
- * | View & state | Reset Name, Zoom, Synchronise Scrolling, Try again, Copy details, Clear panel type, |
+ * | View & state | Zoom, Synchronise Scrolling, Try again, Copy details, Clear panel type,            |
  * |              | Refresh / redraw                                                                    |
  *
  * *Destroy Panel* moves from last to the middle — the same shape the File Explorer menu has always
- * had. *Reset Name* leaves Rename's side for View & state, where the constitution names it
- * explicitly. The editor and terminal conditionals are unchanged: an absent item is simply absent
+ * had. The editor and terminal conditionals are unchanged: an absent item is simply absent
  * from its group, and an empty group draws no divider.
  *
- * TWO ROWS OF THAT TABLE ARE NOW CONDITIONAL ON THE PANEL'S KIND (043). *Zoom* is offered only where
- * a component renders the zoom level (FR-062a, `KINDS_THAT_ZOOM`), and *Rename* / *Reset Name* only
- * where the panel can be renamed at all (FR-061, `isRenamable`). Both are Constitution VI's
- * disabled-versus-absent rule, and between them they empty a whole section for two kinds — the Find
- * in Files panel loses `content` entirely, which is the only shape in the app whose FIRST section is
+ * 048 REMOVED *Rename* and *Reset Name* (FR-030): a panel is named by what it holds, so no menu, chord
+ * or gesture renames one. It ADDED *Split*, on every kind.
+ *
+ * *Zoom* is conditional on the PANEL'S KIND (043): it is offered only where
+ * a component renders the zoom level (FR-062a, `KINDS_THAT_ZOOM`). That is Constitution VI's
+ * disabled-versus-absent rule, and it can empty a whole section — the Find
+ * in Files panel has no `content` at all, which is the only shape in the app whose FIRST section is
  * empty. `menu-sections.test.ts` pins it, so "an empty group draws no divider" is asserted on the
  * shape that actually exercises it rather than only stated here.
  *
@@ -53,8 +55,10 @@ import {
   type PanelKind,
   type PreviewAffordance,
   type PreviewProviderKind,
+  type SplitDirection,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
+import { splitSubmenu } from './split-menu.js';
 
 /**
  * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
@@ -78,30 +82,6 @@ import type { MenuAction } from './context-menu.js';
  * each, so the two files have to move together.
  */
 const KINDS_THAT_ZOOM: readonly PanelKind[] = ['editor', 'terminal', 'findInFiles', PREVIEW_KIND];
-
-/**
- * Whether this panel can be renamed at all (043 FR-061).
- *
- * Every panel is renamable except one, and the exception is deliberate rather than an oversight: a
- * Find in Files panel's identity IS its query. FR-019 lets one Tab hold several of them and the
- * search term is the only thing that tells them apart, so a user-chosen name would hide the one
- * piece of information the header exists to give.
- *
- * ABSENT, not disabled (Constitution VI). Renaming here is not temporarily unavailable — it is never
- * meaningful — and a greyed row invites the user to work out what would re-enable it. Reset Name
- * goes with Rename: an undo offered for something that cannot be done is stranger than the thing
- * itself would have been.
- *
- * Exported because `panel-placeholder.tsx` asks the same question about the same panel for the OTHER
- * two routes into a rename — whether to register a starter for the chord, and whether a double-click
- * on the header opens the box. Three routes, one answer; a second copy of this predicate is how one
- * of them stays open.
- */
-export function isRenamable(panel: Panel): boolean {
-  // 044 FR-030 — a preview is the second exception, on 043 FR-061's ground: its name is DERIVED from
-  // the file it shows or the editor it follows (FR-031), and a user-chosen name would hide which.
-  return panel.kind !== 'findInFiles' && panel.kind !== PREVIEW_KIND;
-}
 
 /**
  * The verb a panel's removal is offered under (011 FR-030).
@@ -138,8 +118,8 @@ export interface PanelHeaderDetach {
 }
 
 export interface PanelHeaderMenuActions {
-  beginRename: () => void;
-  resetName: () => void;
+  /** 048 FR-015 — split THIS panel toward `direction` (the Split submenu's four rows). */
+  split: (direction: SplitDirection) => void;
   zoomIn: () => void;
   zoomOut: () => void;
   resetZoom: () => void;
@@ -387,27 +367,12 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     });
   }
 
-  if (isRenamable(panel)) {
-    items.push({
-      label: 'Rename',
-      icon: 'rename',
-      section: 'content',
-      // The chord is SHOWN, not merely bound. A menu that offers an action without naming
-      // its key teaches nobody the key, and this menu is the panel's canonical index of
-      // what it can do (constitution v4.3.0).
-      shortcut: firstBinding(keybindings, 'panel.rename'),
-      onClick: () => actions.beginRename(),
-    });
-    // Undo a rename back to the panel's default name (a terminal then shows its live title
-    // again). Disabled when there is nothing to reset.
-    items.push({
-      label: 'Reset Name',
-      icon: 'resetName',
-      section: 'viewState',
-      disabled: !(panel.titleIsCustom ?? false),
-      onClick: () => actions.resetName(),
-    });
-  }
+  /*
+   * 048 FR-015 — Split, in Create, on every panel kind: a submenu of the four split commands, each
+   * showing its current chord. The same builder feeds the content menus and the **+** button.
+   * (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
+   */
+  items.push(splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)));
 
   // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
   // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
@@ -689,6 +654,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     label: `${panelVerb} Panel`,
     icon: 'destroy',
     section: 'destroy',
+    // 048 FR-131 — the chord that runs this same item from the keyboard, as bound now.
+    shortcut: firstBinding(keybindings, 'panel.destroy'),
     onClick: () => actions.destroy(),
   });
 

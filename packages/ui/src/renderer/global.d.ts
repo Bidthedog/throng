@@ -121,11 +121,9 @@ declare global {
          *  way the renderer learns a request failed rather than leaving an inert button. */
         onOpenFailed?: (cb: (failure: { id: string; reason: string }) => void) => () => void;
       };
-      // Cross-window Panel identity sync (003): rename the same Panel everywhere.
+      // Cross-window Panel identity sync (003): show the same derived title everywhere.
       panel?: {
-        notifyRenamed: (id: string, title: string) => void;
-        onRenamed: (cb: (id: string, title: string) => void) => () => void;
-        // A name throng moved, not one the user chose (#184/#218) — never marks a panel custom.
+        // A name throng moved because it clashed with another panel's (#184/#218).
         notifyRetitled: (id: string, title: string) => void;
         onRetitled: (cb: (id: string, title: string) => void) => () => void;
         notifyDestroyed: (id: string) => void;

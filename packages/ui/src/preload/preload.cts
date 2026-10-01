@@ -202,19 +202,10 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:projects:changed:push', handler);
     },
   },
-  // Cross-window Panel identity sync (003): renaming a Panel in one window renames
-  // the same Panel (by id) everywhere it appears — project + sub-workspaces.
+  // Cross-window Panel identity sync (003): a Panel's content-derived title is moved in one window and
+  // shows the same everywhere it appears — project + sub-workspaces. (048 removed the user-rename channel.)
   panel: {
-    notifyRenamed: (id: string, title: string) =>
-      ipcRenderer.send('throng:panel:rename', { id, title }),
-    onRenamed: (cb: (id: string, title: string) => void) => {
-      const handler = (_event: unknown, p: { id: string; title: string }): void => cb(p.id, p.title);
-      ipcRenderer.on('throng:panel:renamed', handler);
-      return () => ipcRenderer.removeListener('throng:panel:renamed', handler);
-    },
-    // The same Panel, a DIFFERENT act (#184/#218): throng moved the name because it clashed with a
-    // panel elsewhere in the application. Every window must show the new name, and NO window may
-    // record it as the user's choice — hence its own channel rather than a flag on the rename.
+    // throng moved the name because it clashed with a panel elsewhere in the application (#184/#218).
     notifyRetitled: (id: string, title: string) =>
       ipcRenderer.send('throng:panel:retitle', { id, title }),
     onRetitled: (cb: (id: string, title: string) => void) => {

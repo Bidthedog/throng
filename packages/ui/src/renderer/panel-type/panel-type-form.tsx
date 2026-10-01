@@ -26,7 +26,7 @@ import {
 import { markExplicitRetype } from '../terminal/explicit-retype.js';
 import { useNotify } from '../common/notification.js';
 import { terminalSubject, usePanelPlace } from '../common/panel-subject.js';
-import { usePanelFocusTarget } from '../workspace/panel-focus.js';
+import { requestPanelFocusAfterRetype, usePanelFocusTarget } from '../workspace/panel-focus.js';
 import './panel-type.css';
 
 /**
@@ -126,6 +126,9 @@ export function PanelTypeForm({
       // terminal and attaches); the mirror in other windows never runs this, so it
       // reuses the new session. Only a terminal attaches.
       if (result.kind === 'terminal') markExplicitRetype(panelId);
+      // 048 FR-132 — the keyboard goes into the new content, clicked or pressed: parked for the view
+      // that replaces this form, since the Confirm button that held focus unmounts with it.
+      requestPanelFocusAfterRetype(panelId);
       ws.setPanelType(panelId, result.kind, result.config);
       // Mirror the confirmed type+config to the Panel's other views (FR-027a).
       window.throng?.panel?.notifyTyped?.(panelId, result.kind, result.config);

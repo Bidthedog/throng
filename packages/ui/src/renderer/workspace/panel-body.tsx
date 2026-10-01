@@ -17,6 +17,7 @@ import { useAppSettings } from '../config/config-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel } from './panel-focus.js';
+import { currentPanelTitle } from './use-panel-display-names.js';
 import { PreviewPanel } from '../preview/preview-panel.js';
 import { releasePreviewView } from '../preview/forget-preview-panel.js';
 import { runPreviewEditorRoute } from '../preview/open-in-editor.js';
@@ -140,7 +141,8 @@ export function PanelBody({
     const meta = {
       projectName: originProject?.name ?? (ownedBySub ? subWin?.name : activeProject?.name),
       tabName: layout?.tabs.find((t) => t.id === tabId)?.title,
-      panelName: panel.title,
+      // 048 FR-032 — the header's name for the panel, not the stored fallback "Blank Panel 3".
+      panelName: currentPanelTitle(panel),
     };
     return (
       <TerminalPanel panel={panel} tabId={tabId} projectRoot={root} rootless={ownedBySub} meta={meta} />

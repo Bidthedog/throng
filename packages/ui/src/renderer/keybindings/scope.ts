@@ -200,11 +200,11 @@ export const DELIBERATELY_PANEL_SCOPED: Readonly<Partial<Record<ActionId, string
 export function isPanelScoped(action: ActionId): boolean {
   return !(
     action.startsWith('zoom.') ||
-    // Every `panel.*` command acts on the PANEL — its zoom, its name — and none on the content
-    // inside it. That is the whole distinction this predicate draws, so the test is the prefix
-    // rather than `panel.zoom`: `panel.rename` was being suppressed by a focused input surface,
-    // which meant F2 worked in an editor (whose content area is the document, not an input) and
-    // did nothing whatever in a terminal, whose focused element IS a textarea.
+    // Every `panel.*` command acts on the PANEL — its zoom, how it is split — and none on the
+    // content inside it. That is the whole distinction this predicate draws, so the test is the
+    // prefix rather than `panel.zoom`: a panel command suppressed by a focused input surface would
+    // work in an editor (whose content area is the document, not an input) and do nothing whatever
+    // in a terminal, whose focused element IS a textarea.
     action.startsWith('panel.') ||
     action.startsWith('focus.') ||
     action.startsWith('view.') ||

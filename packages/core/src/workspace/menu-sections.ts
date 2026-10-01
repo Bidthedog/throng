@@ -36,7 +36,7 @@ export type MenuSection =
   | 'destroy'
   /** Takes you somewhere, or names where something is: Open In, Copy Path, Go To Line. */
   | 'navigate'
-  /** Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide. */
+  /** Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide. */
   | 'viewState'
   /** Whole-application destinations: Settings, Key Bindings, Themes, About. */
   | 'application';

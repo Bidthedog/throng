@@ -22,6 +22,8 @@ import {
   inferIndent,
   initialFold,
   isCollapsed,
+  isDefaultPanelName,
+  BLANK_PANEL_NAME,
   languageName,
   PLAIN_TEXT_ID,
   resolveIconAsset,
@@ -62,6 +64,7 @@ import {
   isMissingReason,
   missingFileDetail,
   missingFileMessage,
+  type LoadErrorEntry,
 } from './editor-missing-notice.js';
 import { useReportPanelFailure, useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { buildFileChangedNotice } from './file-changed-notice.js';
@@ -1060,7 +1063,7 @@ export function useEditor(params: UseEditorParams): void {
    * to lose.
    */
   const maybeWarn = (
-    entries: { filePath: string | null; panelName: string; reason: string }[],
+    entries: LoadErrorEntry[],
   ): void => {
     const os = win()?.osName ?? 'windows';
     for (const entry of entries) {
@@ -1134,8 +1137,13 @@ export function useEditor(params: UseEditorParams): void {
     const chosen = await win()?.editor?.chooseSavePath?.({
       defaultDir: cfg.filePath ? dirname(cfg.filePath) : (metaRef.current.projectRoot ?? undefined),
       // FR-083: default the file-name field to the current name or the Panel's name
-      // (read through the ref so a renamed Panel is reflected, not the mount-time name).
-      defaultName: cfg.filePath ? basename(cfg.filePath) : metaRef.current.title,
+      // (read through the ref so the Panel's current derived title is used, not the mount-time one).
+      // 048 FR-032 / FR-130 — the name the panel SHOWS: a generated title is plain "Blank Panel".
+      defaultName: cfg.filePath
+        ? basename(cfg.filePath)
+        : isDefaultPanelName(metaRef.current.title)
+          ? BLANK_PANEL_NAME
+          : metaRef.current.title,
     });
     if (!chosen) return false; // cancelled
     return writeTo(chosen, true);
@@ -1284,7 +1292,7 @@ export function useEditor(params: UseEditorParams): void {
       fileMissingRef.current = true;
       unloadableRef.current = true;
       unloadableDetailRef.current = missingFileDetail(
-        { filePath: absPath, panelName: metaRef.current.title, reason: loaded.reason },
+        { filePath: absPath, reason: loaded.reason },
         win()?.osName ?? 'windows',
       );
       publishState();
@@ -1293,7 +1301,7 @@ export function useEditor(params: UseEditorParams): void {
     } else if (loaded && loaded.ok === false) {
       // A deliberate open of a bad/missing file: warn immediately (single file).
       fileMissingRef.current = isMissingReason(loaded.reason);
-      maybeWarn([{ filePath: absPath, panelName: metaRef.current.title, reason: loaded.reason }]);
+      maybeWarn([{ filePath: absPath, reason: loaded.reason }]);
       publishState();
     }
   };
@@ -1619,6 +1627,8 @@ export function useEditor(params: UseEditorParams): void {
                   view: target,
                   panelId,
                   viewId,
+                  // 048 FR-015 — the Split submenu, with the live chords.
+                  split: { panelId, keybindings: keybindingsRef.current },
                   lineEnding: () =>
                     configRef.current.lineEnding ?? metaRef.current.settings.defaultLineEnding,
                   wordWrap: {
@@ -2205,7 +2215,7 @@ export function useEditor(params: UseEditorParams): void {
           // …and WHY, in the same words the notice's own row carries (FR-052/FR-048a). This view is
           // the one that tried to read the path, so it is the only place the reason exists at all.
           unloadableDetailRef.current = missingFileDetail(
-            { filePath: cfg.filePath ?? null, panelName: metaRef.current.title, reason: loaded.reason },
+            { filePath: cfg.filePath ?? null, reason: loaded.reason },
             win()?.osName ?? 'windows',
           );
           // The file is gone, but its last content may survive in the recovery temp

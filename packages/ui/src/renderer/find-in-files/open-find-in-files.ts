@@ -85,7 +85,6 @@ export interface FindInFilesRequest {
 export interface FindInFilesWorkspace {
   layout: WorkspaceLayout | null;
   addPanel(tabId: string): string;
-  clearLastAddedPanel(): void;
   setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void;
   setActivePanel(tabId: string, panelId: string): void;
 }
@@ -217,13 +216,10 @@ function existingPanel(
 /**
  * Create the panel, in `createDedicatedEditor`'s sequence and for its reasons.
  *
- * `clearLastAddedPanel` is the load-bearing step: only a USER-added panel opens in rename mode
- * (FR-041), and a panel that appeared because the user pressed a search chord must not open with a
- * rename box over its search input.
+ * No panel opens in a rename box any more (048 FR-002, FR-030), so nothing has to clear one.
  */
 function createPanel(ws: FindInFilesWorkspace, tabId: string, projectId: string | null): string {
   const newId = ws.addPanel(tabId);
-  ws.clearLastAddedPanel();
   const config: FindInFilesPanelConfig = {};
   ws.setPanelType(newId, FIND_IN_FILES_KIND, config);
   window.throng?.panel?.notifyTyped?.(newId, FIND_IN_FILES_KIND, config);

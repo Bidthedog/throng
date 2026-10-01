@@ -69,6 +69,12 @@ interface ContextMenuController {
    * The cog lost exactly that when it moved onto the shared menu.
    */
   isOpen: boolean;
+  /**
+   * The opening id of the menu on screen, or null. An opener that toggles ITS OWN menu shut compares this
+   * with the id its `openMenu` returned, so a click while some OTHER menu is open opens its own rather
+   * than being swallowed as a toggle (048 R6).
+   */
+  openId: number | null;
 }
 
 const Ctx = createContext<ContextMenuController | null>(null);
@@ -101,7 +107,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
   }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   const value = useMemo<ContextMenuController>(
-    () => ({ openMenu, updateMenu, closeMenu, isOpen: menu !== null }),
+    () => ({ openMenu, updateMenu, closeMenu, isOpen: menu !== null, openId: menu?.opId ?? null }),
     [openMenu, updateMenu, closeMenu, menu],
   );
 
@@ -121,6 +127,14 @@ export function ContextMenuProvider({ children }: { children: ReactNode }): Reac
       ) : null}
     </Ctx.Provider>
   );
+}
+
+/**
+ * The controller, or null where no provider is mounted. For a window-wide listener that must close the
+ * open menu when one exists (048 FR-133) but is also mounted bare in tests and has no menu of its own.
+ */
+export function useOptionalContextMenu(): ContextMenuController | null {
+  return useContext(Ctx);
 }
 
 export function useContextMenu(): ContextMenuController {

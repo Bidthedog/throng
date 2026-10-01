@@ -102,6 +102,11 @@ export interface IconButtonProps {
    * the button keeps its native "button" role, which is every other caller's unchanged behaviour.
    */
   role?: string;
+  /**
+   * The control OPENS a menu (048 FR-014: a panel's **+** button opens the split menu), announced as
+   * `aria-haspopup`. Omitted for every other button, which then carries no such attribute at all.
+   */
+  ariaHasPopup?: 'menu';
 }
 
 export function IconButton({
@@ -125,6 +130,7 @@ export function IconButton({
   ariaLabel,
   tabIndex,
   role,
+  ariaHasPopup,
 }: IconButtonProps): ReactElement {
   /*
    * The pill is the SAME class the per-tab panel-count pill wears (031 FR-052b) — reused, not
@@ -147,6 +153,7 @@ export function IconButton({
       role={role}
       aria-label={ariaLabel ?? title}
       aria-pressed={ariaPressed}
+      aria-haspopup={ariaHasPopup}
       tabIndex={tabIndex}
       disabled={disabled}
       onClick={onClick}

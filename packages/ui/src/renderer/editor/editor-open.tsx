@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   collectPanels,
+  effectiveActivePanelId,
   isPanel,
   relativeToRoot,
   toDisplayPath,
@@ -8,6 +9,7 @@ import {
   type LayoutNode,
 } from '@throng/core';
 import { useWorkspace } from '../state/workspace-store.js';
+import { SubWorkspaceWorkspaceClient } from '../state/subworkspace-window-client.js';
 import { useProjects } from '../state/projects-store.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
@@ -130,6 +132,31 @@ function editorPanelsInTab(root: LayoutNode): string[] {
     .map((p) => p.id);
 }
 
+/** The owner recorded on panel `id` within `root`. */
+function originOf(root: LayoutNode, id: string): string | undefined {
+  return collectPanels(root).find((p) => p.id === id)?.originProjectId;
+}
+
+/**
+ * 048 FR-129 — the project an editor this open creates or reuses must belong to, or `undefined` for
+ * "the layout's own", which is every main-window open.
+ *
+ * Only a SUB-WORKSPACE window answers anything else. There the caller's `ownerProjectId` wins; without
+ * one, the tab's active panel speaks for the file — a link followed from a project's terminal or
+ * preview, a Find in Files row, a drop — when that panel belongs to a project. A panel the
+ * sub-workspace itself owns gives no project, and the open stays sub-workspace-owned, as before.
+ */
+function openOwner(ws: Ws, tabId: string, ownerProjectId: string | undefined): string | undefined {
+  const layout = ws.layout;
+  if (!layout || SubWorkspaceWorkspaceClient.subWorkspaceIdOf(layout.projectId) === null) return undefined;
+  if (ownerProjectId !== undefined) return ownerProjectId;
+  const tab = layout.tabs.find((t) => t.id === tabId);
+  const active = tab ? effectiveActivePanelId(tab) : undefined;
+  const origin = tab && active ? originOf(tab.root, active) : undefined;
+  if (origin === undefined || SubWorkspaceWorkspaceClient.subWorkspaceIdOf(origin) !== null) return undefined;
+  return origin;
+}
+
 /**
  * Open `absPath` into a specific tab's editor (Open In menu / click). Focuses the
  * existing editor if the file is already open anywhere (one buffer, FR-011a), else
@@ -177,17 +204,27 @@ export async function openFileInTab(
    * 047 FR-083 — flash the panel the file lands in. Set by the File Explorer routes, whose opens leave the
    * keyboard in the tree (FR-081) and so need another way to show where the file went.
    */
-  opts: { flash?: boolean } = {},
+  opts: {
+    flash?: boolean;
+    /**
+     * 048 FR-129 — the project the file belongs to (Quick Open: the project whose root it listed).
+     * Read ONLY in a sub-workspace window, where an editor created without it would be owned by the
+     * sub-workspace and refuse the file (006 FR-036). Absent there, it is derived from the tab's active
+     * panel; in the main window it is ignored and the layout's project owns the editor, as ever.
+     */
+    ownerProjectId?: string;
+  } = {},
 ): Promise<boolean> {
   const landedAt = (panelId: string): string => {
     if (opts.flash === true) requestPanelFlash(panelId);
     return panelId;
   };
+  const owner = openOwner(ws, tabId, opts.ownerProjectId);
   // 1) Already open anywhere → focus that one editor (no second buffer, FR-011a / one-doc-one-state
   //    #68). This holds regardless of the open-target preference (US7 / FR-027).
   //    Counts as opened: the file the caller asked for is what the user is now looking at, whether
   //    this window raised it or UI-main raised the window holding it.
-  const decision = await openDecisionFor(ws, absPath);
+  const decision = await openDecisionFor(ws, absPath, owner);
   if (decision?.action === 'focus') {
     // A panel in another window is raised by main; only one here can be flashed.
     if (focusPanelIfLocal(ws, decision.panelId)) landedAt(decision.panelId);
@@ -215,23 +252,27 @@ export async function openFileInTab(
   // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
   // rather than reusing the tab's last active editor.
   if (openTarget === 'new') {
-    void revealRange(landedAt(openFileInNewEditor(ws, tabId, absPath)), range);
+    void revealRange(landedAt(openFileInNewEditor(ws, tabId, absPath, owner)), range);
     return true;
   }
 
   // 2) Resolve the target editor: the tab's last active editor, else any editor in
   //    the tab, else create the tab's single dedicated editor (FR-010).
-  const editorsHere = editorPanelsInTab(tab.root);
+  //    048 FR-129 — with an owner named, only an editor THAT project owns may take the file: a
+  //    sub-workspace-owned one would refuse it, and another project's would breach 006 FR-036.
+  const editorsHere = editorPanelsInTab(tab.root).filter(
+    (id) => owner === undefined || originOf(tab.root, id) === owner,
+  );
   const last = getLastActiveEditor(tabId);
   const targetId = last && editorsHere.includes(last) ? last : editorsHere[0];
 
   if (!targetId) {
-    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath)), range);
+    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath, owner)), range);
     return true;
   }
 
   if (!getEditorActions(targetId)) {
-    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath)), range);
+    void revealRange(landedAt(createDedicatedEditor(ws, tabId, absPath, owner)), range);
     return true;
   }
 
@@ -320,6 +361,6 @@ export async function openFileInPanel(
  * "New Editor", FR-072). The caller gates on the file not already being open
  * anywhere (app-wide one-buffer, FR-011a), so no focus/reuse path is needed.
  */
-export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string): string {
-  return createDedicatedEditor(ws, tabId, absPath);
+export function openFileInNewEditor(ws: Ws, tabId: string, absPath: string, ownerProjectId?: string): string {
+  return createDedicatedEditor(ws, tabId, absPath, ownerProjectId);
 }

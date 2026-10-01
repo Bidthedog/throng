@@ -76,7 +76,31 @@ export interface ChordKeyEvent extends ChordEventLike {
 }
 
 /** What the pending indicator shows — a prefix awaiting its next stroke, or a just-failed one. */
-export type ChordIndicator = { readonly kind: 'pending' | 'unbound'; readonly keys: string } | null;
+/**
+ * What the pending indicator shows. `'unavailable'` (048 FR-092) is never published by the engine
+ * itself: the window dispatcher raises it for a chord whose command has nothing to act on in a
+ * sub-workspace window, through the same overlay, so chord feedback has one surface.
+ */
+export type ChordIndicator = {
+  readonly kind: 'pending' | 'unbound' | 'unavailable';
+  readonly keys: string;
+} | null;
+
+/**
+ * Whether letting go of a first-stroke modifier ends the prefix (048 R4).
+ *
+ * - `'carried'` (the default) — 046 FR-124: one continuous press. Every key after the first must still
+ *   hold every modifier the first held; releasing one ends the prefix silently. The editor and preview
+ *   hosts use this.
+ * - `'released-ok'` — 048 FR-020a: the window host's split chord takes its arrow with the first
+ *   stroke's modifiers held OR released, so a release neither ends the prefix nor is checked on the
+ *   next key.
+ */
+export type ChordModifierPolicy = 'carried' | 'released-ok';
+
+export interface ChordEngineOptions {
+  readonly modifierPolicy?: ChordModifierPolicy;
+}
 
 /**
  * What a host supplies: its OWN key-matching (over its own bindings and its own notion of "scope"),
@@ -115,7 +139,15 @@ export class ChordEngine<TPrefix> {
   /** The indicator this engine last published, so the next keydown can clear a stale one (below). */
   private indicatorShown: ChordIndicator = null;
 
-  constructor(private readonly host: ChordEngineHost<TPrefix>) {}
+  /** 048 R4 — `'released-ok'`: modifier release is not an ending, and `holdsCarried` is not consulted. */
+  private readonly releasedOk: boolean;
+
+  constructor(
+    private readonly host: ChordEngineHost<TPrefix>,
+    options: ChordEngineOptions = {},
+  ) {
+    this.releasedOk = options.modifierPolicy === 'released-ok';
+  }
 
   /**
    * Called by the host's OWN matched binding, synchronously, when a stroke begins or extends a
@@ -159,7 +191,7 @@ export class ChordEngine<TPrefix> {
     }
     // FR-124 — a first-key modifier no longer held (its keyup went elsewhere) ended the prefix
     // already: end it silently, and this key is handled as it would be with no prefix.
-    if (!holdsCarried(e, this.carried)) {
+    if (!this.releasedOk && !holdsCarried(e, this.carried)) {
       this.end();
       return this.keydown(e);
     }
@@ -172,7 +204,11 @@ export class ChordEngine<TPrefix> {
     }
     // Completes nothing: consumed, typed nowhere, and reported (VS Code's behaviour) — every key
     // pressed, named as the Key Bindings editor writes the chord (`Ctrl+E,W,X`).
-    const keys = chordLabel([...this.pendingPhysical, strokeLabel(e)]);
+    // 048 FR-020a — under `'released-ok'` the first stroke's modifiers count as held whether or not
+    // they still are, so the key is NAMED as carrying them: `Ctrl+Shift+Alt+End,X` for an `X` pressed
+    // after letting go, exactly as for one pressed with them held (`formatChord` refuses a later
+    // stroke that lacks a first-stroke modifier, which would otherwise fall back to a comma list).
+    const keys = chordLabel([...this.pendingPhysical, strokeLabel(this.releasedOk ? withCarried(e, this.carried) : e)]);
     this.pending = null;
     this.pendingPhysical = [];
     this.carried = NO_CARRIED;
@@ -181,8 +217,20 @@ export class ChordEngine<TPrefix> {
     return consume(e);
   }
 
+  /**
+   * 048 FR-092 — a host's own notice on this engine's indicator (the window host's `unavailable`),
+   * ending any prefix first. It lives exactly as an unbound key's report does: {@link UNBOUND_NOTICE_MS},
+   * or until the next key, whichever is first — so chord feedback has one lifetime rule, not two.
+   */
+  notify(indicator: NonNullable<ChordIndicator>): void {
+    this.end();
+    this.arm(UNBOUND_NOTICE_MS);
+    this.setIndicator(indicator);
+  }
+
   /** FR-124 — letting go of a first-key modifier while pending ends the prefix, silently. */
   keyup(e: ChordEventLike): void {
+    if (this.releasedOk) return;
     if (this.pending !== null && releasesCarried(this.carried, e)) this.end();
   }
 
@@ -204,6 +252,20 @@ export class ChordEngine<TPrefix> {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.end(), ms);
   }
+}
+
+/** `e` with every `carried` modifier held — fields copied by name, since a DOM event's are getters. */
+function withCarried(e: ChordEventLike, carried: CarriedModifiers): ChordEventLike {
+  const getModifierState = e.getModifierState;
+  return {
+    key: e.key,
+    code: e.code,
+    ctrlKey: e.ctrlKey || carried.ctrl,
+    altKey: e.altKey || carried.alt,
+    shiftKey: e.shiftKey || carried.shift,
+    metaKey: (e.metaKey ?? false) || carried.meta,
+    ...(getModifierState ? { getModifierState: (k: 'NumLock') => getModifierState.call(e, k) } : {}),
+  };
 }
 
 function consume(e: ChordKeyEvent): true {

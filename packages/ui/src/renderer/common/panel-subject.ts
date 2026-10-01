@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import { collectPanels, type NoticeSubject } from '@throng/core';
 
+import { useEditorStateVersion } from '../editor/editor-state.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useTerminalTitleVersion } from '../terminal/title-store.js';
+import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
 
 /**
  * 030 US2 (#195) — WHERE A PANEL IS, so a notice can say which one it means.
@@ -18,7 +21,7 @@ import { useWorkspace } from '../state/workspace-store.js';
  * parts, never a string.
  */
 export interface PanelPlace {
-  /** The panel's displayed title. */
+  /** The panel's displayed title — the one its header shows (048 FR-032), not the stored one. */
   name: string;
   /** Its tab's title, where the panel was found in one. */
   tab?: string;
@@ -37,19 +40,29 @@ export interface PanelPlace {
 export function usePanelPlace(panelId: string): PanelPlace | undefined {
   const { layout } = useWorkspace();
   const { projects } = useProjects();
+  /*
+   * 048 FR-032 / FR-130 — the panel's NAME is what its header shows, so it moves when the header's
+   * does: a shell announcing a window title, an editor opening a file. The two store versions are
+   * memo inputs for exactly that; the values themselves are read inside `currentPanelTitle`.
+   */
+  const terminalTitles = useTerminalTitleVersion();
+  const editorStates = useEditorStateVersion();
   return useMemo(() => {
     if (!layout) return undefined;
     for (const tab of layout.tabs) {
       const panel = collectPanels(tab.root).find((p) => p.id === panelId);
       if (!panel) continue;
       return {
-        name: panel.title,
+        // Never `panel.title`: that is a generated fallback ("Blank Panel 3") kept only for
+        // uniqueness, and *Copy details* would end in it where the header says "Command Prompt".
+        name: currentPanelTitle(panel),
         tab: tab.title,
         project: projects.find((p) => p.id === panel.originProjectId)?.name,
       };
     }
     return undefined;
-  }, [layout, projects, panelId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the versions are change signals, read via the stores
+  }, [layout, projects, panelId, terminalTitles, editorStates]);
 }
 
 /** The panel itself as a notice subject — `{ kind: 'none' }` when it is no longer in the layout. */

@@ -32,6 +32,7 @@
  */
 import type { PreviewCopyFormat, PreviewLink } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -51,6 +52,8 @@ export interface PreviewEditorRouteItem {
 }
 
 export interface PreviewContentMenuArgs {
+  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
+  split?: SplitMenuArgs;
   /** Whether the body's selection was collapsed when the menu was asked for. */
   selectionEmpty: boolean;
   /** Omitted or `null`: no Content section (a provider without selectable text). */
@@ -230,5 +233,5 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
     });
   }
 
-  return items;
+  return withSplit(items, args.split);
 }

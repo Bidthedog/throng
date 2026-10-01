@@ -52,9 +52,23 @@ function tabOfPanel(ws: WorkspaceApi, panelId: string): string | undefined {
   return ws.layout?.tabs.find((tab) => collectPanels(tab.root).some((p) => p.id === panelId))?.id;
 }
 
-/** Main's one-buffer and refusal decision for `absPath` (FR-011a, 041 FR-013). `undefined` without a bridge. */
-export async function openDecisionFor(ws: WorkspaceApi, absPath: string): Promise<OpenDecision | undefined> {
-  return window.throng?.editor?.openInto({ absPath, ownerKind: 'project', ownerProjectId: ws.layout?.projectId });
+/**
+ * Main's one-buffer and refusal decision for `absPath` (FR-011a, 041 FR-013). `undefined` without a bridge.
+ *
+ * 048 FR-129 — `ownerProjectId` names the project the editor will belong to when that is not the
+ * layout's own (a sub-workspace window opening a project's file), so main judges the file against that
+ * project's root rather than the sub-workspace's synthetic id.
+ */
+export async function openDecisionFor(
+  ws: WorkspaceApi,
+  absPath: string,
+  ownerProjectId?: string,
+): Promise<OpenDecision | undefined> {
+  return window.throng?.editor?.openInto({
+    absPath,
+    ownerKind: 'project',
+    ownerProjectId: ownerProjectId ?? ws.layout?.projectId,
+  });
 }
 
 /**
@@ -112,7 +126,12 @@ export async function replaceInEditorPanel(
       const tabId = tabOfPanel(ws, panelId);
       if (!tabId) return { outcome: 'cancelled', panelId };
       // The new panel's first load is an ordinary one: its history starts with this file (FR-106a).
-      return { outcome: 'openedInNew', panelId: createDedicatedEditor(ws, tabId, absPath) };
+      // It belongs to whoever owned the panel it stands in for (048 FR-129): the same project in a
+      // sub-workspace window, and the layout's project — as ever — in the main one.
+      const owner = ws.layout?.tabs
+        .flatMap((tab) => collectPanels(tab.root))
+        .find((p) => p.id === panelId)?.originProjectId;
+      return { outcome: 'openedInNew', panelId: createDedicatedEditor(ws, tabId, absPath, owner) };
     }
     if (choice === 'save' && !(await actions.save())) {
       return { outcome: 'saveFailed', panelId }; // a failed save must not be followed by the open
@@ -133,12 +152,19 @@ export async function replaceInEditorPanel(
  *
  * Returns the panel it made. 043 FR-038 needs that id: the match has to be selected in the editor the file
  * actually landed in, and this is the only code that knows which one that is.
+ *
+ * 048 FR-129 — `originProjectId` is the project the editor belongs to. Absent, it is the layout's own:
+ * the main window's project, or — in a sub-workspace window — the sub-workspace, which 006 FR-036
+ * forbids from holding a project's file. So a sub-workspace route opening a project's file passes that
+ * project.
  */
-export function createDedicatedEditor(ws: WorkspaceApi, tabId: string, absPath: string): string {
-  const newId = ws.addPanel(tabId);
-  // A programmatically opened editor must NOT open in rename mode (that would steal focus from the tree /
-  // editor). Only user-added Panels rename-on-add (FR-041).
-  ws.clearLastAddedPanel();
+export function createDedicatedEditor(
+  ws: WorkspaceApi,
+  tabId: string,
+  absPath: string,
+  originProjectId?: string,
+): string {
+  const newId = ws.addPanel(tabId, originProjectId);
   ws.setPanelType(newId, 'editor', { filePath: absPath });
   window.throng?.panel?.notifyTyped?.(newId, 'editor', { filePath: absPath });
   ws.setActivePanel(tabId, newId);

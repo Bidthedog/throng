@@ -21,7 +21,12 @@
  * version and then reads the values plainly, which is the same information with a fixed number of
  * hook calls.
  */
-import { defaultPanelTypeRegistry, panelDisplayTitle, type Panel } from '@throng/core';
+import {
+  defaultPanelTypeRegistry,
+  panelDisplayTitle,
+  type Panel,
+  type PanelTitleSources,
+} from '@throng/core';
 import { getEditorState, useEditorStateVersion } from '../editor/editor-state.js';
 import { getTerminalTitle, useTerminalTitleVersion } from '../terminal/title-store.js';
 
@@ -37,6 +42,28 @@ function editorFilePath(panel: Panel): string | null {
   const live = getEditorState(panel.id)?.filePath;
   if (typeof live === 'string' && live.length > 0) return live;
   return typeof panel.config?.filePath === 'string' ? panel.config.filePath : null;
+}
+
+/**
+ * The live sources `panelDisplayTitle` names `panel` from, read from the two stores RIGHT NOW,
+ * without subscribing to either.
+ *
+ * A plain function, not a hook, so a surface that names a panel at a MOMENT rather than on a render
+ * — a failure notice raised from a timer or an IPC answer (048 FR-032, T084) — derives exactly the
+ * sources the header and this popover do instead of a second copy of them. A caller that renders the
+ * name subscribes itself (`useTerminalTitleVersion` / `useEditorStateVersion`), as the hook below does.
+ */
+export function panelTitleSources(panel: Panel): PanelTitleSources {
+  return { terminalTitle: getTerminalTitle(panel.id), editorFilePath: editorFilePath(panel) };
+}
+
+/**
+ * The name `panel` wears at this moment (048 FR-032 / FR-130) — what its header shows, never the
+ * raw stored `panel.title`, which is a generated fallback ("Blank Panel 3") that exists only to keep
+ * names unique.
+ */
+export function currentPanelTitle(panel: Panel): string {
+  return panelDisplayTitle(panel, panelTitleSources(panel));
 }
 
 /** One panel's row in a list that describes a tab. */
@@ -86,11 +113,7 @@ export function usePanelDisplayNames(panels: Panel[], maxNameLength?: number): P
   useEditorStateVersion();
 
   return panels.map((panel) => ({
-    name: panelDisplayTitle(
-      panel,
-      { terminalTitle: getTerminalTitle(panel.id), editorFilePath: editorFilePath(panel) },
-      maxNameLength,
-    ),
+    name: panelDisplayTitle(panel, panelTitleSources(panel), maxNameLength),
     ...panelType(panel),
   }));
 }

@@ -92,7 +92,6 @@ export interface PreviewPlacementWorkspace {
    * target's project; `null` when the layout does not hold the target.
    */
   addPanelBeside(targetId: string, edge: 'left' | 'right', originProjectId?: string): string | null;
-  clearLastAddedPanel(): void;
   setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void;
   setActiveTab(tabId: string): void;
   setActivePanel(tabId: string, panelId: string): void;
@@ -191,8 +190,7 @@ function placePreview(
 
   let panelId: string | null;
   let tabId: string | undefined;
-  // 047 FR-077 — an empty panel a file was dropped on takes the preview itself: no panel is added, and
-  // `clearLastAddedPanel` below is skipped with it (no panel was user-added, or added at all).
+  // 047 FR-077 — an empty panel a file was dropped on takes the preview itself: no panel is added.
   const intoPanel = into === null ? undefined : panelsOf(layout).find((p) => p.id === into && p.kind === undefined);
   if (intoPanel !== undefined) {
     panelId = intoPanel.id;
@@ -206,8 +204,6 @@ function placePreview(
   }
   if (panelId === null || tabId === undefined) return null;
 
-  // Only a USER-added panel opens in rename mode (FR-041); one a command created must not.
-  if (intoPanel === undefined) ws.clearLastAddedPanel();
   // Before the type, so the attach the preview's mount makes carries it.
   setPreviewReservation(panelId, reservation);
   // This window created this view, so this window ends the preview when it closes it — whichever project

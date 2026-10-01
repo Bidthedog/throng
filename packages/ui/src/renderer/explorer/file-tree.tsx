@@ -396,8 +396,7 @@ export function FileTree({
    * 033 US3 (T081, FR-031/FR-033/FR-033a) — the launch, in the order contract §A.2 states it.
    *
    * It is `createDedicatedEditor`'s sequence with a terminal config, and every step is load-bearing:
-   * `clearLastAddedPanel` is what stops the new panel opening in RENAME mode (only a user-added panel
-   * renames on add), `notifyTyped` mirrors the typing to other windows, and `setActivePanel` before
+   * `notifyTyped` mirrors the typing to other windows, and `setActivePanel` before
    * focus is what lets the terminal's own mount-time focus fire — see the note on `focusPanel` below.
    */
   /*
@@ -434,7 +433,6 @@ export function FileTree({
         startDirectory,
       };
       const newId = ws.addPanel(activeTabId);
-      ws.clearLastAddedPanel();
       ws.setPanelType(newId, 'terminal', config);
       window.throng?.panel?.notifyTyped?.(newId, 'terminal', config);
       ws.setActivePanel(activeTabId, newId);

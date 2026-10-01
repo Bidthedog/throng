@@ -176,6 +176,7 @@ import {
   applyPreviewUpdate,
   clearPreviewViewState,
   getPreviewFailure,
+  keepDetachedViewState,
   getPreviewState,
   setPreviewFailure,
   usePreviewFailure,
@@ -848,9 +849,17 @@ export function PreviewPanel({
 
   /** This render's heading tree (`PreviewBodyProps.onHeadings`), for the pop-down and `onJump`. */
   const [headings, setHeadings] = useState<readonly DocumentSymbol[]>([]);
+  /**
+   * The drawn document's headings as the body last REPORTED them — written here, at the report, and not from
+   * the state on this chrome's next render. The body reports in the same task as it inserts the document, and
+   * the state only lands a render later: a menu opened over text already on screen in between read no
+   * headings, and offered its fold rows disabled or not at all (the `preview-fold-menu` flake, 048). Never
+   * assigned from `headings` at render either, where a render that has not yet taken the update would write
+   * the older list back over the newer one.
+   */
   const headingsRef = useRef<readonly DocumentSymbol[]>(headings);
-  headingsRef.current = headings;
   const onHeadings = useCallback((symbols: readonly DocumentSymbol[]): void => {
+    headingsRef.current = symbols;
     setHeadings(symbols);
   }, []);
 
@@ -1448,10 +1457,16 @@ export function PreviewPanel({
       // A reader at the top leaves the TOP on the entry, never "nothing" (u3b concern 1): an entry with no
       // place cannot be stepped back onto visibly.
       const place = placeLeft();
-      if (place !== undefined) window.throng?.history?.setViewState(panelId, place);
-      // The place this view last restored is not where the reader is now: a remount waits for the attach
-      // answer, which carries the place just stored, instead of first jumping to the old one (FR-107).
-      clearPreviewViewState(panelId);
+      if (place === undefined) {
+        // Nothing drawn to read: the place this view last restored is not where the reader is now, so a
+        // remount waits for the attach answer instead of first jumping to the old one (FR-107).
+        clearPreviewViewState(panelId);
+        return;
+      }
+      window.throng?.history?.setViewState(panelId, place);
+      // 048 FR-083 (#459) — and keeps it here, so a remount draws AT it rather than at the top while the attach
+      // is in flight (a view hidden again in that window stored the top). Restored under `keep` (FR-084).
+      keepDetachedViewState(panelId, place);
     },
     [panelId, placeLeft],
   );
@@ -1611,11 +1626,16 @@ export function PreviewPanel({
     return true;
   }, []);
 
-  /** FR-121e, FR-121h — how the body treats the place the store holds (data-model §15.2). */
+  /**
+   * FR-121e, FR-121h — how the body treats the place the store holds (data-model §15.2). 048 FR-084 refines
+   * FR-121h: a place this view kept when its tab was hidden is its own, and comes back as it stands.
+   */
   const placePolicy: PreviewBodyProps['placePolicy'] =
     state?.viewState === undefined
       ? 'restore'
-      : state.viewStateSource === 'attach'
+      : state.viewStateSource === 'detach'
+        ? 'keep'
+        : state.viewStateSource === 'attach'
         ? syncing
           ? 'editorLine'
           : 'restore'
@@ -1759,6 +1779,8 @@ export function PreviewPanel({
         goToHeading: { run: openHeadingOutlineHandler, chord: firstBinding(keybindings, 'preview.goToHeading') },
         // 047 US3 (T048, FR-036) — the fold rows, resolved at the point the menu opened.
         fold: buildFoldMenuArgs(target),
+        // 048 — the Split submenu, splitting this panel.
+        split: { panelId, keybindings },
       });
       if (items.length > 0) openMenu(point.x, point.y, items);
     },
@@ -2004,6 +2026,7 @@ export function PreviewPanel({
             providerSettings={settings.editor.previews.providers[state.providerId] ?? NO_PROVIDER_SETTINGS}
             linkWording={linkWording}
             initialViewState={state.viewState}
+            initialViewStateBasis={state.viewStateBasis}
             navigationSeq={state.navigationSeq}
             syncLine={syncLine}
             syncEcho={syncEcho}

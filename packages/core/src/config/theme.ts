@@ -516,10 +516,6 @@ export const THRONG_THEME: Theme = {
        names rather than as a second vocabulary for it. An eye, because "these are visible to me"
        is what the flipped state means — and deliberately not `search` 🔍, which is the find bar's. */
     showHidden: '👁',
-    /* 023. Reserved for a "Reset Name" menu item the workspace will add — return a renamed tab or
-       project to its original name. A rotated arrow that is NOT `retry` ↻ (re-run a failed action),
-       `revert` ↶ (undo one preference) or `undo` ↩ (editor undo), so the four never blur together. */
-    resetName: '↺',
     /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
        the strip is a themeable icon carrying a hover title — never a text label, never an inline
        vector (SC-002).
@@ -551,7 +547,7 @@ export const THRONG_THEME: Theme = {
 
        `refresh` is the preview header's Refresh — re-read the source now. It is NOT `retry` ↻, which
        means "try again" and is offered BESIDE Refresh while the failure banner is up (030 FR-042c), so
-       the two would otherwise sit next to each other wearing the same arrow; nor `resetName` ↺.
+       the two would otherwise sit next to each other wearing the same arrow.
 
        `navigateBack` / `navigateForward` are the header's history buttons and menu items (FR-104,
        FR-111). Plain horizontal arrows: not `chevronLeft` ‹ / `chevronRight` ›, which step the tab
