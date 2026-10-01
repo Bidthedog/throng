@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, quiesced, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, quiesced, cleanupTemp, splitPanelViaMenu } from './harness.js';
 
 /** A project root holding the named files, each with its own unmistakable content. */
 function makeProject(prefix: string, files: Record<string, string>): string {
@@ -162,10 +162,9 @@ test('switching to a second project restores ITS files, not the one the last pro
         const a1 = await firstPanelId(win);
         await openFileInPanel(win, a1, 'alpha-one.txt');
 
-        await win.getByTestId(`panel-add-${a1}`).click();
+        await splitPanelViaMenu(win, a1);
         await expect(win.locator('.panel-box')).toHaveCount(2);
         const a2 = (await panelIds(win)).find((id) => id !== a1) ?? '';
-        await win.keyboard.press('Escape'); // leave the new panel's rename box untouched
         await openFileInPanel(win, a2, 'alpha-two.txt');
 
         await win.getByTestId('tab-add').click();

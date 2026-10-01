@@ -37,18 +37,7 @@
  * until the toggle arrived; the move is a consequence of that assertion, not of the file's age.
  */
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  firstPanelId,
-  panelIds,
-  focusEditor,
-  commitPanelRename,
-  commitTabRename,
-  settle,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, panelIds, focusEditor, commitTabRename, settle, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 import { createDeepTree, cleanupDeepTree, DEEP_TREE } from './helpers/deep-tree.js';
 import { openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
 
@@ -140,10 +129,8 @@ async function chooseNewEditorTarget(win: Page): Promise<void> {
 /** Add a sibling panel to `pid` and make it an editor. Returns the new panel's id. */
 async function addEditorPanel(win: Page, pid: string): Promise<string> {
   const before = await win.locator('.panel-box').count();
-  await win.getByTestId(`panel-add-${pid}`).click();
+  await splitPanelViaMenu(win, pid);
   await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-  // A freshly added panel opens in rename mode; an open rename input eats the keys that follow.
-  await commitPanelRename(win);
   const next = (await panelIds(win)).filter((id) => id !== pid)[0];
   await win.getByTestId(`panel-type-select-${next}`).selectOption('editor');
   await win.getByTestId(`panel-type-confirm-${next}`).click();

@@ -214,7 +214,7 @@ test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in 
         const pid = await newPanelId(win, before);
         // B1 — it is the ACTIVE panel of the tab it landed in.
         await expect(win.getByTestId(`panel-${pid}`)).toHaveAttribute('data-active', 'true');
-        // B2 / AS-2a — and it did NOT open in rename mode, which is what `clearLastAddedPanel` buys.
+        // B2 / AS-2a — and it did NOT open in rename mode (no panel does any more, 048 FR-002).
         await expect(win.getByTestId(`panel-rename-input-${pid}`)).toHaveCount(0);
         // It is a terminal, already typed — no picker form to confirm (FR-033).
         await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 30_000 });

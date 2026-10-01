@@ -157,11 +157,9 @@ test('the save dialog defaults the file name to the Panel name (FR-083)', { tag:
     await createProject(win, 'Fb2DefaultName', root);
     const pid = await newEditor(win);
 
-    // Rename the panel to a known name.
-    await win.getByTestId(`panel-handle-${pid}`).dblclick();
-    const rename = win.getByTestId(`panel-rename-input-${pid}`);
-    await rename.fill('MyDocument');
-    await rename.press('Enter');
+    // Panels cannot be renamed (048), so the name to expect is whatever the header shows.
+    const panelName = ((await win.getByTestId(`panel-title-${pid}`).textContent()) ?? '').trim();
+    expect(panelName, 'the new editor panel shows no name').not.toBe('');
 
     // Capture the save-dialog default path.
     await app.evaluate(({ dialog }) => {
@@ -181,7 +179,7 @@ test('the save dialog defaults the file name to the Panel name (FR-083)', { tag:
       .poll(async () => app.evaluate(() => (globalThis as Record<string, unknown>).__savePath), {
         timeout: 6000,
       })
-      .toContain('MyDocument');
+      .toContain(panelName);
   } finally {
     cleanupTemp(root);
   }

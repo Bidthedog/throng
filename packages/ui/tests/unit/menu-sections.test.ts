@@ -32,6 +32,7 @@ import {
 import type { EditorView } from '@codemirror/view';
 import type { MenuAction, MenuItem } from '../../src/renderer/workspace/context-menu.js';
 import { withDividers } from '../../src/renderer/workspace/menu-dividers.js';
+import { placeholderContentMenu } from '../../src/renderer/workspace/split-menu.js';
 import { buildContextMenuItems } from '../../src/renderer/explorer/context-menu-items.js';
 import { editorContentMenu } from '../../src/renderer/editor/content-menu.js';
 import {
@@ -253,8 +254,7 @@ const panel = (over: Partial<Panel>): Panel => ({
 });
 
 const panelActions = {
-  beginRename: noop,
-  resetName: noop,
+  split: noop,
   zoomIn: noop,
   zoomOut: noop,
   resetZoom: noop,
@@ -634,6 +634,127 @@ describe('every menu builder declares its sections, and the dividers are derived
   });
 });
 
+/*
+ * 048 FR-015 — Split is in CREATE on the panel header menu and on every panel CONTENT menu, with the
+ * same four children in the same order, each showing its chord. The untyped placeholder's new content
+ * menu carries Split alone, so it draws no divider at all.
+ *
+ * `assertSectioned` above already walks these fixtures (each hands over `split`), so this is the pin on
+ * WHERE the row lands and WHAT it holds — a Split that moved to Navigate would still be a well-formed
+ * menu.
+ */
+describe('Split sits in Create on every panel menu (048 FR-015)', () => {
+  const EXPECTED = ['Split Down', 'Split Up', 'Split Right', 'Split Left'];
+  const SPLIT = { panelId: 'p1', keybindings: DEFAULT_KEYBINDINGS };
+  const splitRow = (items: MenuAction[]): MenuAction | undefined => items.find((i) => i.label === 'Split');
+
+  const MENUS: readonly { name: string; build: () => MenuAction[] }[] = [
+    { name: 'panel header — untyped', build: () => panelHeader({ panel: panel({}) }) },
+    { name: 'panel header — editor', build: () => panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } }) },
+    { name: 'panel header — terminal', build: () => panelHeader({ panel: panel({ kind: 'terminal' }) }) },
+    { name: 'panel header — preview', build: () => panelHeader({ panel: previewPanel(), preview: textPreview(false) }) },
+    { name: 'panel header — Find in Files', build: () => panelHeader({ panel: panel({ kind: 'findInFiles' }) }) },
+    {
+      name: 'editor content menu',
+      build: () =>
+        editorContentMenu({
+          view: {} as EditorView,
+          panelId: 'p1',
+          viewId: 'v1',
+          lineEnding: () => 'lf',
+          wordWrap: { on: true, toggle: noop },
+          gotoLine: { open: noop },
+          split: SPLIT,
+        }),
+    },
+    {
+      name: 'terminal content menu',
+      build: () =>
+        terminalContentMenu({
+          selection: '',
+          startFailure: false,
+          split: SPLIT,
+          actions: {
+            copySelection: noop,
+            paste: noop,
+            redraw: noop,
+            tryAgain: noop,
+            reloadTerminal: noop,
+            copyDetails: noop,
+            clearPanelType: noop,
+          },
+        }),
+    },
+    {
+      name: 'preview content menu',
+      build: () =>
+        previewContentMenu({
+          selectionEmpty: false,
+          content: { copyFormat: 'rich', copy: noop, selectAll: noop },
+          editorRoute: { parented: false, run: noop },
+          syncScroll: { on: false, toggle: noop },
+          find: { run: noop },
+          goToHeading: { run: noop },
+          split: SPLIT,
+        }),
+    },
+    {
+      name: 'Find in Files content menu',
+      build: () =>
+        findInFilesContentMenu({
+          running: false,
+          replaceEnabled: false,
+          grouping: 'file',
+          keybindings: DEFAULT_KEYBINDINGS,
+          split: SPLIT,
+          actions: {
+            run: noop,
+            cancel: noop,
+            toggleReplace: noop,
+            setGrouping: noop,
+            focusScope: noop,
+            setAllCollapsed: noop,
+          },
+        }),
+    },
+    { name: 'untyped placeholder content menu', build: () => placeholderContentMenu(SPLIT) },
+  ];
+
+  it.each(MENUS)('$name: one Split row in create, four children in order, each with its chord', ({ name, build }) => {
+    const items = build();
+    assertSectioned(items, name);
+    const rows = items.filter((i) => i.label === 'Split');
+    expect(rows, `${name}: exactly one Split row`).toHaveLength(1);
+    const row = splitRow(items)!;
+    expect(row.section).toBe('create');
+    expect(row.submenu?.map((i) => i.label)).toEqual(EXPECTED);
+    expect(row.submenu?.every((i) => i.section === 'create' && typeof i.shortcut === 'string' && i.shortcut.length > 0)).toBe(
+      true,
+    );
+  });
+
+  it('the placeholder menu is Split alone: one section, so no divider', () => {
+    const items = placeholderContentMenu({ panelId: 'p1', keybindings: DEFAULT_KEYBINDINGS });
+    expect(shapeOf(items)).toEqual(['Split']);
+    expect(separatorIndices(items)).toEqual([]);
+  });
+
+  it('a content menu built without `split` draws no Split row (the row is the caller’s to hand over)', () => {
+    expect(
+      splitRow(
+        editorContentMenu({
+          view: {} as EditorView,
+          panelId: 'p1',
+          viewId: 'v1',
+          lineEnding: () => 'lf',
+          wordWrap: { on: true, toggle: noop },
+          gotoLine: { open: noop },
+        }),
+      ),
+    ).toBeUndefined();
+  });
+});
+
 describe('zero movement — the Files & Folders menu draws its dividers exactly where it always has', () => {
   /*
    * The evidence that the vocabulary really was derived from this menu (contracts §3.1). These four
@@ -824,7 +945,7 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
  * draws every conditional the editor adds.
  */
 describe('the panel header menu draws exactly the shape contracts/menu-sections.md §3.4 describes', () => {
-  it('an untyped panel: Rename · Destroy Panel · Send to Tab · Reset Name', () => {
+  it('an untyped panel: Split · Destroy Panel · Send to Tab (048: no Rename, no Reset Name)', () => {
     /*
      * 043 FR-062a — `Zoom` LEFT this shape, and the requirement is what removed it rather than a
      * tidy-up. The untyped placeholder has no zoom consumer: only `editor-panel.tsx` and
@@ -833,30 +954,30 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
      * greyed row, and `panel-header-zoom-menu.test.ts` holds the general correspondence.
      */
     expect(shapeOf(panelHeader({ panel: panel({}) }))).toEqual([
-      'Rename',
+      // 048 FR-015 — Split is in Create, the panel's only Create row, and Rename/Reset Name are gone (FR-030).
+      'Split',
       '—',
       'Destroy Panel',
       '—',
       'Send to Tab',
-      '—',
-      'Reset Name',
     ]);
   });
 
-  it('a Find in Files panel: Destroy Panel · Send to Tab · Zoom — Content empty (FR-061)', () => {
+  it('a Find in Files panel: Split · Destroy Panel · Send to Tab · Zoom — Content empty (FR-061)', () => {
     /*
      * The only shape in the table whose FIRST section is empty, which is why it is pinned: the
      * generic divider rule cannot tell a menu that lost its opening section from one that lost it
      * and kept a rule where it used to be, and a menu that opens on a divider is what that looks
      * like on screen.
      *
-     * `Rename` is this kind's only Content row (FR-061 — the panel's identity is its query, so a
-     * user-chosen name would hide it), and `Reset Name` was its only other View & state row. `Zoom`
+     * Content is empty (there never was a Rename here, FR-061, and 048 removed it everywhere) and `Zoom`
      * stays, and that is FR-062a working in the POSITIVE direction: FR-062 gave this panel real
      * zoom, so offering the commands is now correct for exactly the reason offering them on the
-     * untyped placeholder is not.
+     * untyped placeholder is not. 048's Split sits in Create, which is the first section drawn.
      */
     expect(shapeOf(panelHeader({ panel: panel({ kind: 'findInFiles' }) }))).toEqual([
+      'Split',
+      '—',
       'Destroy Panel',
       '—',
       'Send to Tab',
@@ -868,9 +989,9 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
   /*
    * The chords the panel menu SHOWS (034 FR-045).
    *
-   * MIGRATED FROM the first half of `packages/ui/tests/e2e/panel-rename-key.e2e.ts:24`, which
-   * launched Electron, created a project, made an editor panel and opened a real context menu to
-   * assert `menu-item-Rename` contained the text "F2" and `menu-item-Zoom In` contained "Ctrl".
+   * MIGRATED FROM the first half of the retired `panel-rename-key.e2e.ts`, which launched Electron,
+   * created a project, made an editor panel and opened a real context menu to read the chord beside a
+   * row. (048 removed Rename, so the row it asserted is gone; the Zoom half and the new Split rows stay.)
    *
    * `panelHeaderMenu` is a pure function of its `keybindings` argument — `shortcut:
    * firstBinding(keybindings, …)` — so the menu's own claim is settled here, against
@@ -878,13 +999,20 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
    * every chord in the application, and would have passed with Zoom In showing Zoom Out's binding.
    *
    * What is NOT claimed here, and stays end-to-end: that this shortcut string reaches the RENDERED
-   * menu item. `menu-keyboard.test.ts` mounts the real menu, and the surviving E2E test presses the
-   * key for real.
+   * menu item. `menu-keyboard.test.ts` mounts the real menu.
    */
-  it('names the chord beside Rename and beside each Zoom item, and names the RIGHT one', () => {
+  it('names the chord beside each Split and each Zoom item, and names the RIGHT one', () => {
     const items = panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } });
 
-    expect(items.find((i) => i.label === 'Rename')?.shortcut).toBe('F2');
+    expect(
+      (items.find((i) => i.label === 'Split')?.submenu ?? []).map((i) => [i.label, i.shortcut]),
+      'each split item shows its OWN chord, in the contract’s order',
+    ).toEqual([
+      ['Split Down', 'Ctrl+Shift+Alt+End,ArrowDown'],
+      ['Split Up', 'Ctrl+Shift+Alt+End,ArrowUp'],
+      ['Split Right', 'Ctrl+Shift+Alt+End,ArrowRight'],
+      ['Split Left', 'Ctrl+Shift+Alt+End,ArrowLeft'],
+    ]);
 
     const zoom = items.find((i) => i.label === 'Zoom')?.submenu ?? [];
     expect(
@@ -903,12 +1031,12 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
   it('shows a REBOUND chord rather than the shipped one, so the menu teaches the live key', () => {
     /*
      * The half that makes the test above evidence rather than a restatement of the defaults table:
-     * a menu that hard-coded "F2" passes it perfectly and lies to every user who has rebound
-     * `panel.rename`. `firstBinding` is what this asserts, at the one call site that matters.
+     * a menu that hard-coded the default chord passes it perfectly and lies to every user who has rebound
+     * `panel.splitRight`. `firstBinding` is what this asserts, at the one call site that matters.
      */
     const rebound = {
       ...DEFAULT_KEYBINDINGS,
-      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'panel.rename': ['Ctrl+Shift+M'] },
+      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'panel.splitRight': ['Ctrl+Shift+M'] },
     };
     const items = panelHeaderMenu({
       panel: panel({}),
@@ -921,16 +1049,17 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       actions: panelActions,
     });
 
-    expect(items.find((i) => i.label === 'Rename')?.shortcut).toBe('Ctrl+Shift+M');
+    expect(items.find((i) => i.label === 'Split')?.submenu?.find((i) => i.label === 'Split Right')?.shortcut).toBe(
+      'Ctrl+Shift+M',
+    );
   });
 
-  it('an editor panel backed by a file: Destroy moves to the middle, Reset Name leaves Rename’s side', () => {
+  it('an editor panel backed by a file: Split in Create, Destroy in the middle', () => {
     const shape = shapeOf(
       panelHeader({ panel: panel({ kind: 'editor' }), editor: { dirty: false, hasFilePath: true } }),
     );
     expect(shape).toEqual([
       // Content — Save As… sits between Save and Revert, and Reload from disk closes the group.
-      'Rename',
       'Save',
       'Save As…',
       'Revert',
@@ -941,7 +1070,10 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Replace',
       'Replace All',
       '—',
-      // Destroy, alone, third — the same shape the Files & Folders menu has always had.
+      // 048 FR-015 — Split, alone in Create, between Content and Destroy.
+      'Split',
+      '—',
+      // Destroy, alone, after Create — the same shape the Files & Folders menu has always had.
       'Destroy Panel',
       '—',
       // Navigate — the two reveal items exist only for a panel with a file behind it.
@@ -953,8 +1085,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Forward',
       'Send to Tab',
       '—',
-      // View & state — Reset Name has left Rename's side, where the constitution names it.
-      'Reset Name',
+      // View & state.
       'Zoom',
     ]);
   });
@@ -988,7 +1119,6 @@ describe('the panel menu indexes the panel’s search commands (043 FR-015)', ()
     });
 
     expect(labelsIn(items, 'content')).toEqual([
-      'Rename',
       'Save',
       'Save As…',
       'Revert',
@@ -1007,14 +1137,14 @@ describe('the panel menu indexes the panel’s search commands (043 FR-015)', ()
      */
     const items = panelHeader({ panel: panel({ kind: 'terminal' }) });
 
-    expect(labelsIn(items, 'content')).toEqual(['Rename', 'Find']);
+    expect(labelsIn(items, 'content')).toEqual(['Find']);
     expect(items.map((i) => i.label)).not.toContain('Replace');
     expect(items.map((i) => i.label)).not.toContain('Replace All');
   });
 
   it('an untyped panel offers none of them', () => {
     const items = panelHeader({ panel: panel({}) });
-    expect(labelsIn(items, 'content')).toEqual(['Rename']);
+    expect(labelsIn(items, 'content')).toEqual([]);
   });
 
   it('each one SHOWS its bound chord, and shows its own', () => {
@@ -1109,7 +1239,6 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       history: { canGoBack: true, canGoForward: false },
     });
     expect(shapeOf(items)).toEqual([
-      'Rename',
       'Save',
       'Save As…',
       'Revert',
@@ -1117,6 +1246,8 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Find',
       'Replace',
       'Replace All',
+      '—',
+      'Split',
       '—',
       'Destroy Panel',
       '—',
@@ -1127,7 +1258,6 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Forward',
       'Send to Tab',
       '—',
-      'Reset Name',
       'Zoom',
       // 044 FR-122b — after Zoom, exactly where Open Preview is present (§2).
       'Synchronise Scrolling',
@@ -1143,7 +1273,6 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       syncScroll: true,
     });
     expect(shapeOf(items).slice(shapeOf(items).lastIndexOf('—') + 1)).toEqual([
-      'Reset Name',
       'Zoom',
       'Synchronise Scrolling ✓',
       'Try again',
@@ -1239,6 +1368,8 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
 describe('a preview panel’s header menu draws exactly contracts/menus-and-controls.md §1 (044 FR-033)', () => {
   it('a standalone text preview: Close · Navigate with Open in Editor, Back, Forward · Refresh, Zoom, Synchronise Scrolling', () => {
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(false) }))).toEqual([
+      'Split',
+      '—',
       'Close Panel',
       '—',
       'Reveal File in File Explorer',
@@ -1263,6 +1394,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
     expect(
       shapeOf(panelHeader({ panel: previewPanel(), preview: textPreview(true), detach: detachFixture })),
     ).toEqual([
+      'Split',
+      '—',
       'Close Panel',
       '—',
       'Reveal File in File Explorer',
@@ -1283,6 +1416,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
 
   it('a binary preview offers no route to an editor, and no Synchronise Scrolling (FR-015e, FR-122a)', () => {
     expect(shapeOf(panelHeader({ panel: previewPanel(), preview: binaryPreview, syncScroll: true }))).toEqual([
+      'Split',
+      '—',
       'Close Panel',
       '—',
       'Reveal File in File Explorer',
@@ -1323,6 +1458,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
   it('carries Try again, Copy details and Clear panel type in View & state while its banner is up', () => {
     const items = panelHeader({ panel: previewPanel(), preview: textPreview(false), panelFailure: true });
     expect(shapeOf(items)).toEqual([
+      'Split',
+      '—',
       'Close Panel',
       '—',
       'Reveal File in File Explorer',

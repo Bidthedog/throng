@@ -86,11 +86,6 @@ export function tabRenameCounter(win: Page, tabId: string): Locator {
   return win.getByTestId(`tabstrip-rename-count-${tabId}`);
 }
 
-/** The panel rename counter — the same control, the same limit (FR-035g). */
-export function panelRenameCounter(win: Page, panelId: string): Locator {
-  return win.getByTestId(`panel-rename-count-${panelId}`);
-}
-
 /**
  * The counter's text, or `null` when it is not shown.
  *

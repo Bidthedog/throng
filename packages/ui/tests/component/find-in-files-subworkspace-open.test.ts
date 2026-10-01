@@ -48,7 +48,6 @@ vi.mock('../../src/renderer/state/workspace-store.js', () => ({
   useWorkspace: () => ({
     layout: SUB_LAYOUT,
     addPanel: vi.fn(),
-    clearLastAddedPanel: vi.fn(),
     setPanelType: vi.fn(),
     setActivePanel: vi.fn(),
     setActiveTab: vi.fn(),

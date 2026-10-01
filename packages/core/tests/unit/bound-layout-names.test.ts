@@ -16,8 +16,8 @@ import { boundLayoutNames } from '../../src/workspace/bound-names.js';
 import type { WorkspaceLayout, Panel } from '../../src/workspace/model.js';
 
 // A Panel IS a LayoutNode in this model — there is no leaf wrapper (model.ts: `LayoutNode = SplitNode | Panel`).
-function panel(id: string, title: string, custom = true): Panel {
-  return { id, kind: 'editor', title, titleIsCustom: custom } as Panel;
+function panel(id: string, title: string): Panel {
+  return { id, kind: 'editor', title } as Panel;
 }
 
 function layout(tabTitle: string, panels: Panel[]): WorkspaceLayout {

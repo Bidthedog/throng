@@ -129,7 +129,7 @@ describe("'preview' is a dispatch scope", () => {
   });
 
   it('leaves the file, save and rename commands dead in a preview (FR-021, FR-030)', () => {
-    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.save', 'panel.rename']) {
+    for (const action of ['file.delete', 'file.rename', 'file.cut', 'file.copy', 'editor.save']) {
       expect(COMMAND_SCOPES[action as ActionId].has('preview'), action).toBe(false);
     }
   });

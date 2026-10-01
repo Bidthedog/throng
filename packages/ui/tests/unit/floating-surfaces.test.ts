@@ -81,6 +81,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.terminal-panel__starting': 'chrome — a status overlay filling its own panel',
   '.panel-box__flash':
     'chrome — 047 FR-083\'s border flash (workspace/panel-flash.ts): inset:0 over its own panel, clamped to it by construction, `pointer-events: none`; anchored to nothing, so nothing to flip away from',
+  '.panel-box__split-mode':
+    'chrome — 048 FR-026\'s split-mode pulse (workspace/panel-placeholder.tsx): inset:0 over its own panel, clamped to it by construction, `pointer-events: none`, opacity-only animation; anchored to nothing, so nothing to flip away from',
+  '.outer-edge-zones':
+    'chrome — 048 FR-060\'s outer-edge drop bands (workspace/outer-edge-zones.tsx): inset:0 over the tab body that hosts them, each band a fixed 16px strip inside it, shown only while a panel is dragged; anchored to nothing, so nothing to flip away from',
   '.editor-pending-chord':
     'chrome — the two-stroke chord indication (046 FR-092), pinned to the bottom-right of its own editor and clamped to it by max-width; anchored to nothing, so nothing to flip away from',
   '.tab-strip':

@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, commitPanelRename, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject as newProject, firstPanelId, installResizeProbe, openApp, panelIds, reloadWindow, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -83,10 +83,9 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       await newEditor(win, p1);
 
       // A second editor and a terminal, so we can prove per-INSTANCE isolation.
-      await win.getByTestId(`panel-add-${p1}`).click();
-      await commitPanelRename(win);
-      await win.getByTestId(`panel-add-${p1}`).click();
-      await commitPanelRename(win);
+      await splitPanelViaMenu(win, p1);
+      await expect(win.locator('.panel-box')).toHaveCount(2);
+      await splitPanelViaMenu(win, p1);
       await expect(win.locator('.panel-box')).toHaveCount(3);
       const [, p2, p3] = await panelIds(win);
       await newEditor(win, p2);

@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, splitPanelViaMenu } from './harness.js';
 
 // US6 / FR-006a (Delivery D; FR-107 refinement): a top-level "Open in OS File
 // Explorer" reveal + an "Open In" submenu of editor targets (disabled for an
@@ -118,7 +118,7 @@ test('destroying a dirty editor prompts save/discard/cancel; cancel is a no-op',
         await createProject(win, 'MenuProj', root);
         const pid = await newEditor(win);
         // A second panel so the editor can actually be removed (workspace keeps ≥1).
-        await win.getByTestId(`panel-add-${pid}`).click();
+        await splitPanelViaMenu(win, pid);
 
         await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
         await win.keyboard.type('unsaved');

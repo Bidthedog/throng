@@ -120,7 +120,6 @@ describe('drawn on editor and preview headers, before the type icon, and on no o
     let added = '';
     act(() => {
       added = pv!.ws().addPanel(pv!.ws().layout!.tabs[0].id);
-      pv!.ws().clearLastAddedPanel();
     });
     await screen.findByTestId(`panel-handle-${added}`);
     expect(screen.queryByTestId(`panel-back-${added}`)).toBeNull();
@@ -263,7 +262,6 @@ describe('the mouse’s back and forward buttons over the panel (FR-105)', () =>
     let other = '';
     act(() => {
       other = pv!.ws().addPanel(pv!.ws().layout!.tabs[0].id);
-      pv!.ws().clearLastAddedPanel();
     });
     act(() => pv!.ws().setActivePanel(pv!.ws().layout!.tabs[0].id, other));
     // The untyped panel is the active one; the pointer is over the preview.
@@ -280,7 +278,6 @@ describe('the mouse’s back and forward buttons over the panel (FR-105)', () =>
     let other = '';
     act(() => {
       other = pv!.ws().addPanel(pv!.ws().layout!.tabs[0].id);
-      pv!.ws().clearLastAddedPanel();
     });
     act(() => setPanelHistory(id, history([OTHER, FILE], 1)));
     const previewBox = screen.getByTestId(`panel-${id}`);
@@ -315,7 +312,6 @@ describe('Send to Tab keeps the history; destroying the panel purges it (FR-110)
     const { id, history: bridge } = await mountPreview();
     act(() => {
       pv!.ws().addPanel(pv!.ws().layout!.tabs[0].id);
-      pv!.ws().clearLastAddedPanel();
     });
     await openHeaderMenu(id, 'Send to Tab');
     fireEvent.click(menuItem('Send to Tab'));
@@ -330,7 +326,6 @@ describe('Send to Tab keeps the history; destroying the panel purges it (FR-110)
     const { id, history: bridge } = await mountPreview();
     act(() => {
       pv!.ws().addPanel(pv!.ws().layout!.tabs[0].id);
-      pv!.ws().clearLastAddedPanel();
     });
     await openHeaderMenu(id, 'Close Panel');
     fireEvent.click(menuItem('Close Panel'));

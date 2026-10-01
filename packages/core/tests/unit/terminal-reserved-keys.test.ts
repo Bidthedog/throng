@@ -19,6 +19,7 @@ import {
   COMMAND_SCOPES,
   SHIPPED_KEYBINDINGS_BY_PLATFORM,
   normalizeToken,
+  parseChordStrokes,
   type ActionId,
 } from '../../src/config/keybindings.js';
 
@@ -134,6 +135,33 @@ describe('terminal keys belong to the terminal (Constitution IV, #164)', () => {
    * line-editor alias, tracked as a shadowable-tier exception only in the other list. The two counts
    * (3 here, 4 there) are both correct for what each one is.
    */
+  /**
+   * 048 FR-024 / Constitution IV — a multi-stroke chord's FIRST stroke is judged by these tiers as
+   * though it were the whole chord. A reserved first stroke is never live in a terminal; a shadowable
+   * one would need the recorded exception the list above holds, and none is recorded for a prefix.
+   */
+  it('no terminal-live multi-stroke default has a RESERVED or SHADOWABLE first stroke', () => {
+    const offending = terminalLiveChords()
+      .map((c) => ({ ...c, first: parseChordStrokes(c.chord)?.[0] ?? '' }))
+      .filter((c) => (parseChordStrokes(c.chord)?.length ?? 0) > 1)
+      .filter((c) => RESERVED.includes(c.first) || SHADOWABLE.includes(c.first))
+      .map((c) => `${c.platform}:${c.action}=${c.chord}`);
+    expect(offending).toEqual([]);
+  });
+
+  it('the four 048 split chords are terminal-live, multi-stroke, and start on tier-1 Ctrl+Shift+Alt+End', () => {
+    const IDS: ActionId[] = ['panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft'];
+    const live = terminalLiveChords().filter((c) => IDS.includes(c.action as ActionId));
+    expect(live.map((c) => c.action).sort()).toEqual([...IDS].sort());
+    for (const c of live) {
+      const strokes = parseChordStrokes(c.chord);
+      expect(strokes?.length, c.chord).toBe(2);
+      expect(strokes?.[0]).toBe('Ctrl+Shift+Alt+End');
+      expect(RESERVED).not.toContain(strokes?.[0]);
+      expect(SHADOWABLE).not.toContain(strokes?.[0]);
+    }
+  });
+
   it('the recorded shadowable-exception list stays at exactly three entries here', () => {
     expect(RECORDED_EXCEPTIONS).toHaveLength(3);
   });

@@ -7,7 +7,6 @@ import {
   collectPanels,
   type Panel,
   type WorkspaceLayout,
-  DEFAULT_KEYBINDINGS,
 } from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
 import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
@@ -23,9 +22,6 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { PanelPlaceholder } from '../../src/renderer/workspace/panel-placeholder.js';
-import { requestPanelRename } from '../../src/renderer/workspace/panel-rename.js';
-import { PANEL_NAME_CLAIM_METHOD } from '@throng/ipc-contract';
-import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
 import { setEditorState, removeEditorState, allEditorStates } from '../../src/renderer/editor/editor-state.js';
 
 /**
@@ -201,30 +197,6 @@ const panelsIn = (ws: Ws, i = 0): Panel[] => collectPanels(tabOf(ws, i).root) as
 const box = (panelId: string): HTMLElement => screen.getByTestId(`panel-${panelId}`);
 const boxes = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.panel-box')];
 
-/** Every action `panelHeaderMenu` requires, as no-ops: this file reads the menu, it does not run it. */
-const noop = (): void => {};
-const resetOnlyActions = {
-  beginRename: noop,
-  resetName: noop,
-  zoomIn: noop,
-  zoomOut: noop,
-  resetZoom: noop,
-  save: noop,
-  saveAs: noop,
-  revert: noop,
-  reloadFromDisk: noop,
-  revealInTree: noop,
-  openInOsExplorer: noop,
-  tryAgain: noop,
-  reloadTerminal: noop,
-  copyDetails: noop,
-  clearPanelType: noop,
-  redraw: noop,
-  sendToNewTab: noop,
-  sendToTab: noop,
-  destroy: noop,
-};
-
 
 beforeEach(() => {
   captured.ws = null;
@@ -254,7 +226,6 @@ describe('clicking a panel makes it the active one (migrated from active-panel.e
     // A user-added panel opens in rename mode (FR-041); the migrated test committed that rename
     // before clicking. Nothing here reads the name, and the input does not block a pointer event on
     // the box, so it is cleared rather than committed.
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
 
     const [first] = panelsIn(live()).map((p) => p.id);
@@ -287,7 +258,6 @@ describe('clicking a panel makes it the active one (migrated from active-panel.e
       second = live().addPanel(tabId);
       expect(second).toBeTruthy();
     });
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
 
     await user.click(box(second));
@@ -307,7 +277,6 @@ describe('each tab remembers its own active panel (migrated from active-panel.e2
       second = live().addPanel(tab1);
       expect(second).toBeTruthy();
     });
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
 
     const [first] = panelsIn(live()).map((p) => p.id);
@@ -319,7 +288,6 @@ describe('each tab remembers its own active panel (migrated from active-panel.e2
       live().addTab();
       expect((live().layout as WorkspaceLayout).tabs).toHaveLength(2);
     });
-    live().clearLastAddedPanel();
 
     const tab2 = tabOf(live(), 1);
     expect(tab2.id).not.toBe(tab1);
@@ -343,7 +311,6 @@ describe('each tab remembers its own active panel (migrated from active-panel.e2
       second = live().addPanel(tab1);
       expect(second).toBeTruthy();
     });
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
 
     await user.click(box(second));
@@ -353,7 +320,6 @@ describe('each tab remembers its own active panel (migrated from active-panel.e2
       live().addTab();
       expect((live().layout as WorkspaceLayout).tabs).toHaveLength(2);
     });
-    live().clearLastAddedPanel();
     live().setActiveTab(tab1);
 
     await waitFor(() => expect(box(second)).toHaveAttribute('data-active', 'true'));
@@ -384,7 +350,6 @@ describe('an empty panel is destroyed immediately (migrated from destroy.e2e.ts:
       const id = live().addPanel(tabId);
       expect(id).toBeTruthy();
     });
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
     const [first] = panelsIn(live()).map((p) => p.id);
 
@@ -410,7 +375,6 @@ describe('an empty panel is destroyed immediately (migrated from destroy.e2e.ts:
       const id = live().addPanel(tabId);
       expect(id).toBeTruthy();
     });
-    live().clearLastAddedPanel();
     await waitFor(() => expect(boxes()).toHaveLength(2));
     const [first] = panelsIn(live()).map((p) => p.id);
 
@@ -479,73 +443,6 @@ describe('a TERMINAL never wears an editor’s unsaved mark (024 follow-up, from
  * (#89/#97 / FR-017, migrated from editor-naming.e2e.ts:81 and :115)
  * ────────────────────────────────────────────────────────────────────────── */
 
-/**
- * The precedence itself — user rename beats live source beats placeholder — is
- * `core/tests/unit/panel-display-title.test.ts`. What that cannot show is this header calling
- * `panelDisplayTitle` with the right SOURCES, and the two rules either side of it: that a rename box
- * dismissed without typing is not a rename, and that "Reset Name" is disabled until there is
- * something to reset.
- *
- * Both migrated tests made a real project on disk, launched Electron, typed a panel into an editor
- * and clicked files in the explorer tree — to read one `<span>` and one menu item's disabled state.
- *
- * ══ THE BUG THE FIRST ONE IS FOR, WHICH IS EASY TO MISREAD ══
- *
- * A user-added panel opens straight into its rename box. Leaving that box without typing is what
- * everyone actually does — you click away to pick the panel's type — and it used to COMMIT the
- * untouched default as a MANUAL name. That name then outranked every automatic one for the rest of
- * the panel's life, so an editor opened in it never titled itself from its file. The symptom
- * ("my editor is called Panel 2") is three steps from the cause.
- */
-describe('a rename box dismissed without typing is not a rename (migrated from editor-naming.e2e.ts:81)', () => {
-  it('leaves the panel auto-named, and Reset Name disabled', async () => {
-    const { user } = mount();
-    const ws = await ready();
-    const tabId = tabOf(ws).id;
-
-    // A user-added panel opens IN rename mode — `addPanel` sets it, and nothing here clears it.
-    let added = '';
-    await waitFor(() => {
-      added = live().addPanel(tabId);
-      expect(added).toBeTruthy();
-    });
-    const input = await screen.findByTestId(`panel-rename-input-${added}`);
-
-    // Blur without typing. The migrated test pressed Tab; `user.tab()` is the same gesture.
-    await user.tab();
-
-    await waitFor(() => expect(screen.queryByTestId(`panel-rename-input-${added}`)).toBeNull());
-    void input;
-
-    // The rule, stated where it lives: nothing was typed, so nothing was renamed. `titleIsCustom`
-    // is what every later automatic source is gated on, and it is the flag the defect set.
-    const panel = panelsIn(live()).find((p) => p.id === added);
-    expect(panel?.titleIsCustom ?? false).toBe(false);
-  });
-
-  it('so the panel still titles itself from the file it later opens', async () => {
-    const { user } = mount();
-    const ws = await ready();
-    const tabId = tabOf(ws).id;
-    let added = '';
-    await waitFor(() => {
-      added = live().addPanel(tabId);
-      expect(added).toBeTruthy();
-    });
-    await screen.findByTestId(`panel-rename-input-${added}`);
-    await user.tab();
-    await waitFor(() => expect(screen.queryByTestId(`panel-rename-input-${added}`)).toBeNull());
-
-    // Now it becomes an editor holding a file — which is where the defect showed itself.
-    live().setPanelType(added, 'editor', { filePath: 'C:/proj/foo.ts' });
-    setEditorState(added, { filePath: 'C:/proj/foo.ts', ownerRoot: 'C:/proj' });
-
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${added}`)).toHaveTextContent('foo'),
-    );
-  });
-});
-
 describe('an editor titles itself from its open file (migrated from editor-naming.e2e.ts:115)', () => {
   /** Type the first panel as an editor holding `absPath`, the way the editor itself does. */
   async function editorOn(panelId: string, absPath: string): Promise<void> {
@@ -566,44 +463,6 @@ describe('an editor titles itself from its open file (migrated from editor-namin
     // first assertion and fail here.
     setEditorState(first, { filePath: 'C:/proj/bar.md' });
     await waitFor(() => expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('bar'));
-  });
-
-  it('lets a manual rename WIN, even when another file is opened afterwards', async () => {
-    mount();
-    const ws = await ready();
-    const [first] = panelsIn(ws).map((p) => p.id);
-    await editorOn(first, 'C:/proj/foo.ts');
-    await waitFor(() => expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('foo'));
-
-    live().renamePanel(first, 'Scratch');
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('Scratch'),
-    );
-
-    setEditorState(first, { filePath: 'C:/proj/baz.ts' });
-    // Still Scratch. A user's name survives a change of file — that is the whole of #97.
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('Scratch'),
-    );
-    expect(screen.getByTestId(`panel-title-${first}`)).not.toHaveTextContent('baz');
-  });
-
-  it('restores the CURRENT file’s name on Reset Name, not the one it was renamed from', async () => {
-    mount();
-    const ws = await ready();
-    const [first] = panelsIn(ws).map((p) => p.id);
-    await editorOn(first, 'C:/proj/foo.ts');
-    live().renamePanel(first, 'Scratch');
-    setEditorState(first, { filePath: 'C:/proj/baz.ts' });
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('Scratch'),
-    );
-
-    live().resetPanelName(first);
-
-    // `baz`, not `foo`. Reset restores the AUTOMATIC name, which is recomputed from the file open
-    // now — a reset that restored the pre-rename string would give the old file's name.
-    await waitFor(() => expect(screen.getByTestId(`panel-title-${first}`)).toHaveTextContent('baz'));
   });
 
   it('never folds dirtiness into the name — the dot sits beside the title, not inside it', async () => {
@@ -691,46 +550,6 @@ describe('the editor file pill shows the containing folder (migrated from editor
   });
 });
 
-describe('Reset Name is disabled until there is something to reset (FR-017)', () => {
-  it('is disabled on a panel that was never renamed, and enabled after one', async () => {
-    /*
-     * The migrated tests each opened the header's context menu twice to read this — once before the
-     * rename and once after. The menu is BUILT by `panelHeaderMenu`, whose sections are covered by
-     * `unit/menu-sections.test.ts`; what nothing covered is the one line that decides the state,
-     * `panel-header-menu.ts:111`: `disabled: !(panel.titleIsCustom ?? false)`.
-     *
-     * Read from the builder rather than from a rendered menu, because that is where the rule is and
-     * because a rendered menu would put this test's outcome at the mercy of the menu's own layout.
-     */
-    mount();
-    const ws = await ready();
-    const [first] = panelsIn(ws).map((p) => p.id);
-
-    const resetItem = (): { disabled?: boolean } | undefined => {
-      const panel = panelsIn(live()).find((p) => p.id === first) as Panel;
-      return panelHeaderMenu({
-        panel,
-        panelVerb: 'Destroy',
-        keybindings: DEFAULT_KEYBINDINGS,
-        otherTabs: [],
-        editor: null,
-        panelFailure: false,
-        detach: null,
-        actions: resetOnlyActions,
-      }).find((i) => i.label === 'Reset Name');
-    };
-
-    expect(resetItem()?.disabled).toBe(true);
-
-    live().renamePanel(first, 'Scratch');
-    await waitFor(() =>
-      expect(panelsIn(live()).find((p) => p.id === first)?.titleIsCustom).toBe(true),
-    );
-
-    expect(resetItem()?.disabled).toBe(false);
-  });
-});
-
 /* ────────────────────────────────────────────────────────────────────────── *
  * The removal VERB on the header's ✕
  * (011 FR-030/031, migrated from removal-verbs.e2e.ts:130)
@@ -782,186 +601,6 @@ describe('the header’s ✕ names what it will do (migrated from removal-verbs.
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
- * A name already taken elsewhere is ADJUSTED, and the user is told once
- * (024 follow-up, 030 FR-022/FR-023 — migrated from panel-name-unique.e2e.ts:130)
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * ══ WHAT THE DAEMON OWNS, AND WHAT THIS OWNS ══
- *
- * Whether `Build` is taken is the DAEMON's question — only it can see every project and every
- * sub-workspace, including projects that are not open — and it is answered by
- * `packages/daemon/tests/unit/panel-name-service.test.ts`, through the real RPC router against a
- * saved layout ("still adjusts against a REAL panel in another project"). The numbering rules are
- * `packages/core/tests/unit/unique-panel-name.test.ts`, twelve cases.
- *
- * What neither of those can see is what the WINDOW does with the answer, and until now nothing
- * could: `panel-name-adjusted` appeared in exactly two places in the repository — the component
- * that raises it, and the E2E that read it off a screen. Three separate claims lived there:
- *
- *   - the panel takes the GRANTED name, not the one that was asked for;
- *   - a notice is raised, once, as a warning — nothing was lost and there is nothing to decide;
- *   - and (FR-023) the sentence does NOT repeat the granted name, because the heading has just
- *     said it. That one is a wording rule the E2E never checked at all.
- */
-describe('a rename whose name was taken elsewhere', () => {
-  /** A daemon that grants `desired` unless it is `taken`, in which case it adjusts to `granted`. */
-  function claimingDaemon(taken: string, granted: string) {
-    const base = fakeDaemon();
-    const claims: Array<{ panelId: string; desired: string }> = [];
-    const bridge: ThrongBridge = {
-      invoke<T>(method: string, params?: unknown): Promise<T> {
-        if (method === PANEL_NAME_CLAIM_METHOD) {
-          const p = params as { panelId: string; desired: string };
-          claims.push(p);
-          return Promise.resolve(
-            (p.desired.trim().toLowerCase() === taken.toLowerCase()
-              ? { granted, adjusted: true }
-              : { granted: p.desired, adjusted: false }) as T,
-          );
-        }
-        return base.bridge.invoke<T>(method, params);
-      },
-    };
-    return { bridge, claims, saved: base.saved };
-  }
-
-  function mountWith(taken: string, grantedName: string) {
-    const user = userEvent.setup();
-    Reflect.set(window, 'throng', { panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn() } });
-    const daemon = claimingDaemon(taken, grantedName);
-    const services = servicesOver(daemon.bridge);
-    render(
-      createElement(
-        ServicesProvider,
-        { services },
-        createElement(
-          ProjectsProvider,
-          { client: services.projects },
-          createElement(
-            WorkspaceProvider,
-            { client: services.workspace, activeProjectId: PROJECT },
-            createElement(
-              NotificationProvider,
-              null,
-              createElement(
-                ConfirmProvider,
-                null,
-                createElement(ContextMenuProvider, null, createElement(Host, { tabIndex: 0 })),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    return { user, daemon };
-  }
-
-  /** Start the rename the way the F2 chord does, then type a name and commit it. */
-  async function renameTo(
-    user: ReturnType<typeof userEvent.setup>,
-    panelId: string,
-    name: string,
-  ): Promise<void> {
-    // The panel registers its rename handler in an effect, which can run after `ready()` resolves (React
-    // 19 flushes passive effects later than 18 did); a request made first finds nothing and does nothing.
-    await waitFor(() => {
-      let started = false;
-      act(() => {
-        started = requestPanelRename(panelId);
-      });
-      expect(started, 'no rename handler was registered').toBe(true);
-    });
-    const field = await screen.findByTestId(`panel-rename-input-${panelId}`);
-    await user.clear(field);
-    await user.type(field, name);
-    await user.keyboard('{Enter}');
-  }
-
-  it('renames the panel to what the daemon GRANTED, not to what was asked for', async () => {
-    const { user } = mountWith('Build', 'Build (2)');
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    await renameTo(user, panelId, 'Build');
-
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${panelId}`)).toHaveTextContent('Build (2)'),
-    );
-  });
-
-  it('raises ONE warning naming the panel, and says what was asked for', async () => {
-    const { user } = mountWith('Build', 'Build (2)');
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    await renameTo(user, panelId, 'Build');
-
-    const notice = await screen.findByTestId('panel-name-adjusted');
-    expect(notice).toBeVisible();
-    expect(screen.getAllByTestId('panel-name-adjusted')).toHaveLength(1);
-    // The name the user typed is the fact still worth explaining.
-    expect(notice.textContent ?? '').toContain('Build');
-  });
-
-  it('does NOT repeat the granted name in the sentence (030 FR-023)', async () => {
-    /*
-     * The claim the E2E never made, and the one most likely to regress: the heading already names
-     * the panel by its granted name, so putting it in the sentence too is the stutter FR-023 exists
-     * to stop. Asserted on the MESSAGE element specifically — asserting on the whole notice would be
-     * satisfied by the heading and prove nothing.
-     */
-    const { user } = mountWith('Build', 'Build (2)');
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    await renameTo(user, panelId, 'Build');
-
-    const notice = await screen.findByTestId('panel-name-adjusted');
-    const message = notice.querySelector('.notice__message');
-    expect(message, 'the notice must have a message element for this claim to mean anything')
-      .toBeTruthy();
-    expect(message?.textContent ?? '').toContain('Build');
-    expect(message?.textContent ?? '').not.toContain('Build (2)');
-  });
-
-  it('raises NOTHING when the name was granted as asked', async () => {
-    /*
-     * The anti-vacuity control. A component that notified unconditionally would satisfy every
-     * assertion above while warning the user about a rename that went exactly as they asked.
-     */
-    const { user } = mountWith('SomethingElse', 'SomethingElse (2)');
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    await renameTo(user, panelId, 'Build');
-
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${panelId}`)).toHaveTextContent('Build'),
-    );
-    expect(screen.queryByTestId('panel-name-adjusted')).toBeNull();
-  });
-
-  it('tells the other windows the name that was GRANTED', async () => {
-    /*
-     * Clone-sync (003): the same Panel appears in its project and in every sub-workspace. Broadcast
-     * the name the user typed instead of the one granted and those copies drift apart under a name
-     * that is taken — which is the defect the daemon's adjustment exists to prevent, re-created one
-     * layer up. The E2E ran in one window and could not see this.
-     */
-    const { user } = mountWith('Build', 'Build (2)');
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    await renameTo(user, panelId, 'Build');
-
-    const notifyRenamed = (Reflect.get(window, 'throng') as { panel: { notifyRenamed: ReturnType<typeof vi.fn> } })
-      .panel.notifyRenamed;
-    await waitFor(() => expect(notifyRenamed).toHaveBeenCalledWith(panelId, 'Build (2)'));
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
  * A header tooltip shows the TITLE, not a list of instructions
  * (017 / #57 — migrated from panel-tooltips.e2e.ts:49, :63, :131 — 035 T055)
  * ────────────────────────────────────────────────────────────────────────── */
@@ -1000,30 +639,18 @@ describe('a panel header tooltip shows the title (#57)', () => {
     expect(handle(panelId).getAttribute('title') ?? '').not.toContain('Click: Activate');
   });
 
-  it('follows a RENAME — the tooltip is the only way to read a title too long for the header', async () => {
+  it('follows a change of title — the tooltip is the only way to read a title too long for the header', async () => {
     /*
      * Migrated from `:63`. The E2E used a 54-character name so the header would ellipsize it; the
      * length is irrelevant to the claim, which is that the attribute tracks the title rather than
-     * being captured once at mount. A shorter name makes the same point without depending on the
-     * name-limit setting, which has its own coverage.
+     * being captured once at mount. 048 removed renaming, so the title changes the way it still can:
+     * throng retitles the panel (a clash with another panel's name).
      */
-    const { user } = mount();
+    mount();
     const ws = await ready();
     const panelId = panelsIn(ws)[0].id;
 
-    // The panel registers its rename handler in an effect, which can run after `ready()` resolves (React
-    // 19 flushes passive effects later than 18 did); a request made first finds nothing and does nothing.
-    await waitFor(() => {
-      let started = false;
-      act(() => {
-        started = requestPanelRename(panelId);
-      });
-      expect(started, 'no rename handler was registered').toBe(true);
-    });
-    const field = await screen.findByTestId(`panel-rename-input-${panelId}`);
-    await user.clear(field);
-    await user.type(field, 'Renamed');
-    await user.keyboard('{Enter}');
+    act(() => live().retitlePanel(panelId, 'Renamed'));
 
     await waitFor(() => expect(handle(panelId)).toHaveAttribute('title', 'Renamed'));
     // …and the rendered title and the tooltip still agree, which is the invariant rather than the
@@ -1120,7 +747,6 @@ describe('Send to Tab moves the panel to the chosen tab (FR-027)', () => {
       await waitFor(() =>
         expect((live().layout as WorkspaceLayout).tabs).toHaveLength(before + 1),
       );
-      live().clearLastAddedPanel();
     }
   }
 
@@ -1195,95 +821,8 @@ describe('Send to Tab moves the panel to the chosen tab (FR-027)', () => {
 });
 
 
-/* ────────────────────────────────────────────────────────────────────────── *
- * 043 T172/T173 (FR-061) — the panel that cannot be renamed
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * A Find in Files panel is not renamable, and the chord needs no special case to say so.
- *
- * ══ THE MECHANISM, WHICH IS WHY THIS IS THREE LINES AND NOT A FEATURE ══
- *
- * `requestPanelRename` looks the panel up in a module-level registry and returns whether anything
- * was listening — *"a panel whose header is not mounted (or has already gone) is a no-op, not an
- * error"* (`panel-rename.ts`). The header registers itself unconditionally today. NOT registering
- * for this kind makes `panel.rename` inert for it with no branch in `app.tsx` and no new state:
- * the registry already answers the question, so the fix is an omission rather than a guard.
- *
- * ══ WHY THE HEADER'S DOUBLE-CLICK IS ASSERTED TOO ══
- *
- * Because FR-061's headline is *"MUST NOT be renamable"*, and there are three routes into the rename
- * box, not two: the chord, the menu item, and a double-click on the header. Closing the first two
- * and leaving the third would satisfy every clause of the requirement as written while leaving the
- * panel renamable by the gesture most users would actually reach for.
- *
- * The menu half is `panel-header-zoom-menu.test.ts`, which drives the builder directly. What can
- * only be seen from a rendered header is what this file asserts: whether the registration happened,
- * and what a real double-click does.
- */
-describe('a Find in Files panel is not renamable (FR-061)', () => {
-  const handleOf = (panelId: string): HTMLElement => screen.getByTestId(`panel-handle-${panelId}`);
-
-  it('registers no rename starter, so the chord is a no-op by construction', async () => {
-    const { user } = mount();
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    // POSITIVE CONTROL, first and deliberately: this very panel, before it is typed, DOES register.
-    // Without it a broken registry would make the assertion below pass for the wrong reason — and
-    // "nothing was listening" is exactly what a registry that never works looks like.
-    // `ready()` resolves once the store holds a layout, which can be before the header's passive
-    // effect has registered (seen 1 in 2731 under the full component run). Flush effects first.
-    await act(async () => {});
-    act(() => {
-      expect(requestPanelRename(panelId), 'an untyped panel still registers a rename').toBe(true);
-    });
-    await user.keyboard('{Escape}');
-    await waitFor(() =>
-      expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull(),
-    );
-
-    live().setPanelType(panelId, 'findInFiles', {});
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${panelId}`).textContent?.trim()).toBe(
-        'Find in Files',
-      ),
-    );
-    await act(async () => {}); // the unregister cleanup is a passive effect too
-    act(() => {
-      expect(
-        requestPanelRename(panelId),
-        'a Find in Files panel registered a rename starter, so F2 opens a rename box over its search input',
-      ).toBe(false);
-    });
-    expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull();
-  });
-
-  it('opens no rename box when its header is double-clicked', async () => {
-    const { user } = mount();
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    live().setPanelType(panelId, 'findInFiles', {});
-    await waitFor(() => expect(box(panelId)).toBeInTheDocument());
-
-    await user.dblClick(handleOf(panelId));
-    expect(screen.queryByTestId(`panel-rename-input-${panelId}`)).toBeNull();
-  });
-
-  it('still opens one on a panel that IS renamable, double-clicked the same way', async () => {
-    // The control for the test above: the gesture works, and it is the KIND that decides.
-    const { user } = mount();
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    live().setPanelType(panelId, 'editor', { filePath: 'C:/proj/a.txt' });
-    await waitFor(() => expect(box(panelId)).toBeInTheDocument());
-
-    await user.dblClick(handleOf(panelId));
-    expect(await screen.findByTestId(`panel-rename-input-${panelId}`)).toBeInTheDocument();
-  });
-
+/* 048 FR-060 — a Find in Files panel heads itself with what it IS (no rename exists any more, FR-030). */
+describe('a Find in Files panel heads itself with what it IS (FR-060)', () => {
   it('heads the panel with what it IS and its term, never with "Panel N" (FR-060)', async () => {
     // The wiring half of FR-060: `panelDisplayTitle`'s rule is asserted in core, and what this can
     // see is that the header actually resolves through it for this kind — including the term, which

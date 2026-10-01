@@ -215,6 +215,13 @@ describe('an editor where Preview is not the answer (FR-050, FR-062)', () => {
     expect(openFileInTab).toHaveBeenCalledOnce();
   });
 
+  it('Quick Open names the listed project as the editor’s owner (048 FR-129)', async () => {
+    await openFromQuickOpen(sliceWs(), 'tab-1', SOURCE, 'lastActive', route({}));
+    expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', SOURCE, 'lastActive', undefined, {
+      ownerProjectId: PROJECT,
+    });
+  });
+
   it('Quick Open passes the editor route’s answer through — a cancelled open is not an open (033 FR-061)', async () => {
     openFileInTab.mockResolvedValueOnce(false);
     await expect(openFromQuickOpen(sliceWs(), 'tab-1', SOURCE, 'lastActive', route({}))).resolves.toBe(false);
@@ -433,7 +440,12 @@ describe('Quick Open’s choice goes through the router (T135)', () => {
     await user.keyboard('app.ts');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', SOURCE, 'lastActive', undefined));
+    // 048 FR-129 — and names the project whose root it listed as the editor's owner.
+    await waitFor(() =>
+      expect(openFileInTab).toHaveBeenCalledWith(expect.anything(), 'tab-1', SOURCE, 'lastActive', undefined, {
+        ownerProjectId: PROJECT,
+      }),
+    );
     expect(opened).toEqual([]);
   });
 });

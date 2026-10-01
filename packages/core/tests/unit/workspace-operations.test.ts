@@ -9,7 +9,6 @@ import {
   reorderTab,
   setActiveTab,
   renameTab,
-  renamePanel,
   closeTab,
   closeOtherTabs,
   resizeSplit,
@@ -264,7 +263,7 @@ describe('setActiveTab', () => {
   });
 });
 
-describe('renameTab / renamePanel (FR-036/037)', () => {
+describe('renameTab (FR-036)', () => {
   it('renames a Tab', () => {
     const l = renameTab(base(), 't1', 'My Tab');
     expect(l.tabs[0].title).toBe('My Tab');
@@ -273,12 +272,6 @@ describe('renameTab / renamePanel (FR-036/037)', () => {
   it('ignores a blank Tab title', () => {
     const l = renameTab(base(), 't1', '   ');
     expect(l.tabs[0].title).toBe('Tab 1');
-  });
-
-  it('renames a Panel deep in the tree', () => {
-    let l = addPanel(base(), 't1', 'p2');
-    l = renamePanel(l, 'p2', 'Logs');
-    expect(collectPanels(l.tabs[0].root).find((p) => p.id === 'p2')?.title).toBe('Logs');
   });
 });
 

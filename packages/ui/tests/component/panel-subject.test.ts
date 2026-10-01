@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WorkspaceLayout } from '@throng/core';
@@ -19,6 +19,8 @@ import {
   terminalSubject,
   type PanelPlace,
 } from '../../src/renderer/common/panel-subject.js';
+import { removeEditorState } from '../../src/renderer/editor/editor-state.js';
+import { clearTerminalTitle, setTerminalTitle } from '../../src/renderer/terminal/title-store.js';
 
 /**
  * WHERE a panel is, so a notice can say which one it means (030 US2 / #195, FR-021/022/026/027).
@@ -194,6 +196,83 @@ describe('locating a panel (FR-022)', () => {
     const place = await mount(layoutWith(ALPHA), [dto(ALPHA, 'Alpha')], 'panel-gone');
 
     expect(place).toBeUndefined();
+  });
+});
+
+/**
+ * 048 FR-032 / FR-130 (T084) — the panel part of `Project — Tab — Panel` is the title the HEADER
+ * shows, never the raw stored `panel.title`.
+ *
+ * This is the subject *Copy details* puts on the clipboard, and `failure-copy.e2e.ts` found it ending
+ * in the stored fallback where the header of a cmd terminal said "Command Prompt".
+ */
+function layoutHolding(panel: Record<string, unknown>): WorkspaceLayout {
+  return {
+    projectId: ALPHA,
+    schemaVersion: 1,
+    tabs: [
+      {
+        id: 'tab-1',
+        title: 'Build',
+        root: { type: 'panel', id: 'panel-1', originProjectId: ALPHA, ...panel },
+        activePanelId: 'panel-1',
+      },
+    ],
+    activeTabId: 'tab-1',
+  } as WorkspaceLayout;
+}
+
+describe('the panel is named by its content, as its header names it (048 FR-032)', () => {
+  afterEach(() => {
+    removeEditorState('panel-1');
+    clearTerminalTitle('panel-1');
+  });
+
+  it('names a terminal by its flavour, not the stored fallback', async () => {
+    const place = await mount(
+      layoutHolding({
+        kind: 'terminal',
+        title: 'Blank Panel 3',
+        config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
+      }),
+      [dto(ALPHA, 'Alpha')],
+    );
+
+    expect(place?.name).toBe('Command Prompt');
+  });
+
+  it('names an editor by its file, from the persisted config', async () => {
+    const place = await mount(
+      layoutHolding({ kind: 'editor', title: 'Blank Panel 3', config: { filePath: 'D:/work/charlie.md' } }),
+      [dto(ALPHA, 'Alpha')],
+    );
+
+    expect(place?.name).toBe('charlie');
+  });
+
+  it('names an empty panel exactly "Blank Panel" (FR-130)', async () => {
+    const place = await mount(layoutHolding({ title: 'Blank Panel 3' }), [dto(ALPHA, 'Alpha')]);
+
+    expect(place?.name).toBe('Blank Panel');
+  });
+
+  it('follows the terminal’s LIVE title as the shell announces it', async () => {
+    await mount(
+      layoutHolding({
+        kind: 'terminal',
+        title: 'Blank Panel 3',
+        config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
+      }),
+      [dto(ALPHA, 'Alpha')],
+    );
+
+    act(() => setTerminalTitle('panel-1', 'npm run dev'));
+
+    await waitFor(() =>
+      expect((JSON.parse(screen.getByTestId('place').textContent ?? '{}') as PanelPlace).name).toBe(
+        'npm run dev',
+      ),
+    );
   });
 });
 

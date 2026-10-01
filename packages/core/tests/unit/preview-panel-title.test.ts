@@ -61,7 +61,7 @@ describe('panelDisplayTitle — preview branch (FR-031)', () => {
   });
 
   it('falls back to the placeholder only when it has no file at all', () => {
-    expect(panelDisplayTitle(preview())).toBe('Panel 4');
+    expect(panelDisplayTitle(preview())).toBe('Blank Panel') // 048 FR-130: a generated fallback shows unnumbered;
   });
 
   it('leaves every other kind exactly as it was', () => {
@@ -149,7 +149,9 @@ describe('previewTitleParts — the name and suffix apart, for the marker (FR-03
   it('is null wherever panelDisplayTitle does not compose a preview title', () => {
     expect(previewTitleParts(preview())).toBeNull(); // no file: the placeholder
     expect(previewTitleParts(preview({ kind: 'editor' }), { editorFilePath: 'C:/p/a.md' })).toBeNull();
-    expect(previewTitleParts(preview({ titleIsCustom: true }), { previewParentTitle: 'README' })).toBeNull();
+    // 048 FR-032: a leftover custom-title flag no longer suppresses the preview's derived title.
+    const legacy = { ...preview(), titleIsCustom: true } as unknown as Parameters<typeof previewTitleParts>[0];
+    expect(previewTitleParts(legacy, { previewParentTitle: 'README' })?.name).toBe('README');
   });
 
   it('always agrees with panelDisplayTitle: name + suffix is the title, at every limit', () => {

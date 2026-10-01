@@ -188,7 +188,7 @@ test.describe('at the shipped arming delay', () => {
      *
      * Read from the NAME span rather than the row (#304): a row now also holds the panel's type
      * icon, and under a glyph icon pack that glyph is a character in `textContent` — so a row-level
-     * read would compare `▣Panel 1` against `Panel 1` and fail for a reason that has nothing to do
+     * read would compare `▣Blank Panel` against `Blank Panel` and fail for a reason that has nothing to do
      * with P2. The icon itself is asserted in `component/tab-popover.test.ts`, where every panel
      * kind can be driven without an application.
      */

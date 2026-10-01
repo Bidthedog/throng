@@ -147,7 +147,7 @@ describe('removePanelsWhere (FR-063, FR-064, FR-067)', () => {
     const after = removePanelsWhere(l, isPreview, () => 'fresh');
     expect(after.tabs).toHaveLength(1);
     expect(after.tabs[0].id).toBe('t1');
-    expect(after.tabs[0].root).toEqual({ type: 'panel', id: 'fresh', originProjectId: 'proj', title: 'Panel 1' });
+    expect(after.tabs[0].root).toEqual({ type: 'panel', id: 'fresh', originProjectId: 'proj', title: 'Blank Panel' });
     expect(after.tabs[0].activePanelId).toBe('fresh');
     expect(isMainLayoutValid(after)).toBe(true);
   });

@@ -173,7 +173,6 @@ function workspace(l: WorkspaceLayout): Spies {
     ws: {
       layout: l,
       addPanel,
-      clearLastAddedPanel: vi.fn(),
       setPanelType,
       setActivePanel: vi.fn(),
     },

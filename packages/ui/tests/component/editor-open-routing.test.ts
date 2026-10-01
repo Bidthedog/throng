@@ -72,7 +72,7 @@ type Ws = ReturnType<typeof useWorkspace>;
  * The daemon, as far as the workspace store can tell
  * ────────────────────────────────────────────────────────────────────────── */
 
-function fakeServices(): Services {
+function fakeServices(layoutProject: string = PROJECT): Services {
   const bridge: ThrongBridge = {
     invoke<TResult>(method: string, params?: unknown): Promise<TResult> {
       switch (method) {
@@ -81,7 +81,7 @@ function fakeServices(): Services {
           // does a bare `setLayout(result.layout)`. Returning null here leaves the store with no
           // layout at all, which every test then fails on at `ready()` rather than mid-assertion.
           return Promise.resolve({
-            layout: createDefaultLayout(PROJECT, { tab: 'tab-1', panel: 'panel-1' }),
+            layout: createDefaultLayout(layoutProject, { tab: 'tab-1', panel: 'panel-1' }),
             restored: true,
           } as TResult);
         case 'workspace.save':
@@ -157,14 +157,14 @@ function asEditor(panelId: string, over: Partial<EditorActions> = {}): { openFil
   return { openFile };
 }
 
-function mount(): void {
+function mount(layoutProject: string = PROJECT): void {
   // `openInto` is the app-wide one-buffer oracle (FR-011a). Default: this file is open nowhere.
   Reflect.set(window, 'throng', {
     editor: { openInto: () => Promise.resolve({ action: 'open' }) },
     panel: { notifyTyped: () => {} },
   });
 
-  const services = fakeServices();
+  const services = fakeServices(layoutProject);
   // ANTI-VACUITY CONTROL: drop this WorkspaceProvider element and every test fails at ready().
   render(
     createElement(
@@ -172,7 +172,7 @@ function mount(): void {
       { services },
       createElement(
         WorkspaceProvider,
-        { client: services.workspace, activeProjectId: PROJECT },
+        { client: services.workspace, activeProjectId: layoutProject },
         createElement(NotificationProvider, null, createElement(Probe, null)),
       ),
     ),
@@ -412,6 +412,129 @@ describe('openFileInTab routes to the tab’s editor (FR-010)', () => {
 
     // Two opens, two new panels — the seed plus one each.
     expect(editorPanels(live())).toHaveLength(3);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 048 FR-129 — in a sub-workspace window, the editor an open creates belongs to the file's project
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('in a sub-workspace window the opened editor is owned by the project (048 FR-129)', () => {
+  const SUB = 'subworkspace:sw-1';
+  const originOf = (id: string): string | undefined =>
+    panelsIn(live()).find((p) => p.id === id)?.originProjectId;
+
+  /** Replace the bridge with one whose `openInto` records what it was asked. */
+  function recordOpenInto(): ReturnType<typeof vi.fn> {
+    const openInto = vi.fn((_req: unknown) => Promise.resolve({ action: 'open' }));
+    Reflect.set(window, 'throng', { editor: { openInto }, panel: { notifyTyped: () => {} } });
+    return openInto;
+  }
+
+  it('with an ownerProjectId, the created editor is owned by that project', async () => {
+    mount(SUB);
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    expect(editorPanels(ws)).toHaveLength(0);
+    const openInto = recordOpenInto();
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { ownerProjectId: PROJECT });
+    });
+
+    const editors = editorPanels(live());
+    expect(editors).toHaveLength(1);
+    expect(editors[0].originProjectId).toBe(PROJECT);
+    // Main is asked about the file as the PROJECT's, not as the sub-workspace's.
+    expect(openInto).toHaveBeenCalledWith(expect.objectContaining({ ownerProjectId: PROJECT }));
+  });
+
+  it('does not reuse a last-active editor the sub-workspace owns — a project-owned one is created', async () => {
+    mount(SUB);
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    const own = panelsIn(ws)[0].id;
+    act(() => ws.setPanelType(own, 'editor', { filePath: 'D:/elsewhere/x.txt' }));
+    expect(originOf(own)).toBe(SUB);
+    const ownActions = asEditor(own);
+    setLastActiveEditor(tabId, own);
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { ownerProjectId: PROJECT });
+    });
+
+    expect(ownActions.openFile).not.toHaveBeenCalled();
+    const created = editorPanels(live()).filter((p) => p.id !== own);
+    expect(created).toHaveLength(1);
+    expect(created[0].originProjectId).toBe(PROJECT);
+  });
+
+  it('reuses a last-active editor that the project owns', async () => {
+    mount(SUB);
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    let owned = '';
+    act(() => {
+      owned = live().addPanel(tabId, PROJECT);
+    });
+    act(() => live().setPanelType(owned, 'editor', { filePath: FILE_B }));
+    const ownedActions = asEditor(owned);
+    setLastActiveEditor(tabId, owned);
+    const before = editorPanels(live()).length;
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { ownerProjectId: PROJECT });
+    });
+
+    expect(ownedActions.openFile).toHaveBeenCalledWith(FILE_A);
+    expect(editorPanels(live())).toHaveLength(before);
+  });
+
+  it('with no ownerProjectId, takes the owner from the active panel’s project', async () => {
+    mount(SUB);
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    let terminal = '';
+    act(() => {
+      terminal = live().addPanel(tabId, PROJECT);
+    });
+    act(() => live().setActivePanel(tabId, terminal));
+    expect(originOf(terminal)).toBe(PROJECT);
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A);
+    });
+
+    const editors = editorPanels(live());
+    expect(editors).toHaveLength(1);
+    expect(editors[0].originProjectId).toBe(PROJECT);
+  });
+
+  it('with no ownerProjectId and a sub-workspace-owned active panel, stays sub-workspace-owned', async () => {
+    mount(SUB);
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    expect(originOf(panelsIn(ws)[0].id)).toBe(SUB);
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A);
+    });
+
+    const editors = editorPanels(live());
+    expect(editors).toHaveLength(1);
+    expect(editors[0].originProjectId).toBe(SUB);
+  });
+
+  it('control: the main window ignores it — the editor is the layout project’s, as before', async () => {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'lastActive', undefined, { ownerProjectId: 'other' });
+    });
+
+    expect(editorPanels(live())[0].originProjectId).toBe(PROJECT);
   });
 });
 

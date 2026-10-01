@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, commitPanelRename, cleanupTemp, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, cleanupTemp, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 // FR-027a (batch 2, revised 2026-07-02): a cloned Panel (same id in the project +
 // its sub-workspaces) syncs its CONTENT across windows — the type-selection form
@@ -157,8 +157,7 @@ test('panel selection is INDEPENDENT across windows (not mirrored)', { tag: ['@e
   const win = shared.win;
   await createProject(win, 'ActiveSync', 'C:/c/activesync');
   const a = await firstPanelId(win);
-  await win.getByTestId(`panel-add-${a}`).click();
-  await commitPanelRename(win);
+  await splitPanelViaMenu(win, a);
   await expect(win.locator('.panel-box')).toHaveCount(2);
   const b = (await win.locator('.panel-box').evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),

@@ -3,15 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  daemonRpc,
-  firstPanelId,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { openApp, createProject as newProject, daemonRpc, firstPanelId, cleanupTemp, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -97,9 +89,8 @@ test('warns before destroying a Panel that hosts a live terminal', { tag: ['@ext
       const pid = await firstPanelId(win);
 
       // A second Panel so destroying the terminal Panel is allowed.
-      await win.getByTestId(`panel-add-${pid}`).click();
+      await splitPanelViaMenu(win, pid);
       await expect(win.locator('.panel-box')).toHaveCount(2);
-      await win.keyboard.press('Escape');
 
       // Turn the first Panel into a live Terminal.
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');

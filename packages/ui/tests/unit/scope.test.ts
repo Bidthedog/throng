@@ -122,10 +122,8 @@ describe('the file-tree chords are NOT live over a Find in Files panel (043 R14)
     });
   }
 
-  it('renaming the PANEL is what F2 means there instead (panel.rename)', () => {
-    expect(resolveScoped(DEFAULT_KEYBINDINGS, { key: 'F2' }, over('findInFiles'), quiet)).toBe(
-      'panel.rename',
-    );
+  it('F2 means nothing there — 048 removed panel rename, so nothing takes the key (FR-037)', () => {
+    expect(resolveScoped(DEFAULT_KEYBINDINGS, { key: 'F2' }, over('findInFiles'), quiet)).toBeNull();
   });
 
   it('window-level chords are unaffected — a user must still be able to leave the panel', () => {

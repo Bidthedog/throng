@@ -146,6 +146,38 @@ describe('migrateTheme drops the retired icons.projectList token (branch-review 
   });
 });
 
+/**
+ * 048 (research R6) — `icons.resetName` is retired with panel renaming: its one call site was the
+ * panel header's Reset Name row. Every install's `theme.json` carries it from the shipped seed, so it
+ * is dropped on load the same way `projectList` is, rather than carried forever.
+ */
+describe('migrateTheme drops the retired icons.resetName token (048 R6)', () => {
+  const withResetName = (): Theme => ({
+    name: 'Has resetName',
+    colours: { accent: '#111111' },
+    fonts: THRONG_THEME.fonts,
+    icons: { ...THRONG_THEME.icons, resetName: '↺' },
+  });
+
+  it('drops icons.resetName and keeps every other icon token', () => {
+    const theme = withResetName();
+    const out = migrateTheme(theme);
+    expect(out.icons.resetName).toBeUndefined();
+    for (const [token, value] of Object.entries(theme.icons)) {
+      if (token !== 'resetName') expect(out.icons[token], token).toBe(value);
+    }
+  });
+
+  it('is idempotent', () => {
+    const once = migrateTheme(withResetName());
+    expect(migrateTheme(once)).toEqual(once);
+  });
+
+  it('is no longer a shipped icon token', () => {
+    expect(THRONG_THEME.icons.resetName).toBeUndefined();
+  });
+});
+
 describe('migrateTheme — 021 follow-up (active highlight, weight, dialog, editor)', () => {
   it('consolidates activePaneHighlight onto activePanelBorder (drops the old key)', () => {
     const t = legacyTheme();

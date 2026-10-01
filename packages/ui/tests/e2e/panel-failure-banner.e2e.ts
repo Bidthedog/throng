@@ -59,16 +59,7 @@ import { mkdirSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import {
-  cleanupTemp,
-  commitPanelRename,
-  createProject,
-  firstPanelId,
-  openApp,
-  runApp as runOwnApp,
-  settle,
-  type OpenApp,
-} from './harness.js';
+import { cleanupTemp, createProject, firstPanelId, openApp, runApp as runOwnApp, settle, type OpenApp } from './harness.js';
 
 /** The shared banner's root (contract: `data-testid="panel-failure-{panelId}"`). */
 function banner(win: Page, panelId: string): Locator {
@@ -230,15 +221,6 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await inFailureState(win, panelId, 'terminal');
 }
 
-/** Name a panel through its header — no context menu, so nothing here steals a menu from a test. */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await commitPanelRename(win);
-}
-
 /* ════════════════════════════════════════════════════════════════════════════════════════════════
  * ONE APP, TWO BROKEN PANELS — everything except the two tests that must seed state before launch.
  * ════════════════════════════════════════════════════════════════════════════════════════════════ */
@@ -262,8 +244,7 @@ test.beforeAll(async () => {
   await createProject(win, 'Real', realRoot);
   realPid = await firstPanelId(win);
   await editorOn(win, realPid);
-  // Named, so T054's "it kept its title" is a statement about a title somebody chose.
-  await renamePanel(win, realPid, 'Docs');
+  // T054's "it kept its title" is read off the header at the point it matters (panels cannot be renamed, 048).
 
   // A second project whose root never existed: the terminal cannot start, and no shell is spawned.
   await createProject(win, 'Ghost', ghostRoot('pfb'));
@@ -527,7 +508,8 @@ test('Clear panel type returns an editor to panel-type selection, and a terminal
   await inFailureState(win, editorPid, 'editor');
   const box = win.locator('.panel-box').first();
   const idBefore = await box.getAttribute('data-panel-id');
-  await expect(win.getByTestId(`panel-handle-${editorPid}`)).toContainText('Docs');
+  const titleBefore = ((await win.getByTestId(`panel-title-${editorPid}`).textContent()) ?? '').trim();
+  expect(titleBefore, 'the failed editor shows no title').not.toBe('');
 
   const clear = control(win, editorPid, 'Clear panel type');
   await expect(clear).toBeVisible();
@@ -535,10 +517,10 @@ test('Clear panel type returns an editor to panel-type selection, and a terminal
 
   await expect(win.getByTestId(`panel-type-form-${editorPid}`)).toBeVisible({ timeout: 20_000 });
   await expect(banner(win, editorPid)).toHaveCount(0);
-  // Same panel, same place, same name — cleared, not destroyed and recreated.
+  // Same panel, same place — cleared, not destroyed and recreated. (Its NAME is not asserted: a cleared
+  // panel is untyped, and an untyped panel's title is the placeholder, not a name anyone chose — 048.)
   expect(await win.locator('.panel-box').first().getAttribute('data-panel-id')).toBe(idBefore);
   await expect(win.locator('.panel-box')).toHaveCount(1);
-  await expect(win.getByTestId(`panel-handle-${editorPid}`)).toContainText('Docs');
 
   // ── Terminal: exactly 029's behaviour, unchanged (FR-044). ──────────────────────────────────
   const termPid = await terminalPanel(win);

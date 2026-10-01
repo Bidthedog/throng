@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 
 registerTempCleanup();
@@ -170,9 +170,8 @@ test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-0
       .locator('.panel-box')
       .first()
       .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
-    await win.getByTestId(`panel-add-${firstId}`).click();
+    await splitPanelViaMenu(win, firstId);
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    await commitPanelRename(win);
 
     const ids = await win
       .locator('.panel-box')

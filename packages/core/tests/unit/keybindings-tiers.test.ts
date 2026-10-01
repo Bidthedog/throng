@@ -17,6 +17,7 @@ import {
   DEFAULT_KEYBINDINGS,
   isTwoStrokeToken,
   normalizeToken,
+  parseChordStrokes,
   type ActionId,
 } from '../../src/config/keybindings.js';
 
@@ -59,6 +60,13 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'panel.zoomIn': 'tier2',
   'panel.zoomOut': 'tier2',
   'panel.zoomReset': 'tier2',
+  // 048 FR-020 — the split chords: tier-1 first stroke (Ctrl+Shift+Alt+End), multi-stroke.
+  'panel.splitDown': 'tier1', // multi-stroke
+  'panel.splitUp': 'tier1', // multi-stroke
+  'panel.splitRight': 'tier1', // multi-stroke
+  'panel.splitLeft': 'tier1', // multi-stroke
+  // 048 FR-131 — Destroy Panel: tier-1 shape, and a recorded exception (function key, live in a terminal).
+  'panel.destroy': 'tier1', // recorded exception (function key)
   'editor.toggleWordWrap': 'tier2', // recorded exception (multi-stroke, FR-091/FR-092)
   // 047 (research R5) — the six Markdown fold commands, the same multi-stroke exception as word wrap.
   'markdown.toggleSection': 'tier2', // recorded exception (multi-stroke)
@@ -71,7 +79,6 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
   'search.replaceAll': 'tier2', // recorded exception
-  'panel.rename': 'tier2', // recorded exception (function key; shares F2 with file.rename)
   'menu.open': 'tier2', // recorded exception (the Menu key is not a second chord)
 
   // Content — tier 3.
@@ -131,7 +138,6 @@ const TIER_EXCEPTIONS: ReadonlySet<string> = new Set([
   'editor.saveAs|Ctrl+Alt+S',
   'search.replaceAll|Ctrl+Alt+Enter',
   'file.rename|F2',
-  'panel.rename|F2',
   'search.findNext|F3',
   'search.findPrevious|Shift+F3',
   'view.fullscreen|F11',
@@ -219,6 +225,23 @@ describe('the FR-101 tier guard', () => {
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  /**
+   * 048 FR-020 / Constitution IV — a multi-stroke chord's FIRST stroke is judged as though it were the
+   * whole chord. The split commands are tier 1, so their first stroke must be exactly Ctrl+Shift+Alt
+   * plus a key, judged on the stroke itself rather than on the whole token's `+`-split.
+   */
+  it('judges each split chord by its first stroke, which is tier 1 (048 FR-020)', () => {
+    const SPLITS: ActionId[] = ['panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft'];
+    for (const action of SPLITS) {
+      const tokens = DEFAULT_KEYBINDINGS.bindings[action] ?? [];
+      expect(tokens.length, action).toBe(1);
+      const strokes = parseChordStrokes(tokens[0]);
+      expect(strokes?.length, action).toBe(2);
+      expect(ACTION_TIER[action]).toBe('tier1');
+      expect(matchesTier('tier1', strokes?.[0] ?? ''), `${action} first stroke ${strokes?.[0]}`).toBe(true);
+    }
   });
 
   /**
@@ -346,7 +369,13 @@ describe('the FR-101 tier guard', () => {
       'editor.columnSelectLeft': ['Shift+Alt+ArrowLeft'],
       'editor.columnSelectRight': ['Shift+Alt+ArrowRight'],
       'editor.toggleWordWrap': ['Ctrl+E,W'], // re-pinned for FR-124 (Mods+K1,K2)
-      'panel.rename': ['F2'],
+      // 048 FR-020 — the four split commands.
+      'panel.splitDown': ['Ctrl+Shift+Alt+End,ArrowDown'],
+      'panel.splitUp': ['Ctrl+Shift+Alt+End,ArrowUp'],
+      'panel.splitRight': ['Ctrl+Shift+Alt+End,ArrowRight'],
+      'panel.splitLeft': ['Ctrl+Shift+Alt+End,ArrowLeft'],
+      // 048 FR-131 — Destroy Panel.
+      'panel.destroy': ['Ctrl+Shift+Alt+F4'],
       // 047 (research R5, R7) — Markdown section folding and Go to Heading.
       'markdown.toggleSection': ['Ctrl+M,M'],
       'markdown.toggleAll': ['Ctrl+M,L'],

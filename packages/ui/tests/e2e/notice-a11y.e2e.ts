@@ -84,22 +84,6 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 30_000 });
 }
 
-/**
- * Name a panel through its header.
- *
- * Not cosmetic: panel titles are numbered PER TAB, so an unnamed workspace has a `Panel 1` in every
- * tab — and the assertion below ("the delta did not re-announce a panel already reported") would
- * then fail on a name collision rather than on the behaviour it is about.
- */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
-}
-
 async function editorOn(win: Page, panelId: string, file: string): Promise<void> {
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('editor');
   await win.getByTestId(`panel-type-confirm-${panelId}`).click();
@@ -118,9 +102,9 @@ test('a growing notice announces only the panels that joined, and its list takes
   const moved = `${root}-renamed`;
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-a11y-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-a11y-ud-'));
-  writeFileSync(join(root, 'one.txt'), 'ONE\n');
-  writeFileSync(join(root, 'two.txt'), 'TWO\n');
-  writeFileSync(join(root, 'three.txt'), 'THREE\n');
+  writeFileSync(join(root, 'alpha.txt'), 'ALPHA\n');
+  writeFileSync(join(root, 'bravo.txt'), 'BRAVO\n');
+  writeFileSync(join(root, 'charlie.txt'), 'CHARLIE\n');
 
   try {
     await runApp(
@@ -128,13 +112,11 @@ test('a growing notice announces only the panels that joined, and its list takes
         await settle(win);
         await createProject(win, 'A11y', root);
         const [first] = await panelIds(win);
-        await editorOn(win, first!, 'one.txt');
-        await renamePanel(win, first!, 'Alpha');
+        await editorOn(win, first!, 'alpha.txt');
         await addPanels(win, 1);
         const ids = await panelIds(win);
         const second = ids.find((id) => id !== first)!;
-        await editorOn(win, second, 'two.txt');
-        await renamePanel(win, second, 'Bravo');
+        await editorOn(win, second, 'bravo.txt');
 
         // A second tab, left unvisited on restore — the growth this spec is about.
         await win.getByTestId('tab-add').click();
@@ -144,10 +126,9 @@ test('a growing notice announces only the panels that joined, and its list takes
         await rename.press('Enter');
         await expect(rename).toHaveCount(0);
         const [third] = await panelIds(win);
-        await editorOn(win, third!, 'three.txt');
-        await renamePanel(win, third!, 'Charlie');
+        await editorOn(win, third!, 'charlie.txt');
         await win.locator('.tab-chip').first().click();
-        await persisted(dataDir, 'A11y', 'three.txt');
+        await persisted(dataDir, 'A11y', 'charlie.txt');
       },
       { dataDir, userDataDir },
     );
@@ -193,16 +174,16 @@ test('a growing notice announces only the panels that joined, and its list takes
           .not.toBe(before);
 
         const announced = (await delta.textContent()) ?? '';
-        // The panel that joined is named, and so is the tab it joined under…
-        expect(announced).toContain('Charlie');
+        // The panel that joined is named (by its file — panels are not renamable, 048), and so is its tab…
+        expect(announced).toContain('charlie');
         expect(announced).toContain('Later');
         // …and the two the user was already told about are NOT re-read. This is the assertion the
         // whole requirement exists for: the delta region is not a second copy of the list.
         expect(announced, 'the delta region re-announced a panel already reported').not.toContain(
-          'Alpha',
+          'alpha',
         );
         expect(announced, 'the delta region re-announced a panel already reported').not.toContain(
-          'Bravo',
+          'bravo',
         );
 
         // ═══ FR-032b — the list is reachable, and lets go. ═══

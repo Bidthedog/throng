@@ -1,6 +1,12 @@
 /**
  * #218 — a panel wears the name of the thing inside it, and only a name the USER typed is custom.
  *
+ * **048 — manual panel rename is gone.** No panel has a rename box, a typed override or a Reset Name, so
+ * the A2 test (an adjustment under an OPEN rename box), every "Reset Name is not offered" assertion and
+ * the typed-name half of the restart test were removed with the feature. What stays is the auto-naming
+ * half: a panel follows its content, and a daemon adjustment never stops it doing so. The paragraphs
+ * below describe the defect's history and still say "Reset Name" and "rename box"; read them as that.
+ *
  * The rule this file is measured against:
  *
  * > A panel follows its terminal's name or its file's name, **unless** it is untyped (the "Select
@@ -57,14 +63,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  runApp,
-  createProject,
-  firstPanelId,
-  panelIds,
-  reloadWindow,
-  cleanupTemp,
-} from './harness.js';
+import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp } from './harness.js';
 
 function makeProject(prefix: string): string {
   const root = mkdtempSync(join(tmpdir(), prefix));
@@ -134,42 +133,6 @@ function findPanelTitle(node: LayoutPanelNode, panelId: string): string | undefi
   return undefined;
 }
 
-/** One project's persisted layout document, or undefined if it has not been written yet. */
-function readLayoutJson(dataDir: string, projectName: string): string | undefined {
-  let db: InstanceType<typeof Database> | undefined;
-  try {
-    db = new Database(dbPath(dataDir), { readonly: true });
-    const row = db
-      .prepare(
-        `SELECT w.layout_json AS json
-             FROM workspace_layout w
-             JOIN projects p ON p.id = w.project_id
-            WHERE p.name = ?`,
-      )
-      .get(projectName) as { json?: string } | undefined;
-    return row?.json;
-  } catch {
-    return undefined;
-  } finally {
-    db?.close();
-  }
-}
-
-/** Every persisted panel title in a layout document. */
-function panelTitlesInLayout(layoutJson: string): string[] {
-  const layout = JSON.parse(layoutJson) as { tabs?: { root: LayoutPanelNode }[] };
-  const out: string[] = [];
-  const walk = (node: LayoutPanelNode): void => {
-    if (node.type === 'panel') {
-      if (node.title !== undefined) out.push(node.title);
-      return;
-    }
-    for (const child of node.children ?? []) walk(child);
-  };
-  for (const tab of layout.tabs ?? []) walk(tab.root);
-  return out;
-}
-
 /** The persisted title of one panel, found by id across every tab in a layout document. */
 function panelTitleInLayout(layoutJson: string, panelId: string): string | undefined {
   const layout = JSON.parse(layoutJson) as { tabs?: { root: LayoutPanelNode }[] };
@@ -189,29 +152,6 @@ async function enterProject(win: Page, name: string): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 20_000 });
 }
 
-/** Right-click a panel header and report whether "Reset Name" is offered. */
-async function resetNameEnabled(win: Page, panelId: string): Promise<boolean> {
-  await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
-  const menu = win.getByTestId('context-menu');
-  const item = win.getByTestId('menu-item-Reset Name');
-  await expect(item).toBeVisible();
-  const disabled = await item.isDisabled();
-  /*
-   * A plain Escape, and it closes the menu wherever focus happens to be — the root menu closes from
-   * a WINDOW listener, not from the list's own handler.
-   *
-   * This is the assertion that found #228's neighbour: that listener used to be attached inside a
-   * `setTimeout(…, 0)` alongside the outside-pointer one, so for a macrotask the menu was visible,
-   * focused and deaf to Escape. On a busy event loop that window is wide enough to hit — 1 run in 5
-   * here, and 5 in 10 while the app was still starting. Keeping the assertion (rather than merely
-   * pressing and moving on) is what makes this spec able to notice it again.
-   */
-  await win.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  await expect(item).toHaveCount(0);
-  return !disabled;
-}
-
 test('a generated name the daemon adjusts is not a rename — the panel still auto-names itself (#218 A1)', { tag: ['@extended', '@window'] }, async () => {
   const rootA = makeProject('throng-a1-alpha-');
   const rootB = makeProject('throng-a1-beta-');
@@ -219,25 +159,20 @@ test('a generated name the daemon adjusts is not a rename — the panel still au
   try {
     await runApp(
       async (_app, win) => {
-        // Project A owns "Panel 1". Its layout must be PERSISTED before B asks for the same name —
+        // Project A owns "Blank Panel" (048 FR-127). Its layout must be PERSISTED before B asks for the same name —
         // the daemon's claim service reads names off the saved layouts, not off this window's state.
         await createProject(win, 'AutoAlpha', rootA);
         const a = await firstPanelId(win);
-        await expect(win.getByTestId(`panel-title-${a}`)).toHaveText('Panel 1');
-        await expectLayoutSaved(dataDir, 'AutoAlpha', (json) => panelTitleInLayout(json, a) === 'Panel 1');
+        await expect(win.getByTestId(`panel-title-${a}`)).toHaveText('Blank Panel');
+        await expectLayoutSaved(dataDir, 'AutoAlpha', (json) => panelTitleInLayout(json, a) === 'Blank Panel');
 
-        // Project B's first panel is generated "Panel 1" too — panels are numbered within their own
-        // layout — so the daemon adjusts it. That adjustment is throng's choice, not the user's.
+        // Project B's first panel is generated "Blank Panel" too — panels are numbered within their own
+        // layout — so the daemon adjusts the STORED name. That adjustment is throng's choice, not the
+        // user's, and 048 FR-130 keeps it internal: the header still says plain "Blank Panel".
         await createProject(win, 'AutoBeta', rootB);
         const b = await firstPanelId(win);
-        await expect
-          .poll(() => win.getByTestId(`panel-title-${b}`).textContent(), { timeout: 15_000 })
-          .toBe('Panel 2');
-
-        // THE DEFECT: the adjustment travelled to every window as a RENAME, including back to the one
-        // that made it, so the panel is marked manually renamed and "Reset Name" is offered on a panel
-        // nobody has renamed.
-        expect(await resetNameEnabled(win, b)).toBe(false);
+        await expectLayoutSaved(dataDir, 'AutoBeta', (json) => panelTitleInLayout(json, b) === 'Blank Panel 2');
+        await expect(win.getByTestId(`panel-title-${b}`)).toHaveText('Blank Panel');
 
         // …and the consequence the user actually reports: a custom title outranks every automatic one,
         // so typing the panel leaves it wearing the placeholder instead of its shell's name.
@@ -246,107 +181,6 @@ test('a generated name the daemon adjusts is not a rename — the panel still au
         await win.getByTestId(`panel-type-confirm-${b}`).click();
         await expect(win.getByTestId(`terminal-${b}`)).toBeVisible();
         await expect(win.getByTestId(`panel-title-${b}`)).toContainText('cmd.exe', { timeout: 15_000 });
-      },
-      { dataDir },
-    );
-  } finally {
-    for (const r of [rootA, rootB, dataDir]) cleanupTemp(r);
-  }
-});
-
-test('an adjustment landing under an OPEN rename box is not a rename either (#218 A2)', { tag: ['@extended', '@window'] }, async () => {
-  const rootA = makeProject('throng-a2-alpha-');
-  const rootB = makeProject('throng-a2-beta-');
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-a2-data-'));
-  try {
-    await runApp(
-      async (_app, win) => {
-        // Project A takes "Panel 1" AND "Panel 2", so the name project B's `+` will generate is
-        // already spoken for and the daemon must move it.
-        await createProject(win, 'BoxAlpha', rootA);
-        const a = await firstPanelId(win);
-        await win.getByTestId(`panel-add-${a}`).click();
-        await expect(win.locator('.panel-box')).toHaveCount(2);
-        // The box opens a render AFTER the panel appears (`panel-placeholder`'s last-added effect), so
-        // an Escape sent on the panel count alone can land before it exists and close nothing — seen
-        // twice in a row on the hosted gate, with the box then open for the full 15 s.
-        const addedA = (await panelIds(win)).find((id) => id !== a) ?? '';
-        await expect(win.getByTestId(`panel-rename-input-${addedA}`)).toBeFocused();
-        await win.keyboard.press('Escape'); // leave the box without typing — nothing renamed
-        await expect(win.locator('[data-testid^="panel-rename-input-"]')).toHaveCount(0);
-        // Both of A's panel names have to be ON DISK before B can collide with them — the daemon's
-        // claim service (see `expectLayoutSaved`) reads names off the saved layout, not this window.
-        await expectLayoutSaved(
-          dataDir,
-          'BoxAlpha',
-          (json) =>
-            panelTitleInLayout(json, a) !== undefined &&
-            (json.match(/"title":"Panel \d+"/g) ?? []).length === 2,
-        );
-
-        await createProject(win, 'BoxBeta', rootB);
-        const b = await firstPanelId(win);
-
-        // The header `+` opens the new panel straight into its rename box, seeded with the generated
-        // name. The claim for that name resolves a beat later and moves it — under the open box.
-        // The generator counts the panels in B's OWN layout (core/workspace/operations.ts:
-        // `Panel ${totalPanels(layout) + 1}`), so the count taken HERE, before the click, is the
-        // number it will use. Reading it from the database instead does not work: B's layout has
-        // not been written yet at this point.
-        const betaPanelsBefore = await win.locator('.panel-box').count();
-        await win.getByTestId(`panel-add-${b}`).click();
-        await expect(win.locator('.panel-box')).toHaveCount(2);
-        const added = (await panelIds(win)).find((id) => id !== b) ?? '';
-        expect(added).not.toBe('');
-        const renameInput = win.getByTestId(`panel-rename-input-${added}`);
-        await expect(renameInput).toBeVisible();
-        /*
-         * #299 — DO NOT re-derive this wait from `renameInput.inputValue()`.
-         *
-         * It used to read the box's value as `seed` and wait for the persisted title to differ from
-         * it. That is a race with the very adjustment it is waiting for: the box is UNCONTROLLED, so
-         * it shows whatever the name was when it first rendered, and on a loaded machine the daemon's
-         * claim can land BEFORE that first paint. The box then already shows the ADJUSTED name, seed
-         * equals the persisted title, and the predicate can never become true — 15 seconds of polling
-         * for a change that had already happened. It failed 8/8 on CI, then passed, then flaked,
-         * which is the signature of a race and not of a defect, and it never reproduced locally.
-         *
-         * The contract does not need that value. A2 is: B's generated name COLLIDES with one of A's,
-         * the daemon moves it, and moving it is not a manual rename. So state the collision as an
-         * explicit precondition, and wait for the outcome — a persisted title that is no longer one
-         * of A's names. Neither depends on when anything was painted.
-         */
-        const alphaNames = panelTitlesInLayout(readLayoutJson(dataDir, 'BoxAlpha') ?? '{}');
-        const generated = `Panel ${betaPanelsBefore + 1}`;
-        // THE PRECONDITION, ASSERTED. Without this the wait below could be satisfied by a name that
-        // never collided — a green bar proving nothing, which is exactly what this test is about.
-        expect(
-          alphaNames,
-          `A2 needs B's generated name (${generated}) to collide with one of A's (${alphaNames.join(', ')})`,
-        ).toContain(generated);
-        await expectLayoutSaved(
-          dataDir,
-          'BoxBeta',
-          (json) => {
-            const title = panelTitleInLayout(json, added);
-            return title !== undefined && !alphaNames.includes(title);
-          },
-        );
-
-        // Leaving the box is how this ends for everyone — you click away to pick the panel's type.
-        // Nothing was typed into it, so nothing has been renamed.
-        await win.keyboard.press('Tab');
-        await expect(win.getByTestId(`panel-rename-input-${added}`)).toHaveCount(0);
-
-        expect(await resetNameEnabled(win, added)).toBe(false);
-
-        await win.getByTestId(`panel-type-select-${added}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
-        await win.getByTestId(`panel-type-confirm-${added}`).click();
-        await expect(win.getByTestId(`terminal-${added}`)).toBeVisible();
-        await expect(win.getByTestId(`panel-title-${added}`)).toContainText('cmd.exe', {
-          timeout: 15_000,
-        });
       },
       { dataDir },
     );
@@ -437,44 +271,29 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
       const restored = win.getByTestId(`panel-title-${pid}`);
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 20_000 });
       await expect
-        .poll(async () => /^Panel \d+$/.test((await restored.textContent()) ?? ''), {
+        .poll(async () => /^Blank Panel( \d+)?$/.test((await restored.textContent()) ?? ''), {
           timeout: 20_000,
-          message: 'a reattached terminal fell back to its "Panel X" placeholder',
+          message: 'a reattached terminal fell back to its "Blank Panel" placeholder',
         })
         .toBe(false);
 
-      // Reset Name stays disabled throughout — nothing here was ever renamed, so the menu must not
-      // offer a recovery that implies it was.
-      expect(await resetNameEnabled(win, pid)).toBe(false);
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('panel names survive a restart — the automatic ones and the typed one (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+test('a terminal panel keeps its name across a restart (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   test.setTimeout(180_000);
   const root = makeProject('throng-restart-name-');
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-ud-'));
   try {
-    // ── Launch 1: a terminal panel that names itself, and a second panel the user DID rename ──
+    // ── Launch 1: a terminal panel that names itself ──
     await runApp(
       async (_app, win) => {
         await createProject(win, 'RestartNames', root);
         const term = await firstPanelId(win);
-
-        // The second panel is added and named BEFORE the terminal starts: a live terminal in a
-        // sibling panel takes focus back, which blurs and closes the new panel's rename box before
-        // a test can type into it (see `commitPanelRename` in the harness).
-        await win.getByTestId(`panel-add-${term}`).click();
-        await expect(win.locator('.panel-box')).toHaveCount(2);
-        const named = (await panelIds(win)).find((id) => id !== term) ?? '';
-        const input = win.getByTestId(`panel-rename-input-${named}`);
-        await expect(input).toBeVisible();
-        await input.fill('Scratch');
-        await input.press('Enter');
-        await expect(win.getByTestId(`panel-title-${named}`)).toHaveText('Scratch');
 
         await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
         await win.getByTestId('terminal-flavour').selectOption('cmd');
@@ -484,27 +303,9 @@ test('panel names survive a restart — the automatic ones and the typed one (#2
           timeout: 15_000,
         });
 
-        /*
-         * The fence waits for the RENAMED panel only, and the `cmd.exe` half it first carried is
-         * deliberately gone.
-         *
-         * That conjunct never became true: the poll ran its full budget on every attempt, reporting
-         * "the layout for RestartNames was never persisted" while the layout plainly had been —
-         * launch 2 below restores both panels. `panelTitleInLayout` is not the suspect; three other
-         * tests in this file fence on it and pass. The terminal's live title is asserted ON SCREEN
-         * two lines above and evidently does not reach the layout JSON as that string, which is a
-         * fact about where a terminal's name lives, not about whether the write landed.
-         *
-         * Fencing on 'Scratch' is no weaker than what this replaced. The original was an
-         * unconditional 3000ms sleep that verified nothing at all, and the terminal's name surviving
-         * a restart is the SUBJECT of launch 2 — asserted there, with its own auto-polling 20s
-         * budget, which is where a claim about defect B belongs.
-         */
-        await expectLayoutSaved(
-          dataDir,
-          'RestartNames',
-          (json) => panelTitleInLayout(json, named) === 'Scratch',
-        );
+        // The terminal's name is asserted on screen above and again after the restart below; the layout
+        // only has to have been written before the app closes.
+        await expectLayoutSaved(dataDir, 'RestartNames', (json) => panelTitleInLayout(json, term) !== undefined);
       },
       { dataDir, userDataDir },
     );
@@ -518,16 +319,14 @@ test('panel names survive a restart — the automatic ones and the typed one (#2
         // not necessarily re-emit its OSC title, so the terminal's name has to come from somewhere
         // that survives — which is the whole of defect B.
         const titles = win.locator('.panel-box__title');
-        await expect(titles).toHaveCount(2, { timeout: 20_000 });
+        await expect(titles).toHaveCount(1, { timeout: 20_000 });
         await expect
-          .poll(async () => (await titles.allTextContents()).some((t) => /^Panel \d+$/.test(t)), {
+          .poll(async () => (await titles.allTextContents()).some((t) => /^Blank Panel( \d+)?$/.test(t)), {
             timeout: 20_000,
-            message: 'a restored panel fell back to its "Panel X" placeholder',
+            message: 'a restored panel fell back to its "Blank Panel" placeholder',
           })
           .toBe(false);
 
-        // …and a name the user typed still outranks everything, across the restart.
-        await expect(win.locator('.panel-box__title', { hasText: 'Scratch' })).toHaveCount(1);
       },
       { dataDir, userDataDir },
     );

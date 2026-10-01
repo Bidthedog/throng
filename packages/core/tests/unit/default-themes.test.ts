@@ -56,7 +56,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 75;
 // and `foldPreviewCollapsed` — the editor's fold-gutter marker and the preview's disclosure triangle,
 // each in its expanded/collapsed pair, none a reuse of `collapseAll`/`expandAll` (see the comment
 // beside them in theme.ts).
-const EXPECTED_ICON_TOKEN_COUNT = 76;
+// 75 since 048 (research R6): `resetName` retired with panel renaming (`migrateTheme` drops it).
+const EXPECTED_ICON_TOKEN_COUNT = 75;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */

@@ -48,8 +48,7 @@ const noop = (): void => {};
 
 /** Every action the builder can call. Required fields, so a new row is a compile error here. */
 const panelActions: PanelHeaderMenuActions = {
-  beginRename: noop,
-  resetName: noop,
+  split: noop,
   zoomIn: noop,
   zoomOut: noop,
   resetZoom: noop,
@@ -208,63 +207,35 @@ describe('the Zoom submenu is offered only where zoom is implemented (FR-062a, C
 });
 
 /**
- * 043 T172/T173 (FR-061) — a Find in Files panel is not renamable, and says so by ABSENCE.
+ * 048 FR-030 — NO panel kind offers a rename in its header menu, and says so by ABSENCE.
  *
- * ══ WHY ABSENT AND NOT DISABLED, WHICH IS THE WHOLE OF THE REQUIREMENT ══
- *
- * Constitution VI again, and the same distinction the Zoom block above turns on: *disabled* means
- * "not right now", and it invites the user to work out what would re-enable it. Renaming this panel
- * is not temporarily unavailable — it is never meaningful, because the panel's identity IS its
- * query. FR-019 lets one Tab hold several of these and the term is the only thing that tells them
- * apart, so a user-chosen name would hide the one piece of information the header is there to give.
- *
- * This is a deliberate exception to the app-wide rule that every panel is renamable, which is
- * exactly why it is asserted rather than left to the reader of the builder: an omission and a
- * decision look identical in code, and the next person to notice Rename missing here should find a
- * test naming the requirement rather than what looks like a gap.
- *
- * Reset Name goes with it. It is Rename's undo, and offering an undo for something that cannot be
- * done is a stranger row than Rename itself would have been.
+ * This block was 043 FR-061's "a Find in Files panel is not renamable" — one deliberate exception to
+ * the app-wide rule that every panel is renamable. 048 made the exception the rule: a panel is named
+ * by what it holds, so Rename and Reset Name are gone from every kind. Absent, not disabled
+ * (Constitution VI): renaming is never meaningful, and a greyed row invites the user to work out what
+ * would re-enable it.
  */
-describe('a Find in Files panel offers no rename in its header menu (FR-061)', () => {
-  it('omits Rename', () => {
-    expect(labels(menuFor(FIND_IN_FILES_KIND))).not.toContain('Rename');
-  });
-
-  it('omits Reset Name', () => {
-    expect(labels(menuFor(FIND_IN_FILES_KIND))).not.toContain('Reset Name');
-  });
-
-  it('omits them rather than disabling them', () => {
-    // The failure this catches is the easy half-fix: a `disabled: panel.kind === 'findInFiles'`,
-    // which satisfies "the user cannot rename" and not the requirement.
-    const items = menuFor(FIND_IN_FILES_KIND);
-    expect(items.filter((i) => i.label === 'Rename' || i.label === 'Reset Name')).toEqual([]);
-  });
-
-  it('leaves every other kind renamable — the exception is one panel, not a retreat', () => {
-    // 044 FR-030 — a preview is the second stated exception, on the same ground; asserted below.
-    for (const { kind, what } of KINDS.filter((k) => k.kind !== FIND_IN_FILES_KIND && k.kind !== PREVIEW_KIND)) {
-      const l = labels(menuFor(kind));
-      expect(l, `${what} lost Rename`).toContain('Rename');
-      expect(l, `${what} lost Reset Name`).toContain('Reset Name');
+describe('no panel kind offers a rename in its header menu (048 FR-030)', () => {
+  it('omits Rename and Reset Name on every kind, rather than disabling them', () => {
+    for (const { kind, what } of KINDS) {
+      const items = menuFor(kind);
+      expect(items.filter((i) => i.label === 'Rename' || i.label === 'Reset Name'), `${what} offers a rename`).toEqual(
+        [],
+      );
     }
   });
 
-  it('leaves the panel a menu that still does something, with no dangling divider', () => {
+  it('leaves a Find in Files panel a menu that still does something, with no dangling divider', () => {
     /*
-     * Losing the last item of a section must not leave the divider that separated it. `Rename` is
-     * this kind's only `content` row, so removing it empties the menu's FIRST section — the one
-     * shape in the app where a stray separator would put a rule at the very top of the menu. That is
-     * `menu-sections.test.ts`'s business, and this panel's header is added to its table in the same
-     * change; what is asserted here is the cheaper half — the menu is not left empty, and the rows a
-     * user still needs are still on it.
+     * The menu's FIRST section is Create (Split) for this kind — it has no Content row. That is
+     * `menu-sections.test.ts`'s business (this panel's header is in its table); what is asserted here
+     * is the cheaper half — the menu is not left empty, and the rows a user still needs are on it.
      */
     const l = labels(menuFor(FIND_IN_FILES_KIND));
+    expect(l).toContain('Split');
     expect(l).toContain('Send to Tab');
     expect(l).toContain('Destroy Panel');
-    // Zoom stays: FR-062 gave this panel real zoom, so FR-062a now requires the commands rather than
-    // forbidding them. Removing rename is not a retreat from the rest of the menu.
+    // Zoom stays: FR-062 gave this panel real zoom, so FR-062a requires the commands.
     expect(l).toContain('Zoom');
   });
 });

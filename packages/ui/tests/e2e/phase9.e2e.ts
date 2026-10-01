@@ -8,7 +8,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -116,16 +116,8 @@ test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag
       .locator('.panel-box')
       .first()
       .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
-    await win.getByTestId(`panel-add-${firstPanel}`).click();
-    // Commit the new panel's inline rename — but only once its input actually HAS focus
-    // (017 FR-013a). A new panel opens in rename mode with an `autoFocus` input; pressing
-    // Enter before that focus lands re-activates the add BUTTON, which silently adds a
-    // panel nobody asked for and makes the count below [3]. Settling on the input being
-    // focused is the real condition the bare `press('Enter')` was assuming.
-    const panelRename = win.locator('[data-testid^="panel-rename-input-"]');
-    await expect(panelRename).toBeFocused();
-    await win.keyboard.press('Enter');
-    await expect(panelRename).toHaveCount(0);
+    await splitPanelViaMenu(win, firstPanel);
+    // The split opens no rename box (048 FR-002), so the count is the only thing to settle on.
     await expect(win.locator('.tab-chip__count').first()).toHaveText('2');
 
     // Add a 2nd tab so Close is enabled, then close the first with confirmation.

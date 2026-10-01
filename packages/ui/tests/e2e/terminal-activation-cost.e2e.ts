@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 import { makeCmdTerminal } from './altscreen-fixture.js';
 
@@ -59,7 +59,7 @@ async function longTasks(win: Page): Promise<LongTask[]> {
 
 /** Add a panel to the current tab and make it a cmd terminal. */
 async function addTerminal(win: Page, root: string, existingPanelId: string): Promise<void> {
-  await win.getByTestId(`panel-add-${existingPanelId}`).click();
+  await splitPanelViaMenu(win, existingPanelId);
   const formLocator = win.locator('[data-testid^="panel-type-form-"]').first();
   await expect(formLocator).toBeVisible();
   const form = await formLocator.getAttribute('data-testid');

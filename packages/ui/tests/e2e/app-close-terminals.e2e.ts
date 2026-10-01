@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, panelIds, runApp } from './harness.js';
+import { APP_CLOSE_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, firstPanelId, panelIds, runApp, splitPanelViaMenu } from './harness.js';
 // T068 (US3 / FR-015): closing the app while terminals are running must warn with
 // a three-choice prompt (leave running / terminate all / cancel) instead of
 // silently killing them. Cancel keeps the app open.
@@ -97,9 +97,9 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await win.keyboard.press('Enter');
 
       // Add Panel B → a second terminal.
-      await win.getByTestId(`panel-add-${a}`).click();
+      await splitPanelViaMenu(win, a);
+      await expect(win.locator('.panel-box')).toHaveCount(2);
       const b = (await panelIds(win)).find((id) => id !== a)!;
-      await win.keyboard.press('Escape');
       await win.getByTestId(`panel-type-select-${b}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${b}`).click();

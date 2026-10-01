@@ -20,17 +20,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  createProject as newProject,
-  firstPanelId,
-  panelIds,
-  reloadWindow,
-  cleanupTemp,
-  settleOnActiveProject,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, panelIds, reloadWindow, cleanupTemp, settleOnActiveProject, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 import { shippedPress } from '../shared/window-chords.js';
 
 /*
@@ -260,11 +250,9 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
       });
 
       // Add a sibling terminal panel (so the tab is [editor, terminal]).
-      await win.getByTestId(`panel-add-${editorPid}`).click();
+      await splitPanelViaMenu(win, editorPid);
       await expect(win.locator('.panel-box')).toHaveCount(2);
       const termPid = (await panelIds(win)).find((id) => id !== editorPid)!;
-      // Commit the new panel's inline rename if it opened, so the type picker is reachable.
-      await win.keyboard.press('Enter').catch(() => undefined);
       await win.getByTestId(`panel-type-select-${termPid}`).selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
       await win.getByTestId(`panel-type-confirm-${termPid}`).click();

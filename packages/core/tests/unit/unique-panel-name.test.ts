@@ -80,46 +80,52 @@ describe('reconcilePanelNames', () => {
   });
 });
 
-describe('generated panel names run in one global sequence (024 follow-up)', () => {
+describe('generated panel names run in one global sequence (024 follow-up, 048 FR-127)', () => {
   it('recognises a generated name, and only a generated one', () => {
+    expect(isDefaultPanelName('Blank Panel')).toBe(true);
+    expect(isDefaultPanelName('Blank Panel 4')).toBe(true);
+    expect(isDefaultPanelName('  Blank Panel 7  ')).toBe(true);
+    expect(isDefaultPanelName('blank panel 3')).toBe(true); // names compare case-insensitively
+    // The pre-FR-127 shape is still one throng generated, so it rejoins the sequence too (FR-128).
     expect(isDefaultPanelName('Panel 1')).toBe(true);
-    expect(isDefaultPanelName('Panel 42')).toBe(true);
-    expect(isDefaultPanelName('  Panel 7  ')).toBe(true);
-    expect(isDefaultPanelName('panel 3')).toBe(true); // names compare case-insensitively
+    expect(isDefaultPanelName('panel 42')).toBe(true);
     // Anything a user would have typed is NOT a generated name and must never be renumbered.
     expect(isDefaultPanelName('Build')).toBe(false);
     expect(isDefaultPanelName('Panel')).toBe(false);
     expect(isDefaultPanelName('Panel 1 (2)')).toBe(false);
-    expect(isDefaultPanelName('Panel one')).toBe(false);
-    expect(isDefaultPanelName('My Panel 2')).toBe(false);
+    expect(isDefaultPanelName('Blank Panel (2)')).toBe(false);
+    expect(isDefaultPanelName('My Blank Panel')).toBe(false);
+    expect(isDefaultPanelName('Blank Panel one')).toBe(false);
   });
 
-  it('takes the lowest free number, so the sequence has no gaps', () => {
-    expect(nextDefaultPanelName([])).toBe('Panel 1');
-    expect(nextDefaultPanelName(['Panel 1'])).toBe('Panel 2');
-    expect(nextDefaultPanelName(['Panel 1', 'Panel 2', 'Panel 3'])).toBe('Panel 4');
+  it('starts at an unnumbered "Blank Panel", then takes the lowest free number from 2', () => {
+    expect(nextDefaultPanelName([])).toBe('Blank Panel');
+    expect(nextDefaultPanelName(['Blank Panel'])).toBe('Blank Panel 2');
+    expect(nextDefaultPanelName(['Blank Panel', 'Blank Panel 2', 'Blank Panel 3'])).toBe('Blank Panel 4');
   });
 
   it('fills a gap left by a deleted panel rather than counting past it', () => {
-    expect(nextDefaultPanelName(['Panel 1', 'Panel 3'])).toBe('Panel 2');
+    expect(nextDefaultPanelName(['Blank Panel', 'Blank Panel 3'])).toBe('Blank Panel 2');
+    expect(nextDefaultPanelName(['Blank Panel 2'])).toBe('Blank Panel');
   });
 
-  it('ignores names that are not part of the sequence', () => {
-    expect(nextDefaultPanelName(['Build', 'Deploy', 'Panel 1'])).toBe('Panel 2');
+  it('ignores names that are not part of the sequence, legacy "Panel N" included', () => {
+    expect(nextDefaultPanelName(['Build', 'Deploy', 'Blank Panel'])).toBe('Blank Panel 2');
+    expect(nextDefaultPanelName(['Panel 1', 'Panel 2'])).toBe('Blank Panel');
   });
 
   it('is case-insensitive about what is taken', () => {
-    expect(nextDefaultPanelName(['panel 1', 'PANEL 2'])).toBe('Panel 3');
+    expect(nextDefaultPanelName(['blank panel', 'BLANK PANEL 2'])).toBe('Blank Panel 3');
   });
 
   it('renumbers a generated name that is taken, instead of suffixing it', () => {
-    // The whole point: a second project's first panel is "Panel 2", never "Panel 1 (2)".
-    expect(uniquePanelName('Panel 1', ['Panel 1'])).toBe('Panel 2');
-    expect(uniquePanelName('Panel 1', ['Panel 1', 'Panel 2'])).toBe('Panel 3');
+    // The whole point: a second project's first panel is "Blank Panel 2", never "Blank Panel (2)".
+    expect(uniquePanelName('Blank Panel', ['Blank Panel'])).toBe('Blank Panel 2');
+    expect(uniquePanelName('Blank Panel', ['Blank Panel', 'Blank Panel 2'])).toBe('Blank Panel 3');
   });
 
   it('leaves a free generated name alone rather than renumbering it', () => {
-    expect(uniquePanelName('Panel 5', ['Panel 1'])).toBe('Panel 5');
+    expect(uniquePanelName('Blank Panel 5', ['Blank Panel'])).toBe('Blank Panel 5');
   });
 
   it('still SUFFIXES a name the user typed, because they chose those words', () => {
@@ -128,13 +134,13 @@ describe('generated panel names run in one global sequence (024 follow-up)', () 
 
   it('reconciles existing duplicates into the sequence', () => {
     const changed = reconcilePanelNames([
-      { id: 'a', name: 'Panel 1' },
-      { id: 'b', name: 'Panel 1' },
-      { id: 'c', name: 'Panel 1' },
+      { id: 'a', name: 'Blank Panel' },
+      { id: 'b', name: 'Blank Panel' },
+      { id: 'c', name: 'Blank Panel' },
     ]);
     expect(changed).toEqual([
-      { id: 'b', from: 'Panel 1', to: 'Panel 2' },
-      { id: 'c', from: 'Panel 1', to: 'Panel 3' },
+      { id: 'b', from: 'Blank Panel', to: 'Blank Panel 2' },
+      { id: 'c', from: 'Blank Panel', to: 'Blank Panel 3' },
     ]);
   });
 });

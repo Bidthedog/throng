@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WINDOW_HANDLED_ACTIONS } from '../../src/renderer/app.js';
+import { WINDOW_HANDLED_ACTIONS } from '../../src/renderer/keybindings/window-dispatcher.js';
 
 /**
  * Which actions the WINDOW owns, and which are left to whatever has focus.
@@ -35,7 +35,7 @@ describe('the actions the window intercepts', () => {
     /*
      * The other half, and the reason this is a set rather than a rule of thumb. A handler that
      * intercepted everything would satisfy the assertion above while swallowing the chords the
-     * focused widget needs — and the comment in `app.tsx` names exactly this pair as the example.
+     * focused widget needs — and the comment in `window-dispatcher.tsx` names exactly this pair as the example.
      */
     expect(WINDOW_HANDLED_ACTIONS.has('editor.save')).toBe(false);
   });
@@ -62,7 +62,7 @@ describe('the actions the window intercepts', () => {
   it('owns the window-level chords a focused widget must never swallow', () => {
     // A spot-check across the categories, so a wholesale replacement of the set fails here rather
     // than only on the two file actions this migration was about.
-    for (const action of ['zoom.in', 'focus.left', 'view.fullscreen', 'menu.open', 'panel.rename']) {
+    for (const action of ['zoom.in', 'focus.left', 'view.fullscreen', 'menu.open', 'panel.zoomIn']) {
       expect(WINDOW_HANDLED_ACTIONS.has(action), `${action} must be handled at the window`).toBe(
         true,
       );
