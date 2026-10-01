@@ -247,6 +247,8 @@ strip at every point.
 
 ### User Story 4 - Names that cannot run away (Priority: P4)
 
+*Scenario 2's panel clause superseded by 048 FR-042 (048, 2026-09-30) — panels have no rename field.*
+
 Tab and panel names are unbounded. A pasted path, a long branch name, or a stray paste into a
 rename field produces a name that overruns the strip, dominates every menu that lists tabs or
 panels, and bloats the saved layout.
@@ -670,6 +672,7 @@ context menu's Destroy Tab.
 ### Functional Requirements — name limits (US4)
 
 - **FR-033**: One setting MUST bound the maximum character count of both tab names and panel names.
+  *Panel clause superseded by 048 FR-042 (048, 2026-09-30) — the setting now bounds tab names and derived panel titles (FR-037) only.*
 - **FR-033a**: A "character" is a **grapheme cluster** — what the user perceives as one character —
   not a code point and not a UTF-16 unit. A limit of 10 permits ten things the user would point at
   and call characters, whatever they cost to encode.
@@ -683,6 +686,7 @@ context menu's Destroy Tab.
 - **FR-034**: That setting MUST default to 64 characters and be adjustable between 10 and 128.
 - **FR-035**: A rename field for a tab or a panel MUST stop accepting characters at the limit,
   rather than accepting more and truncating when the rename is committed.
+  *Panel clause superseded by 048 FR-042 (048, 2026-09-30) — rename fields exist for tabs only.*
 - **FR-035a**: **The refusal MUST be explained before it happens, not after.** A character counter
   MUST appear in the rename field once the name comes within **10 characters** of the limit, showing
   how many are used against the total, and MUST read as at-limit when the cap is reached. A field
@@ -703,6 +707,7 @@ context menu's Destroy Tab.
   cannot be used to reintroduce an over-long name.
 - **FR-035g**: Everything in FR-035a–f applies to **panel** rename fields exactly as it does to tab
   ones — one setting, one counter, one behaviour.
+  *Superseded by 048 FR-042 (048, 2026-09-30) — panels have no rename field.*
 - **FR-036**: A paste into a rename field that would exceed the limit MUST insert as much as fits
   rather than being refused.
 - **FR-036a**: A paste that is cut short MUST leave the counter reading at-limit, so the user can

@@ -953,10 +953,12 @@ restart; Back again. Repeat in a preview by following links.
 - **FR-030**: A preview panel MUST NOT be renamable — a stated exception to **002 FR-037** and **002
   FR-041**, on the ground **043 FR-061** set for the Find in Files panel. Rename and Reset Name MUST
   be absent from its menu, and the rename chord and header double-click MUST be inert on it.
+  *Made obsolete by 048 FR-044 (048, 2026-09-30) — no panel is renamable.*
 - **FR-031**: A parented preview MUST be titled **`<parent editor's name> - Preview`**, where the
   parent editor's name is whatever that editor currently displays, custom or derived (**024
   FR-015/FR-016**). The title MUST update when the parent's name changes. A standalone preview MUST
   be titled `<name an editor would derive for the file> - Preview`.
+  *Narrowed by 048 FR-044 (048, 2026-09-30) — the parent editor's name is always its derived name.*
 - **FR-032**: When the title would exceed the maximum name length setting, the name part MUST be
   shortened; " - Preview" MUST never be cut. The name part MUST keep at least one character, so at a
   maximum name length of 10 or less (the suffix's own length) a preview title exceeds the setting by
@@ -1376,6 +1378,7 @@ restart; Back again. Repeat in a preview by following links.
     adopting an editor never moves the preview. From then on both directions apply (FR-121f).
     Back, Forward and following links are not openings: they are scrolls under FR-121f, with FR-121e
     for the top-of-document case.
+    *Refined by 048 FR-084 (048, 2026-09-30) — showing a hidden tab again is neither an opening nor a restore; the preview keeps its own place.*
 - **FR-122**: **Synchronise preview and editor scrolling** (FR-114) MUST be switchable from the editor
   and the preview themselves, and every such surface MUST flip the **one global setting** — never a
   per-panel or per-document state — so the change applies at once to every editor and preview in every

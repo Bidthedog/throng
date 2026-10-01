@@ -97,10 +97,15 @@ its current chord via `firstBinding(keybindings, 'navigate.gotoLine')`, supplied
 
 | Section | Items | |
 |---|---|---|
-| Content | Rename, Save, Save As…, Revert, Reload from disk | ✓ / → |
+| Content | Save, Save As…, Revert, Reload from disk | ✓ / → |
+| Create | Split ▸ (Split Down, Split Up, Split Right, Split Left) | 048 |
 | Destroy | Destroy Panel *(or the panel's destroy verb)* | → |
 | Navigate | Reveal File in Files & Folders, Open in OS Explorer, Send to Tab, Sync to | ✓ |
-| View & state | Reset Name, Zoom, Try again, Copy details, Clear panel type, Refresh / redraw terminal | → |
+| View & state | Zoom, Try again, Copy details, Clear panel type, Refresh / redraw terminal | → |
+
+*048 (FR-016, FR-043): panel Rename (Content) and Reset Name (View & state) are removed with panel
+renaming; the Split submenu joins in Create, and every panel content menu carries it too
+(`specs/048-panel-splitting/contracts/menus-commands-controls.md`).*
 
 The biggest restructure in the feature. *Destroy Panel* moves from last to the middle, which is the
 fixed order's consequence and the same shape the Files & Folders menu already has. *Reset Name* leaves

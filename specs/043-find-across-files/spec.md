@@ -1105,6 +1105,7 @@ above has been rewritten or renumbered.
   rule that every panel is renamable: a user-chosen name would hide the term, which is the panel's
   actual identity. *(Absent rather than disabled, per Constitution VI's "absent when meaningless" —
   renaming is not temporarily unavailable here, it is never meaningful.)*
+  *Made obsolete by 048 FR-044 (048, 2026-09-30) — no panel is renamable, so this exception has nothing left to except.*
 
 ##### Presentation
 
