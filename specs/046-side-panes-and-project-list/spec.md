@@ -1363,6 +1363,7 @@ and layouts.
   still equal to the shipped default.*
   *Extended by FR-123 (iterate round 4, 2026-09-26):* "Ctrl+E, released, then W" also completes with
   Ctrl held through the W; only E has to be released.
+  *Extended by 048 FR-024 (048, 2026-09-30) — multi-stroke chords also run at window scope, in every panel type.*
 - **FR-092** *(after the maintainer's review; the capability FR-091 needs; behaviour derived from VS
   Code's Ctrl+K chords, not confirmed by the maintainer)*: A binding MAY be a **two-stroke chord**,
   written as two tokens separated by a space (`Ctrl+E W`), within these limits:
@@ -1384,6 +1385,7 @@ and layouts.
   - **Editor, parse, format and upgrade.** The capture modal MUST be able to record a second stroke
     after the first. Parsing, display, reset, conflict warnings and the shipped-defaults upgrade
     MUST treat a two-stroke binding as one binding.
+  *Extended by 048 FR-020a/FR-024 (048, 2026-09-30) — at window scope the second stroke may carry the first stroke's held modifiers.*
 
   Longer sequences are out of scope.
 - **FR-093** *(after the maintainer's review; restates FR-077's `search.replaceAll` row with its
@@ -1451,6 +1453,7 @@ and layouts.
   | `editor.saveAs` | Ctrl+Alt+S | *unchanged* | Noted exception (it acts on content) |
   | `search.replaceAll` | Ctrl+Alt+Enter | *unchanged* | Noted exception (VS Code / Sublime Text) |
   | `editor.toggleWordWrap` | Ctrl+Alt+W | **Ctrl+E W** | Noted exception, multi-stroke (FR-091 / FR-092) |
+  *The `panel.rename` row is superseded by 048 FR-045 (048, 2026-09-30) — the command is removed; F2 is `file.rename` alone.*
 
   **Content (one modifier or none)**
 
@@ -1607,6 +1610,7 @@ and layouts.
   | `search.replaceAll` | Ctrl+Alt+Enter | unchanged | Exception; live only while an editor's find bar is open (FR-093) |
   | `panel.rename` | F2 | unchanged | Exception (function key); shares F2 with `file.rename` by design |
   | `menu.open` | Shift+F10, ContextMenu | unchanged | Exception: the Menu key is not a second chord |
+  *The `panel.rename` row is superseded by 048 FR-045 (048, 2026-09-30) — the command is removed; F2 is `file.rename` alone.*
 
   **Content — tier 3, one modifier or none: no changes**
 
@@ -2406,6 +2410,7 @@ superseded by S19, and it moves again below.
   formatting, display, collisions and the shipped-defaults upgrade treat a three-key chord as one
   binding. Test layer *(Principle V)*: unit for parse and format; component for the engine and the
   capture box.
+  *Extended by 048 FR-024 (048, 2026-09-30) — the written form applies to window-scope chords too.*
 - **FR-127** *(iterate round 7, 2026-09-26; narrows FR-114 for `panel.zoomReset`; constitution
   v5.6.0 Principle IV's new named exception)*: `panel.zoomReset` MUST ship **`Ctrl+Alt+0`** (the
   main-row 0) as a second keyboard chord, after `Ctrl+Alt+Numpad0` and before `Ctrl+MiddleClick`.

@@ -307,6 +307,7 @@ stays single-project; restart and confirm sub-workspaces are restored.
 - **FR-012a**: The user MUST be able to **add a new Tab** (which starts with exactly one empty
   placeholder Panel) and **add a new empty placeholder Panel** into the active Tab; additional Panels
   MAY also arise from splitting (FR-014).
+  *Refined by 048 FR-013 (048, 2026-09-30) — the panel **+** opens a menu of directional splits, each adding its placeholder beside the clicked panel.*
 - **FR-013**: Each **Tab** MUST contain a **split tree** of one or more **Panels** — Panels arranged
   in rows/columns that can nest to arbitrary depth.
 - **FR-014**: The user MUST be able to **split** a Panel by dragging a Panel onto its edge
@@ -321,6 +322,7 @@ stays single-project; restart and confirm sub-workspaces are restored.
 - **FR-017**: All workspace docking — moving, grouping, splitting, tab reordering, and detaching —
   MUST be operable via **mouse drag-and-drop only** in this iteration; keyboard-/command-driven
   docking is out of scope.
+  *Superseded in part by 048 FR-005 (048, 2026-09-30) — splitting has a command route (the split commands); moving an existing panel stays drag-only.*
 - **FR-018**: While a Tab/Panel is being dragged, the workspace MUST show clear visual feedback of the
   valid drop target and the resulting placement (move vs split vs new tab).
 - **FR-019**: Dropping outside any valid target MUST cancel the operation and leave the Tab/Panel in
@@ -389,6 +391,7 @@ stays single-project; restart and confirm sub-workspaces are restored.
   except the target (the target's Panels are retained).
 - **FR-037**: A Panel MUST be **renameable** via a **right-click context menu on its header**; the new
   title is persisted with the layout.
+  *Superseded by 048 FR-040 (048, 2026-09-30) — panels are no longer renameable; a panel is named by its content.*
 - **FR-038**: **Panel/split resizing MUST function**: dragging a split divider MUST resize the
   adjacent cells (updating the split sizes) and MUST persist, honouring the minimum-size rule (FR-011).
 - **FR-039**: Mouse-driven **zoom** (Ctrl+wheel to zoom, Ctrl+middle-click to reset) MUST work in the
@@ -402,6 +405,7 @@ stays single-project; restart and confirm sub-workspaces are restored.
 - **FR-041**: **Tabs, Panels, and projects MUST also be renameable by double-clicking** them (a Tab
   chip, a Panel header, or a project entry), starting the same inline rename as the right-click menu
   (FR-036/FR-037) / project edit. The committed name is persisted.
+  *Superseded in part by 048 FR-040 (048, 2026-09-30) — the panel clause only; tabs and projects stay renameable by double-click.*
 
 #### Destructive-action confirmations & chrome (clarification 2026-06-26c)
 

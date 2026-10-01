@@ -255,6 +255,7 @@ confirm the new terminal's prompt is in that folder.
 2a. **Given** that terminal has just opened, **When** the user types without clicking anything,
    **Then** the characters reach the shell — the new terminal holds keyboard focus, and the panel did
    not open in rename mode.
+   *Made universal by 048 FR-043 (048, 2026-09-30) — no panel opens in rename mode; panels cannot be renamed.*
 3. **Given** a **file** is right-clicked, **When** the user chooses a flavour, **Then** the terminal
    starts in that file's parent folder.
 4. **Given** the user has added a custom flavour in settings, **When** the submenu is opened, **Then**
@@ -559,6 +560,7 @@ the declared sections, in the declared order, with dividers between them.
   already uses** ("Open In → New Editor"): a new panel in the **active tab**, typed immediately with
   its flavour and start directory, **not** opened in rename mode, and made the **active panel**. This
   feature does not redefine panel placement.
+  *Superseded in part by 048 FR-043 (048, 2026-09-30) — no panel opens in rename mode, so "not opened in rename mode" is now universal.*
 - **FR-033a**: The new terminal MUST additionally take **keyboard focus**, so the user can type a
   command without a further click. Focus does not remain in the file tree.
 - **FR-034**: A start directory that no longer exists at launch MUST fall back to the project root by
