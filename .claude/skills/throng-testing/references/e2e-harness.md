@@ -51,7 +51,8 @@ plan to register in: 034 FR-057 removed it, and the tier filter now reads the sp
   `page.evaluate(() => querySelector(...).getBoundingClientRect())`.
 - `focusEditor(win, panelId)` before typing into an editor — CodeMirror adds `.cm-focused` a beat
   after the click lands.
-- `commitPanelRename(win)` / `commitTabRename(win)` instead of a bare `Enter`.
+- `commitTabRename(win)` instead of a bare `Enter`; `splitPanelViaMenu(win, panelId, dir)` or
+  `addPanels(win, n)` to add panels (the **+** opens a split menu, 048).
 - **Never send a key at a control you have not asserted is there.** A blind `Enter` goes to whatever
   holds focus — typically inserting a newline into the fixture — and the test then dies on an
   assertion that names the feature under test. That failure is a lie and will cost you an hour in the
