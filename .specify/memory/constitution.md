@@ -1,6 +1,46 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.7.1 → 5.8.0
+Bump rationale: MINOR — Principle IV's exhaustive recorded-exceptions lists gain one entry,
+                `panel.destroy` `Ctrl+Shift+Alt+F4` (spec 048 FR-131, issue #461), taken by the
+                maintainer's decision on 2026-10-01: "It should work in all panels", terminals
+                included. Precedent: `Ctrl+F5` joined the same list as a MINOR at v4.4.0. Additive:
+                no principle is removed or redefined, no shipped design becomes non-compliant, and
+                the reserved tier is untouched.
+Modified principles: IV — the terminal-tier recorded exceptions gain the entry and its
+                justification; the modifier-tier recorded exceptions list it beside the other
+                function keys.
+Added sections: none. Removed sections: none.
+Audit: no shipped binding holds `Ctrl+Shift+Alt+F4` or any other `F4` chord
+                (`packages/core/src/config/keybindings.ts`); `Alt+F4` stays in `RESERVED_CHORDS` and
+                is matched exactly, so the four-modifier chord is not refused by it.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 5.7.0 → 5.7.1
+Bump rationale: PATCH — spec 048 FR-045. Panel renaming is removed by 048 (FR-030, FR-040), so
+                Principle IV's `F2` recorded exception loses `panel.rename` and Principle VI's
+                View & state examples lose Reset Name. Neither withdraws a guarantee or adds an
+                obligation: the exception list shrinks by a command that no longer exists, and an
+                example is dropped. A Record line notes that 048's `panel.split*` window-scope
+                two-stroke defaults fall under the existing multi-stroke rule with no new exception.
+Modified principles: IV (recorded exceptions: `F2`; multi-stroke Record line); VI (section table
+                example).
+Added sections: none. Removed sections: none.
+Audit: `panel.rename` removed from `packages/core/src/config/keybindings.ts` by 048 T044; the split
+                chords' first stroke `Ctrl+Shift+Alt+End` is not in the reserved tier.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — absent; no hooks.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.6.0 → 5.7.0
 Bump rationale: MINOR — a new principle, XII "Responsive UI (NON-NEGOTIABLE)", approved by the
                 maintainer on 2026-09-29 during 047's manual testing ("Performance of the UI is a
@@ -1960,10 +2000,22 @@ not the flavour a given user happens to run.
   open to revisiting): `Ctrl+F` (`search.find`), `Ctrl+H` (`search.replace`), `Ctrl+S`
   (`editor.save`) — all three shipped before this rule existed — and `Ctrl+F5`
   (`terminal.redraw`), added deliberately by feature 028 (issue #163).
+  *(v5.8.0: and `Ctrl+Shift+Alt+F4` (`panel.destroy`), added deliberately by spec 048 —
+  see below.)*
   This list is exhaustive; any addition to it MUST come with its own justification,
   and no chord in the reserved tier may join it. *(Unchanged at v5.6.0: a `Ctrl+Shift+-`
   entry drafted for 5.6.0 was withdrawn before publication, when panel zoom returned to
   `Ctrl+Alt`. The draft is kept in the Sync Impact Report.)*
+- **`Ctrl+Shift+Alt+F4` (`panel.destroy`), v5.8.0, spec 048 FR-131 (#461).** What it
+  displaces: a full-screen program that binds `F4` with all three modifiers (xterm would send
+  `CSI 1;8 S`); no default readline, PSReadLine or cmd line-editor binding reads it. What
+  justifies it: the maintainer's decision that destroying a panel from the keyboard must work
+  in EVERY panel, a terminal included, and `F4` carries the close meaning every Windows user
+  knows (`Alt+F4` closes a window, `Ctrl+F4` closes a document). Why no free chord serves: the
+  close family lives on `F4`, and `Alt+F4` and `Ctrl+F4` belong to the window manager and to
+  hosted programs respectively, so the four-modifier form is the one that keeps that meaning
+  without taking a chord anything else owns. The panel menu's Destroy item and the header ✕
+  remain the canonical routes; the chord is an accelerator over them (Principle VI).
 - **`Ctrl+F5`, the first exception taken under this rule rather than inherited by it.**
   What it displaces: a full-screen program can receive `Ctrl+F5` as a function-key
   sequence, and terminal file managers bind the function keys heavily. What justifies
@@ -2066,17 +2118,22 @@ should be able to guess its modifiers:
     were the whole chord, because a pending prefix consumes that stroke. A multi-stroke
     chord whose first stroke is in the reserved tier (`Ctrl+E`, `Ctrl+K`, …) MUST NOT be
     live in any scope that includes a terminal.
+    *(Record, v5.7.1, spec 048: the four split commands `panel.split*` ship window-scope two-stroke
+    defaults `Ctrl+Shift+Alt+End,Arrow*`. Their first stroke is tier 1 and not reserved, so they are
+    live in terminals under this rule as written; no exception is taken. `panel.rename` and its `F2`
+    default are retired by 048, and `F2`'s recorded exception below now names `file.rename` alone.)*
 - **Recorded exceptions** (exhaustive; an addition MUST be justified in the spec that ships
   it and recorded here):
-  - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S` and `Ctrl+F5`;
+  - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S`, `Ctrl+F5` and
+    `Ctrl+Shift+Alt+F4`;
   - **`navigate.quickOpen` `Ctrl+Shift+T`, `search.findInFiles` `Ctrl+Shift+F` and
     `search.replaceInFiles` `Ctrl+Shift+H`**: the chords every editor a user arrives from
     carries;
   - **`editor.saveAll` `Ctrl+Shift+S` and `editor.saveAs` `Ctrl+Alt+S`**, kept as a pair by
     the maintainer's decision;
   - **`search.replaceAll` `Ctrl+Alt+Enter`**, live only while an editor's find bar is open;
-  - the function keys **`F2`** (`panel.rename`, `file.rename`), **`F3` / `Shift+F3`**,
-    **`F11`** and **`Shift+F10`**;
+  - the function keys **`F2`** (`file.rename`), **`F3` / `Shift+F3`**,
+    **`F11`**, **`Shift+F10`** and **`Ctrl+Shift+Alt+F4`** (`panel.destroy`, v5.8.0);
   - **`focus.cycle` `Ctrl+`` and `focus.cycleBack` `Ctrl+Shift+``**: Shift only reverses
     the direction of the same pair;
   - **`menu.open` `Shift+F10` and `ContextMenu`**, the one-chord rule's exception above;
@@ -2392,7 +2449,7 @@ application's, not the menu's.
   | 2 | **Create** | Makes something new: New File, New Folder |
   | 3 | **Destroy** | Removes something: Delete, Destroy Tab, Destroy Panel |
   | 4 | **Navigate** | Takes you somewhere, or names where something is: Open In, Copy Path, Reveal, Go To Line, Sync to |
-  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Reset Name, Hide |
+  | 5 | **View & state** | Toggles and per-surface state: Zoom, Word Wrap, Set Language, Hide |
   | 6 | **Application** | Whole-application destinations: Settings, Key Bindings, Themes, Open Logs Folder, About |
 
 - A divider MUST be drawn only at a real section boundary. A menu whose items fall in one
@@ -2950,7 +3007,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.7.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-09-29
+**Version**: 5.8.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-01
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
