@@ -29,6 +29,22 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Split a panel in any direction** ([#433](https://github.com/Bidthedog/throng/issues/433)): a panel's **+** button now opens **Split Down / Up / Right / Left**, putting a new empty panel on that side of the panel you clicked; the same four are under **Split** in every panel's right-click menus, and **Ctrl+Shift+Alt+End** then an arrow splits the active panel from the keyboard.
+- **Drop a panel along a whole edge** ([#433](https://github.com/Bidthedog/throng/issues/433)): drag a panel to the very edge of the panel area to make a full-height column or a full-width row beside everything else.
+- **Destroy a panel from the keyboard** ([#461](https://github.com/Bidthedog/throng/issues/461)): **Ctrl+Shift+Alt+F4** destroys the focused panel of any type, a terminal included, with the same confirmations as its menu's Destroy.
+
+### Changed
+- **Panels are always named by what they hold** ([#453](https://github.com/Bidthedog/throng/issues/453)); a layout saved with custom panel names opens with each panel's own name. A new, empty panel is called **Blank Panel** until it holds something. Tabs, projects and sub-workspaces can still be renamed.
+- **Keyboard shortcuts in a sub-workspace window work as in the main window** ([#275](https://github.com/Bidthedog/throng/issues/275)); one that has nothing to act on there says so.
+
+### Removed
+- Renaming a panel: the Rename and Reset Name menu items, the header double-click and the F2 panel shortcut. F2 now reaches a terminal program.
+
+### Fixed
+- Pressing **Esc** during a panel or tab drag no longer leaves the drag image on screen ([#458](https://github.com/Bidthedog/throng/issues/458)).
+- A Markdown preview keeps its scroll position when its tab is hidden and shown again, including during a drag across other tabs ([#459](https://github.com/Bidthedog/throng/issues/459)).
+
 ## 1.0.0-alpha8 — 2026-09-30
 
 ### Added

@@ -49,8 +49,7 @@ their main-row keys, so either fires it. The keypad `0` is **not** the same as t
 `Numpad0` in a chord means the keypad zero only.
 
 **Two entries that look like a clash are not one.** `Ctrl+X` is *Cut* in File Explorer and *Cut
-line* in an editor, and `F2` is *Rename* in File Explorer and *Rename panel* in a panel. Their scopes
-never overlap, so only one ever fires. The Key Bindings editor shows each row's scope for exactly
+line* in an editor. Their scopes never overlap, so only one ever fires. The Key Bindings editor shows each row's scope for exactly
 this reason.
 
 ## Zoom
@@ -74,6 +73,11 @@ and the level persists with your layout.
 | Zoom panel type in | `panel.zoomIn` | `Ctrl+Alt++`, `Ctrl+WheelUp` | Everywhere | Increase the text size of every panel of the active panel's type. Ctrl+wheel acts on the panel under the pointer. |
 | Zoom panel type out | `panel.zoomOut` | `Ctrl+Alt+-`, `Ctrl+WheelDown` | Everywhere | Decrease the text size of every panel of the active panel's type. |
 | Reset panel type zoom | `panel.zoomReset` | `Ctrl+Alt+Numpad0`, `Ctrl+Alt+0`, `Ctrl+MiddleClick` | Everywhere | Return the active panel's type to its default text size — the keypad zero, the main-row zero, or a Ctrl+middle-click over the panel. |
+| Split Down | `panel.splitDown` | `Ctrl+Shift+Alt+End,ArrowDown` | Everywhere | Split the active panel in two and put a new empty panel below it. |
+| Split Up | `panel.splitUp` | `Ctrl+Shift+Alt+End,ArrowUp` | Everywhere | Split the active panel in two and put a new empty panel above it. |
+| Split Right | `panel.splitRight` | `Ctrl+Shift+Alt+End,ArrowRight` | Everywhere | Split the active panel in two and put a new empty panel to its right. |
+| Split Left | `panel.splitLeft` | `Ctrl+Shift+Alt+End,ArrowLeft` | Everywhere | Split the active panel in two and put a new empty panel to its left. |
+| Destroy Panel | `panel.destroy` | `Ctrl+Shift+Alt+F4` | Everywhere | Destroy the focused panel — any type, a terminal included — exactly as its menu's Destroy (or Close) does, confirmations and all. Does nothing while a side pane has focus. |
 | Focus panel to the left | `focus.left` | `Ctrl+Shift+Alt+ArrowLeft` | Everywhere | Move focus to the adjacent panel on the left. |
 | Focus panel to the right | `focus.right` | `Ctrl+Shift+Alt+ArrowRight` | Everywhere | Move focus to the adjacent panel on the right. |
 | Focus panel above | `focus.up` | `Ctrl+Shift+Alt+ArrowUp` | Everywhere | Move focus to the adjacent panel above. |
@@ -84,12 +88,17 @@ and the level persists with your layout.
 | Focus File Explorer | `focus.explorer` | `Ctrl+Shift+Alt+M` | Everywhere | Move keyboard focus straight to the File Explorer pane. |
 | Focus Projects | `focus.projects` | `Ctrl+Shift+Alt+B` | Everywhere | Move keyboard focus straight to the Projects pane. |
 | Focus Workspace | `focus.workspace` | `Ctrl+Shift+Alt+N` | Everywhere | Move keyboard focus back to the active panel in the centre workspace, without switching tab, panel or project. |
-| Rename panel | `panel.rename` | `F2` | Editor · Terminal · Find in Files | Rename the active panel — the same key File Explorer uses to rename a file. |
 
 The three focus chords run left to right as the surfaces do: **B** Projects, **N** the workspace,
 **M** File Explorer. The directional moves act from the focused panel and do nothing while a side
 pane has focus; the caret moves with focus, into whichever control in that panel last had it.
 **Ctrl+Wheel** over the title bar or a side pane does nothing, and it never scrolls the panel.
+
+**Split mode.** `Ctrl+Shift+Alt+End` puts the active panel into split mode: its border pulses and its
+status bar says the chord is waiting. An arrow key then splits the panel that way — with
+Ctrl+Shift+Alt still held or already released. **Esc** leaves split mode without splitting; any other
+key, the chord timeout, or focus moving elsewhere ends it too. Neither key reaches a terminal. The same
+four splits are on every panel's **+** button and in its **Split** menu.
 
 ## View
 
@@ -228,9 +237,14 @@ does nothing visible: throng waits for the next key.
 
 - The **first key must carry a modifier** (Ctrl, Shift or Alt), and every key must be a real key,
   not a modifier on its own.
-- A multi-key chord **cannot be bound to a command that is live in a terminal**, because the shell
-  would take the first key as typing. The capture box refuses it, and a hand-written one in
-  `keybindings.json` is ignored on load.
+- A command that is **live in a terminal** takes a multi-key chord only when it is one of the
+  window's own commands (zoom, focus, the side panes, the split commands and the rest of the
+  *Everywhere* rows) **and** its first key is not one a shell needs (the list above). The window
+  catches those keys before the terminal, so the shell receives neither. Any other multi-key chord
+  on a terminal command would hand its first key to the shell as typing: the capture box refuses
+  it, and a hand-written one in `keybindings.json` is ignored on load.
+- For those window commands, the modifiers need not stay held: `Ctrl+Shift+Alt+End` released and
+  then a bare arrow completes a split exactly as it does with the modifiers still down.
 - A multi-key chord **clashes with a shorter chord that is its own prefix**: with `Ctrl+E,W` bound,
   binding `Ctrl+E` to another command in an overlapping scope would make the longer one unreachable,
   and the capture box says so. Two multi-key chords that merely *share* a first key do not clash —

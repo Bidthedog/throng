@@ -47,13 +47,20 @@ Removing a project from throng never deletes anything on disk.
 
 The centre pane is a dock of **tabs**, each holding **panels**.
 
-- **New tab** with **+** on the tab strip; **new panel** with **+** in a panel's header.
-- **Split** by dragging a panel's header onto another panel's edge; drop on its centre to stack it.
+- **New tab** with **+** on the tab strip.
+- **Split a panel** with the **+** in its header: choose **Split Down**, **Up**, **Right** or
+  **Left** and a new empty panel appears on that side. The same four are under **Split** in the
+  panel's right-click menus, and from the keyboard press
+  [Ctrl+Shift+Alt+End](key-bindings.md#focus--zoom), then an arrow.
+- **Rearrange** by dragging a panel's header onto another panel's edge; drop on its centre to stack
+  it. Drag it to the very edge of the panel area instead and it runs the **whole** length of that
+  side — a full-height column or a full-width row, a third of the area. Where two edges meet, the
+  left or right edge wins. **Esc** during a drag cancels it.
 - **Crowded strip?** It scrolls, with arrows either side, and **▾** or **Ctrl+Shift+Alt+T** opens a
   picker that finds any tab by name.
 - A new panel starts **untyped**: choose what it is from its **Panel Type** drop-down and press
   **Confirm**.
-- Panels name themselves after what they show; **F2** or a double-click gives one a name of its own.
+- Panels name themselves after what they show; an empty one is a **Blank Panel** until you give it something.
 
 Move between panels with **Ctrl+Shift+Alt+Arrows** — the caret goes with you, into whatever you land
 on. Your whole layout, splits, sizes and zoom included, is saved per project and restored next time.
