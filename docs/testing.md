@@ -135,7 +135,7 @@ SLAs under it, and how to take a reading deliberately are in
   `skipDaemon`.
 - **Write a running app's config root through the atomic helper**, `helpers/config-write.ts`.
 - **Wait on a real condition**, never a sleep, and use the harness helpers (`settle`, `geom`,
-  `focusEditor`, `commitPanelRename`) that close the race classes most flakes came from.
+  `focusEditor`, `splitPanelViaMenu`) that close the race classes most flakes came from.
 - **A flaky test fails the run.** `failOnFlakyTests` is on, so a test that passes only on retry turns
   the run red; a flake is a bug to reproduce and fix, never to retry away.
 
