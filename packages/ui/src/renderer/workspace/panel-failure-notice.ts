@@ -30,6 +30,7 @@ import {
   type FailureKind,
   type LayoutNode,
   type NoticeSubject,
+  type Panel,
   type WorkspaceLayout,
 } from '@throng/core';
 
@@ -37,6 +38,7 @@ import { useNotify } from '../common/notification.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { operationGroupKey } from './operation.js';
+import { currentPanelTitle } from './use-panel-display-names.js';
 
 /** The test id every consolidated notice carries — one surface, one identifier. */
 export const PANEL_FAILURE_TEST_ID = 'panel-failure-notice';
@@ -83,7 +85,7 @@ function folderName(absPath: string): string {
 }
 
 interface Place {
-  panel: { id: string; title: string; originProjectId?: string };
+  panel: Panel;
   tabId: string;
   tabName: string;
   tabOrder: number;
@@ -213,7 +215,10 @@ export function useReportPanelFailure(): (report: PanelFailureReport) => void {
 
       const affected: AffectedPanel = {
         panelId: place.panel.id,
-        panelName: place.panel.title,
+        // 048 FR-032 / FR-130 — the name the panel's HEADER shows (its file, its terminal's title or
+        // flavour, or plain "Blank Panel"), never the stored fallback "Blank Panel 3". Read at the
+        // moment of the report: a failure is raised from a timer or an IPC answer, not a render.
+        panelName: currentPanelTitle(place.panel),
         tabId: place.tabId,
         tabName: place.tabName,
         tabOrder: place.tabOrder,

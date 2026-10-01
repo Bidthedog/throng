@@ -109,6 +109,23 @@ export function requestPanelFocus(panelId: string): void {
   if (focusPanel(panelId)) pendingFocusPanelId = null;
 }
 
+/**
+ * Park focus for the view that is ABOUT to replace this panel's current body, without delivering it to
+ * the body registered now (048 FR-132).
+ *
+ * Confirming a type on the type form swaps the form for the new content under the same panel id. The
+ * form is still mounted and registered when Confirm runs, so {@link requestPanelFocus} would hand the
+ * caret straight back to the form's own control and spend the request; the new view's registration then
+ * finds nothing parked. Dropping the outgoing registration first means the request waits for the
+ * incoming one — an editor's CodeMirror view, which (unlike a terminal) does not focus itself on an
+ * ordinary mount. The form's own unmount cleanup unregisters the same id again, which is idempotent,
+ * and React runs that cleanup before the new view's mount effect registers.
+ */
+export function requestPanelFocusAfterRetype(panelId: string): void {
+  unregisterPanelFocus(panelId);
+  requestPanelFocus(panelId);
+}
+
 /** Tests only: every registration gone, no focus request left parked, and no hold. */
 export function __resetPanelFocus(): void {
   registry.clear();

@@ -13,8 +13,10 @@ import {
   addPanel as opAddPanel,
   addPanelBeside as opAddPanelBeside,
   addTab as opAddTab,
+  splitPanel as opSplitPanel,
   boundLayoutNames,
   movePanelToEdge as opMovePanelToEdge,
+  movePanelToOuterEdge as opMovePanelToOuterEdge,
   movePanelToTab as opMovePanelToTab,
   addTabFromPanel as opAddTabFromPanel,
   removePanel as opRemovePanel,
@@ -22,9 +24,7 @@ import {
   reorderTab as opReorderTab,
   setActiveTab as opSetActiveTab,
   renameTab as opRenameTab,
-  renamePanel as opRenamePanel,
   retitlePanel as opRetitlePanel,
-  resetPanelName as opResetPanelName,
   closeTab as opCloseTab,
   closeOtherTabs as opCloseOtherTabs,
   resizeSplit as opResizeSplit,
@@ -32,6 +32,7 @@ import {
   panelAfterRemoval,
   effectiveActivePanelId,
   collectPanels,
+  nextDefaultPanelName,
   bumpZoom as opBumpZoom,
   resetZoom as opResetZoom,
   setPanelType as opSetPanelType,
@@ -46,8 +47,11 @@ import {
   type Panel,
   type PanelConfig,
   type PanelKind,
+  type SplitDirection,
   type WorkspaceLayout,
 } from '@throng/core';
+import { requestPanelFocus } from '../workspace/panel-focus.js';
+import { registerSplitRunner } from '../workspace/split-panel.js';
 import type { WorkspaceClient } from './workspace-client.js';
 import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
@@ -73,6 +77,14 @@ const AUTOSAVE_DEBOUNCE_MS = (() => {
   return Number.isFinite(raw) && raw > 0 ? raw : 400;
 })();
 
+/**
+ * 048 FR-127 — the generated title of a panel this store creates: "Blank Panel", or the next free
+ * "Blank Panel <n>", over the names already in `layout`. The one sequence core's `addPanel` uses too.
+ */
+function nextBlankTitle(layout: WorkspaceLayout): string {
+  return nextDefaultPanelName(layout.tabs.flatMap((t) => collectPanels(t.root).map((p) => p.title)));
+}
+
 function newId(): string {
   return globalThis.crypto.randomUUID();
 }
@@ -82,9 +94,6 @@ export interface WorkspaceContextValue {
   loading: boolean;
   /** True when a previously-saved layout could not be restored (US3). */
   restoreFailed: boolean;
-  /** The Panel just created via addPanel — it should open in rename mode (FR-041). */
-  lastAddedPanelId: string | null;
-  clearLastAddedPanel(): void;
   /** Returns the new Tab's id so the caller can immediately rename it. */
   addTab(): string;
   /**
@@ -99,7 +108,15 @@ export interface WorkspaceContextValue {
    * created by a command.
    */
   addPanelBeside(targetId: string, edge: 'left' | 'right', originProjectId?: string): string | null;
+  /**
+   * 048 — split `panelId` (in `tabId`) toward `direction`: a new untyped panel takes the named side, is
+   * made the tab's active panel and is asked to take focus (FR-002; it never opens in a rename box).
+   * Returns its id, or `null` — and changes nothing — when this layout does not hold the target.
+   */
+  splitPanel(tabId: string, panelId: string, direction: SplitDirection): string | null;
   movePanelToEdge(sourceId: string, targetId: string, edge: Edge): void;
+  /** Drop a panel on a tab's OUTER edge: full length, one third of the axis (048 FR-060–FR-063). */
+  movePanelToOuterEdge(tabId: string, panelId: string, edge: Edge): void;
   movePanelToTab(sourceId: string, tabId: string): void;
   /** Move a Panel into a brand-new Tab containing only that Panel (FR-027). */
   addTabFromPanel(sourceId: string): void;
@@ -122,10 +139,8 @@ export interface WorkspaceContextValue {
   /** Reset ONE panel to its default (inherited) text size (012, FR-009). */
   resetZoom(panelId: string): void;
   renameTab(tabId: string, title: string): void;
-  renamePanel(panelId: string, title: string): void;
   /** Rename by throng's own decision, leaving the panel's auto-title free (024, #184). */
   retitlePanel(panelId: string, title: string): void;
-  resetPanelName(panelId: string): void;
   closeTab(tabId: string): void;
   closeOtherTabs(tabId: string): void;
   resizeSplit(tabId: string, path: number[], sizes: number[]): void;
@@ -192,7 +207,6 @@ export function WorkspaceProvider({
   const reloadModeRef = useRef(reloadMode);
   reloadModeRef.current = reloadMode;
   const [restoreFailed, setRestoreFailed] = useState(false);
-  const [lastAddedPanelId, setLastAddedPanelId] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The layout pending a debounced save, so it can be flushed immediately on a
   // project switch or unmount rather than being dropped (no silent data loss).
@@ -417,8 +431,6 @@ export function WorkspaceProvider({
       layout,
       loading,
       restoreFailed,
-      lastAddedPanelId,
-      clearLastAddedPanel: () => setLastAddedPanelId(null),
       addTab: () => {
         const tab = newId();
         apply((l) => opAddTab(l, { tab, panel: newId() }, newTabPosition.current));
@@ -426,7 +438,6 @@ export function WorkspaceProvider({
       },
       addPanel: (tabId, originProjectId) => {
         const panel = newId();
-        setLastAddedPanelId(panel);
         apply((l) => opAddPanel(l, tabId, panel, originProjectId));
         return panel;
       },
@@ -434,20 +445,32 @@ export function WorkspaceProvider({
         const target = layout?.tabs.flatMap((t) => collectPanels(t.root)).find((p) => p.id === targetId);
         if (!target) return null;
         const id = newId();
-        apply((l) => {
-          const count = l.tabs.reduce((n, t) => n + collectPanels(t.root).length, 0);
-          // `addPanel`'s placeholder title; `PanelNameSync` claims a unique one as the panel appears.
-          return opAddPanelBeside(l, targetId, edge, {
+        apply((l) =>
+          // `addPanel`'s placeholder title (048 FR-127: the Blank Panel sequence over this layout's
+          // names); `PanelNameSync` claims an application-wide unique one as the panel appears.
+          opAddPanelBeside(l, targetId, edge, {
             type: 'panel',
             id,
             originProjectId: originProjectId ?? target.originProjectId,
-            title: `Panel ${count + 1}`,
-          });
-        });
+            title: nextBlankTitle(l),
+          }),
+        );
+        return id;
+      },
+      splitPanel: (tabId, panelId, direction) => {
+        const tab = layout?.tabs.find((t) => t.id === tabId);
+        if (!tab || !collectPanels(tab.root).some((p) => p.id === panelId)) return null;
+        const id = newId();
+        // `addPanel`'s placeholder title (048 FR-127); `PanelNameSync` claims a unique one as it appears.
+        apply((l) => opSplitPanel(l, tabId, panelId, direction, { id, title: nextBlankTitle(l) }));
+        // FR-002 — the new panel takes focus. Parked until it mounts and registers (`requestPanelFocus`).
+        requestPanelFocus(id);
         return id;
       },
       movePanelToEdge: (sourceId, targetId, edge) =>
         apply((l) => opMovePanelToEdge(l, sourceId, targetId, edge)),
+      // 048 FR-060 — `apply` skips the save when core returns the same layout (a no-op drop).
+      movePanelToOuterEdge: (tabId, panelId, edge) => apply((l) => opMovePanelToOuterEdge(l, panelId, tabId, edge)),
       movePanelToTab: (sourceId, tabId) => apply((l) => opMovePanelToTab(l, sourceId, tabId)),
       addTabFromPanel: (sourceId) => apply((l) => opAddTabFromPanel(l, sourceId, { tab: newId() })),
       removePanel: (panelId) =>
@@ -470,9 +493,7 @@ export function WorkspaceProvider({
       bumpZoom: (panelId, presses) => apply((l) => opBumpZoom(l, panelId, presses)),
       resetZoom: (panelId) => apply((l) => opResetZoom(l, panelId)),
       renameTab: (tabId, title) => apply((l) => opRenameTab(l, tabId, title)),
-      renamePanel: (panelId, title) => apply((l) => opRenamePanel(l, panelId, title)),
       retitlePanel: (panelId, title) => apply((l) => opRetitlePanel(l, panelId, title)),
-      resetPanelName: (panelId) => apply((l) => opResetPanelName(l, panelId)),
       closeTab: (tabId) => apply((l) => opCloseTab(l, tabId)),
       closeOtherTabs: (tabId) => apply((l) => opCloseOtherTabs(l, tabId)),
       resizeSplit: (tabId, path, sizes) => apply((l) => opResizeSplit(l, tabId, path, sizes)),
@@ -491,7 +512,20 @@ export function WorkspaceProvider({
         scheduleSave(next);
       },
     }),
-    [layout, loading, restoreFailed, lastAddedPanelId, apply, scheduleSave],
+    [layout, loading, restoreFailed, apply, scheduleSave],
+  );
+
+  /*
+   * 048 FR-015 — the right-click menus of the editor, terminal, preview and Find in Files panels split
+   * "this panel" without holding the store or knowing the panel's tab; `splitPanelById` reaches this.
+   */
+  useEffect(
+    () =>
+      registerSplitRunner((panelId, direction) => {
+        const tab = layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === panelId));
+        if (tab) value.splitPanel(tab.id, panelId, direction);
+      }),
+    [layout, value],
   );
 
   /*

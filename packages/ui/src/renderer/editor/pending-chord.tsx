@@ -14,9 +14,21 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 
-/** What the indication shows, and in which editor. `null` when nothing is pending or reported. */
+/**
+ * What the indication shows, and in which host. `null` when nothing is pending or reported.
+ *
+ * 048 widened both: the window dispatcher publishes here too — split mode's pending text, and
+ * `unavailable` (FR-092), a window chord with nothing to act on in a sub-workspace window — with the
+ * active PANEL'S box as the host, so every chord indication shares this one surface. For
+ * `unavailable`, `keys` carries the command's label rather than the keys pressed: the notice names
+ * what cannot be done, not how it was asked for.
+ */
 export type PendingChordState =
-  | { readonly kind: 'pending' | 'unbound'; readonly host: HTMLElement; readonly keys: string }
+  | {
+      readonly kind: 'pending' | 'unbound' | 'unavailable';
+      readonly host: HTMLElement;
+      readonly keys: string;
+    }
   | null;
 
 let current: PendingChordState = null;
@@ -49,9 +61,14 @@ function subscribe(listener: () => void): () => void {
 
 /** The indication's text: what was pressed, and what is (or is not) happening next. */
 export function pendingChordText(state: NonNullable<PendingChordState>): string {
-  return state.kind === 'pending'
-    ? `(${state.keys}) was pressed. Waiting for the next key of the chord…`
-    : `The key combination (${state.keys}) is not bound.`;
+  switch (state.kind) {
+    case 'pending':
+      return `(${state.keys}) was pressed. Waiting for the next key of the chord…`;
+    case 'unbound':
+      return `The key combination (${state.keys}) is not bound.`;
+    case 'unavailable':
+      return `${state.keys} is not available in a sub-workspace window.`;
+  }
 }
 
 /** The indication, portalled into the editor that owns the prefix. Renders nothing otherwise. */

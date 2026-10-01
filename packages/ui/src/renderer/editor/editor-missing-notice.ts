@@ -33,9 +33,13 @@
 import { toDisplayPath } from '@throng/core';
 import type { OsName } from '@throng/core';
 
+/**
+ * One file that could not be opened. It carries no panel name: the row naming the panel is built by
+ * `useReportPanelFailure` from the panel itself (048 FR-032), and a name field here was only ever
+ * filled with the raw stored `panel.title` and read by nothing.
+ */
 export interface LoadErrorEntry {
   filePath: string | null;
-  panelName: string;
   /** A `LoadResult` reason: 'binary' | 'too-large' | 'out-of-tree' | 'folder' | 'io'. */
   reason: string;
 }

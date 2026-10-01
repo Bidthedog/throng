@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import {
-  COMMAND_SCOPES,
+  terminalMultiStrokeAllowed,
+  firstStrokeIsReserved,
+  WINDOW_HANDLED_ACTIONS,
   MAX_CHORD_KEYS,
   captureChordToken,
   captureToken,
@@ -125,8 +127,16 @@ export function CaptureModal({ action, label, bindings, onApply, onClose }: Capt
           return;
         }
         // FR-092: only a command whose scope contains no terminal may carry a multi-key chord — a
-        // shell would take the first key as input, and the saved token is dropped on load.
-        if (COMMAND_SCOPES[action]?.has('terminal')) {
+        // shell would take the first key as input, and the saved token is dropped on load. 048 FR-003/
+        // FR-024: every WINDOW-HANDLED command is the exception (the window takes the first stroke
+        // before a shell does) — provided that first stroke is not one the terminal reserves. The rule is
+        // core's `terminalMultiStrokeAllowed`, shared with the loader.
+        if (!terminalMultiStrokeAllowed(action, token)) {
+          // A window-handled command refused only for its first key: say that, since another first key works.
+          if (WINDOW_HANDLED_ACTIONS.has(action) && firstStrokeIsReserved(token)) {
+            setError(`${strokes[0]} is reserved for the terminal, so it can’t start a chord of several keys. Choose another first key.`);
+            return;
+          }
           setError(`${label} also works in a terminal, which would take the first key as typing — a chord of several keys can’t be bound to it. Use a single key combination.`);
           return;
         }

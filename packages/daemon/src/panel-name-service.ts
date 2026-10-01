@@ -7,6 +7,7 @@ import {
 } from '@throng/ipc-contract';
 import {
   collectPanels,
+  migratePanelTitles,
   reconcilePanelNames,
   uniquePanelName,
   type IUserContext,
@@ -60,6 +61,21 @@ export class PanelNameIpcService {
     return this.deps.userContext.currentUser().userId;
   }
 
+  /*
+   * 048 FR-035 (review R4) — every read goes through the custom-title migration, exactly as
+   * `workspace.load` does. Names must be judged as the panels will SHOW them: a pre-048 "Build" whose
+   * original title was "Panel 2" shows "Panel 2" once migrated, and judged on "Build" it would sit
+   * beside another "Panel 2" unchallenged.
+   */
+  private loadLayout(projectId: string): ReturnType<PanelNameDeps['workspaceStore']['load']> {
+    const result = this.deps.workspaceStore.load(this.owner, projectId);
+    return { ...result, layout: migratePanelTitles(result.layout) };
+  }
+
+  private loadSubs(): SubWorkspace[] {
+    return this.deps.workspaceStore.loadSubWorkspaces(this.owner).map(migratePanelTitles);
+  }
+
   /** Every panel in the application, project layouts first, then sub-workspaces. */
   private allPanels(): { panel: Panel; source: { kind: 'project'; id: string } | { kind: 'sub' } }[] {
     const out: { panel: Panel; source: { kind: 'project'; id: string } | { kind: 'sub' } }[] = [];
@@ -70,7 +86,7 @@ export class PanelNameIpcService {
       // very first panel of a brand-new project clash with its own phantom and come out as
       // "Panel 1 (2)", and a reconcile pass would then have PERSISTED the phantom. Only a layout
       // that was actually restored describes panels that are real.
-      const result = this.deps.workspaceStore.load(this.owner, project.id);
+      const result = this.loadLayout(project.id);
       if (!result.restored) continue;
       for (const tab of result.layout.tabs) {
         for (const panel of collectPanels(tab.root)) {
@@ -78,7 +94,7 @@ export class PanelNameIpcService {
         }
       }
     }
-    for (const sub of this.deps.workspaceStore.loadSubWorkspaces(this.owner)) {
+    for (const sub of this.loadSubs()) {
       for (const tab of sub.tabs) {
         for (const panel of collectPanels(tab.root)) out.push({ panel, source: { kind: 'sub' } });
       }
@@ -139,12 +155,12 @@ export class PanelNameIpcService {
       // Same rule as `allPanels`: a layout that was never saved has no real panels, and writing the
       // synthesised default back would CREATE the layout — inventing a persisted panel for a project
       // the user has not opened yet.
-      const result = this.deps.workspaceStore.load(this.owner, project.id);
+      const result = this.loadLayout(project.id);
       if (!result.restored) continue;
       const mapped = mapLayout(result.layout);
       if (mapped.touched) this.deps.workspaceStore.save(this.owner, project.id, mapped.layout);
     }
-    const subs = this.deps.workspaceStore.loadSubWorkspaces(this.owner);
+    const subs = this.loadSubs();
     let subsTouched = false;
     const nextSubs: SubWorkspace[] = subs.map((sub) => {
       let touched = false;

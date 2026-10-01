@@ -89,8 +89,11 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
  * shipped it. Dropped unconditionally on load, the same as {@link REMOVED_COLOUR_TOKENS}, so an
  * install that received it via the version-12 shipped-defaults seed loses the stale key rather than
  * carrying it forever.
+ *
+ * 048 (research R6) retires `resetName` with panel renaming — its one call site was the panel
+ * header's Reset Name row — and drops it the same way.
  */
-const REMOVED_ICON_TOKENS = ['projectList'] as const;
+const REMOVED_ICON_TOKENS = ['projectList', 'resetName'] as const;
 
 /** Migrate one theme's `icons` to the 046 iterate round 2 model: drop {@link REMOVED_ICON_TOKENS}. */
 export function migrateThemeIcons(icons: Record<string, string>): Record<string, string> {

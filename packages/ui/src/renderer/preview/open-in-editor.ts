@@ -90,8 +90,6 @@ export async function openPreviewInEditor(args: PreviewEditorRouteArgs): Promise
   const tab = tabHolding(ws, args.previewPanelId);
   const panelId = tab === undefined ? null : ws.addPanelBeside(args.previewPanelId, 'left');
   if (tab === undefined || panelId === null) return { kind: 'unavailable' };
-  // A command-created panel must not open in rename mode (FR-041 is for user-added panels).
-  ws.clearLastAddedPanel();
   const config = { filePath: args.filePath };
   ws.setPanelType(panelId, 'editor', config);
   window.throng?.panel?.notifyTyped?.(panelId, 'editor', config);

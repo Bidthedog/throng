@@ -8,6 +8,7 @@ import {
   type WorkspaceLayout,
 } from './model.js';
 import { collectPanels, countPanels } from './invariants.js';
+import { nextDefaultPanelName } from './unique-name.js';
 import { clampZoomLevel, stepZoomLevel } from '../config/zoom.js';
 
 // Typed-panel ops (005) live in the panel-type module but are surfaced here so
@@ -33,6 +34,14 @@ function equalSizes(count: number): number[] {
 
 function totalPanels(layout: WorkspaceLayout): number {
   return layout.tabs.reduce((n, tab) => n + countPanels(tab.root), 0);
+}
+
+/**
+ * The fallback title for a new empty panel (048 FR-127): the next free place in the Blank Panel
+ * sequence over every title already in this layout. The daemon then makes it unique application-wide.
+ */
+function nextBlankTitle(layout: WorkspaceLayout): string {
+  return nextDefaultPanelName(layout.tabs.flatMap((tab) => collectPanels(tab.root).map((p) => p.title)));
 }
 
 function findPanel(layout: WorkspaceLayout, panelId: string): Panel | undefined {
@@ -78,7 +87,9 @@ function insertAtEdge(node: LayoutNode, targetId: string, incoming: Panel, edge:
     const children = incomingFirst ? [incoming, node] : [node, incoming];
     return { type: 'split', orientation, children, sizes: equalSizes(2) };
   }
-  return { ...node, children: node.children.map((c) => insertAtEdge(c, targetId, incoming, edge)) };
+  // A subtree without the target is returned by identity, so an untouched sibling is the SAME node.
+  const children = node.children.map((c) => insertAtEdge(c, targetId, incoming, edge));
+  return children.every((c, i) => c === node.children[i]) ? node : { ...node, children };
 }
 
 /** Add a Panel as a row sibling at the root of a Tab. */
@@ -117,7 +128,7 @@ export function createDefaultLayout(projectId: string, ids: NewTabIds): Workspac
       {
         id: ids.tab,
         title: 'Tab 1',
-        root: makePanel(ids.panel, projectId, 'Panel 1'),
+        root: makePanel(ids.panel, projectId, nextDefaultPanelName([])),
         activePanelId: ids.panel,
       },
     ],
@@ -149,7 +160,7 @@ export function addTab(
   const tab: Tab = {
     id: ids.tab,
     title: `Tab ${layout.tabs.length + 1}`,
-    root: makePanel(ids.panel, layout.projectId, `Panel ${totalPanels(layout) + 1}`),
+    root: makePanel(ids.panel, layout.projectId, nextBlankTitle(layout)),
     activePanelId: ids.panel,
   };
   const activeIndex = layout.tabs.findIndex((t) => t.id === layout.activeTabId);
@@ -169,7 +180,7 @@ export function addPanel(
   panelId: string,
   originProjectId: string = layout.projectId,
 ): WorkspaceLayout {
-  const panel = makePanel(panelId, originProjectId, `Panel ${totalPanels(layout) + 1}`);
+  const panel = makePanel(panelId, originProjectId, nextBlankTitle(layout));
   return {
     ...layout,
     tabs: layout.tabs.map((tab) =>
@@ -204,6 +215,72 @@ export function movePanelToEdge(
     tab.root ? { ...tab, root: insertAtEdge(tab.root, targetId, removed as Panel, edge) } : tab,
   );
   return finalize(layout, inserted);
+}
+
+/** The share of the drop axis a panel dropped on a tab's outer edge takes (048 FR-061). */
+const OUTER_EDGE_SHARE = 1 / 3;
+
+/**
+ * Move a Panel onto a Tab's OUTER edge (048 FR-061–FR-063, FR-067): it runs along the whole edge and
+ * takes one third of the drop axis, while the rest of the tab keeps its arrangement and relative
+ * proportions.
+ *
+ * The panel is removed first, by the ordinary collapse rules, from whichever tab holds it (an emptied
+ * source tab is dropped by `finalize`). Then, when the target tab's root already runs along the drop
+ * axis, the panel joins it as the new first (left/top) or last (right/bottom) member at 1/3 with the
+ * others scaled by 2/3; otherwise the root is wrapped as `[panel, root]` / `[root, panel]`.
+ *
+ * Returns the SAME layout — the caller skips the save — when the panel already spans that edge alone
+ * (it is the first/last member of a root split along the axis), for an unknown panel or tab, and when
+ * the panel is the target tab's only panel (there is no rest to run beside).
+ */
+export function movePanelToOuterEdge(
+  layout: WorkspaceLayout,
+  panelId: string,
+  tabId: string,
+  edge: Edge,
+): WorkspaceLayout {
+  const target = layout.tabs.find((t) => t.id === tabId);
+  if (!target || !findPanel(layout, panelId)) return layout;
+
+  const orientation = edge === 'left' || edge === 'right' ? 'row' : 'column';
+  const first = edge === 'left' || edge === 'top';
+  const root = target.root;
+  if (isSplit(root) && root.orientation === orientation) {
+    const end = root.children[first ? 0 : root.children.length - 1];
+    if (isPanel(end) && end.id === panelId) return layout;
+  }
+
+  let removed: Panel | null = null;
+  const afterRemoval: NullableTab[] = layout.tabs.map((tab) => {
+    const result = removeFromNode(tab.root, panelId);
+    if (result.removed) removed = result.removed;
+    return { ...tab, root: result.node };
+  });
+  const moved = removed as Panel | null;
+  const rest = afterRemoval.find((t) => t.id === tabId)?.root;
+  if (!moved || !rest) return layout;
+
+  let placed: LayoutNode;
+  if (isSplit(rest) && rest.orientation === orientation) {
+    const scaled = rest.sizes.map((s) => s * (1 - OUTER_EDGE_SHARE));
+    placed = {
+      ...rest,
+      children: first ? [moved, ...rest.children] : [...rest.children, moved],
+      sizes: first ? [OUTER_EDGE_SHARE, ...scaled] : [...scaled, OUTER_EDGE_SHARE],
+    };
+  } else {
+    placed = {
+      type: 'split',
+      orientation,
+      children: first ? [moved, rest] : [rest, moved],
+      sizes: first ? [OUTER_EDGE_SHARE, 1 - OUTER_EDGE_SHARE] : [1 - OUTER_EDGE_SHARE, OUTER_EDGE_SHARE],
+    };
+  }
+  return finalize(
+    layout,
+    afterRemoval.map((tab) => (tab.id === tabId ? { ...tab, root: placed } : tab)),
+  );
 }
 
 /** Move a Panel into another Tab as a row sibling (FR cross-tab regroup). */
@@ -307,6 +384,39 @@ export function addPanelBeside(
   };
 }
 
+/** The side a split command puts its new panel on (048 FR-001). */
+export type SplitDirection = 'down' | 'up' | 'right' | 'left';
+
+const SPLIT_EDGE: Record<SplitDirection, Edge> = { down: 'bottom', up: 'top', right: 'right', left: 'left' };
+
+/**
+ * Split one Panel's slot 50/50 and put a new empty placeholder on the `direction` side (048 FR-001).
+ *
+ * Only the target leaf is replaced — through the same insertion an edge drop makes — so every other
+ * panel keeps its node and size by construction. The new panel carries no `zoom` (default zoom), while
+ * the target keeps its own (FR-004), and becomes the tab's active panel (FR-002).
+ *
+ * `newPanel` is caller-supplied, as every id in this module is. Returns the same layout for an unknown
+ * tab, a target not in that tab, or a new id already in the layout.
+ */
+export function splitPanel(
+  layout: WorkspaceLayout,
+  tabId: string,
+  targetPanelId: string,
+  direction: SplitDirection,
+  newPanel: { id: string; title: string },
+): WorkspaceLayout {
+  const tab = layout.tabs.find((t) => t.id === tabId);
+  if (!tab || !collectPanels(tab.root).some((p) => p.id === targetPanelId)) return layout;
+  if (findPanel(layout, newPanel.id)) return layout;
+  const panel = makePanel(newPanel.id, layout.projectId, newPanel.title);
+  const root = insertAtEdge(tab.root, targetPanelId, panel, SPLIT_EDGE[direction]);
+  return {
+    ...layout,
+    tabs: layout.tabs.map((t) => (t.id === tabId ? { ...t, root, activePanelId: panel.id } : t)),
+  };
+}
+
 /**
  * Remove every Panel matching `predicate` exactly as closing each by hand would (044 FR-063, FR-064,
  * FR-067): through {@link removePanel}, so a split slot collapses and an emptied Tab closes.
@@ -334,7 +444,7 @@ export function removePanelsWhere(
       continue;
     }
     const id = newPanelId();
-    const placeholder = makePanel(id, next.projectId, 'Panel 1');
+    const placeholder = makePanel(id, next.projectId, nextDefaultPanelName([]));
     next = {
       ...next,
       tabs: next.tabs.map((tab) =>
@@ -371,56 +481,21 @@ export function renameTab(layout: WorkspaceLayout, tabId: string, title: string)
   };
 }
 
-function renameInNode(node: LayoutNode, panelId: string, title: string): LayoutNode {
-  if (isPanel(node)) {
-    // Capturing defaultTitle the FIRST time (not on re-renames) is what lets Reset Name restore the
-    // original placeholder rather than an intermediate custom name.
-    return node.id === panelId
-      ? { ...node, title, titleIsCustom: true, defaultTitle: node.defaultTitle ?? node.title }
-      : node;
-  }
-  return { ...node, children: node.children.map((c) => renameInNode(c, panelId, title)) };
-}
-
 function retitleInNode(node: LayoutNode, panelId: string, title: string): LayoutNode {
   if (isPanel(node)) {
-    // `titleIsCustom` is deliberately UNTOUCHED: this is throng adjusting a name, not the user
-    // choosing one. Marking it custom would suppress the panel's own auto-title for the rest of its
-    // life — an editor that could name itself after its file would sit on a generated name forever
-    // (the defect behind #176).
+    // Only the fallback title moves: a panel is always SHOWN by what it holds (048 FR-032), so an
+    // editor that can name itself after its file still does (the defect behind #176).
     return node.id === panelId ? { ...node, title } : node;
   }
   return { ...node, children: node.children.map((c) => retitleInNode(c, panelId, title)) };
 }
 
-function resetNameInNode(node: LayoutNode, panelId: string): LayoutNode {
-  if (isPanel(node)) {
-    if (node.id !== panelId || !node.titleIsCustom) return node;
-    return { ...node, title: node.defaultTitle ?? node.title, titleIsCustom: false };
-  }
-  return { ...node, children: node.children.map((c) => resetNameInNode(c, panelId)) };
-}
-
-/** Rename a Panel anywhere in the tree (ignores blank titles) — FR-037. */
-export function renamePanel(
-  layout: WorkspaceLayout,
-  panelId: string,
-  title: string,
-): WorkspaceLayout {
-  const trimmed = title.trim();
-  if (trimmed.length === 0) return layout;
-  return {
-    ...layout,
-    tabs: layout.tabs.map((tab) => ({ ...tab, root: renameInNode(tab.root, panelId, trimmed) })),
-  };
-}
-
 /**
- * Change a Panel's DISPLAYED name without claiming it as the user's choice (024, #184).
+ * Change a Panel's fallback title (024, #184) — the "Panel N" it shows when nothing it holds names it.
  *
  * Used when throng itself has to move a name — a clash with a panel in another project or
- * sub-workspace. The user did not pick this name, so "Reset Name" must stay disabled and any
- * auto-title (an editor's file, a terminal's process) must still be free to replace it.
+ * sub-workspace. Any auto-title (an editor's file, a terminal's process) still replaces it on
+ * display (048 FR-032).
  */
 export function retitlePanel(
   layout: WorkspaceLayout,
@@ -432,17 +507,6 @@ export function retitlePanel(
   return {
     ...layout,
     tabs: layout.tabs.map((tab) => ({ ...tab, root: retitleInNode(tab.root, panelId, trimmed) })),
-  };
-}
-
-/**
- * Reset a renamed Panel back to the default it was created with — the "Reset Name" companion to
- * {@link renamePanel}. A no-op on a panel that was never renamed.
- */
-export function resetPanelName(layout: WorkspaceLayout, panelId: string): WorkspaceLayout {
-  return {
-    ...layout,
-    tabs: layout.tabs.map((tab) => ({ ...tab, root: resetNameInNode(tab.root, panelId) })),
   };
 }
 

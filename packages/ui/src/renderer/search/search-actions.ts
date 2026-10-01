@@ -40,17 +40,14 @@ export const SCROLLBACK_ACTIONS: readonly ActionId[] = [
   'terminal.scrollToBottom',
 ];
 
-// `panel.rename` joins them: F2 renames the panel, and a terminal must not also hand it to the
-// program. It is safe to take unconditionally for the reason `search.close` is not — F2 has no
-// meaning at a shell prompt that a user could be relying on, whereas Escape plainly does.
-// `terminal.redraw` (028, Ctrl+F5) joins them for the same reason as `panel.rename`: throng acts on
-// the chord, so the program must not also receive it. Ctrl+F5 is not in the constitution's reserved
+// `terminal.redraw` (028, Ctrl+F5) joins them: throng acts on the chord, so the program must not
+// also receive it. (048 removed `panel.rename`, which sat here for the same reason: a panel is no
+// longer renamed, so F2 is the program's again.) Ctrl+F5 is not in the constitution's reserved
 // tier and no shell reads it as a line-editing key, which is why it is takeable at all — but it IS a
 // key a full-screen program could receive, so the shadow is recorded as an exception, not assumed
 // free (Principle IV).
 const ALWAYS_OURS = new Set<ActionId>([
   'search.find',
-  'panel.rename',
   'terminal.redraw',
   ...SCROLLBACK_ACTIONS,
 ]);
@@ -104,7 +101,7 @@ export function reservedByTerminal(
 ): boolean {
   if (action === null) return false;
   // Scrollback navigation is throng's only while there is scrollback to navigate and nobody has
-  // asked for the keyboard. The wheel still scrolls, and `search.find` / `panel.rename` stay ours
+  // asked for the keyboard. The wheel still scrolls, and `search.find` and `terminal.redraw` stay ours
   // either way — they are about throng's window, not about the text.
   if (programOwnsKeyboard && SCROLLBACK_ACTIONS.includes(action)) return false;
   if (ALWAYS_OURS.has(action)) return true;

@@ -35,6 +35,7 @@
 import { firstBinding, type Grouping, type Keybindings } from '@throng/core';
 import { openInMenuActions, type OpenInTarget } from '../editor/open-in-targets.js';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
 /** The panel's own commands — the same mutators its toolbar controls call. */
 export interface FindInFilesMenuActions {
@@ -82,6 +83,8 @@ export interface FindInFilesCommitActions {
 }
 
 export interface FindInFilesMenuArgs {
+  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
+  split?: SplitMenuArgs;
   /** Whether a scan is running RIGHT NOW — Run and Cancel are one row, as in the toolbar. */
   running: boolean;
   replaceEnabled: boolean;
@@ -183,7 +186,7 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
 
   const target = commit?.target;
 
-  return [
+  return withSplit([
     // ── Content: the only items that change a file's text (FR-049) ────────────────────────────
     commitItem('Replace All', 'Replace All', commit?.replaceAll),
     commitItem(
@@ -300,5 +303,5 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
       section: 'viewState',
       onClick: () => actions.setAllCollapsed(false),
     },
-  ];
+  ], args.split);
 }

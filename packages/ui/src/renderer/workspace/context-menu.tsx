@@ -13,6 +13,7 @@ import { Icon } from '../common/icon.js';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { withDividers } from './menu-dividers.js';
 import { resolveKeydown } from '../config/chord-key.js';
+import { endSplitMode } from './split-mode.js';
 
 /** Match a keydown against an item's advertised shortcut (e.g. "Ctrl+C"), for in-menu shortcuts. */
 export function chordMatchesShortcut(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'shiftKey' | 'altKey'>, shortcut: string): boolean {
@@ -478,6 +479,12 @@ export function ContextMenu({
   opener?: HTMLElement | null;
 }): ReactElement {
   const ref = useRef<HTMLUListElement>(null);
+
+  // 048 FR-022 — a menu opening ends split mode (the pulse and the pending text with it): the next key
+  // goes to the menu, not to a chord that is no longer waiting. Every menu in the app mounts through here.
+  useEffect(() => {
+    endSplitMode();
+  }, []);
 
   // Close AND hand focus back to the opener — but only if, once the menu has gone, focus fell to the
   // body (nothing else claimed it). An action that opens its own input (Rename, New File) focuses that

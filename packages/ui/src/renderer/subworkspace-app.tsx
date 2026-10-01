@@ -16,6 +16,7 @@ import { FindInFilesChrome } from './find-in-files/find-in-files-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
 import { TransientScrim } from './common/transient-scrim.js';
 import { SearchKeybindings } from './search/search-keybindings.js';
+import { SUB_WORKSPACE_CAPABILITIES, WindowDispatcher } from './keybindings/window-dispatcher.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
@@ -142,11 +143,10 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           {/* 043 — the second of this registration's two mounts, for the reason below: a chord live
               only in the main window would be dead in a sub-workspace. */}
           <FindInFilesChrome />
-          {/* 033 (#219) — the SECOND of the two mounts. A sub-workspace window is its own renderer
-              realm, so a chord live only in the main window would be dead here (Assumption 6). */}
-          <TransientScrim />
-            <NavigationChrome />
           <SearchKeybindings />
+          {/* 048 FR-090 (#275) — the SAME window dispatcher the main window mounts, told what this
+              window can act on. It replaced a narrower listener of this window's own. */}
+          <WindowDispatcher capabilities={SUB_WORKSPACE_CAPABILITIES} />
           {/* Editor keybindings + save/discard/notice dialogs — so a sub-workspace-
               owned editor can be saved and destroyed here too (FR-077). */}
           <div className="throng-root">
@@ -164,6 +164,14 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
             >
               <SubWorkspacePane />
             </div>
+            {/* 033 (#219) — the SECOND of the two mounts. A sub-workspace window is its own renderer
+                realm, so a chord live only in the main window would be dead here (Assumption 6).
+                048 D1 (FR-091, 033 FR-071) — INSIDE `.throng-root`, never beside it: `.throng-root`
+                is `position: fixed`, so it is a stacking context of its own, and the tab picker
+                renders in it. A scrim outside is not compared with the picker at all and painted over
+                it. The main window mounts both inside its shell (`app.tsx`). */}
+            <TransientScrim />
+            <NavigationChrome />
           </div>
         </WorkspaceProvider>
       </SubWorkspaceWindowContext.Provider>

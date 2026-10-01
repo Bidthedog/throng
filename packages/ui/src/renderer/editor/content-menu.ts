@@ -2,6 +2,7 @@ import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { HeadingRecord, LineEndingId, PreviewAffordance } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
+import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
@@ -22,6 +23,8 @@ import { requestLanguagePicker } from './picker-request.js';
 const win = (): typeof window.throng | undefined => window.throng;
 
 export interface ContentMenuArgs {
+  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
+  split?: SplitMenuArgs;
   view: EditorView;
   panelId: string;
   /** THIS view — undo is per document, but the cursors it restores go to the view that asked. */
@@ -128,7 +131,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
   // rebindable command list (keybindings.ts, FR-017c) — there is no ActionId to resolve, so the
   // shortcuts shown here are the literal native bindings the editor is wired to (Ctrl+X/C/V/A and
   // Mod-z / Mod-y in use-editor.ts). They are display-only, matching what the user actually presses.
-  return [
+  return withSplit([
     // Never disabled for want of a selection (FR-012b): with none, they act on the caret's whole
     // line. A greyed-out Copy on the line the user just right-clicked is a refusal to do the
     // obvious thing.
@@ -301,7 +304,7 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
           },
         ]
       : []),
-  ];
+  ], args.split);
 }
 
 /**

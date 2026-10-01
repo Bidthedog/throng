@@ -35,6 +35,12 @@ export interface PreviewBodyProps {
    */
   initialViewState: unknown;
   /**
+   * 048 FR-083/FR-084 (review R3) — the content `initialViewState` was measured against, when the chrome knows
+   * it: a view shown again may come back to a newer text than it left. A body that names places by source
+   * position carries the place onto `content` through the edit; one that does not ignores it.
+   */
+  initialViewStateBasis?: PreviewContent | null;
+  /**
    * 044 T177 (FR-024 with FR-013c) — main's count of this run's NAVIGATIONS, from `PreviewUpdate`. A
    * `filePath` that changes while this number stands still is a re-point — the same document under a new
    * path, after an in-app rename or move or a Save As — and the body MUST keep the reader's place, as it
@@ -90,8 +96,10 @@ export interface PreviewBodyProps {
    *   restored (`placeOnStep`).
    * - `editorLine`: the place is an opening's or a restore's (the attach answer). With `syncLine` known, the
    *   editor's line wins over it and the place is not restored; without, it is restored.
+   * - `keep` (048 FR-083, FR-084): the view's OWN place, kept when its tab was hidden. Restored as it stands,
+   *   whatever `syncLine` says, and nothing is driven to the editor: each side keeps its own place.
    */
-  placePolicy?: 'restore' | 'editorLineIfTop' | 'editorLine';
+  placePolicy?: 'restore' | 'editorLineIfTop' | 'editorLine' | 'keep';
   /** The body hands the panel a way to read its view state when the panel leaves an entry (FR-107). */
   onViewStateCapture(capture: () => unknown): void;
   /** FR-090, FR-091 — the chrome decides what following means. */

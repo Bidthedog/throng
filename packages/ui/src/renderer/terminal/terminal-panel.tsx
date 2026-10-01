@@ -57,6 +57,7 @@ import { terminalContentMenu } from './terminal-content-menu.js';
 import { Icon } from '../common/icon.js';
 import { PanelFailureBanner, retryPanelFailure } from '../common/panel-failure-banner.js';
 import { markTerminalRunning, markTerminalStopped } from '../workspace/subprocess.js';
+import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
 import {
   useReportPanelFailure,
   useReportSubjectFailure,
@@ -370,6 +371,7 @@ export function TerminalPanel({
         terminalContentMenu({
           selection,
           redrawChord: firstBinding(keybindings, 'terminal.redraw'),
+          split: { panelId: panel.id, keybindings },
           startFailure: startFailureRef.current !== null,
           actions: {
             copySelection: () => {
@@ -730,13 +732,15 @@ export function TerminalPanel({
         terminalExitNotice(code, {
           projectName: meta?.projectName,
           tabName: meta?.tabName,
-          panelName: meta?.panelName ?? panel.title,
+          // 048 FR-032 / FR-130 — what the header shows at the moment of the exit (the shell's last
+          // window title, else the flavour), never the stored fallback "Blank Panel 3".
+          panelName: currentPanelTitle(panel),
           flavourLabel: config.flavourLabel,
         }),
         code,
         unexpected,
       ),
-    [end, meta, panel.title, config.flavourLabel],
+    [end, meta, panel, config.flavourLabel],
   );
   /**
    * A start failure (029 / #204, FR-001 → FR-003).

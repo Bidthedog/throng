@@ -316,6 +316,11 @@ export {
   isValidTwoStrokeToken,
   isValidTwoStrokeFirstStroke,
   twoStrokeTerminalViolations,
+  terminalMultiStrokeAllowed,
+  firstStrokeIsReserved,
+  WINDOW_MULTI_STROKE_ACTIONS,
+  WINDOW_HANDLED_ACTIONS,
+  RESERVED_TERMINAL_CHORDS,
   sameBindingToken,
   // 046 iterate round 5 (FR-124) — the `Mods+K1,K2` form: its strokes as written, and its writer.
   splitStrokes,
@@ -812,9 +817,7 @@ export {
   reorderTab,
   setActiveTab,
   renameTab,
-  renamePanel,
   retitlePanel,
-  resetPanelName,
   closeTab,
   closeOtherTabs,
   resizeSplit,
@@ -827,12 +830,18 @@ export {
   resetZoom,
   addPanelBeside,
   removePanelsWhere,
+  splitPanel,
+  movePanelToOuterEdge,
 } from './workspace/operations.js';
-export type { Edge, NewTabIds } from './workspace/operations.js';
+// 048 FR-035 — custom panel titles migrate away on load of every persisted layout.
+export {
+  dropCustomPanelTitles,
+  renameLegacyDefaultTitles,
+  migratePanelTitles,
+} from './workspace/panel-title-migration.js';
+export type { Edge, NewTabIds, SplitDirection } from './workspace/operations.js';
 export { panelDisplayTitle, previewTitleParts, PREVIEW_TITLE_SUFFIX } from './workspace/panel-title.js';
 export type { PanelTitleSources, PreviewTitleParts } from './workspace/panel-title.js';
-export { renameCommit } from './workspace/rename-commit.js';
-export type { RenameCommit } from './workspace/rename-commit.js';
 // 011 FR-030/031 — which verb a Panel's own removal controls wear. Extracted from a ternary inside
 // the panel header (035 T058), where it could only be read by launching the app.
 export { panelRemovalVerb } from './workspace/removal-verbs.js';
@@ -916,6 +925,8 @@ export {
   reconcilePanelNames,
   isDefaultPanelName,
   nextDefaultPanelName,
+  BLANK_PANEL_NAME,
+  LEGACY_DEFAULT_PANEL_NAME,
 } from './workspace/unique-name.js';
 // 029 — the shared failure-cause concept and daemon liveness. One idea for four bugs: a reason
 // derived from a raw error, which also owns the wording and the "already reported" key.

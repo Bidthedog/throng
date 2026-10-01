@@ -47,6 +47,39 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Reset panel type zoom',
     "Return the active panel's type to its default text size. Also reachable by holding Ctrl and clicking a panel with the middle mouse button.",
   ),
+  // 048 FR-001/FR-020 — the four split commands, beside the other commands that act on the active
+  // panel. Descriptions name no chord: a rebind would make them false.
+  chord(
+    'panel.splitDown',
+    'Focus & Zoom',
+    'Split Down',
+    'Split the active panel in two and put a new empty panel below it.',
+  ),
+  chord(
+    'panel.splitUp',
+    'Focus & Zoom',
+    'Split Up',
+    'Split the active panel in two and put a new empty panel above it.',
+  ),
+  chord(
+    'panel.splitRight',
+    'Focus & Zoom',
+    'Split Right',
+    'Split the active panel in two and put a new empty panel to its right.',
+  ),
+  chord(
+    'panel.splitLeft',
+    'Focus & Zoom',
+    'Split Left',
+    'Split the active panel in two and put a new empty panel to its left.',
+  ),
+  // 048 FR-131 — beside the splits; the description names no chord, for the same reason.
+  chord(
+    'panel.destroy',
+    'Focus & Zoom',
+    'Destroy Panel',
+    'Destroy the focused panel, exactly as its Destroy menu item does — with the same confirmations and unsaved-changes guard. A preview is closed instead. Does nothing while focus is in a side pane.',
+  ),
   chord(
     'focus.left',
     'Focus & Zoom',
@@ -146,12 +179,6 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'View',
     'Open context menu',
     'Open the focused item’s context menu from the keyboard (024 US6).',
-  ),
-  chord(
-    'panel.rename',
-    'Focus & Zoom',
-    'Rename panel',
-    'Rename the active panel — the same key the file tree uses to rename a file.',
   ),
 
   // Tabs (031, FR-032b). Grouped under the SAME heading the Settings editor gives the tab options,

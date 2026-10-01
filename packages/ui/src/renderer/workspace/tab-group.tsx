@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { holdPanelFocus, releasePanelFocus } from './panel-focus.js';
+import { endSplitMode } from './split-mode.js';
 import {
   DndContext,
   PointerSensor,
@@ -46,6 +47,7 @@ import { useDetach } from './detach-context.js';
 import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { SplitTree } from './split-tree.js';
+import { OuterEdgeZones } from './outer-edge-zones.js';
 import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuAction } from './context-menu.js';
 import { tabContextMenu } from './tab-menu.js';
@@ -63,6 +65,8 @@ import {
 import {
   DragStateContext,
   parseEdgeDropId,
+  parseOuterEdgeDropId,
+  preferOuterEdge,
   parsePanelDragId,
   parseTabDragId,
   parseTabDropId,
@@ -184,9 +188,8 @@ function TabChip({
    * an edit (#218).
    *
    * The panel header's rename had this guard and the tab strip's did not — the asymmetry the issue
-   * asks about. A tab carries no `titleIsCustom`, so committing an unchanged title never branded
-   * anything; it did write an identical layout and pay for an autosave, and it left the one rule
-   * ("only a changed name is a rename") stated in only one of the two places that need it.
+   * asks about (048 removed the panel rename, so the tab strip now holds the rule alone). Committing an
+   * unchanged title wrote an identical layout and paid for an autosave.
    *
    * The seed now travels with the value from {@link NameLimitField}, which owns the box.
    */
@@ -681,7 +684,7 @@ function useHoldRepeat(
 export function TabGroup(): ReactElement {
   const ws = useWorkspace();
   const confirm = useConfirm();
-  const { openMenu } = useContextMenu();
+  const { openMenu, closeMenu } = useContextMenu();
   const settings = useAppSettings();
   const detach = useDetach();
   const subWin = useSubWorkspaceWindow();
@@ -702,6 +705,36 @@ export function TabGroup(): ReactElement {
   const hintAt = useRef(0);
   // What's being dragged, for the drop-target hint + once-only sync check.
   const dragInfo = useRef<{ kind: 'tab' | 'panel'; id: string } | null>(null);
+  // 048 FR-082 — a window unmounted mid-drag must not leave the capturing pointermove listeners or the
+  // OS ghost behind. Only when a drag is in flight, so an ordinary unmount stops nothing it does not own.
+  const resetRef = useRef<() => void>(() => {});
+  // 048 FR-080 — Escape must cancel ANY drag. dnd-kit listens for it in the bubble phase, and pressing a
+  // terminal panel's header focuses xterm's textarea, which stops Escape bubbling (and the ESC byte then
+  // reaches the shell). So, only while a drag is live, a window CAPTURE listener consumes the key and
+  // re-issues it on `document`, where dnd-kit's own listener cancels the drag (`onDragCancel` → reset).
+  const reissuingEscape = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || dragInfo.current === null || reissuingEscape.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      reissuingEscape.current = true;
+      try {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+      } finally {
+        reissuingEscape.current = false;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+  useEffect(
+    () => () => {
+      if (dragInfo.current !== null) resetRef.current();
+    },
+    [],
+  );
   // True while dragging a sub-workspace-OWNED Panel: it can't be moved out of its
   // window, so leaving the window shows an invalid-drop warning on the ghost (FR-030).
   const draggingOwned = useRef(false);
@@ -1047,6 +1080,10 @@ export function TabGroup(): ReactElement {
     const panelId = parsePanelDragId(id);
     const tabId = parseTabDragId(id);
     if (!panelId && !tabId) return;
+    // 048 T018/T032 — a drag starting dismisses an open menu (the + split menu included) and ends split
+    // mode: neither may sit over, or wait through, a drag.
+    closeMenu();
+    endSplitMode();
     dragInfo.current = panelId ? { kind: 'panel', id: panelId } : { kind: 'tab', id: tabId! };
 
     // Drive the OS ghost from coalesced pointer moves (one tick per frame) so it
@@ -1127,12 +1164,19 @@ export function TabGroup(): ReactElement {
     }
     window.throng?.dragGhost?.stop();
     clearHover();
+    // 048 FR-082 — the one teardown for a drop, a cancel and an unmount: nothing of this drag (a
+    // split-mode pulse, an open + menu) outlives it, so the next drag starts as a first one.
+    closeMenu();
+    endSplitMode();
+    dragInfo.current = null;
     draggingOwned.current = false;
     setDraggingPanelId(null);
     setDraggingTabId(null);
     setIndicatorX(null);
     slotRef.current = null;
   };
+
+  resetRef.current = reset;
 
   const clearHover = (): void => {
     hoverTabId.current = null;
@@ -1243,6 +1287,12 @@ export function TabGroup(): ReactElement {
         return;
       }
       if (!overId) return;
+      // 048 FR-060 — dropped on a tab's outer edge band: run along the whole edge.
+      const outer = parseOuterEdgeDropId(overId);
+      if (outer) {
+        ws.movePanelToOuterEdge(outer.tabId, panelSrc, outer.edge as Edge);
+        return;
+      }
       // Dropped on the New-Tab (+) button → move the Panel into its own new Tab (FR-027).
       if (overId === NEW_TAB_DROP_ID) {
         ws.addTabFromPanel(panelSrc);
@@ -1449,10 +1499,14 @@ export function TabGroup(): ReactElement {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={pointerWithin}
+      collisionDetection={(args) => preferOuterEdge(pointerWithin(args))}
+      // 048 FR-080/FR-081 — no auto-scroll while dragging (the body never scrolls, and a scroll mid-drag
+      // would move the zones under a still pointer), and Escape (a cancel) tears down exactly as a drop.
+      autoScroll={false}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
+      onDragCancel={reset}
     >
       <DragStateContext.Provider value={{ draggingPanelId, draggingTabId }}>
         <div
@@ -1619,6 +1673,7 @@ export function TabGroup(): ReactElement {
         ) : null}
         <div className="tab-body" data-testid="tab-body">
           {activeTab ? <SplitTree node={activeTab.root} tabId={activeTab.id} path={[]} /> : null}
+          {activeTab ? <OuterEdgeZones tabId={activeTab.id} panelCount={countPanels(activeTab.root)} /> : null}
         </div>
       </DragStateContext.Provider>
     </DndContext>
