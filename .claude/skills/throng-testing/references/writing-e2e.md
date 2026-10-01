@@ -103,9 +103,10 @@ most of the flakes we found. Use them:
   for the element to exist *or* to stop animating, and both failures look like flakiness rather than
   like the broken read they are.
 - **`viewport(win)`** — window dimensions, for measuring a control against the window edge.
-- **`commitPanelRename(win)` / `commitTabRename(win)`** — commit the inline rename that `panel-add`
-  and `tab-add` open the new panel/tab in. They wait for the input, assert it holds focus, press
-  Enter and return only once it is gone.
+- **`commitTabRename(win)`** — commit the inline rename that `tab-add` opens the new tab in. It waits
+  for the input, asserts it holds focus, presses Enter and returns only once it is gone.
+- **`splitPanelViaMenu(win, panelId, dir)`** — click a panel's **+** and choose a split from its
+  menu (048); panels no longer open in a rename box. `addPanels(win, n)` builds on it.
 - **`focusEditor(win, panelId)`** — click into a panel's editor and wait until it *actually* has
   focus. A click resolves when the event is dispatched; CodeMirror adds `.cm-focused` a beat later,
   and keys sent in that gap go nowhere.
