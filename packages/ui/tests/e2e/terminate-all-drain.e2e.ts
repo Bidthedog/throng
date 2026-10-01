@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -92,32 +92,11 @@ async function openEditorOn(win: Page, pid: string, file: string, contains: stri
   });
 }
 
-/**
- * Close the inline rename box IF the new panel opened one, by pressing Enter ON THE INPUT.
- *
- * A freshly added panel can open straight into rename mode, and the Enter this file used to send was
- * there to commit it. But a BARE `keyboard.press('Enter')` goes wherever focus happens to be, and
- * immediately after the click that is still the add button — a clicked button keeps focus until React
- * moves it. Enter then activates the button a second time and adds a panel nobody asked for. That is
- * the flake, measured on CI run 31305390679, shard 1: four `.panel-box` where the test asserted three.
- *
- * Pressing on the located input cannot reach the button, so the race has nowhere left to happen.
- *
- * Traced in this file's own path: the rename box does NOT open here (2s sample, focus on a plain div,
- * zero rename inputs), so the old Enter was a no-op locally and a coin flip on a loaded runner. The
- * conditional keeps it correct either way rather than depending on which of those is true.
- */
-async function commitAnyRename(win: Page): Promise<void> {
-  const rename = win.locator('[data-testid^="panel-rename-input-"]');
-  if ((await rename.count()) > 0) await rename.press('Enter');
-}
-
-/** Add a sibling panel, and settle whatever the add left open. */
+/** Add a sibling panel through the Split menu (048), which opens nothing to settle afterwards. */
 async function addPanel(win: Page, hostPid: string): Promise<void> {
   const before = await win.locator('.panel-box').count();
-  await win.getByTestId(`panel-add-${hostPid}`).click();
+  await splitPanelViaMenu(win, hostPid);
   await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-  await commitAnyRename(win);
 }
 
 /** Add a sibling panel and turn it into a running cmd terminal — the close warning's precondition. */
@@ -582,8 +561,7 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', {
         //
         // Inlined rather than using `addPanel`, because `armedAt` must be stamped before the
         // assertion that confirms the panel — the ordering this test measures.
-        await child.getByTestId('panel-add-p').click();
-        await commitAnyRename(child);
+        await splitPanelViaMenu(child, 'p');
         armedAt = Date.now();
         await expect(child.locator('.panel-box')).toHaveCount(2);
 

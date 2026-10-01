@@ -52,11 +52,11 @@ const rel = (file: string): string => relative(RENDERER, file).split('\\').join(
 const FROM_TAB_SETTINGS =
   /(maxNameLength\s*=\s*settings\.tabs\.maxNameLength)|(\{[^}]*\bmaxNameLength\b[^}]*\}\s*=\s*settings\.tabs\b)/;
 
-describe('the bounded rename box has exactly two call sites', () => {
+describe('the bounded rename box has exactly one call site (048 FR-030, FR-042)', () => {
   const files = walk(RENDERER);
   const users = files.filter((f) => /<NameLimitField\b/.test(readFileSync(f, 'utf8')));
 
-  it('is rendered by the tab strip and the panel header, and by nothing else', () => {
+  it('is rendered by the tab strip, and by nothing else — the panel header lost its box (048 FR-030)', () => {
     /*
      * A third rename box is exactly the regression FR-035g exists to prevent, and it would not fail
      * any other test in the repository: it would simply have its own idea of the cap, and a user would
@@ -65,13 +65,10 @@ describe('the bounded rename box has exactly two call sites', () => {
      * If a legitimate third surface is added, this list is the place to record the decision — which is
      * the point. An addition here is a sentence in a diff; a silent second implementation is not.
      */
-    expect(users.map(rel).sort()).toEqual([
-      'workspace/panel-placeholder.tsx',
-      'workspace/tab-group.tsx',
-    ]);
+    expect(users.map(rel).sort()).toEqual(['workspace/tab-group.tsx']);
   });
 
-  it('both take their limit from `settings.tabs.maxNameLength`, and pass it as `limit`', () => {
+  it('it takes its limit from `settings.tabs.maxNameLength`, and passes it as `limit`', () => {
     for (const file of users) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${rel(file)}: does not derive the limit from the tabs settings`).toMatch(
@@ -89,6 +86,6 @@ describe('the bounded rename box has exactly two call sites', () => {
     // Rename the component, or change the JSX to a spread, and every assertion above becomes trivially
     // true over an empty list. That failure mode is the whole reason source guards get distrusted.
     expect(files.length).toBeGreaterThan(50);
-    expect(users.length).toBe(2);
+    expect(users.length).toBe(1);
   });
 });

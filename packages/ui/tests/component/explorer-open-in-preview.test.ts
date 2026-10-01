@@ -399,19 +399,6 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(within(flyout).getByTestId('menu-item-Last Preview Panel (other)')).toBeInTheDocument();
   });
 
-  it('a renamed preview panel is named by its own title', async () => {
-    recordLastActivePreview('t1', 'pv');
-    const base = layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`);
-    const tab = base.tabs[0]!;
-    const layout: WorkspaceLayout = {
-      ...base,
-      tabs: [{ ...tab, root: { ...(tab.root as Panel), title: 'Design notes', titleIsCustom: true } }],
-    };
-    const { user, tree } = await mount({ layout });
-    const flyout = await openInFlyout(user, tree, 'README.md');
-    expect(within(flyout).getByTestId('menu-item-Last Preview Panel (Design notes)')).toBeInTheDocument();
-  });
-
   it('sends the explicit target override — never the setting — for each row', async () => {
     recordLastActivePreview('t1', 'pv');
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });

@@ -48,6 +48,7 @@ import {
   __resetDocumentMetricsStore,
 } from '../../src/renderer/editor/document-metrics-store.js';
 import { disposeEditor } from '../../src/renderer/editor/use-editor.js';
+import { getEditorActions } from '../../src/renderer/editor/editor-actions.js';
 import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 
 const PANEL = 'p-listener';
@@ -260,7 +261,7 @@ describe('a real edit still reports and still arms the save', () => {
  *     stay green, correctly.
  *   • the arming guard removed (`settings.autoSave && configRef.current.filePath` → `true`):
  *     cases 2 and 4 fail — a disabled setting writes, and an untitled buffer opens a save dialog on
- *     a user who pressed nothing (`chooseSavePath` called with `defaultName: 'Panel 1'`). Cases 1
+ *     a user who pressed nothing (`chooseSavePath` called with `defaultName: 'Blank Panel'`). Cases 1
  *     and 3 stay green, correctly.
  *
  * Every case is red under exactly one of the two, and none is red under both — which is what makes
@@ -423,6 +424,22 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
 
     expect(h.calls.save, 'an unpathed document has nowhere confined to go').not.toHaveBeenCalled();
     expect(chooseSavePath, 'and no dialog may appear unasked').not.toHaveBeenCalled();
+  });
+
+  it('suggests the panel’s SHOWN name for an unpathed Save — "Blank Panel", never its number (048 FR-032, FR-130)', async () => {
+    // The harness panel's stored title is the generated "Panel 1"; the header shows "Blank Panel".
+    const h = await mountedFiring({ absPath: null });
+    const chooseSavePath = vi.fn((_opts: { defaultName?: string }) => Promise.resolve(null));
+    (Reflect.get(window, 'throng') as { editor: Record<string, unknown> }).editor.chooseSavePath =
+      chooseSavePath;
+
+    await act(async () => {
+      await getEditorActions(PANEL)!.save();
+    });
+
+    expect(chooseSavePath).toHaveBeenCalledTimes(1);
+    expect(chooseSavePath.mock.calls[0]![0]).toMatchObject({ defaultName: 'Blank Panel' });
+    h.unmount();
   });
 });
 

@@ -33,15 +33,12 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { FILE_OP_TIMEOUT_MS,
-  addPanels,
   cleanupTemp,
   createProject,
   openApp,
-  panelIds,
   runApp as runOwnApp,
   setSlider,
   settle,
@@ -220,43 +217,6 @@ async function noticeLogged(userDataDir: string, pattern: RegExp): Promise<void>
     .toBe(true);
 }
 
-/**
- * Poll the daemon's own SQLite store for a persisted layout matching `predicate` — the layout the
- * PANEL-NAME service actually reads (`panel-name-service.ts`'s `claim` goes through
- * `workspaceStore.load`, never an in-memory registry), so this is the real condition a debounced
- * write's caller needs, rather than a duration standing in for it. Mirrors
- * `persistence-restore.e2e.ts`'s (unexported) `expectLayoutSaved`.
- */
-async function expectLayoutPersisted(
-  projectName: string,
-  predicate: (layoutJson: string) => boolean,
-): Promise<void> {
-  await expect
-    .poll(
-      () => {
-        let db: InstanceType<typeof Database> | undefined;
-        try {
-          db = new Database(join(dataDir, 'throng.db'), { readonly: true });
-          const row = db
-            .prepare(
-              `SELECT w.layout_json AS json
-                 FROM workspace_layout w
-                 JOIN projects p ON p.id = w.project_id
-                WHERE p.name = ?`,
-            )
-            .get(projectName) as { json?: string } | undefined;
-          return row?.json !== undefined && predicate(row.json);
-        } catch {
-          return false; // not written yet, or a transient read of a mid-write DB
-        } finally {
-          db?.close();
-        }
-      },
-      { timeout: 15_000, message: `the layout for "${projectName}" was never persisted` },
-    )
-    .toBe(true);
-}
-
 /** Open the preferences window on the Settings tab and return its Page. */
 async function openSettings(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -286,17 +246,6 @@ async function raiseErrorNotice(win: Page): Promise<string> {
   const name = `Ghost${ghosts}`;
   await createProject(win, name, `C:/throng-e2e-missing/${name.toLowerCase()}`);
   return name;
-}
-
-/** Rename a panel through its header, WITHOUT a context menu (double-click opens the box). */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  // Asserted present above: a blind Enter would land on whatever holds focus.
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
 }
 
 /*
@@ -544,57 +493,12 @@ test('a pre-030 settings file opens with its preferences intact and no configura
   );
 });
 
-test('Dismiss only outlives any timeout — asserted on a WARNING, which auto-vanishes today (FR-012)', { tag: ['@extended', '@prefs'] }, async () => {
-  // Registered, not deleted here: under one app this root is watched for the rest of the file.
-  const root = mkdtempSync(join(tmpdir(), 'throng-notice-prefs-warn-'));
-  ownedRoots.push(root);
-  await runApp(
-    async (app, win) => {
-      await settle(win);
-      const prefs = await openSettings(app, win);
-      // The shipped default for `warning` IS Dismiss only (FR-013) — pinned here because the
-      // whole assertion rests on it.
-      await expect(prefs.getByTestId('control-notifications.warning.mode')).toHaveValue('dismiss');
-
-      // A real warning: two panels, one name. The daemon adjusts the second and says so once.
-      await createProject(win, 'WarnProj', root);
-      await addPanels(win, 1);
-      const ids = await panelIds(win);
-      expect(ids.length).toBeGreaterThanOrEqual(2);
-      await renamePanel(win, ids[0]!, 'Build');
-      // The daemon grants names from the PERSISTED layouts (`panel-name-service.ts`'s `claim` reads
-      // straight through `workspaceStore.load`, never an in-memory registry) and the write is
-      // debounced — ask the second panel for "Build" before the first rename has actually reached
-      // the store and nothing is taken yet, so nothing is adjusted and no warning is raised. Poll the
-      // store itself rather than asserting a duration is always long enough for the debounce plus
-      // its IPC round trip.
-      await expectLayoutPersisted('WarnProj', (json) => json.includes('"title":"Build"'));
-      await renamePanel(win, ids[1]!, 'Build');
-      // The ADJUSTMENT is the event. Asserted here so a producer that did not fire is reported as
-      // a producer that did not fire, and never as a missing notice.
-      await expect(win.getByTestId(`panel-title-${ids[1]!}`)).toHaveText('Build (2)');
-
-      const notice = win.getByTestId('panel-name-adjusted');
-      await expect(notice).toBeVisible({ timeout: 15_000 });
-      await expect(notice).toHaveClass(/notice--warning/);
-
-      /*
-       * On master (pre-030) the timer was armed for every severity but `error`, so this warning would
-       * have been gone by `AUTO_DISMISS_MS` (5000) whatever Preferences said. That NO timer is ever
-       * armed for `mode: 'dismiss'` — at any severity, for any duration, an hour included — is proven
-       * with a fake clock in `notice-dismissal-timer.test.ts` ("Dismiss only never arms a timer,
-       * whatever the severity", 034 FR-045/SC-008), so this spec no longer waits real seconds to
-       * gesture at the same fact. What stays here, and only Electron can prove it: that a REAL
-       * panel-rename collision through the real daemon raises a real `warning` notice under the
-       * shipped `dismiss` default, and that it is still dismissible — both asserted around this.
-       */
-
-      // Dismiss only still means dismissABLE.
-      await win.getByTestId('panel-name-adjusted-dismiss').click();
-      await expect(notice).toHaveCount(0);
-    },
-  );
-});
+/*
+ * REMOVED (048) — "Dismiss only outlives any timeout, asserted on a WARNING". Its warning was the daemon's
+ * panel-name-adjusted notice, raised when a TYPED panel name collided with another; panels cannot be renamed
+ * any more, so nothing raises that notice. The claim itself (no timer is ever armed for `dismiss`, at any
+ * severity) is `component/notice-dismissal-timer.test.ts`, which a fake clock makes stronger than a real wait.
+ */
 
 /**
  * T014 — turning an ERROR off is a consequence a user consents to; turning `info` off is not.

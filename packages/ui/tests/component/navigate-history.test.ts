@@ -26,6 +26,7 @@ import {
   type WorkspaceLayout,
 } from '@throng/core';
 import { KeybindingsHandler } from '../../src/renderer/app.js';
+import { SUB_WORKSPACE_CAPABILITIES, WindowDispatcher } from '../../src/renderer/keybindings/window-dispatcher.js';
 import {
   getEditorActions,
   registerEditorActions,
@@ -214,7 +215,7 @@ describe('US7b fix round 1, item 2 — Alt+Left in a SUB-WORKSPACE window (FR-10
     fireEvent.keyDown(document.body, { key: 'ArrowLeft', code: 'ArrowLeft', altKey: true });
   };
 
-  it('the sub-workspace window’s capture listener steps the focused editor back', async () => {
+  it('the sub-workspace window’s dispatcher steps the focused editor back', async () => {
     ws = await mountWorkspace(editorsLayout(), {
       throng: { editor: { openInto: () => Promise.resolve({ action: 'open' }) } },
       extras: [
@@ -222,6 +223,9 @@ describe('US7b fix round 1, item 2 — Alt+Left in a SUB-WORKSPACE window (FR-10
           SubWorkspaceWindowContext.Provider,
           { key: 'sub', value: { id: 'sub-1', name: 'Sub', colour: '#336699' } },
           createElement(NavigationChrome),
+          // 048 FR-090 — the sub-workspace window's chords go through the SAME dispatcher as the
+          // main window's, mounted as `subworkspace-app.tsx` mounts it.
+          createElement(WindowDispatcher, { capabilities: SUB_WORKSPACE_CAPABILITIES }),
         ),
       ],
     });
@@ -233,7 +237,7 @@ describe('US7b fix round 1, item 2 — Alt+Left in a SUB-WORKSPACE window (FR-10
     );
   });
 
-  it('the MAIN window’s NavigationChrome leaves the chord to app.tsx, so it is never handled twice', async () => {
+  it('NavigationChrome handles no chord itself — the window dispatcher is the only listener (048 FR-090)', async () => {
     ws = await mountWorkspace(editorsLayout(), {
       throng: { editor: { openInto: () => Promise.resolve({ action: 'open' }) } },
       extras: [createElement(NavigationChrome, { key: 'nav' })],
@@ -246,7 +250,7 @@ describe('US7b fix round 1, item 2 — Alt+Left in a SUB-WORKSPACE window (FR-10
   });
 });
 
-describe('US7b fix round 2, item 2 — the sub-workspace listener honours the transient-input guard (FR-105)', () => {
+describe('US7b fix round 2, item 2 — the sub-workspace window honours the transient-input guard (FR-105)', () => {
   const altLeft = (): void => {
     fireEvent.keyDown(document.body, { key: 'ArrowLeft', code: 'ArrowLeft', altKey: true });
   };
@@ -262,6 +266,9 @@ describe('US7b fix round 2, item 2 — the sub-workspace listener honours the tr
           SubWorkspaceWindowContext.Provider,
           { key: 'sub', value: { id: 'sub-1', name: 'Sub', colour: '#336699' } },
           createElement(NavigationChrome),
+          // 048 FR-090 — the sub-workspace window's chords go through the SAME dispatcher as the
+          // main window's, mounted as `subworkspace-app.tsx` mounts it.
+          createElement(WindowDispatcher, { capabilities: SUB_WORKSPACE_CAPABILITIES }),
         ),
         // A plain input, standing in for a find bar / Quick Open filter box — `transientInputFocused`
         // only cares about the focused element's tag, not which surface drew it.

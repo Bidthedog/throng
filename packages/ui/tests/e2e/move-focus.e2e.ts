@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { shippedPress } from '../shared/window-chords.js';
-import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, commitPanelRename, createProject as newProject, firstPanelId, openApp, panelIds, type AppOptions, type OpenApp } from './harness.js';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, addPanels, cleanupTemp, createProject as newProject, firstPanelId, openApp, panelIds, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -137,8 +137,8 @@ test('move-focus works from a focused terminal and editor, and input routing fol
       await win.getByTestId(`panel-type-confirm-${p1}`).click();
       await expect(win.getByTestId(`terminal-${p1}`)).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
-      await win.getByTestId(`panel-add-${p1}`).click();
-      await commitPanelRename(win);
+      await splitPanelViaMenu(win, p1);
+      await expect(win.locator('.panel-box')).toHaveCount(2);
       const [, p2] = await panelIds(win);
       await win.getByTestId(`panel-type-select-${p2}`).selectOption('editor');
       await win.getByTestId(`panel-type-confirm-${p2}`).click();

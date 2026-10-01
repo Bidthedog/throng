@@ -67,14 +67,6 @@ describe('the dormant terminal placeholder (039 FR-023)', () => {
     expect(screen.getByTestId('terminal-dormant-name')).toHaveTextContent('Command Prompt');
   });
 
-  it('a name the user typed outranks the flavour, exactly as the header does', () => {
-    renderDormant(undefined, dormantPanel({ title: 'Build', titleIsCustom: true }));
-    // FR-027: a dormant Panel keeps its name. The placeholder is where that is visible — without
-    // it, twenty dormant panels are twenty identical boxes and "reload the two I care about" is
-    // guesswork.
-    expect(screen.getByTestId('terminal-dormant-name')).toHaveTextContent('Build');
-  });
-
   /*
    * The one source a dormant panel genuinely cannot have, asserted so the resolver is not merely
    * assumed to be in the loop.

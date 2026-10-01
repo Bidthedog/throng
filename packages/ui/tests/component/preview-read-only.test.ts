@@ -27,7 +27,6 @@ import {
   resolveAction,
 } from '@throng/core';
 import { resolveScoped } from '../../src/renderer/keybindings/scope.js';
-import { requestPanelRename } from '../../src/renderer/workspace/panel-rename.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { EditorKeybindings } from '../../src/renderer/editor/editor-chrome.js';
 import {
@@ -247,14 +246,6 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
 });
 
 describe('the panel cannot be renamed (FR-030)', () => {
-  it('the rename chord reaches no rename starter', async () => {
-    const { id } = await mountText();
-    act(() => {
-      expect(requestPanelRename(id)).toBe(false);
-    });
-    expect(screen.queryByTestId(`panel-rename-input-${id}`)).toBeNull();
-  });
-
   it('a header double-click opens no rename box', async () => {
     const { id } = await mountText();
     fireEvent.doubleClick(screen.getByTestId(`panel-handle-${id}`));

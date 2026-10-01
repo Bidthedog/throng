@@ -118,20 +118,6 @@ describe('publishing each editor panel’s displayed name (FR-031)', () => {
     expect(publish.mock.calls.map((c) => c[0])).not.toContain('term');
   });
 
-  it('publishes a CUSTOM name when the editor is renamed, and the derived one again on Reset Name', async () => {
-    await mount();
-    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
-    publish.mockClear();
-
-    act(() => ws().renamePanel('ed1', 'Release plan'));
-    expect(publish).toHaveBeenCalledTimes(1);
-    expect(publish).toHaveBeenCalledWith('ed1', 'Release plan');
-
-    act(() => ws().resetPanelName('ed1'));
-    expect(publish).toHaveBeenCalledTimes(2);
-    expect(publish).toHaveBeenLastCalledWith('ed1', editorAutoTitle(README));
-  });
-
   it('publishes the DERIVED name again when the editor’s live file changes (an open in place, a Save As)', async () => {
     await mount();
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
@@ -151,8 +137,6 @@ describe('publishing each editor panel’s displayed name (FR-031)', () => {
     act(() => ws().setActiveTab('t2'));
     act(() => ws().bumpZoom('ed1', 1));
     act(() => setEditorState('ed1', { filePath: README, dirty: true }));
-    // Renaming to the name it already displays is no change either.
-    act(() => ws().renamePanel('ed2', editorAutoTitle(GUIDE)));
 
     expect(publish).not.toHaveBeenCalled();
   });

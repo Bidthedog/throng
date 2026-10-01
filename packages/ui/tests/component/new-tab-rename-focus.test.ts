@@ -9,8 +9,8 @@
  * Required: the name box keeps focus while it is open; when it closes (Enter or Escape), focus moves
  * into the new tab's active panel — for an untyped panel, its type picker (FR-125).
  *
- * The same check for the other rename-on-create surface, a new panel opening in rename mode
- * (FR-041, `lastAddedPanelId`), sits beside it.
+ * A new PANEL no longer opens in rename mode at all (048 FR-002, FR-030): the case beside it asserts a
+ * split panel has no name box and that focus lands in its type picker.
  *
  * Mounted as a window mounts them: the real `TabGroup` (which renders the strip, the New Tab button and
  * the active tab's panels) with the real `PanelFocusSync` beside it.
@@ -183,21 +183,21 @@ describe('a new tab opens with its name box focused, and focus goes into its pan
   });
 });
 
-describe('a new panel opens with its name box focused (FR-041 rename-on-create)', () => {
-  it('the new panel’s name box is still open and holds focus once the panel has mounted', async () => {
+describe('a split panel opens with no name box, and focus goes to its type picker (048 FR-002)', () => {
+  it('has no text-entry mode and holds focus once the panel has mounted', async () => {
     mount();
     await screen.findByTestId('panel-type-select-p1');
     fireEvent.click(screen.getByTestId('panel-add-p1'));
+    fireEvent.click(await screen.findByTestId('menu-item-Split Right'));
     let newId = '';
     await waitFor(() => {
       const ids = collectPanels(activeTab()!.root).map((p) => p.id);
       expect(ids.length).toBe(2);
       newId = ids.find((id) => id !== 'p1')!;
     });
-    await screen.findByTestId(`panel-type-select-${newId}`);
+    const picker = await screen.findByTestId(`panel-type-select-${newId}`);
     await settle();
-    const box = screen.getByTestId(`panel-${newId}`).querySelector('input[type="text"]');
-    expect(box, 'the new panel’s name box closed — something took focus from it').not.toBeNull();
-    expect(document.activeElement).toBe(box);
+    expect(screen.getByTestId(`panel-${newId}`).querySelector('input[type="text"]')).toBeNull();
+    expect(document.activeElement).toBe(picker);
   });
 });

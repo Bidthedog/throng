@@ -565,6 +565,61 @@ describe('FR-124 — at most two keys follow the modifiers, and no two-stroke co
     expect(screen.getByTestId('capture-modal')).toBeVisible();
   });
 
+  it('a panel.split* command CAN be rebound to another two-stroke chord, though it is live in a terminal (048 FR-003, FR-024, R1)', () => {
+    // The window dispatcher takes the first stroke before a shell does (the default is Ctrl+Shift+Alt+End,
+    // then an arrow), so `terminalMultiStrokeAllowed` admits these four and only these.
+    const onApply = vi.fn();
+    render(
+      createElement(CaptureModal, {
+        action: 'panel.splitRight' as never,
+        label: 'Split Right',
+        bindings: BINDINGS,
+        onApply,
+        onClose: vi.fn(),
+      }),
+    );
+    // The first stroke must not be one a terminal reserves (`Ctrl+E,W` is refused — Ctrl+E is readline's).
+    const held = { ctrlKey: true, shiftKey: true, altKey: true };
+    one('keydown', 'Control', held);
+    one('keydown', 'k', held);
+    one('keyup', 'k', held);
+    one('keydown', 'w', held);
+    one('keyup', 'w', held);
+    one('keyup', 'Control');
+    expect(screen.queryByTestId('capture-error')).toBeNull();
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const applied = onApply.mock.calls[0]![0] as Record<string, string[]>;
+    expect(applied['panel.splitRight']!.some((t) => /,W$/.test(t))).toBe(true);
+  });
+
+  it('a window-handled command whose FIRST key is reserved says so, and that another first key would work (T067)', () => {
+    const { onApply } = openCapture('panel.zoomIn');
+    one('keydown', 'Control', { ctrlKey: true });
+    one('keydown', 'e', { ctrlKey: true });
+    one('keyup', 'e', { ctrlKey: true });
+    one('keydown', 'z', { ctrlKey: true });
+    one('keyup', 'z', { ctrlKey: true });
+    one('keyup', 'Control');
+    const error = screen.getByTestId('capture-error');
+    expect(error).toHaveTextContent(/first key/i);
+    expect(error).toHaveTextContent(/reserved/i);
+    // Not the blanket "several keys can't be bound" — that is untrue of this command.
+    expect(error).not.toHaveTextContent(/single key/i);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('…while an ordinary terminal-live command still refuses it (the allowance is the split commands only)', () => {
+    const { onApply } = openCapture('focus.left');
+    one('keydown', 'Control', { ctrlKey: true });
+    one('keydown', 'e', { ctrlKey: true });
+    one('keyup', 'e', { ctrlKey: true });
+    one('keydown', 'w', { ctrlKey: true });
+    one('keyup', 'w', { ctrlKey: true });
+    one('keyup', 'Control');
+    expect(screen.getByTestId('capture-error')).toHaveTextContent(/terminal/i);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
   it('renders no capture-two-stroke control', () => {
     openCapture();
     expect(screen.queryByTestId('capture-two-stroke')).not.toBeInTheDocument();

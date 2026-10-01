@@ -46,7 +46,6 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { PanelPlaceholder } from '../../src/renderer/workspace/panel-placeholder.js';
 import { PanelDestroySync } from '../../src/renderer/workspace/panel-destroy-sync.js';
-import { requestPanelRename } from '../../src/renderer/workspace/panel-rename.js';
 import { allEditorStates } from '../../src/renderer/editor/editor-state.js';
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
@@ -382,7 +381,6 @@ describe('an attach refusal clears the panel only for the three FR-067 reasons',
     const tabId = live().layout!.tabs[0].id;
     act(() => {
       live().addPanel(tabId);
-      live().clearLastAddedPanel();
     });
     await waitFor(() => expect(panelsIn()).toHaveLength(2));
     const id = panelsIn()[0].id;
@@ -447,7 +445,6 @@ describe('closing a preview never prompts and tells main it is gone (FR-042)', (
     // A second panel, so closing this one is allowed at all.
     act(() => {
       live().addPanel(live().layout!.tabs[0].id);
-      live().clearLastAddedPanel();
     });
     await waitFor(() => expect(panelsIn()).toHaveLength(2));
     // Parented to a dirty document — the state in which an editor WOULD prompt.
@@ -509,15 +506,6 @@ describe('zoom is the preview’s own (FR-034)', () => {
 });
 
 describe('a preview is not renamable and not editable (FR-030, FR-020)', () => {
-  it('registers no rename starter, so the rename chord does nothing', async () => {
-    const { id } = await mountPreview();
-    await screen.findByTestId(`preview-${id}`);
-    act(() => {
-      expect(requestPanelRename(id)).toBe(false);
-    });
-    expect(screen.queryByTestId(`panel-rename-input-${id}`)).toBeNull();
-  });
-
   it('opens no rename box on a header double-click', async () => {
     const { id, user } = await mountPreview();
     await screen.findByTestId(`preview-${id}`);

@@ -1081,8 +1081,14 @@ export const TYPE_DELAY = E2E_STEP_MS > 0 ? 180 : 40;
 
 /** Create a project via the form (folder filled manually; dialog stays stubbed). */
 export async function createProject(win: Page, name: string, root: string): Promise<void> {
-  await win.getByTestId('project-new').click();
-  await expect(win.getByTestId('project-form')).toBeVisible();
+  // @dnd-kit's pointer sensor swallows every click for 50ms after a drag ends (a capture-phase
+  // listener it removes on a timer). On a shared app the previous test's drop can be that recent,
+  // so the click is retried until the form shows. Only a lost click is retried: once the form is up
+  // nothing clicks New project again.
+  await expect(async () => {
+    await win.getByTestId('project-new').click();
+    await expect(win.getByTestId('project-form')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await win.getByTestId('project-root-input').fill(root);
   await win.getByTestId('project-name-input').fill(name);
   await win.getByTestId('project-save').click();
@@ -1183,79 +1189,61 @@ export async function panelIds(win: Page): Promise<string[]> {
   return win.locator('.panel-box').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
 }
 
+/** A split direction, as the **+** menu and the Split submenu name it (048). */
+export type SplitDirectionName = 'down' | 'up' | 'right' | 'left';
+
 /**
- * Add `n` sibling panels to the active tab, committing each new panel's inline rename.
+ * Split `panelId` through its **+** button (048 FR-010): click it, choose the item.
  *
- * The two specs that need this each grew their own copy, each closing one of the two races
- * below and leaving the other open — so both were flaky, for different reasons (issue #59).
- * One helper, both races closed.
+ * The **+** no longer adds a panel by itself — it opens a four-way menu, and nothing exists until an item
+ * is chosen. Every spec that used to click `panel-add-<id>` and then deal with a rename box goes through
+ * here; the new panel takes focus and opens in NO rename mode (FR-002), so there is no box to commit.
+ * It does not wait for the new panel: callers assert the count they expect, as they always did.
+ */
+export async function splitPanelViaMenu(
+  win: Page,
+  panelId: string,
+  direction: SplitDirectionName = 'right',
+): Promise<void> {
+  await win.getByTestId(`panel-add-${panelId}`).click();
+  const label = `Split ${direction.charAt(0).toUpperCase()}${direction.slice(1)}`;
+  await win.getByTestId(`menu-item-${label}`).click();
+}
+
+/**
+ * Add `n` panels to the active tab by splitting the LAST panel to its right each time, so the panels
+ * read left to right in creation order (p1 | p2 | p3).
  *
- * **Race 1 — the baseline.** The workspace renders NO panels until its layout has loaded (the
+ * **Race — the baseline.** The workspace renders NO panels until its layout has loaded (the
  * tab group returns an empty fragment while `layout` is null), and {@link createProject} returns
  * as soon as the project appears in the sidebar, which is *before* that round-trip lands. Neither
  * `count()` nor `evaluateAll()` auto-waits, so a baseline read inside that window is 0 — the
  * click still works, and every assertion built on the baseline is then off by one. Settle on a
  * rendered workspace before reading anything.
  *
- * **Race 2 — the stray Enter.** A new panel opens in rename mode with its input `autoFocus`ed.
- * Press Enter before that focus lands and it re-activates the add BUTTON, adding a panel nobody
- * asked for.
- *
- * The rename input also commits on blur, so anything that steals focus back — a live terminal in
- * a sibling panel does exactly that — commits the rename for us and unmounts the input. That is a
- * legitimate outcome, not a failure: settle on the new panel existing, then commit the rename
- * only if it is still open.
+ * The widths are NOT equal thirds any more: each split halves the slot it is made in, so three panels
+ * are 25% | 25% | 50%. A spec that needs equal panels asserts that itself rather than through here.
  */
 export async function addPanels(win: Page, n: number): Promise<void> {
   await expect(win.locator('.panel-box').first()).toBeVisible();
   for (let i = 0; i < n; i += 1) {
     const before = await win.locator('.panel-box').count();
-    const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
+    const ids = await panelIds(win);
+    await splitPanelViaMenu(win, ids[ids.length - 1]!, 'right');
     await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-    await commitPanelRename(win);
   }
 }
 
 /**
- * Close the inline rename a freshly-added Panel opens in — and do not return until no rename
- * input is open (017 FR-013a). Call this after ANY action that adds a Panel.
+ * Close the inline rename a new TAB opens in — and do not return until no rename input is open.
  *
- * `await expect(win.locator('.panel-box')).toHaveCount(n)` settles as soon as the BOX renders, but
- * the rename input `autoFocus`es a render LATER. A bare `keyboard.press('Enter')` after the count
- * therefore fires into the gap: it commits nothing, the input then mounts, and it STAYS OPEN.
- * `keyboard.press` does not auto-wait, so nothing catches it — the test carries on with an open
- * text input on the panel header.
- *
- * What that breaks is rarely the next assertion, which is what makes it so slippery. A panel whose
- * header is an open rename input is not draggable: the pointerdown lands in the input instead of
- * the drag handle, dnd-kit never reaches its activation distance, `draggingPanelId` stays null and
- * the edge drop-zones — rendered only while a drag is live — never appear. The failure surfaces
- * 30 seconds later as `waiting for getByTestId('edge-bottom-…') to be visible`, pointing at the
- * drag helper rather than at the Enter that missed (issue #75; observed on CI shard 3/3).
- *
- * 017 fixed this inside {@link addPanels}, but six specs hand-roll the add + blind-Enter sequence
- * without it. This is that fix, extracted so there is ONE implementation to be right.
- *
- * The input also commits on blur, so anything stealing focus back — a live terminal in a sibling
- * panel — closes it for us and it never appears. That is an equally fine outcome: either way we
- * return with no open rename input.
- */
-export async function commitPanelRename(win: Page): Promise<void> {
-  await commitInlineRename(win, 'panel-rename-input-');
-}
-
-/**
- * The Tab equivalent of {@link commitPanelRename} — `tab-add` opens the new tab in rename mode
- * (`onNewTab={() => setRenamingTabId(ws.addTab())}`), so a blind Enter after clicking it races the
- * input's mount exactly the same way.
+ * `tab-add` opens the new tab in rename mode (`onNewTab={() => setRenamingTabId(ws.addTab())}`), and
+ * the input `autoFocus`es a render after the chip appears, so a blind `keyboard.press('Enter')` after
+ * the click races the input's mount: it commits nothing, the input then mounts, and it STAYS OPEN. A
+ * panel's rename box is gone (048 FR-030); a tab's is not.
  */
 export async function commitTabRename(win: Page): Promise<void> {
-  await commitInlineRename(win, 'tab-rename-input-');
-}
-
-/** Shared implementation: wait for the input, commit it if it opened, return only once it is gone. */
-async function commitInlineRename(win: Page, testIdPrefix: string): Promise<void> {
+  const testIdPrefix = 'tab-rename-input-';
   const rename = win.locator(`[data-testid^="${testIdPrefix}"]`);
   const appeared = await rename
     .waitFor({ state: 'visible', timeout: 5000 })

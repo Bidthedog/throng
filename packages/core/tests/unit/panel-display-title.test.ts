@@ -18,13 +18,16 @@ const panel = (over: Partial<Panel> = {}): Panel => ({
   type: 'panel',
   id: 'p1',
   originProjectId: 'proj',
-  title: 'Panel 3',
+  title: 'Blank Panel 3',
   ...over,
 });
 
 describe('panelDisplayTitle', () => {
-  it('shows the placeholder for an UNTYPED panel — the one state where "Panel X" is right', () => {
-    expect(panelDisplayTitle(panel())).toBe('Panel 3');
+  it('shows an UNTYPED panel as "Blank Panel", never its number (048 FR-130)', () => {
+    expect(panelDisplayTitle(panel())).toBe('Blank Panel');
+    expect(panelDisplayTitle(panel({ title: 'Blank Panel' }))).toBe('Blank Panel');
+    // A legacy generated name the migration has not reached yet shows the same.
+    expect(panelDisplayTitle(panel({ title: 'Panel 12' }))).toBe('Blank Panel');
   });
 
   it('shows a terminal’s live window title', () => {
@@ -49,7 +52,7 @@ describe('panelDisplayTitle', () => {
   });
 
   it('shows the placeholder for a terminal with neither a title nor a flavour', () => {
-    expect(panelDisplayTitle(panel({ kind: 'terminal' }))).toBe('Panel 3');
+    expect(panelDisplayTitle(panel({ kind: 'terminal' }))).toBe('Blank Panel');
   });
 
   it('shows an editor’s file name without its final extension', () => {
@@ -58,24 +61,37 @@ describe('panelDisplayTitle', () => {
   });
 
   it('shows the placeholder for an editor holding a never-saved document', () => {
-    expect(panelDisplayTitle(panel({ kind: 'editor' }))).toBe('Panel 3');
+    expect(panelDisplayTitle(panel({ kind: 'editor' }))).toBe('Blank Panel');
   });
 
-  it('lets a user’s rename outrank every automatic source', () => {
-    const p = panel({
-      kind: 'terminal',
-      title: 'Build',
-      titleIsCustom: true,
-      config: { flavourLabel: 'Command Prompt' },
-    });
-    expect(panelDisplayTitle(p, { terminalTitle: 'cmd.exe' })).toBe('Build');
-    const e = panel({ kind: 'editor', title: 'Scratch', titleIsCustom: true });
-    expect(panelDisplayTitle(e, { editorFilePath: 'C:/proj/alpha.ts' })).toBe('Scratch');
+  /**
+   * 048 FR-032 — a panel is always named by what it holds. Superseded: the #89/#97 rule that a
+   * user's rename outranked every automatic source (panel renaming is removed, R6). A leftover flag
+   * on a document the migration has not seen must not bring the old precedence back.
+   */
+  it('ignores any leftover custom-title flag — the content-derived title wins (FR-032)', () => {
+    const legacy = (over: Partial<Panel>): Panel =>
+      ({ ...panel(over), titleIsCustom: true, defaultTitle: 'Panel 3' }) as unknown as Panel;
+    const t = legacy({ kind: 'terminal', title: 'Build', config: { flavourLabel: 'Command Prompt' } });
+    expect(panelDisplayTitle(t, { terminalTitle: 'cmd.exe' })).toBe('cmd.exe');
+    expect(panelDisplayTitle(t)).toBe('Command Prompt');
+    const e = legacy({ kind: 'editor', title: 'Scratch' });
+    expect(panelDisplayTitle(e, { editorFilePath: 'C:/proj/alpha.ts' })).toBe('alpha');
+  });
+
+  /**
+   * 048 FR-032 — every surface that names a panel (header, tab strip, menus, tooltips, notices)
+   * reads this one function; the unsaved editor's default save name (006 FR-083) reads the panel's
+   * `title`, which for an editor with no file IS what this function returns.
+   */
+  it('names an unsaved editor "Blank Panel" — the default save name (006 FR-083, 048 FR-130)', () => {
+    const e = panel({ kind: 'editor', title: 'Blank Panel 7' });
+    expect(panelDisplayTitle(e)).toBe('Blank Panel');
   });
 
   it('ignores a blank or whitespace-only source rather than showing an empty header', () => {
     const p = panel({ kind: 'terminal', config: { flavourLabel: '   ' } });
-    expect(panelDisplayTitle(p, { terminalTitle: '  ' })).toBe('Panel 3');
+    expect(panelDisplayTitle(p, { terminalTitle: '  ' })).toBe('Blank Panel');
   });
 });
 
@@ -98,8 +114,8 @@ describe('panelDisplayTitle bounds its result (N8)', () => {
     expect(panelDisplayTitle(p, { terminalTitle: long }, undefined)).toBe(long);
   });
 
-  it('bounds a name the USER typed', () => {
-    const p = panel({ title: 'Deployment scratchpad', titleIsCustom: true, kind: 'terminal' });
+  it('bounds the placeholder title a panel falls back to', () => {
+    const p = panel({ title: 'Deployment scratchpad', kind: 'terminal' });
     expect(panelDisplayTitle(p, {}, 10)).toBe('Deployment');
   });
 
@@ -124,7 +140,7 @@ describe('panelDisplayTitle bounds its result (N8)', () => {
   });
 
   it('bounds the untyped PLACEHOLDER too — whatever the source means whatever the source', () => {
-    expect(panelDisplayTitle(panel({ title: 'Panel 13' }), {}, 5)).toBe('Panel');
+    expect(panelDisplayTitle(panel({ title: 'Blank Panel 13' }), {}, 5)).toBe('Blank');
   });
 
   it('cuts on a grapheme boundary, never mid-cluster', () => {
@@ -134,8 +150,8 @@ describe('panelDisplayTitle bounds its result (N8)', () => {
   });
 
   it('trims the trailing space a cut leaves behind (N9)', () => {
-    // 'Panel 3' cut at 6 lands after the space; a header reading "Panel " is not a name.
-    expect(panelDisplayTitle(panel(), {}, 6)).toBe('Panel');
+    // 'Blank Panel' cut at 6 lands after the space; a header reading "Blank " is not a name.
+    expect(panelDisplayTitle(panel(), {}, 6)).toBe('Blank');
   });
 
   it('leaves a name within the limit exactly as it was', () => {
@@ -147,7 +163,7 @@ describe('panelDisplayTitle bounds its result (N8)', () => {
   it('never returns an empty header for an absurd limit', () => {
     // A limit this small cannot arrive through the settings guard (10–128, FR-034), so this is
     // defensive: whatever it does, it must not blank the panel's name.
-    expect(panelDisplayTitle(panel(), {}, 1)).toBe('P');
+    expect(panelDisplayTitle(panel(), {}, 1)).toBe('B');
   });
 });
 

@@ -103,9 +103,6 @@ function fakeWs(initial: WorkspaceLayout) {
       layout = opAddPanelBeside(layout, targetId, edge, panel(id, { originProjectId: target.originProjectId }));
       return id;
     },
-    clearLastAddedPanel(): void {
-      calls.push('clearLastAddedPanel');
-    },
     setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void {
       calls.push('setPanelType');
       layout = opSetPanelType(layout, panelId, kind, config);
@@ -199,8 +196,6 @@ describe('Open in Editor asks editor.openInto first (FR-015c, one buffer)', () =
     expect(allPanels(l).find((p) => p.id === 'new-1')).toMatchObject({ kind: 'editor', config: { filePath: FILE } });
     expect(effectiveActivePanelId(t2!)).toBe('new-1');
     expect(focused).toEqual(['new-1']);
-    // A command-created panel never opens in rename mode (FR-041 is for user-added panels).
-    expect(ws.calls).toContain('clearLastAddedPanel');
     // Mirrored to other windows, as every created panel is.
     expect((window.throng as unknown as { panel: { notifyTyped: ReturnType<typeof vi.fn> } }).panel.notifyTyped).toHaveBeenCalledWith(
       'new-1',
@@ -328,7 +323,6 @@ describe('the status bar, the body menu and the header menu reach the one route 
     let parentId = '';
     act(() => {
       parentId = ws.addPanel(ws.layout!.tabs[0].id);
-      ws.clearLastAddedPanel();
     });
     mounted.openInto.mockImplementation(() => Promise.resolve({ action: 'focus', panelId: parentId, windowId: 'w1' }));
     mounted.push(

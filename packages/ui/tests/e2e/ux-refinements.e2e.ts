@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { skipIfElevated } from './admin.js';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 
 /**
  * ══ ONE APP FOR THE FILE (034 FR-045) ══
@@ -18,8 +18,8 @@ import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js'
  * layout renders, so `.tab-chip`, `.panel-box`, `.split--row`, `.split--column` and the split-node
  * counts are active-project-scoped and see this test's workspace and no other. Tab titles are
  * per-layout, so every project's first tab is `Tab 1` however many projects exist. Panel names are
- * globally unique with a re-used `Panel <n>` sequence, so a later project's first panel is
- * `Panel 7`, never `Panel 1 (2)` — which is why test 8's title regex survives unchanged. And every
+ * globally unique with a re-used `Blank Panel <n>` sequence (048 FR-127), so a later project's first
+ * panel is `Blank Panel 7`, never `Blank Panel (2)` — which is why test 8's title regex survives. And every
  * root here is a distinct sibling (`C:/code/some/deep/path`, `C:/c/tm`, `C:/c/pm`, `C:/c/rz`,
  * `C:/c/dc`, `C:/c/sz`, `C:/c/a`, `C:/c/b`), so FR-029's root exclusivity — which refuses identical,
  * ancestor AND descendant roots — is never engaged.
@@ -259,7 +259,7 @@ test('uses a native folder picker for the project root (FR-034)', { tag: ['@exte
 test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await createProject(win, 'Resize', 'C:/c/rz');
   const first = (await panelIds(win))[0];
-  await win.getByTestId(`panel-add-${first}`).click();
+  await splitPanelViaMenu(win, first);
   await expect(win.locator('.split--row')).toHaveCount(1);
 
   const cell = win.locator('.split--row > .split__cell').first();
@@ -366,13 +366,14 @@ test('window title shows the active project + Tab · Panel, no path or totals (F
 
   // Active project + its Tab · Panel context, nothing else (021 suffix form, FR-033).
   //
-  // The panel's name is no longer literally "Panel 1": panel names are unique across the whole
+  // 048 FR-130 shows an empty panel as plain "Blank Panel"; the optional groups below keep the shape
+  // check tolerant of the stored name. Historically (FR-127): panel names are unique across the whole
   // application (024 follow-up), and TitleA's panel claimed that name first, so TitleB's carries a
   // suffix. What this test is about is the SHAPE of the title — project · tab · panel, no path and
   // no totals — so it asserts that, and leaves the exact name to the naming tests.
   await expect
     .poll(getTitle, { timeout: 5000 })
-    .toMatch(/^TitleB · Tab 1 · Panel \d+( \(\d+\))? — throng$/);
+    .toMatch(/^TitleB · Tab 1 · Blank Panel( \d+)?( \(\d+\))? — throng$/);
   const title = await getTitle();
   expect(title).not.toContain('C:/c/b'); // no path
   expect(title).not.toMatch(/\d+ (projects|tabs|panels)/); // no totals

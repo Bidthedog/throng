@@ -255,8 +255,7 @@ function Host({ sidebar = false }: { sidebar?: boolean } = {}): ReactElement {
               detach.syncToExisting('panel', mainPanel.id, subId, tabId),
           },
           actions: {
-            beginRename: noop,
-            resetName: noop,
+            split: noop,
             zoomIn: noop,
             zoomOut: noop,
             resetZoom: noop,

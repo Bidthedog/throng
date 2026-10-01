@@ -147,7 +147,7 @@ test.beforeAll(async () => {
   const win = shared.win;
   await createProject(win, 'ChordProj', root);
 
-  // One editor panel showing a real file: the surface `panel.rename` and `navigate.gotoLine` need.
+  // One editor panel showing a real file: the surface `navigate.gotoLine` needs.
   editorPanel = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${editorPanel}`).selectOption('editor');
   await win.getByTestId(`panel-type-confirm-${editorPanel}`).click();
@@ -234,16 +234,8 @@ test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@ex
   await expect(win.getByTestId('gotoline')).toHaveCount(0);
 });
 
-test('the panel rename box still resolves — F2', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
-  const win = shared.win;
-  await focusEditorPanel(win);
-  await win.keyboard.press(chordFor('panel.rename'));
-  const input = win.getByTestId(`panel-rename-input-${editorPanel}`);
-  await expect(input).toBeVisible();
-  // Escape backs out without writing, so the panel keeps the name the rest of the file expects.
-  await input.press('Escape');
-  await expect(input).toHaveCount(0);
-});
+// REMOVED (048) — "the panel rename box still resolves — F2". `panel.rename` no longer exists: a panel is
+// named by its content and has no rename box (FR-030), so there is no chord left to resolve.
 
 test('file undo and redo still resolve with the tree active — Ctrl+Z and Ctrl+Y', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;

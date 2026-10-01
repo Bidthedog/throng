@@ -57,8 +57,7 @@ const panel = (over: Partial<Panel> = {}): Panel => ({
 });
 
 const headerActions = {
-  beginRename: noop,
-  resetName: noop,
+  split: noop,
   zoomIn: noop,
   zoomOut: noop,
   resetZoom: noop,

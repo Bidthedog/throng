@@ -4,15 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import {
-  runApp,
-  createProject,
-  firstPanelId,
-  daemonPid,
-  daemonRpc,
-  conhostChildren,
-  probeConhostChildren,
-  expectNoOrphanConhosts, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, probeConhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { skipIfElevated } from './admin.js';
 
 // Every test here asserts the terminal's conhost is a child of the DAEMON — true
@@ -148,7 +140,7 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { ta
       for (const flavour of flavours) {
         const pid = await firstPanelId(win);
         // A second Panel so destroying the terminal Panel is allowed (keep ≥ 1).
-        await win.getByTestId(`panel-add-${pid}`).click();
+        await splitPanelViaMenu(win, pid);
         await openTerminal(win, pid, flavour, dpid);
 
         // Destroy the Panel → daemon `terminal.kill` → the conhost must be reaped.
@@ -307,7 +299,7 @@ test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['
 
       // Two live terminals in two Panels.
       const pidA = await firstPanelId(win);
-      await win.getByTestId(`panel-add-${pidA}`).click();
+      await splitPanelViaMenu(win, pidA);
       await openTerminal(win, pidA, 'cmd', dpid);
       const pidB = (await win.locator('.panel-box').evaluateAll((els) =>
         els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),

@@ -130,7 +130,7 @@ describe('E2E parallel plan', () => {
    * without naming what puts it there is exactly the drift FR-001 was written against, and
    * "UNATTRIBUTED" must cost something or it becomes the default answer.
    */
-  const UNATTRIBUTED_CEILING = 14;
+  const UNATTRIBUTED_CEILING = 13;
 
   it('every serial entry names the mechanism that put it there', () => {
     const bad = Object.entries(plan.serial)

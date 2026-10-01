@@ -39,17 +39,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import {
-  addPanels,
-  cleanupTemp,
-  commitPanelRename,
-  createProject,
-  firstPanelId,
-  focusEditor,
-  panelIds,
-  runApp,
-  settle,
-} from './harness.js';
+import { addPanels, cleanupTemp, createProject, firstPanelId, focusEditor, panelIds, runApp, settle } from './harness.js';
 
 /** A project root that has never existed — the cheapest panel failure there is, and it scales. */
 function ghostRoot(name: string): string {
@@ -129,15 +119,6 @@ async function failingTerminalOn(win: Page, panelId: string): Promise<void> {
   await confirm.focus();
   await confirm.press('Enter');
   await expect(banner(win, panelId)).toBeVisible({ timeout: 90_000 });
-}
-
-/** Name a panel through its header — no context menu, so nothing here steals a menu from a test. */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await commitPanelRename(win);
 }
 
 /**
@@ -297,8 +278,9 @@ test('the banner copies its message, subject, path and system error with no noti
         await createProject(win, 'Silenced', ghostRoot('silenced-copy'));
         const pid = await firstPanelId(win);
         await failingTerminalOn(win, pid);
-        // Named, so the subject assertion is about a name somebody chose rather than a default.
-        await renamePanel(win, pid, 'Shell');
+        // Panels are not renamable (048), so the subject is asserted against the title the header shows.
+        const panelTitle = ((await win.getByTestId(`panel-title-${pid}`).textContent()) ?? '').trim();
+        expect(panelTitle, 'the failed panel shows no title to assert the subject against').not.toBe('');
 
         // Genuinely alone: no notice exists to have carried the detail instead.
         await expect(win.getByTestId('notices').locator('.notice')).toHaveCount(0);
@@ -316,7 +298,8 @@ test('the banner copies its message, subject, path and system error with no noti
         expect(
           copiedLines[1],
           'the copied subject is not the full Project — Tab — Panel form',
-        ).toMatch(/^Silenced — .+ — Shell$/);
+        ).toMatch(/^Silenced — .+ — /);
+        expect(copiedLines[1].endsWith(` — ${panelTitle}`), 'the subject does not end in the panel title').toBe(true);
         // The path it could not use, and the system error nobody could have retyped.
         expect(copied).toContain('throng-e2e-missing');
         expect(copied, 'the banner copied no system error').toMatch(

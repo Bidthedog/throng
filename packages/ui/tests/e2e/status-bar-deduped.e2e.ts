@@ -86,10 +86,11 @@ test('the status bar keeps only the project root path; the title bar keeps the i
       // The title bar is untouched — same project name, same Tab · Panel context, same colour.
       const identity = win.getByTestId('title-bar-identity');
       await expect(identity).toContainText('DedupeProj');
-      await expect(identity).toContainText('Tab 1 · Panel 1');
+      // 048 FR-127 — the new project's empty panel is "Blank Panel".
+      await expect(identity).toContainText('Tab 1 · Blank Panel');
 
       // And so is the OS window/taskbar title (TitleManager).
-      await expect.poll(() => osTitle(app), { timeout: 5000 }).toBe('DedupeProj · Tab 1 · Panel 1 — throng');
+      await expect.poll(() => osTitle(app), { timeout: 5000 }).toBe('DedupeProj · Tab 1 · Blank Panel — throng');
     });
   } finally {
     cleanupTemp(root);

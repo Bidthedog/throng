@@ -204,8 +204,6 @@ row is the gap, and SC-009 is not met while any remain.
 | `pane-auto-collapse.e2e.ts` | 4 | 1 | 1 | ALREADY-SHARED | One openApp in beforeAll (:59); the header documents the 4 -> 1 conversion, its FR-029 root fix and the order dependency. The second counted launch is prose. |
 | `panel-name-unique.e2e.ts` | 2 | 1 | 1 | SAFE-SHARE | Needs a reorder: panel names come from ONE global daemon sequence and test 2 asserts Panel 1 / Panel 2 (:84, :97), a first-run condition that test 1's four panels push to Panel 5 / Panel 6. Flagged because the dependency on the daemon's global sequence was inferred from the test's own comments rather than the daemon source. |
 | `panel-owner-align.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |
-| `panel-rename-key.e2e.ts` | 2 | 1 | 1 | UNSAFE-RESOURCE | Test 2 launches a real cmd (:81) and then closes the whole app to answer the terminate prompt (:16-22, called :94) — blockers #1 and #6 in one test, and with only two tests the other has nothing to share with. |
-| `panel-reset-name.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |
 | `panel-sync.e2e.ts` | 3 | 1 | 1 | ALREADY-SHARED | One openApp in beforeAll (:58), no escape needed; test 3's ordinal was already replaced by an id-delta lookup (:182). The second counted launch is prose. |
 | `panel-tooltips.e2e.ts` | 5 | 1 | 1 | ALREADY-SHARED | One app AND one project in beforeAll (:39); every assertion is relative to the current title. The second counted launch is prose. |
 | `panel-type-form.e2e.ts` | 2 | 1 | 1 | SAFE-SHARE | Both real shells are exited in-test and the revert to the type form is ASSERTED (:62, :102), which is the application observing the session's death — a named teardown. Flagged because it is still a real shell: if blocker #1 is applied as strictly as to the terminal-* files this is UNSAFE-RESOURCE. Test 2 must also close the sub-workspace window it opens (:80). |
@@ -245,7 +243,6 @@ row is the gap, and SC-009 is not met while any remain.
 | `subworkspace-owned-terminal.e2e.ts` | 3 | 1 | 1 | ALREADY-SHARED | Its one real shell is killed and the kill awaited (:120-121), and test 3 counts against a run-time baseline (:201). The second counted launch is prose. |
 | `subworkspace-persist-error.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |
 | `subworkspace-prefs-modality.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |
-| `subworkspace-rename-sync.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |
 | `subworkspace-rename-title.e2e.ts` | 2 | 1 | 1 | SAFE-SHARE | Test 1's window-title poll for "Sub-workspace 1" (:31) is an ordinal true only of the first sub-workspace, so it must stay first; both tests leave their child window open (:25, :60) and must close it. Same ordinal-rewrite caveat as subworkspace-detach. |
 | `subworkspace-sync.e2e.ts` | 2 | 1 | 1 | ALREADY-SHARED | One launch already serves 2 tests — at the floor. |
 | `subworkspace-titlebar.e2e.ts` | 1 | 1 | 1 | SINGLE-LAUNCH | 1 test, 1 launch — at the floor; there is no second test to share with. |

@@ -130,11 +130,11 @@ describe('the Find in Files scope (043 R14)', () => {
     );
   });
 
-  it('renames the PANEL there — F2 is panel.rename, not file.rename (the PANELS widening)', () => {
-    // A panel's name belongs to the panel whatever the panel holds, so `panel.rename` widens to the
-    // new scope. `editor.save*` and the `search.*` bar commands deliberately do NOT: they act on a
+  it('F2 there renames nothing — never the FILE TREE’s selection (R14; 048 FR-030 removed panel.rename)', () => {
+    // Before its own scope existed, F2 over a results panel fell through to `explorer` and renamed a
+    // FILE. `editor.save*` and the `search.*` bar commands do not reach it either: they act on a
     // document or a find bar, and a results panel has neither.
-    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F2' }, 'findInFiles')).toBe('panel.rename');
+    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F2' }, 'findInFiles')).toBeNull();
     expect(COMMAND_SCOPES['editor.save'].has('findInFiles')).toBe(false);
     expect(COMMAND_SCOPES['search.find'].has('findInFiles')).toBe(false);
   });
@@ -144,7 +144,7 @@ describe('the Find in Files scope (043 R14)', () => {
     // fourth scope missing from `EVERYWHERE` would quietly turn every window command's one pill into
     // three, which is how a type widening becomes a UI regression.
     expect(scopeNames(COMMAND_SCOPES['zoom.in'])).toEqual(['Everywhere']);
-    expect(scopeNames(COMMAND_SCOPES['panel.rename'])).toEqual([
+    expect(scopeNames(new Set<DispatchScope>(['editor', 'terminal', 'findInFiles']))).toEqual([
       'Editor',
       'Terminal',
       'Find in Files',
@@ -236,6 +236,27 @@ describe('scope completeness (FR-017b0 — there is no default)', () => {
     for (const d of KEYBINDINGS_METADATA) {
       expect(d.scope, `no scope on the descriptor for "${d.key}"`).toBeDefined();
       expect(d.scope?.length, d.key).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('048 split commands (FR-020, FR-024)', () => {
+  const SPLITS: ActionId[] = ['panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft'];
+
+  it('registers exactly the four panel.split* commands', () => {
+    expect(ACTION_IDS.filter((a) => a.startsWith('panel.split')).sort()).toEqual([...SPLITS].sort());
+  });
+
+  it('scopes each to every DispatchScope — a window command, live over any panel and any pane', () => {
+    for (const action of SPLITS) {
+      expect(scopeNames(COMMAND_SCOPES[action]), action).toEqual(scopeNames(COMMAND_SCOPES['focus.left']));
+    }
+  });
+
+  it('the first stroke alone resolves nothing in any scope — it only starts the chord', () => {
+    const firstStroke = { key: 'End', ctrl: true, shift: true, alt: true };
+    for (const scope of ['editor', 'terminal', 'explorer', 'findInFiles', 'preview', 'projects'] as const) {
+      expect(resolveAction(DEFAULT_KEYBINDINGS, firstStroke, scope), scope).toBeNull();
     }
   });
 });

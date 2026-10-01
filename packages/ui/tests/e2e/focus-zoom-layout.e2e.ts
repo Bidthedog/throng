@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitPanelRename, commitTabRename, cleanupTemp} from './harness.js';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitTabRename, cleanupTemp, splitPanelViaMenu } from './harness.js';
 
 // 012 US4 (FR-005/006/010, SC-003): focus + per-type zoom survive layout changes.
 // A sensible panel stays active across every transition, and each type's
@@ -49,8 +49,7 @@ test("a panel's zoom and a single active panel survive tab switch, split, and cl
       await expect(win.locator('.panel-box--active')).toHaveCount(1);
 
       // Split (add a sibling panel) → p1's zoom unchanged, exactly one panel active.
-      await win.getByTestId(`panel-add-${p1}`).click();
-      await commitPanelRename(win);
+      await splitPanelViaMenu(win, p1);
       await expect(win.locator('.panel-box')).toHaveCount(2);
       expect(await panelZoom(win, p1)).toBe(level);
       await expect(win.locator('.panel-box--active')).toHaveCount(1);
@@ -78,8 +77,7 @@ test('the main window and a detached sub-workspace hold independent active panel
     await runApp(async (app, win) => {
       await createProject(win, 'MainProj', root);
       const p1 = await firstPanelId(win);
-      await win.getByTestId(`panel-add-${p1}`).click();
-      await commitPanelRename(win);
+      await splitPanelViaMenu(win, p1);
       await expect(win.locator('.panel-box')).toHaveCount(2);
       // sleep-justified: the layout blob sits behind workspace-store's fixed 400ms debounce
       // sleep-justified: (layout-saves.ts:5) and the write is fire-and-forget past it — nothing on

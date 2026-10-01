@@ -171,13 +171,14 @@ test('theme icons hot-reload in context menus (#9)', { tag: ['@extended', '@pref
   await runApp(
     async (_app, win) => {
       await createProject(win, 'Icons', 'C:/c/icons');
-      writeTheme(cfg, { icons: { rename: '✗' } });
+      // Send to Tab is on every panel's menu, an empty one included (048 removed panel Rename).
+      writeTheme(cfg, { icons: { send: '✗' } });
       const panelId = await win
         .locator('.panel-box')
         .first()
         .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
       const handle = win.getByTestId(`panel-handle-${panelId}`);
-      const icon = win.getByTestId('menu-item-Rename').locator('.context-menu__icon');
+      const icon = win.getByTestId('menu-item-Send to Tab').locator('.context-menu__icon');
       /*
        * The hot-reload lands in the renderer's config context, not on disk, so there is nothing
        * file-based to poll — and the icon only exists inside a menu that is not open yet. Poll the

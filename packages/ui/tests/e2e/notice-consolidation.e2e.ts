@@ -146,23 +146,6 @@ async function openFirstTab(win: Page): Promise<void> {
 }
 
 /**
- * Name a panel through its header — no context menu, so this spec's serial listing stays about the
- * shell and nothing else.
- *
- * The names matter: a panel's default title is `Panel 1`, which tells a reader of this spec nothing
- * about whether the row they are looking at is the editor or the terminal. Naming them is what makes
- * "editors and terminals in the same list" an assertion rather than a count.
- */
-async function renamePanel(win: Page, panelId: string, to: string): Promise<void> {
-  await win.getByTestId(`panel-handle-${panelId}`).dblclick();
-  const input = win.getByTestId(`panel-rename-input-${panelId}`);
-  await expect(input).toBeVisible();
-  await input.fill(to);
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
-}
-
-/**
  * T037 / T037a / T040 — the consolidated notice, everything about it, in one restored session.
  *
  * Deliberately one test rather than four. Every assertion below describes the SAME restored
@@ -175,7 +158,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
   const moved = `${root}-renamed`;
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-consol-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-consol-ud-'));
-  for (const name of ['one', 'two', 'three']) {
+  for (const name of ['docs', 'notes', 'scratch']) {
     writeFileSync(join(root, `${name}.txt`), `${name.toUpperCase()}\n`);
   }
 
@@ -186,8 +169,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         await settle(win);
         await createProject(win, 'Consol', root);
         const [first] = await panelIds(win);
-        await editorOn(win, first!, 'one.txt');
-        await renamePanel(win, first!, 'Docs');
+        await editorOn(win, first!, 'docs.txt'); // the panel is titled by its file — 048 removed renaming
 
         // A REAL terminal beside it, in the same tab: FR-029 requires editors and terminals to land
         // in one list, and two panel types reporting through one notice is the whole claim.
@@ -200,22 +182,19 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         await expect(win.getByTestId(`terminal-${term}`)).toContainText(basename(root), {
           timeout: 30_000,
         });
-        await renamePanel(win, term, 'Shell');
 
         await newTab(win, 'Second');
         const [secondPanel] = await panelIds(win);
-        await editorOn(win, secondPanel!, 'two.txt');
-        await renamePanel(win, secondPanel!, 'Notes');
+        await editorOn(win, secondPanel!, 'notes.txt');
 
         await newTab(win, 'Third');
         const [thirdPanel] = await panelIds(win);
-        await editorOn(win, thirdPanel!, 'three.txt');
-        await renamePanel(win, thirdPanel!, 'Scratch');
+        await editorOn(win, thirdPanel!, 'scratch.txt');
 
         // Back to the first tab, so the restored session opens there and tabs two and three are
         // genuinely UNRENDERED — which is what makes growth observable at all.
         await openFirstTab(win);
-        await persisted(dataDir, 'Consol', 'three.txt');
+        await persisted(dataDir, 'Consol', 'scratch.txt');
         await persisted(dataDir, 'Consol', '"kind":"terminal"');
       },
       { dataDir, userDataDir },
@@ -253,7 +232,7 @@ test('one cause across several tabs is one notice, listing every panel it defeat
          *
          * `allInnerTexts()` takes a still photograph; `toHaveCount` waits. With the snapshot first,
          * the text was captured while only the terminal had joined the notice and the editor's
-         * 300ms tab-open scan had not yet reported — so the later `toContain('Docs')` failed against
+         * 300ms tab-open scan had not yet reported — so the later `toContain('docs')` failed against
          * a list that was complete on screen by then, and the count assertion two lines down passed.
          * A three-second sleep used to sit above all this and hid the ordering entirely.
          *
@@ -264,8 +243,11 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         await expect(rows(win)).toHaveCount(2);
         const rowText = (await rows(win).allInnerTexts()).join('\n');
         expect(rowText, 'a row repeats the project the heading already names').not.toContain('Consol');
-        expect(rowText, 'the editor panel is missing from the list').toContain('Docs');
-        expect(rowText, 'the terminal panel is missing from the list').toContain('Shell');
+        expect(rowText, 'the editor panel is missing from the list').toContain('docs');
+        // The other row is the terminal's: a panel's title is its content's name now, so it is told apart
+        // by not being the editor rather than by a name somebody typed.
+        const otherRows = (await rows(win).allInnerTexts()).filter((t) => !t.includes('docs'));
+        expect(otherRows, 'the terminal panel is missing from the list').toHaveLength(1);
 
         // ═══ THE RAW SYSTEM ERROR IS NOT RENDERED (FR-034, 029 FR-016/FR-018a). ═══
         //

@@ -9,7 +9,7 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -159,7 +159,7 @@ test('restores each project’s own layout after a restart (SC-006)', { tag: ['@
     await expect(projectItem(win, 'Beta')).toHaveAttribute('data-active', 'true');
     await expect(win.locator('.tab-chip')).toHaveCount(1);
     const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
+    await splitPanelViaMenu(win, first);
     await expect(win.locator('.panel-box')).toHaveCount(2);
     await expectLayoutSaved(h.dataDir, 'Beta', (json) => savedPanels(json) === 2);
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -90,9 +90,8 @@ test('drag a Panel onto "+" → new active Tab containing only that Panel', { ta
 
     // Split the tab into two Panels; commit the new Panel's rename.
     const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
+    await splitPanelViaMenu(win, first);
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    await commitPanelRename(win);
     await expect(win.locator('.tab-chip')).toHaveCount(1);
 
     const [a, b] = await panelIds(win);

@@ -223,6 +223,11 @@ async function dismissRename(user: ReturnType<typeof userEvent.setup>): Promise<
   if (box) await user.keyboard('{Escape}');
 }
 const panelBoxes = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.panel-box')];
+/** A panel's + button opens the split menu (048 FR-010); a second panel needs an item chosen. */
+async function splitFromPlus(user: ReturnType<typeof userEvent.setup>, panelId: string): Promise<void> {
+  await user.click(screen.getByTestId(`panel-add-${panelId}`));
+  await user.click(await screen.findByTestId('menu-item-Split Right'));
+}
 
 beforeEach(() => {
   captured.ws = null;
@@ -422,7 +427,7 @@ describe('the tab picker lists every tab (migrated from tab-picker.e2e.ts:76)', 
     await waitFor(() => expect(screen.queryByTestId('tabpicker')).toBeNull());
 
     // A second panel in the same tab.
-    await user.click(screen.getByTestId(`panel-add-${panelBoxes()[0]?.dataset.panelId}`));
+    await splitFromPlus(user, panelBoxes()[0]?.dataset.panelId ?? '');
     await waitFor(() => expect(panelBoxes()).toHaveLength(2));
 
     requestTabPicker();
@@ -548,35 +553,7 @@ describe('Destroy other tabs (FR-043, migrated from ux-refinements.e2e.ts:249)',
   });
 });
 
-describe('renaming a Panel from its header menu (migrated from ux-refinements.e2e.ts:271)', () => {
-  it('commits on Enter and the header shows the new name', async () => {
-    const { user } = mount();
-    await ready();
-    const panelId = panelBoxes()[0]?.dataset.panelId ?? '';
-    expect(panelId).not.toBe('');
-
-    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`panel-handle-${panelId}`) });
-    await user.click(await screen.findByTestId('menu-item-Rename'));
-
-    const input = (await screen.findByTestId(`panel-rename-input-${panelId}`)) as HTMLInputElement;
-    await user.clear(input);
-    await user.type(input, 'Server Logs');
-    await user.keyboard('{Enter}');
-
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${panelId}`)).toHaveTextContent('Server Logs'),
-    );
-    // …and it is a MANUAL name, which is the fact every later automatic source is gated on. The
-    // migrated test asserted the text and stopped, so a rename that displayed correctly while
-    // leaving `titleIsCustom` false would have passed it and then been overwritten by the next file
-    // the panel opened.
-    await waitFor(() =>
-      expect(panelsIn(liveWorkspace()).find((p) => p.id === panelId)?.titleIsCustom).toBe(true),
-    );
-  });
-});
-
-describe('double-click is the second route into both boxes (migrated from ux-refinements.e2e.ts:303)', () => {
+describe('double-click opens the tab’s rename box (migrated from ux-refinements.e2e.ts:303; the panel box went in 048)', () => {
   it('opens the TAB rename box', async () => {
     const { user } = mount();
     await ready();
@@ -591,23 +568,6 @@ describe('double-click is the second route into both boxes (migrated from ux-ref
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(screen.getByTestId(`tab-${chipIds()[0]}`)).toHaveTextContent('My Tab'));
-  });
-
-  it('opens the PANEL rename box from its header', async () => {
-    const { user } = mount();
-    await ready();
-    const panelId = panelBoxes()[0]?.dataset.panelId ?? '';
-
-    await user.dblClick(screen.getByTestId(`panel-handle-${panelId}`));
-
-    const input = (await screen.findByTestId(`panel-rename-input-${panelId}`)) as HTMLInputElement;
-    await user.clear(input);
-    await user.type(input, 'My Panel');
-    await user.keyboard('{Enter}');
-
-    await waitFor(() =>
-      expect(screen.getByTestId(`panel-title-${panelId}`)).toHaveTextContent('My Panel'),
-    );
   });
 
   it('a SINGLE click on a tab activates it and opens no box', async () => {
@@ -653,7 +613,7 @@ describe('adding a Panel splits, and closing one collapses (migrated from worksp
     // state that was always there.
     expect(screen.queryByTestId('split-node')).toBeNull();
 
-    await user.click(screen.getByTestId(`panel-add-${first}`));
+    await splitFromPlus(user, first);
 
     await waitFor(() => expect(panelBoxes()).toHaveLength(2));
     expect(screen.getByTestId('split-node')).toBeInTheDocument();
@@ -672,7 +632,7 @@ describe('adding a Panel splits, and closing one collapses (migrated from worksp
     await ready();
     const first = panelBoxes()[0]?.dataset.panelId ?? '';
 
-    await user.click(screen.getByTestId(`panel-add-${first}`));
+    await splitFromPlus(user, first);
     await waitFor(() => expect(panelBoxes()).toHaveLength(2));
 
     await user.click(screen.getByTestId(`panel-close-${first}`));
@@ -987,34 +947,6 @@ describe('the New Tab route names its panel automatically (#218)', () => {
     expect(document.querySelector('[data-testid^="panel-rename-input-"]')).toBeNull();
   });
 
-  it('leaves the new tab’s panel un-renamed, so it keeps naming itself', async () => {
-    /*
-     * The #218 rule. `titleIsCustom` is what suppresses automatic naming, so a panel that comes out
-     * of this route believing it was renamed is a panel whose terminal title and file name will
-     * never show — on the panels a user has just made, which is the reported symptom.
-     *
-     * Asserted on the STORE rather than on the Reset Name menu item's disabled flag, which is how
-     * the E2E read it: the flag is derived from this, so the store is the claim and the flag is a
-     * rendering of it. `panel-box.test.ts` covers the flag.
-     */
-    const { user } = mount();
-    await ready();
-    const tabsBefore = (liveWorkspace().layout as WorkspaceLayout).tabs.length;
-
-    await user.click(screen.getByTestId('tab-add'));
-    await waitFor(() =>
-      expect((liveWorkspace().layout as WorkspaceLayout).tabs.length).toBe(tabsBefore + 1),
-    );
-
-    const newTab = (liveWorkspace().layout as WorkspaceLayout).tabs[tabsBefore];
-    const panels = collectPanels(newTab.root) as Panel[];
-    expect(panels.length, 'the new tab must bring a panel for this to be about one').toBeGreaterThan(0);
-
-    for (const p of panels) {
-      expect(p.titleIsCustom, `panel ${p.id} came out of New Tab marked custom`).toBeFalsy();
-    }
-  });
-
   it('escaping the tab’s rename box still leaves nothing renamed', async () => {
     /*
      * How this ends for a user who does not want to name the tab — the E2E pressed Escape here too.
@@ -1033,11 +965,6 @@ describe('the New Tab route names its panel automatically (#218)', () => {
     await waitFor(() =>
       expect(document.querySelector('[data-testid^="tab-rename-input-"]')).toBeNull(),
     );
-
-    const newTab = (liveWorkspace().layout as WorkspaceLayout).tabs[tabsBefore];
-    for (const p of collectPanels(newTab.root) as Panel[]) {
-      expect(p.titleIsCustom).toBeFalsy();
-    }
   });
 });
 
@@ -1280,9 +1207,8 @@ describe('the confirmation LEVEL the user set reaches a destroy (migrated from c
     const { user } = mount(undefined, { confirmations: { destroyPanel: 'none' } });
     await ready();
     const id = firstPanelId();
-    await user.click(screen.getByTestId(`panel-add-${id}`));
+    await splitFromPlus(user, id);
     await waitFor(() => expect(panelBoxes()).toHaveLength(2));
-    await dismissRename(user);
     markTerminalRunning(id);
 
     await user.click(screen.getByTestId(`panel-close-${id}`));
@@ -1338,12 +1264,12 @@ describe('the glyph controls are announced by their action, not their glyph (#28
     expect(screen.queryByRole('button', { name: '+' })).toBeNull();
   });
 
-  it('names the Add Panel button "Add panel"', async () => {
+  it('names the panel + button "Split panel…" (048 FR-014)', async () => {
     mount();
     await ready();
     const id = firstPanelId();
 
-    expect(screen.getByRole('button', { name: 'Add panel' })).toBe(
+    expect(screen.getByRole('button', { name: 'Split panel…' })).toBe(
       screen.getByTestId(`panel-add-${id}`),
     );
     expect(screen.queryByRole('button', { name: '+' })).toBeNull();

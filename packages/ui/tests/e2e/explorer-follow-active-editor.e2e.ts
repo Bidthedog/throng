@@ -15,19 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import {
-  openApp,
-  runApp as runOwnApp,
-  createProject,
-  firstPanelId,
-  panelIds,
-  focusEditor,
-  commitPanelRename,
-  commitTabRename,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { openApp, runApp as runOwnApp, createProject, firstPanelId, panelIds, focusEditor, commitTabRename, cleanupTemp, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 /**
  * A project with a root-level file and one buried two folders deep, so "expands every ancestor" is a
@@ -57,9 +45,8 @@ async function newEditor(win: Page, pid: string): Promise<void> {
  */
 async function addPanel(win: Page, pid: string): Promise<string> {
   const before = await panelIds(win);
-  await win.getByTestId(`panel-add-${pid}`).click();
+  await splitPanelViaMenu(win, pid);
   await expect(win.locator('.panel-box')).toHaveCount(before.length + 1);
-  await commitPanelRename(win);
   return (await panelIds(win)).find((id) => !before.includes(id))!;
 }
 

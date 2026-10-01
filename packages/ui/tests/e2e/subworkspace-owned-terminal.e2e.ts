@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, commitPanelRename, type OpenApp } from './harness.js';
+import { openApp, createProject, firstPanelId, type OpenApp, splitPanelViaMenu } from './harness.js';
 
 // Batch 3 (2026-07-01):
 //  • FR-028 — a Panel created INSIDE a sub-workspace (owned; no project) can open a
@@ -97,10 +97,9 @@ test('a sub-workspace-owned Panel can open a terminal (launches at home, no proj
   try {
     // Add a NEW Panel inside the sub-workspace — this one is owned by the
     // sub-workspace (no origin project), so it should still be able to open a
-    // terminal. Commit the auto-rename that a new Panel opens in.
-    await child.getByTestId(`panel-add-${a}`).click();
+    // terminal.
+    await splitPanelViaMenu(child, a);
     await expect(child.locator('.panel-box')).toHaveCount(2);
-    await commitPanelRename(child);
     const owned = (
       await child.locator('.panel-box').evaluateAll((els) =>
         els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),
@@ -138,9 +137,8 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
   const child = await syncToNewSubWorkspace(app, win, a);
   try {
     // Add an OWNED Panel (belongs to the sub-workspace, not a project).
-    await child.getByTestId(`panel-add-${a}`).click();
+    await splitPanelViaMenu(child, a);
     await expect(child.locator('.panel-box')).toHaveCount(2);
-    await commitPanelRename(child);
     const owned = (
       await child.locator('.panel-box').evaluateAll((els) =>
         els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),

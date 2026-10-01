@@ -100,12 +100,6 @@ describe('the popover names a panel the way the panel names itself', () => {
     expect(names([editorPanel()])).toEqual(['composition-root']);
   });
 
-  it('lets a user rename outrank every live source', () => {
-    setTerminalTitle('p-term', 'ISSUE MANAGEMENT');
-
-    expect(names([terminalPanel({ title: 'Deploy', titleIsCustom: true })])).toEqual(['Deploy']);
-  });
-
   it('names every panel in a tab, in layout order', () => {
     setTerminalTitle('p-term', 'ISSUE MANAGEMENT');
     setEditorState('p-ed', { filePath: 'C:/proj/src/composition-root.ts' });
@@ -153,7 +147,7 @@ describe('and carries what type of panel it is', () => {
   it('carries NEITHER for an untyped panel, whose name is already the placeholder', () => {
     // The "Select Panel Type" form is what it is showing, so the absence is the information.
     expect(rows([terminalPanel({ id: 'p-none', kind: undefined, title: 'Panel 9' })])).toEqual([
-      { name: 'Panel 9', icon: null, typeLabel: null },
+      { name: 'Blank Panel', icon: null, typeLabel: null },
     ]);
   });
 
@@ -161,7 +155,7 @@ describe('and carries what type of panel it is', () => {
     // A layout persisted by a build that had a type this one does not. Guessing an icon from the
     // id would be worse than showing none.
     expect(rows([terminalPanel({ id: 'p-x', kind: 'not-registered', title: 'Panel 7' })])).toEqual([
-      { name: 'Panel 7', icon: null, typeLabel: null },
+      { name: 'Blank Panel', icon: null, typeLabel: null },
     ]);
   });
 

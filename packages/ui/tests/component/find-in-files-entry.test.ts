@@ -112,22 +112,19 @@ function layout(withFindPanel: boolean, activePanelId?: string): WorkspaceLayout
 interface Spies {
   ws: FindInFilesWorkspace;
   addPanel: ReturnType<typeof vi.fn>;
-  clearLastAddedPanel: ReturnType<typeof vi.fn>;
   setPanelType: ReturnType<typeof vi.fn>;
   setActivePanel: ReturnType<typeof vi.fn>;
 }
 
 function workspace(l: WorkspaceLayout | null): Spies {
   const addPanel = vi.fn(() => NEW_PANEL_ID);
-  const clearLastAddedPanel = vi.fn();
   const setPanelType = vi.fn();
   const setActivePanel = vi.fn();
   return {
     addPanel,
-    clearLastAddedPanel,
     setPanelType,
     setActivePanel,
-    ws: { layout: l, addPanel, clearLastAddedPanel, setPanelType, setActivePanel },
+    ws: { layout: l, addPanel, setPanelType, setActivePanel },
   };
 }
 
@@ -229,14 +226,6 @@ describe('which panel the search goes to (FR-020, FR-021, FR-022)', () => {
 
     expect(invoke(spies, { openTarget: 'new' })).toBe(NEW_PANEL_ID);
     expect(spies.addPanel).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not open the new panel in RENAME mode', () => {
-    // Only a USER-added panel renames on add (FR-041). A panel that appeared because the user
-    // pressed a search chord must not open with a rename box over its search input.
-    const spies = workspace(layout(false));
-    invoke(spies);
-    expect(spies.clearLastAddedPanel).toHaveBeenCalledTimes(1);
   });
 });
 

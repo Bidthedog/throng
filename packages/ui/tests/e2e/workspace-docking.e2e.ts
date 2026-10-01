@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitPanelRename, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
+import { cleanupTemp, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -135,11 +135,8 @@ test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: 
     await createProjectAndOpen(win);
 
     const first = (await panelIds(win))[0];
-    await win.getByTestId(`panel-add-${first}`).click();
+    await splitPanelViaMenu(win, first);
     await expect(win.locator('.panel-box')).toHaveCount(2);
-    // A newly added Panel opens in rename mode. Commit it before dragging — a panel with an open
-    // rename input is not draggable, and a blind Enter here can fire before the input mounts.
-    await commitPanelRename(win);
 
     const [a, b] = await panelIds(win);
     // Drag B onto A's bottom edge → a column split forms; both panels survive.

@@ -82,7 +82,6 @@ describe('the ordinary rows (FR-033)', () => {
     const { id } = await mountText();
     act(() => {
       m!.ws().addPanel(m!.ws().layout!.tabs[0].id);
-      m!.ws().clearLastAddedPanel();
     });
     // Parented to a dirty document — the state in which an editor WOULD ask.
     m!.push(update({ revision: 2, dirty: true, parent: { panelId: 'ed', title: 'notes' } }));
@@ -150,7 +149,6 @@ describe('the ordinary rows (FR-033)', () => {
     let parentId = '';
     act(() => {
       parentId = m!.ws().addPanel(m!.ws().layout!.tabs[0].id);
-      m!.ws().clearLastAddedPanel();
     });
     m!.push(update({ revision: 2, parent: { panelId: parentId, title: 'notes' } }));
     await openHeaderMenu();

@@ -120,9 +120,6 @@ function fakeWs(initial: WorkspaceLayout) {
       layout = opAddPanelBeside(layout, targetId, edge, panel(id, { originProjectId: originProjectId ?? target.originProjectId }));
       return id;
     },
-    clearLastAddedPanel(): void {
-      calls.push('clearLastAddedPanel');
-    },
     setPanelType(panelId: string, kind: PanelKind, config: PanelConfig): void {
       calls.push('setPanelType');
       layout = opSetPanelType(layout, panelId, kind, config);
@@ -204,8 +201,6 @@ describe('placeLocally beside a parent this window holds (FR-010)', () => {
     expect(l.activeTabId).toBe('t2');
     expect(effectiveActivePanelId(t2!)).toBe('new-1');
     expect(focused).toEqual(['new-1']);
-    // A preview created by a command must not open in rename mode (FR-041 is for user-added panels).
-    expect(ws.calls).toContain('clearLastAddedPanel');
   });
 
   it('hands the mounting preview main’s reservation, so its attach consumes it (FR-012)', async () => {

@@ -54,7 +54,7 @@
  * does NOT do is give the workspace store a layout — it mounts with `activeProjectId: null` because
  * nothing under test read `ws.layout`. This test is entirely about `ws.layout`, so it passes a real
  * project id and answers `workspace.load` from the fake bridge with a layout built by core's own
- * `createDefaultLayout` / `addPanel` / `renamePanel`. No production change was needed:
+ * `createDefaultLayout` / `addPanel` / `retitlePanel`. No production change was needed:
  * `WorkspaceProvider` is exported and takes its client as a prop.
  *
  * `restored: true` is returned deliberately — `workspace-store.tsx:261` schedules a SAVE when a
@@ -68,7 +68,7 @@ import {
   addPanel,
   addTab,
   createDefaultLayout,
-  renamePanel,
+  retitlePanel,
   renameTab,
   type WorkspaceLayout,
 } from '@throng/core';
@@ -151,9 +151,9 @@ const LISTING: Record<string, FileTreeEntry[]> = {
  * Layouts
  * ────────────────────────────────────────────────────────────────────────── */
 
-/** One tab, one panel, renamed — the shape the E2E arranged with a real inline rename. */
+/** One tab, one panel with a chosen title (048: panels are no longer renamable, so the title is set by the layout itself). */
 function oneNamedPanel(title: string): WorkspaceLayout {
-  return renamePanel(createDefaultLayout(PROJECT_ID, { tab: TAB_ID, panel: 'p1' }), 'p1', title);
+  return retitlePanel(createDefaultLayout(PROJECT_ID, { tab: TAB_ID, panel: 'p1' }), 'p1', title);
 }
 
 /**
@@ -166,8 +166,8 @@ function oneNamedPanel(title: string): WorkspaceLayout {
 function twoNamedPanels(first: string, second: string): WorkspaceLayout {
   let layout = createDefaultLayout(PROJECT_ID, { tab: TAB_ID, panel: 'p1' });
   layout = addPanel(layout, TAB_ID, 'p2');
-  layout = renamePanel(layout, 'p1', first);
-  layout = renamePanel(layout, 'p2', second);
+  layout = retitlePanel(layout, 'p1', first);
+  layout = retitlePanel(layout, 'p2', second);
   return layout;
 }
 

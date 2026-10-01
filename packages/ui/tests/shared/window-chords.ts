@@ -30,7 +30,12 @@ import { chordCandidates } from '../../src/renderer/config/chord-key.js';
 import { chordEvent, keyOf } from './chord-event.js';
 
 /** The dispatcher whose allowlist is the subject. */
-export const APP_TSX = fileURLToPath(new URL('../../src/renderer/app.tsx', import.meta.url));
+export const APP_TSX = fileURLToPath(
+  // 048 R5 (#275) moved the dispatcher out of `app.tsx`; 048 T060 moved its allowlist into core, where
+  // it also decides which terminal-live commands may carry a multi-stroke chord. The constant keeps
+  // its name; what it names is "the file holding the window allowlist".
+  new URL('../../../core/src/config/keybindings.ts', import.meta.url),
+);
 
 /** Where the end-to-end specs live, for resolving a `COVERED_ELSEWHERE` exemption. */
 export const E2E_DIR = fileURLToPath(new URL('../e2e/', import.meta.url));
@@ -60,7 +65,8 @@ export function handledActions(): string[] {
 
 /** `handledActions` over a given source text — the part that parses, separated so it can be fed. */
 export function parseHandledActions(src: string): string[] {
-  const block = /const WINDOW_HANDLED_ACTIONS:[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(src);
+  // `new Set([` or `new Set<ActionId>([` — core declares it with its element type.
+  const block = /const WINDOW_HANDLED_ACTIONS:[^=]*=\s*new Set(?:<[^>]*>)?\(\[([\s\S]*?)\]\)/.exec(src);
   if (!block) {
     throw new Error(
       `could not find the WINDOW_HANDLED_ACTIONS set in ${APP_TSX} — the dispatcher was ` +
@@ -112,6 +118,10 @@ export function discoverKeepShiftChords(): Map<string, string[]> {
   const found = new Map<string, string[]>();
   for (const action of handledActions()) {
     const chords = (bindings[action] ?? []).filter((token) => {
+      // 048 — a multi-stroke default (`panel.split*`) is the window chord ENGINE's and never reaches
+      // the single-stroke event the keepShift branch builds; the allowlist entry exists for a user's
+      // one-key rebind, which is pressed by `component/split-mode.test.ts`.
+      if ((splitStrokes(token)?.length ?? 1) > 1) return false;
       const e = chordEvent(token);
       return keepsShift(keyOf(token), { ctrlKey: e.ctrlKey, altKey: e.altKey });
     });
@@ -132,7 +142,6 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
   ['tabs.openPicker', 'the tab picker'],
   ['navigate.quickOpen', 'Quick Open — the chord the widening was made for'],
   ['navigate.gotoLine', 'Go To Line over the active editor'],
-  ['panel.rename', 'the active panel’s rename box'],
   ['file.undo', 'undo and redo a file operation'],
   ['file.redo', 'undo and redo a file operation'],
   ['focus.cycle', 'cycling panel focus both ways'],
@@ -238,6 +247,11 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
   ['panel.zoomIn', { test: 'window-zoom-reset-shift.test.ts', key: '=', mods: ['ctrlKey', 'altKey'] }],
   ['panel.zoomOut', { test: 'window-zoom-reset-shift.test.ts', key: '-', mods: ['ctrlKey', 'altKey'] }],
   ['panel.zoomReset', { test: 'window-zoom-reset-shift.test.ts', key: '0', mods: ['ctrlKey', 'altKey'] }],
+  /*
+   * 048 FR-131 — `panel.destroy` (`Ctrl+Shift+Alt+F4`) takes the FUNCTION-KEY branch. Pressed through the
+   * real dispatcher from a focused stand-in terminal, and through the real `TabGroup`, by its own file.
+   */
+  ['panel.destroy', { test: 'panel-destroy-chord.test.ts', key: 'F4', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
 ]);
 
 /** Where the component tests live, for resolving a `COVERED_IN_COMPONENT` claim. */
