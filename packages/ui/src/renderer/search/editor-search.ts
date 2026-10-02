@@ -8,8 +8,8 @@
  * (FR-008) and what keeps encoding / line endings untouched — the document's text is
  * changed in place and the existing save path writes it back exactly as before.
  */
-import { Prec, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, EditorView, type DecorationSet } from '@codemirror/view';
+import { Prec, StateEffect, StateField, type EditorState } from '@codemirror/state';
+import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import type { EditorSearchController } from './search-controller.js';
 import { seedFromSelections } from '@throng/core';
 import {
@@ -84,6 +84,48 @@ export const searchHighlightExtension = [
 ];
 
 /**
+ * The find matches painted in `state`, within `ranges`, in document order (049 FR-013). Read from the decoration
+ * set rather than a remembered array: the set is mapped through every edit, so it is correct even in the moment
+ * between a change and the controller's re-search, which is when the occurrence tint asks.
+ */
+export function searchMatchRanges(state: EditorState, ranges: readonly { from: number; to: number }[]): Match[] {
+  const set = state.field(highlightField, false);
+  if (!set) return [];
+  const out: Match[] = [];
+  let last = -1;
+  for (const r of ranges) {
+    set.between(r.from, r.to, (from, to) => {
+      if (from > last) {
+        out.push({ from, to });
+        last = from;
+      }
+    });
+  }
+  return out;
+}
+
+/** True when this update changed which find matches are painted (a new query, a step, an edit mapping them). */
+export function searchMatchesChanged(update: ViewUpdate): boolean {
+  return update.startState.field(highlightField, false) !== update.state.field(highlightField, false);
+}
+
+/**
+ * What an editor panel supplies for a document that can hide text (a Markdown section fold, 049 R5). Absent for
+ * an editor with nothing foldable, where every method below is a no-op and find behaves as it always did.
+ */
+export interface EditorSearchDeps {
+  /**
+   * Make offset `pos` visible BEFORE the controller scrolls to it or edits it: open the collapsed sections whose
+   * fold hides it, through the document's fold authority (never a bare unfold, never a collapse — FR-006).
+   */
+  revealBeforeScroll?: (pos: number) => boolean | void;
+  /** The collapsed sections whose fold hides `pos`, own or ancestor (none when it is visible). */
+  hidingSections?: (pos: number) => string[];
+  /** Open exactly these sections, in one fold-state write (Replace All's "Replace and unfold"). */
+  revealSections?: (slugs: readonly string[]) => void;
+}
+
+/**
  * Build the search controller for one editor view. `isReadOnly` is asked afresh on
  * every replace so a document that becomes non-editable stops accepting replacements
  * without the bar having to be rebuilt.
@@ -92,19 +134,30 @@ export function createEditorSearchController(
   view: EditorView,
   isReadOnly: () => boolean,
   onCount?: (count: SearchCount) => void,
+  deps: EditorSearchDeps = {},
 ): EditorSearchController {
   let term = '';
   let modes: MatchModes = { caseSensitive: false, wholeWord: false };
   let matches: Match[] = [];
   let current = -1;
+  /**
+   * The offset of the current match the last time there was one (049 R1). A controller rebuilt by a remount
+   * is restored against a document that may not have arrived yet — the view is created empty and the text
+   * lands a moment later — so `resync` needs somewhere to re-land when `matches` is still empty.
+   */
+  let lastFrom: number | null = null;
 
   const paint = (): void => {
+    const from = matches[current]?.from;
+    if (from !== undefined) lastFrom = from;
     view.dispatch({ effects: setHighlights.of({ matches, current }) });
   };
 
   const reveal = (): void => {
     const m = matches[current];
     if (!m) return;
+    // 049 FR-005: a match inside a collapsed section is opened (through the fold authority) before we scroll to it.
+    deps.revealBeforeScroll?.(m.from);
     view.dispatch({ effects: EditorView.scrollIntoView(m.from, { y: 'center' }) });
   };
 
@@ -124,7 +177,7 @@ export function createEditorSearchController(
    */
   const resync = (): SearchCount => {
     if (term.length === 0) return NO_MATCHES;
-    const anchor = matches[current]?.from ?? view.state.selection.main.from;
+    const anchor = matches[current]?.from ?? lastFrom ?? view.state.selection.main.from;
     matches = editorMatches(view.state.doc, term, modes);
     current = matches.length === 0 ? -1 : Math.min(indexFrom(matches, anchor), matches.length - 1);
     paint();
@@ -163,6 +216,20 @@ export function createEditorSearchController(
       return recompute(view.state.selection.main.from);
     },
 
+    restore(nextTerm: string, nextModes: MatchModes, anchor: number | null): SearchCount {
+      term = nextTerm;
+      modes = nextModes;
+      lastFrom = anchor;
+      matches = editorMatches(view.state.doc, term, modes);
+      current = matches.length === 0 ? -1 : indexFrom(matches, anchor ?? 0);
+      paint(); // never `reveal()`: the view's own restored scroll position stands (049 FR-001)
+      return countOf(matches, current);
+    },
+
+    currentFrom(): number | null {
+      return matches[current]?.from ?? null;
+    },
+
     findNext(): SearchCount {
       current = stepIndex(current, matches.length, 1);
       paint();
@@ -184,6 +251,8 @@ export function createEditorSearchController(
       resync();
       const m = matches[current];
       if (!m) return countOf(matches, current);
+      // 049 FR-007: never edit text the user cannot see — open its section first.
+      deps.revealBeforeScroll?.(m.from);
       view.dispatch({ changes: { from: m.from, to: m.to, insert: replacement } });
       // Re-search from where the replacement ends, so the selection lands on the NEXT
       // match rather than re-finding the text we just inserted.
@@ -206,10 +275,27 @@ export function createEditorSearchController(
 
     isReadOnly,
 
+    foldedMatchCount(): number {
+      if (!deps.hidingSections) return 0;
+      return matches.filter((m) => deps.hidingSections!(m.from).length > 0).length;
+    },
+
+    foldedSectionSlugs(): string[] {
+      if (!deps.hidingSections) return [];
+      const seen = new Set<string>();
+      for (const m of matches) for (const slug of deps.hidingSections(m.from)) seen.add(slug);
+      return [...seen];
+    },
+
+    revealSections(slugs: readonly string[]): void {
+      deps.revealSections?.(slugs);
+    },
+
     close(opts?: { refocus?: boolean }): void {
       matches = [];
       current = -1;
       term = '';
+      lastFrom = null;
       docChanged.delete(view);
       view.dispatch({ effects: setHighlights.of({ matches: [], current: -1 }) });
       // Only pull focus back into the content when the user closed find ON this panel.

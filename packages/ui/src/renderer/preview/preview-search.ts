@@ -22,6 +22,7 @@
  */
 import { countOf, indexFrom, NO_MATCHES, seedFrom, stepIndex, type MatchModes, type Match, type SearchCount } from '@throng/core';
 import type { BaseSearchController } from '../search/search-controller.js';
+import { setPanelRanges } from './highlight-registry.js';
 import { buildPreviewTextModel, findPreviewMatches, locate, type TextModelNode } from './preview-search-model.js';
 
 /** The two named highlights this feature paints (R1); colours come from theme tokens in `preview.css`. */
@@ -37,36 +38,17 @@ export interface HighlightPainter {
   clear(): void;
 }
 
-interface HighlightRegistry {
-  set(name: string, value: unknown): void;
-  delete(name: string): boolean;
-}
-interface HighlightCtor {
-  new (...ranges: Range[]): unknown;
-}
-
-/** Feature-detected at call time — never assumed to exist, and never assumed absent (Chromium has it). */
-function highlightRuntime(): { registry: HighlightRegistry; Ctor: HighlightCtor } | null {
-  const css = (globalThis as { CSS?: { highlights?: HighlightRegistry } }).CSS;
-  const Ctor = (globalThis as { Highlight?: HighlightCtor }).Highlight;
-  return css?.highlights && Ctor ? { registry: css.highlights, Ctor } : null;
-}
-
-/** The production painter (R1). A runtime with no Custom Highlight API silently paints nothing. */
-export function createCssHighlightPainter(): HighlightPainter {
+/** The production painter (R1), per panel (049 R2) — paints through the shared registry. A runtime with no Custom Highlight API silently paints nothing. */
+export function createCssHighlightPainter(panelId: string): HighlightPainter {
   return {
     paint(ranges, current) {
-      const rt = highlightRuntime();
-      if (!rt) return;
-      rt.registry.set(PREVIEW_MATCH_HIGHLIGHT, new rt.Ctor(...ranges));
+      setPanelRanges(PREVIEW_MATCH_HIGHLIGHT, panelId, ranges);
       const cur = ranges[current];
-      if (cur) rt.registry.set(PREVIEW_CURRENT_MATCH_HIGHLIGHT, new rt.Ctor(cur));
-      else rt.registry.delete(PREVIEW_CURRENT_MATCH_HIGHLIGHT);
+      setPanelRanges(PREVIEW_CURRENT_MATCH_HIGHLIGHT, panelId, cur ? [cur] : []);
     },
     clear() {
-      const rt = highlightRuntime();
-      rt?.registry.delete(PREVIEW_MATCH_HIGHLIGHT);
-      rt?.registry.delete(PREVIEW_CURRENT_MATCH_HIGHLIGHT);
+      setPanelRanges(PREVIEW_MATCH_HIGHLIGHT, panelId, []);
+      setPanelRanges(PREVIEW_CURRENT_MATCH_HIGHLIGHT, panelId, []);
     },
   };
 }
@@ -90,17 +72,8 @@ export interface MatchFrame {
  * The controller decides WHICH frames; the painter decides how they reach the screen.
  */
 export interface FramePainter {
-  /** `clip` — the body's viewport, in viewport coordinates: nothing is drawn outside it. */
-  paint(frames: MatchFrame[], clip?: FrameClip): void;
+  paint(frames: MatchFrame[]): void;
   clear(): void;
-}
-
-/** The rectangle the frames may be seen in — the preview body's viewport, in VIEWPORT coordinates. */
-export interface FrameClip {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
 }
 
 /**
@@ -110,17 +83,12 @@ export interface FrameClip {
  */
 export function createDomFramePainter(layer: () => HTMLElement | null): FramePainter {
   return {
-    paint(frames, clip) {
+    paint(frames) {
       const el = layer();
       if (!el) return;
+      // The layer sits inside the scrolling body (049 FR-029): its origin moves with the content, as do the
+      // frames placed against it, and the body's own overflow clips what is under the header and bars.
       const origin = el.getBoundingClientRect();
-      // The layer covers the whole panel, header and bars included; a match half scrolled under one of
-      // them is still in the body's viewport, and its frame must not be drawn over that chrome.
-      el.style.clipPath =
-        clip === undefined
-          ? ''
-          : `inset(${Math.max(0, clip.top - origin.top)}px ${Math.max(0, origin.right - clip.right)}px ` +
-            `${Math.max(0, origin.bottom - clip.bottom)}px ${Math.max(0, clip.left - origin.left)}px)`;
       const doc = el.ownerDocument;
       const drawn = frames.map((f) => {
         const frame = doc.createElement('div');
@@ -137,7 +105,6 @@ export function createDomFramePainter(layer: () => HTMLElement | null): FramePai
       const el = layer();
       if (!el) return;
       el.replaceChildren();
-      el.style.clipPath = '';
     },
   };
 }
@@ -162,6 +129,22 @@ export interface PreviewSearchController extends BaseSearchController {
    * of triggers in a frame cost one repaint; a no-op while no query is active.
    */
   repaintFrames(): void;
+  /**
+   * 049 FR-029 — the body scrolled. The frames scroll with their text and need no work, so this does nothing
+   * (reads two numbers) unless the viewport has left the band the frames were drawn for, and then asks for one repaint.
+   */
+  scrolled(): void;
+  /**
+   * 049 R4 — bring the CURRENT match into view, re-locating it from its text offset against the body as it is
+   * now. The panel finishes a reveal with this: expanding a collapsed section redraws the body, and the node the
+   * reveal started from may be gone. A no-op with no current match.
+   */
+  scrollToCurrent(): void;
+  /**
+   * 049 FR-013 — the matches currently painted, as text-model offsets in document order. The occurrence tint reads
+   * this to leave a range that is a find match to find's own highlight.
+   */
+  matchRanges(): readonly Match[];
 }
 
 export interface PreviewSearchDeps {
@@ -183,9 +166,14 @@ export interface PreviewSearchDeps {
    * this function should scroll immediately — correct for a document with no folds at all.
    */
   revealBeforeScroll?: (node: Node) => boolean | void;
+  /** Called after every paint or clear of the matches — the occurrence tint re-evaluates against the new set (049 FR-013). */
+  onPaint?: () => void;
 }
 
-const EMPTY_MODEL = { text: '', entries: [] } as const;
+/** Viewports of margin, each side, that are framed ahead of a scroll (049 FR-029). */
+const BAND = 3;
+
+const EMPTY_MODEL ={ text: '', entries: [] } as const;
 
 /** Build a `PreviewSearchController` over `deps.host()`'s current content. */
 export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewSearchController {
@@ -197,6 +185,8 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
   let model: ReturnType<typeof buildPreviewTextModel> = EMPTY_MODEL;
   let matches: Match[] = [];
   let current = -1;
+  /** The text offset of the current match the last time there was one — see `restore` (049 R1). */
+  let lastFrom: number | null = null;
 
   const runQuery = (): void => {
     const h = host();
@@ -227,6 +217,8 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
   // The ranges of the last paint, so a scroll or resize re-reads their GEOMETRY without re-walking the body.
   let ranges: Range[] = [];
   let frameHandle: number | null = null;
+  /** The scroll-content region the last paint framed (049 FR-029); null before the first paint. */
+  let band: { left: number; right: number; top: number; bottom: number } | null = null;
 
   /**
    * FR-074 — a frame per client rect of each match range still inside the body's viewport. A range with no
@@ -238,21 +230,35 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
     const h = host();
     if (!h) return framePainter.clear();
     const view = h.getBoundingClientRect();
+    // 049 FR-029 — frames are drawn in the scrolling content, so they move with their text and a scroll costs no
+    // script. A match scrolled into view must already have one: a BAND of three viewports each way is framed,
+    // and `scrolled()` rebuilds it only when the viewport leaves it.
+    const bandX = view.width * BAND;
+    const bandY = view.height * BAND;
+    band = {
+      left: h.scrollLeft - bandX,
+      right: h.scrollLeft + h.clientWidth + bandX,
+      top: h.scrollTop - bandY,
+      bottom: h.scrollTop + h.clientHeight + bandY,
+    };
     const out: MatchFrame[] = [];
     ranges.forEach((range, i) => {
       if (typeof range.getClientRects !== 'function') return;
       for (const r of Array.from(range.getClientRects())) {
-        if (r.right < view.left || r.left > view.right || r.bottom < view.top || r.top > view.bottom) continue;
+        if (r.right < view.left - bandX || r.left > view.right + bandX || r.bottom < view.top - bandY || r.top > view.bottom + bandY) continue;
         out.push({ left: r.left, top: r.top, width: r.width, height: r.height, current: i === current });
       }
     });
-    framePainter.paint(out, { left: view.left, top: view.top, right: view.right, bottom: view.bottom });
+    framePainter.paint(out);
   };
 
   const paint = (): void => {
+    const from = matches[current]?.from;
+    if (from !== undefined) lastFrom = from;
     ranges = rangesFor(matches);
     painter.paint(ranges, current);
     paintFrames();
+    deps.onPaint?.();
   };
 
   const cancelPendingFrame = (): void => {
@@ -320,11 +326,59 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
       if (term.length === 0) return NO_MATCHES;
       // Anchor on the OLD current match's text offset (R1) — never on its index, which a document
       // change can make point at an unrelated match once the count shifts.
-      const anchor = matches[current]?.from ?? 0;
+      const anchor = matches[current]?.from ?? lastFrom ?? 0;
       runQuery();
       current = matches.length === 0 ? -1 : Math.min(indexFrom(matches, anchor), matches.length - 1);
       paint();
       return countOf(matches, current);
+    },
+
+    /**
+     * 049 R1 — re-establish a find session on a REBUILT body. The body may not have drawn yet (it arrives a
+     * moment after the panel mounts), in which case the query finds nothing now and `refresh()` — run from
+     * `onDrawn` — re-lands on `anchor` once it has. Never scrolls or reveals: the body's restored scroll
+     * position stands.
+     */
+    restore(nextTerm: string, nextModes: MatchModes, anchor: number | null): SearchCount {
+      term = nextTerm;
+      modes = nextModes;
+      lastFrom = anchor;
+      runQuery();
+      current = matches.length === 0 ? -1 : indexFrom(matches, anchor ?? 0);
+      paint();
+      return countOf(matches, current);
+    },
+
+    currentFrom(): number | null {
+      return matches[current]?.from ?? null;
+    },
+
+    matchRanges(): readonly Match[] {
+      return matches;
+    },
+
+    scrollToCurrent(): void {
+      const m = matches[current];
+      const h = host();
+      if (!m || !h) return;
+      // The body may have been redrawn since the model was built; the offsets still describe the same text.
+      model = buildPreviewTextModel(h as unknown as TextModelNode);
+      const start = locate(model, m.from);
+      if (!start) return;
+      const node = start.node as unknown as Node;
+      const el = node.nodeType === 1 ? (node as unknown as Element) : node.parentElement;
+      el?.scrollIntoView({ block: 'center' });
+    },
+
+    scrolled(): void {
+      const h = host();
+      if (!h || band === null) return;
+      const inside =
+        h.scrollTop >= band.top &&
+        h.scrollTop + h.clientHeight <= band.bottom &&
+        h.scrollLeft >= band.left &&
+        h.scrollLeft + h.clientWidth <= band.right;
+      if (!inside) this.repaintFrames();
     },
 
     repaintFrames(): void {
@@ -339,11 +393,13 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
       term = '';
       matches = [];
       current = -1;
+      lastFrom = null;
       model = EMPTY_MODEL;
       ranges = [];
       cancelPendingFrame();
       painter.clear();
       framePainter?.clear();
+      deps.onPaint?.();
       // Do not pull focus back into a body the reader has already navigated away from.
       if (opts?.refocus !== false) host()?.focus({ preventScroll: true });
     },

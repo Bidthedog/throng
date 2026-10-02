@@ -79,6 +79,20 @@ export function createTerminalSearchController(
       return count;
     },
 
+    /**
+     * 049 R1 — the terminal's find session is panel state like any other (FR-000), so a rebuilt xterm
+     * re-runs it. The match the addon lands on is the one nearest the (replayed) viewport, and the addon
+     * re-reports the count as the replayed scrollback arrives, which `onCountChange` forwards. A terminal
+     * match has no text offset, so the anchor is unused.
+     */
+    restore(nextTerm: string, nextModes: MatchModes, _anchor: number | null): SearchCount {
+      return this.setQuery(nextTerm, nextModes);
+    },
+
+    currentFrom(): number | null {
+      return null;
+    },
+
     findNext(): SearchCount {
       if (query.length === 0) return count;
       addon.findNext(query, options());

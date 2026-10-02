@@ -319,6 +319,11 @@ export interface EditorSettings {
    */
   showGutter: boolean;
   /**
+   * 049 FR-019: a selection softly tints every other instance of its text, in editor panels AND Markdown
+   * previews — one setting for both, on by default. Read by the renderer's occurrence painters only.
+   */
+  highlightOccurrences: boolean;
+  /**
    * 047 (research R3, data-model.md "Settings") — a Markdown document's heading sections' starting
    * state, in the editor and in a fresh preview alike. Default `'expanded'`.
    */
@@ -764,6 +769,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     // a preference that reclaims width is opt-IN: shipping it off would change what today's users
     // see on upgrade without anyone having asked for it.
     showGutter: true,
+    highlightOccurrences: true,
     // 047 FR-039 — a Markdown document's sections start expanded.
     markdownSectionsOpen: 'expanded',
     // 040 FR-030/FR-031 — both readout groups ship ON. The bar already has to earn its row; a
@@ -1213,6 +1219,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   const showGutter = typeof v.showGutter === 'boolean' ? v.showGutter : fallback.showGutter;
+  const highlightOccurrences =
+    typeof v.highlightOccurrences === 'boolean' ? v.highlightOccurrences : fallback.highlightOccurrences;
   const markdownSectionsOpen = MARKDOWN_SECTIONS_OPEN.includes(v.markdownSectionsOpen as MarkdownSectionsOpen)
     ? (v.markdownSectionsOpen as MarkdownSectionsOpen)
     : fallback.markdownSectionsOpen;
@@ -1238,6 +1246,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     // NOT in this hand-listed literal compiles, ships, and is silently dropped on every read — the
     // user's `false` comes back as the default `true` and nothing anywhere says so.
     showGutter,
+    highlightOccurrences,
     // 047 FR-039 — same trap, same fix: the local above is dead without this line.
     markdownSectionsOpen,
     statusBar: statusBarSettings(v.statusBar, fallback.statusBar),

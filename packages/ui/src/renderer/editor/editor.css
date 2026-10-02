@@ -67,6 +67,14 @@
   background: var(--throng-colour-editorSelection, #2a3a57) !important;
 }
 
+/* 049 (#457) — a selection kept in an editor that does not have focus. CodeMirror keeps drawing it
+ * (`drawSelection` paints `.cm-selectionBackground` whether or not the view is focused), so the only thing
+ * missing is a colour that says "kept, not active". Out-ranks the base rule above by specificity, which both
+ * `!important`s leave in play. */
+.editor-panel .cm-editor:not(.cm-focused) .cm-selectionBackground {
+  background: var(--throng-colour-editorSelectionInactive, #2a3139) !important;
+}
+
 /* ---------------------------------------------------------------------------
    The editor status strip (016, FR-010) — the band along the bottom of an
    Editor Panel carrying the language indicator.

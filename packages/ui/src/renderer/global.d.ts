@@ -324,6 +324,15 @@ declare global {
         ) => () => void;
       };
       /**
+       * 049 R3 — a loaded panel's state handed to another window (contracts/panel-state-handoff.md). The
+       * sending window awaits `stash` before it opens or notifies the sub-workspace; the receiving window
+       * awaits `claim` before it mounts. `claim` deletes what it returns; ids with none are absent.
+       */
+      panelState: {
+        stash: (snapshots: readonly import('@throng/core').PanelSnapshot[]) => Promise<void>;
+        claim: (panelIds: readonly string[]) => Promise<Record<string, import('@throng/core').PanelSnapshot>>;
+      };
+      /**
        * 033 US1 — the project file index behind Quick Open (contracts/file-index.md §3).
        *
        * Its only renderer-side consumer is `navigate/use-file-index.ts` (R1). `subscribe` answers

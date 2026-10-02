@@ -16,7 +16,7 @@
  * and shifts every absolute index; only the distance from the bottom is stable.
  */
 
-/** A 1-based selection range from xterm's `getSelectionPosition()`. */
+/** A selection range as xterm's `getSelectionPosition()` reports it — the 0-based buffer coordinates `select()` takes. */
 export interface TerminalSelection {
   start: { x: number; y: number };
   end: { x: number; y: number };
@@ -29,7 +29,7 @@ export interface TerminalViewState {
    * same slice of history is shown even if the buffer grew while detached.
    */
   offsetFromBottom: number;
-  /** The selection at save time, if any (xterm 1-based buffer coordinates). */
+  /** The selection at save time, if any (xterm buffer coordinates, 0-based — see `TerminalSelection`). */
   selection?: TerminalSelection;
 }
 
@@ -44,6 +44,16 @@ export function takeTerminalViewState(panelId: string): TerminalViewState | unde
   const state = store.get(panelId);
   store.delete(panelId);
   return state;
+}
+
+/** Read the saved view state without consuming it (049 R3: the cross-window hand-off captures an unmounted panel). */
+export function peekTerminalViewState(panelId: string): TerminalViewState | undefined {
+  return store.get(panelId);
+}
+
+/** Write a received view state, only where this window has none for the panel (049 R3). */
+export function seedTerminalViewState(panelId: string, state: TerminalViewState): void {
+  if (!store.has(panelId)) store.set(panelId, state);
 }
 
 /** Drop any saved view state for a panel (called when the terminal is torn down for good). */

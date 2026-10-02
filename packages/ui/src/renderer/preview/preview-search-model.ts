@@ -106,16 +106,21 @@ export function buildPreviewTextModel(
  */
 export function locate(model: PreviewTextModel, offset: number): { node: TextModelNode; offset: number } | null {
   const { entries } = model;
-  for (let i = 0; i < entries.length; i += 1) {
-    const entry = entries[i]!;
+  // Entries are contiguous and ascending, so the owner is found by binary search — a 10,000-line document
+  // locates thousands of ranges per frame (049 occurrences), and a scan per range was O(ranges × entries).
+  let lo = 0;
+  let hi = entries.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const entry = entries[mid]!;
     // Half-open [from, to) — an offset sitting exactly on a join belongs to the node that STARTS
     // there, not the one that ends there, so a match beginning at a join lands in the right node.
     // The one exception is the model's very last character-past-the-end (locate(model, text.length)),
     // which has no next entry to claim it: the final entry answers for it too.
-    const isLast = i === entries.length - 1;
-    if (offset >= entry.from && (offset < entry.to || (isLast && offset === entry.to))) {
-      return { node: entry.node, offset: offset - entry.from };
-    }
+    const isLast = mid === entries.length - 1;
+    if (offset < entry.from) hi = mid - 1;
+    else if (offset < entry.to || (isLast && offset === entry.to)) return { node: entry.node, offset: offset - entry.from };
+    else lo = mid + 1;
   }
   return null;
 }

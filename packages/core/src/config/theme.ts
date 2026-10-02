@@ -238,6 +238,11 @@ export const THRONG_THEME: Theme = {
     editorFg: '#d6deea',
     editorCursor: '#6aa3ff',
     editorSelection: '#2a3a57',
+    // 049 FR-025 — a selection kept in an unfocused editor or preview. Hand-set from the SAME walk the
+    // fourteen bundled themes run (`inactiveSelection` in default-themes), measured on these values;
+    // re-measure it whenever `editorSelection`, `editorBg` or a match surface below moves. 049 FR-025a moved it from
+    // `#182133` (ΔE00 8.25 from the page) to the walk's first candidate at least 9.0 from it: 11.10.
+    editorSelectionInactive: '#2b323f',
     // Editor line-number gutter (009) — its own surface + line-number colour, a
     // subtle offset from the editor body so it reads as a distinct strip.
     editorGutterBg: '#151a23',
@@ -298,13 +303,22 @@ export const THRONG_THEME: Theme = {
     // accent ray where the current match already is). `searchMatchCurrent` keeps its 016 FR-007a
     // value unchanged, because FR-067 leaves the accent ray alone: the current match is what 016
     // tuned and what `searchMatchCurrentBorder` holds its 3:1 against.
-    searchMatch: '#262a32',
+    //
+    // 049 FR-009a then raised the floor between the two fills to ΔE00 9.0, which 7.99 missed; `separatedMatch`'s
+    // rule (the candidate nearest the old value that clears it, every other rule held) gives `#24272d`: 9.30 from
+    // the current match, 7.06 from the page, and the outline below still 3:1 against it.
+    searchMatch: '#24272d',
     searchMatchCurrent: '#213049',
     searchMatchCurrentBorder: '#6aa3ff',
     // 047 FR-074 — the ORDINARY match's outline, `blend(editorBg, editorFg, 0.49)`: the first
     // neutral tint the derivation's walk accepts, clearing 3:1 against the page (3.9:1) and against
     // the ordinary fill (3.0:1). Hand-set for the reason above; re-measure it with the other three.
     searchMatchBorder: '#6f747e',
+    // 049 (#324, #325) — another instance of the selected text. Focused: exactly the ordinary-match
+    // tint (FR-010, one soft tint means "another instance"). Unfocused: `inactiveOccurrence`'s walk
+    // over this theme's values, nearer the page (FR-018a). Hand-set for the reason above.
+    searchMatchOccurrence: '#24272d',
+    searchMatchOccurrenceInactive: '#181b23',
     // The ACTIVE-PANE highlight — the outline marking the pane/panel you are working in (012, FR-002;
     // 021 consolidated the File Explorer's separate `activePaneHighlight` onto this one token so the
     // whole app marks the active pane the same way). While a project is open the highlight is painted

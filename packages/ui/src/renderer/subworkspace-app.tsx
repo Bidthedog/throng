@@ -1,5 +1,7 @@
-import { useEffect, useState, type ReactElement } from 'react';
-import { countPanels } from '@throng/core';
+import { Fragment, useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { collectPanels, countPanels } from '@throng/core';
+import type { WorkspaceLoadSubsResult } from '@throng/ipc-contract';
+import { claimAndSeedPanelState } from './workspace/panel-state-capture.js';
 import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
@@ -69,6 +71,43 @@ function SubWorkspaceTitle({ name }: { name: string }): null {
 }
 
 /**
+ * 049 FR-000a (R3) — claims the panel state the sending window stashed for this sub-workspace's panels and
+ * seeds it into this window's stores BEFORE the workspace renders, so every panel's first mount (and each
+ * remount a `reloadKey` change causes) finds its caret, scroll, selection and find session already there.
+ * The children are keyed by the reload that completed, so the remount happens after the claim, never before.
+ */
+export function PanelStateGate({
+  subWorkspaceId,
+  reloadKey,
+  children,
+}: {
+  subWorkspaceId: string;
+  reloadKey: number;
+  children: ReactNode;
+}): ReactElement | null {
+  const { bridge } = useServices();
+  const [readyKey, setReadyKey] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { subWorkspaces } = await bridge.invoke<WorkspaceLoadSubsResult>('workspace.loadSubWorkspaces', {});
+        const sub = subWorkspaces.find((s) => s.id === subWorkspaceId);
+        const ids = sub ? sub.tabs.flatMap((t) => collectPanels(t.root).map((p) => p.id)) : [];
+        await claimAndSeedPanelState(ids);
+      } catch {
+        // No hand-off: the panels mount with default state.
+      }
+      if (!cancelled) setReadyKey(reloadKey);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, subWorkspaceId, reloadKey]);
+  return readyKey === null ? null : <Fragment key={readyKey}>{children}</Fragment>;
+}
+
+/**
  * Root component of a detached sub-workspace window. Themed like the main window
  * (hot-reload included) and backed by a {@link SubWorkspaceWorkspaceClient} so its
  * edits persist back to the sub-workspace record (US7). Its dominant colour drives
@@ -125,8 +164,8 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
   return (
     <ThemeProvider theme={activeTheme}>
       <SubWorkspaceWindowContext.Provider value={identity}>
+        <PanelStateGate subWorkspaceId={subWorkspaceId} reloadKey={reloadKey}>
         <WorkspaceProvider
-          key={reloadKey}
           client={workspace}
           activeProjectId={SubWorkspaceWorkspaceClient.layoutProjectId(subWorkspaceId)}
         >
@@ -174,6 +213,7 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
             <NavigationChrome />
           </div>
         </WorkspaceProvider>
+        </PanelStateGate>
       </SubWorkspaceWindowContext.Provider>
     </ThemeProvider>
   );

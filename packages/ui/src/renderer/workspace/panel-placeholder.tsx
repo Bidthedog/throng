@@ -762,7 +762,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                  * already up it runs the replacement, exactly as `search.replaceAll` does.
                  */
                 replaceAll: () => {
-                  if (getFindSession(panel.id)) replaceAllMatches(panel.id);
+                  if (getFindSession(panel.id)) void replaceAllMatches(panel.id);
                   else openFind(panel.id, 'editor', { replace: true });
                 },
                 destroy: () => void destroyPanel(),

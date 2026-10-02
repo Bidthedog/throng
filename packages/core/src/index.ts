@@ -421,6 +421,7 @@ export {
   // compares an installed file against. Copies, never references: see their doc comments.
   V6_SEARCH_MATCH_COLOURS,
   V6_FIND_IN_FILES_ICON,
+  V19_MOVED_COLOURS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,
@@ -947,6 +948,18 @@ export {
   seedFrom,
 } from './search/match-model.js';
 export type { MatchModes, Match, SearchCount } from './search/match-model.js';
+// 049 R8 — what counts as another occurrence of a selection (FR-015), and search-match precedence (FR-013).
+export { isWordChar, occurrenceQuery, occurrenceMatches, withoutSearchMatches } from './search/occurrence-model.js';
+export type { OccurrenceQuery } from './search/occurrence-model.js';
+// 049 R3 — a loaded panel's state handed between windows (FR-000, FR-000a).
+export { isPanelSnapshot, panelSnapshotBytes, MAX_PANEL_SNAPSHOT_BYTES } from './workspace/panel-snapshot.js';
+export type {
+  PanelSnapshot,
+  PanelSnapshotFind,
+  PanelSnapshotEditor,
+  PanelSnapshotTerminal,
+  PanelSnapshotPreviewSelection,
+} from './workspace/panel-snapshot.js';
 // 043 — the pure file-search model: ordering, grouping, snippets and staleness. The scan that
 // fills these shapes lives in UI main; what the results MEAN is settled here, by unit test.
 export {

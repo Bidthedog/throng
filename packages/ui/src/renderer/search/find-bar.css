@@ -143,7 +143,8 @@
 
 .cm-editor .throng-search-match--current {
   background: var(--throng-colour-searchMatchCurrent, #2c4a7a);
-  outline: 1px solid var(--throng-colour-searchMatchCurrentBorder, #6aa3ff);
+  /* 049 FR-009b — the current match is outlined 2 px; an outline is drawn outside the box and takes no layout space. */
+  outline: 2px solid var(--throng-colour-searchMatchCurrentBorder, #6aa3ff);
 }
 
 /* 047 US1 (FR-006) — a preview's matches, painted through the CSS Custom Highlight API rather than
@@ -158,4 +159,30 @@
 
 ::highlight(throng-preview-match-current) {
   background-color: var(--throng-colour-searchMatchCurrent, #2c4a7a);
+}
+
+/* 049 (#324) — the OTHER instances of the selected text. Softer than a find match, so a match always reads as
+ * the stronger of the two, and carrying NO outline: an outline is what makes a find match a find match. Two
+ * strengths — the selection's panel has focus, or it does not (FR-018a). One derivation with the match surfaces
+ * (core `default-themes`), so every bundled theme keeps syntax colours legible through them. */
+.cm-editor.cm-focused .throng-occurrence {
+  background: var(--throng-colour-searchMatchOccurrence, #1f2937);
+}
+
+.cm-editor:not(.cm-focused) .throng-occurrence {
+  background: var(--throng-colour-searchMatchOccurrenceInactive, #1a212b);
+}
+
+/* …and a preview's, through the Custom Highlight registry (`preview/highlight-registry.ts`). */
+::highlight(throng-preview-occurrence) {
+  background-color: var(--throng-colour-searchMatchOccurrence, #1f2937);
+}
+
+::highlight(throng-preview-occurrence-inactive) {
+  background-color: var(--throng-colour-searchMatchOccurrenceInactive, #1a212b);
+}
+
+/* A preview's retained selection while its body is not focused (049 US5, FR-021) — the editor's inactive colour. */
+::highlight(throng-preview-selection-inactive) {
+  background-color: var(--throng-colour-editorSelectionInactive, #2a3139);
 }

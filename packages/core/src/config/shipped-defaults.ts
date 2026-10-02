@@ -284,7 +284,50 @@ import { setAtPath } from './metadata.js';
 // outline every ordinary find match now carries (FR-074). The additive case again. Version 17 is not
 // edited to carry it, for the reason version 13 was not: the maintainer's hand-testing install
 // already holds a 17 marker, and would never receive the token.
-export const SHIPPED_DEFAULTS_VERSION = 18;
+//
+// Bumped by 049 (18 → 19): three colour tokens — `searchMatchOccurrence`,
+// `searchMatchOccurrenceInactive` and `editorSelectionInactive` (FR-018a, FR-025). The additive case
+// again: no existing value moves. `editor.highlightOccurrences` needs no bump (044's 7 → 8 reasoning).
+//
+// Bumped by 049's second manual-test round (19 → 20): existing VALUES move — the ordinary-match fill where it
+// sat nearer the current match than FR-009a's floor, and the inactive selection where it sat nearer the page
+// than FR-025a's. Version 19 wrote both into every theme file, so this is 043's guarded value rewrite, not the
+// additive case: {@link V19_MOVED_COLOURS} records what 19 wrote and {@link planThemeValueUpgrade} moves a
+// token only where the file still holds exactly that.
+export const SHIPPED_DEFAULTS_VERSION = 20;
+
+/**
+ * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
+ * (FR-009a, FR-025a), per built-in theme, and only those tokens. A frozen literal copy for
+ * {@link V6_SEARCH_MATCH_COLOURS}' reason: the live values are the NEW ones, and a guard reading them would
+ * compare each install with the value it is about to write, match nothing, and pass every test.
+ */
+export const V19_MOVED_COLOURS: Readonly<Record<string, Readonly<Record<string, string>>>> = deepFreeze({
+  throng: {
+    searchMatch: '#262a32',
+    searchMatchOccurrence: '#262a32',
+    searchMatchOccurrenceInactive: '#1a1d25',
+    editorSelectionInactive: '#182133',
+  },
+  Light: { editorSelectionInactive: '#eaf1ff' },
+  Snake: {
+    searchMatch: '#262a1f',
+    searchMatchOccurrence: '#262a1f',
+    editorSelectionInactive: '#313528',
+  },
+  'Windows Terminal': { editorSelectionInactive: '#111921' },
+  Bash: { editorSelectionInactive: '#041314' },
+  VSCode: { editorSelectionInactive: '#1c2730' },
+  'VI-VIM': { searchMatch: '#2e2e2e', searchMatchOccurrence: '#2e2e2e' },
+  'English Garden': {
+    searchMatch: '#d6dccd',
+    searchMatchOccurrence: '#d6dccd',
+    searchMatchOccurrenceInactive: '#e2e7da',
+    editorSelectionInactive: '#e5eed4',
+  },
+  Claude: { editorSelectionInactive: '#2f221a' },
+  Ubuntu: { editorSelectionInactive: '#4d102c' },
+});
 
 /**
  * `explorer.excludeGlobs` as shipped-defaults version 4 wrote it — the VS Code `files.exclude`
@@ -1152,21 +1195,25 @@ export function planThemeValueUpgrade(args: {
     // than the file's own `name` field, which the user can edit.
     if (!isReservedThemeName(name, shipped)) continue;
     const v6 = V6_SEARCH_MATCH_COLOURS[name];
+    const v19 = V19_MOVED_COLOURS[name];
     const shippedTheme = shipped.themes[name];
-    if (!v6 || !shippedTheme) continue;
+    if ((!v6 && !v19) || !shippedTheme) continue;
 
     const leaves: SettingsLeafUpgrade[] = [];
-    for (const token of SEARCH_MATCH_TOKENS) {
-      const current = ownAtPath(theme, `colours.${token}`);
-      const next = shippedTheme.colours[token];
-      if (current === v6[token] && next !== undefined && next !== current) {
-        leaves.push({ path: `colours.${token}`, value: next });
-      }
+    const moveIfStill = (path: string, was: string, next: string | undefined): void => {
+      if (leaves.some((l) => l.path === path)) return;
+      const current = ownAtPath(theme, path);
+      if (current === was && next !== undefined && next !== current) leaves.push({ path, value: next });
+    };
+    if (v6) {
+      for (const token of SEARCH_MATCH_TOKENS) moveIfStill(`colours.${token}`, v6[token], shippedTheme.colours[token]);
+      moveIfStill('icons.findInFiles', V6_FIND_IN_FILES_ICON, shippedTheme.icons.findInFiles);
     }
-    const icon = ownAtPath(theme, 'icons.findInFiles');
-    const nextIcon = shippedTheme.icons.findInFiles;
-    if (icon === V6_FIND_IN_FILES_ICON && nextIcon !== undefined && nextIcon !== icon) {
-      leaves.push({ path: 'icons.findInFiles', value: nextIcon });
+    // 049 round 2 (19 → 20): the same guard against version 19's record.
+    if (v19) {
+      for (const [token, was] of Object.entries(v19)) {
+        moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
+      }
     }
 
     if (leaves.length > 0) plans.push({ name, leaves });

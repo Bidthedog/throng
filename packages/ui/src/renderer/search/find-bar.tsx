@@ -295,7 +295,7 @@ export function FindBar({ panelId }: FindBarProps): React.JSX.Element | null {
               data-testid="replace-all"
               title="Replace all"
               disabled={readOnly}
-              onClick={() => replaceAll(panelId)}
+              onClick={() => void replaceAll(panelId)}
             >
               <Icon token="replaceAll" />
             </button>
