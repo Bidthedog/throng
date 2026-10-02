@@ -75,6 +75,8 @@ function editorController(rec: Recorder): EditorSearchController {
   return {
     panelKind: 'editor',
     seedFromSelection: () => '',
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: (term) => {
       rec.queries.push(term);
       current = term.length > 0 ? 1 : 0;
@@ -104,6 +106,8 @@ function terminalController(rec: Recorder): TerminalSearchController {
   return {
     panelKind: 'terminal',
     seedFromSelection: () => '',
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: (term) => {
       rec.queries.push(term);
       return term.length > 0 ? { current: 1, total: 2 } : NO_MATCHES;

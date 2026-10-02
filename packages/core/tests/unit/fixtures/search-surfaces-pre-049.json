@@ -1,0 +1,92 @@
+{
+  "throng": {
+    "searchMatch": "#262a32",
+    "searchMatchCurrent": "#213049",
+    "searchMatchCurrentBorder": "#6aa3ff",
+    "searchMatchBorder": "#6f747e"
+  },
+  "Light": {
+    "searchMatch": "#e1e2e2",
+    "searchMatchCurrent": "#d3e0fb",
+    "searchMatchCurrentBorder": "#2563eb",
+    "searchMatchBorder": "#7f8084"
+  },
+  "Snake": {
+    "searchMatch": "#262a1f",
+    "searchMatchCurrent": "#2b311f",
+    "searchMatchCurrentBorder": "#8a9a5b",
+    "searchMatchBorder": "#6f7560"
+  },
+  "Gothic": {
+    "searchMatch": "#2d272e",
+    "searchMatchCurrent": "#4f1523",
+    "searchMatchCurrentBorder": "#aa606f",
+    "searchMatchBorder": "#7a6f77"
+  },
+  "Windows Terminal": {
+    "searchMatch": "#252525",
+    "searchMatchCurrent": "#152836",
+    "searchMatchCurrentBorder": "#3a96dd",
+    "searchMatchBorder": "#6e6e6e"
+  },
+  "Bash": {
+    "searchMatch": "#1c1c1c",
+    "searchMatchCurrent": "#062024",
+    "searchMatchCurrentBorder": "#2bd4ee",
+    "searchMatchBorder": "#676767"
+  },
+  "SUBNET": {
+    "searchMatch": "#132d50",
+    "searchMatchCurrent": "#06323c",
+    "searchMatchCurrentBorder": "#39FF14",
+    "searchMatchBorder": "#627893"
+  },
+  "VSCode": {
+    "searchMatch": "#323232",
+    "searchMatchCurrent": "#173549",
+    "searchMatchCurrentBorder": "#1583cd",
+    "searchMatchBorder": "#7b7b7b"
+  },
+  "VI-VIM": {
+    "searchMatch": "#2e2e2e",
+    "searchMatchCurrent": "#293129",
+    "searchMatchCurrentBorder": "#5f875f",
+    "searchMatchBorder": "#787878"
+  },
+  "English Garden": {
+    "searchMatch": "#d6dccd",
+    "searchMatchCurrent": "#cfdabd",
+    "searchMatchCurrentBorder": "#648237",
+    "searchMatchBorder": "#737f66"
+  },
+  "Matrix": {
+    "searchMatch": "#001405",
+    "searchMatchCurrent": "#00260a",
+    "searchMatchCurrentBorder": "#00ff41",
+    "searchMatchBorder": "#00701d"
+  },
+  "Cyberpunk": {
+    "searchMatch": "#201e1f",
+    "searchMatchCurrent": "#0d2320",
+    "searchMatchCurrentBorder": "#55ead4",
+    "searchMatchBorder": "#6d696a"
+  },
+  "Claude": {
+    "searchMatch": "#312c28",
+    "searchMatchCurrent": "#402921",
+    "searchMatchCurrentBorder": "#d97757",
+    "searchMatchBorder": "#7b756e"
+  },
+  "Debian": {
+    "searchMatch": "#2f2f2f",
+    "searchMatchCurrent": "#5c142e",
+    "searchMatchCurrentBorder": "#d44477",
+    "searchMatchBorder": "#787878"
+  },
+  "Ubuntu": {
+    "searchMatch": "#411a35",
+    "searchMatchCurrent": "#52111e",
+    "searchMatchCurrentBorder": "#e95420",
+    "searchMatchBorder": "#836b7b"
+  }
+}

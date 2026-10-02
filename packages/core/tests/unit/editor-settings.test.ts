@@ -27,6 +27,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,
+      // 049 FR-019 — selection-occurrence tinting, shipped ON. Exhaustive assertion, as above.
+      highlightOccurrences: true,
       // 047 FR-039 — a Markdown document's sections start expanded, in the editor and a fresh
       // preview alike. Exhaustive assertion, same reason as the neighbours around it.
       markdownSectionsOpen: 'expanded',
@@ -239,6 +241,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,
+      // 049 FR-019 — selection-occurrence tinting, shipped ON. Exhaustive assertion, as above.
+      highlightOccurrences: true,
       // 047 FR-039 — a Markdown document's sections start expanded, in the editor and a fresh
       // preview alike. Exhaustive assertion, same reason as the neighbours around it.
       markdownSectionsOpen: 'expanded',

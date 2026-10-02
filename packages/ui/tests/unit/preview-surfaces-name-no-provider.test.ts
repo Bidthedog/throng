@@ -379,9 +379,11 @@ const ALLOWED: readonly Allowed[] = [
     'markdownSections',
   ], `${SECTION_FOLDING} — the editor's fold markers and commands`),
   ...allow(`${UI_SRC}/renderer/editor/markdown-fold.ts`, 'literal', ['./markdown-headings.js'], `${SECTION_FOLDING} — the import of the editor's heading scanner`),
+  ...allow(`${UI_SRC}/renderer/editor/editor-fold-reveal.ts`, 'literal', ['./markdown-fold.js'], `${SECTION_FOLDING} — the import of the editor's fold sections, which find opens through the fold authority (049 R5)`),
   ...allow(`${UI_SRC}/renderer/editor/markdown-headings.ts`, 'identifier', ['markdownHeadingRecords', 'markdownInlineText'], `${EDITOR_LANGUAGE} — the editor's heading scanner`),
   ...allow(`${UI_SRC}/renderer/editor/use-editor.ts`, 'identifier', [
     'isMarkdown',
+    'isMarkdownRef',
     'markdownFold',
     'markdownFoldCommand',
     'markdownFoldDeps',

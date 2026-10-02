@@ -92,6 +92,8 @@ function terminalController(): SearchController {
   return {
     panelKind: 'terminal',
     seedFromSelection: () => '',
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: () => NO_MATCHES,
     findNext: () => NO_MATCHES,
     findPrevious: () => NO_MATCHES,
@@ -109,6 +111,8 @@ function editorController(): SearchController {
   return {
     panelKind: 'editor',
     seedFromSelection: () => '',
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: () => NO_MATCHES,
     findNext: () => NO_MATCHES,
     findPrevious: () => NO_MATCHES,
