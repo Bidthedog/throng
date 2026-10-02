@@ -53,5 +53,3 @@ packages/ui/tests/.tsc-notice-guard/
 
 # speckit-autopilot run state (ledger, brief, todo lists) — local to one run, never source.
 .claude/.speckit-autopilot/
-# Manual test plans — the working record of what a human has signed off on this branch, never source.
-.claude/.manual-test-plans/
