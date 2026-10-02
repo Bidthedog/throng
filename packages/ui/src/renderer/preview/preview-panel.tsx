@@ -139,8 +139,12 @@ import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSec
 import { openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
-import { closeFind, getFindSession, openFind } from '../search/search-store.js';
-import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
+import { attachPanelSearch, closeFind, getFindSession, openFind, updateCount } from '../search/search-store.js';
+import { unregisterPanelSearch } from '../search/search-controller.js';
+import { clearPanel } from './highlight-registry.js';
+import { createPreviewOccurrences, type PreviewOccurrences } from './preview-occurrences.js';
+import { createPreviewSelection, type PreviewSelection } from './preview-selection.js';
+import { createModelCache } from './preview-selection-model.js';
 import { createCssHighlightPainter, createDomFramePainter, createPreviewSearchController } from './preview-search.js';
 import { recordLastActivePreview } from './last-active-preview.js';
 import { HeadingOutline } from './heading-outline.js';
@@ -636,28 +640,67 @@ export function PreviewPanel({
    * produced, what copy reads and what find's text model walks are all untouched by the outlines it draws.
    */
   const matchFrameLayerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 049 US4 (#324) — the occurrence tint of this panel's own selection (`preview-occurrences.ts`), governed by
+   * `editor.highlightOccurrences` (read at frame time, so a toggle needs no remount — FR-019).
+   */
+  const occurrencesRef = useRef<PreviewOccurrences | null>(null);
+  /** 049 US5 (#457) — the selection this body keeps while it is not focused (`preview-selection.ts`). */
+  const selectionRef = useRef<PreviewSelection | null>(null);
+  const highlightOccurrencesRef = useRef(settings.editor.highlightOccurrences);
+  highlightOccurrencesRef.current = settings.editor.highlightOccurrences;
+  useEffect(() => {
+    occurrencesRef.current?.schedule();
+  }, [settings.editor.highlightOccurrences]);
   useEffect(() => {
     const controller = createPreviewSearchController({
       host: () => bodyHostRef.current,
-      painter: createCssHighlightPainter(),
+      painter: createCssHighlightPainter(panelId),
       frames: createDomFramePainter(() => matchFrameLayerRef.current),
       revealBeforeScroll: (node) => revealBeforeScrollRef.current(node),
+      // A find match is painted as one and carries no occurrence tint (FR-013): re-evaluate whenever it changes.
+      onPaint: () => occurrencesRef.current?.schedule(),
     });
+    // One text model per draw, walked once for both controllers that map the DOM selection onto it.
+    const models = createModelCache(() => bodyHostRef.current);
+    const retainedSelection = createPreviewSelection({ host: () => bodyHostRef.current, panelId, modelCache: models });
+    const occurrences = createPreviewOccurrences({
+      host: () => bodyHostRef.current,
+      panelId,
+      modelCache: models,
+      // Its occurrences follow a selection the body holds while unfocused, at inactive strength (FR-018a).
+      retained: () => retainedSelection.retained(),
+      enabled: () => highlightOccurrencesRef.current,
+      searchMatches: () => controller.matchRanges(),
+      isFocused: () => {
+        const host = bodyHostRef.current;
+        return host !== null && host.contains(host.ownerDocument.activeElement);
+      },
+    });
+    occurrencesRef.current = occurrences;
+    selectionRef.current = retainedSelection;
     searchControllerRef.current = controller;
-    registerPanelSearch(panelId, controller);
-    // The frames sit still while the text moves under them: repaint on the body's scroll and on any resize of
-    // it (the panel, the zoom), through the controller's one requestAnimationFrame. A redraw repaints through
-    // `refresh()` (`onDrawn`).
+    attachPanelSearch(panelId, controller);
+    // 049 FR-029 — the frames live in the scrolling body and move with their text, so a scroll repaints nothing
+    // (`scrolled()` only notices the viewport leaving the band the frames were drawn for). They are redrawn on
+    // any resize of the body (the panel, the zoom), through the controller's one requestAnimationFrame; a redraw
+    // or a fold repaints through `refresh()` / `repaintFrames()`.
     const body = bodyHostRef.current;
     const repaint = (): void => controller.repaintFrames();
-    body?.addEventListener('scroll', repaint, { passive: true });
+    const scrolled = (): void => controller.scrolled();
+    body?.addEventListener('scroll', scrolled, { passive: true });
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repaint);
     if (body) observer?.observe(body);
     return () => {
-      body?.removeEventListener('scroll', repaint);
+      body?.removeEventListener('scroll', scrolled);
       observer?.disconnect();
       searchControllerRef.current = null;
+      occurrences.dispose();
+      occurrencesRef.current = null;
+      retainedSelection.dispose();
+      selectionRef.current = null;
       unregisterPanelSearch(panelId);
+      clearPanel(panelId);
     };
   }, [panelId]);
 
@@ -981,28 +1024,40 @@ export function PreviewPanel({
    * the same commit, so the body's fold-gutter DOM update has already happened by the time the effect
    * watching `foldState` here runs.
    */
-  const pendingReveal = useRef<{ kind: 'heading'; fragment: string; animateMs?: number } | { kind: 'search'; node: Node } | null>(null);
-
-  /** `node`'s own element (`preview-search.ts`'s own derivation, duplicated here to finish its scroll). */
-  const elementOf = (node: Node): Element | null => (node.nodeType === 1 ? (node as Element) : node.parentElement);
+  const pendingReveal = useRef<{ kind: 'heading'; fragment: string; animateMs?: number } | { kind: 'search' } | null>(null);
 
   revealBeforeScrollRef.current = (node: Node): boolean => {
     if (!isFoldableProvider || !revealRef.current) return false;
     const host = bodyHostRef.current;
     const slug = host ? sectionAtPoint(host, node) : null;
     if (slug === null) return false;
-    if (visibleSections(foldState, headingsRef.current).has(slug)) return false; // already shown — scroll now
-    pendingReveal.current = { kind: 'search', node };
+    // 049 #455: "the section's HEADING is shown" is not "its text is" — a section collapsed ITSELF keeps its
+    // heading in `visibleSections` and hides its body. Only a section that is shown AND open needs no reveal.
+    if (visibleSections(foldState, headingsRef.current).has(slug) && !isCollapsed(foldState, slug)) return false;
+    pendingReveal.current = { kind: 'search' };
     revealRef.current(slug);
     return true;
   };
+
+  /**
+   * 049 T056 — folding or unfolding a section moves every block below it, and changes no box the frame layer
+   * watches: the body's own box is the same size before and after, so neither its scroll nor its resize
+   * observer fires. The outlines were left where the text had been — over blank space, or over other text. The
+   * body's fold effect (a child, so before this one) has hidden or shown the blocks by now, so a repaint reads
+   * the new geometry. Its ranges, unlike the frames, follow the text on their own.
+   */
+  useEffect(() => {
+    searchControllerRef.current?.repaintFrames();
+  }, [foldState]);
 
   useEffect(() => {
     const pending = pendingReveal.current;
     if (!pending) return;
     pendingReveal.current = null;
     if (pending.kind === 'search') {
-      elementOf(pending.node)?.scrollIntoView({ block: 'center' });
+      // The match is re-located from its text offset against the body as it is NOW: the redraw the fold
+      // change caused may have replaced the node the reveal started from (049 R4).
+      searchControllerRef.current?.scrollToCurrent();
     } else {
       // Re-run the whole check: if the target is STILL hidden (an edge case — another fold change
       // landed first), this defers again rather than scrolling to a hidden element's zero rect.
@@ -1192,7 +1247,11 @@ export function PreviewPanel({
       settleRedraw(true);
       // FR-005 — the body just redrew under any open find session's feet; re-run its active query
       // (a no-op with none) so the reader keeps their place in the search rather than losing it.
-      searchControllerRef.current?.refresh();
+      const refreshed = searchControllerRef.current?.refresh();
+      if (refreshed) updateCount(panelId, refreshed);
+      // 049: the body just replaced its DOM — the cached text model the occurrence tint reads is stale.
+      occurrencesRef.current?.invalidate();
+      selectionRef.current?.invalidate(); // …and a retained selection is rebuilt over the new nodes, or dropped (FR-026)
       const pending = pendingFragment.current;
       if (pending !== null && samePath(pending.filePath, filePath)) {
         pendingFragment.current = null;
@@ -1201,7 +1260,7 @@ export function PreviewPanel({
         else scrollToHeading(pending.fragment);
       }
     },
-    [scrollToHeading, jumpToHeading, settleRedraw],
+    [panelId, scrollToHeading, jumpToHeading, settleRedraw],
   );
 
   /* ── Following (FR-090, FR-091) ──────────────────────────────────────────────────────────────── */
@@ -2057,19 +2116,20 @@ export function PreviewPanel({
             }}
           />
         ) : null}
+        {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a
+            layer of its own because `::highlight()` takes no outline. 049 FR-029: INSIDE the scrolling body, so a
+            frame scrolls with its text, but a sibling of the rendered content, never in it (the sanitised content,
+            copy and find's text model are untouched). aria-hidden, no pointer events (match-frames.css); covered
+            with the body, whose visibility it inherits. */}
+        <div
+          className="preview-match-frames"
+          data-testid={`preview-match-frames-${panelId}`}
+          aria-hidden="true"
+          ref={matchFrameLayerRef}
+        />
           </div>
         </PanelDropTarget>
       </TreeDropTarget>
-      {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a
-          layer of its own because `::highlight()` takes no outline. Outside the body (the sanitised
-          content), aria-hidden, no pointer events (match-frames.css); covered with the body. */}
-      <div
-        className="preview-match-frames"
-        data-testid={`preview-match-frames-${panelId}`}
-        aria-hidden="true"
-        ref={matchFrameLayerRef}
-        style={bodyCovered ? { visibility: 'hidden' } : undefined}
-      />
       {/* 047 US1 (FR-007) — the one shared find bar; renders only while find is open on this panel. */}
       <FindBar panelId={panelId} />
       {/* 047 US4 (research R7) — the Go to Heading pop-down; renders only while open. */}

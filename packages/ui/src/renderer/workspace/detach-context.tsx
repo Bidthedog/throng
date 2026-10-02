@@ -28,6 +28,7 @@ import type { WorkspaceLoadSubsResult } from '@throng/ipc-contract';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useServices } from '../composition-root.js';
 import { useSubWorkspaces } from '../state/subworkspaces-store.js';
+import { stashPanelState } from './panel-state-capture.js';
 
 /**
  * The "sync" hub for the main window (US7 / 003 clone-and-sync model). Tabs and
@@ -70,6 +71,13 @@ function findPanel(layout: WorkspaceLayout, panelId: string): Panel | undefined 
     if (panel) return panel;
   }
   return undefined;
+}
+
+/** The panel ids a tear-off moves: the panel itself, or every panel of the moved tab (049 R3). */
+function movedPanelIds(layout: WorkspaceLayout, kind: 'tab' | 'panel', id: string): string[] {
+  if (kind === 'panel') return [id];
+  const tab = layout.tabs.find((t) => t.id === id);
+  return tab ? collectPanels(tab.root).map((p) => p.id) : [];
 }
 
 export function DetachProvider({ children }: { children: ReactNode }): ReactElement {
@@ -143,6 +151,9 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
         if (!result.subWorkspace) return;
 
         try {
+          // 049 FR-000a: the moved panels' view and transient UI state reaches main BEFORE the new
+          // window can exist, so its renderer's claim always finds it.
+          await stashPanelState(movedPanelIds(layout, kind, id));
           // Clone semantics: the main layout is untouched; persist the new
           // sub-workspace (appended to the existing set, which the persist path
           // replaces wholesale) and open its window.
@@ -195,6 +206,9 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           }
           if (!updated) return;
 
+          // 049 FR-000a: stash first, so a window that is already open and reloads on `notifyChanged`
+          // claims state that is already in main.
+          await stashPanelState(movedPanelIds(layout, kind, id));
           const next = all.map((s) => (s.id === subId ? updated! : s));
           await bridge.invoke('workspace.persistSubWorkspaces', { subWorkspaces: next });
           clearError();

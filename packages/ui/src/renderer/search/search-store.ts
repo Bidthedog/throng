@@ -22,11 +22,20 @@
  *   2. Every action takes a `panelId`. No action reads "the current session" — that coupling is
  *      exactly where the defect lived (FR-003).
  *   3. A session's lifetime is its PANEL's: created on first open, kept across a hide, kept across
- *      a MOVE (a detach into a sub-workspace unmounts the panel and unregisters its controller —
- *      neither destroys it, FR-025b), and discarded only on `closeFind` or panel destroy (FR-006).
+ *      a view rebuild in THIS window (an unmount unregisters the controller and does not destroy the
+ *      session, FR-025b — `attachPanelSearch` re-runs it on the rebuilt controller, 049), carried to
+ *      ANOTHER window as a snapshot (`snapshotFindSession` / `seedFindSession`, 049 R3: a tear-off
+ *      copies the panel into a renderer whose store starts empty, so the session does not "travel"
+ *      by itself), and discarded only on `closeFind` or panel destroy (FR-006).
  */
 import { useSyncExternalStore } from 'react';
-import { getPanelSearch, unregisterPanelSearch } from './search-controller.js';
+import {
+  getPanelSearch,
+  registerPanelSearch,
+  unregisterPanelSearch,
+  type SearchController,
+} from './search-controller.js';
+import type { PanelSnapshotFind } from '@throng/core';
 import { NO_MATCHES, NO_MODES, type MatchModes, type SearchCount } from './search-model.js';
 
 export type FindPanelKind = 'editor' | 'terminal' | 'preview';
@@ -43,6 +52,12 @@ export interface FindSession {
   readonly count: SearchCount;
   /** Seeded on open, so the bar can select the text for overtyping (013 FR-002b). */
   readonly seeded: boolean;
+  /**
+   * 049 R1 — the text offset of the CURRENT match (`null` when there is none), kept in step with `count`
+   * on every write. It is the anchor a rebuilt view's controller re-lands on, so the match the user was on
+   * is the one they are on after a remount, a move to another window, or a text change while hidden.
+   */
+  readonly currentFrom: number | null;
   /**
    * Bumped on EVERY open of THIS panel's bar, including re-opening one already up. The bar keys
    * its focus/select effect on it: without it, pressing the find chord again after clicking into
@@ -145,8 +160,13 @@ export function useVisibleFindSession(panelId: string): FindSession | null {
 /** Re-run a session's query against its panel and record the resulting count. */
 function applyQuery(session: FindSession): FindSession {
   const controller = getPanelSearch(session.panelId);
-  if (!controller) return { ...session, count: NO_MATCHES };
-  return { ...session, count: controller.setQuery(session.term, session.modes) };
+  if (!controller) return { ...session, count: NO_MATCHES, currentFrom: null };
+  return withCount(session, controller.setQuery(session.term, session.modes), controller);
+}
+
+/** A session with `count` written and `currentFrom` read from the controller that produced it (049 FR-003). */
+function withCount(session: FindSession, count: SearchCount, controller: SearchController | undefined): FindSession {
+  return { ...session, count, currentFrom: controller ? controller.currentFrom() : session.currentFrom };
 }
 
 /** Write a session back, but only if it still exists — an action racing a destroy resurrects none. */
@@ -185,6 +205,7 @@ export function openFind(
       replacement: existing?.replacement ?? '',
       modes: existing?.modes ?? NO_MODES,
       count: NO_MATCHES,
+      currentFrom: null,
       seeded: true,
       // Always a NEW value, so re-opening an already-open bar still re-focuses its input.
       openSeq: (existing?.openSeq ?? 0) + 1,
@@ -259,25 +280,65 @@ export function toggleReplace(panelId: string): void {
 export function findNext(panelId: string): void {
   const controller = getPanelSearch(panelId);
   if (!controller) return;
-  update(panelId, (s) => ({ ...s, count: controller.findNext(), seeded: false }));
+  update(panelId, (s) => ({ ...withCount(s, controller.findNext(), controller), seeded: false }));
 }
 
 export function findPrevious(panelId: string): void {
   const controller = getPanelSearch(panelId);
   if (!controller) return;
-  update(panelId, (s) => ({ ...s, count: controller.findPrevious(), seeded: false }));
+  update(panelId, (s) => ({ ...withCount(s, controller.findPrevious(), controller), seeded: false }));
 }
 
 export function replaceCurrent(panelId: string): void {
   const controller = getPanelSearch(panelId);
   if (controller?.panelKind !== 'editor' || controller.isReadOnly()) return;
-  update(panelId, (s) => ({ ...s, count: controller.replaceCurrent(s.replacement), seeded: false }));
+  update(panelId, (s) => ({ ...withCount(s, controller.replaceCurrent(s.replacement), controller), seeded: false }));
 }
 
-export function replaceAll(panelId: string): void {
+/** What the user chose when Replace All found matches inside folded sections (049 FR-007a). */
+export type ReplaceAllChoice = 'cancel' | 'keep' | 'unfold';
+export interface ReplaceAllFoldedRequest {
+  /** How many of the matches sit inside a folded section. */
+  folded: number;
+  /** How many matches there are in all. */
+  total: number;
+}
+type ReplaceAllChooser = (request: ReplaceAllFoldedRequest) => Promise<ReplaceAllChoice>;
+
+let replaceAllChooser: ReplaceAllChooser | null = null;
+
+/**
+ * Install the surface that asks the question (049 FR-007a) — `replace-all-prompt.tsx` mounts one beside the
+ * confirmation provider. The store is not a React module and cannot call `useChoose`, so the host registers
+ * itself here, as controllers register in `search-controller.ts`. Returns the uninstall.
+ */
+export function setReplaceAllChooser(chooser: ReplaceAllChooser): () => void {
+  replaceAllChooser = chooser;
+  return () => {
+    if (replaceAllChooser === chooser) replaceAllChooser = null;
+  };
+}
+
+/**
+ * Replace every match (013 FR-008) — but first, if any match is inside a FOLDED section, ask (049 FR-007a):
+ * rewriting text the user cannot see is not something to do silently. Cancel does nothing at all; "keep
+ * folded" replaces and leaves the folds; "unfold" opens every affected section in one fold-state write first.
+ *
+ * With no folded match nothing is awaited, so the replacement still happens synchronously, as it always did.
+ * With no host mounted (a surface that never shows the prompt) it replaces without asking.
+ */
+export async function replaceAll(panelId: string): Promise<void> {
   const controller = getPanelSearch(panelId);
   if (controller?.panelKind !== 'editor' || controller.isReadOnly()) return;
-  update(panelId, (s) => ({ ...s, count: controller.replaceAll(s.replacement), seeded: false }));
+  const folded = controller.foldedMatchCount?.() ?? 0;
+  if (folded > 0 && replaceAllChooser) {
+    const choice = await replaceAllChooser({ folded, total: sessions.get(panelId)?.count.total ?? folded });
+    if (choice === 'cancel') return;
+    if (choice === 'unfold') controller.revealSections?.(controller.foldedSectionSlugs?.() ?? []);
+    // The panel may have been closed or rebuilt while the question was open.
+    if (getPanelSearch(panelId) !== controller) return;
+  }
+  update(panelId, (s) => ({ ...withCount(s, controller.replaceAll(s.replacement), controller), seeded: false }));
 }
 
 /**
@@ -288,7 +349,43 @@ export function replaceAll(panelId: string): void {
  * moment its bar comes back.
  */
 export function updateCount(panelId: string, count: SearchCount): void {
-  update(panelId, (s) => ({ ...s, count }));
+  update(panelId, (s) => withCount(s, count, getPanelSearch(panelId)));
+}
+
+/**
+ * Register `controller` as `panelId`'s engine AND bring an existing find session back onto it (049 R1).
+ *
+ * A panel's view is rebuilt by a tab switch, a drag, a split or a move to another window, and the controller
+ * is rebuilt with it — born with no query, no highlights and no current match, while the session (kept
+ * across the unmount, rule 3 above) still reads `2 of 5` with its bar showing. That mismatch was #456. So a
+ * session that is open with a term is re-run on the new controller: the highlights return, the match the
+ * user was on is current again (or the nearest following if the text changed meanwhile), and Next steps from
+ * there. A session with no term, or no session, is simply registered — a closed bar is not re-run.
+ */
+export function attachPanelSearch(panelId: string, controller: SearchController): void {
+  registerPanelSearch(panelId, controller);
+  const session = sessions.get(panelId);
+  if (!session || session.term.length === 0) return;
+  const count = controller.restore(session.term, session.modes, session.currentFrom);
+  update(panelId, (s) => withCount(s, count, controller));
+}
+
+/** A session as the hand-off carries it: every field but the window-local `openSeq` (049 R3). */
+export function snapshotFindSession(panelId: string): PanelSnapshotFind | undefined {
+  const s = sessions.get(panelId);
+  if (!s) return undefined;
+  const { openSeq: _openSeq, ...rest } = s;
+  return rest;
+}
+
+/**
+ * Create a session from a received snapshot, only where this window has none (049 R3). It does not show a
+ * bar: `followActivePanel` does that when the panel becomes active, as it does for any session.
+ */
+export function seedFindSession(snapshot: PanelSnapshotFind): void {
+  if (sessions.has(snapshot.panelId)) return;
+  sessions.set(snapshot.panelId, { ...snapshot, openSeq: 0 });
+  emit();
 }
 
 /**
@@ -297,10 +394,10 @@ export function updateCount(panelId: string, count: SearchCount): void {
  * ══ WHY THIS IS NOT `unregisterPanelSearch` ══
  *
  * `unregisterPanelSearch` runs from the editor's and terminal's UNMOUNT cleanup, and a panel
- * unmounts for two very different reasons: it was destroyed, or it MOVED — detached into a
- * sub-workspace, reattached, dragged to another tab. FR-025b says a session travels with its
- * panel, so hanging the discard off the unregister would throw away the user's search every time
- * they moved a panel. The discard therefore belongs to the explicit destroy paths (`disposeEditor`,
+ * unmounts for two very different reasons: it was destroyed, or its view was rebuilt — a tab
+ * switch, a drag to another tab, a split — while the panel itself lives on. FR-025b says the session
+ * outlives its view (a move to another window hands it over as a snapshot, 049 R3), so hanging the
+ * discard off the unregister would throw away the user's search every time the view was rebuilt. The discard therefore belongs to the explicit destroy paths (`disposeEditor`,
  * `destroyPanel`, the cross-window destroy cascade), which is what this function is for.
  */
 export function destroyPanelSearch(panelId: string): void {

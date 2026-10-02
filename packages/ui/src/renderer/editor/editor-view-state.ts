@@ -49,6 +49,16 @@ export function takeEditorViewState(panelId: string): EditorViewState | undefine
   return state;
 }
 
+/** Read the saved view state without consuming it (049 R3: the cross-window hand-off captures an unmounted panel). */
+export function peekEditorViewState(panelId: string): EditorViewState | undefined {
+  return store.get(panelId);
+}
+
+/** Write a received view state, only where this window has none for the panel (049 R3). */
+export function seedEditorViewState(panelId: string, state: EditorViewState): void {
+  if (!store.has(panelId)) store.set(panelId, state);
+}
+
 /** Drop any saved view state for a panel (called on explicit Panel destroy). */
 export function clearEditorViewState(panelId: string): void {
   store.delete(panelId);

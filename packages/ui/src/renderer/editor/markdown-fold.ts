@@ -209,6 +209,9 @@ function markdownHeadingGutter(deps: MarkdownFoldDeps): Extension {
     return liveSections(view).find((section) => section.startLine === line0) ?? null;
   };
 
+  /** The fold state the markers were last judged against — see `lineMarkerChange`. */
+  let lastMarkedState: FoldState | null = null;
+
   return gutter({
     class: 'cm-throng-fold-gutter',
     lineMarker: (view, line) => {
@@ -226,7 +229,22 @@ function markdownHeadingGutter(deps: MarkdownFoldDeps): Extension {
     // already been parsed. Callers force the parse ahead of time (`use-editor.ts`'s reconfigure
     // effect, before dispatching); this tells the gutter to recompute markers whenever the syntax
     // tree advances further, on a later edit, rather than only on the next viewport/doc change.
-    lineMarkerChange: (update) => syntaxTree(update.startState) !== syntaxTree(update.state),
+    //
+    // 049 T062 — it must ALSO say so when the fold state moved. A marker is drawn from `getFoldState()`, and a
+    // line whose text, height and position did not change is not asked again: Collapse All on a one-H1 document
+    // folds everything under the H1 and leaves its own line exactly as it was, so its marker kept reading `−`
+    // while the sections it had just hidden read `+`. The folded RANGES changing is the same fact seen from the
+    // view; the state's identity covers a state that changes no range (a section with no content to fold).
+    lineMarkerChange: (update) => {
+      const state = deps.getFoldState();
+      const stateMoved = state !== lastMarkedState;
+      lastMarkedState = state;
+      return (
+        stateMoved ||
+        syntaxTree(update.startState) !== syntaxTree(update.state) ||
+        foldedRanges(update.startState) !== foldedRanges(update.state)
+      );
+    },
     domEventHandlers: {
       mousedown: (view, line) => {
         const section = sectionAt(view, line.from);

@@ -257,8 +257,15 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * `warning`'s case once more: a neutral grey sits close to its counterparts across themes, so the
  * mean drops by construction with no theme becoming more alike in character. The threshold is
  * untouched at 4.3.
+ *
+ * Re-measured by 049 (FR-018a, FR-025), which added `searchMatchOccurrence` (equal to `searchMatch`),
+ * `searchMatchOccurrenceInactive` (a quieter neutral tint) and `editorSelectionInactive` (the selection
+ * pulled toward the page) to every theme: 6.155814166374773 → 6.093435722242142. `warning`'s case:
+ * three more terms that sit near the page and near counterparts every theme already has, so the mean
+ * drops by construction with no theme becoming more alike in character. The threshold is untouched at
+ * 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.155814166374773;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.093435722242142;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A
@@ -351,8 +358,14 @@ export const MATCH_SURFACE_PAIRS: readonly (readonly [string, string])[] = Objec
  * axes buy less separation there than anywhere else; its current match sits only ΔE00 6.80 off its
  * own page to begin with, because that is as far as the readability walk will tint it. Snake is the
  * theme to re-measure first if this constant ever has to move.
+ *
+ * Re-measured 2026-10-02 for 049 FR-009a, which holds the two fills ΔE00 9.0 apart: on Snake, VI-VIM and English
+ * Garden the ordinary fill moved off the neutral ray to reach that, and toward the page — never nearer it than the
+ * floor plus 0.6 (`separatedMatch`), so the headroom this measurement must keep is kept rather than spent. The
+ * smallest gap is now **VI-VIM's `searchMatch` ↔ `editorBg` at 3.636** (Snake 3.81, English Garden 3.83). The 3.0
+ * floor was not moved; the ordinary match also carries its own outline (047 FR-074).
  */
-export const CLOSEST_MATCH_SURFACE_DELTA = 3.7658577440969068;
+export const CLOSEST_MATCH_SURFACE_DELTA = 3.636323864275396;
 
 /**
  * The floor a theme's three match-surface gaps must clear (043, FR-067).
@@ -374,6 +387,22 @@ export const CLOSEST_MATCH_SURFACE_DELTA = 3.7658577440969068;
  * Bash 4.49, VI-VIM 4.57, Cyberpunk 4.98 — where they now measure 5.458, 6.150, 5.678 and 7.154.
  */
 export const MATCH_DISTINCTNESS_THRESHOLD = 3.0;
+
+/**
+ * 049 FR-009a / SC-003a — the floor between the ordinary-match and current-match FILLS, raised from
+ * {@link MATCH_DISTINCTNESS_THRESHOLD} for that one pair. Calibrated by hand-testing, not by the themes: the
+ * maintainer judged the current match hard to pick out on Snake (3.93), English Garden (5.46) and VI-VIM (7.49)
+ * and easy on Claude (9.47), VSCode (12.17), Cyberpunk (13.24) and Debian (22.88). 9.0 sits under the weakest
+ * theme judged good. (Matrix was judged poor at 10.66, green on green; FR-009b's 2 px outline answers it.)
+ */
+export const CURRENT_MATCH_SEPARATION = 9.0;
+
+/**
+ * 049 FR-025a / SC-003a — how far the inactive selection must sit from the page. The maintainer found some
+ * themes' inactive selection hard to see (the lowest then: English Garden 5.94, Bash 6.61, Windows Terminal
+ * 6.69); the floor is the same 9.0 accepted for the current match.
+ */
+export const INACTIVE_SELECTION_FROM_PAGE = 9.0;
 
 export interface MatchDistinctnessResult {
   /** the first token of the pair. */

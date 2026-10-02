@@ -10,6 +10,7 @@ import { PanelNameClient } from './state/panel-name-client.js';
 import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
+import { ReplaceAllPrompt } from './search/replace-all-prompt.js';
 import { NotificationProvider } from './common/notification.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
@@ -123,6 +124,7 @@ export function CompositionRoot(): ReactElement {
             <ContextMenuProvider>
               <ProjectsProvider client={services.projects}>
                 <SubWorkspacesProvider client={services.subWorkspaces}>
+                  <ReplaceAllPrompt />
                   <App />
                   {/* 045 FR-166 — one link hint per WINDOW (each renderer is its own process). */}
                   <LinkHint />
@@ -173,6 +175,7 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
                   the Panel header colours itself by its origin project — so the
                   projects list is needed here too. */}
               <ProjectsProvider client={services.projects}>
+                <ReplaceAllPrompt />
                 <SubWorkspaceApp subWorkspaceId={id} />
                 <LinkHint />
               </ProjectsProvider>

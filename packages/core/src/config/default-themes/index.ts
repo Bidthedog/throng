@@ -10,6 +10,9 @@
  */
 import { THRONG_THEME, TOKEN_PARENT, type Theme } from '../theme.js';
 import {
+  CURRENT_MATCH_SEPARATION,
+  INACTIVE_SELECTION_FROM_PAGE,
+  MATCH_DISTINCTNESS_THRESHOLD,
   ciede2000,
   contrastRatio,
   hexToRgb,
@@ -167,7 +170,14 @@ function searchHighlights(
   editorBg: string,
   editorFg: string,
   overlaid: readonly string[] = [],
-): { match: string; current: string; border: string; outline: string } {
+): {
+  match: string;
+  current: string;
+  border: string;
+  outline: string;
+  occurrence: string;
+  occurrenceInactive: string;
+} {
   // What is drawn ON a match is not editorFg — it is SYNTAX-COLOURED CODE (016, FR-007a). So the
   // tint must be weak enough that every one of those colours stays readable through it, not just
   // the plain body text. Constraining the SURFACE is what preserves the code's colours; the
@@ -245,8 +255,201 @@ function searchHighlights(
       break;
     }
   }
-  return { match, current, border, outline };
+
+  // 049 FR-009a — where the walk above leaves the two fills nearer than the hand-tested floor, the ordinary
+  // fill alone moves. `current`, `border` and `outline` are already final, so they keep their shipped values.
+  const separated = deltaE(match, current) < CURRENT_MATCH_SEPARATION;
+  if (separated) match = separatedMatch(match, current, editorBg, readable, weakerThanCurrent, outline);
+
+  // 049 — computed after the four above, from them. The focused occurrence tint IS `match`: one soft tint
+  // means "another instance" (FR-010).
+  const occurrenceInactive = inactiveOccurrence(match, editorBg, editorFg, readable, separated);
+  return { match, current, border, outline, occurrence: match, occurrenceInactive };
 }
+
+/**
+ * Directions the ordinary fill may leave the page in when the neutral ray cannot hold it far enough from the
+ * current match (049 FR-009a): black, white and the six primaries and secondaries. The neutral ray runs toward
+ * the text, so on a theme whose text and accent are one family (Snake's olives) every candidate on it is near the
+ * current match; a hue away from the accent is where the separation is.
+ */
+/** The ordinary match's luminance floor against the page (`theme-syntax.test.ts`, "a search match must stay VISIBLE"). */
+const ORDINARY_MATCH_MIN_CONTRAST = 1.04;
+/** The margin above 043 FR-067's 3.0 floor a moved ordinary fill keeps from the page; the gate requires 0.5. */
+const SEPARATION_PAGE_HEADROOM = 0.6;
+
+const SEPARATION_DIRECTIONS = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+/**
+ * 049 FR-009a — the ordinary-match fill nearest the one the neutral walk chose (so a theme keeps as much of its
+ * character as the floor allows) among the candidates that clear {@link CURRENT_MATCH_SEPARATION} from the current
+ * match, while every rule the walk enforces still holds: syntax readable through it, weaker than the current match
+ * by both measures, a perceptible tint on the page (043 FR-067), and its own outline still clearing 3:1 against it
+ * (047 FR-074). Unlike the walk, this reads a floor: the spec states the floor as the requirement, and
+ * `theme-occurrence-surfaces.test.ts` measures it independently. Measured feasible on every bundled theme before it
+ * was written; if no candidate clears it, the walk's choice stands and that test fails, naming the theme.
+ */
+function separatedMatch(
+  match: string,
+  current: string,
+  editorBg: string,
+  readable: (surface: string) => boolean,
+  weakerThanCurrent: (candidate: string) => boolean,
+  outline: string,
+): string {
+  let best = match;
+  let bestMove = Infinity;
+  for (const toward of SEPARATION_DIRECTIONS) {
+    for (let step = 1; step <= ORDINARY_MATCH_MAX; step += 1) {
+      const candidate = blend(editorBg, toward, step / ORDINARY_MATCH_GRID);
+      if (deltaE(candidate, current) < CURRENT_MATCH_SEPARATION) continue;
+      // 043 FR-067's floor plus the half-unit of headroom its measurement must keep (`theme-match-distinctness`).
+      if (deltaE(candidate, editorBg) < MATCH_DISTINCTNESS_THRESHOLD + SEPARATION_PAGE_HEADROOM) continue;
+      // 013 SC-005 / 016's visibility floor: a match is a tint you can SEE, not only one ΔE00 can tell apart.
+      if (contrastRatio(candidate, editorBg) <= ORDINARY_MATCH_MIN_CONTRAST) continue;
+      if (!readable(candidate) || !weakerThanCurrent(candidate)) continue;
+      if (contrastRatio(outline, candidate) < 3) continue;
+      const move = deltaE(candidate, match);
+      if (move < bestMove) {
+        bestMove = move;
+        best = candidate;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * 049 FR-018a — the occurrence tint of an UNFOCUSED panel. It walks toward the page strictly nearer it than
+ * `match`, keeping the readable candidate that maximises the smaller of
+ * its two gaps (to `match`, and to the page): weaker than the focused tint, and still a tint. Like the
+ * ordinary-match walk it never reads a gate threshold; `theme-occurrence-surfaces.test.ts` measures what
+ * it achieved. Separate so the hand-authored `throng` theme can be measured by the same walk.
+ */
+function inactiveOccurrence(
+  match: string,
+  editorBg: string,
+  editorFg: string,
+  readable: (surface: string) => boolean,
+  offNeutral = false,
+): string {
+  const matchFromSurface = deltaE(match, editorBg);
+  const matchAgainstSurface = contrastRatio(match, editorBg);
+  let best = blend(editorBg, editorFg, 1 / ORDINARY_MATCH_GRID);
+  let bestScore = -1;
+  // The neutral ray — plus, where FR-009a moved the ordinary fill off it (`offNeutral`), the ray from the page
+  // toward `match` itself, without which nothing weaker than the moved fill is reachable.
+  const candidates: string[] = [];
+  for (let step = ORDINARY_MATCH_MAX; step >= 1; step -= 1) candidates.push(blend(editorBg, editorFg, step / ORDINARY_MATCH_GRID));
+  if (offNeutral) {
+    for (let step = ORDINARY_MATCH_GRID - 1; step >= 1; step -= 1) candidates.push(blend(editorBg, match, step / ORDINARY_MATCH_GRID));
+  }
+  for (const candidate of candidates) {
+    const fromSurface = deltaE(candidate, editorBg);
+    if (!readable(candidate) || fromSurface >= matchFromSurface) continue;
+    if (contrastRatio(candidate, editorBg) > matchAgainstSurface) continue;
+    const score = Math.min(deltaE(candidate, match), fromSurface);
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+/**
+ * 049 FR-025 — the selection colour of a panel that does not have focus, derived from the theme's own
+ * active selection rather than hand-listed per theme. It walks from the selection toward the page (an
+ * inactive selection reads quieter than the active one), keeping the candidate that code stays readable
+ * on and that maximises its SMALLEST perceptual gap to everything it must not be mistaken for: the
+ * active selection, the page, and every match surface. The same maximise-the-smaller-gap shape as the
+ * ordinary match above, and for the same reason — a first-fit walk can land on a collision.
+ */
+function inactiveSelection(
+  selection: string,
+  editorBg: string,
+  editorFg: string,
+  accent: string,
+  matchSurfaces: readonly string[],
+  overlaid: readonly string[] = [],
+): string {
+  // Every comparand is fixed, so its luminance and Lab are computed once and each candidate is parsed
+  // once: this walk runs for every bundled theme at module load, and the naive form measured ~90 ms.
+  const textLums = [editorFg, ...overlaid].map((c) => relativeLuminance(hexToRgb(c)));
+  const avoidLabs = [selection, editorBg, ...matchSurfaces].map((c) => rgbToLab(hexToRgb(c)));
+  const pageLab = avoidLabs[1]!;
+  // FR-025a: a candidate at least INACTIVE_SELECTION_FROM_PAGE from the page always beats one that is not, so
+  // the walk optimises among the plainly visible candidates and falls back to the old optimum only if none exist
+  // (the floor's own test then names the theme).
+  const seen = new Set<string>();
+  // Toward the page (quieter), then optionally a little toward the text (a neutral lift) or the accent
+  // (the theme's own hue). The page ray alone runs between the selection and a match surface with no
+  // room either side on the tight themes — measured: SUBNET peaked at ΔE00 2.89 and Snake at 2.83 —
+  // and a second direction finds it: the neutral lift for Snake (3.06), the accent for SUBNET (5.36),
+  // whose selection sits only 9.5 from its own page.
+  let best = blend(selection, editorBg, 0.5);
+  let bestScore = -1;
+  for (let s = 1; s < INACTIVE_SELECTION_GRID; s += 1) {
+    const toPage = blend(selection, editorBg, s / INACTIVE_SELECTION_GRID);
+    for (let u = 0; u <= INACTIVE_SELECTION_LIFT_STEPS * 2; u += 1) {
+      const toward = u <= INACTIVE_SELECTION_LIFT_STEPS ? editorFg : accent;
+      const amount = (u <= INACTIVE_SELECTION_LIFT_STEPS ? u : u - INACTIVE_SELECTION_LIFT_STEPS) * INACTIVE_SELECTION_LIFT;
+      const candidate = amount === 0 ? toPage : blend(toPage, toward, amount);
+      if (seen.has(candidate)) continue; // neighbouring grid points often round to the same hex
+      seen.add(candidate);
+      const rgb = hexToRgb(candidate);
+      const lum = relativeLuminance(rgb);
+      const readable = textLums.every(
+        (l) => (Math.max(l, lum) + 0.05) / (Math.min(l, lum) + 0.05) >= 4.5,
+      );
+      if (!readable) continue;
+      const lab = rgbToLab(rgb);
+      let score = Infinity;
+      for (const avoid of avoidLabs) score = Math.min(score, ciede2000(lab, avoid));
+      if (score >= MATCH_DISTINCTNESS_THRESHOLD && ciede2000(lab, pageLab) >= INACTIVE_SELECTION_FROM_PAGE) {
+        score += VISIBLE_BONUS;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+  }
+  if (bestScore >= VISIBLE_BONUS) return best;
+
+  // FR-025a fallback: nothing between the selection and the page is both readable and 9.0 from the page. Measured
+  // on Snake, whose olive syntax hues are legible on almost no surface that far from its page, and whose few
+  // legible ones land on its current match. Leave the page along other hues instead (as FR-009a's ordinary fill
+  // does) and take the qualifying candidate nearest the active selection, so it still reads as that selection.
+  const selectionLab = avoidLabs[0]!;
+  let nearest = best;
+  let nearestMove = Infinity;
+  for (const toward of [...SEPARATION_DIRECTIONS, selection, accent]) {
+    for (let step = 1; step < ORDINARY_MATCH_GRID; step += 1) {
+      const candidate = blend(editorBg, toward, step / ORDINARY_MATCH_GRID);
+      const rgb = hexToRgb(candidate);
+      const lum = relativeLuminance(rgb);
+      if (!textLums.every((l) => (Math.max(l, lum) + 0.05) / (Math.min(l, lum) + 0.05) >= 4.5)) continue;
+      const lab = rgbToLab(rgb);
+      if (ciede2000(lab, pageLab) < INACTIVE_SELECTION_FROM_PAGE) continue;
+      if (avoidLabs.some((avoid) => avoid !== pageLab && ciede2000(lab, avoid) < MATCH_DISTINCTNESS_THRESHOLD)) continue;
+      const move = ciede2000(lab, selectionLab);
+      if (move < nearestMove) {
+        nearestMove = move;
+        nearest = candidate;
+      }
+    }
+  }
+  return nearest;
+}
+
+/** The inactive-selection walk's grid toward the page (049 FR-025): steps of 1/50. */
+const INACTIVE_SELECTION_GRID = 50;
+/** The lift toward the text or the accent: up to 10 steps of 0.04, at most 0.4. */
+const INACTIVE_SELECTION_LIFT_STEPS = 10;
+const INACTIVE_SELECTION_LIFT = 0.04;
+/** Larger than any ΔE00 a score can reach, so the FR-025a page floor ranks before the smallest-gap score. */
+const VISIBLE_BONUS = 1000;
 
 /**
  * A theme's syntax hues (016, FR-007/FR-007c) — the ten colours code is painted with.
@@ -309,6 +512,10 @@ function syntaxAndSearch(
   current: string;
   border: string;
   outline: string;
+  occurrence: string;
+  occurrenceInactive: string;
+  /** The body-lifted syntax hues the surfaces were derived against — 049's inactive selection uses them. */
+  onBody: readonly string[];
 } {
   // Lifted to 6:1 on the body, not the bare 4.5:1 floor. The extra 1.5 is HEADROOM, and it is what
   // pays for a visible search highlight: a match surface can only be tinted as far as the weakest
@@ -320,7 +527,7 @@ function syntaxAndSearch(
     Object.entries(seeds).map(([k, c]) => [k, legibleOn(c, [editorBg], editorFg, 6)]),
   ) as Record<keyof SyntaxSeeds, string>;
 
-  const { match, current, border, outline } = searchHighlights(
+  const { match, current, border, outline, occurrence, occurrenceInactive } = searchHighlights(
     accent,
     editorBg,
     editorFg,
@@ -348,6 +555,9 @@ function syntaxAndSearch(
     current,
     border,
     outline,
+    occurrence,
+    occurrenceInactive,
+    onBody: Object.values(onBody),
   };
 }
 
@@ -458,6 +668,19 @@ function makeTheme(name: string, p: Palette): Theme {
       searchMatchCurrent: code.current,
       searchMatchCurrentBorder: code.border,
       searchMatchBorder: code.outline,
+      // 049 (#324, #325): selection occurrences, from the SAME derivation as the search surfaces —
+      // the focused tint is the ordinary-match tint (FR-010), the unfocused one quieter (FR-018a).
+      searchMatchOccurrence: code.occurrence,
+      searchMatchOccurrenceInactive: code.occurrenceInactive,
+      // 049 FR-025: a selection kept in an unfocused panel, derived from the theme's own selection.
+      editorSelectionInactive: inactiveSelection(
+        p.selection ?? p.surfaceActive ?? p.surface,
+        editorBg,
+        editorFg,
+        p.accent,
+        [code.match, code.current, code.occurrenceInactive],
+        code.onBody,
+      ),
       // Active-pane highlight (012, FR-002 / SC-001; 021 consolidated the File Explorer's separate
       // highlight onto this one token): a contrast-guaranteed accent marks the active pane/panel when
       // the window is foreground; a dimmed variant marks it when the window is background — still

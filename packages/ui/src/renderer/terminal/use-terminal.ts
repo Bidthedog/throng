@@ -22,7 +22,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 
-import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
+import { unregisterPanelSearch } from '../search/search-controller.js';
+import { attachPanelSearch } from '../search/search-store.js';
 import {
   createTerminalSearchController,
   type TerminalSearchDecorations,
@@ -55,6 +56,7 @@ import { createLinkMarks, type MarkedLink } from './link-marks.js';
 import { terminalLinkHintAnchor } from './link-hint-anchor.js';
 import { shouldDropScrollback } from './clear-detect.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
+import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
@@ -612,6 +614,15 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // PowerShell output. (cls/clear is handled separately via isScreenClear.)
     });
     termRef.current = term;
+    // 049 FR-000a: this view's live viewport and selection for the cross-window hand-off — read when the panel is
+    // sent to another window, which is a copy whose renderer has no saved terminal state of its own.
+    const unregisterStateCapture = registerPanelStateCapture(panelId, 'terminal', () => {
+      const buffer = term.buffer.active;
+      return {
+        offsetFromBottom: Math.max(0, buffer.baseY - buffer.viewportY),
+        selection: term.getSelectionPosition() ?? undefined,
+      };
+    });
     /*
      * 045 FR-136 / FR-154 — xterm's built-in OSC 8 provider, so the view pass can mark hyperlinks AT
      * REST. The public API cannot see an OSC 8 link until the pointer reaches it (`IBufferCell` has
@@ -1112,7 +1123,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         },
       );
       const offCount = controller.onCountChange((c) => onSearchCountRef.current?.(c));
-      registerPanelSearch(panelId, controller);
+      attachPanelSearch(panelId, controller);
       cleanupSearch = () => {
         offCount?.();
         unregisterPanelSearch(panelId);
@@ -1660,11 +1671,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
             }
             const sel = savedTerminalView.selection;
             if (sel) {
-              // getSelectionPosition() is 1-based; select()/selectLines() are 0-based.
+              // `getSelectionPosition()` and `select()`/`selectLines()` speak the SAME 0-based buffer
+              // coordinates (xterm 6: `select(2, 10, 5)` reads back `{2,10}–{7,10}`). This used to subtract
+              // 1 from both, believing the former 1-based, and moved a kept selection one column left and
+              // one row up on every restore (049 B1).
               if (sel.start.y === sel.end.y) {
-                term.select(sel.start.x - 1, sel.start.y - 1, Math.max(1, sel.end.x - sel.start.x));
+                term.select(sel.start.x, sel.start.y, Math.max(1, sel.end.x - sel.start.x));
               } else {
-                term.selectLines(sel.start.y - 1, sel.end.y - 1);
+                term.selectLines(sel.start.y, sel.end.y);
               }
             }
           });
@@ -1799,6 +1813,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // Remember the scroll offset + selection before the xterm is disposed, so the
       // next mount of this terminal (tab/panel/project switch) can restore them
       // (issue 144, follow-up). Offset is measured from the buffer bottom.
+      unregisterStateCapture(); // 049: the live capture goes with the view; the saved entry below answers from here on
       const activeBuffer = term.buffer.active;
       saveTerminalViewState(panelId, {
         offsetFromBottom: Math.max(0, activeBuffer.baseY - activeBuffer.viewportY),

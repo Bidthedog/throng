@@ -53,8 +53,8 @@ import { registerEditorActions, unregisterEditorActions, type EditorLoadNavigati
 import { setPanelHistory } from '../navigation/history-store.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { getActivePane } from '../workspace/active-pane.js';
-import { registerPanelSearch, unregisterPanelSearch } from '../search/search-controller.js';
-import { destroyPanelSearch, updateCount } from '../search/search-store.js';
+import { unregisterPanelSearch } from '../search/search-controller.js';
+import { attachPanelSearch, destroyPanelSearch, updateCount } from '../search/search-store.js';
 import {
   createEditorSearchController,
   searchHighlightExtension,
@@ -80,6 +80,7 @@ import { markdownHeadingRecords } from './markdown-headings.js';
 import {
   foldCompartment,
   markdownFoldCommand,
+  liveSections,
   markdownFoldExtension,
   markdownSections,
   sectionAtLine,
@@ -88,10 +89,14 @@ import {
 } from './markdown-fold.js';
 import {
   applyFoldStateFromSync,
+  documentFoldState,
   relayedKeyMatches,
   setDocumentFoldState,
   useDocumentFoldState,
 } from './fold-state-store.js';
+import { hidingSections, revealOffset, revealSections } from './editor-fold-reveal.js';
+import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
+import { occurrenceCompartment, occurrenceExtensionFor } from './occurrence-highlight.js';
 import { loadDocumentOverride, toRelPath } from './language-override.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
 import {
@@ -402,6 +407,10 @@ export function useEditor(params: UseEditorParams): void {
   // the gutter extension was last (re)built.
   const foldStateValueRef = useRef(foldStateValue);
   foldStateValueRef.current = foldStateValue;
+  // Read at call time by the find controller's fold dependency (049): the controller is built once per view,
+  // but whether the document is Markdown (and so foldable) can change under it.
+  const isMarkdownRef = useRef(isMarkdown);
+  isMarkdownRef.current = isMarkdown;
 
   /**
    * `commandsFor()`'s fold deps (R5) — `isMarkdown` is THIS render's, so the rebuild effect that
@@ -475,7 +484,11 @@ export function useEditor(params: UseEditorParams): void {
       effects: foldCompartment.reconfigure(
         markdownFoldExtension({
           iconFor: (token) => resolveIconAsset(theme, iconPacks, token),
-          getFoldState: () => foldStateValueRef.current,
+          // 049 T062 — read the STORE, not the render's copy of it: a command (Collapse All) writes the store and
+          // folds the ranges in one go, and the ref below only catches up on the next render — after the
+          // gutter had already redrawn its markers from the old state.
+          getFoldState: () =>
+            documentFoldState(wrapDocKeyRef.current, initialFold(metaRef.current.settings.markdownSectionsOpen)),
           onToggle: (slug) => {
             setDocumentFoldState(
               wrapDocKeyRef.current,
@@ -957,6 +970,13 @@ export function useEditor(params: UseEditorParams): void {
     // whole dependency, because the value goes straight into the reconfigure rather than through a
     // helper that closes over anything else.
   }, [settings.showGutter]);
+
+  // 049 FR-019: `editor.highlightOccurrences` takes effect in every open editor without a reload.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: occurrenceCompartment.reconfigure(occurrenceExtensionFor(settings.highlightOccurrences)),
+    });
+  }, [settings.highlightOccurrences]);
   // The app-wide context-menu host (FR-036/037): exactly one menu is open anywhere at a time, so
   // the editor asks for one rather than rendering its own.
   const { openMenu, updateMenu } = useContextMenu();
@@ -1786,6 +1806,9 @@ export function useEditor(params: UseEditorParams): void {
           // it through the controller registered below; CodeMirror's own search panel
           // is deliberately not used (its controls could not be theme-token driven).
           searchHighlightExtension,
+          // 049 (#324): other instances of the selected text, softly tinted — in a compartment so
+          // `editor.highlightOccurrences` reaches a live view without a remount (FR-019).
+          occurrenceCompartment.of(occurrenceExtensionFor(metaRef.current.settings.highlightOccurrences)),
           /*
            * CODEMIRROR MUST NOT EAT THE FILE DROP.
            *
@@ -1834,6 +1857,12 @@ export function useEditor(params: UseEditorParams): void {
       }
     };
     view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
+    // 049 FR-000a: this view's live caret, selection and scroll for the cross-window hand-off — read when a panel
+    // is sent to another window, which is a copy: the receiving renderer's `editor-view-state` starts empty.
+    const unregisterStateCapture = registerPanelStateCapture(panelId, 'editor', () => ({
+      selection: view.state.selection.toJSON(),
+      scrollAnchor: lastScrollAnchor,
+    }));
     // The status strip and the language picker live OUTSIDE this view and must be able to
     // reconfigure it when the user picks a language (016).
     registerEditorView(panelId, view);
@@ -1855,7 +1884,7 @@ export function useEditor(params: UseEditorParams): void {
     registerPanelFocus(panelId, () => viewRef.current?.focus());
     // Register this editor's search engine (013) so the shared find bar — and the
     // rebindable find/replace commands — can drive whichever panel is active.
-    registerPanelSearch(
+    attachPanelSearch(
       panelId,
       createEditorSearchController(
         view,
@@ -1863,6 +1892,33 @@ export function useEditor(params: UseEditorParams): void {
         // Editing while the bar is open re-runs the query, so the count the user sees keeps
         // pace with the document they are changing.
         (count) => updateCount(panelId, count),
+        {
+          // 049 R5: a match inside a collapsed Markdown section is opened through the fold authority.
+          revealBeforeScroll: (pos) =>
+            isMarkdownRef.current &&
+            revealOffset(view, pos, {
+              docKey: () => wrapDocKeyRef.current,
+              panelId,
+              seedDefault: () => initialFold(metaRef.current.settings.markdownSectionsOpen),
+            }),
+          revealSections: (slugs) => {
+            if (!isMarkdownRef.current) return;
+            revealSections(view, slugs, {
+              docKey: () => wrapDocKeyRef.current,
+              panelId,
+              seedDefault: () => initialFold(metaRef.current.settings.markdownSectionsOpen),
+            });
+          },
+          hidingSections: (pos) =>
+            isMarkdownRef.current
+              ? hidingSections(
+                  liveSections(view),
+                  view,
+                  pos,
+                  documentFoldState(wrapDocKeyRef.current, initialFold(metaRef.current.settings.markdownSectionsOpen)),
+                )
+              : [],
+        },
       ),
     );
 
@@ -2260,6 +2316,8 @@ export function useEditor(params: UseEditorParams): void {
         selection: view.state.selection.toJSON(),
         scrollAnchor: lastScrollAnchor,
       });
+      // 049: the view is gone, so its live capture goes with it (the saved entry above answers from here on).
+      unregisterStateCapture();
       offSync?.();
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
       unregisterPanelFocus(panelId);
@@ -2304,9 +2362,10 @@ export function disposeEditor(panelId: string): void {
    * …and the find session that was open on it (043 FR-006).
    *
    * NOT in the unmount cleanup beside `unregisterPanelSearch`, which is the obvious place and the
-   * wrong one: a panel unmounts when it MOVES — a detach into a sub-workspace, a drag to another
-   * tab — and a session travels with its panel (FR-025b). Only an explicit destroy discards it,
-   * and this function IS the explicit destroy.
+   * wrong one: a panel's view is rebuilt when it is hidden by a tab switch, dragged to another tab
+   * or split, and the session outlives the view (FR-025b; `attachPanelSearch` re-runs it on the new
+   * one — and a copy sent to another window takes it along as a hand-off snapshot, 049 R3). Only an
+   * explicit destroy discards it, and this function IS the explicit destroy.
    */
   destroyPanelSearch(panelId);
   // …nor the status bar's READOUT of that caret (040 FR-006, data-model.md §3.1). Keyed by panel,

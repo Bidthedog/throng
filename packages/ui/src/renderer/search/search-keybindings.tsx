@@ -176,7 +176,7 @@ export function SearchKeybindings(): null {
           if (!findOpen || activeKind !== 'editor') return;
           if (!getFindSession(activePanelId)?.replaceShown) return;
           e.preventDefault();
-          replaceAll(activePanelId);
+          void replaceAll(activePanelId);
           return;
 
         default:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
-import { holdPanelFocus, releasePanelFocus } from './panel-focus.js';
+import { holdPanelFocus, releasePanelFocus, requestPanelFocus } from './panel-focus.js';
 import { endSplitMode } from './split-mode.js';
 import {
   DndContext,
@@ -744,6 +744,13 @@ export function TabGroup(): ReactElement {
   // Hover-over-a-tab-to-activate during a panel drag (FR-023).
   const hoverTabId = useRef<string | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The panel the last drop placed, and how many drops there have been — state, so focus runs after commit. */
+  const [droppedPanel, setDroppedPanel] = useState<{ panelId: string; n: number } | null>(null);
+  useEffect(() => {
+    if (droppedPanel === null) return;
+    setActivePane('workspace');
+    requestPanelFocus(droppedPanel.panelId);
+  }, [droppedPanel]);
   const [draggingPanelId, setDraggingPanelId] = useState<string | null>(null);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [indicatorX, setIndicatorX] = useState<number | null>(null);
@@ -1272,6 +1279,21 @@ export function TabGroup(): ReactElement {
     })();
   };
 
+  /**
+   * 049 FR-000b — a panel the user dropped is its tab's active panel, its tab is the one shown, and
+   * focus moves into it. `tabId` is the tab the drop put it in, or null when the operation itself made
+   * the tab (the New-Tab drop activates its own). Focus is asked for AFTER the layout has committed (see
+   * the effect beside `onDragOver`), so the view that remounted for the move has registered, or the
+   * request is parked for the one that is still loading.
+   */
+  const claimDropped = (panelId: string, tabId: string | null): void => {
+    if (tabId !== null) {
+      ws.setActiveTab(tabId);
+      ws.setActivePanel(tabId, panelId);
+    }
+    setDroppedPanel((prev) => ({ panelId, n: (prev?.n ?? 0) + 1 }));
+  };
+
   const onDragEnd = (event: DragEndEvent): void => {
     const activeId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
@@ -1291,20 +1313,29 @@ export function TabGroup(): ReactElement {
       const outer = parseOuterEdgeDropId(overId);
       if (outer) {
         ws.movePanelToOuterEdge(outer.tabId, panelSrc, outer.edge as Edge);
+        claimDropped(panelSrc, outer.tabId);
         return;
       }
       // Dropped on the New-Tab (+) button → move the Panel into its own new Tab (FR-027).
       if (overId === NEW_TAB_DROP_ID) {
         ws.addTabFromPanel(panelSrc);
+        claimDropped(panelSrc, null);
         return;
       }
       const edge = parseEdgeDropId(overId);
       if (edge && edge.panelId !== panelSrc) {
         ws.movePanelToEdge(panelSrc, edge.panelId, edge.edge as Edge);
+        claimDropped(
+          panelSrc,
+          layout.tabs.find((t) => collectPanels(t.root).some((p) => p.id === edge.panelId))?.id ?? null,
+        );
         return;
       }
       const tabTarget = parseTabDropId(overId);
-      if (tabTarget) ws.movePanelToTab(panelSrc, tabTarget);
+      if (tabTarget) {
+        ws.movePanelToTab(panelSrc, tabTarget);
+        claimDropped(panelSrc, tabTarget);
+      }
       return;
     }
 

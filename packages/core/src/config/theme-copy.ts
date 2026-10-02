@@ -275,6 +275,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Editor Selection',
     description: 'The highlight behind text the user has selected in the code editor.',
   },
+  'colours.editorSelectionInactive': {
+    label: 'Editor Inactive Selection',
+    description:
+      'A quieter highlight that keeps a selection visible in an editor or preview after you click into another panel, until you change it.',
+  },
   'colours.editorGutterBg': {
     label: 'Editor Gutter Background',
     description: 'The strip down the left edge of the code editor that carries the line numbers, behind those numbers.',
@@ -369,6 +374,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Search Match Border',
     description:
       'The thin line drawn around every other match in an editor or a preview, so each one stands clear of the page around it.',
+  },
+  'colours.searchMatchOccurrence': {
+    label: 'Selection Occurrence Highlight',
+    description:
+      'The soft tint on every other place the selected text appears in the editor or preview you are working in.',
+  },
+  'colours.searchMatchOccurrenceInactive': {
+    label: 'Inactive Selection Occurrence Highlight',
+    description:
+      'A weaker version of that tint, shown while the panel holding the selection is not the one you are working in.',
   },
   'colours.activePanelBorder': {
     label: 'Active Pane Highlight',

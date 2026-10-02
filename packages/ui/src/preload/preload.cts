@@ -531,6 +531,11 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:history:changed', handler);
     },
   },
+  // 049 R3 — a loaded panel's state handed to another window (contracts/panel-state-handoff.md).
+  panelState: {
+    stash: (snapshots: readonly unknown[]) => ipcRenderer.invoke('throng:panelState:stash', { snapshots }),
+    claim: (panelIds: readonly string[]) => ipcRenderer.invoke('throng:panelState:claim', { panelIds }),
+  },
   // 033 US1 (contracts/file-index.md §3): the project file index that seeds Quick Open. NEW
   // channels rather than additions to `files.*` — that surface carries ONE process-wide root, and
   // this index is keyed BY root so two windows on two projects never see each other's sets (I4).

@@ -579,6 +579,18 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   /*
+   * 049 FR-019 — one setting for editors AND Markdown previews, so the description names both; under
+   * Editor with no subgroup, beside the other app-wide editor toggles.
+   */
+  {
+    key: 'editor.highlightOccurrences',
+    label: 'Highlight other occurrences of the selection',
+    description:
+      'Softly tint every other instance of the text selected in an editor or a preview. The tint is a visual aid only: nothing else is selected.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  /*
    * 047 (research R3, data-model.md "Settings") — NO subgroup, deliberately: it seeds a document's
    * fold state (`initialFold`), governing the EDITOR as well as any preview, so it must not be
    * disabled or hidden by anything under `Editor → Previews`. It belongs beside `showGutter` above

@@ -78,6 +78,8 @@ import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
+import { PanelStateHandoff } from './panel-state-handoff.js';
+import { registerPanelStateIpc } from './panel-state-handoff-ipc.js';
 import { openInEditorOrPreview } from './open-document-check.js';
 // `isPreferencesOpen` is deliberately no longer imported here: its only two uses in this file were
 // the app-modal `setEnabled(false)` calls that 021 FR-042 superseded (#263). The LAYERING those
@@ -1437,6 +1439,9 @@ if (isPrimaryInstance)
     broadcastChanged: historyPush.broadcastChanged,
   });
   registerNavigationHistoryIpc(ipcMain, historyService);
+  // 049 R3 — a panel's state waits here between the window that sends it and the window that receives it.
+  const panelStateHandoff = new PanelStateHandoff();
+  registerPanelStateIpc(ipcMain, panelStateHandoff);
   onSettingsChanged.push((previous, next) => {
     if (previous.editor.navigation.historySize !== next.editor.navigation.historySize) {
       historyService.applyCap(next.editor.navigation.historySize);
@@ -2150,6 +2155,7 @@ if (isPrimaryInstance)
   ipcMain.on('throng:panel:destroy', (_event, payload: unknown) => {
     const p = payload as { id?: unknown } | null;
     if (!p || typeof p.id !== 'string') return;
+    panelStateHandoff.forget(p.id);
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:panel:destroyed', { id: p.id });
   });
 
