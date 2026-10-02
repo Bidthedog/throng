@@ -383,6 +383,10 @@ function MenuLevel({
             // Roving tabindex: one item is reachable, and it is the one that has focus.
             tabIndex={index === active && !item.disabled ? 0 : -1}
             onFocus={() => setActive(index)}
+            // A press must not FOCUS the item: `:focus` paints the hover highlight (FR-013a), so a press dragged
+            // onto another item left two items highlighted — the pressed one by focus, the other by hover. The
+            // click still fires (press and release on one item), and the arrow keys still move focus.
+            onMouseDown={(e) => e.preventDefault()}
             onMouseEnter={() => {
               cancelHover();
               if (hasSub && !item.disabled) {
