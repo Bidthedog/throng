@@ -33,6 +33,12 @@ the workstation was `npm run test:e2e`, which is not the gate, and is 18 minutes
 | `npm run test:e2e:raw`, `npm run test:e2e:admin` | as above |
 | Any `vitest run --project <p>` with **no path** | the same command with the file under the cursor |
 
+**Every vitest run that does reach the workstation passes `--maxWorkers=50%`.** Vitest defaults to a
+worker per core, so even a narrow run of a few component files pins the whole machine while it starts
+— the maintainer saw every core max out mid-session (049, 2026-10-02) from runs this table allows.
+Half the cores leaves the desktop and every other session usable; the gate runner is unaffected.
+This is throng's rule, not a general one — no other repo here spikes like it.
+
 **The only thing that lifts this is the user asking for it, in that turn.** Not a plan that concludes
 the run is warranted, not a green set of cheaper layers, not "I expect it to pass". Those are
 arguments for dispatching the gate, which is free and does not touch this machine.
