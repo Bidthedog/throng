@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, type Transaction, type TransactionSpec } from '@codemirror/state';
 import { EditorView, type DecorationSet } from '@codemirror/view';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createEditorSearchController,
   searchHighlightExtension,
@@ -379,5 +379,66 @@ describe('closing find clears the document of highlights', () => {
 
     expect(v.matchCount).toBe(0);
     expect(v.focused).toBe(focusedBefore);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 049 — revealing a match a fold hides (FR-005 – FR-007, US2.4)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('the current match is revealed through the fold dependency before it is scrolled to (049)', () => {
+  function openWithReveal(doc: string, readOnly = false) {
+    const v = new FakeView(doc);
+    const log: string[] = [];
+    const revealBeforeScroll = vi.fn((pos: number) => {
+      log.push(`reveal:${pos}`);
+      return true;
+    });
+    const origDispatch = v.dispatch.bind(v);
+    v.dispatch = (spec: TransactionSpec): void => {
+      if (spec.changes !== undefined) log.push('replace');
+      origDispatch(spec);
+    };
+    const c = createEditorSearchController(v.view, () => readOnly, undefined, { revealBeforeScroll });
+    return { v, c, log, revealBeforeScroll };
+  }
+
+  it('reveals for a typed query, Next and Previous — every change of the current match', () => {
+    const { v, c, revealBeforeScroll } = openWithReveal('alpha\nalpha\nalpha\n');
+    v.caret(0);
+
+    c.setQuery('alpha', NO_MODES);
+    expect(revealBeforeScroll).toHaveBeenLastCalledWith(0);
+    c.findNext();
+    expect(revealBeforeScroll).toHaveBeenLastCalledWith(6);
+    c.findPrevious();
+    expect(revealBeforeScroll).toHaveBeenLastCalledWith(0);
+    expect(revealBeforeScroll).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not reveal on the repaint a document change causes, and never for no match', () => {
+    const { v, c, revealBeforeScroll } = openWithReveal('alpha\nalpha\n');
+    v.caret(0);
+    c.setQuery('zzz', NO_MODES);
+    expect(revealBeforeScroll).not.toHaveBeenCalled();
+  });
+
+  it('Replace reveals the match BEFORE replacing it (FR-007)', () => {
+    const { v, c, log } = openWithReveal('alpha beta\nalpha gamma\n');
+    v.caret(0);
+    c.setQuery('alpha', NO_MODES);
+    log.length = 0;
+
+    c.replaceCurrent('omega');
+
+    expect(log.slice(0, 2)).toEqual(['reveal:0', 'replace']);
+    expect(v.text).toBe('omega beta\nalpha gamma\n');
+  });
+
+  it('works unchanged with no fold dependency (a plain-text editor)', () => {
+    const { v, c } = open('alpha\nalpha\n');
+    v.caret(0);
+    expect(c.setQuery('alpha', NO_MODES)).toEqual({ current: 1, total: 2 });
+    expect(c.findNext()).toEqual({ current: 2, total: 2 });
   });
 });

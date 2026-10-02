@@ -7,7 +7,7 @@
  * snapshot held across a mutation).
  */
 import { render } from '@testing-library/react';
-import { createElement, Fragment } from 'react';
+import { createElement, Fragment, type ReactElement } from 'react';
 import { vi } from 'vitest';
 import { createDefaultLayout, DEFAULT_APP_SETTINGS, type WorkspaceLayout } from '@throng/core';
 import type { ThrongBridge } from '../../../src/renderer/state/bridge.js';
@@ -38,7 +38,16 @@ export interface MountedTabGroup {
   unmount(): void;
 }
 
-export function mountTabGroup(layout?: WorkspaceLayout, opts: { projectId?: string } = {}): MountedTabGroup {
+export function mountTabGroup(
+  layout?: WorkspaceLayout,
+  /** `throng`: extra `window.throng` members (a fake `editor` or `preview` bridge), merged over the harness's own. */
+  opts: {
+    projectId?: string;
+    throng?: Record<string, unknown>;
+    /** An ancestor around the whole tree (a provider registry context, say). */
+    wrap?: (children: ReactElement) => ReactElement;
+  } = {},
+): MountedTabGroup {
   const projectId = opts.projectId ?? layout?.projectId ?? 'proj-tab-group';
   const initial = layout ?? createDefaultLayout(projectId, { tab: 't1', panel: 'p1' });
   const saves = vi.fn();
@@ -47,6 +56,7 @@ export function mountTabGroup(layout?: WorkspaceLayout, opts: { projectId?: stri
     panel: { notifyDestroyed: vi.fn(), notifyTyped: vi.fn(), publishIdentities: vi.fn() },
     config: { get: () => Promise.resolve({ settings: DEFAULT_APP_SETTINGS }), onChange: () => () => {} },
     dragGhost: ghost,
+    ...opts.throng,
   });
   const bridge: ThrongBridge = {
     invoke<T>(method: string, params?: unknown): Promise<T> {
@@ -81,8 +91,7 @@ export function mountTabGroup(layout?: WorkspaceLayout, opts: { projectId?: stri
     captured.ws = useWorkspace();
     return null;
   }
-  const view = render(
-    createElement(
+  const tree = createElement(
       ConfigProvider,
       null,
       createElement(
@@ -110,8 +119,8 @@ export function mountTabGroup(layout?: WorkspaceLayout, opts: { projectId?: stri
           ),
         ),
       ),
-    ),
-  );
+    );
+  const view = render(opts.wrap ? opts.wrap(tree) : tree);
   return {
     ws: () => captured.ws as TabGroupWs,
     saves,

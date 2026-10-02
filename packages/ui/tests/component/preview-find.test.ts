@@ -22,7 +22,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createDomFramePainter,
   createPreviewSearchController,
-  type FrameClip,
   type FramePainter,
   type HighlightPainter,
   type MatchFrame,
@@ -404,14 +403,12 @@ describe('the match-frame layer (FR-074, R16)', () => {
     vi.restoreAllMocks();
   });
 
-  function recordingFrames(): FramePainter & { paints: MatchFrame[][]; clips: (FrameClip | undefined)[]; clears: number } {
+  function recordingFrames(): FramePainter & { paints: MatchFrame[][]; clears: number } {
     const rec = {
       paints: [] as MatchFrame[][],
-      clips: [] as (FrameClip | undefined)[],
       clears: 0,
-      paint(frames: MatchFrame[], clip?: FrameClip) {
+      paint(frames: MatchFrame[]) {
         rec.paints.push(frames);
-        rec.clips.push(clip);
       },
       clear() {
         rec.clears += 1;
@@ -463,29 +460,63 @@ describe('the match-frame layer (FR-074, R16)', () => {
     ]);
   });
 
-  it('draws nothing for a rect outside the body’s viewport (only VISIBLE matches are framed)', () => {
-    const { controller, frames } = over('<p>foo foo foo foo</p>');
+  it('frames the matches in a band around the body’s viewport (three viewports each way), not the whole document', () => {
+    const { controller, frames } = over('<p>foo foo foo foo foo</p>');
     geometry.set('foo', [
       [rect(10, 20)], // inside
-      [rect(10, 400)], // below
-      [rect(10, -50)], // above (rect bottom -40 < viewport top)
-      [rect(500, 20)], // right of it
+      [rect(10, 400)], // below, within the band (viewport is 300 tall: band reaches 300 + 900)
+      [rect(10, -500)], // above, within the band
+      [rect(10, 5000)], // far below: outside the band
+      [rect(2000, 20)], // far right: outside the band
     ]);
 
     controller.setQuery('foo', NONE);
 
-    expect(frames.paints.at(-1)!.map((f) => f.top)).toEqual([20]);
+    expect(frames.paints.at(-1)!.map((f) => f.top)).toEqual([20, 400, -500]);
   });
 
-  it('hands the painter the body’s viewport, so a frame half under the panel chrome is clipped to the body', () => {
-    const { controller, frames } = over('<p>foo</p>');
-    geometry.set('foo', [[rect(10, 20)]]);
-    controller.setQuery('foo', NONE);
-    expect(frames.clips.at(-1)).toEqual({
-      left: viewport.left,
-      top: viewport.top,
-      right: viewport.right,
-      bottom: viewport.bottom,
+  describe('scrolling (049 FR-029)', () => {
+    function scroller(host: HTMLElement, state: { top: number }): void {
+      Object.defineProperty(host, 'scrollTop', { configurable: true, get: () => state.top });
+      Object.defineProperty(host, 'scrollLeft', { configurable: true, get: () => 0 });
+      Object.defineProperty(host, 'clientHeight', { configurable: true, get: () => 300 });
+      Object.defineProperty(host, 'clientWidth', { configurable: true, get: () => 400 });
+    }
+
+    it('a scroll inside the painted band measures nothing and requests no frame', () => {
+      const queued: (() => void)[] = [];
+      const { controller, host } = over('<p>foo</p>', { requestFrame: (cb) => queued.push(cb), cancelFrame: () => {} });
+      const state = { top: 0 };
+      scroller(host, state);
+      geometry.set('foo', [[rect(10, 20)]]);
+      controller.setQuery('foo', NONE);
+      const measured = counters.get('foo') ?? 0;
+
+      state.top = 600; // the band reaches 900 below the viewport's top
+      controller.scrolled();
+      state.top = 900;
+      controller.scrolled();
+
+      expect(queued).toEqual([]);
+      expect(counters.get('foo') ?? 0).toBe(measured);
+    });
+
+    it('a scroll that leaves the band repaints once, around where the viewport is now', () => {
+      const queued: (() => void)[] = [];
+      const { controller, host, frames } = over('<p>foo</p>', { requestFrame: (cb) => queued.push(cb), cancelFrame: () => {} });
+      const state = { top: 0 };
+      scroller(host, state);
+      geometry.set('foo', [[rect(10, 20)]]);
+      controller.setQuery('foo', NONE);
+      const paints = frames.paints.length;
+
+      state.top = 1500; // the viewport's bottom (1800) is beyond the band's (1200)
+      controller.scrolled();
+      controller.scrolled();
+      expect(queued).toHaveLength(1);
+
+      queued[0]!();
+      expect(frames.paints).toHaveLength(paints + 1);
     });
   });
 
@@ -601,21 +632,12 @@ describe('the match-frame layer (FR-074, R16)', () => {
       expect(layer.children).toHaveLength(0);
     });
 
-    it('clips the layer to the body’s viewport, so no frame paints over the panel’s header, bars or find bar', () => {
+    it('sets no clip-path: the layer is inside the scroller, so the scroller clips frames under the header and bars', () => {
       const layer = document.createElement('div');
       document.body.appendChild(layer);
-      vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(rect(5, 7, 400, 300)); // right 405, bottom 307
+      vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(rect(5, 7, 400, 300));
       const painter = createDomFramePainter(() => layer);
-
-      painter.paint([{ left: 15, top: 27, width: 20, height: 10, current: false }], {
-        left: 5,
-        top: 37,
-        right: 405,
-        bottom: 280,
-      });
-
-      expect(layer.style.clipPath).toBe('inset(30px 0px 27px 0px)');
-      painter.clear();
+      painter.paint([{ left: 15, top: 27, width: 20, height: 10, current: false }]);
       expect(layer.style.clipPath).toBe('');
     });
 
@@ -643,8 +665,10 @@ describe('the match-frame layer on a mounted preview panel (FR-074, R16)', () =>
       const body = screen.getByTestId(`preview-body-${mounted.id}`);
 
       expect(layer.getAttribute('aria-hidden')).toBe('true');
-      // Not inside what the sanitiser produced, copy reads, or find's text model walks.
-      expect(body.contains(layer)).toBe(false);
+      // 049 FR-029 — inside the scroller, so frames scroll with their text; not inside what the sanitiser
+      // produced, copy reads, or find's text model walks (the rendered content is its own element).
+      expect(layer.parentElement).toBe(body);
+      expect(body.querySelector('.preview-markdown')?.contains(layer)).toBe(false);
       expect(layer.children).toHaveLength(0);
 
       await press(user, 'f');
@@ -655,6 +679,22 @@ describe('the match-frame layer on a mounted preview panel (FR-074, R16)', () =>
       expect(layer.querySelectorAll('.preview-match-frame--current')).toHaveLength(1);
       // …and it never entered the body's own text, so the count is still the body's three matches.
       expect(screen.getByTestId('find-count')).toHaveTextContent('1 of 3');
+
+      // 049 FR-029 — a scroll of the body re-measures nothing and re-positions nothing.
+      const measure = rangeProto.getClientRects as () => unknown;
+      let measured = 0;
+      rangeProto.getClientRects = () => {
+        measured += 1;
+        return measure();
+      };
+      const kids = [...layer.children];
+      act(() => {
+        body.dispatchEvent(new Event('scroll'));
+      });
+      await new Promise((r) => setTimeout(r, 60)); // longer than a requestAnimationFrame
+      expect(measured).toBe(0);
+      expect([...layer.children]).toEqual(kids);
+      rangeProto.getClientRects = measure as () => unknown;
 
       act(() => closeFind(mounted.id));
       await waitFor(() => expect(layer.children).toHaveLength(0));

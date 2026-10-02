@@ -58,6 +58,7 @@
     "panel-auto-naming.e2e.ts": "FOCUS",
     "panel-failure-banner.e2e.ts": "FOCUS",
     "panel-split.e2e.ts": "FOCUS",
+    "panel-state-across-windows.e2e.ts": "FOCUS",
     "panel-sync.e2e.ts": "FOCUS",
     "panel-type-form.e2e.ts": "FOCUS",
     "panel-zoom.e2e.ts": "FOCUS",

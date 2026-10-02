@@ -467,6 +467,53 @@ describe('the text is actually folded to the document\'s state, however the edit
   });
 });
 
+/*
+ * 049 T062 / 047 FR-037a — "Collapse All on a document with one H1 therefore leaves only the H1 showing". The
+ * maintainer saw the H1's marker still reading `−` (expanded) afterwards while every other section read `+`.
+ */
+describe('Collapse All on a document with one H1 (047 FR-037a)', () => {
+  const collapseAllDeps = {
+    docKey: () => 'file:C:/proj/note.md',
+    panelId: 'p-ed',
+    seedDefault: () => initialFold('expanded'),
+  };
+
+  it('leaves the H1 showing, collapsed (`+`), with its content folded away', async () => {
+    const h = await mountMarkdown({});
+    await waitFor(() => expect(markers().map(markerSlug)).toEqual(['intro', 'a', 'b']));
+    expect(markers()[0]!.title).toBe('Collapse section');
+
+    act(() => {
+      markdownFoldCommand('collapseAll', collapseAllDeps)(h.view());
+    });
+
+    expect(documentFoldState('file:C:/proj/note.md', initialFold('expanded')).base).toBe('collapsed');
+    await waitFor(() => {
+      // Only the H1 is left showing — its H2s are folded away inside it — and it reads collapsed.
+      expect(markers().map(markerSlug)).toEqual(['intro']);
+      expect(markers()[0]!.title).toBe('Expand section');
+    });
+    h.unmount();
+  });
+
+  it('after Expand All the H1 is open again and shows its H2s collapsed', async () => {
+    const h = await mountMarkdown({});
+    await waitFor(() => expect(markers().length).toBe(3));
+    act(() => {
+      markdownFoldCommand('collapseAll', collapseAllDeps)(h.view());
+    });
+    await waitFor(() => expect(markers().map(markerSlug)).toEqual(['intro']));
+
+    // Expanding the H1 alone (its marker) shows its H2s, each still collapsed (047 FR-037a).
+    act(() => {
+      fireEvent.mouseDown(markers()[0]!);
+    });
+    await waitFor(() => expect(markers().map(markerSlug)).toEqual(['intro', 'a', 'b']));
+    expect(markers().map((m) => m.title)).toEqual(['Collapse section', 'Expand section', 'Expand section']);
+    h.unmount();
+  });
+});
+
 describe('folding never dirties the document, changes its text, or adds a history entry (FR-035)', () => {
   it('a click leaves the dispatched authority messages exactly as they were', async () => {
     const h = await mountMarkdown({});

@@ -40,8 +40,9 @@ describe('searchMatchBorder (047 FR-074)', () => {
     expect(() => assertThemeAreaGroups(THEME_METADATA)).not.toThrow();
   });
 
-  it('is shipped-defaults version 18, so an existing install receives it', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
+  it('is shipped-defaults version 18 or later, so an existing install receives it', () => {
+    // 18 introduced it; 049 bumped to 19 for its own three tokens, and a later bump still delivers this one.
+    expect(SHIPPED_DEFAULTS_VERSION).toBeGreaterThanOrEqual(18);
   });
 
   it('arrives through the additive upgrade into every theme file that lacks it', () => {

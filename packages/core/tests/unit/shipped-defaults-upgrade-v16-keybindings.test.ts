@@ -36,8 +36,8 @@ function after(doc: Doc): Doc {
 }
 
 describe('the v16 keybindings upgrade (FR-127)', () => {
-  it('is shipped-defaults version 16 or later (re-pinned: 047 bumps it to 17, then 18)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(18);
+  it('is shipped-defaults version 16 or later (re-pinned: 047 bumps it to 17, then 18, then 049 to 19, then 20)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
   });
 
   it('panel.zoomReset ships Numpad0, then the main-row 0, then the gesture — or the cases below are vacuous', () => {

@@ -157,6 +157,8 @@ function focusedSelection(selection: string): void {
   registerPanelSearch(EDITOR_ID, {
     panelKind: 'editor',
     seedFromSelection: () => selection,
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: () => ({ total: 0, current: 0 }),
     findNext: () => ({ total: 0, current: 0 }),
     findPrevious: () => ({ total: 0, current: 0 }),

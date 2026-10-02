@@ -1,4 +1,5 @@
-import { mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -8,6 +9,7 @@ import {
   cleanupTemp,
   createProject,
   firstPanelId,
+  focusEditor,
   openApp,
   panelIds,
   runApp,
@@ -227,6 +229,151 @@ test('a drop on a panel\'s own edge zone, outside the band, splits that panel as
   near(after[p5]!.x, after[p1]!.x, 2, 'p5 shares p1\'s column');
   near(after[p5]!.width, after[p1]!.width, 2, 'p5 is as wide as p1');
 });
+
+/**
+ * Press the find bar's own Next or Previous until the count reads `expected`.
+ *
+ * Retried, not slept: a click in the first moments after a drop can be lost — dnd-kit keeps a capturing click
+ * guard up for 50 ms after a drag ends, and the moved panel's find bar is rebuilt around the same time. A lost
+ * click steps nothing, so pressing again is idempotent; a delivered one reads `expected` at once.
+ */
+async function stepFind(win: Page, button: 'find-next' | 'find-previous', expected: string): Promise<void> {
+  await expect(async () => {
+    await win.getByTestId(button).click();
+    await expect(win.getByTestId('find-count')).toHaveText(expected, { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+}
+
+test('an editor with an open find, dropped on another tab, shows that tab, has focus and still reads 2 of 5 (049 FR-000, FR-000b)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
+  const win = shared.win;
+  // A real folder: a project root that does not exist raises a "could not be found" notice over the panel's controls.
+  const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-'));
+  await createProject(win, 'DropFind', root);
+  const first = await firstPanelId(win);
+  await win.getByTestId(`panel-type-select-${first}`).selectOption('editor');
+  await win.getByTestId(`panel-type-confirm-${first}`).click();
+  const editor = win.getByTestId(`editor-${first}`);
+  await expect(editor).toBeVisible();
+  await focusEditor(win, first);
+  await win.keyboard.type('foo\nfoo\nfoo\nfoo\nfoo');
+  await win.keyboard.press('Control+f');
+  await win.getByTestId('find-input').fill('foo');
+  await expect(win.getByTestId('find-count')).toHaveText('1 of 5');
+  await win.getByTestId('find-next').click();
+  await expect(win.getByTestId('find-count')).toHaveText('2 of 5');
+
+  // Keep the first tab alive after the editor leaves it, and make a second tab to drop on.
+  await splitPanelViaMenu(win, first);
+  await expect(win.locator('.panel-box')).toHaveCount(2);
+  await win.getByTestId('tab-add').click();
+  await expect(win.locator('.tab-chip')).toHaveCount(2);
+  const firstTab = win.locator('.tab-chip').first();
+  await expect(async () => {
+    await firstTab.click();
+    await expect(firstTab).toHaveAttribute('data-active', 'true');
+  }).toPass();
+  await expect(editor).toBeVisible();
+
+  await dragOnto(win, first, () => win.locator('.tab-chip').nth(1));
+  // Linger over the chip as a person does, until its dwell has switched to it mid-drag (600 ms by default).
+  await expect(win.locator('.tab-chip').nth(1)).toHaveAttribute('data-active', 'true', { timeout: 5_000 });
+  await win.mouse.up();
+
+  // The second tab is the one shown, the editor is in it, focused, and its find is exactly where it was.
+  await expect(win.locator('.tab-chip').nth(1)).toHaveAttribute('data-active', 'true');
+  await expect(editor).toBeVisible();
+  await expect(editor.locator('.cm-editor.cm-focused')).toBeVisible({ timeout: 10_000 });
+  await expect(win.getByTestId('find-count')).toHaveText('2 of 5');
+  await expect(editor.locator('.throng-search-match')).toHaveCount(5);
+
+  // …and it still steps: the find bar's own Next and Previous act on the moved editor.
+  await stepFind(win, 'find-next', '3 of 5');
+  await stepFind(win, 'find-previous', '2 of 5');
+});
+
+test('a file-backed editor with an open find, dropped on a panel edge in its own tab, still steps with Next and Previous (049 FR-000)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
+  const win = shared.win;
+  const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-same-'));
+  cpSync(join(fileURLToPath(new URL('../fixtures/preview/', import.meta.url)), 'links'), root, { recursive: true });
+  await createProject(win, 'DropFindSame', root);
+  const first = await firstPanelId(win);
+  await win.getByTestId(`panel-type-select-${first}`).selectOption('editor');
+  await win.getByTestId(`panel-type-confirm-${first}`).click();
+  const editor = win.getByTestId(`editor-${first}`);
+  await expect(editor).toBeVisible();
+  await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
+  await expect(editor.locator('.cm-content')).toContainText('Links fixture', { timeout: 8000 });
+  await focusEditor(win, first);
+  await win.keyboard.press('Control+f');
+  await win.getByTestId('find-input').fill('e');
+  await expect(win.getByTestId('find-count')).toHaveText(/^1 of \d+$/);
+  await win.getByTestId('find-input').press('Enter');
+  await expect(win.getByTestId('find-count')).toHaveText(/^2 of \d+$/);
+  const before = (await win.getByTestId('find-count').textContent()) ?? '';
+  const total = before.split(' of ')[1];
+
+  // Splitting makes the new panel the active one, so the editor's bar is hidden; the drag's own press on the
+  // editor's header makes it active again, as it does for a person.
+  const second = await splitAndFind(win, first, 'right');
+  await dragOnto(win, first, () => win.getByTestId(`edge-bottom-${second}`));
+  await win.mouse.up();
+  const moved = await boxes(win);
+  expect(moved[first]!.y, 'the editor is now below the other panel').toBeGreaterThan(moved[second]!.y);
+
+  await expect(win.getByTestId('find-count')).toHaveText(before);
+  await stepFind(win, 'find-next', `3 of ${total}`);
+  await stepFind(win, 'find-previous', `2 of ${total}`);
+});
+
+for (const target of ['a panel edge in its own tab', 'another tab'] as const) {
+  test(`a preview with an open find, dropped on ${target}, still steps with Next and Previous (049 FR-000)`, { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
+    const win = shared.win;
+    const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-pv-'));
+    cpSync(join(fileURLToPath(new URL('../fixtures/preview/', import.meta.url)), 'links'), root, { recursive: true });
+    await createProject(win, 'DropFindPreview', root);
+    const tree = win.getByTestId('file-explorer-tree');
+    await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
+    await expect(win.locator('.panel-box')).toHaveCount(1);
+    const known = await panelIds(win);
+    await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
+    await win.getByTestId('menu-item-Open In').click();
+    await win.getByTestId('menu-item-New Preview Panel').click();
+    await expect(win.locator('.panel-box')).toHaveCount(known.length + 1);
+    const preview = (await panelIds(win)).find((id) => !known.includes(id))!;
+    await expect(win.getByTestId(`preview-markdown-${preview}`)).toContainText('Links fixture');
+    await win.getByTestId(`preview-markdown-${preview}`).getByText('Links fixture').first().click();
+    await win.keyboard.press('Control+f');
+    await win.getByTestId('find-input').fill('e');
+    await expect(win.getByTestId('find-count')).toHaveText(/^1 of \d+$/);
+    await win.getByTestId('find-input').press('Enter');
+    await expect(win.getByTestId('find-count')).toHaveText(/^2 of \d+$/);
+    const before = (await win.getByTestId('find-count').textContent()) ?? '';
+    const total = before.split(' of ')[1];
+
+    const other = (await panelIds(win)).find((id) => id !== preview)!;
+    if (target === 'another tab') {
+      await win.getByTestId('tab-add').click();
+      await expect(win.locator('.tab-chip')).toHaveCount(2);
+      const firstTab = win.locator('.tab-chip').first();
+      await expect(async () => {
+        await firstTab.click();
+        await expect(firstTab).toHaveAttribute('data-active', 'true');
+      }).toPass();
+      await win.getByTestId(`panel-handle-${preview}`).click();
+      await dragOnto(win, preview, () => win.locator('.tab-chip').nth(1));
+      // Linger over the chip as a person does, until its dwell has switched to it mid-drag (600 ms by default).
+      await expect(win.locator('.tab-chip').nth(1)).toHaveAttribute('data-active', 'true', { timeout: 5_000 });
+    } else {
+      await win.getByTestId(`panel-handle-${preview}`).click();
+      await dragOnto(win, preview, () => win.getByTestId(`edge-bottom-${other}`));
+    }
+    await win.mouse.up();
+
+    await expect(win.getByTestId('find-count')).toHaveText(before);
+    await stepFind(win, 'find-next', `3 of ${total}`);
+    await stepFind(win, 'find-previous', `2 of ${total}`);
+  });
+}
 
 async function syncToNewSubWorkspace(app: ElectronApplication, win: Page, panelId: string): Promise<Page> {
   await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });

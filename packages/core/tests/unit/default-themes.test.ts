@@ -28,7 +28,10 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 // category header strip, inheriting `sidebarBg` (see TOKEN_PARENT).
 //
 // 75 since 047 FR-074 added `searchMatchBorder` — the outline every ordinary find match carries.
-const EXPECTED_COLOUR_TOKEN_COUNT = 75;
+//
+// 78 since 049 (FR-018a, FR-025) added `searchMatchOccurrence`, `searchMatchOccurrenceInactive` and
+// `editorSelectionInactive` — selection occurrences, focused and not, and a kept unfocused selection.
+const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 /**
  * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
  * `searchScope` (FR-029a/FR-029b, FR-030).
@@ -86,6 +89,9 @@ const ADDED_SINCE_FIXTURE = [
   'linkHintBorder',
   'categoryHeaderBackground',
   'searchMatchBorder',
+  'searchMatchOccurrence',
+  'searchMatchOccurrenceInactive',
+  'editorSelectionInactive',
 ];
 
 const EXPECTED = [

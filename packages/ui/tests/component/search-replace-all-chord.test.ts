@@ -77,6 +77,8 @@ function editorController(replaceAll: ReturnType<typeof vi.fn>): EditorSearchCon
   return {
     panelKind: 'editor',
     seedFromSelection: () => '',
+    restore: () => ({ current: 0, total: 0 }),
+    currentFrom: () => null,
     setQuery: () => NO_MATCHES,
     findNext: () => NO_MATCHES,
     findPrevious: () => NO_MATCHES,

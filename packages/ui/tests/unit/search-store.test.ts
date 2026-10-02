@@ -17,6 +17,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getPanelSearch,
   registerPanelSearch,
   unregisterPanelSearch,
   type EditorSearchController,
@@ -24,6 +25,9 @@ import {
 } from '../../src/renderer/search/search-controller.js';
 import {
   __resetFindState,
+  attachPanelSearch,
+  seedFindSession,
+  snapshotFindSession,
   closeFind,
   destroyPanelSearch,
   findNext,
@@ -56,6 +60,8 @@ function fakeEditor(overrides: Partial<EditorSearchController> = {}): EditorSear
     replaceCurrent: vi.fn((): SearchCount => ({ current: 1, total: total - 1 })),
     replaceAll: vi.fn((): SearchCount => ({ current: 0, total: 0 })),
     isReadOnly: vi.fn(() => false),
+    restore: vi.fn((term: string): SearchCount => (term.length > 0 ? { current: 1, total } : { current: 0, total: 0 })),
+    currentFrom: vi.fn((): number | null => null),
     close: vi.fn(),
     ...overrides,
   } as EditorSearchController;
@@ -68,6 +74,8 @@ function fakeTerminal(): TerminalSearchController {
     setQuery: vi.fn((): SearchCount => ({ current: 1, total: 2 })),
     findNext: vi.fn((): SearchCount => ({ current: 2, total: 2 })),
     findPrevious: vi.fn((): SearchCount => ({ current: 1, total: 2 })),
+    restore: vi.fn((): SearchCount => ({ current: 1, total: 2 })),
+    currentFrom: vi.fn((): number | null => null),
     close: vi.fn(),
     scrollLines: vi.fn(),
     scrollPages: vi.fn(),
@@ -290,5 +298,126 @@ describe('a session dies with its panel, and only with its panel (FR-006 / FR-02
     unregisterPanelSearch('p1');
 
     expect(getFindSession('p1')?.term).toBe('first');
+  });
+});
+
+/*
+ * 049 R1/R3 — a session records where its current match is (`currentFrom`), a rebuilt view re-attaches
+ * to it (`attachPanelSearch` → `restore`), and the session crosses windows as a snapshot.
+ */
+describe('currentFrom follows the controller (049 FR-003)', () => {
+  it('is recorded on open, on every step, and on a replace', () => {
+    let from: number | null = 4;
+    const editor = fakeEditor({ currentFrom: vi.fn(() => from) });
+    registerPanelSearch('p1', editor);
+    openFind('p1', 'editor');
+    setTerm('p1', 'needle');
+    expect(getFindSession('p1')?.currentFrom).toBe(4);
+
+    from = 9;
+    findNext('p1');
+    expect(getFindSession('p1')?.currentFrom).toBe(9);
+    from = 2;
+    findPrevious('p1');
+    expect(getFindSession('p1')?.currentFrom).toBe(2);
+    from = 7;
+    replaceCurrent('p1');
+    expect(getFindSession('p1')?.currentFrom).toBe(7);
+    from = null;
+    void replaceAll('p1');
+    expect(getFindSession('p1')?.currentFrom).toBeNull();
+  });
+});
+
+describe('attachPanelSearch (049 R1)', () => {
+  it('registers, and restores an open session with a term, writing back its count and anchor', () => {
+    registerPanelSearch('p1', fakeEditor());
+    openFind('p1', 'editor');
+    setTerm('p1', 'needle');
+    toggleMode('p1', 'wholeWord');
+    unregisterPanelSearch('p1');
+
+    const rebuilt = fakeEditor({
+      restore: vi.fn((): SearchCount => ({ current: 2, total: 5 })),
+      currentFrom: vi.fn(() => 31),
+    });
+    attachPanelSearch('p1', rebuilt);
+
+    expect(getPanelSearch('p1')).toBe(rebuilt);
+    expect(rebuilt.restore).toHaveBeenCalledWith(
+      'needle',
+      { caseSensitive: false, wholeWord: true },
+      null,
+    );
+    expect(getFindSession('p1')?.count).toEqual({ current: 2, total: 5 });
+    expect(getFindSession('p1')?.currentFrom).toBe(31);
+  });
+
+  it('passes the session’s recorded anchor to restore', () => {
+    registerPanelSearch('p1', fakeEditor({ currentFrom: vi.fn(() => 12) }));
+    openFind('p1', 'editor');
+    setTerm('p1', 'needle');
+    unregisterPanelSearch('p1');
+    const rebuilt = fakeEditor();
+    attachPanelSearch('p1', rebuilt);
+    expect(rebuilt.restore).toHaveBeenCalledWith('needle', expect.anything(), 12);
+  });
+
+  it('only registers when there is no session, or the term is empty', () => {
+    const none = fakeEditor();
+    attachPanelSearch('p1', none);
+    expect(getPanelSearch('p1')).toBe(none);
+    expect(none.restore).not.toHaveBeenCalled();
+
+    registerPanelSearch('p2', fakeEditor());
+    openFind('p2', 'editor');
+    unregisterPanelSearch('p2');
+    const empty = fakeEditor();
+    attachPanelSearch('p2', empty);
+    expect(empty.restore).not.toHaveBeenCalled();
+    expect(getFindSession('p2')?.term).toBe('');
+  });
+});
+
+describe('snapshot and seed of a session (049 R3)', () => {
+  it('snapshotFindSession omits openSeq and carries currentFrom', () => {
+    registerPanelSearch('p1', fakeEditor({ currentFrom: vi.fn(() => 6) }));
+    openFind('p1', 'editor', { replace: true });
+    setTerm('p1', 'needle');
+    setReplacement('p1', 'thread');
+
+    const snap = snapshotFindSession('p1');
+    expect(snap).toEqual({
+      panelId: 'p1',
+      panelKind: 'editor',
+      replaceShown: true,
+      term: 'needle',
+      replacement: 'thread',
+      modes: { caseSensitive: false, wholeWord: false },
+      count: { current: 1, total: 3 },
+      seeded: false,
+      currentFrom: 6,
+    });
+    expect(snap).not.toHaveProperty('openSeq');
+    expect(snapshotFindSession('nobody')).toBeUndefined();
+  });
+
+  it('seedFindSession creates a session only where none exists', () => {
+    const snap = {
+      panelId: 'p9',
+      panelKind: 'preview' as const,
+      replaceShown: false,
+      term: 'foo',
+      replacement: '',
+      modes: { caseSensitive: true, wholeWord: false },
+      count: { current: 2, total: 5 },
+      seeded: false,
+      currentFrom: 40,
+    };
+    seedFindSession(snap);
+    expect(getFindSession('p9')).toMatchObject({ ...snap, openSeq: 0 });
+
+    seedFindSession({ ...snap, term: 'other' });
+    expect(getFindSession('p9')?.term).toBe('foo');
   });
 });
