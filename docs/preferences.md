@@ -121,6 +121,7 @@ when it writes the file; a retired key it once used is dropped.
 | Warn on missing file | `editor.warnOnMissingFile` | on | on · off | Report an editor whose file is missing or deleted. |
 | Editor default word wrap | `editor.defaultWordWrap` | on | on · off | Wrap long lines by default in new editors. Each editor toggles its own from its status bar, its content menu or [`Ctrl+E,W`](key-bindings.md#editor). |
 | Show the editor gutter | `editor.showGutter` | on | on · off | The strip of line numbers down each editor's left side. Hiding it gives that width back to the document. |
+| Highlight other occurrences of the selection | `editor.highlightOccurrences` | on | on · off | Softly tints every other instance of the text selected in an editor or Markdown preview. A whole-word selection tints whole words only; matching is case-sensitive. |
 | Markdown sections open | `editor.markdownSectionsOpen` | `expanded` | `expanded` · `collapsed` | Whether a Markdown document opens with its heading sections expanded or collapsed, in the editor and its preview alike. Sections are then folded from the gutter, the right-click menu or the [Markdown bindings](key-bindings.md#markdown). |
 | Keep undo history after a crash | `editor.persistUndoHistory` | on | on · off | Restore the undo history along with unsaved changes when throng reopens after a crash. Removed text lives in the recovery file until then. |
 
@@ -298,7 +299,11 @@ plain-language label, using colour, size and icon pickers drawn from the theme i
 how you make a theme of your own. Contrast is guarded automatically. The
 link underline's colours are the **Link Underline** and **Link Hover Underline** tokens, and the
 plain-click hint's are **Link Hint Background**, **Link Hint Text** and **Link Hint Border**, all in
-the General area; unset, they follow the theme's accent colour.
+the General area; unset, they follow the theme's accent colour. The tint on other occurrences of a
+selection is **Selection Occurrence Highlight**, and its quieter form in a panel without focus is
+**Inactive Selection Occurrence Highlight** (both in the Search area, derived from the same colours as
+search matches); a selection kept in a panel without focus is **Editor Inactive Selection** (Editor
+area). See [Highlight other occurrences of the selection](#editor).
 
 **Restoring built-in themes.** An upgrade only *adds* newly shipped themes and fills in newly added
 theme tokens; it never overwrites a value you already have. Adopting new shipped values on an existing
