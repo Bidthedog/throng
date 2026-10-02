@@ -33,10 +33,15 @@ What changed in each release of throng, written for someone deciding whether to 
 - **Split a panel in any direction** ([#433](https://github.com/Bidthedog/throng/issues/433)): a panel's **+** button now opens **Split Down / Up / Right / Left**, putting a new empty panel on that side of the panel you clicked; the same four are under **Split** in every panel's right-click menus, and **Ctrl+Shift+Alt+End** then an arrow splits the active panel from the keyboard.
 - **Drop a panel along a whole edge** ([#433](https://github.com/Bidthedog/throng/issues/433)): drag a panel to the very edge of the panel area to make a full-height column or a full-width row beside everything else.
 - **Destroy a panel from the keyboard** ([#461](https://github.com/Bidthedog/throng/issues/461)): **Ctrl+Shift+Alt+F4** destroys the focused panel of any type, a terminal included, with the same confirmations as its menu's Destroy.
+- **See other instances of the selected text** ([#324](https://github.com/Bidthedog/throng/issues/324)): selecting text in an editor or a Markdown preview softly tints every other place it appears, in the same tint search matches use ([#325](https://github.com/Bidthedog/throng/issues/325)); a whole word tints whole words only. Turn it off with **Highlight other occurrences of the selection**.
+- **A selection stays visible after you click away** ([#457](https://github.com/Bidthedog/throng/issues/457)): an editor or preview keeps its selection in a quieter colour while another panel has focus; click back and it is active again, ready to copy.
+- **Replace All asks about folded sections**: when some matches are inside folded sections, choose to replace and unfold, replace and keep them folded, or cancel.
 
 ### Changed
 - **Panels are always named by what they hold** ([#453](https://github.com/Bidthedog/throng/issues/453)); a layout saved with custom panel names opens with each panel's own name. A new, empty panel is called **Blank Panel** until it holds something. Tabs, projects and sub-workspaces can still be renamed.
 - **Keyboard shortcuts in a sub-workspace window work as in the main window** ([#275](https://github.com/Bidthedog/throng/issues/275)); one that has nothing to act on there says so.
+- **The current find match stands out on every theme** ([#325](https://github.com/Bidthedog/throng/issues/325)): its outline is now 2 px, and on Snake, VI-VIM, English Garden and throng the other matches take a quieter fill so the one you are on is easy to pick out. A kept selection in an unfocused panel is easier to see on several themes. Theme colours you have changed are left as they are.
+- **A panel you drag and drop takes focus**, and the tab it lands in is shown.
 
 ### Removed
 - Renaming a panel: the Rename and Reset Name menu items, the header double-click and the F2 panel shortcut. F2 now reaches a terminal program.
@@ -44,6 +49,11 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Fixed
 - Pressing **Esc** during a panel or tab drag no longer leaves the drag image on screen ([#458](https://github.com/Bidthedog/throng/issues/458)).
 - A Markdown preview keeps its scroll position when its tab is hidden and shown again, including during a drag across other tabs ([#459](https://github.com/Bidthedog/throng/issues/459)).
+- Find keeps its highlights and count after a tab switch, in editors and previews, instead of reporting "No results" ([#456](https://github.com/Bidthedog/throng/issues/456)).
+- Find opens a collapsed section, or unfolds a folded editor range, so the current match is visible ([#455](https://github.com/Bidthedog/throng/issues/455)).
+- A panel sent to a sub-workspace window keeps its place there: an editor's caret, selection and scroll, a terminal's scroll-back position and selection, and an open find bar.
+- Collapsing or expanding a preview section while find is open no longer leaves the match outlines where the text used to be.
+- **Collapse All** in a Markdown editor shows a document's single H1 as collapsed, like every other section.
 
 ## 1.0.0-alpha8 — 2026-09-30
 
