@@ -1,6 +1,32 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.8.0 → 5.9.0
+Bump rationale: MINOR — Principle XI gains one rule, "A loaded Panel keeps its state", in the
+                maintainer's words from spec 049's clarification of 2026-10-01 (049 FR-000).
+                Additive: nothing is withdrawn or redefined. It is a new constraint that shipped
+                code fails, which is the ordinary MINOR case (v5.6.0's focus rule, v3.15.0); the
+                failures are enumerated in the rule as an end-state requirement under Incremental
+                Delivery. It does not touch "One document, one state": that rule governs content
+                state and lets view state differ per Panel; this one says view state, once a Panel
+                has it, survives the Panel being moved.
+Modified principles: XI — new bullet after "Focus follows the active Panel".
+Added sections: none. Removed sections: none.
+Audit (2026-10-01, renderer read for nine state kinds): survives remount AND window move —
+                preview scroll (main's history), Markdown folds (main's editor coordinator),
+                per-panel zoom (layout model), terminal scrollback (daemon). Survives a same-window
+                remount only — find sessions, editor caret/selection/scroll, terminal viewport and
+                selection (renderer-local module maps). Lost on a same-window remount — editor and
+                preview find engines (#456) and preview text selection. All enumerated in the rule.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+Deferred: none. Every violation is owned by spec 049 (FR-000, FR-000a); the editor-caret and
+                terminal-viewport window-move cases were rolled into 049 at the maintainer's direction
+                rather than filed separately.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.7.1 → 5.8.0
 Bump rationale: MINOR — Principle IV's exhaustive recorded-exceptions lists gain one entry,
                 `panel.destroy` `Ctrl+Shift+Alt+F4` (spec 048 FR-131, issue #461), taken by the
@@ -2751,6 +2777,28 @@ The model MUST obey these rules:
   violations at adoption: the untyped Panel and Find in Files register no focus target in
   `packages/ui/src/renderer/workspace/panel-focus.ts`; only the editor, terminal and preview
   do. 046 FR-125 fixes both.)*
+- **A loaded Panel keeps its state.** A Panel's state — its view state (caret, selection, scroll
+  position, folds, per-panel zoom, a terminal's viewport) and its transient UI state (an open find
+  bar's query, options, current match and highlights) — MUST NOT change when the Panel is hidden
+  by a tab switch, dragged, resized, split, moved to another Tab, synced into a sub-workspace or
+  moved to another window, **including where the move rebuilds the Panel's view or hands it to
+  another window's renderer**. That state survives everything while the Panel is **loaded**, and
+  is lost only when the Panel is **unloaded**: closed or destroyed, its project unloaded, or the
+  application quit. A new Panel type, or new state on an existing one, is not done until it meets
+  this. Content state is governed by *One document, one state* above, not by this rule.
+  *(v5.9.0, 049 clarification 2026-10-01 (FR-000), the maintainer's wording: "A panel's state
+  should not change as it is dragged, resized, synced to a workspace and moved to another tab. A
+  Panel's state survives everything whilst it is loaded. If unloaded, the panel's state is lost."
+  Known violations at adoption — end-state requirement under Incremental Delivery:*
+  - *Lost on a same-window remount: the editor and preview find engines' matches, current match
+    and highlights (`packages/ui/src/renderer/search/editor-search.ts`,
+    `packages/ui/src/renderer/preview/preview-search.ts` — a new controller starts with an empty
+    query; issue #456), and preview text selection (never saved). Spec 049 fixes all three.*
+  - *Lost on a move to another window (renderer-local maps with no hand-off): find sessions
+    (`packages/ui/src/renderer/search/search-store.ts`; spec 049 fixes), editor caret, selection and
+    scroll (`packages/ui/src/renderer/editor/editor-view-state.ts`), and a terminal's viewport and
+    selection (`packages/ui/src/renderer/terminal/terminal-view-state.ts`). Spec 049 fixes all
+    three (FR-000, FR-000a).)*
 - Only **Panels** MUST be reattachable to the main workspace, and only into **their
   original project's** workspace. The **main workspace MUST NOT mix Panels from
   different projects**; cross-project mixing exists only inside sub-workspaces. A
@@ -3007,7 +3055,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.8.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-01
+**Version**: 5.9.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-01
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
