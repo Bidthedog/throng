@@ -337,11 +337,12 @@ export function FileTree({
       //
       // The effect re-asserted is the one the TARGET chose (takeTreeDropEffect), not a blanket
       // 'copy' — a target that refused the drag must keep showing the "not allowed" cursor rather
-      // than promising a copy it will then decline. Nothing under the pointer → 'copy', because the
-      // panel bodies have uncovered gaps and a drag across one must not flicker.
+      // than promising a copy it will then decline. No target claimed the event → 'none' (050 FR-034):
+      // the title bar, a Projects row or a gap show the "no entry" cursor rather than a copy that
+      // would not happen (R17).
       const overTree = (e.target as HTMLElement | null)?.closest?.('[data-testid="file-explorer-tree"]');
       if (!overTree && getTreeDrag()) {
-        const chosen = takeTreeDropEffect() ?? 'copy';
+        const chosen = takeTreeDropEffect() ?? 'none';
         e.preventDefault();
         e.dataTransfer.dropEffect = chosen;
         return;

@@ -18,9 +18,10 @@ import { useChoose } from '../confirm-dialog.js';
 const leaf = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 /** One side of the comparison: a file's size and time, or a folder's item count; the newer one marked. */
-function Side({ side, testId }: { side: ClashSide; testId: string }): ReactElement {
+function Side({ side, label, testId }: { side: ClashSide; label: string; testId: string }): ReactElement {
   return (
-    <td data-testid={testId}>
+    <div className={side.newer ? 'clash-side clash-side--newer' : 'clash-side'} data-testid={testId}>
+      <div className="clash-side__label">{label}</div>
       {side.kind === 'folder' ? (
         <div>{formatGrouped(side.itemCount ?? 0)} items</div>
       ) : (
@@ -30,7 +31,7 @@ function Side({ side, testId }: { side: ClashSide; testId: string }): ReactEleme
         </>
       )}
       {side.newer ? <strong className="clash-newer">Newer</strong> : null}
-    </td>
+    </div>
   );
 }
 
@@ -44,20 +45,14 @@ function ClashDetails({
 }): ReactElement {
   return (
     <div className="clash-details" data-testid="clash-details">
-      <table className="clash-table">
-        <thead>
-          <tr>
-            <th scope="col">Existing</th>
-            <th scope="col">Incoming</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <Side side={question.existing} testId="clash-existing" />
-            <Side side={question.incoming} testId="clash-incoming" />
-          </tr>
-        </tbody>
-      </table>
+      {/* Incoming → existing: the arrow says which way the paste goes; the boxes carry the words. */}
+      <div className="clash-sides">
+        <Side side={question.incoming} label="Incoming" testId="clash-side-incoming" />
+        <span className="clash-arrow" aria-hidden="true">
+          →
+        </span>
+        <Side side={question.existing} label="Existing" testId="clash-side-existing" />
+      </div>
       <label className="clash-apply-all">
         <input
           type="checkbox"

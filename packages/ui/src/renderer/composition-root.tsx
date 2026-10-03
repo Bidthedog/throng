@@ -90,7 +90,12 @@ export function useNoDropNavigation(): void {
       // A drop target that wants the file has already called preventDefault and stopped propagation, so
       // by the time an event reaches here it landed on nothing. Refuse the navigation, silently — the
       // user aimed at nothing in particular and expects nothing in particular to happen.
+      // A `dragover` no target claimed also shows the "no entry" cursor (050 FR-034, R17) — the drop
+      // would do nothing, and the cursor should say so. A claiming target has already called
+      // preventDefault, and its own effect (an editor's `copy`) must stand untouched.
+      const unclaimed = !e.defaultPrevented;
       e.preventDefault();
+      if (e.type === 'dragover' && unclaimed && e.dataTransfer) e.dataTransfer.dropEffect = 'none';
     };
     window.addEventListener('dragover', swallow);
     window.addEventListener('drop', swallow);

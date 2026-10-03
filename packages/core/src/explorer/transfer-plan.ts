@@ -58,6 +58,50 @@ export function keepBothName(name: string, siblings: readonly string[]): string 
   return dedupeName(name, siblings, 'copy');
 }
 
+/** Where one selected item lands: the folder it goes INTO, keeping its own name. */
+export interface Landing {
+  src: string;
+  destDir: string;
+}
+
+const segmentsOf = (p: string): string[] => p.split(/[\\/]+/).filter((s) => s !== '');
+
+/**
+ * Where each item of a paste or drag lands, keeping the structure of a selection that spans folders
+ * (FR-033, research R16).
+ *
+ * An item inside another selected item travels with it and is dropped. Every remaining item lands under
+ * `targetDir` at its parent's path relative to the deepest folder holding every item's parent — so items
+ * sharing one folder land directly in `targetDir`, as they always have, and `/test/test.md` with
+ * `/test.md` keep `test/`. Parents are compared separator- and case-insensitively (NTFS's rule); the
+ * relative segments keep the source's spelling and are joined with the target's separator. Input order
+ * is kept.
+ */
+export function landingPlan(sources: readonly string[], targetDir: string): Landing[] {
+  const norm = sources.map((s) => normaliseForCompare(s));
+  const kept = sources.filter(
+    (_s, i) => !norm.some((other, j) => j !== i && norm[i].startsWith(`${other}/`)),
+  );
+  const parents = kept.map((s) => segmentsOf(s).slice(0, -1));
+  const key = (seg: string): string => normaliseForCompare(seg);
+  let common = parents[0]?.length ?? 0;
+  for (const p of parents) {
+    common = Math.min(common, p.length);
+    for (let i = 0; i < common; i++) {
+      if (key(p[i]) !== key(parents[0][i])) {
+        common = i;
+        break;
+      }
+    }
+  }
+  const sep = targetDir.includes('\\') ? '\\' : '/';
+  const base = targetDir.replace(/[\\/]+$/, '');
+  return kept.map((src, i) => {
+    const rest = parents[i].slice(common);
+    return { src, destDir: rest.length === 0 ? targetDir : [base, ...rest].join(sep) };
+  });
+}
+
 /**
  * Which side of a clash is newer, for the prompt's marker (FR-018).
  *

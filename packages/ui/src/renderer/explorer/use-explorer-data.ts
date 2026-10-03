@@ -1623,7 +1623,12 @@ export function useExplorerData(
        * the same queue and move bracket as a paste so editors follow the move. Main validates the
        * world; a refusal comes back as an error and is reported like any other (024 FR-008a).
        */
-      if (entry.kind === 'paste' || (entry.kind === 'move' && entry.projects !== undefined)) {
+      // 050 R16 — an entry that created folders (FR-033) goes to main too: the root-relative bridge
+      // cannot remove a folder, nor recreate one on redo.
+      if (
+        entry.kind === 'paste' ||
+        (entry.kind === 'move' && (entry.projects !== undefined || entry.createdDirs !== undefined))
+      ) {
         const res = await window.throng?.transfer?.applyUndo(entry, direction);
         if (res && 'error' in res) {
           fail(res.error, action, { kind: 'none' }, res.cause);
@@ -1640,6 +1645,8 @@ export function useExplorerData(
                 ]
               : [];
         const dirs = new Set<string>();
+        // A removed or recreated folder changes its PARENT's listing.
+        if (entry.kind === 'move' || entry.kind === 'paste') paths.push(...(entry.createdDirs ?? []));
         for (const abs of paths) {
           const rel = toRel(abs);
           if (rel !== null) dirs.add(parentRel(rel));

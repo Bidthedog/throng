@@ -27,7 +27,7 @@ export interface CrossProject {
  * (a cut) or nothing at all (a copy, FR-022).
  */
 export type FileOpUndoEntry =
-  | { kind: 'move'; id?: string; items: { from: string; to: string }[]; projects?: CrossProject; at: number }
+  | { kind: 'move'; id?: string; items: { from: string; to: string }[]; projects?: CrossProject; createdDirs?: string[]; at: number }
   | { kind: 'rename'; id?: string; from: string; to: string; at: number }
   | { kind: 'delete'; id?: string; items: { originalPath: string }[]; at: number }
   | {
@@ -38,6 +38,8 @@ export type FileOpUndoEntry =
       /** Recycled items only: a permanently replaced item cannot be restored, so it is left out (FR-018f). */
       replaced: { path: string; trashedAt: number }[];
       projects?: CrossProject;
+      /** Folders the paste created to keep a selection's structure, parents first (FR-033, R16). */
+      createdDirs?: string[];
       at: number;
     };
 
@@ -267,10 +269,16 @@ function isOptionalProjects(v: unknown): boolean {
   return typeof p.source === 'string' && typeof p.target === 'string';
 }
 
+function isOptionalStrings(v: unknown): boolean {
+  return v === undefined || (Array.isArray(v) && v.every((s) => typeof s === 'string'));
+}
+
 function isEntry(e: unknown): e is FileOpUndoEntry {
   if (typeof e !== 'object' || e === null) return false;
   const x = e as Record<string, unknown>;
   if (typeof x.at !== 'number') return false;
+  // 050 R16 — `createdDirs` (move and paste only) must be a string array when present.
+  if (!isOptionalStrings(x.createdDirs)) return false;
   // 050 — optional on every kind, but a present one must be well-formed.
   if (x.id !== undefined && typeof x.id !== 'string') return false;
   if (x.kind === 'rename') return typeof x.from === 'string' && typeof x.to === 'string';

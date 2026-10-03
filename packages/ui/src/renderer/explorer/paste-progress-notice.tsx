@@ -10,21 +10,18 @@
  * it is not part of any explorer — and it is persistent while the run is live (a `display` override of
  * *until dismissed*): a timed card could vanish before its Cancel was reached.
  *
- * ══ THE ONE-SECOND RULE LIVES HERE ══
+ * ══ MAIN DECIDES WHEN A CARD SHOWS (FR-031) ══
  *
- * Main pushes progress from the moment a job starts; this decides when that is worth showing. A run
- * that is already over inside a second raises nothing (a clean run) or just its failure report. A QUEUED
- * run is shown at once — it is waiting, so there is nothing quick about it, and it must be cancellable
- * before it ever starts (FR-019d).
+ * Main pushes progress from the moment a job starts and marks the event `display: true` once a card is
+ * worth showing: a QUEUED run at once (it must be cancellable before it starts — FR-019d), a large one
+ * after it has worked for a while. This raises the card on the first such event and keeps no clock of
+ * its own. A run that never gets one raises nothing (a clean run) or just its failure report.
  */
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { formatGrouped, formatSubject, type TransferProgress } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { useNotify, type NoticeInput } from '../common/notification.js';
 import { pasteFailureNotice } from './paste-failure-notice.js';
-
-/** How long a run must still be going before its progress is worth a card (FR-019). */
-export const PROGRESS_DELAY_MS = 1000;
 
 /** The card stays until the run ends: the user's notice timings must not take a live Cancel away. */
 const PERSISTENT = { mode: 'dismiss', timeoutMs: 30_000 } as const;
@@ -37,7 +34,6 @@ interface Run {
   /** The run's top-level item count, for the failure headline's `K of N`. */
   total: number;
   last: TransferProgress;
-  timer: ReturnType<typeof setTimeout> | null;
 }
 
 function earlier(n: number): string {
@@ -113,7 +109,7 @@ export function PasteProgressNotice(): ReactElement | null {
       if (p.kind !== 'paste' || p.state === 'done') return;
       let run = runs.get(p.jobId);
       if (!run) {
-        run = { noticeId: '', total: p.total, last: p, timer: null };
+        run = { noticeId: '', total: p.total, last: p };
         runs.set(p.jobId, run);
       }
       run.last = p;
@@ -127,24 +123,14 @@ export function PasteProgressNotice(): ReactElement | null {
         raise(run);
         return;
       }
-      if (p.state === 'queued') {
-        raise(run); // waiting is never quick: visible and cancellable at once (FR-019d)
-        return;
-      }
-      if (p.state === 'running' && run.timer === null) {
-        const started = run;
-        started.timer = setTimeout(() => {
-          started.timer = null;
-          // Still live, and not yet shown: it has now run long enough to deserve a card.
-          if (runs.get(p.jobId) === started && !started.noticeId) raise(started);
-        }, PROGRESS_DELAY_MS);
-      }
+      // Main decides when a card is worth showing (FR-031) — a queued run at once (FR-019d), a large
+      // one after it has worked for a while — and says so with `display: true`. No clock here.
+      if (p.display) raise(run);
     });
 
     const offDone = transfer.onDone((result) => {
       if (result.kind !== 'paste') return;
       const run = runs.get(result.jobId);
-      if (run?.timer) clearTimeout(run.timer);
       runs.delete(result.jobId);
 
       const failure = pasteFailureNotice(result, run?.total);
@@ -173,7 +159,6 @@ export function PasteProgressNotice(): ReactElement | null {
     return () => {
       offProgress();
       offDone();
-      for (const run of runs.values()) if (run.timer) clearTimeout(run.timer);
     };
   }, [notify, update, dismiss]);
 

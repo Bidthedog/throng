@@ -16,12 +16,16 @@
  * never from the request: a half-finished job reports what it DID (FR-023, 019 FR-001).
  */
 import { randomUUID } from 'node:crypto';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import {
+  PROGRESS_MIN_BYTES,
+  PROGRESS_WORK_MS,
   clashKind,
   classifyTopLevel,
   isWithinRoot,
   keepBothName,
+  landingPlan,
   newerOf,
   parseFileOpStack,
   plannedMoves,
@@ -36,6 +40,7 @@ import {
   type FileOpUndoEntry,
   type Holder,
   type IFileSystem,
+  type Landing,
   type TransferFailure,
   type TransferJobState,
   type TransferProgress,
@@ -91,7 +96,9 @@ type JournalOp =
   /** An existing item a Replace disposed of; `trashedAt` null = deleted permanently (FR-018f). */
   | { op: 'replaced'; path: string; trashedAt: number | null; kind: 'file' | 'folder' }
   /** A cut merge's source folder, removed once empty (R4). */
-  | { op: 'removedDir'; path: string };
+  | { op: 'removedDir'; path: string }
+  /** A folder this job created to keep a selection's structure (FR-033, R16). */
+  | { op: 'createdDir'; path: string };
 
 /** Cancel, from the progress control or the clash prompt: the run stops before the next change. */
 class JobCancelled extends Error {
@@ -107,6 +114,11 @@ interface Job {
   mode: TransferMode;
   sources: readonly string[];
   targetDir: string;
+  /**
+   * Where each item lands, from the core rule (FR-033, R16). Provisional until the job runs and knows
+   * which items are inside a project — see {@link TransferService.planFor}.
+   */
+  plan: readonly Landing[];
   ownerWindowId: number;
   snapshot: FileClipboard;
   state: TransferJobState;
@@ -127,6 +139,14 @@ interface Job {
   movedTop: Set<string>;
   sourceProjectId: string;
   targetProjectId: string;
+  /** Bytes the selected items hold, summed in `prepare` (R14). */
+  bytes: number;
+  /** Whether progress shows — once true for a job, it stays true (FR-031). */
+  display: boolean;
+  /** The work clock (R14): ms of the job's own work so far, and when the running stretch began. */
+  workMs: number;
+  workSince: number | null;
+  workTimer?: ReturnType<typeof setTimeout>;
   result: Promise<TransferResult>;
   resolve: (r: TransferResult) => void;
 }
@@ -147,13 +167,14 @@ export type ApplyUndoResult =
 function undoPaths(entry: FileOpUndoEntry): string[] {
   switch (entry.kind) {
     case 'move':
-      return entry.items.flatMap((i) => [i.from, i.to]);
+      return [...entry.items.flatMap((i) => [i.from, i.to]), ...(entry.createdDirs ?? [])];
     case 'rename':
       return [entry.from, entry.to];
     case 'paste':
       return [
         ...[...entry.moved, ...entry.copied].flatMap((i) => [i.from, i.to]),
         ...entry.replaced.map((r) => r.path),
+        ...(entry.createdDirs ?? []),
       ];
     case 'delete':
       return entry.items.map((i) => i.originalPath);
@@ -215,6 +236,7 @@ export class TransferService {
       mode,
       sources: [...sources],
       targetDir,
+      plan: landingPlan(sources, targetDir),
       ownerWindowId,
       snapshot,
       state: 'queued',
@@ -227,11 +249,19 @@ export class TransferService {
       movedTop: new Set(),
       sourceProjectId: '',
       targetProjectId: '',
+      bytes: 0,
+      display: false,
+      workMs: 0,
+      workSince: null,
       result,
       resolve,
     };
     this.queue.push(job);
-    if (this.queue.length > 1) this.emitProgress(job);
+    if (this.queue.length > 1) {
+      // A queued paste shows at once (FR-019d), and keeps showing once it runs (R14).
+      job.display = true;
+      this.emitProgress(job);
+    }
     void this.deps.files.exclusive(() => this.run(job)).then(
       (r) => {
         if (r) this.finish(job, r);
@@ -304,13 +334,31 @@ export class TransferService {
     const moved: MovePair[] = [];
     if (moves.length > 0) this.deps.files.beginMoveBracket(moves.map((m) => m.from));
     let current: string | undefined;
+    // The folders the paste made to keep structure (R16): redo makes them again, parents first, before
+    // anything lands in them; undo removes them last, children first, once empty.
+    const createdDirs = valid.kind === 'rename' ? [] : (valid.createdDirs ?? []);
+    const remakeDirs = async (): Promise<void> => {
+      for (const d of createdDirs) {
+        current = d;
+        if (!(await fs.exists(d))) await fs.mkdir(d);
+      }
+    };
+    const removeDirs = async (): Promise<void> => {
+      for (const d of [...createdDirs].reverse()) {
+        current = d;
+        // One the user has put something in since stays, and the undo still succeeded (R16).
+        await this.removeIfEmpty(d);
+      }
+    };
     try {
       if (valid.kind !== 'paste') {
+        if (direction === 'redo') await remakeDirs();
         for (const m of moves) {
           current = m.from;
           await this.moveBack(m.from, m.to);
           moved.push(m);
         }
+        if (direction === 'undo') await removeDirs();
         return { ok: true };
       }
       if (direction === 'undo') {
@@ -327,8 +375,10 @@ export class TransferService {
           current = r.path;
           await fs.restoreFromTrash(r.path, r.trashedAt);
         }
+        await removeDirs();
         return { ok: true };
       }
+      await remakeDirs();
       // Redo: the replaced items make way again, then everything lands as the paste first had it.
       const replaced: { path: string; trashedAt: number }[] = [];
       for (const r of valid.replaced) {
@@ -438,19 +488,22 @@ export class TransferService {
     const prepared = await this.prepare(job);
     if ('error' in prepared) return this.resultOf(job, [this.jobFailure(job, prepared.error)]);
     const ctx = prepared;
+    job.plan = await this.planFor(job, ctx);
     // Only a cut moves anything, so only a cut opens the bracket — over every source, before the first
     // change (019 FR-004); it closes in the `finally` with exactly what moved.
     const bracketOpen = job.mode === 'cut';
     if (bracketOpen) this.deps.files.beginMoveBracket(job.sources);
     let outcome: TransferResult['outcome'] = 'completed';
     let rollbackFailures: TransferFailure[] = [];
+    // The work clock starts with the first item (R14).
+    this.resumeWork(job);
     try {
-      for (const src of job.sources) {
+      for (const { src, destDir } of job.plan) {
         // SC-008 — Cancel stops before the next item begins.
         if (job.controller.signal.aborted) break;
         job.current = src;
         this.emitProgress(job);
-        await this.transferTop(job, ctx, src);
+        await this.transferTop(job, ctx, src, destDir);
         job.done++;
         job.current = null;
         this.emitProgress(job);
@@ -467,6 +520,7 @@ export class TransferService {
         }
       }
     } finally {
+      this.pauseWork(job);
       // The clipboard first, while its items still carry the paths the snapshot was taken with: the
       // bracket's close re-points pending items to where they went (FR-009), after which a clipboard
       // holding only moved items would no longer equal the snapshot, and `afterRun` would leave the
@@ -487,11 +541,14 @@ export class TransferService {
 
   /** Ask the owner window Keep finished or Roll back, and wait (FR-019a). */
   private askCancelChoice(job: Job): Promise<'keep' | 'rollback'> {
+    // Time the choice is open is not the job's work (FR-031).
+    this.pauseWork(job);
     return new Promise((resolve) => {
       job.state = 'awaiting-cancel-choice';
       job.choose = (choice) => {
         job.choose = undefined;
         job.state = 'running';
+        this.resumeWork(job);
         resolve(choice);
       };
       // Quit already chose for every job (FR-019f): asking again per job would be a second question.
@@ -526,6 +583,11 @@ export class TransferService {
             break;
           case 'removedDir':
             await fs.mkdir(op.path);
+            break;
+          case 'createdDir':
+            // Newest first, so its contents went before it; one still holding something is the
+            // user's now and stays (R16).
+            await this.removeIfEmpty(op.path);
             break;
           case 'replaced':
             if (op.trashedAt === null) throw new Error(`"${basename(op.path)}" was deleted permanently and cannot be restored.`);
@@ -606,12 +668,58 @@ export class TransferService {
     }
     if (!isWithinRoot(activeReal, targetReal)) return { error: 'Target is outside the project root.' };
     job.targetProjectId = roots.find((r) => isWithinRoot(r.real, targetReal))?.id ?? '';
+    // Only a paste reports progress (FR-019e), so only a paste needs its size (R14). The items selected,
+    // before any clash decision: a skipped item counted shows the card a little early, never hides it.
+    if (job.kind === 'paste') {
+      for (const src of job.sources) job.bytes += await this.sizeOf(src);
+    }
     return { roots, targetReal };
   }
 
-  /** One selected item: classified, confined, then placed. Its failure never stops the job (FR-013). */
-  private async transferTop(job: Job, ctx: Context, src: string): Promise<void> {
+  /** Bytes under `path`: a file's size, a folder's files summed; a link or an unreadable item, none. */
+  private async sizeOf(path: string): Promise<number> {
     const { fs } = this.deps;
+    try {
+      const { kind, isSymlink } = await fs.stat(path);
+      if (isSymlink) return 0;
+      if (kind === 'file') return (await fs.modifiedAt(path)).size;
+      let total = 0;
+      for (const child of await fs.list(path)) total += await this.sizeOf(join(path, child.name));
+      return total;
+    } catch {
+      // The item's own failure is reported when it is placed; its size simply does not count.
+      return 0;
+    }
+  }
+
+  /**
+   * Start (or restart) the work clock (R14). A paste over {@link PROGRESS_MIN_BYTES} that is not yet
+   * showing arms a timer for the rest of its {@link PROGRESS_WORK_MS}; when it fires, progress shows.
+   */
+  private resumeWork(job: Job): void {
+    if (job.workSince !== null) return;
+    job.workSince = performance.now();
+    if (job.kind !== 'paste' || job.display || job.bytes <= PROGRESS_MIN_BYTES) return;
+    job.workTimer = setTimeout(() => {
+      job.workTimer = undefined;
+      job.display = true;
+      this.emitProgress(job);
+    }, Math.max(0, PROGRESS_WORK_MS - job.workMs));
+  }
+
+  /** Stop the work clock: a question is open, or the run is over (FR-031). */
+  private pauseWork(job: Job): void {
+    if (job.workSince === null) return;
+    job.workMs += performance.now() - job.workSince;
+    job.workSince = null;
+    if (job.workTimer !== undefined) clearTimeout(job.workTimer);
+    job.workTimer = undefined;
+  }
+
+  /** One selected item: classified, confined, then placed. Its failure never stops the job (FR-013). */
+  private async transferTop(job: Job, ctx: Context, src: string, destDir: string): Promise<void> {
+    const { fs } = this.deps;
+    let created: string[] = [];
     try {
       const srcReal = await fs.realpath(src);
       const root = ctx.roots.find((r) => isWithinRoot(r.real, srcReal));
@@ -625,12 +733,13 @@ export class TransferService {
         return;
       }
       const parentReal = await fs.realpath(dirname(src));
-      switch (classifyTopLevel(parentReal, ctx.targetReal, srcReal, job.mode)) {
+      // The duplicate and no-op rules are judged at the item's OWN landing folder (R16).
+      switch (classifyTopLevel(parentReal, await this.landingReal(job, ctx, destDir), srcReal, job.mode)) {
         case 'same-folder-duplicate': {
           // A cut back into its own folder is a no-op; a copy is a duplicate, never a clash (FR-018c).
           if (job.mode === 'cut') return;
-          const siblings = (await fs.list(job.targetDir)).map((e) => e.name);
-          const dest = join(job.targetDir, keepBothName(basename(src), siblings));
+          const siblings = (await fs.list(destDir)).map((e) => e.name);
+          const dest = join(destDir, keepBothName(basename(src), siblings));
           await this.copyTree(job, src, dest, true);
           job.placedTop.push(dest);
           return;
@@ -639,16 +748,103 @@ export class TransferService {
           this.failNamed(job, src, `"${basename(src)}" cannot be pasted into itself.`);
           return;
         case 'ordinary': {
-          const { landed, moved } = await this.place(job, src, job.targetDir);
+          created = await this.ensureDir(job, src, destDir);
+          const { landed, moved } = await this.place(job, src, destDir);
           if (landed) job.placedTop.push(landed);
-          if (moved) job.movedTop.add(src);
+          else await this.dropCreated(job, created);
+          if (moved) {
+            job.movedTop.add(src);
+            // A selected item inside this one travelled with it (FR-033): it left its source too.
+            for (const s of job.sources) if (s !== src && isWithinRoot(src, s)) job.movedTop.add(s);
+          }
         }
       }
     } catch (e) {
+      // Nothing of this item stands, so neither do the folders made for it.
+      await this.dropCreated(job, created).catch(() => undefined);
       // A cancelled item is not a failed one: its partial copy is already gone (R5, R7).
       if (job.controller.signal.aborted) return;
       await this.fail(job, src, e);
     }
+  }
+
+  /**
+   * Where each item lands (R16), from the core rule over the items that can be pasted at all. One inside
+   * no project fails on its own (FR-010) and must not bend where the others land, so it is left out of
+   * the rule and kept in the plan, in its place, to be refused.
+   */
+  private async planFor(job: Job, ctx: Context): Promise<Landing[]> {
+    const confined: string[] = [];
+    for (const src of job.sources) {
+      try {
+        const real = await this.deps.fs.realpath(src);
+        if (ctx.roots.some((r) => isWithinRoot(r.real, real))) confined.push(src);
+      } catch {
+        // Gone: it fails when placed, and has no say in the structure either.
+      }
+    }
+    const planned = new Map(landingPlan(confined, job.targetDir).map((l) => [l.src, l]));
+    return job.sources.flatMap((src): Landing[] => {
+      const hit = planned.get(src);
+      if (hit) return [hit];
+      // Left out by the rule because it travels inside another selected item.
+      if (confined.includes(src)) return [];
+      return [{ src, destDir: job.targetDir }];
+    });
+  }
+
+  /** The real path an item's landing folder has, or will have once created (R16). */
+  private async landingReal(job: Job, ctx: Context, destDir: string): Promise<string> {
+    if (destDir === job.targetDir) return ctx.targetReal;
+    try {
+      return await this.deps.fs.realpath(destDir);
+    } catch {
+      return join(ctx.targetReal, relative(job.targetDir, destDir));
+    }
+  }
+
+  /**
+   * Create each folder between the target and `destDir` that is missing, journalled as `createdDir`,
+   * parents first (R16). An existing folder is merged into (FR-018c); a FILE where a folder is needed
+   * fails the item, named (FR-013). Returns the folders created for this item.
+   */
+  private async ensureDir(job: Job, src: string, destDir: string): Promise<string[]> {
+    const { fs } = this.deps;
+    const created: string[] = [];
+    let cur = job.targetDir;
+    for (const seg of relative(job.targetDir, destDir).split(/[\\/]+/).filter((s) => s !== '')) {
+      cur = join(cur, seg);
+      if (await fs.exists(cur)) {
+        if ((await fs.stat(cur)).kind === 'file') {
+          throw new Error(`"${basename(src)}" could not be placed: "${seg}" is a file, not a folder.`);
+        }
+        continue;
+      }
+      await fs.mkdir(cur);
+      job.journal.push({ op: 'createdDir', path: cur });
+      created.push(cur);
+    }
+    return created;
+  }
+
+  /** Remove folders made for an item that did not land, newest first, while they are empty. */
+  private async dropCreated(job: Job, created: readonly string[]): Promise<void> {
+    for (const dir of [...created].reverse()) {
+      if (!(await this.removeIfEmpty(dir))) return;
+      job.journal = job.journal.filter((o) => !(o.op === 'createdDir' && o.path === dir));
+    }
+  }
+
+  /**
+   * Remove `dir` if it is there and empty. True when it is gone. A folder that holds something is
+   * left, silently: what is in it now is the user's (R16).
+   */
+  private async removeIfEmpty(dir: string): Promise<boolean> {
+    const { fs } = this.deps;
+    if (!(await fs.exists(dir))) return true;
+    if ((await fs.list(dir)).length > 0) return false;
+    await fs.delete(dir);
+    return true;
   }
 
   /**
@@ -725,15 +921,22 @@ export class TransferService {
       if (signal.aborted) resolve({ choice: 'cancel' });
       signal.addEventListener('abort', () => resolve({ choice: 'cancel' }), { once: true });
     });
-    const answer = await Promise.race([cancelled, this.deps.clash.ask(job.ownerWindowId, {
-      jobId: job.id,
-      requestId: this.newId(),
-      name: basename(dest),
-      targetDir: dirname(dest),
-      existing: { ...existingSide, newer: newer === 'existing' },
-      incoming: { ...incomingSide, newer: newer === 'incoming' },
-      permanentReplace: this.replaceMode() === 'permanent',
-    })]);
+    // Time the question is open is not the job's work (FR-031).
+    this.pauseWork(job);
+    let answer: ClashAnswer;
+    try {
+      answer = await Promise.race([cancelled, this.deps.clash.ask(job.ownerWindowId, {
+        jobId: job.id,
+        requestId: this.newId(),
+        name: basename(dest),
+        targetDir: dirname(dest),
+        existing: { ...existingSide, newer: newer === 'existing' },
+        incoming: { ...incomingSide, newer: newer === 'incoming' },
+        permanentReplace: this.replaceMode() === 'permanent',
+      })]);
+    } finally {
+      this.resumeWork(job);
+    }
     if (answer.choice === 'cancel') {
       // Cancel from the prompt is Cancel (FR-019a): the run stops here, nothing about this item done.
       job.controller.abort();
@@ -886,12 +1089,15 @@ export class TransferService {
       job.sourceProjectId && job.targetProjectId && job.sourceProjectId !== job.targetProjectId
         ? { projects: { source: job.sourceProjectId, target: job.targetProjectId } }
         : {};
+    // The folders made to keep structure, parents first — the journal's order (R16).
+    const dirs = job.journal.flatMap((o) => (o.op === 'createdDir' ? [o.path] : []));
+    const createdDirs = dirs.length > 0 ? { createdDirs: dirs } : {};
     if (replaced.length > 0) {
       const copied = job.mode === 'copy' ? pairs('placed') : [];
-      return { kind: 'paste', id: this.newId(), moved, copied, replaced, ...cross, at: this.now() };
+      return { kind: 'paste', id: this.newId(), moved, copied, replaced, ...cross, ...createdDirs, at: this.now() };
     }
     if (job.mode !== 'cut' || moved.length === 0) return null;
-    return { kind: 'move', id: this.newId(), items: moved, ...cross, at: this.now() };
+    return { kind: 'move', id: this.newId(), items: moved, ...cross, ...createdDirs, at: this.now() };
   }
 
   private resultOf(job: Job, failures: TransferFailure[]): TransferResult {
@@ -951,10 +1157,11 @@ export class TransferService {
       kind: job.kind,
       state: job.state,
       done: job.done,
-      total: job.sources.length,
+      total: job.plan.length,
       current: job.current,
       queuedBehind: job.state === 'queued' ? this.queue.indexOf(job) : 0,
       targetDir: job.targetDir,
+      display: job.display,
     });
   }
 }

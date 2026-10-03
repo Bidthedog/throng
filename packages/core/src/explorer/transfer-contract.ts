@@ -55,7 +55,20 @@ export interface TransferProgress {
   queuedBehind: number;
   /** The folder being pasted into, absolute. */
   targetDir: string;
+  /**
+   * Whether the progress card should show (FR-031, research R14). Main decides: a queued paste at once,
+   * a running one only when it pastes more than {@link PROGRESS_MIN_BYTES} and has spent
+   * {@link PROGRESS_WORK_MS} working — time a clash question or the cancel choice is open not counted.
+   * Once true for a job it stays true.
+   */
+  display: boolean;
 }
+
+/** A paste this size or smaller never shows progress (FR-031): 5 MB. */
+export const PROGRESS_MIN_BYTES = 5 * 1024 * 1024;
+
+/** How long a large paste works before its progress shows (FR-019, FR-031). */
+export const PROGRESS_WORK_MS = 1000;
 
 /** One item that did not land (FR-013, FR-015). */
 export interface TransferFailure {

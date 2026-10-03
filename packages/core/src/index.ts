@@ -170,6 +170,11 @@ export {
   clashKind,
   keepBothName,
   newerOf,
+  // 050 R16 — where a multi-folder selection lands (FR-033).
+  landingPlan,
+  // 050 R14 — when a paste's progress shows (FR-031).
+  PROGRESS_MIN_BYTES,
+  PROGRESS_WORK_MS,
   // 050 R1 — the application clipboard's pure transitions.
   followMoves,
   dropDeleted,
@@ -187,7 +192,7 @@ export {
   immediateChildFolders,
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
-export type { TopLevelClass, ClashKind, ClashChoice } from './explorer/index.js';
+export type { TopLevelClass, ClashKind, ClashChoice, Landing } from './explorer/index.js';
 export type { FileClipboard, ClipboardItem } from './explorer/index.js';
 // 050 — the `throng:transfer:*` payloads, shared by main and the renderer (contracts/transfer-ipc.md §2).
 export type {
