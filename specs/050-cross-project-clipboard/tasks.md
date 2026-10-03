@@ -7,7 +7,7 @@ description: "Task list for 050 Cross-Project Clipboard"
 
 **Input**: Design documents from `specs/050-cross-project-clipboard/`
 
-**Prerequisites**: plan.md, spec.md, research.md (R1–R13), data-model.md, contracts/transfer-ipc.md,
+**Prerequisites**: plan.md, spec.md, research.md (R1–R17), data-model.md, contracts/transfer-ipc.md,
 contracts/ui-surfaces.md
 
 **Tests**: Mandatory — constitution Principle V (test-first, lowest layer). Every implementation task is preceded by
@@ -237,3 +237,54 @@ checkpoint that can be shown and hand-tested on its own.
 ## Phase 9: Convergence
 
 - [x] T071 Amend FR-025 to require Paste enabled in the context menu only — the explorer toolbar has no Paste control and 004 FR-020 never gave it one per FR-025 (contradicts)
+
+## Phase 10: Iteration 2 — after manual testing (FR-031 – FR-034)
+
+**Purpose**: Session 2026-10-03 (fifth). Progress only for a paste over 5 MB (MT-04), a clearer clash prompt
+(MT-03), structure kept across folders (MT-08), no-entry cursor (MT-09). Research R14 – R17. No defects handed over.
+
+**No new E2E** (Principle V, lowest layer that proves it): FR-031 is decided in main (integration T077) and
+raised by the renderer (component T079); FR-032 is markup and theme (component T081 + MT-03); FR-033 is a main
+engine rule (integration T083) with its routing in the renderer (component T085); FR-034 is a `dropEffect` the
+renderer sets — Playwright cannot see the OS cursor, so the component test (T087) and MT-09 own it.
+
+**Order**: T072 → T078; T073 → T074 → T084; T075 → T076 → T084, T086; T078 and T084 share
+`transfer-service.ts` and run one after the other; renderer tasks follow the core ones they import.
+
+**Foundational (core, blocks the rest)**
+
+- [x] T072 [P] Add `display: boolean` to `TransferProgress` and export `PROGRESS_MIN_BYTES = 5 * 1024 * 1024` and `PROGRESS_WORK_MS = 1000` in `core/src/explorer/transfer-contract.ts`; re-export from `core/src/explorer/index.ts` and `core/src/index.ts` (R14, FR-031)
+- [x] T073 [P] Write failing unit tests for `landingPlan(sources, targetDir)` in `core/tests/unit/transfer-plan.test.ts`: `/r/test/test.md` + `/r/test.md` → `targetDir/test/test.md` dir and `targetDir` dir; one shared parent → every item in `targetDir`; a source inside another selected source is dropped; case-insensitive parent comparison on Windows spellings (R16, FR-033, SC-010)
+- [x] T074 Implement `landingPlan` in `core/src/explorer/transfer-plan.ts` (returns `{ src, destDir }[]` in input order, nested sources removed) and export it (R16)
+- [x] T075 [P] Write failing unit tests in `core/tests/unit/fileop-undo.test.ts`: a `move` and a `paste` entry with `createdDirs` parse round-trip, a malformed `createdDirs` is dropped by `parse`, and `plannedMoves` is unchanged by it (R16, FR-033)
+- [x] T076 Add optional `createdDirs?: string[]` to the `move` and `paste` kinds in `core/src/fileop-undo/undo-stack.ts` (`isEntry` accepts a string array or absence) (R16)
+
+**FR-031 — progress only when it is worth it (MT-04)**
+
+- [x] T077 [P] [US5] Write failing integration tests in `ui/tests/integration/transfer-progress-display.integration.test.ts` on the real engine: a ≤5 MB paste with a clash question held open for 2 s never emits `display: true`; a >5 MB paste emits `display: true` only after 1 s of work, and time a clash question is open is not counted; a queued paste emits `display: true` at once; drags never emit progress (R14, FR-031, SC-009)
+- [x] T078 [US5] Implement in `ui/src/main/transfer-service.ts`: size the job in `prepare` (sum of file sizes under every source via `fs.stat`/`fs.modifiedAt`), a work clock that starts with the first item and pauses in `decide` and `askCancelChoice`, and `display` on every progress event (R14)
+- [x] T079 [P] [US5] Write failing component tests in `ui/tests/component/paste-progress-notice.test.ts`: the card is raised only when an event carries `display: true` (no renderer timer); a small paste whose clash prompt is open raises no card; a `display: true` queued event raises it at once (FR-031, SC-009)
+- [x] T080 [US5] Implement in `ui/src/renderer/explorer/paste-progress-notice.tsx`: drop `PROGRESS_DELAY_MS` and the timer; raise on first `display: true`; failure reporting unchanged (FR-031)
+
+**FR-032 — the clash prompt layout (MT-03)**
+
+- [x] T081 [P] [US5] Write failing component tests in `ui/tests/component/clash-prompt.test.ts`: two `.clash-side` boxes, incoming first then existing, an `aria-hidden` arrow between them, the newer box carries `.clash-side--newer` and still says "Newer", the boxes name their side in words (FR-032)
+- [x] T082 [US5] Implement in `ui/src/renderer/explorer/clash-prompt.tsx` and style `.clash-*` in `ui/src/renderer/theme.css` with theme tokens only (no literal colours): boxes, arrow, newer highlight, gaps between message, boxes, apply-to-all and buttons (R15, FR-032)
+
+**FR-033 — structure kept across folders (MT-08)**
+
+- [x] T083 [P] [US1] Write failing integration tests in `ui/tests/integration/transfer-structure.integration.test.ts`: `/test/test.md` + `/test.md` pasted into `/test2` (same project and another project) land at `/test2/test/test.md` and `/test2/test.md`; `/test/a.md` + `/b.md` copied onto the root lands `a copy.md` in `/test` (a cut: a no-op for `a.md`); undo leaves a created folder the user has since put a file in; an existing `/test2/test` is merged into with a clash question for an existing file; a file named `test` where a folder is needed fails that item, named; a cut leaves `/test` in place; roll back removes the created `/test2/test`; the undo entry carries `createdDirs`; `applyUndo` undo removes it once empty and redo recreates it; a drag of the same selection lands the same way (R16, FR-033, SC-010)
+- [x] T084 [US1] Implement in `ui/src/main/transfer-service.ts`: place each source via `landingPlan`, `mkdir` missing intermediate folders journalled as `createdDir`, roll back removes them newest first when empty, `buildUndo` adds `createdDirs`, `applyUndo` removes/recreates them (R16)
+- [x] T085 [P] [US1] Write failing component test in `ui/tests/component/explorer-cross-project-undo.test.ts`: a within-project `move` entry carrying `createdDirs` (no `projects`) is applied through `transfer.applyUndo`, not `files.move` (R16)
+- [x] T086 [US1] Route `createdDirs` entries to `transfer.applyUndo` in `applyEntry` in `ui/src/renderer/explorer/use-explorer-data.ts` (R16)
+
+**FR-034 — no-entry cursor (MT-09)**
+
+- [x] T087 [P] [US2] Write failing component tests in `ui/tests/component/drag-no-entry.test.ts`: a tree drag `dragover` over an element no target claimed — a Projects pane row included — ends with `dropEffect === 'none'` (`file-tree.tsx`'s window listener, registered after react-dnd's backend, so its value is the one that stands); an OS `Files` drag over nothing ends with `dropEffect === 'none'` and its `drop` is still prevented (`useNoDropNavigation`); a target that chose `copy` still gets `copy` (R17, FR-034, SC-011)
+- [x] T088 [US2] Implement in `ui/src/renderer/explorer/file-tree.tsx` (fallback `'none'` instead of `'copy'`) and `ui/src/renderer/composition-root.tsx` (`useNoDropNavigation` sets `dropEffect = 'none'` on an unclaimed `dragover`) (R17, FR-034)
+
+**Close-out**
+
+- [x] T089 Grep the E2E specs for what FR-031 and FR-034 change (a progress notice expected for a small paste, a `copy` effect over a non-target) and fix any made stale; they run in the heavy gate on CI — never as a local batch. `explorer-cross-project.e2e.ts` may run alone locally
+- [x] T090 Document FR-033 and FR-031 at tour depth in `docs/quick-start.md` (items from several folders keep their structure; progress for large pastes), rewording any text that says progress shows after 1 second; run the `throng-docs` audit
+- [x] T091 Widen MT-03, MT-04, MT-08 (add `core/src/fileop-undo/undo-stack.ts`, `core/src/explorer/transfer-plan.ts`) and MT-09 `Paths:` in the manual test plan to the files that now implement them

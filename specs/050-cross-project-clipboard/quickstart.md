@@ -24,7 +24,11 @@ Setup: two projects, **A** and **B**, on separate folders (one on another drive 
 | 4 | Ctrl+Z in A's explorer | File back in A, editor follows; B's Undo no longer offers it, Redo does | US3, FR-020 |
 | 5 | Paste a set into a folder holding some of the same names | Prompt per clash with sizes, times, newer marked; Enter = Replace; tick *Apply to all* | FR-017, FR-018 |
 | 6 | Ctrl+Z after a Replace | Replaced file back from the Recycle Bin, pasted one gone | FR-018b |
-| 7 | Paste a large folder across drives; Cancel; Roll back | Progress after ~1 s; target as before, sources intact | FR-019, FR-019a, SC-007 |
+| 7 | Paste a large folder across drives; Cancel; Roll back | Progress after ~1 s of work (the folder is over 5 MB); target as before, sources intact | FR-019, FR-019a, FR-031, SC-007 |
+| 7a | Paste a small file onto a folder holding its name; leave the prompt open a few seconds | Only the prompt; no progress notice | FR-031, SC-009 |
+| 7b | The clash prompt | A box per side, incoming → existing, newer highlighted, buttons clear of the text | FR-032 |
+| 7c | Copy `/test/test.md` + `/test.md`, paste on `/test2/` | `/test2/test/test.md` and `/test2/test.md` | FR-033, SC-010 |
+| 7d | Drag a tree file over the Projects pane | No-entry cursor; releasing does nothing | FR-034, SC-011 |
 | 8 | Start a paste, start a second | Second shows *Paste queued* and can be cancelled | FR-019d |
 | 9 | Close throng mid-paste | *A paste is still running* — Wait / Cancel pastes; Escape keeps throng open | FR-019f |
 | 10 | Click the root row, press Left arrow | Tree stays expanded | US4, FR-030 |

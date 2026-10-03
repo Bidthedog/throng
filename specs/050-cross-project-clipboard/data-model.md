@@ -97,6 +97,11 @@ type FileOpUndoEntry =
     };
 
 interface CrossProject { source: string; target: string } // project ids
+
+// Iteration 2 (R16, FR-033): `move` and `paste` gain an optional
+//   createdDirs?: string[]   // absolute folders the paste created, parents first
+// Undo removes each once empty (children first); redo recreates them. An entry carrying
+// createdDirs is applied by main (transfer.applyUndo), like a cross-project one.
 ```
 
 - A cross-project entry lives in **both** projects' stacks, matched by `id` (FR-020). It counts toward each stack's

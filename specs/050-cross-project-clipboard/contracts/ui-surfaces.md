@@ -9,13 +9,16 @@ Through `useChoose` (`confirm-dialog.tsx`) — one dialog slot, existing focus t
 | title | `Name already exists` |
 | message | `"<name>" already exists in <target folder>.` — the name emphasised |
 | details | two columns, *Existing* / *Incoming*: size and modified time for a file (sizes digit-grouped), item count for a folder; the newer side labelled **Newer** · checkbox **Apply to all remaining clashes** |
+| layout (FR-032, R15) | two boxes `.clash-side` (`clash-side-incoming`, `clash-side-existing`), incoming first, an `aria-hidden` arrow between them pointing at the existing box; the newer box carries `.clash-side--newer` (accent border and tint) and keeps its **Newer** label; spacing between message, boxes, the apply-to-all row and the buttons; theme tokens only |
 | choices (in order) | `Cancel` (`clash-cancel`) · `Skip` (`clash-skip`) · `Keep both` (`clash-keep-both`) · `Replace` (`clash-replace`, primary; label `Replace (cannot be undone)` and `danger` when `explorer.replaceMode` is `permanent`) |
 | keys | Enter → Replace (`initialFocusValue: 'replace'`); Escape → Cancel; Tab reaches the checkbox |
 | test ids | overlay `clash-overlay`, dialog `clash-dialog`, message `clash-message`, checkbox `clash-apply-all` |
 
 Cancel resolves exactly as cancelling the run (§3).
 
-## §2 Paste progress notice (FR-019, FR-019d, FR-013)
+## §2 Paste progress notice (FR-019, FR-019d, FR-013, FR-031)
+
+Raised when a progress event first carries `display: true` (R14) — never on a renderer timer.
 
 One notice per run, `testId: 'paste-progress'`, in the window that started it.
 

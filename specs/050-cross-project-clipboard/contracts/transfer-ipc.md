@@ -28,7 +28,7 @@ renderer cannot name a path outside the project it is showing. The root row (`''
 | `applyUndo(entry, direction)` | `throng:transfer:applyUndo` | invoke | cross-project or `paste` entry → `{ ok, entry? } \| { error, cause? }`; `entry` is the refreshed entry a `paste` redo returns (it re-recycles at a new time), stored in place of the old one in both stacks (same id) |
 | `exists(absPaths)` | `throng:transfer:exists` | invoke | → `boolean[]`, `false` for any path outside every project root |
 | `quitChoice(choice)` | `throng:transfer:quitChoice` | send | `'wait' \| 'keep' \| 'rollback' \| 'dismiss'` |
-| `onProgress(cb)` | `throng:transfer:progress` | push to owner window | `{ jobId, state, done, total, current, queuedBehind }` |
+| `onProgress(cb)` | `throng:transfer:progress` | push to owner window | `{ jobId, state, done, total, current, queuedBehind, display }` — `display` true once the card should show (R14, FR-031) |
 | `onClash(cb)` | `throng:transfer:clash` | push to owner window | `ClashQuestion` |
 | `onCancelChoice(cb)` | `throng:transfer:cancelChoice` | push to owner window | `{ jobId }` — ask Keep finished / Roll back |
 | `onDone(cb)` | `throng:transfer:done` | push to owner window | `TransferResult` |

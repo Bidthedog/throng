@@ -245,3 +245,62 @@ prompt (FR-019f).
 | E2E `@extended` | cross-project copy, cross-project move with an open editor following, undo from the other project; clash prompt in-app. Budget re-seeded in the same commit |
 
 #448's fix and its component test are already on the branch (`0fc44e5f`).
+
+---
+
+*Iteration 2 (Session 2026-10-03, fifth): FR-031 – FR-034.*
+
+## R14 — When progress shows (FR-031, SC-009)
+
+**Decision**: main decides, and says so on the progress event. `TransferProgress` gains `display: boolean`. In
+`prepare`, the engine sums the size of every file the job will paste (a `stat` walk of the sources; a folder counts
+its files). Over 5 MB (`5 * 1024 * 1024` bytes), it runs a **work clock** — a timer that starts with the first
+item and **pauses** while a clash question or the cancel choice is open — and when that clock reaches 1 s it emits
+progress with `display: true`, and every later event for the job carries it. A queued paste emits `display: true`
+at once (FR-019d), and the flag stays true once it runs. The size counts the items *selected*, before any
+clash decision — a skipped item still counted is a card shown a little early, never a card hidden. The `stat` walk
+is the same walk the copy makes anyway and costs nothing a paste of that size does not already spend. [derived] The renderer raises the card when `display` is first true, and never on its own timer.
+
+**Rationale**: only main knows the bytes and when a question is open. A renderer timer cannot see either, which is
+the bug the user hit. Pausing the clock keeps SC-008 for real work while a prompt costs nothing.
+
+**Alternatives**: the renderer pausing its own timer around the clash prompt (still blind to size); counting the
+bytes in the renderer (it holds no paths outside the active root).
+
+## R15 — The clash prompt layout (FR-032)
+
+**Decision**: `clash-prompt.tsx` renders two `.clash-side` boxes in a row, incoming first, an arrow (`→`, an
+`aria-hidden` glyph, the boxes carry the words) between them pointing at the existing box, the newer box with a
+`.clash-side--newer` class (accent border and tint, plus the existing "Newer" label for non-colour readers).
+Styles live in `theme.css` beside the dialog's, using theme tokens only — the dialog surface forbids literal
+colours. Spacing: a gap between message, boxes, the apply-to-all row and the button row. 
+**Alternatives**: a table (today's markup — what the user found unclear).
+
+## R16 — Keeping structure across folders (FR-033, SC-010)
+
+**Decision**: a pure core rule, `landingPlan(sources, targetDir)` in `transfer-plan.ts`: drop every source inside
+another selected source; take the deepest folder containing all remaining sources' parents (case-insensitive on
+Windows, by `path-id`); each source lands in `targetDir` joined with its parent's path relative to that folder. One
+parent → every item lands in `targetDir` (today). The engine asks the rule once per job, creates a missing
+intermediate folder with `mkdir` and journals it as `createdDir`; an existing folder is merged into (FR-018c), a
+file where a folder is needed fails that item (named, FR-013). Roll back removes `createdDir`s newest first when
+empty. The undo entry gains optional `createdDirs` on `move` and `paste`; undo removes them once empty, redo
+recreates them; an entry carrying `createdDirs` is applied by main (`transfer.applyUndo`), like a cross-project one,
+because the root-relative bridge cannot remove folders. Drag uses the same rule (FR-018e covers drag).
+Undo leaves a created folder that is no longer empty in place, silently — what is in it now is the user's, and the
+undo itself succeeded [derived]. The duplicate and no-op rules of FR-018c are judged per item at its landing
+folder: `/test/a.md` pasted with `/b.md` onto the project root lands `a.md` back in `/test` as a copy-duplicate
+(`a copy.md`) or a cut no-op, while `b.md` lands as usual [derived].
+
+**Alternatives**: structure relative to the project root (lands `/test2/test/...` only by luck of depth); a flat
+landing with renamed items (what the user rejected).
+
+## R17 — No-entry cursor (FR-034, SC-011)
+
+**Decision**: a drag's cursor comes from the last `dropEffect` set in `dragover`. Two places set a non-`none`
+effect over things that cannot take a drop: the tree's window listener falls back to `'copy'` when no target chose
+an effect (`file-tree.tsx`), and `useNoDropNavigation` calls `preventDefault` on every window `dragover`, which
+makes the whole window a copy target for an OS drag. Both now set `dropEffect = 'none'` when no target chose one;
+`useNoDropNavigation` keeps refusing the `drop` (navigation) itself. Real drop targets keep setting their own effect
+(and the tree's store) as today. The flicker across panel gaps the old fallback avoided is accepted: the user asked
+for no-entry everywhere a drop does nothing.

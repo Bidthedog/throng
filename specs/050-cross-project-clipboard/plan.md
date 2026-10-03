@@ -2,8 +2,8 @@
 
 **Branch**: `feature/S050-I448-I7-cross-project-clipboard` | **Date**: 2026-10-03 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `specs/050-cross-project-clipboard/spec.md` (5 user stories, FR-001–FR-030,
-SC-001–SC-008, four clarification sessions). Refs #7, #448.
+**Input**: Feature specification from `specs/050-cross-project-clipboard/spec.md` (5 user stories, FR-001–FR-034,
+SC-001–SC-011, five clarification sessions). Refs #7, #448.
 
 ## Summary
 
@@ -28,6 +28,16 @@ runs through one engine that can see more than one project root:
   where; the placed items are revealed and selected.
 - **#448** (FR-030) is already fixed on this branch (`0fc44e5f`, component test included).
 
+**Iteration 2** (Session 2026-10-03, fifth — after manual testing):
+
+- **Progress only when it is worth it** (R14, FR-031): main sizes the paste and runs a work clock that pauses while a
+  question is open; the progress event's new `display` flag tells the renderer when to raise the card.
+- **A clearer clash prompt** (R15, FR-032): a box per side, an arrow the way the copy goes, the newer box highlighted,
+  styled in `theme.css`.
+- **Structure kept across folders** (R16, FR-033): a core `landingPlan` rule; the engine creates and journals
+  intermediate folders, and undo entries carry `createdDirs`, applied by main.
+- **No-entry cursor** (R17, FR-034): the two window `dragover` handlers stop promising a copy over nothing.
+
 ## Technical Context
 
 **Language/Version**: TypeScript (repo toolchain, ES2022), Node 24, Electron 44
@@ -46,7 +56,7 @@ portable; Recycle-Bin restore stays behind its existing seam).
 
 **Project Type**: desktop application, npm-workspaces monorepo.
 
-**Performance Goals**: SC-008 — progress visible within 1 s of a slow paste starting; Cancel takes effect before the
+**Performance Goals**: SC-008, narrowed by SC-009 — progress visible within 1 s of work on a paste over 5 MB, never for a smaller one; Cancel takes effect before the
 next item and inside a large file's copy. Nothing new on the keystroke, scroll or render path; the progress body
 re-renders only on a progress push.
 
@@ -164,5 +174,5 @@ docs/preferences.md, docs/ (File Explorer section)
 | Deviation | Why Needed | Simpler Alternative Rejected Because |
 |---|---|---|
 | **004 FR-022 superseded for sources** (Principle I engaged) | #7 is precisely "files between projects" | Keeping single-root confinement makes the feature impossible; targets stay confined |
-| **Principle X: the 1-second progress threshold is a constant** | Fixed by FR-019 and SC-008 | A setting would contradict the clarified requirement |
+| **Principle X: the 1-second progress threshold is a constant** | Fixed by FR-019, SC-008 and FR-031 (`PROGRESS_WORK_MS`, `PROGRESS_MIN_BYTES`) | A setting would contradict the clarified requirement |
 | **A second file-operation service beside `FilesService`** | Jobs, journals, prompts and multi-root confinement outlive one IPC call | Folding them into `FilesService` would make its single-root invariant a special case on every method (R2); the two share one queue, so they cannot interleave |
