@@ -35,6 +35,7 @@
     "error-dismiss.e2e.ts": "FOCUS",
     "explorer-follow-active-editor.e2e.ts": "FOCUS",
     "explorer-live-sync.e2e.ts": "FOCUS",
+    "explorer-cross-project.e2e.ts": "FOCUS",
     "explorer-new-items.e2e.ts": "FOCUS",
     "explorer.e2e.ts": "FOCUS",
     "failure-copy.e2e.ts": "UNATTRIBUTED",

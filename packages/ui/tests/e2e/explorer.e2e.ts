@@ -281,7 +281,7 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
       await menuItem('Cut').click();
       await tree.getByText('assets', { exact: true }).click({ button: 'right' });
       await menuItem('Paste').click();
-      await toggleFolder(tree, 'assets'); // expand via the chevron (#121)
+      // The paste reveals what it placed, opening `assets` (050 FR-025b) — no chevron needed.
       // Exactly one README.md remains (under assets) — it MOVED, not copied. The
       // count retries while the watcher re-reads the root and drops the stale row.
       await expect(tree.locator('.tree-label', { hasText: 'README.md' })).toHaveCount(1);
