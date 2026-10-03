@@ -403,8 +403,8 @@ is a shipped requirement (004 FR-004) being broken.
 
 **Discoverability and keys**
 
-- **FR-025**: Paste MUST be enabled in every File Explorer's context menu and toolbar whenever the clipboard holds
-  items, whichever project they came from (004 FR-020).
+- **FR-025**: Paste MUST be enabled in every File Explorer's context menu whenever the clipboard holds items,
+  whichever project they came from (004 FR-020). The toolbar has no Paste control and none is added.
 - **FR-025a**: The Paste context-menu item's label MUST name what will land: the item's name when there is one
   (`Paste "config.json"`), otherwise the count (`Paste 3 items`), followed by `from <project name>` when the items
   came from a project other than the active one. No other indicator of a pending clipboard is added.
