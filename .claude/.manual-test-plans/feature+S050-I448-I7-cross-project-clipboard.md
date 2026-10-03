@@ -11,6 +11,8 @@ Spec: `specs/050-cross-project-clipboard/spec.md`
 | MT-05 | Undo a move between projects from either side | untested | | | |
 | MT-06 | A paste that partly fails reports once | untested | | | |
 | MT-07 | Left arrow on the root row | signed off | 34d97b21beb0 | 2026-10-03 | |
+| MT-08 | Items from different folders keep their structure | untested | | | |
+| MT-09 | No-entry cursor where a file drag cannot drop | untested | | | |
 
 ## MT-01: Copy a file from one project into another
 
@@ -48,11 +50,12 @@ Paths: `packages/ui/src/renderer/explorer/**`, `packages/ui/src/main/transfer-se
 
 ## MT-03: Name clashes ask first
 
-Covers: FR-017, FR-018, FR-018a, FR-018b, FR-018c, FR-018d, FR-018e, FR-018f, SC-006
-Paths: `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/main/transfer-service.ts`, `packages/core/src/explorer/transfer-plan.ts`, `packages/core/src/config/settings-metadata.ts`
+Covers: FR-017, FR-018, FR-018a, FR-018b, FR-018c, FR-018d, FR-018e, FR-018f, FR-032, SC-006
+Paths: `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/main/transfer-service.ts`, `packages/core/src/explorer/transfer-plan.ts`, `packages/core/src/config/settings-metadata.ts`
 
 ### Steps
 1. Put a `notes.txt` in both A and B. Copy A's, paste into B's folder holding `notes.txt`. A prompt names the file and folder, shows both sides' size and modified time, and marks the newer one.
+1a. In that prompt, the incoming file and the existing file each sit in their own box, with an arrow between them pointing from the incoming box to the existing one. The newer box is highlighted, not just labelled. There is clear space between the message, the boxes, the apply-to-all tick-box and the buttons.
 2. Press **Enter**. B's `notes.txt` now has A's content; the old one is in the Recycle Bin.
 3. Repeat and choose **Keep both**. B now has `notes copy.txt` beside `notes.txt`.
 4. Repeat and choose **Skip**. Nothing changes, and Paste is still offered.
@@ -68,7 +71,7 @@ Paths: `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/ma
 
 ## MT-04: Progress, Cancel, queued pastes and quitting mid-paste
 
-Covers: FR-019, FR-019a, FR-019b, FR-019c, FR-019d, FR-019e, FR-019f, SC-007, SC-008
+Covers: FR-019, FR-019a, FR-019b, FR-019c, FR-019d, FR-019e, FR-019f, FR-031, SC-007, SC-008, SC-009
 Paths: `packages/ui/src/renderer/explorer/paste-progress-notice.tsx`, `packages/ui/src/renderer/explorer/paste-quit-prompt.tsx`, `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/renderer/common/notification.tsx`, `packages/ui/src/main/transfer-service.ts`, `packages/ui/src/main/transfer-quit-gate.ts`, `packages/ui/src/main/main.ts`
 
 Setup: a project holding a large folder — the `node_modules` of any JavaScript project works.
@@ -82,8 +85,11 @@ Setup: a project holding a large folder — the `node_modules` of any JavaScript
 6. Start a long paste and close the main window. A prompt offers **Wait** or **Cancel pastes**. Choose Wait: throng closes once it finishes.
 7. Repeat and dismiss the prompt with Escape. The window stays open and the paste keeps running.
 
+8. Copy a single file of more than 5 MB (a video or installer works) onto a folder that already holds its name. Answer the clash prompt with Replace. If the copy is still running after a second, its progress notice appears then — not while the prompt was open.
+
 ### Negative cases
 - A small paste shows no progress notice.
+- Copy a small file (under 5 MB) onto a folder holding its name, and leave the clash prompt open for several seconds before answering. Only the prompt appears; no progress notice shows at any point.
 - Dragging the large folder shows no progress and no Cancel.
 
 ## MT-05: Undo a move between projects from either side
@@ -124,3 +130,36 @@ Paths: `packages/ui/src/renderer/explorer/file-tree.tsx`, `packages/ui/src/rende
 
 ### Negative cases
 - Left on an open sub-folder still collapses it.
+
+## MT-08: Items from different folders keep their structure
+
+Covers: FR-033, FR-018e, SC-010
+Paths: `packages/ui/src/main/transfer-service.ts`, `packages/core/src/explorer/transfer-plan.ts`, `packages/ui/src/renderer/explorer/use-explorer-data.ts`
+
+Setup: in project A, a file `test.md` at the root and a folder `test` holding another `test.md`. An empty folder `test2` in A and in B.
+
+### Steps
+1. Select `/test.md` and `/test/test.md` together and **Copy**. Paste on B's `test2`. B now has `test2/test.md` and `test2/test/test.md`.
+2. Paste the same selection on A's `test2`. A now has `test2/test.md` and `test2/test/test.md`, and the originals are untouched.
+3. Paste it on B's `test2` again. The folder `test2/test` is merged into rather than duplicated, and each file that now exists asks through the clash prompt.
+4. Select the same two files, **Cut**, and paste on B's `test2` (emptied first). Both files move with the same structure; A's `test` folder stays, now empty.
+5. Undo in either project (Ctrl+Z). Both files are back in A, and the `test2/test` folder the paste created is gone.
+6. Drag the same two-file selection onto a folder in A. They land with the same structure as a paste.
+
+### Negative cases
+- Files selected from one folder still land directly in the target folder, with no extra folder.
+- Selecting the folder `test` and the file inside it pastes the folder once; the file does not also land on its own.
+
+## MT-09: No-entry cursor where a file drag cannot drop
+
+Covers: FR-034, SC-011
+Paths: `packages/ui/src/renderer/explorer/file-tree.tsx`, `packages/ui/src/renderer/explorer/tree-drag-store.ts`, `packages/ui/src/renderer/composition-root.tsx`, `packages/ui/src/renderer/sidebar/projects-panel.tsx`
+
+### Steps
+1. Drag a file from the File Explorer over a project in the Projects pane. The pointer shows the no-entry cursor. Release: nothing happens.
+2. Drag it over the title bar, a panel header, a tab and the gaps between panels. Each shows the no-entry cursor, and releasing does nothing.
+3. Drag it over an editor, a terminal, an empty panel and a folder in the tree. Each still shows the copy or move cursor, and the drop works as before.
+4. Drag a file in from Windows Explorer over the Projects pane. The pointer shows the no-entry cursor.
+
+### Negative cases
+- No place where a release does nothing shows the copy (+) cursor.
