@@ -396,6 +396,42 @@ describe('what opens a folder (#121 / #140)', () => {
   });
 });
 
+describe('Left arrow never collapses the root (004 FR-004, #448)', () => {
+  it('leaves the root open, its children visible, when the root row has focus', async () => {
+    const { tree, user } = await mount();
+    await user.click(within(tree).getByText('demo'));
+    await waitFor(() => expect(focusedRowLabel()).toBe('demo'));
+
+    await user.keyboard('{ArrowLeft}');
+
+    expect(rowLabels(tree)).toEqual(['demo', 'Docs', 'a.txt', 'b.txt']);
+  });
+
+  it('leaves the root open on Space, react-arborist\'s other toggle key (050 FR-030)', async () => {
+    const { tree, user } = await mount();
+    await user.click(within(tree).getByText('demo'));
+    await waitFor(() => expect(focusedRowLabel()).toBe('demo'));
+
+    await user.keyboard(' ');
+
+    expect(rowLabels(tree)).toEqual(['demo', 'Docs', 'a.txt', 'b.txt']);
+  });
+
+  it('still collapses an open SUBFOLDER, so the key reaches the tree at all', async () => {
+    // Anti-vacuity control for the test above: a Left arrow that never arrived would also leave the
+    // root open.
+    const { tree, user } = await mount();
+    await user.click(twisty(tree, 'Docs'));
+    await waitFor(() => expect(rowLabels(tree)).toContain('note.txt'));
+    await user.click(within(tree).getByText('Docs'));
+    await waitFor(() => expect(focusedRowLabel()).toBe('Docs'));
+
+    await user.keyboard('{ArrowLeft}');
+
+    await waitFor(() => expect(rowLabels(tree)).not.toContain('note.txt'));
+  });
+});
+
 /* ────────────────────────────────────────────────────────────────────────── *
  * The rename itself — rename-noop.e2e.ts, explorer-tree-state.e2e.ts (3)
  * ────────────────────────────────────────────────────────────────────────── */

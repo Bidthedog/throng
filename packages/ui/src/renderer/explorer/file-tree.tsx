@@ -611,13 +611,20 @@ export function FileTree({
   );
   // Enter opens a highlighted file (never renames) and toggles a folder (FR-070).
   // Captured on the pane so it preempts react-arborist's default Enter=edit.
-  const onEnterCapture = useCallback(
+  // Left arrow and Space are react-arborist's collapse keys; on the root row they are swallowed,
+  // because the root never collapses (004 FR-004, 050 FR-030, #448).
+  const onTreeKeyCapture = useCallback(
     (e: ReactKeyboardEvent): void => {
-      if (e.key !== 'Enter') return;
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return; // rename input
       const node = treeRef.current?.focusedNode;
       if (!node) return;
+      if ((e.key === 'ArrowLeft' || e.key === ' ') && node.data.relPath === '') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key !== 'Enter') return;
       e.preventDefault();
       e.stopPropagation();
       if (node.data.kind === 'folder') {
@@ -656,7 +663,7 @@ export function FileTree({
       className="explorer"
       data-testid="file-explorer-tree"
       onKeyDown={onKeyDown}
-      onKeyDownCapture={onEnterCapture}
+      onKeyDownCapture={onTreeKeyCapture}
     >
       {/* 033 (#219, FR-018c) — this is the toolbar's PROJECT-OPEN rendering. There is a second one
           in `panes/file-explorer-pane.tsx`'s empty state, because Quick Open's control must be drawn

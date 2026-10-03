@@ -111,7 +111,7 @@ export function TreeRow({
         // real button: it carries the action (accessible label + aria-expanded),
         // stops the click from also selecting, and gets a hover affordance in CSS
         // so its purpose is discoverable. Enter still toggles at the row level
-        // (file-tree onEnterCapture); tabIndex=-1 keeps react-arborist's roving
+        // (file-tree onTreeKeyCapture); tabIndex=-1 keeps react-arborist's roving
         // row focus intact rather than adding a tab stop per folder.
         <button
           type="button"
