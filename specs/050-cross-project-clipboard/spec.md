@@ -107,6 +107,26 @@ onto a project in the project list."
   count for folders), with the newer one marked (FR-018).
 - Q: What does the File Explorer select after a paste? → A: **The pasted items**, revealed and selected (FR-025b).
 
+### Session 2026-10-03 (fifth) — after manual testing
+
+- Q: Which pastes show progress? → A: **Only a paste of more than 5 MB**, once it has spent 1 second working; time
+  a clash prompt or the cancel choice is open does not count (FR-031). Narrows the trigger of the earlier answer
+  "Progress, with a Cancel action" (FR-019); the progress itself is unchanged. *(5 MB is the user's; keeping the
+  1-second delay and not counting prompt time are derived from FR-019 and SC-008, not confirmed by the user.)*
+- Q: How does the clash prompt lay out the two items? → A: **A box for each**, incoming and existing, with an
+  arrow between them pointing the way the copy goes, the newer one highlighted, and clear space around the boxes
+  and above the buttons (FR-032). *(Incoming box first, arrow towards the existing box, derived from "pointing in
+  the direction of the copy".)*
+- Q: Where do items selected from different folders land? → A: **In the same structure they had**, relative to
+  the deepest folder holding them all: `/test/test.md` and `/test.md` pasted into `/test2/` land at
+  `/test2/test/test.md` and `/test2/test.md`, within a project and across projects (FR-033). Reverses FR-018e's
+  "each separately selected item lands directly in the target folder". *(Applying it to drag as well as paste,
+  merging into an intermediate folder that already exists, and an item inside another selected folder travelling
+  with that folder are derived from FR-018c and FR-018e, not confirmed by the user.)*
+- Q: What cursor does a file drag show over something that cannot take it? → A: **The no-entry cursor**,
+  everywhere a drop would do nothing — the Projects pane included (FR-034). *(Covering drags from outside throng and
+  the gaps between panels is derived from "everywhere that a file drag is invalid".)*
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Copy a file from one project into another (Priority: P1)
@@ -134,6 +154,9 @@ B's folder with the same bytes, and A still holds it.
    (FR-017).
 5. **Given** a copy is pending, **When** the user opens the File Explorer context menu in project B, **Then**
    Paste is enabled and reads `Paste "<file name>" from <project A's name>` (FR-025a).
+6. **Given** `/test/test.md` and `/test.md` selected together in A and copied, **When** the user pastes on
+   `/test2/` in B, **Then** they land at `/test2/test/test.md` and `/test2/test.md`; pasted on `/test2/` in A
+   instead, they land at the same two paths in A (FR-033).
 
 ---
 
@@ -164,6 +187,9 @@ shows the new path and is not dirty, and no notice appears.
    cancelled, the clipboard is empty, and A's row is no longer greyed.
 6. **Given** a cut file whose name already exists in the B target folder, **When** the user pastes, **Then**
    the clash prompt asks whether to replace, skip or keep both; the other items move as normal (FR-017).
+7. **Given** a file dragged from the File Explorer, **When** it is held over a project in the Projects pane, or
+   anywhere else that would not take it, **Then** the pointer shows the no-entry cursor, and releasing there
+   changes nothing (FR-034).
 
 ---
 
@@ -200,10 +226,18 @@ as it was and every source is intact.
 7. **Given** the same set is pasted into the same folder a second time, **Then** every item clashes and is asked
    about; nothing is renamed or refused without the user's choice.
 8. **Given** a paste that is still running after a moment, **Then** its progress is shown with a Cancel action.
+   *Narrowed by scenario 10 (Session 2026-10-03, fifth) — only a paste of more than 5 MB.*
 9. **Given** the user cancels a paste partway, **When** asked, they choose **Keep finished** → items that landed
    stay, the half-copied item is removed and its source is untouched, and items not yet started are skipped; or
    **Roll back** → every item this paste placed is removed, every moved item returns to its source, and every
    replaced item is restored.
+10. **Given** a small file (5 MB or less) pasted onto a folder that already holds its name, **When** the clash
+    prompt stays open for several seconds before the user answers, **Then** no progress notice appears at any
+    point — only the prompt. A paste of more than 5 MB still running after 1 second of work shows its progress
+    with Cancel (FR-031).
+11. **Given** the clash prompt is shown, **Then** the incoming item and the existing item each sit in their own
+    box, an arrow between them points from the incoming box to the existing one, the newer box is highlighted,
+    and the buttons stand clear of the text above them (FR-032).
 
 ---
 
@@ -345,6 +379,7 @@ is a shipped requirement (004 FR-004) being broken.
   **Cancel**. **Replace** MUST be the default choice, taken by Enter; Escape MUST be Cancel. The prompt MUST show
   the existing and the incoming item side by side — size and last-modified time for a file, item count for a
   folder — and mark which is newer.
+  *Extended by FR-032 (Session 2026-10-03, fifth) — how the two sides are laid out.*
 - **FR-018a**: **Keep both** MUST give the pasted item the existing non-clobbering name (`name copy.ext`,
   `name copy 2.ext`). **Skip** MUST leave both items untouched and the source on the clipboard.
 - **FR-018b**: **Replace** MUST dispose of the existing item by the replace setting (FR-018f) before the pasted one
@@ -362,12 +397,37 @@ is a shipped requirement (004 FR-004) being broken.
   the same path relative to the folder, at every depth, including when it merges into an existing folder (FR-018c),
   where clashes are found and asked about at whatever depth they occur. Each separately selected item lands directly
   in the target folder, as today.
+  *Last sentence superseded by FR-033 (Session 2026-10-03, fifth) — items selected from different folders keep
+  their structure.*
+- **FR-031**: A paste MUST show the FR-019 progress only when the items it pastes total **more than 5 MB** and it
+  is still running after **1 second of its own work**; time during which a clash prompt (FR-017) or the cancel
+  choice (FR-019a) is open does not count towards that second. A paste of 5 MB or less never shows progress; its
+  failures still raise the one FR-013 notice. A queued paste is still shown at once (FR-019d). *Narrows FR-019's
+  trigger; the progress itself is unchanged.*
+- **FR-032**: The clash prompt MUST show the incoming item and the existing item each in **its own box**, side by
+  side, with an **arrow** between them pointing from the incoming box to the existing box — the direction of the
+  copy. The newer side MUST be **highlighted**, not only labelled. The prompt MUST leave clear space between its
+  message, the two boxes, the "apply to all" choice and its buttons. *Extends FR-018.*
+- **FR-033**: When the items pasted or dragged together sit in **different folders**, each MUST land under the
+  target folder at its path relative to the **deepest folder that contains them all**, so their folder structure
+  is kept: `/test/test.md` and `/test.md` pasted into `/test2/` land at `/test2/test/test.md` and
+  `/test2/test.md`, within a project and across projects. A folder the structure needs is created; one that already
+  exists is merged into (FR-018c), with clashes asked about where they occur. An item inside another selected
+  folder travels with that folder, not separately. Items that share one folder land directly in the target, as
+  before. A cut moves only the selected items; the folders they leave stay. Roll back (FR-019a) and undo (FR-020,
+  FR-023) remove any folder the paste created. *Supersedes FR-018e's last sentence.*
+- **FR-034**: During a file drag — from the File Explorer or from outside throng — every place that would not take
+  the drop, including the Projects pane, MUST show the **no-entry** cursor, and releasing there MUST change nothing.
+  Only a place that takes the drop shows the copy or move cursor (006 FR-092, FR-095). *Replaces the copy cursor a
+  tree drag showed over anything that is not a drop target.*
 
 **Progress and cancel**
 
 - **FR-019**: A paste still running 1 second after it starts MUST show its progress — items done of total, and the
   item in progress — with a **Cancel** action. The progress MUST be shown in the window's notice area, inline and
   not as a toast, and MUST stay visible and cancellable whichever project is active, and it MUST be the same notice that then reports the paste's failures (FR-013), not a second one.
+  *Trigger narrowed by FR-031 (Session 2026-10-03, fifth) — only a paste of more than 5 MB, and prompt time does
+  not count.*
 - **FR-019a**: Cancelling a paste (from progress or from the clash prompt) MUST ask the user to choose:
   **Keep finished** — items that landed stay, the item in progress is removed in full and its source left intact,
   and items not yet started are skipped; or **Roll back** — every item the paste placed is removed, every moved
@@ -449,6 +509,12 @@ is a shipped requirement (004 FR-004) being broken.
   paste, for every item roll back could restore; any it could not are named.
 - **SC-008**: A paste running longer than 1 second shows progress within 1 second of starting, and Cancel stops it
   before the next item begins.
+  *Narrowed by SC-009 (Session 2026-10-03, fifth) — applies to a paste of more than 5 MB.*
+- **SC-009**: A paste of 5 MB or less raises 0 progress notices, however long its clash prompt stays open.
+- **SC-010**: Items selected from different folders land 100% at their source paths relative to the deepest folder
+  holding them all, under the paste target.
+- **SC-011**: Over every place a file drag cannot be dropped, the pointer shows the no-entry cursor, and a release
+  there changes 0 files.
 
 ## Assumptions
 
@@ -456,6 +522,8 @@ is a shipped requirement (004 FR-004) being broken.
   and costs nothing while there is one.
 - Progress (FR-019) applies to every paste, within or across projects, and to no drag (FR-019e); the 1-second threshold keeps it off small
   pastes. Cancel takes effect between items and inside a large file's copy, never leaving a half-written item.
+  *The threshold is superseded by FR-031 (Session 2026-10-03, fifth): 1 second of work AND more than 5 MB, because a
+  clash prompt held a small paste open past 1 second and raised a second notice beside it.*
 - The clash prompt reuses the application's existing confirmation dialog surface; no new modal kind is introduced.
 - FR-013's continue-past-failure rule changes today's within-project behaviour, which stops at the first failure.
   No existing requirement asks for the stop: the 006 multi-item delete already carries on past a failure and
