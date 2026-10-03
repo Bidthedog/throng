@@ -6,11 +6,11 @@ Spec: `specs/050-cross-project-clipboard/spec.md`
 |---|---|---|---|---|---|
 | MT-01 | Copy a file from one project into another | untested | | | |
 | MT-02 | Move a file between projects with its editor open | untested | | | |
-| MT-03 | Name clashes ask first | untested | | | |
-| MT-04 | Progress, Cancel, queued pastes and quitting mid-paste | untested | | | |
+| MT-03 | Name clashes ask first | needs retest | | | failed: the confirmation prompt is not styled very well; it needs more spacing, a clearer existing / incoming split, the newer side highlighted, and the buttons are too close to the text |
+| MT-04 | Progress, Cancel, queued pastes and quitting mid-paste | needs retest | | | failed: pasting a small file over an existing name shows the copy notification as well as the confirmation prompt |
 | MT-05 | Undo a move between projects from either side | untested | | | |
 | MT-06 | A paste that partly fails reports once | untested | | | |
-| MT-07 | Left arrow on the root row | untested | | | |
+| MT-07 | Left arrow on the root row | signed off | 34d97b21beb0 | 2026-10-03 | |
 
 ## MT-01: Copy a file from one project into another
 
