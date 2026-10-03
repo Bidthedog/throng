@@ -88,6 +88,15 @@ Click a file in the **File Explorer** to open it in the last active editor, or d
 Windows Explorer. The panel it opens in flashes briefly, and the keyboard stays in the tree, so you
 can keep browsing or press **F2** to rename the file.
 
+- **Move and copy files between projects** with [Cut, Copy and Paste](key-bindings.md#file-explorer)
+  in the tree: cut or copy in one project, switch, and paste in another. The Paste menu item names
+  what will land and which project it came from.
+- **A name that is already taken** asks first — **Replace**, **Skip** or **Keep both** — and a
+  replaced item goes to the Recycle Bin unless [When Paste replaces an item](preferences.md#file-explorer)
+  says otherwise.
+- **A long paste** shows its progress with a Cancel button; cancelling asks whether to keep what has
+  landed or roll the whole paste back. **Ctrl+Z** undoes a move between projects from either one.
+
 - **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
 - **31 languages** are highlighted; the language picker in the status bar corrects a wrong guess.
 - The status bar shows the caret's position, the selection and the document's size.
