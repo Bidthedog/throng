@@ -35,7 +35,7 @@ goes away.
 - **Sub-workspaces** — tear tabs or panels off into their own windows that move as one group.
 - **Terminal panels** — your real installed shells, owned by a background service so they survive a restart and reattach.
 - **Editor panels** — a fast code editor with syntax highlighting for 31 languages, crash recovery and one buffer per file across every window.
-- **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete.
+- **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete, and cut, copy and paste between projects.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
   a heading outline, section folding shared with the editor, and wikilinks.

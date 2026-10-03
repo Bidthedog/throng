@@ -19,7 +19,7 @@ import { ExplorerToolbar } from './toolbar.js';
 import { TreeRow } from './tree-node.js';
 import { useExplorerData, ROOT_ID, type TreeNodeData } from './use-explorer-data.js';
 import { ExplorerRowContext } from './explorer-context.js';
-import { buildContextMenuItems } from './context-menu-items.js';
+import { buildContextMenuItems, pasteLabel } from './context-menu-items.js';
 import { previewTargetFor, useExplorerKeybindings } from './explorer-keybindings.js';
 import { registerExplorerCommands, unregisterExplorerCommands } from './explorer-commands.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -105,11 +105,18 @@ export function FileTree({
   projectId,
   hiddenPaths,
   onHide,
+  projectNameOf,
 }: {
   rootFolder: string;
   projectId: string;
   hiddenPaths: string[];
   onHide: (relPath: string) => void;
+  /**
+   * The name of a project by id — for Paste's `from <project>` suffix (050 FR-025a). A prop rather
+   * than a read of the projects store because the tree is mounted without one in places, and an
+   * unresolvable name simply leaves the suffix off.
+   */
+  projectNameOf?: (projectId: string) => string | undefined;
 }): ReactElement {
   const treeRef = useRef<TreeApi<TreeNodeData> | null>(null);
   const name = rootName(rootFolder);
@@ -330,11 +337,12 @@ export function FileTree({
       //
       // The effect re-asserted is the one the TARGET chose (takeTreeDropEffect), not a blanket
       // 'copy' — a target that refused the drag must keep showing the "not allowed" cursor rather
-      // than promising a copy it will then decline. Nothing under the pointer → 'copy', because the
-      // panel bodies have uncovered gaps and a drag across one must not flicker.
+      // than promising a copy it will then decline. No target claimed the event → 'none' (050 FR-034):
+      // the title bar, a Projects row or a gap show the "no entry" cursor rather than a copy that
+      // would not happen (R17).
       const overTree = (e.target as HTMLElement | null)?.closest?.('[data-testid="file-explorer-tree"]');
       if (!overTree && getTreeDrag()) {
-        const chosen = takeTreeDropEffect() ?? 'copy';
+        const chosen = takeTreeDropEffect() ?? 'none';
         e.preventDefault();
         e.dataTransfer.dropEffect = chosen;
         return;
@@ -457,6 +465,12 @@ export function FileTree({
     [ws, rootFolder],
   );
 
+  /** The Paste row's label (050 FR-025a): what will land, and where from. */
+  const pasteLabelText = useMemo(
+    () => pasteLabel(clipboard, projectId, projectNameOf ?? (() => undefined)),
+    [clipboard, projectId, projectNameOf],
+  );
+
   const onContextMenu = useCallback(
     async (node: NodeApi<TreeNodeData>, event: React.MouseEvent) => {
       node.select();
@@ -556,6 +570,7 @@ export function FileTree({
         node: node.data,
         selectedRelPaths,
         clipboard,
+        pasteLabel: pasteLabelText,
         // 033 US4 (T091) — both act on the RIGHT-CLICKED node's relative path, which
         // `buildContextMenuItems` closes over from `node`, never on the selection.
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
@@ -568,7 +583,7 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, projectId, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
+    [selectedRelPaths, clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, projectId, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -582,6 +597,7 @@ export function FileTree({
         node: { relPath: '', kind: 'folder' },
         selectedRelPaths: [],
         clipboard,
+        pasteLabel: pasteLabelText,
         ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         keybindings,
@@ -590,12 +606,25 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
+    [clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
-  const cutPaths = useMemo(
-    () => new Set(clipboard?.mode === 'cut' ? clipboard.relPaths : []),
-    [clipboard],
-  );
+  /*
+   * GREYED ROWS (004 FR-017, 050 FR-004): the clipboard holds ABSOLUTE paths from any project, so the
+   * cut set is built by asking which of them lie under THIS tree's root — compared slash- and
+   * case-insensitively by `relPathUnderRoot`, since Windows calls those the same file. Items from
+   * another project fall under another root and simply match nothing here, and a project switched
+   * away from and back to reads the same clipboard from main and greys the same rows.
+   */
+  const cutPaths = useMemo(() => {
+    const rels = new Set<string>();
+    if (clipboard?.mode === 'cut') {
+      for (const item of clipboard.items) {
+        const rel = relPathUnderRoot(rootFolder, item.absPath);
+        if (rel) rels.add(rel);
+      }
+    }
+    return rels;
+  }, [clipboard, rootFolder]);
   // Open-into-editor (006, FR-009): raise an open-file intent the editor consumes,
   // honouring the editor's openOnClick trigger (single / double / none).
   const openOnClick = useAppSettings().editor.openOnClick;
@@ -611,13 +640,20 @@ export function FileTree({
   );
   // Enter opens a highlighted file (never renames) and toggles a folder (FR-070).
   // Captured on the pane so it preempts react-arborist's default Enter=edit.
-  const onEnterCapture = useCallback(
+  // Left arrow and Space are react-arborist's collapse keys; on the root row they are swallowed,
+  // because the root never collapses (004 FR-004, 050 FR-030, #448).
+  const onTreeKeyCapture = useCallback(
     (e: ReactKeyboardEvent): void => {
-      if (e.key !== 'Enter') return;
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return; // rename input
       const node = treeRef.current?.focusedNode;
       if (!node) return;
+      if ((e.key === 'ArrowLeft' || e.key === ' ') && node.data.relPath === '') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key !== 'Enter') return;
       e.preventDefault();
       e.stopPropagation();
       if (node.data.kind === 'folder') {
@@ -656,7 +692,7 @@ export function FileTree({
       className="explorer"
       data-testid="file-explorer-tree"
       onKeyDown={onKeyDown}
-      onKeyDownCapture={onEnterCapture}
+      onKeyDownCapture={onTreeKeyCapture}
     >
       {/* 033 (#219, FR-018c) — this is the toolbar's PROJECT-OPEN rendering. There is a second one
           in `panes/file-explorer-pane.tsx`'s empty state, because Quick Open's control must be drawn

@@ -477,8 +477,6 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.invoke('throng:files:rename', relPath, newName),
     move: (srcRelPaths: string[], destRelDir: string) =>
       ipcRenderer.invoke('throng:files:move', srcRelPaths, destRelDir),
-    copy: (srcRelPaths: string[], destRelDir: string) =>
-      ipcRenderer.invoke('throng:files:copy', srcRelPaths, destRelDir),
     delete: (relPaths: string[], mode: 'recycle' | 'permanent') =>
       ipcRenderer.invoke('throng:files:delete', relPaths, mode),
     newFolder: (destRelDir: string) => ipcRenderer.invoke('throng:files:newFolder', destRelDir),
@@ -529,6 +527,59 @@ contextBridge.exposeInMainWorld('throng', {
       const handler = (_event: unknown, evt: { panelId: string; history: unknown }): void => cb(evt);
       ipcRenderer.on('throng:history:changed', handler);
       return () => ipcRenderer.removeListener('throng:history:changed', handler);
+    },
+  },
+  // 050 R1 — the ONE application File Explorer clipboard, held by main (contracts/transfer-ipc.md §1).
+  fileClipboard: {
+    get: () => ipcRenderer.invoke('throng:fileClipboard:get'),
+    set: (mode: 'cut' | 'copy', relPaths: readonly string[]) =>
+      ipcRenderer.invoke('throng:fileClipboard:set', mode, relPaths),
+    clear: () => ipcRenderer.send('throng:fileClipboard:clear'),
+    onChange: (cb: (clipboard: unknown) => void) => {
+      const handler = (_event: unknown, clipboard: unknown): void => cb(clipboard);
+      ipcRenderer.on('throng:fileClipboard:changed', handler);
+      return () => ipcRenderer.removeListener('throng:fileClipboard:changed', handler);
+    },
+  },
+  // 050 R2 — every paste and drag is a job run by main's transfer engine (contracts/transfer-ipc.md §2).
+  transfer: {
+    paste: (targetRelDir: string) => ipcRenderer.invoke('throng:transfer:paste', targetRelDir),
+    drop: (srcRelPaths: readonly string[], targetRelDir: string, mode: 'cut' | 'copy') =>
+      ipcRenderer.invoke('throng:transfer:drop', srcRelPaths, targetRelDir, mode),
+    cancel: (jobId: string) => ipcRenderer.send('throng:transfer:cancel', jobId),
+    finishCancel: (jobId: string, choice: 'keep' | 'rollback') =>
+      ipcRenderer.send('throng:transfer:finishCancel', jobId, choice),
+    resolveClash: (requestId: string, answer: unknown) =>
+      ipcRenderer.send('throng:transfer:resolveClash', requestId, answer),
+    applyUndo: (entry: unknown, direction: 'undo' | 'redo') =>
+      ipcRenderer.invoke('throng:transfer:applyUndo', entry, direction),
+    exists: (absPaths: readonly string[]) => ipcRenderer.invoke('throng:transfer:exists', absPaths),
+    quitChoice: (choice: 'wait' | 'keep' | 'rollback' | 'dismiss') =>
+      ipcRenderer.send('throng:transfer:quitChoice', choice),
+    onProgress: (cb: (progress: unknown) => void) => {
+      const handler = (_event: unknown, progress: unknown): void => cb(progress);
+      ipcRenderer.on('throng:transfer:progress', handler);
+      return () => ipcRenderer.removeListener('throng:transfer:progress', handler);
+    },
+    onClash: (cb: (question: unknown) => void) => {
+      const handler = (_event: unknown, question: unknown): void => cb(question);
+      ipcRenderer.on('throng:transfer:clash', handler);
+      return () => ipcRenderer.removeListener('throng:transfer:clash', handler);
+    },
+    onCancelChoice: (cb: (evt: { jobId: string }) => void) => {
+      const handler = (_event: unknown, evt: { jobId: string }): void => cb(evt);
+      ipcRenderer.on('throng:transfer:cancelChoice', handler);
+      return () => ipcRenderer.removeListener('throng:transfer:cancelChoice', handler);
+    },
+    onDone: (cb: (result: unknown) => void) => {
+      const handler = (_event: unknown, result: unknown): void => cb(result);
+      ipcRenderer.on('throng:transfer:done', handler);
+      return () => ipcRenderer.removeListener('throng:transfer:done', handler);
+    },
+    onQuitPrompt: (cb: (evt: { running: number; queued: number }) => void) => {
+      const handler = (_event: unknown, evt: { running: number; queued: number }): void => cb(evt);
+      ipcRenderer.on('throng:transfer:quitPrompt', handler);
+      return () => ipcRenderer.removeListener('throng:transfer:quitPrompt', handler);
     },
   },
   // 049 R3 — a loaded panel's state handed to another window (contracts/panel-state-handoff.md).

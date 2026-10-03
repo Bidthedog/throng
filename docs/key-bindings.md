@@ -144,11 +144,11 @@ Live only while the File Explorer pane has focus.
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
 | Rename | `file.rename` | `F2` | File Explorer | Rename the selected file or folder. |
-| Undo file operation | `file.undo` | `Ctrl+Z` | File Explorer | Reverse the last move, rename or delete made in the file tree. |
+| Undo file operation | `file.undo` | `Ctrl+Z` | File Explorer | Reverse the last move, rename, delete or replacing paste made in the file tree; a move between projects undoes from either project. |
 | Redo file operation | `file.redo` | `Ctrl+Y` | File Explorer | Re-apply the last file operation that was undone. |
 | Cut | `file.cut` | `Ctrl+X` | File Explorer | Cut the selected file or folder. |
 | Copy | `file.copy` | `Ctrl+C` | File Explorer | Copy the selected file or folder. |
-| Paste | `file.paste` | `Ctrl+V` | File Explorer | Paste into the selected folder. |
+| Paste | `file.paste` | `Ctrl+V` | File Explorer | Paste into the selected folder, from this project or another. |
 | Delete | `file.delete` | `Delete` | File Explorer | Delete the selected file or folder — to the Recycle Bin or permanently, per [Delete files to](preferences.md#file-explorer). |
 
 ## Editor

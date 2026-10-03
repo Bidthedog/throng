@@ -7,7 +7,7 @@
  * both from the keyboard alone and proves the file that actually moved is the one that was cut, into
  * the folder the cursor had reached.
  */
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -47,11 +47,13 @@ test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { ta
       await win.keyboard.press('ArrowUp');
       await win.keyboard.press('Control+v');
 
-      // a.txt moved into the (collapsed) folder: gone from the root listing, present inside it.
-      await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0, { timeout: 8000 });
+      // a.txt moved into the folder, which the paste opened to reveal it (050 FR-025b): present
+      // once, a level down, and selected.
+      const moved = tree.getByRole('treeitem', { name: 'a.txt', exact: true });
+      await expect(moved).toHaveAttribute('aria-level', '3', { timeout: 8000 });
+      await expect(moved).toHaveAttribute('aria-selected', 'true');
       await expect(tree.getByText('b.txt', { exact: true })).toBeVisible(); // untouched
-      await tree.getByText('sub', { exact: true }).dblclick();
-      await expect(tree.getByText('a.txt', { exact: true })).toBeVisible({ timeout: 8000 });
+      await expect.poll(() => existsSync(join(root, 'sub', 'a.txt'))).toBe(true);
     });
   } finally {
     cleanupTemp(root);

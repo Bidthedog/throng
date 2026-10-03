@@ -101,6 +101,7 @@ when it writes the file; a retired key it once used is dropped.
 | Open files with | `editor.openOnClick` | `single` | `single` · `double` · `none` | Which file-tree click opens a file into the last active editor. |
 | Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. |
 | Delete files to | `explorer.deleteMode` | `recycle` | `recycle` · `permanent` | Send deleted files to the Recycle Bin, or delete them permanently. |
+| When Paste replaces an item | `explorer.replaceMode` | `recycle` | `recycle` · `permanent` | What happens to an item a paste or drag replaces after you choose **Replace**: the Recycle Bin, so undo can bring it back, or deleted for good. Independent of the delete setting. |
 | Excluded globs | `explorer.excludeGlobs` | `**/.git`, `**/.svn`, `**/.hg`, `**/CVS`, `**/.DS_Store`, `**/Thumbs.db`, `**/node_modules` | A list of root-relative glob patterns; may be empty | Entries hidden from the file tree (and, by default, from Quick Open). An empty list hides nothing. |
 | Follow the active editor | `explorer.autoRevealActiveFile` | on | on · off | Select the active editor's file in File Explorer, expanding its folders. |
 | Copy-drag modifier | `explorer.dragCopyModifier` | `ctrl` | `ctrl` · `shift` · `alt` | The key that makes a file-tree drag copy instead of move. |

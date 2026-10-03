@@ -269,7 +269,6 @@ declare global {
         ) => Promise<{ entries: FileTreeEntry[] } | FilesFailure>;
         rename: (relPath: string, newName: string) => Promise<FilesOkOrError>;
         move: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
-        copy: (srcRelPaths: string[], destRelDir: string) => Promise<FilesOkOrError>;
         delete: (relPaths: string[], mode: 'recycle' | 'permanent') => Promise<FilesOkOrError>;
         newFolder: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
         newFile: (destRelDir: string) => Promise<{ relPath: string } | FilesFailure>;
@@ -322,6 +321,49 @@ declare global {
         onChanged: (
           cb: (evt: { panelId: string; history: import('@throng/core').NavigationHistory | null }) => void,
         ) => () => void;
+      };
+      /**
+       * 050 R1 — the ONE application File Explorer clipboard, held by main (contracts/transfer-ipc.md §1).
+       * `set` takes ROOT-RELATIVE paths of the active project; main resolves them against the active root
+       * and project, so a window cannot put a path outside the project it shows on the clipboard. The
+       * root (`''`) is refused. `onChange` reaches EVERY window (FR-002).
+       */
+      fileClipboard?: {
+        get: () => Promise<import('@throng/core').FileClipboard>;
+        set: (mode: 'cut' | 'copy', relPaths: readonly string[]) => Promise<FilesOkOrError>;
+        clear: () => void;
+        onChange: (cb: (clipboard: import('@throng/core').FileClipboard) => void) => () => void;
+      };
+      /**
+       * 050 R2 — every paste and drag is a job run by main's transfer engine (contracts/transfer-ipc.md
+       * §2). Pushes (`onProgress`, `onClash`, `onCancelChoice`, `onDone`) reach only the window that
+       * started the job; `onQuitPrompt` reaches the main window.
+       */
+      transfer?: {
+        /** Snapshot the clipboard and queue a paste into `targetRelDir` of the active project (FR-019d). */
+        paste: (targetRelDir: string) => Promise<{ jobId: string } | FilesFailure>;
+        /** A drag: no progress, no cancel, still asks about clashes; resolves when the job ends (FR-019e). */
+        drop: (
+          srcRelPaths: readonly string[],
+          targetRelDir: string,
+          mode: 'cut' | 'copy',
+        ) => Promise<import('@throng/core').TransferResult | FilesFailure>;
+        cancel: (jobId: string) => void;
+        finishCancel: (jobId: string, choice: 'keep' | 'rollback') => void;
+        resolveClash: (requestId: string, answer: import('@throng/core').ClashAnswer) => void;
+        /** Apply a cross-project or `paste` undo entry over absolute paths, confined in main (R10). */
+        applyUndo: (
+          entry: import('@throng/core').FileOpUndoEntry,
+          direction: 'undo' | 'redo',
+        ) => Promise<{ ok: true; entry?: import('@throng/core').FileOpUndoEntry } | FilesFailure>;
+        /** Existence of absolute paths; `false` for any path outside every project root. */
+        exists: (absPaths: readonly string[]) => Promise<boolean[]>;
+        quitChoice: (choice: import('@throng/core').TransferQuitChoice) => void;
+        onProgress: (cb: (progress: import('@throng/core').TransferProgress) => void) => () => void;
+        onClash: (cb: (question: import('@throng/core').ClashQuestion) => void) => () => void;
+        onCancelChoice: (cb: (evt: { jobId: string }) => void) => () => void;
+        onDone: (cb: (result: import('@throng/core').TransferResult) => void) => () => void;
+        onQuitPrompt: (cb: (evt: { running: number; queued: number }) => void) => () => void;
       };
       /**
        * 049 R3 — a loaded panel's state handed to another window (contracts/panel-state-handoff.md). The

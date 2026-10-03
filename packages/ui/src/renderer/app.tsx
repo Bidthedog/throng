@@ -25,6 +25,10 @@ import { useErrorNotice } from './common/notification.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
+import { TransferCompletionHost } from './explorer/transfer-completion.js';
+import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
+import { ClashPrompt } from './explorer/clash-prompt.js';
+import { PasteQuitPrompt } from './explorer/paste-quit-prompt.js';
 import { useResize } from './util/use-resize.js';
 import { ThemeProvider } from './theme/theme-provider.js';
 import {
@@ -568,6 +572,12 @@ export function App(): ReactElement {
           </div>
           <StatusBar />
           <AppClosePrompt />
+          {/* 050 — the window-level halves of a paste: they must outlive any one project's tree, so
+              they are mounted here and not in the explorer. */}
+          <TransferCompletionHost />
+          <PasteProgressNotice />
+          <ClashPrompt />
+          <PasteQuitPrompt />
         </div>
         </DetachProvider>
       </WorkspaceProvider>
