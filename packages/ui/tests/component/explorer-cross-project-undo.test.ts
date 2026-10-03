@@ -344,3 +344,27 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
     expect(m.transfer.api.applyUndo).not.toHaveBeenCalled();
   });
 });
+
+describe('an entry that created folders (050 T085, R16, FR-033)', () => {
+  it('applies a within-project `move` carrying createdDirs through main, not the root-relative bridge', async () => {
+    const seed = await mountExplorer(standardHost, A);
+    const move: FileOpUndoEntry = {
+      kind: 'move',
+      id: 'm-2',
+      items: [{ from: 'C:/projects/demo/test/test.md', to: 'C:/projects/demo/test2/test/test.md' }],
+      createdDirs: ['C:/projects/demo/test2/test'],
+      at: 1,
+    };
+    seed.daemon.seedStack('project-a', { undo: [move], redo: [] });
+    seed.unmount();
+    const m = await mountExplorer(standardHost, { ...A, reuse: seed });
+
+    await stacksLoaded(m);
+    pressUndo();
+
+    // The bridge cannot remove a folder, so main applies it (it also recreates them on redo).
+    await waitFor(() => expect(m.transfer.api.applyUndo).toHaveBeenCalledWith(move, 'undo'));
+    expect(m.files.files.move).not.toHaveBeenCalled();
+    await waitFor(() => expect(ids(m.daemon.stack('project-a').redo)).toEqual(['m-2']));
+  });
+});

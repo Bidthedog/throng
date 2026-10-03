@@ -160,6 +160,8 @@ export function fakeTransfer() {
         current: null,
         queuedBehind: 0,
         targetDir: 'C:/projects/demo',
+        // Main decides when a card is worth showing (FR-031); a test opts in with `display: true`.
+        display: false,
         ...p,
       }),
     clash: clash.emit,

@@ -144,9 +144,30 @@ describe('fileop undo — cross-project and paste entries (050)', () => {
       expect(parse(JSON.stringify({ undo: [{ ...paste, replaced: [{ path: 'x' }] }], redo: [] }))).toEqual(emptyStack());
       expect(parse(JSON.stringify({ undo: [{ ...paste, copied: 'no' }], redo: [] }))).toEqual(emptyStack());
     });
+
+    it('round-trips the folders a paste created on a move and a paste entry (FR-033, R16)', () => {
+      const s = {
+        undo: [
+          { ...xmove, createdDirs: ['D:/b/test'] },
+          { ...paste, createdDirs: ['D:/b/test', 'D:/b/test/sub'] },
+        ],
+        redo: [],
+      };
+      expect(parse(serialise(s))).toEqual(s);
+    });
+
+    it('rejects a malformed createdDirs, as any malformed field', () => {
+      expect(parse(JSON.stringify({ undo: [{ ...xmove, createdDirs: 'D:/b/test' }], redo: [] }))).toEqual(emptyStack());
+      expect(parse(JSON.stringify({ undo: [{ ...paste, createdDirs: [1] }], redo: [] }))).toEqual(emptyStack());
+    });
   });
 
   describe('plannedMoves', () => {
+    it('is unchanged by createdDirs (FR-033, R16)', () => {
+      const withDirs: FileOpUndoEntry = { ...xmove, createdDirs: ['D:/b/test'] };
+      expect(plannedMoves(withDirs, 'undo')).toEqual(plannedMoves(xmove, 'undo'));
+    });
+
     it('reverses only the moved items of a paste on undo, and replays them on redo', () => {
       expect(plannedMoves(paste, 'undo')).toEqual([{ from: 'D:/b/m.md', to: 'C:/a/m.md' }]);
       expect(plannedMoves(paste, 'redo')).toEqual([{ from: 'C:/a/m.md', to: 'D:/b/m.md' }]);

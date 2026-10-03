@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyTopLevel, clashKind, keepBothName, newerOf } from '@throng/core';
+import { classifyTopLevel, clashKind, keepBothName, landingPlan, newerOf } from '@throng/core';
 
 /*
  * 050 R3 — the pure rules a paste or drag is planned by. Main supplies the real paths and walks the
@@ -49,6 +49,43 @@ describe('keepBothName (050 FR-018a)', () => {
 
   it('is case-insensitive about what is taken', () => {
     expect(keepBothName('A.TXT', ['a.txt'])).toBe('A copy.TXT');
+  });
+});
+
+describe('landingPlan (050 FR-033, SC-010)', () => {
+  it('keeps the structure relative to the deepest folder holding every item', () => {
+    expect(landingPlan(['C:\\r\\test\\test.md', 'C:\\r\\test.md'], 'C:\\r\\test2')).toEqual([
+      { src: 'C:\\r\\test\\test.md', destDir: 'C:\\r\\test2\\test' },
+      { src: 'C:\\r\\test.md', destDir: 'C:\\r\\test2' },
+    ]);
+  });
+
+  it('lands every item directly in the target when they share one folder, as before', () => {
+    expect(landingPlan(['C:/a/x.md', 'C:/a/y.md'], 'D:/b/dst')).toEqual([
+      { src: 'C:/a/x.md', destDir: 'D:/b/dst' },
+      { src: 'C:/a/y.md', destDir: 'D:/b/dst' },
+    ]);
+  });
+
+  it('keeps several levels, spelled in the target\'s separator and the source\'s case', () => {
+    expect(landingPlan(['C:/r/A/B/one.md', 'C:/r/C/two.md'], 'D:\\dst')).toEqual([
+      { src: 'C:/r/A/B/one.md', destDir: 'D:\\dst\\A\\B' },
+      { src: 'C:/r/C/two.md', destDir: 'D:\\dst\\C' },
+    ]);
+  });
+
+  it('drops an item inside another selected folder: it travels with that folder', () => {
+    expect(landingPlan(['C:/r/test', 'C:/r/test/test.md', 'C:/r/top.md'], 'C:/r/dst')).toEqual([
+      { src: 'C:/r/test', destDir: 'C:/r/dst' },
+      { src: 'C:/r/top.md', destDir: 'C:/r/dst' },
+    ]);
+  });
+
+  it('compares parents case- and separator-insensitively, as NTFS does', () => {
+    expect(landingPlan(['C:\\R\\Test\\a.md', 'c:/r/test/b.md'], 'C:/dst')).toEqual([
+      { src: 'C:\\R\\Test\\a.md', destDir: 'C:/dst' },
+      { src: 'c:/r/test/b.md', destDir: 'C:/dst' },
+    ]);
   });
 });
 

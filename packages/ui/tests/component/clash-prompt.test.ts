@@ -68,8 +68,57 @@ describe('what the question says (050 T052, FR-018)', () => {
     // Exactly one side carries the "Newer" mark, and it is the incoming one.
     const marks = within(details).getAllByText('Newer');
     expect(marks).toHaveLength(1);
-    expect(screen.getByTestId('clash-incoming').textContent).toContain('Newer');
-    expect(screen.getByTestId('clash-existing').textContent).not.toContain('Newer');
+    expect(screen.getByTestId('clash-side-incoming').textContent).toContain('Newer');
+    expect(screen.getByTestId('clash-side-existing').textContent).not.toContain('Newer');
+  });
+
+  describe('layout (050 T081, FR-032, R15)', () => {
+    it('is two .clash-side boxes, incoming first, then an aria-hidden arrow, then existing', () => {
+      render(host());
+      ask();
+
+      const details = screen.getByTestId('clash-details');
+      expect(details.querySelector('table')).toBeNull();
+      const parts = [...details.querySelectorAll<HTMLElement>('.clash-side, .clash-arrow')];
+      expect(parts.map((p) => p.dataset.testid ?? p.className)).toEqual([
+        'clash-side-incoming',
+        'clash-arrow',
+        'clash-side-existing',
+      ]);
+      expect(parts[1]!.getAttribute('aria-hidden')).toBe('true');
+      expect(parts[1]!.textContent).toBe('→');
+      expect(details.querySelectorAll('.clash-side')).toHaveLength(2);
+    });
+
+    it('names each side in words, so the arrow and the colour carry nothing alone', () => {
+      render(host());
+      ask();
+
+      expect(screen.getByTestId('clash-side-incoming').textContent).toContain('Incoming');
+      expect(screen.getByTestId('clash-side-existing').textContent).toContain('Existing');
+    });
+
+    it('puts .clash-side--newer on the newer box only, which still says "Newer"', () => {
+      render(host());
+      ask();
+
+      const incoming = screen.getByTestId('clash-side-incoming');
+      const existing = screen.getByTestId('clash-side-existing');
+      expect(incoming.classList.contains('clash-side--newer')).toBe(true);
+      expect(incoming.textContent).toContain('Newer');
+      expect(existing.classList.contains('clash-side--newer')).toBe(false);
+    });
+
+    it('marks neither box newer when neither is', () => {
+      render(host());
+      ask({
+        ...FILE_QUESTION,
+        existing: { ...FILE_QUESTION.existing, newer: false },
+        incoming: { ...FILE_QUESTION.incoming, newer: false },
+      });
+
+      expect(document.querySelectorAll('.clash-side--newer')).toHaveLength(0);
+    });
   });
 
   it('shows an item COUNT for a folder instead of a size', () => {

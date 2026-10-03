@@ -72,7 +72,7 @@ Paths: `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/re
 ## MT-04: Progress, Cancel, queued pastes and quitting mid-paste
 
 Covers: FR-019, FR-019a, FR-019b, FR-019c, FR-019d, FR-019e, FR-019f, FR-031, SC-007, SC-008, SC-009
-Paths: `packages/ui/src/renderer/explorer/paste-progress-notice.tsx`, `packages/ui/src/renderer/explorer/paste-quit-prompt.tsx`, `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/renderer/common/notification.tsx`, `packages/ui/src/main/transfer-service.ts`, `packages/ui/src/main/transfer-quit-gate.ts`, `packages/ui/src/main/main.ts`
+Paths: `packages/ui/src/renderer/explorer/paste-progress-notice.tsx`, `packages/ui/src/renderer/explorer/paste-quit-prompt.tsx`, `packages/ui/src/renderer/explorer/clash-prompt.tsx`, `packages/ui/src/renderer/common/notification.tsx`, `packages/ui/src/main/transfer-service.ts`, `packages/ui/src/main/transfer-quit-gate.ts`, `packages/ui/src/main/main.ts`, `packages/core/src/explorer/transfer-contract.ts`
 
 Setup: a project holding a large folder — the `node_modules` of any JavaScript project works.
 
@@ -134,7 +134,7 @@ Paths: `packages/ui/src/renderer/explorer/file-tree.tsx`, `packages/ui/src/rende
 ## MT-08: Items from different folders keep their structure
 
 Covers: FR-033, FR-018e, SC-010
-Paths: `packages/ui/src/main/transfer-service.ts`, `packages/core/src/explorer/transfer-plan.ts`, `packages/ui/src/renderer/explorer/use-explorer-data.ts`
+Paths: `packages/ui/src/main/transfer-service.ts`, `packages/core/src/explorer/transfer-plan.ts`, `packages/core/src/fileop-undo/undo-stack.ts`, `packages/ui/src/renderer/explorer/use-explorer-data.ts`
 
 Setup: in project A, a file `test.md` at the root and a folder `test` holding another `test.md`. An empty folder `test2` in A and in B.
 
@@ -153,7 +153,7 @@ Setup: in project A, a file `test.md` at the root and a folder `test` holding an
 ## MT-09: No-entry cursor where a file drag cannot drop
 
 Covers: FR-034, SC-011
-Paths: `packages/ui/src/renderer/explorer/file-tree.tsx`, `packages/ui/src/renderer/explorer/tree-drag-store.ts`, `packages/ui/src/renderer/composition-root.tsx`, `packages/ui/src/renderer/sidebar/projects-panel.tsx`
+Paths: `packages/ui/src/renderer/explorer/file-tree.tsx`, `packages/ui/src/renderer/composition-root.tsx`
 
 ### Steps
 1. Drag a file from the File Explorer over a project in the Projects pane. The pointer shows the no-entry cursor. Release: nothing happens.

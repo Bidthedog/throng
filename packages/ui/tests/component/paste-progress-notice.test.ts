@@ -47,25 +47,42 @@ const running = (over: Record<string, unknown> = {}): void =>
     total: 1500,
     current: 'C:/projects/demo/Docs/big.iso',
     targetDir: 'C:/projects/demo/Docs',
+    // Main has decided the run is worth a card (FR-031); the tests that say otherwise override it.
+    display: true,
     ...over,
   });
 
-describe('progress appears after one second (050 T050, FR-019)', () => {
-  it('raises NOTHING before 1 s', () => {
+describe('progress appears when main says so (050 T079, FR-031, FR-019)', () => {
+  it('raises NOTHING for a running event that does not carry display: true — however long it takes', () => {
     render(tree());
-    running();
+    running({ display: false });
     act(() => {
-      vi.advanceTimersByTime(900);
+      vi.advanceTimersByTime(60_000);
     });
     expect(cards()).toHaveLength(0);
   });
 
-  it('raises ONE paste-progress notice at 1 s with done-of-total (digit-grouped) and the current item', () => {
+  it('raises a card on the first event carrying display: true, with no renderer timer', () => {
+    render(tree());
+    running({ display: false });
+    expect(cards()).toHaveLength(0);
+    running({ display: true, done: 1 });
+    expect(cards()).toHaveLength(1);
+  });
+
+  it('keeps raising nothing for a small paste whose clash prompt is open (no display event arrives)', () => {
+    render(tree());
+    running({ display: false });
+    transfer.progress({ jobId: 'job-1', state: 'awaiting-cancel-choice', display: false });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(cards()).toHaveLength(0);
+  });
+
+  it('raises ONE paste-progress notice with done-of-total (digit-grouped) and the current item', () => {
     render(tree());
     running();
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
 
     expect(cards()).toHaveLength(1);
     const card = screen.getByTestId('paste-progress');
@@ -124,7 +141,7 @@ describe('the Cancel control (050 T050, FR-019)', () => {
 describe('a queued run (050 T050, FR-019d)', () => {
   it('shows `Paste queued` AT ONCE, naming how many are ahead, with its own cancel', () => {
     render(tree());
-    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 2, total: 3 });
+    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 2, total: 3, display: true });
 
     expect(cards()).toHaveLength(1);
     const card = screen.getByTestId('paste-progress');
@@ -136,8 +153,8 @@ describe('a queued run (050 T050, FR-019d)', () => {
 
   it('gives each queued run its OWN card, though their wording is identical', () => {
     render(tree());
-    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1 });
-    transfer.progress({ jobId: 'job-3', state: 'queued', queuedBehind: 1 });
+    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1, display: true });
+    transfer.progress({ jobId: 'job-3', state: 'queued', queuedBehind: 1, display: true });
 
     expect(cards()).toHaveLength(2);
     fireEvent.click(within(cards()[1]!).getByTestId('paste-cancel'));
@@ -146,7 +163,7 @@ describe('a queued run (050 T050, FR-019d)', () => {
 
   it('becomes the running notice in place when it starts', () => {
     render(tree());
-    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1 });
+    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1, display: true });
     const card = screen.getByTestId('paste-progress');
 
     running({ jobId: 'job-2', done: 0, total: 4, current: 'C:/projects/demo/Docs/a.txt' });
@@ -201,10 +218,7 @@ describe('how the run ends (050 T050, FR-013)', () => {
 
   it('raises the error notice directly when a run fails inside the first second', () => {
     render(tree());
-    running();
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
+    running({ display: false });
     expect(cards()).toHaveLength(0);
 
     transfer.done({
@@ -254,7 +268,7 @@ describe('a live card cannot be dismissed, and a failure is never lost (050 FR-0
 
   it('a queued card has no dismiss control either', () => {
     render(tree());
-    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1 });
+    transfer.progress({ jobId: 'job-2', state: 'queued', queuedBehind: 1, display: true });
     expect(within(screen.getByTestId('paste-progress')).queryByTestId('paste-progress-dismiss')).toBeNull();
   });
 
