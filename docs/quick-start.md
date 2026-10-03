@@ -90,11 +90,12 @@ can keep browsing or press **F2** to rename the file.
 
 - **Move and copy files between projects** with [Cut, Copy and Paste](key-bindings.md#file-explorer)
   in the tree: cut or copy in one project, switch, and paste in another. The Paste menu item names
-  what will land and which project it came from.
+  what will land and which project it came from. Items picked from different folders keep their
+  folder structure where they land.
 - **A name that is already taken** asks first — **Replace**, **Skip** or **Keep both** — and a
   replaced item goes to the Recycle Bin unless [When Paste replaces an item](preferences.md#file-explorer)
   says otherwise.
-- **A long paste** shows its progress with a Cancel button; cancelling asks whether to keep what has
+- **A large paste** (over 5 MB) that takes more than a moment shows its progress with a Cancel button; cancelling asks whether to keep what has
   landed or roll the whole paste back. **Ctrl+Z** undoes a move between projects from either one.
 
 - **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
