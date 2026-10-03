@@ -189,8 +189,9 @@ export function ThemesTab(): ReactElement {
    * than it forbids saying nothing. Each message below already names the theme it is about, in the
    * position where it reads as a sentence, so FR-027 leaves them alone.
    */
-  const setError = (message: string): void =>
+  const setError = (message: string): void => {
     notify({ severity: 'error', subject: { kind: 'none' }, message, testId: 'theme-notice-error' });
+  };
 
   /**
    * The three confirmations, on the SHARED model — which this window can finally reach.

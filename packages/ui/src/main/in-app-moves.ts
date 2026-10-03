@@ -11,6 +11,8 @@
  * 3. `rewritePaths` over every navigation history, once (never from `markMoved`), then `throng:files:moved`
  *    to every window, which rewrites `config.history` and a preview's `config.filePath` for the panels its
  *    layout holds.
+ * 4. `clipboard.followMoves` (050 FR-009) — the File Explorer clipboard re-points a pending item by the same
+ *    prefix rule an editor follows (019 FR-005). Last, because nothing before it reads the clipboard.
  *
  * Extracted from `main.ts` so the integration suite can drive the real order.
  *
@@ -43,6 +45,8 @@ export interface InAppMoveDeps {
   };
   /** `throng:files:moved { moves }` to every window. */
   broadcastFilesMoved(moves: readonly MovePair[]): void;
+  /** 050 FR-009 — the application File Explorer clipboard follows a pending item to its new path. */
+  clipboard: { followMoves(moves: readonly MovePair[]): void };
 }
 
 export interface InAppMoveCallbacks {
@@ -65,6 +69,7 @@ export function createInAppMoveCallbacks(deps: InAppMoveDeps): InAppMoveCallback
         deps.previews.announcePath(panelId);
         deps.history.announce(panelId);
       }
+      deps.clipboard.followMoves(moves);
     },
   };
 }

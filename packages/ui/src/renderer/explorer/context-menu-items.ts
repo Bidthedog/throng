@@ -5,15 +5,45 @@
  * so more items can be added as the feature grows.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
-import type { ClipboardState } from './use-explorer-data.js';
+import type { FileClipboard } from '@throng/core';
 import {
   firstBinding,
+  formatGrouped,
   pathForms,
   type FlavourOption,
   type Keybindings,
   type PreviewAffordance,
   type TargetNode,
 } from '@throng/core';
+
+/** The slice of the shared clipboard (`FileClipboard`, core) that the Paste label reads. */
+export interface PasteLabelClipboard {
+  readonly items: readonly { readonly absPath: string; readonly projectId: string }[];
+}
+
+/**
+ * The Paste row's label (050 FR-025a, contracts/ui-surfaces §5): what will land, and where from.
+ *
+ * One item → its name; several → the count, digit-grouped (constitution 4.5.0); then ` from <project>`
+ * when the items came from a project other than the active one. That is the ONLY indicator of a
+ * pending clipboard anywhere (FR-025a). A source project whose name cannot be resolved (it has since
+ * been removed) drops the suffix rather than printing a blank.
+ */
+export function pasteLabel(
+  clipboard: PasteLabelClipboard | null,
+  activeProjectId: string | undefined,
+  projectName: (projectId: string) => string | undefined,
+): string {
+  if (clipboard === null || clipboard.items.length === 0) return 'Paste';
+  const [first] = clipboard.items;
+  const what =
+    clipboard.items.length === 1
+      ? `"${first!.absPath.split(/[/\\]/).filter(Boolean).pop() ?? first!.absPath}"`
+      : `${formatGrouped(clipboard.items.length)} items`;
+  const source = first!.projectId;
+  const from = source !== activeProjectId ? projectName(source) : undefined;
+  return from ? `Paste ${what} from ${from}` : `Paste ${what}`;
+}
 
 export interface ContextMenuOps {
   beginRename: (relPath: string) => void;
@@ -63,7 +93,9 @@ export interface ContextMenuOps {
 export function buildContextMenuItems(args: {
   node: TargetNode;
   selectedRelPaths: string[];
-  clipboard: ClipboardState;
+  clipboard: FileClipboard;
+  /** 050 FR-025a: the Paste row's label, from {@link pasteLabel}. Absent → plain `Paste`. */
+  pasteLabel?: string;
   ops: ContextMenuOps;
   /** Editor "Open In" targets for a file (006, FR-011a) — appended under Open In,
    *  after OS File Explorer. Absent for folders/root. */
@@ -108,7 +140,7 @@ export function buildContextMenuItems(args: {
     lastPreviewTitle: string | null;
   };
 }): MenuAction[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn, keybindings, projectRoot, undoState, flavours, preview } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, pasteLabel: pasteText = 'Paste', keybindings, projectRoot, undoState, flavours, preview } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
   const sc = (action: string): string | undefined =>
     keybindings ? firstBinding(keybindings, action as never) : undefined;
@@ -134,7 +166,7 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Cut', icon: 'cut', section: 'content', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
     items.push({ label: 'Copy', icon: 'copy', section: 'content', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: 'Paste', icon: 'paste', section: 'content', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  items.push({ label: pasteText, icon: 'paste', section: 'content', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
   // 024 US3 (#85): undo/redo the last file OPERATION. Disabled — not hidden — when the stack is
   // empty: an action that exists and is unavailable teaches what the menu can do; one that vanishes
   // teaches nothing (and leaves the user wondering whether undo exists at all).

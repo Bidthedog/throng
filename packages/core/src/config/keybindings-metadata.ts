@@ -259,7 +259,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'file.undo',
     'File Explorer',
     'Undo file operation',
-    'Reverse the last move, rename or delete made in the file tree.',
+    'Reverse the last move, rename, delete or replacing paste made in the file tree; a move between projects undoes from either project.',
   ),
   chord(
     'file.redo',
@@ -269,7 +269,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   ),
   chord('file.cut', 'File Explorer', 'Cut', 'Cut the selected file or folder.'),
   chord('file.copy', 'File Explorer', 'Copy', 'Copy the selected file or folder.'),
-  chord('file.paste', 'File Explorer', 'Paste', 'Paste into the selected folder.'),
+  chord('file.paste', 'File Explorer', 'Paste', 'Paste into the selected folder, from this project or another.'),
   chord('file.delete', 'File Explorer', 'Delete', 'Delete the selected file or folder.'),
 
   // Editor (resolved while the active pane is a workspace editor panel)

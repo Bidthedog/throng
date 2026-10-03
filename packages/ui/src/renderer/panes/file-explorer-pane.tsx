@@ -32,7 +32,7 @@ export function FileExplorerPane({
   onResizeStart: (e: ReactPointerEvent) => void;
   resizing: boolean;
 }): ReactElement {
-  const { activeProject, setProjectHidden } = useProjects();
+  const { activeProject, projects, setProjectHidden } = useProjects();
   const keybindings = useKeybindings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The File Explorer pane becomes the active pane on click, gating panel
@@ -117,6 +117,7 @@ export function FileExplorerPane({
               <FileTree
                 rootFolder={activeProject.rootFolder}
                 projectId={activeProject.id}
+                projectNameOf={(id) => projects.find((p) => p.id === id)?.name}
                 hiddenPaths={activeProject.hiddenPaths}
                 onHide={(relPath) =>
                   void setProjectHidden(activeProject.id, [...activeProject.hiddenPaths, relPath])
