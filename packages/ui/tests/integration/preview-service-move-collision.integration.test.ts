@@ -164,6 +164,7 @@ beforeEach(async () => {
     previews,
     history,
     broadcastFilesMoved: (moves) => void wire.push({ kind: 'files:moved', moves }),
+    clipboard: { followMoves: () => {} },
   });
 });
 

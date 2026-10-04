@@ -82,6 +82,7 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { FileTree } from '../../src/renderer/explorer/file-tree.js';
+import { resetFileClipboardStoreForTests } from '../../src/renderer/explorer/file-clipboard-store.js';
 import {
   setEditorState,
   removeEditorState,
@@ -259,6 +260,7 @@ let projectSeq = 0;
 
 beforeEach(() => {
   localStorage.clear();
+  resetFileClipboardStoreForTests();
 });
 afterEach(() => {
   localStorage.clear();
@@ -288,7 +290,39 @@ async function mount(options: MountOptions = {}) {
   // optional chaining (`window.throng?.files?.list?.(…)`), so only the members actually used need
   // to exist — `terminal.listFlavours` is absent on purpose, and `useFlavours` handles that by
   // staying empty rather than by throwing.
+  /*
+   * 050 — the clipboard is MAIN's now, so the cut/Escape tests need main's half: a double that holds
+   * the value, resolves root-relative paths against this project's root as main does, and pushes every
+   * change to whoever follows it.
+   */
+  let clipboardValue: unknown = null;
+  const clipboardListeners = new Set<(v: unknown) => void>();
+  const pushClipboard = (v: unknown): void => {
+    clipboardValue = v;
+    act(() => {
+      for (const l of clipboardListeners) l(v);
+    });
+  };
   const throng: Record<string, unknown> = {
+    fileClipboard: {
+      get: () => Promise.resolve(clipboardValue),
+      set: (mode: 'cut' | 'copy', rels: string[]) => {
+        pushClipboard({
+          mode,
+          items: rels.map((rel) => ({
+            absPath: `${ROOT_FOLDER}/${rel}`,
+            projectId,
+            projectRoot: ROOT_FOLDER,
+          })),
+        });
+        return Promise.resolve({ ok: true });
+      },
+      clear: () => pushClipboard(null),
+      onChange: (cb: (v: unknown) => void) => {
+        clipboardListeners.add(cb);
+        return () => clipboardListeners.delete(cb);
+      },
+    },
     files,
     // Reached only when a FILE's context menu is built — awaited in `onContextMenu` and handed to
     // `readOpenInFacts` as `alreadyOpen`, to decide whether the "Open In" targets are disabled.

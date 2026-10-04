@@ -294,12 +294,24 @@ test('the banner copies its message, subject, path and system error with no noti
         const copiedLines = lines(copied);
         // The banner's own headline, in the panel type's words (FR-040).
         expect(copiedLines[0]).toBe('This terminal could not be opened');
-        // The subject in FULL — there is no surrounding context to elide it against (FR-022/FR-052).
-        expect(
-          copiedLines[1],
-          'the copied subject is not the full Project — Tab — Panel form',
-        ).toMatch(/^Silenced — .+ — /);
-        expect(copiedLines[1].endsWith(` — ${panelTitle}`), 'the subject does not end in the panel title').toBe(true);
+        // Every line the banner shows comes first, in the order shown (050 FR-037, SC-013).
+        // The banner's text without its buttons — controls are not content.
+        const shown = await banner(win, pid).evaluate((el) => {
+          const clone = el.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('button').forEach((b) => b.remove());
+          document.body.appendChild(clone);
+          const text = clone.innerText;
+          clone.remove();
+          return text;
+        });
+        expectRenderedIsCopied(lines(shown), copiedLines);
+        // Then `Details`, holding the subject in FULL — there is no surrounding context to elide it
+        // against (030 FR-022/FR-052; 050 FR-037 moved it below what is shown).
+        const details = copiedLines.indexOf('Details');
+        expect(details, 'the copy has no Details block').toBeGreaterThan(0);
+        const subject = copiedLines[details + 1] ?? '';
+        expect(subject, 'the copied subject is not the full Project — Tab — Panel form').toMatch(/^Silenced — .+ — /);
+        expect(subject.endsWith(` — ${panelTitle}`), 'the subject does not end in the panel title').toBe(true);
         // The path it could not use, and the system error nobody could have retyped.
         expect(copied).toContain('throng-e2e-missing');
         expect(copied, 'the banner copied no system error').toMatch(

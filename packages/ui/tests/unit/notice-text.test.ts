@@ -62,6 +62,7 @@ describe('noticeToText — every rendered part, in render order', () => {
     });
 
     // The heading is the notice's own — composed once, by `noticeHeading`, never re-spelled here.
+    // 050 FR-037: every SHOWN line first, then a blank line, `Details`, and what is never shown.
     expect(text.split('\n')).toEqual([
       "Couldn't open Consol",
       'The file could not be opened.',
@@ -72,6 +73,9 @@ describe('noticeToText — every rendered part, in render order', () => {
       '  Shell',
       'first detail',
       'second detail',
+      '',
+      'Details',
+      'Consol',
       "ENOENT: no such file or directory, open 'C:\\gone\\one.txt'",
     ]);
   });
@@ -124,6 +128,9 @@ describe('noticeToText — every rendered part, in render order', () => {
       '  Shell',
       'Second',
       '  Scratch',
+      '',
+      'Details',
+      'Consol',
     ]);
   });
 
@@ -166,11 +173,14 @@ describe('noticeToText — copied, and deliberately never rendered', () => {
       copyDetail: raw,
     });
     expect(text).toContain(raw);
-    // LAST — a bug report wants the human sentence first and the machine text under it.
+    // LAST — a bug report wants the human sentence first and the machine text under it, below the
+    // `Details` line (050 FR-037), which the shown lines never reach.
     expect(text.split('\n').at(-1)).toBe(raw);
+    const lines = text.split('\n');
+    expect(lines.indexOf('Details')).toBeGreaterThan(lines.indexOf('Another program is using that folder.'));
   });
 
-  it("emits each affected row's OWN error beside its row (FR-048a)", () => {
+  it("emits each affected row's OWN error under Details, never among the shown rows (FR-048a, 050 FR-037)", () => {
     // Two panels, two DIFFERENT unclassified failures, one notice. The shared message cannot state
     // either of them, and FR-034 forbids rendering them, so copy is the only route by which a user
     // ever sees which panel failed for which reason.
@@ -187,19 +197,71 @@ describe('noticeToText — copied, and deliberately never rendered', () => {
       'Consol',
       'Those files could not be opened.',
       'Main',
-      '  Docs — C:\\work\\one.txt (io)',
-      '  Notes — C:\\work\\two.txt (binary)',
+      '  Docs',
+      '  Notes',
+      '',
+      'Details',
+      'Consol',
+      'Docs — C:\\work\\one.txt (io)',
+      'Notes — C:\\work\\two.txt (binary)',
     ]);
   });
 
-  it('leaves a row without its own error as a bare row', () => {
+  it('leaves a row without its own error out of Details, and adds no Details for nothing', () => {
     const text = noticeToText({
       severity: 'error',
-      subject: { kind: 'project', name: 'Consol' },
+      subject: { kind: 'none' },
       message: 'Those panels could not be opened.',
       affected: [panel({ panelId: 'p1', panelName: 'Docs' })],
     });
     expect(text).not.toContain('—');
+    expect(text).not.toContain('Details');
+  });
+});
+
+/**
+ * 050 FR-037 / SC-013 — a shown line with no panel is copied like any other.
+ *
+ * `partText` walked `groups` and ignored `ungrouped`, which the affected list DRAWS after every
+ * group (041 FR-013: a refused open creates no panel). The row vanished from the copy.
+ */
+describe('noticeToText — rows with no panel (050 FR-037)', () => {
+  /** 041 FR-013 — a refused open: no panel, so no tab to sit under. */
+  const refused = {
+    subject: 'todo.md',
+    reason: 'missing',
+    displayPath: 'notes\\todo.md',
+    detail: 'C:\\work\\notes\\todo.md (missing)',
+  };
+
+  it('copies an ungrouped row after every group, then its path and reason under Details', () => {
+    const text = noticeToText({
+      severity: 'error',
+      subject: { kind: 'project', name: 'Consol' },
+      message: 'Those files could not be opened.',
+      affected: [panel({ panelId: 'p1', panelName: 'Docs' }), refused],
+    });
+    expect(text.split('\n')).toEqual([
+      'Consol',
+      'Those files could not be opened.',
+      'Main',
+      '  Docs',
+      'notes\\todo.md',
+      '',
+      'Details',
+      'Consol',
+      'notes\\todo.md — C:\\work\\notes\\todo.md (missing)',
+    ]);
+  });
+
+  it('copies a notice whose ONLY rows are ungrouped', () => {
+    const text = noticeToText({
+      severity: 'error',
+      subject: { kind: 'none' },
+      message: 'That file could not be opened.',
+      affected: [refused],
+    });
+    expect(text.split('\n')).toContain('notes\\todo.md');
   });
 });
 
@@ -244,10 +306,65 @@ describe('panelFailureText — the banner, with no notice on screen (FR-052/FR-0
         },
       }).split('\n'),
     ).toEqual([
+      // Shown, in the order the banner draws them (050 FR-037): headline, path, pointer.
       'This terminal could not be opened',
-      'Ghost — Main — Shell',
       'C:\\throng-e2e-missing\\ghost',
+      'Copy the details here, or see the notification.',
+      '',
+      // Never shown (030 FR-034, FR-048a): the full subject and the raw system error.
+      'Details',
+      'Ghost — Main — Shell',
       'Cannot lock "C:\\throng-e2e-missing\\ghost": the path does not exist',
+    ]);
+  });
+
+  it('copies the note, the retry-failed sentence and the pointer exactly as the banner shows them', () => {
+    // The omissions of MT-02: the note, the retry-failed sentence and the pointer were rendered and
+    // never copied, so a user pasting the banner into a report lost every sentence but the headline.
+    expect(
+      panelFailureText({
+        headline: 'This file could not be read',
+        subject: { kind: 'panel', name: 'Docs', tab: 'Main', project: 'Ghost' },
+        detail: { path: 'C:\\ghost\\a.txt', systemError: 'EACCES: permission denied' },
+        note: 'What is shown here is not the file. Restore the file before saving.',
+        retryFailed: true,
+      }).split('\n'),
+    ).toEqual([
+      'This file could not be read',
+      'C:\\ghost\\a.txt',
+      'What is shown here is not the file. Restore the file before saving.',
+      'That did not work — the condition is still there.',
+      'Copy the details here, or see the notification.',
+      '',
+      'Details',
+      'Ghost — Main — Docs',
+      'EACCES: permission denied',
+    ]);
+  });
+
+  it('names no notification where none was raised, and no pointer at all on a Close banner', () => {
+    const base = { headline: 'h', subject: { kind: 'none' } } as const;
+    expect(panelFailureText({ ...base, pointer: 'copy-only' }).split('\n')).toEqual([
+      'h',
+      'Copy the details here.',
+    ]);
+    expect(panelFailureText({ ...base, pointer: 'none' })).toBe('h');
+  });
+
+  it('holds the moved notice its sentence and new path, with the subject under Details', () => {
+    expect(
+      panelFailureText({
+        headline: 'This file moved to another project, at B\\new.txt. You can no longer work on it in this project.',
+        subject: { kind: 'panel', name: 'Docs', tab: 'Main', project: 'A' },
+        detail: { path: 'B\\new.txt' },
+        pointer: 'none',
+      }).split('\n'),
+    ).toEqual([
+      'This file moved to another project, at B\\new.txt. You can no longer work on it in this project.',
+      'B\\new.txt',
+      '',
+      'Details',
+      'A — Main — Docs',
     ]);
   });
 
@@ -256,6 +373,7 @@ describe('panelFailureText — the banner, with no notice on screen (FR-052/FR-0
       panelFailureText({
         headline: 'This file could not be read',
         subject: { kind: 'none' },
+        pointer: 'none',
       }),
     ).toBe('This file could not be read');
   });

@@ -60,7 +60,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // each in its expanded/collapsed pair, none a reuse of `collapseAll`/`expandAll` (see the comment
 // beside them in theme.ts).
 // 75 since 048 (research R6): `resetName` retired with panel renaming (`migrateTheme` drops it).
-const EXPECTED_ICON_TOKEN_COUNT = 75;
+// 76 since 050 (FR-039, R24): `cancel`, the paste notice's own Cancel — not the `dismiss` glyph.
+const EXPECTED_ICON_TOKEN_COUNT = 76;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
