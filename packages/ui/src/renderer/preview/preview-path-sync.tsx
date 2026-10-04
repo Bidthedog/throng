@@ -34,10 +34,35 @@ export function PreviewPathSync(): null {
         .flatMap((tab) => collectPanels(tab.root) as Panel[])
         .filter((p) => p.kind === PREVIEW_KIND);
 
+    const heldMovedOut = (panel: Panel): boolean => (panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
+
     const offPath = window.throng?.preview?.onPathChanged?.((evt) => {
       const panel = previewsHere().find((p) => p.id === evt.panelId);
-      if (!panel || previewPathOfPanel(panel) === evt.filePath) return;
-      wsRef.current.updatePanelConfig(panel.id, { filePath: evt.filePath });
+      if (!panel) return;
+      // 050 FR-035 — the move took the file out of the project (true), or an undo / redo brought it back
+      // (false); absent leaves the flag as it is. Written as true or REMOVED (`undefined` drops out of the
+      // persisted JSON), so a project shown later shows the moved notice without reading the file.
+      const flagUnchanged = evt.movedOut === undefined || heldMovedOut(panel) === evt.movedOut;
+      if (previewPathOfPanel(panel) === evt.filePath && flagUnchanged) return;
+      wsRef.current.updatePanelConfig(
+        panel.id,
+        evt.movedOut === undefined
+          ? { filePath: evt.filePath }
+          : { filePath: evt.filePath, movedOut: evt.movedOut ? true : undefined },
+      );
+    });
+
+    // The run's own word, for a preview this window views: a moved-out notice sets the flag, and an
+    // update carrying no notice at all clears a flag a former moved-out left behind.
+    const offUpdate = window.throng?.preview?.onUpdate?.((update) => {
+      const panel = previewsHere().find((p) => p.id === update.panelId);
+      if (!panel) return;
+      if (update.notice?.kind === 'moved-out') {
+        if (heldMovedOut(panel) && previewPathOfPanel(panel) === update.notice.movedTo) return;
+        wsRef.current.updatePanelConfig(panel.id, { filePath: update.notice.movedTo, movedOut: true });
+      } else if (update.notice === null && heldMovedOut(panel)) {
+        wsRef.current.updatePanelConfig(panel.id, { filePath: update.filePath, movedOut: undefined });
+      }
     });
 
     const offMoved = window.throng?.files?.onMoved?.(({ moves }) => {
@@ -55,6 +80,7 @@ export function PreviewPathSync(): null {
 
     return () => {
       offPath?.();
+      offUpdate?.();
       offMoved?.();
     };
   }, []);

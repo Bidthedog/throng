@@ -20,6 +20,7 @@ import { IconButton } from '../common/icon-button.js';
 import { useErrorNotice } from '../common/notification.js';
 import { allEditorStates, useDirtyProjectKey } from '../editor/editor-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
+import { saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import {
   DndContext,
@@ -606,7 +607,13 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
         // dirty editors as a side effect of removing just this one. `activeProjectId: id` scopes
         // 'project' to exactly the project being removed (`editorsInScope`, `@throng/core`).
         const result = await window.throng?.editor?.saveAll?.({ scope: 'project', activeProjectId: id });
-        if (!result || result.failed.length > 0 || result.skippedUnpathed.length > 0) {
+        // 050 FR-036 — a moved-out editor is passed by Save All; Save As is its way to keep the text.
+        if (
+          !result ||
+          result.failed.length > 0 ||
+          result.skippedUnpathed.length > 0 ||
+          !(await saveDirtyMovedOutEditors(id))
+        ) {
           // Coordinator follow-up (C1) — `reportFailure` defaults its action to 'unload' (its only
           // caller before this one); naming it explicitly here is what keeps this notice's heading
           // saying "Couldn't remove", not "Couldn't unload".

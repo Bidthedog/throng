@@ -114,6 +114,9 @@ export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, Drag
 export { normaliseForCompare, samePath, isUnderPath, remainderUnder } from './fs/path-id.js';
 export { toCanonicalPath, isCanonicalPath, type PathSeparator } from './fs/path-canon.js';
 export { canonicalisePersistedPaths, previewPathOf } from './workspace/persisted-paths.js';
+// 050 R19, FR-035 — a panel config after an in-app move: new paths, and `movedOut` set or cleared.
+export { movedPathOf, movedPanelConfig, moveLayoutNode, moveLayoutTabs } from './workspace/moved-paths.js';
+export type { MovedPathPair } from './workspace/moved-paths.js';
 
 // Terminal shell detection (005 Phase B): OS seam.
 export type { IShellDetection, DetectedShell } from './abstractions/shell-detection.js';
@@ -165,6 +168,21 @@ export {
   resolveTarget,
   validateRename,
   dedupeName,
+  // 050 R3 — paste/drag planning rules.
+  classifyTopLevel,
+  clashKind,
+  keepBothName,
+  newerOf,
+  // 050 R16 — where a multi-folder selection lands (FR-033).
+  landingPlan,
+  // 050 R14 — when a paste's progress shows (FR-031).
+  PROGRESS_MIN_BYTES,
+  PROGRESS_WORK_MS,
+  // 050 R1 — the application clipboard's pure transitions.
+  followMoves,
+  dropDeleted,
+  retainProjects,
+  afterRun,
   resolveDragEffect,
   DEFAULT_DRAG_MODIFIERS,
   decideClick,
@@ -177,6 +195,19 @@ export {
   immediateChildFolders,
 } from './explorer/index.js';
 export type { DragModifierKey, DragModifierConfig } from './explorer/index.js';
+export type { TopLevelClass, ClashKind, ClashChoice, Landing } from './explorer/index.js';
+export type { FileClipboard, ClipboardItem } from './explorer/index.js';
+// 050 — the `throng:transfer:*` payloads, shared by main and the renderer (contracts/transfer-ipc.md §2).
+export type {
+  ClashSide,
+  ClashQuestion,
+  ClashAnswer,
+  TransferJobState,
+  TransferProgress,
+  TransferFailure,
+  TransferResult,
+  TransferQuitChoice,
+} from './explorer/index.js';
 export type { TreeDragPayload, TreeDragInput } from './explorer/index.js';
 // 033 US1 — the project file index's pure half (contracts/file-index.md §1).
 export type { WalkOptions, FileIndexDelta } from './explorer/index.js';
@@ -913,6 +944,12 @@ export {
   serialise as serialiseFileOpStack,
   parse as parseFileOpStack,
   FILEOP_UNDO_BOUND,
+  // 050 FR-020 — one entry in two projects' stacks.
+  removeById as removeFileOpById,
+  pushUndoEntry as pushFileOpUndoEntry,
+  pushRedoEntry as pushFileOpRedoEntry,
+  dropEntriesNamingProjects as dropFileOpEntriesNamingProjects,
+  type CrossProject,
   type FileOpUndoEntry,
   type FileOpUndoStack,
   type PlannedMove,

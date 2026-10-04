@@ -60,6 +60,17 @@ export function isFileNotice(notice: PreviewNotice | null | undefined): notice i
   return notice !== null && notice !== undefined && FILE_KINDS.has(notice.kind);
 }
 
+/**
+ * The run's file moved to another project (050 FR-035) — a notice of its own, not a file notice: nothing is
+ * wrong with the file and no retry brings it back, so it is drawn by `MovedOutNotice` (Close and Copy)
+ * and never ranked by {@link shownPreviewFailure}.
+ */
+export function isMovedOutNotice(
+  notice: PreviewNotice | null | undefined,
+): notice is Extract<PreviewNotice, { kind: 'moved-out' }> {
+  return notice !== null && notice !== undefined && notice.kind === 'moved-out';
+}
+
 /** The one sentence a file notice says (030 FR-040, FR-026). */
 export function previewNoticeMessage(notice: FileNotice): string {
   switch (notice.kind) {
@@ -115,11 +126,18 @@ export function shownPreviewFailureFacts(
   shown: PreviewFailureSource,
   filePath: string | undefined,
   os: OsName,
-): { headline: string; detail?: { path?: string; systemError?: string } } {
+): { headline: string; detail?: { path?: string; systemError?: string }; pointer: 'copy-only' } {
+  // Both banners pass `notified={false}` — no notification is raised for a preview's condition — so the
+  // copy carries the Copy-only pointer the banner shows (050 FR-037).
   if (shown.source === 'failure') {
-    return { headline: shown.failure.headline, ...(shown.failure.detail ? { detail: shown.failure.detail } : {}) };
+    return {
+      headline: shown.failure.headline,
+      ...(shown.failure.detail ? { detail: shown.failure.detail } : {}),
+      pointer: 'copy-only',
+    };
   }
   return {
+    pointer: 'copy-only',
     headline: previewNoticeMessage(shown.notice),
     ...(filePath ? { detail: { path: toDisplayPath(filePath, os) } } : {}),
   };

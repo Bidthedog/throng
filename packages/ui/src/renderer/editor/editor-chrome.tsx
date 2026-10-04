@@ -13,6 +13,7 @@ import { DirtyCloseDialog } from './dirty-close-dialog.js';
 import { EditorNoticeDialog } from './editor-notice-dialog.js';
 import { MissingFileWatcher } from './missing-file-watcher.js';
 import { MovedPathSync } from './moved-path-sync.js';
+import { MovedOutLayoutSync } from './moved-out-layout-sync.js';
 import { EditorTitlePublisher } from './editor-title-publisher.js';
 import { PendingChord } from './pending-chord.js';
 import { PreviewCommands } from '../preview/preview-commands.js';
@@ -37,6 +38,8 @@ export function EditorChrome({ isSubWorkspace = false }: { isSubWorkspace?: bool
       {/* Every editor panel in this window follows its file into the persisted layout — including
           the ones in background tabs, which are not mounted to hear it themselves (FR-008). */}
       <MovedPathSync />
+      {/* 050 FR-035 — the moved-out flag for every editor and preview this window's layout holds, mounted or not. */}
+      <MovedOutLayoutSync />
       {/* 044 US7 — main's navigation histories into this window's store and layout, and a preview's shown
           file into its persisted config: both for every panel the layout holds, mounted or not. */}
       <HistoryMirrorSync />

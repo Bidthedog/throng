@@ -122,6 +122,14 @@ export async function goToPreviewParent(
 export function runPreviewEditorRoute(panel: Panel, ws: () => PreviewPlacementWorkspace): void {
   if (panel.kind !== PREVIEW_KIND) return;
   const state = getPreviewState(panel.id);
+  // 050 R26 — a moved-out preview has no editor to open or focus: the file is no longer this project's, and
+  // the remembered state (parent, path) predates the move. The notice is already the panel's one surface;
+  // invoking the route brings the panel forward so it is seen again.
+  const held = (panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
+  if (held || state?.notice?.kind === 'moved-out') {
+    requestPanelFocus(panel.id);
+    return;
+  }
   const filePath = state?.filePath ?? previewPathOf(panel.config as PreviewPanelConfig | undefined);
   if (!filePath) return;
   const args: PreviewEditorRouteArgs = {

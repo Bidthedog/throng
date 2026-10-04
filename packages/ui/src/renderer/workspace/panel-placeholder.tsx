@@ -306,10 +306,13 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     const editorActions = getEditorActions(panel.id);
     if (editorActions?.isDirty()) {
       const name = editorUi?.displayName ?? panel.title;
-      const choice = await promptDirtyClose(name, editorUi?.filePath ? [name] : []);
+      const choice = await promptDirtyClose(name, editorUi?.filePath ? [name] : [], {
+        movedOut: editorUi?.movedOut === true,
+      });
       if (choice === 'cancel') return;
       if (choice === 'save') {
-        const ok = await editorActions.save();
+        // A moved-out editor cannot Save (050 FR-036): "save" there is Save As, and a cancelled one aborts.
+        const ok = await editorActions.saveForClose();
         if (!ok) return; // save failed/cancelled → don't destroy (no silent loss)
       }
     }
@@ -573,7 +576,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     // app produces one today — and under `!= null` it would enable Reload and draw
                     // two reveal items for a panel with no file. N6: the extraction alters no
                     // condition.
-                    { dirty: editorUi?.dirty ?? false, hasFilePath: !!editorUi?.filePath }
+                    {
+                      dirty: editorUi?.dirty ?? false,
+                      hasFilePath: !!editorUi?.filePath,
+                      movedOut: editorUi?.movedOut === true,
+                    }
                   : null,
               // 044 — true while an editor's banner is up, or a preview's banner offering the three commands:
               // an attach or body failure, or an FR-026 file notice. The FR-027 notice (no preview for this

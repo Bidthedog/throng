@@ -15,6 +15,23 @@ export type { TargetNode } from './target.js';
 export { resolveTarget } from './target.js';
 export type { RenameResult, DedupeStyle } from './naming.js';
 export { validateRename, dedupeName } from './naming.js';
+// 050 R3 — the pure rules a paste or drag is planned by.
+export { classifyTopLevel, clashKind, keepBothName, landingPlan, newerOf } from './transfer-plan.js';
+export type { TopLevelClass, ClashKind, ClashChoice, Landing } from './transfer-plan.js';
+// 050 R1 — the application clipboard's shape and pure transitions.
+export { followMoves, dropDeleted, retainProjects, afterRun } from './file-clipboard-rules.js';
+export type { FileClipboard, ClipboardItem } from './file-clipboard-rules.js';
+export type {
+  ClashSide,
+  ClashQuestion,
+  ClashAnswer,
+  TransferJobState,
+  TransferProgress,
+  TransferFailure,
+  TransferResult,
+  TransferQuitChoice,
+} from './transfer-contract.js';
+export { PROGRESS_MIN_BYTES, PROGRESS_WORK_MS } from './transfer-contract.js';
 export type { DragModifiers, DragEffect, DragModifierKey, DragModifierConfig } from './drag.js';
 export { resolveDragEffect, DEFAULT_DRAG_MODIFIERS } from './drag.js';
 export type { ClickAction } from './open-intent.js';

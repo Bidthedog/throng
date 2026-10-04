@@ -175,7 +175,8 @@ import { useNotify } from '../common/notification.js';
 import { registerPreviewPanelHandles } from './preview-panel-handles.js';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
-import { isFileNotice, PreviewFileNotice, shownPreviewFailure } from './preview-notice.js';
+import { isFileNotice, isMovedOutNotice, PreviewFileNotice, shownPreviewFailure } from './preview-notice.js';
+import { MovedOutNotice } from '../editor/moved-out-notice.js';
 import {
   applyPreviewUpdate,
   clearPreviewViewState,
@@ -407,6 +408,14 @@ export function PreviewPanel({
   const config = panel.config as PreviewPanelConfig | undefined;
   const mountFile = useRef(config?.filePath ?? previewPathOf(config) ?? '');
   const mountHistory = useRef(config?.history);
+  /**
+   * 050 FR-035 (R19) — a move took the file out of this project and the layout says so: the panel shows the
+   * moved notice and reads nothing. Read live for the notice, and through a ref where the mount effect
+   * decides whether to attach (a config write must not re-attach — see above).
+   */
+  const heldMovedOut = config?.movedOut === true;
+  const heldMovedOutRef = useRef(heldMovedOut);
+  heldMovedOutRef.current = heldMovedOut;
   const onRefusedRef = useRef(onRefused);
   onRefusedRef.current = onRefused;
   /** For a RETRY's answer only — each effect guards its own answers with its own `active` flag. */
@@ -494,9 +503,13 @@ export function PreviewPanel({
     const unsubscribe = bridge?.onUpdate((update) => {
       if (update.panelId === panelId) applyPreviewUpdate(update);
     });
-    void attach().then((result) => {
-      if (active) settleAttach(result);
-    });
+    // A panel mounted MOVED OUT holds no file it may read: no attach, so main never reads or watches the
+    // path and nothing can report it unreadable (050 FR-035). It still hears updates, for the way back.
+    if (!heldMovedOutRef.current) {
+      void attach().then((result) => {
+        if (active) settleAttach(result);
+      });
+    }
     return () => {
       active = false;
       mounted.current = false;
@@ -506,6 +519,24 @@ export function PreviewPanel({
       setPreviewFailure(panelId, null);
     };
   }, [panelId, attach, settleAttach]);
+
+  /*
+   * The way back (050 FR-035): the flag a layout carried goes — an undo or redo brought the file back into
+   * the project — so this panel, which mounted without attaching, attaches now at the path the layout holds.
+   * Only a mounted panel's flag going true → false does it: a live run that moved out and back keeps its
+   * attachment, and a config write that leaves the flag alone never re-attaches.
+   */
+  const wasMovedOut = useRef(heldMovedOut);
+  useEffect(() => {
+    const was = wasMovedOut.current;
+    wasMovedOut.current = heldMovedOut;
+    if (!was || heldMovedOut) return;
+    mountFile.current = config?.filePath ?? previewPathOf(config) ?? mountFile.current;
+    void attach().then((result) => {
+      if (mounted.current) settleAttach(result);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heldMovedOut]);
 
   const retryAttach = useCallback(async (): Promise<boolean> => {
     const result = await attach();
@@ -604,6 +635,8 @@ export function PreviewPanel({
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
+  /** 050 R26 — the moved notice is up: every route to the linked editor is unavailable. */
+  const movedOutRef = useRef(false);
   useEffect(() => {
     registerPanelFocus(panelId, () => {
       // US2 fix round 1 — while a file notice covers the body, the body is inert and cannot take the
@@ -1818,7 +1851,9 @@ export function PreviewPanel({
           }
         : null;
       const editorRoute: PreviewEditorRouteItem | null =
-        providerKind === 'text' && onEditorRoute !== undefined ? { parented, run: onEditorRoute } : null;
+        providerKind === 'text' && onEditorRoute !== undefined
+          ? { parented, run: onEditorRoute, disabled: movedOutRef.current }
+          : null;
       const items = previewContentMenu({
         selectionEmpty,
         content,
@@ -1987,8 +2022,23 @@ export function PreviewPanel({
    */
   const shown = shownPreviewFailure(state, failure);
   const fileNotice = state !== undefined && isFileNotice(state.notice) ? state.notice : null;
-  const bodyCovered = fileNotice !== null;
+  /*
+   * 050 FR-035 — where the moved notice says the file went, or `null` for an ordinary preview. The run's
+   * own word wins while it has spoken (an update with no notice is the way back); before it has, the
+   * layout's persisted flag speaks for a panel that mounted without attaching.
+   */
+  const movedOutTo: string | null =
+    state !== undefined && isMovedOutNotice(state.notice)
+      ? state.notice.movedTo
+      : heldMovedOut
+        ? // R26 — the layout's flag wins over what the window's store remembers from before this view
+          // unmounted (a project switch): that state predates the move. The flag goes only when main
+          // reports the file back in the project (`pathChanged`, `movedOut: false`).
+          (config?.filePath ?? mountFile.current)
+        : null;
+  const bodyCovered = fileNotice !== null || movedOutTo !== null;
   bodyCoveredRef.current = bodyCovered;
+  movedOutRef.current = movedOutTo !== null;
 
   /*
    * US2 scenario 6 — while the file cannot be shown, the notice and nothing else. The body is COVERED
@@ -2025,7 +2075,9 @@ export function PreviewPanel({
       onPointerDown={recordActive}
       onFocus={recordActive}
     >
-      {shown?.source === 'notice' && state ? (
+      {movedOutTo !== null ? (
+        <MovedOutNotice panelId={panelId} filePath={movedOutTo} onClose={onClose} />
+      ) : shown?.source === 'notice' && state ? (
         <PreviewFileNotice
           panelId={panelId}
           notice={shown.notice}
@@ -2149,6 +2201,7 @@ export function PreviewPanel({
           providerKind={providerKind}
           parented={parented}
           onEditorRoute={onEditorRoute}
+          editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}

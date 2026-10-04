@@ -2,7 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactEl
 import type { NoticeSubject } from '@throng/core';
 import { IconButton } from './icon-button.js';
 import { useNotify } from './notification.js';
-import { panelFailureText } from './notice-text.js';
+import {
+  BANNER_POINTER,
+  BANNER_POINTER_COPY_ONLY,
+  BANNER_RETRY_FAILED,
+  panelFailureText,
+} from './notice-text.js';
 import { attemptRetry } from './panel-retry.js';
 import { useCopyToClipboard } from './use-copy.js';
 import './panel-failure-banner.css';
@@ -126,6 +131,7 @@ interface PanelFailureBannerRetryProps extends PanelFailureBannerCommon {
   /** Clear the panel's type: back to the panel-type selection screen, panel intact (FR-043/FR-044). */
   onCancel: () => void;
   onClose?: never;
+  copyable?: never;
 }
 
 /**
@@ -137,6 +143,12 @@ interface PanelFailureBannerRetryProps extends PanelFailureBannerCommon {
 interface PanelFailureBannerCloseProps extends PanelFailureBannerCommon {
   /** Close the panel, exactly as its header's Close Panel does. */
   onClose: () => void;
+  /**
+   * 050 FR-035 — also draw Copy details, before Close: the moved notice (an editor or preview whose
+   * file moved to another project) is a Close banner that still has a path and a sentence worth
+   * copying. No pointer and no Retry either way. Absent: 044 FR-027's Close-only banner.
+   */
+  copyable?: boolean;
   onRetry?: never;
   onCancel?: never;
 }
@@ -150,13 +162,13 @@ export type PanelFailureBannerProps = PanelFailureBannerRetryProps | PanelFailur
  * may have been dismissed, timed out or silenced, and a pointer that promised it first would be
  * false in exactly the case the user most needs it to be true.
  */
-const POINTER = 'Copy the details here, or see the notification.';
+const POINTER = BANNER_POINTER;
 
 /** The pointer where no notification exists (044 FR-026, refining 030 FR-041). Fixed wording too. */
-const POINTER_COPY_ONLY = 'Copy the details here.';
+const POINTER_COPY_ONLY = BANNER_POINTER_COPY_ONLY;
 
 /** Fixed wording, not the implementer's choice (FR-040b) — a test on it is otherwise vacuous. */
-const RETRY_FAILED = 'That did not work — the condition is still there.';
+const RETRY_FAILED = BANNER_RETRY_FAILED;
 
 /**
  * THE MOUNTED BANNERS' OWN RETRIES, BY PANEL — so the menu item is the SAME COMMAND (FR-042c).
@@ -222,6 +234,7 @@ export function PanelFailureBanner({
   onRetry,
   onCancel,
   onClose,
+  copyable = false,
 }: PanelFailureBannerProps): ReactElement {
   const copy = useCopyToClipboard();
   const { notify } = useNotify();
@@ -313,12 +326,27 @@ export function PanelFailureBanner({
         ships `⎘` for it — a component that hard-coded 📋 would ignore the user's icon pack and
         render something the rest of the application does not use.
       */}
-      {onClose === undefined ? (
+      {onClose === undefined || copyable ? (
         <IconButton
           token="copy"
           title="Copy details"
           className="panel-failure__control"
-          onClick={() => copy(panelFailureText({ headline, subject, detail }), subject)}
+          onClick={() =>
+            // 050 FR-037 — every line this banner shows, as shown, then `Details` and what it never
+            // shows. `retryFailed` and `pointer` are the banner's own state, so the copy cannot
+            // drift from the screen.
+            copy(
+              panelFailureText({
+                headline,
+                subject,
+                detail,
+                note,
+                retryFailed,
+                pointer: onClose !== undefined ? 'none' : notified ? 'notified' : 'copy-only',
+              }),
+              subject,
+            )
+          }
         />
       ) : null}
       {onClose === undefined ? (

@@ -159,10 +159,20 @@ export class FilesService {
    * another window gets that window named (FR-013a). Absent when the caller has no window — every
    * panel then reads as "here", which is the same answer a single-window session gives.
    */
-  private async holderFor(relPath: string, reportingWindowId?: number): Promise<Holder | undefined> {
-    if (!this.resolveHolder || !this.root) return undefined;
+  private async holderForRel(relPath: string, reportingWindowId?: number): Promise<Holder | undefined> {
+    if (!this.root) return undefined;
+    return this.holderFor(this.absOf(relPath), reportingWindowId);
+  }
+
+  /**
+   * Who is holding the item at an ABSOLUTE path, best effort (050 T013). The transfer engine works
+   * on absolute paths across every project root, so it cannot go through the root-relative form.
+   * Never throws — this is a failure path.
+   */
+  async holderFor(absPath: string, reportingWindowId?: number): Promise<Holder | undefined> {
+    if (!this.resolveHolder) return undefined;
     try {
-      return await this.resolveHolder(this.absOf(relPath), reportingWindowId);
+      return await this.resolveHolder(absPath, reportingWindowId);
     } catch {
       // Identifying a holder is inherently racy — the process can go between the failure and the
       // lookup. A lookup that fails degrades to "not identified", which is a stated outcome
@@ -218,7 +228,7 @@ export class FilesService {
   }
 
   async rename(relPath: string, newName: string, reportingWindowId?: number): Promise<OkOrError> {
-    return this.bracketed(() => this.renameInBracket(relPath, newName, reportingWindowId));
+    return this.exclusive(() => this.renameInBracket(relPath, newName, reportingWindowId));
   }
 
   private async renameInBracket(
@@ -283,7 +293,7 @@ export class FilesService {
        * move bracket by that round trip: every open document stayed `movePending` for longer than
        * the operation took, for an answer nobody would read.
        */
-      const holder = holdsTheAnswer(e) ? await this.holderFor(relPath, reportingWindowId) : undefined;
+      const holder = holdsTheAnswer(e) ? await this.holderForRel(relPath, reportingWindowId) : undefined;
       return this.failed(e, 'lock', holder);
     } finally {
       if (bracketOpen) this.onMoved?.(moved);
@@ -291,7 +301,7 @@ export class FilesService {
   }
 
   async move(srcRelPaths: readonly string[], destRelDir: string): Promise<OkOrError> {
-    return this.bracketed(() => this.moveInBracket(srcRelPaths, destRelDir));
+    return this.exclusive(() => this.moveInBracket(srcRelPaths, destRelDir));
   }
 
   private async moveInBracket(srcRelPaths: readonly string[], destRelDir: string): Promise<OkOrError> {
@@ -560,11 +570,33 @@ export class FilesService {
    * The chain is never broken by a failure: `op` already returns `{ error }` rather than throwing
    * (FR-025), and the `catch` here is the belt-and-braces that guarantees one rejected link cannot
    * wedge every move for the rest of the session.
+   *
+   * Public since 050 (R2): the transfer engine runs every paste, drag and cross-project undo inside
+   * this same queue, so "file operations run one at a time" (FR-019e) is one queue, not two.
    */
-  private bracketed<T>(op: () => Promise<T>): Promise<T> {
+  exclusive<T>(op: () => Promise<T>): Promise<T> {
     const run = this.moveQueue.then(op, op);
     this.moveQueue = run.catch(() => undefined);
     return run;
+  }
+
+  /**
+   * Open the move bracket for an operation that runs OUTSIDE this service (050 T013 — the transfer
+   * engine). Only valid inside {@link exclusive}: the bracket's close clears every open doc, which is
+   * exact only while one bracket is open at a time.
+   */
+  beginMoveBracket(absPaths: readonly string[]): void {
+    this.onMoveStarted?.(absPaths);
+  }
+
+  /** Close a bracket opened by {@link beginMoveBracket}, with exactly the pairs that moved. */
+  endMoveBracket(moves: readonly MovePair[]): void {
+    this.onMoved?.(moves);
+  }
+
+  /** The active project's absolute root, or null (050 T013 — the transfer engine's target bound). */
+  activeRoot(): string | null {
+    return this.root;
   }
 
   private absOf(rel: string): string {
@@ -594,7 +626,7 @@ export class FilesService {
  * A failure matching none of the five kinds is returned UNCHANGED (FR-011b) — which is what makes
  * this incapable of making anything worse than it already is.
  */
-function failure(
+export function failure(
   e: unknown,
   operation: FailureOperation = 'access',
   holder?: Holder,
@@ -612,7 +644,7 @@ function failure(
  * which is why the two are named here rather than the kind being re-derived: this runs BEFORE
  * classification, on the failure path, to decide whether classification needs an expensive answer.
  */
-function holdsTheAnswer(error: unknown): boolean {
+export function holdsTheAnswer(error: unknown): boolean {
   const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
   return code === 'EBUSY' || code === 'EPERM';
 }

@@ -47,6 +47,8 @@ export interface PreviewStatusBarProps {
   parented: boolean;
   /** The preview's editor route (`runPreviewEditorRoute`), shared with both menus (FR-015b). */
   onEditorRoute: () => void;
+  /** 050 R26 — the file moved to another project: the route is unavailable. */
+  editorRouteDisabled?: boolean;
   /** FR-122c — `editor.previews.syncScroll` as the window holds it, shown as the toggle's pressed state. */
   syncScroll: boolean;
   /** FR-122 — the toggle's click: the panel's `toggleSyncScroll` call, shared with its body menu row. */
@@ -66,6 +68,7 @@ export function PreviewStatusBar({
   providerKind,
   parented,
   onEditorRoute,
+  editorRouteDisabled = false,
   syncScroll,
   onToggleSyncScroll,
   readout,
@@ -105,6 +108,7 @@ export function PreviewStatusBar({
           testId={`preview-editor-${panelId}`}
           title={title}
           ariaPressed={parented}
+          disabled={editorRouteDisabled}
           onClick={onEditorRoute}
         />
       </div>

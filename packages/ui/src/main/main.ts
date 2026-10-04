@@ -75,6 +75,7 @@ import { installNavigationGuards, installRendererRequestFilter } from './rendere
 import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
 import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
+import { walkMovedLayouts } from './moved-layout-walk.js';
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
@@ -112,6 +113,10 @@ import { NodeFileWatcher } from './node-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
+import { FileClipboardService } from './file-clipboard.js';
+import { TransferService } from './transfer-service.js';
+import { createTransferPush, registerTransferIpc } from './transfer-ipc.js';
+import { TransferQuitGate } from './transfer-quit-gate.js';
 import { resolveThrongHolder } from './throng-holder.js';
 import { PanelIdentityRegistry } from './panel-identity.js';
 import { ExplorerWatcher } from './explorer-watcher.js';
@@ -1153,6 +1158,11 @@ if (isPrimaryInstance)
   // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
   filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));
   registerFilesIpc(filesService, explorerWatcher);
+  // 050 R1 — the application's ONE File Explorer clipboard (FR-001, FR-002), memory only (FR-007).
+  // Every window hears each change, so every explorer greys and labels from the same value.
+  const fileClipboard = new FileClipboardService((clipboard) =>
+    broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:fileClipboard:changed', clipboard),
+  );
   /*
    * 033 US1 — the project file index that seeds Quick Open (contracts/file-index.md §2).
    *
@@ -1217,6 +1227,9 @@ if (isPrimaryInstance)
       // its hidden set going away is a change like any other.
       if (gone.hiddenPaths.length > 0) changed.push(gone.rootFolder);
     }
+    // 050 FR-011 — a project removed or re-rooted empties a clipboard holding its items. Here, inside
+    // the refresh, so EVERY caller's fresh list is checked — and only a list the daemon actually gave.
+    fileClipboard.retainProjects(new Map(projects.map((p) => [p.id, p.rootFolder])));
     return changed;
   };
   const projectFileIndex = new ProjectFileIndexService(
@@ -1646,7 +1659,11 @@ if (isPrimaryInstance)
   registerClipboardIpc(container.get<ClipboardService>(UI_TYPES.ClipboardService));
   // Deleting a file that is open in an editor marks that editor dirty (FR-099): the
   // buffer survives so the user can save it back (re-creating the file) or discard.
-  filesService.setOnDeleted((absPaths) => editorCoordinator.markDeleted(absPaths));
+  // 050 FR-009 — and a deleted pending item leaves the File Explorer clipboard.
+  filesService.setOnDeleted((absPaths) => {
+    editorCoordinator.markDeleted(absPaths);
+    fileClipboard.dropDeleted(absPaths);
+  });
   // #273 — what confines `revealDocument`, since a rootless sub-workspace panel has no root to be
   // confined by: a path may be revealed exactly while some Panel, in some window, is showing it —
   // an editor OR a preview (044 FR-033: a standalone preview shows a file no editor has open).
@@ -1670,9 +1687,94 @@ if (isPrimaryInstance)
     previews,
     history: historyService,
     broadcastFilesMoved: (moves) => historyPush.broadcastFilesMoved(moves),
+    clipboard: fileClipboard,
   });
   filesService.setOnMoveStarted(inAppMoves.started);
   filesService.setOnMoved(inAppMoves.moved);
+
+  /*
+   * 050 R2 — the transfer engine every paste and drag runs through, and its wire
+   * (contracts/transfer-ipc.md). It shares `FilesService`'s queue and move bracket, so a cross-project
+   * move reaches the same `inAppMoves` consumers an in-project one does (FR-016), and file operations
+   * stay one at a time (FR-019e). Sources may come from ANY project root, so the project list is
+   * re-read from the daemon before each job (FR-010).
+   */
+  const freshProjects = async (): Promise<{ id: string; rootFolder: string }[]> => {
+    await refreshProjectsCache();
+    return [...projectsByRoot.values()].map((p) => ({ id: p.id, rootFolder: p.rootFolder }));
+  };
+  const transferPush = createTransferPush((windowId, channel, payload) => {
+    const target = webContents.fromId(windowId);
+    if (!target || target.isDestroyed()) return false;
+    target.send(channel, payload);
+    return true;
+  });
+  const transferService = new TransferService({
+    fs: fileSystem,
+    files: filesService,
+    projects: freshProjects,
+    events: transferPush.events,
+    clash: transferPush.clash,
+    clipboard: fileClipboard,
+    // Read live, so a change in Preferences applies to the next clash without a restart (FR-018f).
+    replaceMode: () => currentSettings.explorer.replaceMode,
+    // 050 R19 (FR-016, FR-035) — once a job's moves land, rewrite the layouts no window holds, so a
+    // project shown later (or after a restart) has its panels' new paths and `movedOut` flags. The held
+    // records are the windows' own (`MovedPathSync` & co.), on the same O6 rule as the preview purge.
+    afterMoves: (moves) => {
+      void walkMovedLayouts(
+        {
+          call: <T>(method: string, params: unknown) => daemonClient.call<T>(method, params),
+          held: async () => {
+            const { projects } = await daemonClient.call<{ projects: Array<{ id: string; isActive?: boolean }> }>(
+              'projects.list',
+              {},
+            );
+            return {
+              projectIds: new Set(projects.filter((p) => p.isActive === true).map((p) => p.id)),
+              subWorkspaceIds: new Set(windowManager.childIds()),
+            };
+          },
+          notifySubWorkspaceChanged: (id) =>
+            broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:subworkspace:changed:push', id),
+        },
+        moves,
+      ).catch((error: unknown) => {
+        // Best-effort: a layout the walk could not rewrite keeps its old path, as before this walk existed.
+        diagnostics.log.warn(
+          `[transfer] rewriting unheld layouts after a move failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    },
+  });
+  // 050 R11 (FR-019f) — asked FIRST by the main window's close handler, below. The prompt goes to the
+  // main window through the TDZ-safe ref: the window does not exist yet when this is built.
+  const transferQuitGate = new TransferQuitGate(transferService, (counts) =>
+    currentMainWindow()?.webContents.send('throng:transfer:quitPrompt', counts),
+  );
+  registerTransferIpc(ipcMain, {
+    quitChoice: (choice) => transferQuitGate.choose(choice),
+    clipboard: fileClipboard,
+    transfer: transferService,
+    push: transferPush,
+    activeRoot: () => filesService.activeRoot(),
+    activeProjectId: async () => {
+      const root = filesService.activeRoot();
+      if (!root) return null;
+      await refreshProjectsCache();
+      return projectsByRoot.get(normaliseForCompare(root))?.id ?? null;
+    },
+  });
+  // A window that closes mid-question answers Cancel, and a pending cancel choice Keep finished (R9).
+  const watchTransferOwner = (contents: WebContents): void => {
+    const id = contents.id;
+    contents.once('destroyed', () => {
+      transferPush.windowGone(id);
+      transferService.ownerGone(id);
+    });
+  };
+  for (const contents of webContents.getAllWebContents()) watchTransferOwner(contents);
+  app.on('web-contents-created', (_event, contents) => watchTransferOwner(contents));
 
   // Terminal flavours (005 Phase B): UI main owns shell detection (inline, like
   // the FS seams above), merging the machine's built-ins with settings.terminals.
@@ -1950,6 +2052,16 @@ if (isPrimaryInstance)
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
+    // 050 FR-019f — a paste running or queued is asked about BEFORE anything else. Once the user's
+    // answer lets the close go on, it starts again from the top: the gate is idle then, so the
+    // ordinary flow below runs, terminals prompt included. Dismissed → the window stays open.
+    const pastes = transferService.busy();
+    if (pastes.running + pastes.queued > 0) {
+      void transferQuitGate.check().then((proceed) => {
+        if (proceed && !mainWindow.isDestroyed()) mainWindow.close();
+      });
+      return;
+    }
     // Immediately show a blocking overlay (spinner + wait cursor) so the click gives
     // instant feedback, THEN resolve into the warning or the closing message once we
     // know whether any terminals are running.

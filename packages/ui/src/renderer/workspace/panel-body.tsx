@@ -12,10 +12,10 @@ import { PanelDropTarget, type DropContext } from '../editor/drop-target.js';
 import { TreeDropTarget } from '../editor/tree-drop-target.js';
 import { openFileInPanel } from '../editor/editor-open.js';
 import { findEditorPanelByPath } from '../editor/editor-state.js';
-import { collectPanels, defaultOpenActionFor, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
+import { collectPanels, FIND_IN_FILES_KIND, PREVIEW_KIND } from '@throng/core';
+import { openFileInEmptyPanel, previewProjectForDrop } from './open-dropped-file.js';
 import { useAppSettings } from '../config/config-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
-import { requestPreviewOpen } from '../preview/open-preview.js';
 import { focusPanel } from './panel-focus.js';
 import { currentPanelTitle } from './use-panel-display-names.js';
 import { PreviewPanel } from '../preview/preview-panel.js';
@@ -299,40 +299,19 @@ function UntypedPanelBody({
   const previews = useAppSettings().editor.previews;
   const { registry } = usePreviewProviders();
 
-  const typeAsEditor = useCallback(
-    (absPath: string): void => {
-      ws.setPanelType(panel.id, 'editor', { filePath: absPath });
-      window.throng?.panel?.notifyTyped?.(panel.id, 'editor', { filePath: absPath });
-    },
-    [ws, panel.id],
-  );
-
   /*
-   * 047 FR-077 (R18) — a file dropped here opens in the view its provider's DEFAULT OPEN ACTION names
-   * (044 FR-052; core's `defaultOpenActionFor`, which a disabled provider or an unclaimed file answers
-   * `editor`): a preview when that is Preview, an editor otherwise. The preview is asked for through
-   * the one `preview.open` command, `intoPanelId` naming THIS panel — a drop is a gesture at a place —
-   * and `mode: 'new'` so main never reuses another preview instead. With no project to ask on behalf
-   * of (a sub-workspace's own panel holding a path outside every project) it is an editor, exactly
-   * as `open-router.ts` falls back.
+   * 047 FR-077 (R18) — a file dropped here opens in the view its provider's DEFAULT OPEN ACTION names:
+   * a preview into THIS panel, or an editor. The rule is shared with the tab strip's + (050 FR-038),
+   * which fills a new tab's empty panel the same way — see `open-dropped-file.ts`.
    */
   const previewProjectFor = useCallback(
-    (absPath: string): string | null => {
-      if (defaultOpenActionFor(registry, previews, absPath) !== 'preview') return null;
-      return dropCtx.ownerProjectId ?? owningProjectFor(absPath);
-    },
+    (absPath: string): string | null =>
+      previewProjectForDrop(registry, previews, absPath, dropCtx.ownerProjectId, owningProjectFor),
     [dropCtx.ownerProjectId, owningProjectFor, registry, previews],
   );
   const openDropped = useCallback(
-    (absPath: string): void => {
-      const projectId = previewProjectFor(absPath);
-      if (projectId) {
-        void requestPreviewOpen({ absPath, projectId, target: { mode: 'new' }, intoPanelId: panel.id });
-        return;
-      }
-      typeAsEditor(absPath);
-    },
-    [previewProjectFor, panel.id, typeAsEditor],
+    (absPath: string): void => openFileInEmptyPanel(ws, panel.id, absPath, previewProjectFor(absPath)),
+    [ws, panel.id, previewProjectFor],
   );
 
   const acceptTreeDrop = useCallback(

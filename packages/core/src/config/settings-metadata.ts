@@ -394,6 +394,20 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: ['recycle', 'permanent'],
   },
   {
+    // 050 FR-018f — beside the delete mode, and independent of it.
+    key: 'explorer.replaceMode',
+    label: 'When Paste replaces an item',
+    description:
+      'What happens to an item a paste or drag replaces: move it to the Recycle Bin, so undo can restore it, or delete it permanently.',
+    group: 'File Explorer',
+    control: 'select',
+    allowedValues: ['recycle', 'permanent'],
+    optionLabels: {
+      recycle: 'Move it to the Recycle Bin',
+      permanent: 'Delete it permanently',
+    },
+  },
+  {
     key: 'explorer.excludeGlobs',
     label: 'Excluded globs',
     description: 'Root-relative glob patterns hiding entries from the file tree.',

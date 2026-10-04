@@ -57,6 +57,11 @@ export interface EditorUiState {
    * rule forbids.
    */
   openPending: boolean;
+  /**
+   * A move took the file out of this panel's project (050 FR-035): the panel stays, read-only, and says so
+   * in the moved notice. It holds no claim on the file, reads nothing, and is never reported as missing.
+   */
+  movedOut?: boolean;
   ownerProjectId?: string;
 }
 

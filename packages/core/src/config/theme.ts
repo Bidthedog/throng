@@ -390,6 +390,10 @@ export const THRONG_THEME: Theme = {
     // `destroy` but a distinct token so re-skinning one never affects the other
     // (009 addition; consumed by 011 main-window affordances).
     dismiss: '✕',
+    // Cancel a running operation (050 FR-039) — the paste notice's Cancel. A circle with a slash,
+    // deliberately NOT the `dismiss` cross: dismissing a message and stopping a run are different
+    // actions, and re-skinning one must never re-skin the other.
+    cancel: '⊘',
     collapse: '‹',
     expand: '›',
     rename: '✎',

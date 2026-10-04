@@ -30,8 +30,8 @@ import {
   isMissingReason,
   isOpenAnywhere,
   isUnderPath,
+  movedPathOf as coreMovedPathOf,
   openOrFocus,
-  remainderUnder,
   samePath,
   partitionByPathed,
   registerOpen,
@@ -220,6 +220,15 @@ interface CoordDoc {
   /** THRONG is moving this file right now (019, FR-004): between `beginMove` and
    *  `markMoved` its absence from `absPath` is the move in progress, not a delete. */
   movePending?: boolean;
+  /**
+   * 050 FR-035 (R18, data-model "Moved out") — a move took `absPath` outside the owner project's root.
+   *
+   * The document is DETACHED: it holds no registry claim and no watch (so the project the file moved to
+   * opens it as its own, 006 FR-011a, Principle XI), reads nothing, refuses edits and Save, and its
+   * Save As may target only the project root holding `absPath` (FR-036). A later move back inside the
+   * owner root clears it — unless another panel claimed that path meanwhile.
+   */
+  movedOut?: boolean;
   /** Watch on the doc's folder for external changes (soft detection, FR-028). */
   watch?: Disposable;
   recoveryTimer?: ReturnType<typeof setTimeout>;
@@ -279,6 +288,13 @@ export interface EditorSyncMsg {
   /** The document's file MOVED, in-app (019, FR-002). Its new absolute path — and the
    *  ONLY thing about the document that changed. Not a reload, not a dirty edit. */
   movedTo?: string;
+  /**
+   * 050 FR-035 (R18) — rides with `movedTo`. `true`: the move took the file out of the document's owner
+   * project; the document is detached (no registry claim, no watch, Save refused, Save As only into the
+   * project holding `movedTo`). `false`: a later move (undo/redo) brought it back and it is an ordinary
+   * document again. Absent when the move changed neither — an in-project move is unchanged.
+   */
+  movedOut?: boolean;
   /**
    * The document's word wrap changed (024 US1, FR-001a). Sent to every Panel showing this
    * document, in every window — wrap is document state, so one document has one answer.
@@ -593,7 +609,8 @@ export class EditorCoordinator {
     const isUnder = (file: string): boolean =>
       deletedAbsPaths.some((gone) => isUnderPath(file, gone));
     for (const doc of this.docs.values()) {
-      if (!doc.absPath || doc.fileMissing || !isUnder(doc.absPath)) continue;
+      // 050 FR-035 — a moved-out document has let go of its file: deleting it is not this panel's news.
+      if (!doc.absPath || doc.fileMissing || doc.movedOut || !isUnder(doc.absPath)) continue;
       // A document that never had its file in this panel (the FR-106d stand-in, a failed restore) and holds
       // nothing the user typed has no buffer for FR-099 to keep: an in-app delete leaves it exactly as the
       // folder watch does (`onDiskChange`). One it WAS typed into is dirty, and kept like any other.
@@ -645,7 +662,7 @@ export class EditorCoordinator {
     const isUnder = (file: string): boolean =>
       restoredAbsPaths.some((back) => isUnderPath(file, back));
     for (const doc of this.docs.values()) {
-      if (!doc.absPath || !doc.fileMissing || !isUnder(doc.absPath)) continue;
+      if (!doc.absPath || !doc.fileMissing || doc.movedOut || !isUnder(doc.absPath)) continue;
       const res = await this.service.load({
         absPath: doc.absPath,
         ownerRoot: doc.ownerRoot,
@@ -716,6 +733,7 @@ export class EditorCoordinator {
    * untouched — a file moved by ANOTHER program is still kept, dirty and recoverable (FR-009).
    */
   markMoved(moves: readonly MovePair[]): void {
+    const detached: { doc: CoordDoc; newAbs: string }[] = [];
     for (const doc of this.docs.values()) {
       // The bracket closes on EVERY doc it opened, moved or not — a flag left set would suppress
       // the dirtying a genuine external delete is entitled to, for the rest of the session.
@@ -723,6 +741,17 @@ export class EditorCoordinator {
       if (!doc.absPath) continue;
       const newAbs = movedPathOf(doc.absPath, moves);
       if (newAbs === null) continue;
+      // 050 FR-035 — a moved-out document is settled AFTER every ordinary one, so "has another editor
+      // claimed the path it returns to?" is asked of the registry as this batch leaves it, not halfway.
+      if (doc.movedOut) {
+        detached.push({ doc, newAbs });
+        continue;
+      }
+      // …and one this move takes out of its owner project is detached now.
+      if (leavesOwner(doc, newAbs)) {
+        this.moveDetached(doc, newAbs);
+        continue;
+      }
       // The one-buffer registry follows the file: the new path now focuses this editor, and the
       // old one is free — a stale claim there would refuse a later Save-As onto it (`:480`).
       // Unregister-then-register is the pair `save()` already uses for Save-As (`:503-505`).
@@ -740,6 +769,49 @@ export class EditorCoordinator {
       // isolated, so a throwing listener cannot cost a later document its move.
       this.announcePath(doc);
     }
+    for (const { doc, newAbs } of detached) this.moveDetached(doc, newAbs);
+  }
+
+  /**
+   * 050 FR-035 (R18) — `markMoved` for a document whose move crosses its owner project's boundary, or
+   * that is already moved out.
+   *
+   * - Leaving: release the claim and the watch, keep the buffer, dirty state and history untouched (it is
+   *   the same document, just detached), and tell the lifecycle listener the document is GONE for that
+   *   file (`unregistered`) — a parented preview falls back to standalone, and `PreviewService.moved`
+   *   then gives it its own moved-out state.
+   * - Moving again while out: the path follows (the header shows where the file is), nothing else.
+   * - Coming back inside the owner root unclaimed: re-claim, re-watch, `registered` — an ordinary
+   *   document again. Claimed by another panel meanwhile: it stays moved out at that path.
+   */
+  private moveDetached(doc: CoordDoc, newAbs: string): void {
+    const wasOut = doc.movedOut === true;
+    const backInside = !leavesOwner(doc, newAbs);
+    const claimed = openOrFocus(this.registry, newAbs);
+    const reclaim = backInside && (claimed.action !== 'focus' || claimed.panelId === doc.panelId);
+    if (!wasOut) {
+      unregisterPanel(this.registry, doc.panelId);
+      this.disposeWatch(doc);
+    }
+    doc.absPath = newAbs;
+    if (reclaim) {
+      doc.movedOut = false;
+      registerOpen(this.registry, newAbs, { panelId: doc.panelId, windowId: doc.windowId });
+      this.watchDoc(doc);
+      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: newAbs, movedOut: false });
+      this.announcePath(doc);
+      return;
+    }
+    doc.movedOut = true;
+    this.deps.relaySync(-1, wasOut ? { panelId: doc.panelId, movedTo: newAbs } : { panelId: doc.panelId, movedTo: newAbs, movedOut: true });
+    if (!wasOut) this.announceDetached(doc);
+  }
+
+  /** The document no longer stands for its file (FR-035): `unregistered` for the path last announced. */
+  private announceDetached(doc: CoordDoc): void {
+    const told = doc.reported.path;
+    doc.reported.path = null;
+    if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, doc.panelId));
   }
 
   /**
@@ -751,7 +823,7 @@ export class EditorCoordinator {
    * takes the `getContent` path and never attempts a load at all, so without this the banner
    * silently disappears and the editor goes back to presenting remembered text as the file.
    */
-  register(meta: DocMeta, text = '', opts: { unloadable?: boolean } = {}): void {
+  register(meta: DocMeta, text = '', opts: { unloadable?: boolean; movedOut?: boolean } = {}): void {
     const previous = this.docs.get(meta.panelId);
     const doc: CoordDoc = {
       panelId: meta.panelId,
@@ -771,6 +843,26 @@ export class EditorCoordinator {
     doc.unloadable = opts.unloadable === true;
     // A mount that failed to read its path never read it here: nothing of the file's for FR-099 to keep.
     doc.neverRead = doc.unloadable;
+    if (opts.movedOut === true && meta.absPath) {
+      /*
+       * 050 FR-035/FR-036 — a panel restored with `config.movedOut` (after a restart, or a layout no window
+       * held during the move) whose unsaved text the renderer is about to restore. It is detached from the
+       * start: no claim, no watch, nothing read, and the lifecycle listener is told nothing about a file
+       * that is another project's. Save As then works through the same exception as a live move-out.
+       */
+      if (previous?.absPath) {
+        this.disposeWatch(previous);
+        unregisterPanel(this.registry, meta.panelId);
+      }
+      doc.movedOut = true;
+      this.docs.set(meta.panelId, doc);
+      const told = doc.reported.path;
+      doc.reported.path = null;
+      doc.reported.dirty = doc.authority.dirty;
+      doc.reported.contentless = false;
+      if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, doc.panelId));
+      return;
+    }
     this.docs.set(meta.panelId, doc);
     if (meta.absPath) {
       registerOpen(this.registry, meta.absPath, { panelId: meta.panelId, windowId: meta.windowId });
@@ -850,6 +942,12 @@ export class EditorCoordinator {
   dispatchChange(meta: DocMeta, change: DispatchChangeMsg): void {
     const doc = this.docs.get(change.documentId);
     if (!doc) return; // the buffer was destroyed under a live view — nothing to apply it to
+    if (doc.movedOut) {
+      // 050 FR-035 — read-only. A view that typed anyway (a keystroke in flight as the move landed) is
+      // put back in step with the document, which did not change.
+      this.broadcastReset(doc);
+      return;
+    }
     this.refreshMeta(doc, meta);
 
     const canonical = doc.authority.dispatch(change);
@@ -1088,6 +1186,10 @@ export class EditorCoordinator {
     if (!doc.absPath) {
       return { ok: false, reason: 'no-location', error: 'This document has no file to reload from.' };
     }
+    if (doc.movedOut) {
+      // 050 FR-035 — the file is another project's now; this panel reads nothing.
+      return { ok: false, reason: 'out-of-tree', error: 'This file moved to another project.' };
+    }
     const res = await this.service.load({
       absPath: doc.absPath,
       ownerRoot: doc.ownerRoot,
@@ -1226,6 +1328,9 @@ export class EditorCoordinator {
       const doc = this.docs.get(panelId);
       const abs = doc?.absPath;
       if (!doc || !abs) return;
+      // 050 FR-035 — a moved-out document reads nothing: its path is another project's, and "could not
+      // be read" would be a false claim about a file that is fine where it went.
+      if (doc.movedOut) return;
       const req = {
         absPath: abs,
         ownerRoot: doc.ownerRoot,
@@ -1265,7 +1370,7 @@ export class EditorCoordinator {
     step: (doc: CoordDoc) => CanonicalChangeMsg | null,
   ): void {
     const doc = this.docs.get(panelId);
-    if (!doc) return;
+    if (!doc || doc.movedOut) return; // 050 FR-035 — a moved-out document is read-only
     const canonical = step(doc);
     if (!canonical) return; // nothing left to undo/redo — not an error
     this.scheduleRecovery(doc);
@@ -1607,7 +1712,8 @@ export class EditorCoordinator {
     if (!target) return { ok: false, reason: 'no-location', error: 'Choose where to save first.' };
     // Save-As onto a path already open in ANOTHER editor would bind two buffers to
     // one file (violates the app-wide one-buffer rule, FR-011a).
-    if (target !== doc.absPath) {
+    // A moved-out document holds no claim (050 FR-035), so ANY claim on its target is another editor's.
+    if (target !== doc.absPath || doc.movedOut) {
       const at = openOrFocus(this.registry, target);
       if (at.action === 'focus' && at.panelId !== doc.panelId) {
         return { ok: false, reason: 'io', error: 'That file is already open in another editor.' };
@@ -1617,6 +1723,12 @@ export class EditorCoordinator {
     if (payload.ownerKind) doc.ownerKind = payload.ownerKind;
     if (payload.ownerRoot !== undefined) doc.ownerRoot = payload.ownerRoot;
     if (payload.allProjectRoots) doc.allProjectRoots = [...payload.allProjectRoots];
+    // 050 FR-036 — a moved-out document saving anywhere but its OWN project goes by the exception. Save As
+    // back into its own project is ordinary 006 FR-084 and takes the path below; it ends moved-out state.
+    const wasMovedOut = doc.movedOut === true;
+    if (wasMovedOut && (payload.absPath === undefined || leavesOwner(doc, target))) {
+      return this.saveMovedOut(doc, payload.absPath);
+    }
 
     const result = await this.service.save({
       absPath: target,
@@ -1655,6 +1767,12 @@ export class EditorCoordinator {
     // Mirror the clean state to any other window showing this document, so a synced
     // editor's unsaved dot clears everywhere on save (FR-034). No origin to exclude.
     this.deps.relaySync(-1, { panelId: doc.panelId, dirty: false });
+    if (wasMovedOut) {
+      // 050 FR-036 — a Save As into its own project: an ordinary editor of that file again, claimed and
+      // watched above. `reported.path` was cleared when it moved out, so `announcePath` says `registered`.
+      doc.movedOut = false;
+      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: target, movedOut: false });
+    }
     // FR-013c / FR-013a — only now, with the save fully settled and relayed. A Save As of a pathed
     // document is one `repointed`, exactly as an in-app move; the first Save As of an unpathed one is
     // `registered(target)`, because a document now exists for that file. The relay above carries no
@@ -1663,6 +1781,60 @@ export class EditorCoordinator {
     // R14, FR-109 — a Save As re-points the editor's CURRENT history entry: no second entry, and no stale
     // one for Back to land on. The first Save As of an unpathed document records it (H8). Called here
     // rather than through the listener, whose one slot is `PreviewService`'s.
+    if (pathChanged) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(doc.panelId, target));
+    this.notifyAfterMutation(doc, false);
+    return result;
+  }
+
+  /**
+   * 050 FR-036 (amended) — saving a moved-out document.
+   *
+   * Save (no new path) is refused: the file is another project's now. Save As outside its own project may
+   * write anywhere inside the project root that holds the document's current path — the one exception to
+   * 006 FR-084's confinement — and nowhere else. (Save As into its own project never reaches here: that is
+   * ordinary FR-084, handled by `save`, and makes it an ordinary editor again.) A successful one leaves the
+   * document moved out: clean, `absPath` the saved path, still no registry claim and no watch, so the
+   * saved file is the destination project's to open (Principle XI).
+   */
+  private async saveMovedOut(
+    doc: CoordDoc,
+    target: string | undefined,
+  ): Promise<SaveResult | { ok: false; reason: 'no-location'; error: string }> {
+    const refused = (error: string): SaveResult => ({ ok: false, reason: 'out-of-tree', error });
+    if (target === undefined) return refused('This file moved to another project. Use Save As to keep your changes.');
+    const here = doc.absPath;
+    const destinationRoot = here ? doc.allProjectRoots.find((root) => isUnderPath(here, root)) : undefined;
+    if (destinationRoot === undefined) return refused('This file moved to another project, which is no longer open.');
+    const result = await this.service.save({
+      absPath: target,
+      text: doc.authority.text,
+      encoding: doc.encoding,
+      hasBom: doc.hasBom,
+      lineEnding: doc.lineEnding,
+      ownerKind: 'project',
+      ownerRoot: destinationRoot,
+      allProjectRoots: doc.allProjectRoots,
+    });
+    if (!result.ok) {
+      return result.reason === 'out-of-tree'
+        ? refused('This file can only be saved inside the project it moved to.')
+        : result;
+    }
+    const pathChanged = doc.absPath !== target;
+    doc.absPath = target;
+    doc.authority.markSaved();
+    doc.fileMissing = false;
+    doc.unloadable = false;
+    doc.neverRead = false;
+    doc.missingSince = undefined;
+    doc.diskChanged = false;
+    if (doc.recoveryTimer) {
+      clearTimeout(doc.recoveryTimer);
+      doc.recoveryTimer = undefined;
+    }
+    void this.recovery.remove(doc.panelId);
+    this.deps.relaySync(-1, { panelId: doc.panelId, dirty: false });
+    this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: target, movedOut: true });
     if (pathChanged) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(doc.panelId, target));
     this.notifyAfterMutation(doc, false);
     return result;
@@ -1685,7 +1857,9 @@ export class EditorCoordinator {
       editors: scopeEditors,
       activeTabId: ctx.activeTabId,
       activeProjectId: ctx.activeProjectId,
-    }).filter((id) => this.docs.get(id)?.authority.dirty);
+    })
+      // 050 FR-036 — Save is unavailable on a moved-out document; Save All passes it by, as it would a clean one.
+      .filter((id) => this.docs.get(id)?.authority.dirty && !this.docs.get(id)?.movedOut);
     const { pathed, unpathed } = partitionByPathed(ids, scopeEditors);
     const saved: string[] = [];
     const failed: { panelId: string; reason: string }[] = [];
@@ -1739,6 +1913,8 @@ export class EditorCoordinator {
     fileMissing: boolean;
     /** The path could not be read when this document was adopted (027 / #161). */
     unloadable: boolean;
+    /** 050 FR-035 — a move took the file out of this document's project; it is detached and read-only. */
+    movedOut: boolean;
     /**
      * 044 — the document has NO content of its file to follow: its path cannot be read and has never been
      * read in its panel (the FR-106d stand-in, a restore-time unloadable register). A parented preview shows
@@ -1761,6 +1937,8 @@ export class EditorCoordinator {
       // A REMOUNT reads its state from here and never attempts a load, so the banner survives a
       // tab/project/panel switch only because this is published (027 / #161).
       unloadable: !!doc.unloadable,
+      // 050 FR-035 — a remount shows the moved notice from this, without reading.
+      movedOut: !!doc.movedOut,
       contentless: isContentless(doc),
       // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
       // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
@@ -1986,6 +2164,15 @@ export class EditorCoordinator {
   }
 }
 
+/**
+ * 050 FR-035 — is `absPath` outside the project that owns this document? Only a PROJECT-owned document
+ * with a known root can be moved out; a sub-workspace editor's files lie outside every project and a
+ * cross-project move never takes one as a source.
+ */
+function leavesOwner(doc: CoordDoc, absPath: string): boolean {
+  return doc.ownerKind === 'project' && doc.ownerRoot !== null && !isUnderPath(absPath, doc.ownerRoot);
+}
+
 /** No content of its file to follow: unreadable, and never read in its panel (`CoordDoc.neverRead`). */
 function isContentless(doc: CoordDoc): boolean {
   return doc.unloadable === true && doc.neverRead === true;
@@ -2006,21 +2193,11 @@ function isContentless(doc: CoordDoc): boolean {
  * path they could have typed.
  *
  * Exported for `PreviewService` (044 u7), whose standalone previews follow an in-app move by the same
- * rule — one rule for "where did this file go", not two that must agree.
+ * rule — one rule for "where did this file go", not two that must agree. The rule itself now lives in core
+ * (050 R19, `workspace/moved-paths.ts`), so the layout walk and the renderer's held-layout patch use it too.
  */
 export function movedPathOf(absPath: string, moves: readonly MovePair[]): string | null {
-  for (const move of moves) {
-    if (samePath(absPath, move.from)) return move.to;
-    // Cut by SEGMENTS (`remainderUnder`), never at `normaliseForCompare(move.from).length`: lower-casing
-    // can lengthen a name (`İ`), and that slice then ate the first letter of the file (adversarial review).
-    const remainder = remainderUnder(absPath, move.from);
-    if (remainder !== null) {
-      const to = move.to.replace(/[\\/]+$/, '');
-      const sep = to.includes('\\') ? '\\' : '/';
-      return to + remainder.replace(/[\\/]/g, sep);
-    }
-  }
-  return null;
+  return coreMovedPathOf(absPath, moves);
 }
 
 /**

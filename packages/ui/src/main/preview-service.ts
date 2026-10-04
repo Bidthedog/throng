@@ -221,6 +221,12 @@ interface PreviewRun {
    * once rather than on the settle schedule.
    */
   documentContentless: boolean;
+  /**
+   * 050 FR-035 (R18) — a move took the run's file out of `projectRoot`. The run shows `moved-out` with the
+   * new path, holds no `byPath` entry, watches and reads nothing, and is never parented. Cleared when a
+   * move (undo, redo) brings the path back inside, or a navigation moves the run to a file of its project.
+   */
+  movedOut: boolean;
 }
 
 /**
@@ -604,6 +610,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   async refresh(panelId: string): Promise<PreviewRefreshResponse> {
     const run = this.runs.get(panelId);
     if (!run) return { update: null };
+    // 050 FR-035 — a moved-out run reads nothing: Refresh flashes the notice it already shows.
+    if (run.movedOut) return { update: run.notice ? this.emit(run, null, { ...run.notice, repeat: true }) : this.snapshot(run) };
     if (run.source.kind === 'document') {
       run.scheduler?.cancel();
       const current = this.deps.documents.getContent(run.source.documentPanelId);
@@ -880,7 +888,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 044 T177 — this is a NAVIGATION, the one thing that is not an update: the renderer shows the target
     // from its top (FR-024), where a re-point through `rebind` alone keeps the reader's place.
     run.navigationSeq += 1;
-    this.rebind(run, target, { rewriteHistory: false });
+    // 050 FR-035 — a navigation lands inside the project (the link and history rules confine it), so a
+    // moved-out run that steps away from the moved file is an ordinary preview again.
+    const wasOut = run.movedOut;
+    run.movedOut = false;
+    this.rebind(run, target, { rewriteHistory: false, ...(wasOut ? { movedOut: false } : {}) });
 
     if (doc) {
       run.source = { kind: 'document', documentPanelId: doc.panelId };
@@ -1052,6 +1064,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       if (run.source.kind !== 'disk') continue;
       const next = movedPathOf(run.filePath, moves);
       if (next === null) continue;
+      // 050 FR-035 — a move across the run's project boundary, either way, or a moved-out run moving again.
+      if (run.movedOut || !isUnderPath(next, run.projectRoot)) {
+        this.moveDetached(run, next, before);
+        continue;
+      }
       const holder = this.runForPath(canon(next));
       if (holder && holder !== run && before.get(holder.panelId) === canon(next)) {
         heldBack.push(run.panelId);
@@ -1063,6 +1080,49 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       void this.readAndApply(run, { force: true, repeat: false });
     }
     return heldBack;
+  }
+
+  /**
+   * 050 FR-035 (R18) — `moved` for a run whose file left its project, or a moved-out run's file moving again.
+   *
+   * - Leaving: the run lets go of the file — no watch, no read, no `byPath` hold (so the project the file
+   *   moved to opens its own preview of it, FR-012 per project) — and shows `moved-out` with the new path.
+   *   Never `unreadable`: nothing here asks the disk.
+   * - Moving again while still outside: the path and the notice follow.
+   * - Back inside `run.projectRoot`: an ordinary preview again — parented if a document holds the path,
+   *   else read and watched from disk — unless another run already holds that path (FR-012), in which case
+   *   it stays moved out, as an editor does when another editor holds its path.
+   *
+   * `pathChanged` carries `movedOut` on each flip, to every window, so a held layout's preview that no
+   * window is viewing records it in its config too.
+   */
+  private moveDetached(run: PreviewRun, next: string, before: ReadonlyMap<string, string>): void {
+    const wasOut = run.movedOut;
+    const key = canon(next);
+    const holder = this.runForPath(key);
+    const backInside =
+      isUnderPath(next, run.projectRoot) && !(holder && holder !== run && before.get(holder.panelId) === key);
+    run.scheduler?.cancel();
+    run.readSeq += 1; // a read still in flight describes where the file was
+    if (!backInside) {
+      if (run.source.kind === 'disk') run.source.watch.dispose();
+      run.source = { kind: 'disk', watch: { dispose: () => {} } };
+      run.movedOut = true;
+      this.rebind(run, next, { rewriteHistory: false, claim: false, movedOut: wasOut ? undefined : true });
+      run.notice = { kind: 'moved-out', movedTo: next };
+      this.emit(run, null);
+      return;
+    }
+    run.movedOut = false;
+    this.rebind(run, next, { rewriteHistory: false, movedOut: false });
+    const doc = this.deps.documents.documentFor(next);
+    if (doc && this.deps.registry.get(run.providerId)?.kind !== 'binary') {
+      this.makeParented(run, doc.panelId);
+      return;
+    }
+    run.notice = this.providerNotice(run);
+    this.watchDisk(run);
+    void this.readAndApply(run, { force: true, repeat: false });
   }
 
   /** Broadcast `pathChanged` with the file the run shows now — to put back a window's `config.filePath` (I-1). */
@@ -1085,7 +1145,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   registered(absPath: string, documentPanelId: string): void {
     const key = canon(absPath);
     for (const run of this.runs.values()) {
-      if (run.source.kind === 'disk' && canon(run.filePath) === key) this.makeParented(run, documentPanelId);
+      // Not a moved-out run (050 FR-035): the file is the other project's, and so is its document.
+      if (run.source.kind === 'disk' && !run.movedOut && canon(run.filePath) === key) {
+        this.makeParented(run, documentPanelId);
+      }
     }
   }
 
@@ -1287,6 +1350,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
       navigateSeq: 0,
       navigationSeq: 0,
       documentContentless: false,
+      movedOut: false,
     };
     this.runs.set(run.panelId, run);
     // Claimed, and announced, before the read: from here on a concurrent `open` must see this run, and a
@@ -1345,7 +1409,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    */
   private leavePath(key: string, run: PreviewRun): void {
     if (this.byPath.get(key) !== run.panelId) return;
-    const heir = [...this.runs.values()].find((r) => r !== run && canon(r.filePath) === key);
+    // A moved-out run (050 FR-035) shows another project's file and never inherits a hold on it.
+    const heir = [...this.runs.values()].find((r) => r !== run && !r.movedOut && canon(r.filePath) === key);
     if (heir) {
       this.byPath.set(key, heir.panelId);
       return;
@@ -1531,19 +1596,31 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   }
 
   /** Point a run at a new file: `byPath`, `openChanged` for both paths, `pathChanged`, provider. */
-  private rebind(run: PreviewRun, to: string, opts: { rewriteHistory: boolean }): void {
+  private rebind(
+    run: PreviewRun,
+    to: string,
+    opts: {
+      rewriteHistory: boolean;
+      /** 050 FR-035 — `false` for a moved-out run, which holds no path (default `true`). */
+      claim?: boolean;
+      /** 050 FR-035 — carried on `pathChanged` when the run's moved-out state flips. */
+      movedOut?: boolean;
+    },
+  ): void {
     const oldKey = canon(run.filePath);
     const newKey = canon(to);
     run.filePath = to;
     const provider = enabledProviderFor(this.deps.registry, this.previewSettings(), to);
     if (provider) run.providerId = provider.id;
     run.notice = provider ? (run.notice?.kind === 'no-provider' ? null : run.notice) : { kind: 'no-provider' };
-    if (oldKey !== newKey) {
-      this.leavePath(oldKey, run);
-      this.claimPath(newKey, run);
-    }
+    if (oldKey !== newKey || opts.claim === false) this.leavePath(oldKey, run);
+    if (opts.claim !== false) this.claimPath(newKey, run);
     if (opts.rewriteHistory) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(run.panelId, to));
-    this.deps.push.broadcastPathChanged({ panelId: run.panelId, filePath: to });
+    this.deps.push.broadcastPathChanged({
+      panelId: run.panelId,
+      filePath: to,
+      ...(opts.movedOut !== undefined ? { movedOut: opts.movedOut } : {}),
+    });
   }
 
   /** (Re)watch the run's folder and make the disk its source. */
@@ -1604,6 +1681,7 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    * (FR-026). Returns the update sent, or `null` when the read was stale or changed nothing.
    */
   private async readAndApply(run: PreviewRun, opts: { force: boolean; repeat: boolean }): Promise<PreviewUpdate | null> {
+    if (run.movedOut) return null; // 050 FR-035 — reads nothing
     const seq = ++run.readSeq;
     const path = run.filePath;
     const read = await this.readDisk(run);

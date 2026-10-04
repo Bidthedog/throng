@@ -31,6 +31,18 @@ export interface IFileSystem {
   move(src: string, destDir: string): Promise<string>;
   /** Copy `src` INTO `destDir`, optionally under `newName`; recursive for folders. */
   copy(src: string, destDir: string, newName?: string): Promise<string>;
+  /**
+   * Copy ONE file from `src` to the full path `dest`, stoppable mid-copy (050, research R5).
+   *
+   * `copy` is a single recursive OS call with no way to stop it, so Cancel on a large paste would
+   * wait for the whole file. This streams, and on `signal` abort it removes the partial `dest` before
+   * rejecting — Cancel never leaves a half-written item (spec Assumptions). An already-aborted signal
+   * copies nothing.
+   *
+   * `onBytes`, when given, is called as the copy proceeds with the bytes of THIS file copied so far
+   * (cumulative) — what a paste's progress bar fills by within a large file (050 FR-039, R23).
+   */
+  copyFileCancellable(src: string, dest: string, signal: AbortSignal, onBytes?: (copied: number) => void): Promise<void>;
   /** Permanent, irreversible delete (deleteMode = "permanent" only). */
   delete(path: string): Promise<void>;
   /** Move to the OS Recycle Bin / Trash (deleteMode = "recycle", default). */

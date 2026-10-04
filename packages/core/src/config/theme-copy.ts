@@ -500,6 +500,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the control that clears a transient message such as an error bar or notice, without destroying anything.',
   },
+  'icons.cancel': {
+    label: 'Cancel action icon',
+    description:
+      'The glyph on the control that stops a running operation, such as cancelling a paste in progress.',
+  },
   'icons.retry': {
     label: 'Retry action icon',
     description:
