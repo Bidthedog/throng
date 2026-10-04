@@ -1819,6 +1819,64 @@ textarea,
   line-height: 1.45;
 }
 
+/* 050 FR-032 — the clash question: incoming box → existing box, newer one highlighted. Theme tokens
+   only; the gaps separate the message above, the boxes, the apply-to-all row and the buttons below. */
+.clash-details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 0 16px;
+}
+
+.clash-sides {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.clash-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.clash-side--newer {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.clash-side__label {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.clash-newer {
+  color: var(--accent);
+  font-weight: var(--throng-font-weight-bold, 700);
+}
+
+.clash-arrow {
+  align-self: center;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+.clash-apply-all {
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
 .modal__buttons {
   display: flex;
   justify-content: flex-end;
@@ -2776,6 +2834,60 @@ textarea,
 .notice__body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* 050 FR-039 — the paste notice: a progress bar under "N of M files · size", and the Cancel icon in
+   its own slot at the right, apart from the text. Every colour is a theme token; the indeterminate
+   shimmer reuses `throng-shimmer` (loading.css) and stops under reduced motion (below). */
+.paste-progress__body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.paste-progress__main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.paste-progress__text {
+  overflow-wrap: anywhere;
+}
+.paste-progress__bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--throng-colour-border);
+}
+.paste-progress__fill {
+  height: 100%;
+  background: var(--throng-colour-accent);
+  transition: width 0.2s linear;
+}
+.paste-progress__bar--indeterminate {
+  background: linear-gradient(
+    90deg,
+    var(--throng-colour-border) 25%,
+    var(--throng-colour-accent) 37%,
+    var(--throng-colour-border) 63%
+  );
+  background-size: 400% 100%;
+  animation: throng-shimmer 1.4s ease infinite;
+}
+.paste-progress__cancel {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  border-left: 1px solid var(--throng-colour-border);
+}
+@media (prefers-reduced-motion: reduce) {
+  .paste-progress__bar--indeterminate {
+    animation: none;
+  }
+  .paste-progress__fill {
+    transition: none;
+  }
 }
 
 .notice__message {

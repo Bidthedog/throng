@@ -30,11 +30,11 @@ export function registerFilesIpc(service: FilesService, watcher: ExplorerWatcher
   ipcMain.handle('throng:files:rename', (event, relPath: unknown, newName: unknown) =>
     service.rename(asStr(relPath), asStr(newName), event.sender.id),
   );
+  // Within-project undo/redo of a `move` entry still applies through this (use-explorer-data's
+  // `applyEntry`). Paste and drag no longer do: they run through the transfer engine (050 R2), which is
+  // why `throng:files:copy` is gone.
   ipcMain.handle('throng:files:move', (_event, src: unknown, destDir: unknown) =>
     service.move(asStrArr(src), asStr(destDir)),
-  );
-  ipcMain.handle('throng:files:copy', (_event, src: unknown, destDir: unknown) =>
-    service.copy(asStrArr(src), asStr(destDir)),
   );
   ipcMain.handle('throng:files:delete', (_event, paths: unknown, mode: unknown) =>
     service.delete(asStrArr(paths), (mode === 'permanent' ? 'permanent' : 'recycle') as DeleteMode),

@@ -49,6 +49,8 @@ export interface PreviewEditorRouteItem {
   /** Parented → *Go to Editor*; standalone → *Open in Editor*. */
   parented: boolean;
   run: () => void;
+  /** 050 R26 — the file moved to another project: the row is drawn disabled. */
+  disabled?: boolean;
 }
 
 export interface PreviewContentMenuArgs {
@@ -178,6 +180,7 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       label: editorRoute.parented ? 'Go to Editor' : 'Open in Editor',
       icon: 'editorPanel',
       section: 'navigate',
+      disabled: editorRoute.disabled === true,
       onClick: () => editorRoute.run(),
     });
   }

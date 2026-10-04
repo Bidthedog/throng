@@ -65,6 +65,12 @@ export type EditorPanelConfig = {
    * first entry, so no migration is needed and `LAYOUT_SCHEMA_VERSION` does not move.
    */
   history?: PersistedHistory;
+  /**
+   * 050 FR-035 (R18, R19) — a move took `filePath` out of this panel's project. The panel mounts showing
+   * the moved notice, read-only, without reading the file. Written by main's walk of unheld layouts and by
+   * the holding window's `MovedPathSync`; cleared (absent) when a move brings the path back inside.
+   */
+  movedOut?: true;
 };
 
 /**
@@ -112,6 +118,8 @@ export type PreviewPanelConfig = {
    * alone decides, as it did then.
    */
   placedInLayoutProjectId?: string;
+  /** 050 FR-035 — as {@link EditorPanelConfig.movedOut}: the preview shows the moved notice and reads nothing. */
+  movedOut?: true;
 };
 
 /**

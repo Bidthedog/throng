@@ -439,7 +439,16 @@ export function registerPreviewOpener(
  * a window with no registered opener — either way nothing opened.
  */
 export async function requestPreviewOpen(intent: PreviewOpenIntent): Promise<boolean> {
-  if (!opener) return false;
-  const outcome = await opener(intent);
+  const outcome = await requestPreviewOpenOutcome(intent);
   return outcome.kind !== 'refused' && outcome.kind !== 'unavailable';
+}
+
+/**
+ * The same command, answering WHAT happened rather than whether anything did. A caller that made a place
+ * for the preview before asking (050 FR-038: the + drop's new tab) must know whether the preview landed
+ * THERE — `placed` — or main focused an existing one, placed it in another window, or refused.
+ */
+export async function requestPreviewOpenOutcome(intent: PreviewOpenIntent): Promise<OpenPreviewOutcome> {
+  if (!opener) return { kind: 'unavailable' };
+  return opener(intent);
 }

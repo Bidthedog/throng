@@ -11,6 +11,8 @@
  * 3. `rewritePaths` over every navigation history, once (never from `markMoved`), then `throng:files:moved`
  *    to every window, which rewrites `config.history` and a preview's `config.filePath` for the panels its
  *    layout holds.
+ * 4. `clipboard.followMoves` (050 FR-009) — the File Explorer clipboard re-points a pending item by the same
+ *    prefix rule an editor follows (019 FR-005). Last, because nothing before it reads the clipboard.
  *
  * Extracted from `main.ts` so the integration suite can drive the real order.
  *
@@ -43,6 +45,8 @@ export interface InAppMoveDeps {
   };
   /** `throng:files:moved { moves }` to every window. */
   broadcastFilesMoved(moves: readonly MovePair[]): void;
+  /** 050 FR-009 — the application File Explorer clipboard follows a pending item to its new path. */
+  clipboard: { followMoves(moves: readonly MovePair[]): void };
 }
 
 export interface InAppMoveCallbacks {
@@ -50,21 +54,38 @@ export interface InAppMoveCallbacks {
   moved(moves: readonly MovePair[]): void;
 }
 
+/**
+ * Run one consumer, isolated (050 FR-020, R27). By the time `moved` is called the files HAVE moved: a
+ * consumer that throws must neither starve the consumers after it nor reach the caller — whose
+ * operation would then be reported failed (and its undo stack left behind) although it landed.
+ */
+function isolated<T>(step: string, run: () => T, fallback: T): T {
+  try {
+    return run();
+  } catch (err) {
+    console.error(`[in-app-moves] ${step} threw:`, err);
+    return fallback;
+  }
+}
+
 export function createInAppMoveCallbacks(deps: InAppMoveDeps): InAppMoveCallbacks {
   return {
+    // Not isolated: `started` runs before anything changes, so a throw there fails the operation
+    // honestly — with nothing moved — rather than letting a move run unannounced.
     started: (absPaths) => {
       deps.coordinator.beginMove(absPaths);
       deps.previews.beginMove(absPaths);
     },
     moved: (moves) => {
-      deps.coordinator.markMoved(moves);
-      const heldBack = deps.previews.moved(moves);
-      deps.history.rewritePaths(moves, heldBack);
-      deps.broadcastFilesMoved(moves);
+      isolated('coordinator.markMoved', () => deps.coordinator.markMoved(moves), undefined);
+      const heldBack = isolated('previews.moved', () => deps.previews.moved(moves), [] as readonly string[]);
+      isolated('history.rewritePaths', () => deps.history.rewritePaths(moves, heldBack), undefined);
+      isolated('broadcastFilesMoved', () => deps.broadcastFilesMoved(moves), undefined);
       for (const panelId of heldBack) {
-        deps.previews.announcePath(panelId);
-        deps.history.announce(panelId);
+        isolated('previews.announcePath', () => deps.previews.announcePath(panelId), undefined);
+        isolated('history.announce', () => deps.history.announce(panelId), undefined);
       }
+      isolated('clipboard.followMoves', () => deps.clipboard.followMoves(moves), undefined);
     },
   };
 }

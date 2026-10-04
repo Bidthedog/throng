@@ -27,6 +27,11 @@ export type PreviewNotice = (
   /** Raised by the RENDERER, never by main: main does not parse headings. */
   | { kind: 'link-missing-heading'; target: string }
   | { kind: 'history-refused'; target: string; reason: string }
+  /**
+   * 050 FR-035 (R18) — a move took the run's file out of its project. The run reads and watches nothing;
+   * `movedTo` is the file's new absolute path (also the update's `filePath`). Close and Copy only, no Retry.
+   */
+  | { kind: 'moved-out'; movedTo: string }
 ) & { repeat?: true };
 
 /** `throng:preview:update` — to the run's viewers only (FR-022, FR-040, Principle I). */
@@ -159,6 +164,12 @@ export interface PreviewOpenChanged {
 export interface PreviewPathChanged {
   panelId: string;
   filePath: string;
+  /**
+   * 050 FR-035 — `true`: the move took `filePath` out of the run's project (write `config.movedOut`);
+   * `false`: a later move brought it back (delete it). Absent: neither changed. Broadcast to every window,
+   * so a held layout's preview that no window is viewing records it too.
+   */
+  movedOut?: boolean;
 }
 
 /** `throng:preview:focus` — to one window (FR-014, FR-090c). */

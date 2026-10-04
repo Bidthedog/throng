@@ -101,6 +101,8 @@ export interface PanelHeaderEditorState {
   dirty: boolean;
   /** Backed by a path on disk — the two reveal items exist only then, and Reload needs one. */
   hasFilePath: boolean;
+  /** 050 FR-036 — the file moved to another project: Save is disabled, Save As stays. */
+  movedOut?: boolean;
 }
 
 export interface PanelHeaderDetachTarget {
@@ -339,10 +341,13 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     // FR-015b/c/d — the mirror image of an editor's Open Preview. A binary provider has no editor at
     // all (FR-015e), so neither form is offered for one.
     if (args.preview?.providerKind === 'text') {
+      // 050 R26 — unavailable while the file is moved out (the layout's flag, which main's moved-out
+      // report is mirrored into): the row stays, disabled, like every other state-dependent command.
+      const disabled = (args.panel.config as { movedOut?: unknown } | undefined)?.movedOut === true;
       items.push(
         args.preview.parented
-          ? { label: 'Go to Editor', icon: 'editorPanel', section: 'navigate', onClick: () => actions.goToEditor() }
-          : { label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', onClick: () => actions.openInEditor() },
+          ? { label: 'Go to Editor', icon: 'editorPanel', section: 'navigate', disabled, onClick: () => actions.goToEditor() }
+          : { label: 'Open in Editor', icon: 'editorPanel', section: 'navigate', disabled, onClick: () => actions.openInEditor() },
       );
     }
     items.push({
@@ -415,6 +420,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       icon: 'send',
       section: 'content',
       shortcut: firstBinding(keybindings, 'editor.save'),
+      disabled: editor?.movedOut === true,
       onClick: () => actions.save(),
     });
     items.push({

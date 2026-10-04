@@ -12,6 +12,11 @@ export interface DirtyCloseRequest {
   targetLabel: string;
   /** Unsaved file names to name in the prompt. */
   files: string[];
+  /**
+   * The editor's file moved to another project (050 FR-036): Save is unavailable, so the one way to keep
+   * the work is Save As. The answer is still `'save'`; the dialog's wording and the caller's action change.
+   */
+  movedOut?: boolean;
   resolve: (choice: DirtyCloseChoice) => void;
 }
 
@@ -22,11 +27,16 @@ function emit(): void {
   for (const l of listeners) l();
 }
 
-export function promptDirtyClose(targetLabel: string, files: string[]): Promise<DirtyCloseChoice> {
+export function promptDirtyClose(
+  targetLabel: string,
+  files: string[],
+  opts?: { movedOut?: boolean },
+): Promise<DirtyCloseChoice> {
   return new Promise((resolve) => {
     pending = {
       targetLabel,
       files,
+      ...(opts?.movedOut ? { movedOut: true } : {}),
       resolve: (choice) => {
         pending = null;
         emit();

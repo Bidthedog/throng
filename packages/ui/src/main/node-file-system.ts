@@ -5,6 +5,9 @@
  * `trash` call is injected (Electron `shell.trashItem` in the composition root)
  * so this stays testable without the Electron runtime.
  */
+import { createReadStream, createWriteStream } from 'node:fs';
+import { Transform, type Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { basename, dirname, join } from 'node:path';
 import {
   cp,
@@ -32,11 +35,18 @@ export type TrashItem = (path: string) => Promise<void>;
  */
 export type RestoreItem = (originalPath: string, deletedAt: number) => Promise<void>;
 
+/**
+ * Open a file for streaming read (050 R5). A seam only so a test can abort from the first chunk —
+ * mid-copy by construction rather than by racing the disk. Production uses `createReadStream`.
+ */
+export type OpenRead = (path: string) => Readable;
+
 export class NodeFileSystem implements IFileSystem {
   constructor(
     private readonly trashItem: TrashItem,
     private readonly restoreItem: RestoreItem = () =>
       Promise.reject(new Error('restore-from-trash is not supported on this platform')),
+    private readonly openRead: OpenRead = (path) => createReadStream(path),
   ) {}
 
   async list(dir: string): Promise<DirEntry[]> {
@@ -90,6 +100,43 @@ export class NodeFileSystem implements IFileSystem {
     const dest = join(destDir, newName ?? basename(src));
     await cp(src, dest, { recursive: true });
     return dest;
+  }
+
+  /**
+   * Stream one file to `dest`, stoppable mid-copy (050 R5). On ANY failure — an abort included —
+   * the partial `dest` is removed before rejecting, so a cancelled paste never leaves a half-written
+   * item. An already-aborted signal is refused before `dest` is created.
+   */
+  async copyFileCancellable(
+    src: string,
+    dest: string,
+    signal: AbortSignal,
+    onBytes?: (copied: number) => void,
+  ): Promise<void> {
+    signal.throwIfAborted();
+    try {
+      const write = createWriteStream(dest, { flags: 'wx' });
+      if (onBytes) {
+        // Counted as each chunk passes on to the write: at most a chunk or two ahead of the disk.
+        let copied = 0;
+        const count = new Transform({
+          transform(chunk: Buffer, _enc, done) {
+            copied += chunk.length;
+            onBytes(copied);
+            done(null, chunk);
+          },
+        });
+        await pipeline(this.openRead(src), count, write, { signal });
+      } else {
+        await pipeline(this.openRead(src), write, { signal });
+      }
+    } catch (error) {
+      // `wx` refused an existing dest: that file is not ours to remove.
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        await rm(dest, { force: true, maxRetries: 5, retryDelay: 20 }).catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   async delete(path: string): Promise<void> {

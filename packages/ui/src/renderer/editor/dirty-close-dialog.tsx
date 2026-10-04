@@ -48,14 +48,19 @@ export function DirtyCloseDialog(): ReactElement | null {
               {')'}
             </>
           ) : null}
-          . Save before closing?
+          {req.movedOut ? '. Its file moved to another project, so it can only be saved as a new file.' : '. Save before closing?'}
         </>
       ),
       testIds: { dialog: 'dirty-close-dialog' },
       choices: [
         { label: 'Cancel', value: 'cancel', testId: 'dirty-close-cancel' },
         { label: 'Discard & close', value: 'discard', danger: true, testId: 'dirty-close-discard' },
-        { label: 'Save & close', value: 'save', testId: 'dirty-close-save' },
+        // A moved-out editor cannot Save (050 FR-036): its one way to keep the work is Save As.
+        {
+          label: req.movedOut ? 'Save As & close' : 'Save & close',
+          value: 'save',
+          testId: 'dirty-close-save',
+        },
       ],
     }).then((v) => {
       // A dismissal (overlay click / Escape) is a CANCEL — the safe answer. It must never be read as

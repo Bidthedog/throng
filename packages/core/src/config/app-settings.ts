@@ -47,6 +47,12 @@ export type DeleteMode = 'recycle' | 'permanent';
 /** File Explorer tree preferences (004, contracts/config-additions.md). */
 export interface ExplorerSettings {
   deleteMode: DeleteMode;
+  /**
+   * What a paste's Replace does with the item it overwrites (050 FR-018f): the Recycle Bin (default,
+   * so the paste's undo can restore it) or permanent. Deliberately its own setting, not `deleteMode`:
+   * a user who deletes permanently on purpose has not thereby agreed that a mis-clicked Replace should.
+   */
+  replaceMode: DeleteMode;
   /** Globs hiding entries by root-relative path; default = VS Code files.exclude. */
   excludeGlobs: string[];
   /** Drag modifier that copies (default Ctrl, Windows-style) (006, FR-095). */
@@ -718,6 +724,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   explorer: {
     deleteMode: 'recycle',
+    replaceMode: 'recycle',
     excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS],
     dragCopyModifier: 'ctrl',
     dragMoveModifier: 'shift',
@@ -1012,6 +1019,8 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
   if (!isRecord(v)) return cloneExplorer(fallback);
   const deleteMode: DeleteMode =
     v.deleteMode === 'recycle' || v.deleteMode === 'permanent' ? v.deleteMode : fallback.deleteMode;
+  const replaceMode: DeleteMode =
+    v.replaceMode === 'recycle' || v.replaceMode === 'permanent' ? v.replaceMode : fallback.replaceMode;
   // An explicit array (even empty = "exclude nothing") is honoured; anything else
   // falls back to the default list. Non-string entries are dropped.
   const excludeGlobs = Array.isArray(v.excludeGlobs)
@@ -1025,7 +1034,7 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     : fallback.dragMoveModifier;
   const autoRevealActiveFile =
     typeof v.autoRevealActiveFile === 'boolean' ? v.autoRevealActiveFile : fallback.autoRevealActiveFile;
-  return { deleteMode, excludeGlobs, dragCopyModifier, dragMoveModifier, autoRevealActiveFile };
+  return { deleteMode, replaceMode, excludeGlobs, dragCopyModifier, dragMoveModifier, autoRevealActiveFile };
 }
 
 const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
@@ -1033,6 +1042,7 @@ const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
 function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
   return {
     deleteMode: e.deleteMode,
+    replaceMode: e.replaceMode,
     excludeGlobs: [...e.excludeGlobs],
     dragCopyModifier: e.dragCopyModifier,
     dragMoveModifier: e.dragMoveModifier,

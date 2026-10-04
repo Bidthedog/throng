@@ -49,6 +49,9 @@ export async function saveAllEditors(params: {
   const { pathed } = partitionByPathed(ids, scopeEditors);
   for (const panelId of pathed) {
     const actions = getEditorActions(panelId);
+    // 050 FR-036 — Save is unavailable on an editor whose file moved to another project: passed by,
+    // like a clean one, and never counted a failure.
+    if (getEditorState(panelId)?.movedOut) continue;
     if (actions?.isDirty()) await actions.save();
   }
 }

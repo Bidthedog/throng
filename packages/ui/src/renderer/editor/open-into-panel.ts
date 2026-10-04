@@ -133,7 +133,8 @@ export async function replaceInEditorPanel(
         .find((p) => p.id === panelId)?.originProjectId;
       return { outcome: 'openedInNew', panelId: createDedicatedEditor(ws, tabId, absPath, owner) };
     }
-    if (choice === 'save' && !(await actions.save())) {
+    // A moved-out editor cannot Save (050 FR-036): its "save" is Save As.
+    if (choice === 'save' && !(await actions.saveForClose())) {
       return { outcome: 'saveFailed', panelId }; // a failed save must not be followed by the open
     }
   }

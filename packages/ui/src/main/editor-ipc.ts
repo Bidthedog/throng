@@ -173,7 +173,11 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     const text = typeof raw.text === 'string' ? raw.text : '';
     // `unloadable` says this panel adopted a path it could NOT read (027 / #161). Recorded on the
     // document so a later remount — which never re-attempts the load — still knows.
-    coordinator.register(toMeta(event, raw), text, { unloadable: raw.unloadable === true });
+    // 050 FR-035 — `movedOut`: a panel restored with `config.movedOut`, registered detached.
+    coordinator.register(toMeta(event, raw), text, {
+      unloadable: raw.unloadable === true,
+      movedOut: raw.movedOut === true,
+    });
   });
 
   /**

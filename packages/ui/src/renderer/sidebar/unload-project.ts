@@ -16,6 +16,7 @@
 import { planUnload, projectPanelIdsInSubWorkspaces } from '@throng/core';
 import type { Tab, UnloadTerminalAction } from '@throng/core';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
+import { saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
 import { settleLayoutSaves } from '../state/layout-saves.js';
 import type { EditorSaveAllResult } from '../global.js';
 
@@ -80,7 +81,14 @@ export async function unloadProject(
         scope: 'project',
         activeProjectId: id,
       });
-      if (!result || result.failed.length > 0 || result.skippedUnpathed.length > 0) {
+      // 050 FR-036 — main's Save All passes a moved-out editor by (it cannot Save); its way to keep the
+      // text is Save As, asked here, and a cancelled one stops the unload like any other unsaved change.
+      if (
+        !result ||
+        result.failed.length > 0 ||
+        result.skippedUnpathed.length > 0 ||
+        !(await saveDirtyMovedOutEditors(id))
+      ) {
         collaborators.reportFailure(
           `Nothing was unloaded: not every unsaved change in ${projectName} could be saved.`,
           projectName,

@@ -21,6 +21,10 @@ import {
   ancestorsWithinRoot,
   deletePaths,
   descendantOpenFolders,
+  dropFileOpEntriesNamingProjects,
+  pushFileOpRedoEntry,
+  pushFileOpUndoEntry,
+  removeFileOpById,
   emptyStack,
   immediateChildFolders,
   isExcluded,
@@ -37,6 +41,7 @@ import {
   type DirEntry,
   type ExpandNode,
   type FailureCause,
+  type FileClipboard,
   type FileOpUndoEntry,
   type FileOpUndoStack,
   type NoticeSubject,
@@ -46,6 +51,10 @@ import type { FilesOkOrError } from '../global.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useServices } from '../composition-root.js';
+import { clearFileClipboard, setFileClipboard, useFileClipboard } from './file-clipboard-store.js';
+import { hasPendingReveal, subscribeReveal, takeReveal } from './pending-reveal.js';
+import { useTransferFailureReporter } from './paste-failure-notice.js';
+import { carryOverrides, onTransferCompleted, onUndoStacksChanged } from './transfer-completion.js';
 
 /** react-arborist rejects empty-string ids, so the root (relPath "") uses this
  *  non-empty sentinel as its node id; logic keys off `relPath`, not `id`. */
@@ -59,8 +68,6 @@ export interface TreeNodeData {
   isSymlink: boolean;
   children?: TreeNodeData[];
 }
-
-export type ClipboardState = { mode: 'cut' | 'copy'; relPaths: string[] } | null;
 
 export interface ExplorerApi {
   data: TreeNodeData[];
@@ -126,7 +133,7 @@ export interface ExplorerApi {
   // Selection + operations (US3).
   selectedRelPaths: string[];
   primarySelected: TargetNode | null;
-  clipboard: ClipboardState;
+  clipboard: FileClipboard;
   beginRename: (relPath?: string) => void;
   cut: (relPaths: string[]) => void;
   copy: (relPaths: string[]) => void;
@@ -280,6 +287,21 @@ async function suppressedByAncestor(
   return true;
 }
 
+/**
+ * Put `entry` in the place of the entry with its id, in whichever list holds it (050 T061).
+ *
+ * A `paste` REDO re-recycles the replaced items at a new time, so main hands back a refreshed entry
+ * (same id, new `trashedAt`); storing the OLD one would make the next undo look for Recycle-Bin items
+ * under a timestamp that no longer exists. An entry without an id, or one the stack does not hold,
+ * leaves the stack untouched.
+ */
+function withEntry(stack: FileOpUndoStack, entry: FileOpUndoEntry): FileOpUndoStack {
+  if (!entry.id) return stack;
+  const swap = (list: readonly FileOpUndoEntry[]): FileOpUndoEntry[] =>
+    list.map((e) => (e.id === entry.id ? entry : e));
+  return { undo: swap(stack.undo), redo: swap(stack.redo) };
+}
+
 export function useExplorerData(
   rootFolder: string | null,
   projectId: string,
@@ -289,7 +311,9 @@ export function useExplorerData(
 ): ExplorerApi {
   const settings = useAppSettings();
   const confirm = useConfirm();
-  const { documents, fileOpUndo } = useServices();
+  const reportFailures = useTransferFailureReporter();
+  const services = useServices();
+  const { documents, fileOpUndo, projects: projectsClient } = services;
   const globs = settings.explorer.excludeGlobs;
   const globsKey = globs.join(' ');
 
@@ -361,10 +385,33 @@ export function useExplorerData(
     [fileOpUndo, projectId],
   );
 
+  /**
+   * Read this project's persisted history into memory.
+   *
+   * An entry that names a project which no longer exists is dropped here, on load (050 Assumptions: a
+   * cross-project entry exists only while both its projects do) — so removing a project needs no visit
+   * to the other project's stack, and an undo of something whose other half is gone is never offered.
+   * If the project list cannot be read the stack is used as it is: refusing to show a history because
+   * a check about it failed would be the worse error.
+   */
+  const loadStack = useCallback(async (): Promise<FileOpUndoStack> => {
+    const [loaded, list] = await Promise.all([
+      fileOpUndo.load(projectId),
+      projectsClient.list().catch(() => null),
+    ]);
+    if (!list) return loaded;
+    const live = dropFileOpEntriesNamingProjects(
+      loaded,
+      list.map((p) => p.id),
+    );
+    if (live !== loaded) void fileOpUndo.save(projectId, live);
+    return live;
+  }, [fileOpUndo, projectsClient, projectId]);
+
   // Load this project's history when it opens. A project with none simply starts empty.
   useEffect(() => {
     let cancelled = false;
-    void fileOpUndo.load(projectId).then((loaded) => {
+    void loadStack().then((loaded) => {
       if (cancelled) return;
       stackRef.current = loaded;
       setStack(loaded);
@@ -372,13 +419,26 @@ export function useExplorerData(
     return () => {
       cancelled = true;
     };
-  }, [fileOpUndo, projectId]);
+  }, [loadStack]);
+
+  // The window recorded something in this project's stack (a finished paste, 050 FR-020): re-read it.
+  useEffect(
+    () =>
+      onUndoStacksChanged((ids) => {
+        if (!ids.includes(projectId)) return;
+        void loadStack().then((loaded) => {
+          stackRef.current = loaded;
+          setStack(loaded);
+        });
+      }),
+    [loadStack, projectId],
+  );
 
   const [childrenMap, setChildrenMap] = useState<Map<string, TreeNodeData[]>>(new Map());
   const [initialOpenState, setInitialOpenState] = useState<OpenMap>({ [ROOT_ID]: true });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedRelPaths, setSelectedRelPaths] = useState<string[]>([]);
-  const [clipboard, setClipboard] = useState<ClipboardState>(null);
+  const clipboard = useFileClipboard();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorAction, setErrorAction] = useState<string | null>(null);
@@ -1056,6 +1116,124 @@ export function useExplorerData(
     [treeRef, ensureLoaded, persist],
   );
 
+  /*
+   * REVEAL WHAT A PASTE PLACED (050 FR-025b, R12).
+   *
+   * The window queues a finished run's placed paths under the project they landed in
+   * (`transfer-completion.tsx` → `pending-reveal.ts`); this tree drains ITS project's queue whenever it
+   * is ready. That one rule covers both cases the requirement names: the run ended while this project
+   * was showing (drained at once), and it ended while another was (drained when the user next shows
+   * this one — never by switching to it).
+   *
+   * Three steps, because each depends on the one before: re-read the folders the items landed in (so
+   * the new rows exist), open every ancestor shallow → deep (so the rows are visible), then select the
+   * rows — which can only happen once React has rendered them, so the selection is a PENDING target
+   * drained from the data effect below, exactly as the rename's re-selection is.
+   *
+   * ══ WHICH COMMIT MAY GIVE UP ON A ROW ══
+   *
+   * The drain runs as a passive effect, and a passive effect can run AFTER the async steps above have
+   * finished while still belonging to an OLDER commit — one rendered before the placed folder's listing
+   * landed. Measured on the gate (`explorer-keyboard-selection.e2e.ts`): the source folder's re-read
+   * committed first, the reveal's listing of the target arrived before that commit's effects had run,
+   * and the stale effect saw the placed row absent with the steps "done" and dropped the reveal — the
+   * folder opened and nothing was selected. An absent row there means "not rendered yet", not "gone".
+   *
+   * So the steps record the tick they end on (`placedTick`), and only a commit that has rendered that
+   * tick — and therefore every listing and open the steps queued before it — may conclude a row is
+   * absent. An earlier commit can still SELECT a row it already has; it just cannot give up on one.
+   */
+  const [revealTick, setRevealTick] = useState(0);
+  /** The last tick requested, read synchronously — `revealTick` only says what a commit has rendered. */
+  const revealTickRequested = useRef(0);
+  const bumpReveal = useCallback((): number => {
+    revealTickRequested.current += 1;
+    setRevealTick(revealTickRequested.current);
+    return revealTickRequested.current;
+  }, []);
+  useEffect(() => subscribeReveal(() => void bumpReveal()), [bumpReveal]);
+  const ensureLoadedRef = useRef(ensureLoaded);
+  ensureLoadedRef.current = ensureLoaded;
+  const pendingPlaced = useRef<string[]>([]);
+  /**
+   * The tick whose commit carries the placed rows' listings and opened folders; until a commit has
+   * rendered it, an absent row is awaited. `null` while no reveal is pending.
+   */
+  const placedTick = useRef<number | null>(null);
+  useEffect(() => {
+    if (!ready || !treeRef.current || !hasPendingReveal(projectId)) return;
+    const rels = takeReveal(projectId)
+      .map(toRel)
+      .filter((r): r is string => r !== null && r !== '');
+    if (rels.length === 0) return;
+    void (async () => {
+      const parents = [...new Set(rels.map(parentRel))];
+      await reloadDirs(parents);
+      const ancestors = new Set<string>();
+      for (const rel of rels) for (let p = parentRel(rel); p !== ''; p = parentRel(p)) ancestors.add(p);
+      for (const dir of [...ancestors].sort((a, b) => a.split('/').length - b.split('/').length)) {
+        await ensureLoadedRef.current(dir);
+        treeRef.current?.open(dir);
+      }
+      pendingPlaced.current = rels;
+      // Re-run the drain below once the rows are rendered — and only from the commit that has them.
+      placedTick.current = bumpReveal();
+    })();
+    // `revealTick` is a trigger, not an input. The loader is read through a ref: its identity changes
+    // with every listing it adds, and re-running this effect mid-flight would abandon the reveal.
+  }, [ready, projectId, revealTick, toRel, reloadDirs, treeRef, bumpReveal]);
+  useEffect(() => {
+    const api = treeRef.current;
+    if (!api || pendingPlaced.current.length === 0) return;
+    const present = pendingPlaced.current.filter((rel) => api.get(rel));
+    if (present.length > 0) {
+      // The FIRST placed row takes the selection AND the keyboard; the rest join the selection quietly.
+      api.select(present[0]!, { focus: true });
+      for (const rel of present.slice(1)) api.selectMulti(rel, { focus: false });
+      persist(present[present.length - 1]!);
+      pendingPlaced.current = [];
+      placedTick.current = null;
+    } else if (placedTick.current !== null && revealTick >= placedTick.current) {
+      // This commit has rendered every listing the steps loaded, and the rows are not there (moved on
+      // again, or deleted): stop waiting. An OLDER commit's effect never reaches here — see above.
+      pendingPlaced.current = [];
+      placedTick.current = null;
+    }
+  }, [data, revealTick, treeRef, persist]);
+
+  /*
+   * The folders a finished paste touched are re-read from the awaited result rather than left to the
+   * watcher alone — the same reconcile every other mutation does ("even when the debounced fs-watch
+   * is missed or coalesced"). Both sides: where the items landed, and — for a cut — where they left.
+   */
+  useEffect(
+    () =>
+      onTransferCompleted((result) => {
+        if (result.targetProjectId !== projectId && result.sourceProjectId !== projectId) return;
+        const dirs = new Set<string>();
+        if (result.targetProjectId === projectId) {
+          for (const abs of result.placed) {
+            const rel = toRel(abs);
+            if (rel !== null) dirs.add(parentRel(rel));
+          }
+        }
+        if (result.sourceProjectId === projectId && result.undo) {
+          const moves =
+            result.undo.kind === 'move'
+              ? result.undo.items
+              : result.undo.kind === 'paste'
+                ? result.undo.moved
+                : [];
+          for (const m of moves) {
+            const rel = toRel(m.from);
+            if (rel !== null) dirs.add(parentRel(rel));
+          }
+        }
+        if (dirs.size > 0) void reloadDirs([...dirs]);
+      }),
+    [projectId, toRel, reloadDirs],
+  );
+
   // --- File operations (US3). All mutations go through the sandboxed files.*
   // bridge (confinement + naming enforced in the main process); the live-sync
   // watcher then refreshes the tree. Errors surface in the pane's error banner. ---
@@ -1184,56 +1362,49 @@ export function useExplorerData(
     [report, nodeSubject, documents, projectId, reloadDirs, pushUndo, toAbs, snapshotOpen],
   );
 
-  const cut = useCallback((relPaths: string[]) => {
-    const items = relPaths.filter((r) => r !== '');
-    if (items.length > 0) setClipboard({ mode: 'cut', relPaths: items });
-  }, []);
+  /*
+   * CUT / COPY / CLEAR go to MAIN (050 FR-001..FR-005). The clipboard is the application's, not this
+   * tree's: main resolves the root-relative paths against the active project into absolute ones and
+   * pushes the result to every window, which is how the rows grey here AND in whichever tree the user
+   * switches to. The root row is refused by main as well; filtering it here only avoids the round trip.
+   */
+  const cut = useCallback(
+    (relPaths: string[]) => {
+      const items = relPaths.filter((r) => r !== '');
+      if (items.length === 0) return;
+      void setFileClipboard('cut', items).then((res) => report(res, 'cut these items', { kind: 'none' }));
+    },
+    [report],
+  );
 
-  const copy = useCallback((relPaths: string[]) => {
-    const items = relPaths.filter((r) => r !== '');
-    if (items.length > 0) setClipboard({ mode: 'copy', relPaths: items });
-  }, []);
+  const copy = useCallback(
+    (relPaths: string[]) => {
+      const items = relPaths.filter((r) => r !== '');
+      if (items.length === 0) return;
+      void setFileClipboard('copy', items).then((res) => report(res, 'copy these items', { kind: 'none' }));
+    },
+    [report],
+  );
 
-  const clearClipboard = useCallback(() => setClipboard(null), []);
+  const clearClipboard = useCallback(() => clearFileClipboard(), []);
 
+  /*
+   * PASTE is a JOB that main runs (050 R2). All the renderer sends is the TARGET folder, by the shared
+   * rule (004 FR-017: a folder is itself, a file its parent): main snapshots its own clipboard when it
+   * accepts the job, so the items are never re-sent from here and cannot be stale. What happens next —
+   * progress, the clash questions, the result — arrives on the transfer channels and is handled
+   * window-wide (`transfer-completion.tsx`, `paste-progress-notice.tsx`), not by this tree, because a
+   * paste outlives the project it was started in.
+   */
   const paste = useCallback(
     (target: TargetNode | null) => {
       if (!clipboard) return;
       const dest = resolveTarget(target);
-      // Reconcile the moved-from parents (and the destination) from the awaited
-      // result: the move/copy promise resolving guarantees the on-disk change is done,
-      // so this drops any stale moved-from row deterministically even when the
-      // debounced fs-watch re-read is missed or coalesced (as on a slow CI filesystem).
-      if (clipboard.mode === 'cut') {
-        const affected = [...new Set([...clipboard.relPaths.map(parentRel), dest])];
-        const moving = clipboard.relPaths;
-        void window.throng?.files?.move?.(moving, dest).then((res) => {
-          // A SET, so no single subject (FR-027). `moving` may hold one item or twenty, and the
-          // failure may be about any of them; US3's affected list is what names several.
-          report(res, 'move these items', { kind: 'none' });
-          if (!(res && 'error' in res)) {
-            pushUndo({
-              kind: 'move',
-              items: moving.map((from) => {
-                const leaf = from.split('/').pop() ?? from;
-                return { from: toAbs(from), to: toAbs(dest ? `${dest}/${leaf}` : leaf) };
-              }),
-              at: Date.now(),
-            });
-          }
-          void reloadDirs(affected);
-          // A move changes the file's project-relative path, so the override moves with it (016).
-          for (const from of moving) carryOverride(from, dest);
-        });
-        setClipboard(null);
-      } else {
-        void window.throng?.files?.copy?.(clipboard.relPaths, dest).then((res) => {
-          report(res, 'paste these items', { kind: 'none' });
-          void reloadDirs([dest]);
-        });
-      }
+      void window.throng?.transfer?.paste(dest).then((res) => {
+        if ('error' in res) fail(res.error, 'paste these items', { kind: 'none' }, res.cause);
+      });
     },
-    [clipboard, report, reloadDirs, carryOverride, pushUndo, toAbs],
+    [clipboard, fail],
   );
 
   const remove = useCallback(
@@ -1385,64 +1556,74 @@ export function useExplorerData(
       // otherwise strand it (the folder lands closed) and leave a stale entry at
       // the old id. A COPY leaves the original in place, so nothing migrates.
       const openBefore = asCopy ? [] : snapshotOpen();
-      const op = asCopy ? window.throng?.files?.copy : window.throng?.files?.move;
-      void op?.(items, destRelDir).then(async (res) => {
-        report(res, asCopy ? 'copy these items' : 'move these items', { kind: 'none' });
-        // A COPY is not undoable by this stack: nothing was lost, and "undo" would mean deleting a
-        // file the user can simply delete themselves. A MOVE is.
-        if (!asCopy && !(res && 'error' in res)) {
-          pushUndo({
-            kind: 'move',
-            items: items.map((from) => {
-              const leaf = from.split('/').pop() ?? from;
-              return { from: toAbs(from), to: toAbs(destRelDir ? `${destRelDir}/${leaf}` : leaf) };
-            }),
-            at: Date.now(),
+      /*
+       * THE ENGINE RUNS IT (050 FR-017, FR-019e). The renderer sends the items, the destination and
+       * the mode and works from what comes back; a name that already exists is asked about by main
+       * (the clash prompt), so nothing is overwritten silently. No progress and no cancel for a drag.
+       */
+      void window.throng?.transfer?.drop(items, destRelDir, asCopy ? 'copy' : 'cut').then(async (res) => {
+        if (!res) return;
+        if ('error' in res) {
+          fail(res.error, asCopy ? 'copy these items' : 'move these items', { kind: 'none' }, res.cause);
+          return;
+        }
+        fail(null);
+        // FR-013 — a drag that could not place every item says which, in one notice.
+        reportFailures(res);
+
+        /*
+         * What REALLY moved, from the journal main built — not from the request. A kept-both item
+         * landed under a different name, a skipped one did not move at all, and the undo entry,
+         * the open-state migration and the language override must all follow the real destination.
+         */
+        const entry = res.undo;
+        const moved =
+          entry?.kind === 'move' ? entry.items : entry?.kind === 'paste' ? entry.moved : [];
+        // A plain copy has no entry (nothing was lost); a move, or a drag that replaced something, does.
+        if (entry) pushUndo(entry);
+
+        const pairs = moved
+          .map((m) => ({ from: toRel(m.from), to: toRel(m.to) }))
+          .filter((p): p is { from: string; to: string } => p.from !== null && p.to !== null);
+
+        // Whether we can PROVE a moved node's absence after the reload: only if the
+        // destination is loaded (else reloadDirs skips it and can't tell us).
+        const destLoaded = destRelDir === '' || childrenMapRef.current.has(destRelDir);
+        for (const { from, to } of pairs) {
+          // The moved folder itself, and every open descendant, migrate by prefix.
+          for (const open of openBefore) {
+            if (open === from || open.startsWith(`${from}/`)) {
+              pendingOpen.current.add(to + open.slice(from.length));
+            }
+          }
+          // A MOVE carries the override with the file; a COPY deliberately does not — the copy
+          // is a new document, and inheriting a language the user chose for a different file
+          // would be a guess, not a decision.
+          void documents.movePath(projectId, from, to).catch(() => {
+            /* nothing here is worth failing a move over */
           });
         }
-        if (!asCopy) {
-          // Whether we can PROVE a moved node's absence after the reload: only if the
-          // destination is loaded (else reloadDirs skips it and can't tell us).
-          const destLoaded = destRelDir === '' || childrenMapRef.current.has(destRelDir);
-          const movedBases: string[] = [];
-          for (const from of items) {
-            const leaf = from.split(/[\\/]/).pop() ?? from;
-            const newBase = destRelDir ? `${destRelDir}/${leaf}` : leaf;
-            movedBases.push(newBase);
-            // The moved folder itself, and every open descendant, migrate by prefix.
-            for (const open of openBefore) {
-              if (open === from || open.startsWith(`${from}/`)) {
-                pendingOpen.current.add(newBase + open.slice(from.length));
-              }
-            }
-            // A MOVE carries the override with the file; a COPY deliberately does not — the copy
-            // is a new document, and inheriting a language the user chose for a different file
-            // would be a guess, not a decision.
-            carryOverride(from, destRelDir);
-          }
-          // Reconcile the moved-from parents + destination from the awaited result,
-          // so the tree converges even if the debounced fs-watch is coalesced
-          // (mirrors paste). This is also what materialises the moved node at its
-          // new path for the pending-open drain to find.
-          const affected = [...new Set([...items.map(parentRel), destRelDir])];
-          const present = await reloadDirs(affected);
-          // Finding 2 — if a moved node never materialised at its destination (deleted
-          // or externally renamed mid-move), drop the open-state we just queued for it.
-          // Left in place it would linger for the whole session and spuriously open a
-          // DIFFERENT folder later created at that exact path.
-          if (destLoaded) {
-            for (const newBase of movedBases) {
-              if (!present.has(newBase)) {
-                for (const t of [...pendingOpen.current]) {
-                  if (t === newBase || t.startsWith(`${newBase}/`)) pendingOpen.current.delete(t);
-                }
+        // Reconcile the moved-from parents + destination from the awaited result,
+        // so the tree converges even if the debounced fs-watch is coalesced. This is also what
+        // materialises the moved node at its new path for the pending-open drain to find.
+        const affected = [...new Set([...items.map(parentRel), destRelDir])];
+        const present = await reloadDirs(affected);
+        // Finding 2 — if a moved node never materialised at its destination (deleted
+        // or externally renamed mid-move), drop the open-state we just queued for it.
+        // Left in place it would linger for the whole session and spuriously open a
+        // DIFFERENT folder later created at that exact path.
+        if (destLoaded) {
+          for (const { to } of pairs) {
+            if (!present.has(to)) {
+              for (const t of [...pendingOpen.current]) {
+                if (t === to || t.startsWith(`${to}/`)) pendingOpen.current.delete(t);
               }
             }
           }
         }
       });
     },
-    [report, carryOverride, snapshotOpen, reloadDirs, pushUndo, toAbs],
+    [fail, reportFailures, documents, projectId, toRel, snapshotOpen, reloadDirs, pushUndo],
   );
 
   /**
@@ -1455,8 +1636,59 @@ export function useExplorerData(
    * who pressed undo and saw nothing at all would reasonably conclude undo is broken.
    */
   const applyEntry = useCallback(
-    async (entry: FileOpUndoEntry, direction: 'undo' | 'redo'): Promise<boolean> => {
+    async (entry: FileOpUndoEntry, direction: 'undo' | 'redo'): Promise<FileOpUndoEntry | null> => {
       const action = direction === 'undo' ? 'undo that file operation' : 'redo that file operation';
+
+      /*
+       * AN ENTRY MAIN MUST APPLY (050 R10). A cross-project move names paths in TWO roots, and a
+       * `paste` entry restores replaced items from the Recycle Bin — neither fits the root-relative,
+       * single-project bridge below. Routed BY KIND (a `paste` entry has no `projects` when it stayed
+       * inside one project), applied by main over absolute paths confined to some project root, inside
+       * the same queue and move bracket as a paste so editors follow the move. Main validates the
+       * world; a refusal comes back as an error and is reported like any other (024 FR-008a).
+       */
+      // 050 R16 — an entry that created folders (FR-033) goes to main too: the root-relative bridge
+      // cannot remove a folder, nor recreate one on redo.
+      if (
+        entry.kind === 'paste' ||
+        (entry.kind === 'move' && (entry.projects !== undefined || entry.createdDirs !== undefined))
+      ) {
+        const res = await window.throng?.transfer?.applyUndo(entry, direction);
+        if (res && 'error' in res) {
+          fail(res.error, action, { kind: 'none' }, res.cause);
+          return null;
+        }
+        const paths: string[] =
+          entry.kind === 'move'
+            ? entry.items.flatMap((m) => [m.from, m.to])
+            : entry.kind === 'paste'
+              ? [
+                  ...entry.moved.flatMap((m) => [m.from, m.to]),
+                  ...entry.copied.map((m) => m.to),
+                  ...entry.replaced.map((r) => r.path),
+                ]
+              : [];
+        const dirs = new Set<string>();
+        // A removed or recreated folder changes its PARENT's listing.
+        if (entry.kind === 'move' || entry.kind === 'paste') paths.push(...(entry.createdDirs ?? []));
+        for (const abs of paths) {
+          const rel = toRel(abs);
+          if (rel !== null) dirs.add(parentRel(rel));
+        }
+        if (dirs.size > 0) void reloadDirs([...dirs]);
+        // An undone move takes the file back, so its override goes back with it.
+        const named = entry.projects;
+        const source = named?.source ?? projectId;
+        const target = named?.target ?? projectId;
+        void carryOverrides(
+          plannedMoves(entry, direction),
+          direction === 'undo' ? target : source,
+          direction === 'undo' ? source : target,
+          services,
+        );
+        return res?.entry ?? entry;
+      }
+
       /*
        * Existence is asked of the CONFINED bridge — not of the loaded tree.
        *
@@ -1487,14 +1719,14 @@ export function useExplorerData(
       if (!check.ok) {
         // NO SUBJECT: an undo entry can carry many moves, and the refusal may be about any of them.
         fail(check.reason, action, { kind: 'none' });
-        return false;
+        return null;
       }
 
       if (entry.kind === 'delete') {
         // Undo restores from the Recycle Bin; redo trashes again. A permanent delete cannot be
         // undone at all, and `validate` has already said so by the time we get here.
         const rels = deletePaths(entry).map(toRel).filter((r): r is string => r !== null);
-        if (rels.length === 0) return false;
+        if (rels.length === 0) return null;
         const res =
           direction === 'undo'
             ? await Promise.all(rels.map((rel) => window.throng?.files?.restore?.(rel, entry.at)))
@@ -1502,10 +1734,10 @@ export function useExplorerData(
         const failed = res.find((r) => r && 'error' in r);
         if (failed && 'error' in failed) {
           fail(failed.error, action, { kind: 'none' }, failed.cause);
-          return false;
+          return null;
         }
         await reloadDirs([...new Set(rels.map(parentRel))]);
-        return true;
+        return entry;
       }
 
       // A move and a rename are the same shape once planned: take `from` to `to`. Which BRIDGE call
@@ -1515,7 +1747,7 @@ export function useExplorerData(
         const toRelPath = toRel(move.to);
         if (fromRel === null || toRelPath === null) {
           fail('That file is no longer inside this project.', action, { kind: 'none' });
-          return false;
+          return null;
         }
         const sameParent = parentRel(fromRel) === parentRel(toRelPath);
         const leaf = toRelPath.split('/').pop() ?? toRelPath;
@@ -1524,37 +1756,83 @@ export function useExplorerData(
           : await window.throng?.files?.move?.([fromRel], parentRel(toRelPath));
         if (res && 'error' in res) {
           fail(res.error, action, { kind: 'none' }, res.cause);
-          return false;
+          return null;
         }
         carryOverride(fromRel, parentRel(toRelPath));
         await reloadDirs([...new Set([parentRel(fromRel), parentRel(toRelPath)])]);
       }
-      return true;
+      return entry;
     },
-    [toRel, fail, deleteMode, reloadDirs, carryOverride],
+    [toRel, fail, deleteMode, reloadDirs, carryOverride, projectId, services],
   );
 
+  /**
+   * One entry in two stacks (050 FR-020): having applied a cross-project entry from THIS project, move
+   * it in the other project's persisted stack by \`id\` — off whichever list holds it, onto the redo list
+   * after an undo and the undo list after a redo. That is what keeps the two histories agreeing about
+   * whether the operation is currently done. The other stack is not live in memory (only one explorer
+   * is mounted at a time), so it goes through the client.
+   */
+  const syncOtherStack = useCallback(
+    async (entry: FileOpUndoEntry, direction: 'undo' | 'redo'): Promise<void> => {
+      const named = entry.kind === 'move' || entry.kind === 'paste' ? entry.projects : undefined;
+      if (!named || !entry.id) return;
+      for (const other of new Set([named.source, named.target])) {
+        if (other === projectId) continue;
+        const theirs = await fileOpUndo.load(other);
+        const without = removeFileOpById(theirs, entry.id);
+        await fileOpUndo.save(
+          other,
+          direction === 'undo' ? pushFileOpRedoEntry(without, entry) : pushFileOpUndoEntry(without, entry),
+        );
+      }
+    },
+    [fileOpUndo, projectId],
+  );
+
+  /**
+   * Whether an undo or redo is already being applied. Two quick presses would otherwise pop the SAME
+   * entry twice — the stack only moves once the first has been applied — and ask main to do it again.
+   */
+  const applying = useRef(false);
+
   const undoFileOp = useCallback(() => {
+    if (applying.current) return;
     const popped = popUndo(stackRef.current);
     if (!popped) return; // nothing to undo is not a failure, and says so by being silent
-    void applyEntry(popped.entry, 'undo').then((ok) => {
-      if (!ok) return; // a refused entry STAYS on the undo stack — the user may fix the world and retry
-      stackRef.current = popped.stack;
-      setStack(popped.stack);
-      void fileOpUndo.save(projectId, popped.stack);
-    });
-  }, [applyEntry, fileOpUndo, projectId]);
+    applying.current = true;
+    void applyEntry(popped.entry, 'undo')
+      .then(async (applied) => {
+        if (!applied) return; // a refused entry STAYS on the undo stack — the user may fix the world and retry
+        popped.stack = withEntry(popped.stack, applied);
+        stackRef.current = popped.stack;
+        setStack(popped.stack);
+        void fileOpUndo.save(projectId, popped.stack);
+        await syncOtherStack(applied, 'undo');
+      })
+      .finally(() => {
+        applying.current = false;
+      });
+  }, [applyEntry, fileOpUndo, projectId, syncOtherStack]);
 
   const redoFileOp = useCallback(() => {
+    if (applying.current) return;
     const popped = popRedo(stackRef.current);
     if (!popped) return;
-    void applyEntry(popped.entry, 'redo').then((ok) => {
-      if (!ok) return;
-      stackRef.current = popped.stack;
-      setStack(popped.stack);
-      void fileOpUndo.save(projectId, popped.stack);
-    });
-  }, [applyEntry, fileOpUndo, projectId]);
+    applying.current = true;
+    void applyEntry(popped.entry, 'redo')
+      .then(async (applied) => {
+        if (!applied) return;
+        popped.stack = withEntry(popped.stack, applied);
+        stackRef.current = popped.stack;
+        setStack(popped.stack);
+        void fileOpUndo.save(projectId, popped.stack);
+        await syncOtherStack(applied, 'redo');
+      })
+      .finally(() => {
+        applying.current = false;
+      });
+  }, [applyEntry, fileOpUndo, projectId, syncOtherStack]);
 
   return {
     data,

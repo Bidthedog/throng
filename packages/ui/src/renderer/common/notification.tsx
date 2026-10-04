@@ -220,6 +220,22 @@ export interface Notice {
    * announcement — only the display resolution moves.
    */
   display?: SeverityNotificationSettings;
+  /**
+   * WHICH RUN OF SOMETHING this notice belongs to (050 FR-019d).
+   *
+   * Two queued pastes read identically — "Paste queued", the same folder — and the duplicate rule
+   * above would fold the second into the first, leaving two runs sharing one card and one Cancel. They
+   * are two events that merely look alike, so the raiser says so: notices with different instance keys
+   * are never duplicates. Absent on every other notice, where the rule is exactly what it was.
+   */
+  instanceKey?: string;
+  /**
+   * Whether the card offers a Dismiss control (050 FR-019). Absent means it does, as every notice
+   * always has. A paste's live card sets it `false`: while the run is going its Cancel is the only
+   * action, because dismissing the card would take the progress and the Cancel with it. Restored
+   * (`dismissible: true`) when the card becomes the failure report.
+   */
+  dismissible?: boolean;
 }
 
 /**
@@ -254,7 +270,26 @@ export type { NoticeSeverity };
 export type { AffectedCasualty, AffectedPanel };
 
 interface NotifyContextValue {
-  notify(notice: NoticeInput): void;
+  /**
+   * Raise a notice and return its id (050 / FR-019).
+   *
+   * The id is what lets a raiser patch the card later with {@link update} — a paste's progress turns
+   * into its own failure report rather than a second card appearing. A raise that was merged into a
+   * live card (a duplicate, or a consolidated growth) returns THAT card's id; a raise that rendered
+   * nothing (suppressed, or the user's mode is `never`) returns `''`, which `update` treats as an id
+   * that no longer exists. Existing callers ignore the value.
+   */
+  notify(notice: NoticeInput): string;
+  /**
+   * Patch a live notice in place (050 / FR-019): same card, same DOM node.
+   *
+   * A no-op for an id that is not live — dismissed, never raised, or `''` — and then returns `false`, so
+   * a raiser whose card has gone can raise a fresh one rather than lose its message. A severity change files one
+   * log record (it is a new event: "pasting" became "failed"); a message-only change files none. The
+   * dwell is re-resolved when the severity or `display` is patched, from the patch's own `display`
+   * when it states one and the new severity's setting otherwise.
+   */
+  update(id: string, patch: Partial<NoticeInput>): boolean;
   dismiss(id: string): void;
   /** Clear every notice carrying this test id — how a migrated surface says "the error is over". */
   clear(testId: string): void;
@@ -674,7 +709,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   dismissRef.current = dismiss;
 
   const notify = useCallback(
-    (input: NoticeInput) => {
+    (input: NoticeInput): string => {
       /*
        * WHAT DECIDES THIS NOTICE'S DWELL (030 FR-016; 043 FR-082a).
        *
@@ -773,7 +808,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             // The recurring subject is named, never the list (FR-011b). `incoming` is what was just
             // re-reported, so its first row is the thing the user actually retried.
             flash(target.id, affectedNames(incoming, project)[0]);
-            return;
+            return target.id;
           }
           const joined = joinedPanels(existing, incoming);
           // A MERGE IS AN EVENT TOO (FR-006a). Without this, a user who silenced the severity would
@@ -797,7 +832,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             ),
           );
           announceGrowth(joined, project);
-          return;
+          return target.id;
         }
       }
 
@@ -826,6 +861,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           n.title === input.title &&
           n.action === input.action &&
           n.testId === input.testId &&
+          n.instanceKey === input.instanceKey &&
           formatSubject(n.subject ?? { kind: 'none' }) === subject &&
           /*
            * 043 T237 — AND WHAT IT LISTS. The details are part of what a notice says: a replace
@@ -844,12 +880,12 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         // Flashing the most recent live notice instead would pulse the wrong one whenever two are up,
         // which is exactly when a user most needs the signal to mean something.
         flash(duplicate.id, subject || undefined);
-        return;
+        return duplicate.id;
       }
       // …and the same question asked of the notices the user chose not to see (FR-005b). Without
       // this half a silenced repeat is compared against an empty list and files a record every time,
       // so a severity turned off is LOUDER in the log than the same events displayed (SC-003).
-      if (shouldSuppressSilenced(silenced.current, shadowKey, panelIds, now)) return;
+      if (shouldSuppressSilenced(silenced.current, shadowKey, panelIds, now)) return '';
       /*
        * ONE CAUSE, ONE NOTICE (029 FR-019).
        *
@@ -880,7 +916,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
        * The other direction still holds, below and unchanged: once the consolidated notice is up,
        * the surface-level ones are suppressed by it.
        */
-      if (!input.affected?.length && shouldSuppressForCause(causeKeys, input.causeKey)) return;
+      if (!input.affected?.length && shouldSuppressForCause(causeKeys, input.causeKey)) return '';
 
       /*
        * ACCEPTED — so it is logged, whatever the user chose to see (FR-006).
@@ -932,7 +968,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           causeKey: input.causeKey,
           panelIds,
         });
-        return;
+        return '';
       }
 
       const id = `n${++seq}`;
@@ -965,8 +1001,62 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
           setTimeout(() => dismiss(id), behaviour.timeoutMs),
         );
       }
+      return id;
     },
     [announceGrowth, dismiss, flash, publish],
+  );
+
+  /** See {@link NotifyContextValue.update}. */
+  const update = useCallback(
+    (id: string, patch: Partial<NoticeInput>): boolean => {
+      const current = live.current.find((n) => n.id === id);
+      if (!current) return false; // dismissed, never raised, or the '' a suppressed raise returned
+
+      const next: Notice = { ...current, ...patch, id };
+      const severityChanged = patch.severity !== undefined && patch.severity !== current.severity;
+      const displayChanged = 'display' in patch;
+
+      if (severityChanged) {
+        // A new event — "pasting" became "failed" — so one record, exactly as a fresh raise files one.
+        window.throng?.notices?.log?.(
+          noticeLogRecord({
+            severity: next.severity,
+            message: next.message,
+            subject: next.subject ?? { kind: 'none' },
+            title: next.title,
+            action: next.action,
+            causeKey: next.causeKey,
+            detail: next.copyDetail,
+          }),
+        );
+      }
+
+      publish(live.current.map((n) => (n.id === id ? next : n)));
+
+      if (severityChanged || displayChanged) {
+        // Re-resolve the dwell: the patch's own display, else the (new) severity's setting.
+        const existing = timers.current.get(id);
+        if (existing) {
+          clearTimeout(existing);
+          timers.current.delete(id);
+        }
+        const behaviour: SeverityNotificationSettings =
+          next.display ??
+          displaySettings.current?.[next.severity] ??
+          DEFAULT_NOTIFICATION_SETTINGS[next.severity];
+        if (behaviour.mode === 'never') {
+          // The user chose not to see this severity: the record is filed, the card goes.
+          dismiss(id);
+        } else if (behaviour.mode === 'timed') {
+          timers.current.set(
+            id,
+            setTimeout(() => dismiss(id), behaviour.timeoutMs),
+          );
+        }
+      }
+      return true;
+    },
+    [dismiss, publish],
   );
 
   const clear = useCallback(
@@ -1013,8 +1103,8 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
   }, [notices, announced]);
 
   const value = useMemo<NotifyContextValue>(
-    () => ({ notify, dismiss, clear }),
-    [notify, dismiss, clear],
+    () => ({ notify, update, dismiss, clear }),
+    [notify, update, dismiss, clear],
   );
 
   return (
@@ -1075,16 +1165,18 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
             {/* EVERY notice is dismissable — including the restore notice, which was a stateless
                 component with no dismiss path at all, so the only way to be rid of it was to make
                 the condition it reported stop being true. */}
-            <IconButton
-              token="dismiss"
-              className="notice__dismiss"
-              testId={
-                n.testIds?.dismiss ??
-                (n.testId ? `${n.testId}-dismiss` : `notice-${n.severity}-dismiss`)
-              }
-              title="Dismiss"
-              onClick={() => dismiss(n.id)}
-            />
+            {n.dismissible === false ? null : (
+              <IconButton
+                token="dismiss"
+                className="notice__dismiss"
+                testId={
+                  n.testIds?.dismiss ??
+                  (n.testId ? `${n.testId}-dismiss` : `notice-${n.severity}-dismiss`)
+                }
+                title="Dismiss"
+                onClick={() => dismiss(n.id)}
+              />
+            )}
           </div>
         ))}
       </div>

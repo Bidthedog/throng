@@ -64,7 +64,11 @@ export function MissingFileWatcher(): null {
     if (!activeTabId || !warn) return;
     const tab = ws.layout?.tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
-    const panels = collectPanels(tab.root).filter((p) => p.kind === EDITOR_KIND);
+    // 050 FR-035 — a panel a move took out of its project holds no file this scan could report: the moved
+    // notice is its one notice, and the file is no longer its to find missing.
+    const panels = collectPanels(tab.root).filter(
+      (p) => p.kind === EDITOR_KIND && (p.config as { movedOut?: boolean } | undefined)?.movedOut !== true,
+    );
 
     /** Torn down with the activation, so a tab change never leaves a watch behind (see below). */
     let unwatch: (() => void) | undefined;
@@ -145,6 +149,7 @@ export function MissingFileWatcher(): null {
       const pending = new Map<string, Panel>();
       for (const p of panels) {
         const st = getEditorState(p.id);
+        if (st?.movedOut) continue; // moved out in this session, whatever its persisted config says yet
         if (st?.fileMissing || st?.unloadable) report(p, st);
         else if (st?.openPending) pending.set(p.id, p);
       }
@@ -167,6 +172,7 @@ export function MissingFileWatcher(): null {
           const st = getEditorState(id);
           if (!st || st.openPending) continue; // still undecided — keep waiting
           pending.delete(id);
+          if (st.movedOut) continue;
           if (st.fileMissing || st.unloadable) report(p, st);
         }
         if (pending.size === 0) {

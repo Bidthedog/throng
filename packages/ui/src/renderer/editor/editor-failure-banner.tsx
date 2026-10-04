@@ -4,10 +4,12 @@ import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useSubWorkspaceWindow } from '../workspace/subworkspace-window-context.js';
 import { useWorkspace } from '../state/workspace-store.js';
+import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { clearEditorPanelType } from './clear-editor-panel-type.js';
 import { getEditorActions } from './editor-actions.js';
-import { useEditorFailure } from './editor-failure.js';
+import { NOT_THE_FILE, useEditorFailure } from './editor-failure.js';
 import { useEditorState } from './editor-state.js';
+import { MovedOutNotice } from './moved-out-notice.js';
 
 /**
  * "This is not your file" — the standing statement an editor makes while its path cannot be read
@@ -37,30 +39,10 @@ import { useEditorState } from './editor-state.js';
  * fires once, when a tab is opened, and it is dismissible. This states a CONDITION, so it is not
  * dismissible — it goes when the condition does, whether by auto-recovery noticing the path came
  * back or by the user pressing ↻.
+ *
+ * (The second sentence, `NOT_THE_FILE`, lives in `editor-failure.ts` beside the facts the panel menu
+ * copies, so the menu and this banner cannot say different things.)
  */
-
-/**
- * 026 `contracts/editor-unloadable.md` P3 — WHAT IS ON SCREEN IS NOT THE FILE.
- *
- * A shipped requirement, and the one thing this panel type says that no other does. It survived the
- * 030 migration only because a review caught it going: the new banner renders headline + path +
- * pointer, and this sentence had no slot, so it was deleted with `unloadable-banner.tsx` and no test
- * noticed (`editor-stranded-recovery.e2e.ts` and `editor-stranded-restart.e2e.ts` both asserted
- * visibility and the path, which is exactly what remained).
- *
- * ══ WHY IT IS NOT MERELY WORDING ══
- *
- * `unloadable` guards NO save path in the renderer — 026 P6's save-while-unloadable confirmation is
- * not implemented here. Until it is, this sentence is the only thing in the panel warning that
- * Ctrl+S will write a remembered buffer back over a path throng could not read. That is the same
- * scenario FR-040a gives as its reason for keeping the path visible, and half the reason is not the
- * requirement.
- *
- * Kept VERBATIM from the banner it replaced. "Reload it now" still names a real command — *Reload
- * from disk*, in this panel's own menu (026 P7) — and it is the retry the banner's ↻ runs.
- */
-const NOT_THE_FILE =
-  'What is shown here is not the file. Restore the path and it reloads by itself, or reload it now.';
 export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElement | null {
   const state = useEditorState(panelId);
   // The headline, subject and detail — shared with the panel menu's copy of these commands so the
@@ -92,6 +74,18 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
       clearPanelType: ws.clearPanelType,
     });
   }, [panelId, state?.dirty, state?.displayName, endsPanel, confirm, ws]);
+
+  // 050 FR-035 — a document a move took out of its project: the ONE notice, Close and Copy, no Retry. The
+  // panel's own Close runs the header's flow, so a dirty one asks Save As / Discard / Cancel first.
+  if (state?.movedOut) {
+    return (
+      <MovedOutNotice
+        panelId={panelId}
+        filePath={state.filePath}
+        onClose={() => void requestPanelDestroy(panelId)}
+      />
+    );
+  }
 
   if (!failure) return null;
 

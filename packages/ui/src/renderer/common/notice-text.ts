@@ -239,59 +239,125 @@ export function partText(part: NoticePart): string {
       return nodeText(part.node);
     case 'affected':
       /*
-       * The tab, then its rows indented under it — the shape the list is drawn in.
-       *
-       * FR-048a: a row carrying its OWN raw error emits it beside the row. Two different
-       * unclassified failures in one operation share a notice whose message can state neither, and
-       * FR-034 forbids rendering them, so this line is the only route by which a user ever learns
-       * which panel failed for which reason.
+       * EXACTLY WHAT THE LIST DRAWS (050 FR-037): each tab, its rows indented under it, then the
+       * rows with no panel after every group — the order `AffectedList` renders them in. A row's own
+       * raw error is NOT here: it is never shown (FR-034), so it is copied under `Details`
+       * ({@link affectedDetailLines}) rather than beside a row that does not show it.
        */
-      return part.groups
-        .flatMap((group) => [
+      return [
+        ...part.groups.flatMap((group) => [
           ...(group.label ? [group.label] : []),
-          ...group.rows.map((row) => `  ${row.label}${row.detail ? ` — ${row.detail}` : ''}`),
-        ])
-        .join('\n');
+          ...group.rows.map((row) => `  ${row.label}`),
+        ]),
+        ...part.ungrouped.map((row) => row.label),
+      ].join('\n');
     case 'details':
       return part.items.join('\n');
   }
 }
 
 /**
- * A notice as PLAIN TEXT, for the clipboard (FR-048/FR-049).
+ * FR-048a — each affected row's own path and reason, which the list never renders.
  *
- * The whole notice, in the order it is read on screen, and then the raw system error underneath it:
- * a bug report wants the human sentence first and the machine text below, and the machine text is
+ * Copied under `Details`, in the order the rows are listed, one `label — detail` line each. Two
+ * different unclassified failures in one operation share a notice whose message can state neither,
+ * so this is the only route by which a user learns which panel failed for which reason.
+ */
+function affectedDetailLines(part: Extract<NoticePart, { kind: 'affected' }>): string[] {
+  return [...part.groups.flatMap((group) => group.rows), ...part.ungrouped]
+    .filter((row) => !!row.detail)
+    .map((row) => `${row.label} — ${row.detail}`);
+}
+
+/**
+ * THE TWO BLOCKS OF A COPY (050 FR-037, R20): every shown line, in the order and words shown; then a
+ * blank line, `Details`, and the parts that are never shown. A block with nothing in it adds no
+ * `Details` line — a heading over nothing is noise.
+ */
+function copyBlocks(shown: readonly (string | undefined)[], hidden: readonly (string | undefined)[]): string {
+  const present = (lines: readonly (string | undefined)[]): string[] =>
+    lines.filter((line): line is string => !!line && line.trim().length > 0);
+  const top = present(shown);
+  const bottom = present(hidden);
+  return bottom.length > 0 ? [...top, '', 'Details', ...bottom].join('\n') : top.join('\n');
+}
+
+/**
+ * A notice as PLAIN TEXT, for the clipboard (FR-048/FR-049, ordered by 050 FR-037).
+ *
+ * Every part the card renders, in render order; then the parts it never renders — the subject in
+ * the full form of 030 FR-022, each row's path and reason, the raw system error — under `Details`.
+ * A bug report wants the human sentences first and the machine text below, and the machine text is
  * precisely the part a user cannot retype accurately.
  */
 export function noticeToText(n: NoticeContent): string {
-  return [...noticeParts(n).map(partText), n.copyDetail]
-    .filter((text): text is string => !!text && text.trim().length > 0)
-    .join('\n');
+  const parts = noticeParts(n);
+  return copyBlocks(
+    parts.map(partText),
+    [
+      n.subject ? formatSubject(n.subject) : undefined,
+      ...parts.flatMap((part) => (part.kind === 'affected' ? affectedDetailLines(part) : [])),
+      n.copyDetail,
+    ],
+  );
 }
 
-/** What a failure banner copies (FR-052) — the four facts it holds. */
+/**
+ * Fixed wording of the shared banner (030 FR-040b, FR-041, 044 FR-026), here rather than in the
+ * component so the banner RENDERS these and {@link panelFailureText} COPIES them from one place.
+ */
+export const BANNER_RETRY_FAILED = 'That did not work — the condition is still there.';
+/** Copy leads, because it always works; the notification may have been dismissed or silenced. */
+export const BANNER_POINTER = 'Copy the details here, or see the notification.';
+/** The pointer where no notification exists (044 FR-026). */
+export const BANNER_POINTER_COPY_ONLY = 'Copy the details here.';
+
+/** What a failure banner copies (FR-052, ordered by 050 FR-037) — what it shows, then what it never does. */
 export interface PanelFailureCopy {
   /** The banner's own headline, in its panel type's words (FR-040). */
   headline: string;
   /** What the banner is about, in FULL: there is no surrounding context to elide it against. */
   subject: NoticeSubject;
+  /** `path` is shown; `systemError` never is (FR-034). */
   detail?: { path?: string; systemError?: string };
+  /** The per-type second sentence the banner draws under the path (026 P3). */
+  note?: string;
+  /** The banner is showing that its last retry failed. */
+  retryFailed?: boolean;
+  /**
+   * The pointer sentence the banner draws. Absent means the standard one, which is what every retry
+   * banner shows; `copy-only` where no notification was raised; `none` for a Close banner.
+   */
+  pointer?: 'notified' | 'copy-only' | 'none';
 }
 
 /**
- * THE BANNER'S copy text (FR-052), which must work with no notice on screen (FR-053).
+ * THE BANNER's copy text (FR-052, 050 FR-037), which must work with no notice on screen (FR-053).
  *
  * The banner is not a notice and has no `noticeToText` to lean on: it is a standing statement about
  * a panel's condition, and it stands whatever the notification preferences say (FR-005a). For a
  * silenced severity this text and the diagnostic log are the ONLY routes by which the system error
  * reaches the user, which is why the pointer sentence leads with Copy rather than with the notice.
  *
- * The subject goes through `formatSubject` like every other subject in the application (FR-021), so
- * a banner can never spell `Project — Tab — Panel` differently from the notice about the same panel.
+ * Shown lines in the banner's own order — headline, path, note, retry-failed, pointer — then
+ * `Details`: the subject through `formatSubject` like every other subject in the application
+ * (FR-021), and the system error.
  */
 export function panelFailureText(copy: PanelFailureCopy): string {
-  return [copy.headline, formatSubject(copy.subject), copy.detail?.path, copy.detail?.systemError]
-    .filter((part): part is string => !!part && part.trim().length > 0)
-    .join('\n');
+  const pointer =
+    copy.pointer === 'none'
+      ? undefined
+      : copy.pointer === 'copy-only'
+        ? BANNER_POINTER_COPY_ONLY
+        : BANNER_POINTER;
+  return copyBlocks(
+    [
+      copy.headline,
+      copy.detail?.path,
+      copy.note,
+      copy.retryFailed ? BANNER_RETRY_FAILED : undefined,
+      pointer,
+    ],
+    [formatSubject(copy.subject), copy.detail?.systemError],
+  );
 }

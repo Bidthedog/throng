@@ -42,6 +42,9 @@ export function MovedPathSync(): null {
         // panel from another window it is synced to (044 FR-110) — the same fact about the same panel.
         const filePath = typeof msg.movedTo === 'string' ? msg.movedTo : msg.reset?.filePath;
         if (typeof filePath !== 'string') return;
+        // 050 FR-035 — the move took the file out of the project (true), or an undo / redo brought it back
+        // (false); `undefined` is an ordinary move that leaves the flag as it is.
+        const movedOut = typeof msg.movedTo === 'string' ? msg.movedOut : undefined;
         const { layout, updatePanelConfig } = wsRef.current;
         const panel = layout?.tabs
           .flatMap((tab) => collectPanels(tab.root))
@@ -53,10 +56,16 @@ export function MovedPathSync(): null {
         if (!panel || panel.kind !== 'editor') return;
         // Every reset names its path, and nearly all of them name the one already held (a revert, a
         // reload, a resync), so this check is what keeps those from writing anything.
-        if ((panel.config as { filePath?: string } | undefined)?.filePath === filePath) return;
+        const held = panel.config as { filePath?: string; movedOut?: boolean } | undefined;
+        const flagUnchanged = movedOut === undefined || (held?.movedOut === true) === movedOut;
+        if (held?.filePath === filePath && flagUnchanged) return;
         // The config write rides the store's existing debounced `workspace.save`, exactly as a
         // Save-As's does — this is the same fact about the same panel, arriving by a different door.
-        updatePanelConfig(msg.panelId, { filePath });
+        // `movedOut` is written as true or REMOVED (undefined drops out of the persisted JSON).
+        updatePanelConfig(
+          msg.panelId,
+          movedOut === undefined ? { filePath } : { filePath, movedOut: movedOut ? true : undefined },
+        );
       }),
     [],
   );

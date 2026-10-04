@@ -17,6 +17,11 @@ export interface EditorActions {
   save: () => Promise<boolean>;
   /** Save As — always prompt for a new location, even if already pathed (FR-084). */
   saveAs: () => Promise<boolean>;
+  /**
+   * What "Save" means when closing: Save, or — for an editor whose file moved to another project, where
+   * Save is unavailable — Save As (050 FR-036). Resolves true when the work is safe to let go.
+   */
+  saveForClose: () => Promise<boolean>;
   /** Whether this document currently has unsaved changes. */
   isDirty: () => boolean;
   /**

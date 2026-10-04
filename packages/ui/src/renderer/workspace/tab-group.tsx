@@ -35,6 +35,10 @@ import { usePanelDisplayNames } from './use-panel-display-names.js';
 import { useTabScroll } from './tab-scroll.js';
 import { TabPicker, registerTabPicker } from './tab-picker.js';
 import { useWorkspace } from '../state/workspace-store.js';
+import { useProjects } from '../state/projects-store.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { openFileInEmptyPanel, previewIntoPanelIntent, previewProjectForDrop } from './open-dropped-file.js';
+import { requestPreviewOpen, requestPreviewOpenOutcome } from '../preview/open-preview.js';
 import { useServices } from '../composition-root.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useEditorDirty } from '../editor/editor-state.js';
@@ -534,10 +538,69 @@ function TabChip({
  * component (mirroring TabChip) so dnd-kit reliably registers/measures it — a
  * droppable declared in the parent alongside the DndContext is not tracked.
  */
-function NewTabButton({ onNewTab }: { onNewTab: () => void }): ReactElement {
+function NewTabButton({
+  onNewTab,
+  onTreeFileDrop,
+}: {
+  onNewTab: () => void;
+  /** 050 FR-038 — a single file dragged from a File Explorer was dropped here. */
+  onTreeFileDrop: (path: string) => void;
+}): ReactElement {
   const { draggingPanelId } = useDragState();
   const drop = useDroppable({ id: NEW_TAB_DROP_ID });
   const panelOver = drop.isOver && draggingPanelId !== null;
+  /*
+   * 050 FR-038 — a tree file dragged over +. A tree drag is a NATIVE HTML5 drag that dnd-kit never sees
+   * (see `TabChip`), so + claims it the same way a chip does, with native listeners: `IconButton` has
+   * no drag props, and a wrapper element would change the strip's layout.
+   *
+   *   one file                     → `copy`, and a drop opens it in a new tab (or focuses its editor)
+   *   a folder or several items    → `none`, the no-entry cursor (050 FR-034)
+   *   no tree drag (an OS drag)    → untouched, so `useNoDropNavigation` ends it in `none`
+   */
+  const [treeOver, setTreeOver] = useState(false);
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  // Stable, so React does not detach and re-attach the ref (and re-run the effect below) on every render.
+  const { setNodeRef } = drop;
+  const nodeRef = useCallback(
+    (node: HTMLButtonElement | null): void => {
+      setNodeRef(node);
+      setButton(node);
+    },
+    [setNodeRef],
+  );
+  const dropRef = useRef(onTreeFileDrop);
+  dropRef.current = onTreeFileDrop;
+  useEffect(() => {
+    if (button === null) return undefined;
+    const onOver = (e: DragEvent): void => {
+      const treeDrag = getTreeDrag();
+      if (!treeDrag) return;
+      e.preventDefault();
+      const effect = treeDrag.singleFile ? 'copy' : 'none';
+      if (e.dataTransfer) e.dataTransfer.dropEffect = effect;
+      setTreeDropEffect(effect);
+      setTreeOver(treeDrag.singleFile);
+    };
+    const onDrop = (e: DragEvent): void => {
+      const treeDrag = getTreeDrag();
+      if (!treeDrag) return;
+      e.preventDefault();
+      clearTreeDrag();
+      setTreeOver(false);
+      const [path] = treeDrag.paths;
+      if (treeDrag.singleFile && treeDrag.paths.length === 1 && path !== undefined) dropRef.current(path);
+    };
+    const onLeave = (): void => setTreeOver(false);
+    button.addEventListener('dragover', onOver);
+    button.addEventListener('drop', onDrop);
+    button.addEventListener('dragleave', onLeave);
+    return () => {
+      button.removeEventListener('dragover', onOver);
+      button.removeEventListener('drop', onDrop);
+      button.removeEventListener('dragleave', onLeave);
+    };
+  }, [button]);
   return (
     /*
      * Through `IconButton` rather than a hand-rolled `<button>` (#282, #291).
@@ -552,10 +615,10 @@ function NewTabButton({ onNewTab }: { onNewTab: () => void }): ReactElement {
      * The only reason it was ever off this path is `drop.setNodeRef`, which `IconButton` now takes.
      */
     <IconButton
-      nodeRef={drop.setNodeRef}
+      nodeRef={nodeRef}
       token="add"
       title={draggingPanelId ? 'Drop to move into a new tab' : 'New tab'}
-      className={`tab-strip__add${panelOver ? ' tab-strip__add--over' : ''}`}
+      className={`tab-strip__add${panelOver || treeOver ? ' tab-strip__add--over' : ''}`}
       testId="tab-add"
       onClick={onNewTab}
     />
@@ -776,6 +839,81 @@ export function TabGroup(): ReactElement {
     },
     [],
   );
+  /*
+   * 050 FR-038 — a tree file dropped on +: the tab is made now, and the file is opened into it once the
+   * layout holds it. `ws.addTab()` returns the id at once but `ws.layout` (which `openFileInTab` reads)
+   * is the render's snapshot, so opening in the same tick would find no such tab and open nothing.
+   */
+  const fileForNewTab = useRef<{ tabId: string; path: string } | null>(null);
+  /** The latest store object — it is replaced every render, and the answer to a preview request outlives one. */
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
+  const { projects } = useProjects();
+  const { registry } = usePreviewProviders();
+  const previewSettings = settings.editor.previews;
+  /** The project a file would be previewed for in a new tab's panel, or `null` when it opens as an editor. */
+  const previewProjectFor = useCallback(
+    (absPath: string, ownerProjectId: string | undefined): string | null => {
+      const norm = (p: string): string => p.replace(/\\/g, '/');
+      const owningProjectFor = (file: string): string | null =>
+        projects.find((p) => p.rootFolder && norm(file).startsWith(norm(p.rootFolder)))?.id ?? null;
+      return previewProjectForDrop(registry, previewSettings, absPath, ownerProjectId, owningProjectFor);
+    },
+    [projects, registry, previewSettings],
+  );
+  useEffect(() => {
+    const pending = fileForNewTab.current;
+    const tab = layout?.tabs.find((t) => t.id === pending?.tabId);
+    if (!pending || !tab) return;
+    fileForNewTab.current = null;
+    // The new tab holds ONE empty panel (`addTab`), and the file fills THAT panel by the rule a drop on
+    // an empty panel uses (047 FR-077) — not `openFileInTab`, which would add a second, editor, panel.
+    const [panel] = collectPanels(tab.root);
+    if (!panel) return;
+    const previewProject = previewProjectFor(pending.path, panel.originProjectId);
+    if (previewProject === null) {
+      openFileInEmptyPanel(ws, panel.id, pending.path, null);
+      return;
+    }
+    // A preview is one per file (044 FR-012): main may focus an existing one, place it in another
+    // window, or refuse. Only `placed` fills this panel — anything else leaves the new tab EMPTY, so it
+    // is taken back rather than left behind (FR-038).
+    const tabId = tab.id;
+    void requestPreviewOpenOutcome(previewIntoPanelIntent(panel.id, pending.path, previewProject)).then(
+      (outcome) => {
+        if (outcome.kind !== 'placed') wsRef.current.closeTab(tabId);
+      },
+    );
+  }, [layout, ws, previewProjectFor]);
+  /**
+   * A single file dropped on +. Already open in an editor: the existing open path focuses it, and no
+   * tab is made (006 FR-011a). Otherwise a new tab — without the rename box a click opens — and the
+   * file opened into it.
+   */
+  const dropFileOnNewTab = (path: string): void => {
+    void (async () => {
+      // Focusing an existing editor applies only to a file that opens AS an editor (FR-038): a file whose
+      // default open action is Preview goes to a preview in the new tab, whatever editor holds it.
+      const current = layoutRef.current;
+      const previewProject = previewProjectFor(path, current?.projectId);
+      if (previewProject !== null) {
+        // A preview of this file already exists (any tab, any window — one per file, 044 FR-012): ask for
+        // it WITHOUT a panel to place into, so main only focuses it, and make no tab. The request is made
+        // before the tab, because a tab made first is left empty when the answer is not `placed`.
+        if ((await window.throng?.preview?.isOpen?.(path)) === true) {
+          void requestPreviewOpen({ absPath: path, projectId: previewProject });
+          return;
+        }
+      }
+      const open = previewProject !== null ? false : await window.throng?.editor?.isOpen(path);
+      if (open === true && current) {
+        const tabId = current.activeTabId ?? current.tabs[0]?.id;
+        if (tabId !== undefined) await openFileInTab(ws, tabId, path);
+        return;
+      }
+      fileForNewTab.current = { tabId: ws.addTab(), path };
+    })();
+  };
   const sensors =useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   /*
    * 031 US1 (#225) — the strip's scroll lives on a TRACK inside it, and this is that track.
@@ -1683,6 +1821,7 @@ export function TabGroup(): ReactElement {
             </div>
           ) : null}
           <NewTabButton
+            onTreeFileDrop={dropFileOnNewTab}
             onNewTab={() => {
               holdPanelFocus(); // released when the new tab's name box closes (see `createdTabId`)
               const id = ws.addTab();

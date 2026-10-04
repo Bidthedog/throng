@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { Annotation, EditorSelection, EditorState, Prec, type Transaction } from '@codemirror/state';
+import { Annotation, Compartment, EditorSelection, EditorState, Prec, type Transaction } from '@codemirror/state';
 import {
   EditorView,
   crosshairCursor,
@@ -185,6 +185,15 @@ import { useServices } from '../composition-root.js';
  * and applied twice.
  */
 const fromAuthority = Annotation.define<boolean>();
+
+/**
+ * Read-only while a move has taken this document out of its project (050 FR-035). In a compartment so a
+ * later `movedOut: false` (an undo that brought the file back) makes the live view writable again. The
+ * authority's own changes still apply: read-only stops the USER typing, not a canonical change arriving.
+ */
+const readOnlyCompartment = new Compartment();
+const movedOutExtensions = (movedOut: boolean): [] | [ReturnType<typeof EditorState.readOnly.of>, ReturnType<typeof EditorView.editable.of>] =>
+  movedOut ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [];
 
 /**
  * The modifier the column-select DRAG answers to (FR-017e/FR-025), from the shipped-defaults record.
@@ -550,6 +559,12 @@ export function useEditor(params: UseEditorParams): void {
     ws.layout?.activeTabId === tabId && !!activeTab && effectiveActivePanelId(activeTab) === panel.id;
   const configRef = useRef<EditorPanelConfig>((panel.config ?? {}) as EditorPanelConfig);
   /**
+   * A move took this document out of its project (050 FR-035): it no longer reads or saves its file,
+   * shows the moved notice, and is read-only. Seeded from the persisted config, so a panel mounted
+   * after the layout walk (R19) or a restart starts in the state without reading anything.
+   */
+  const movedOutRef = useRef(configRef.current.movedOut === true);
+  /**
    * Whose config `configRef` currently holds — and a re-seed if this hook is ever handed a
    * DIFFERENT panel (#228).
    *
@@ -567,6 +582,7 @@ export function useEditor(params: UseEditorParams): void {
   if (seededFor.current !== panel.id) {
     seededFor.current = panel.id;
     configRef.current = (panel.config ?? {}) as EditorPanelConfig;
+    movedOutRef.current = configRef.current.movedOut === true;
   }
   /**
    * 044 US7 — the panel's LIVE `config.history`, the mirror `HistoryMirrorSync` keeps. `configRef` is the
@@ -1056,7 +1072,29 @@ export function useEditor(params: UseEditorParams): void {
       unloadableDetail: unloadableRef.current ? unloadableDetailRef.current : undefined,
       openPending: openPendingRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
+      movedOut: movedOutRef.current,
     });
+  };
+
+  /**
+   * Enter or leave the moved-out state (050 FR-035). Moved out: the file is no longer this panel's to
+   * read, so the could-not-read and missing flags clear (the moved notice is the one surface), the view
+   * goes read-only and the flag rides the config. Back in (an undo): an ordinary editor again.
+   */
+  const applyMovedOut = (movedOut: boolean): void => {
+    movedOutRef.current = movedOut;
+    if (movedOut) {
+      fileMissingRef.current = false;
+      unloadableRef.current = false;
+      unloadableDetailRef.current = undefined;
+      openPendingRef.current = false;
+      configRef.current = { ...configRef.current, movedOut: true };
+    } else {
+      const { movedOut: _gone, ...rest } = configRef.current;
+      configRef.current = rest;
+    }
+    viewRef.current?.dispatch({ effects: readOnlyCompartment.reconfigure(movedOutExtensions(movedOut)) });
+    publishState();
   };
 
   /**
@@ -1128,14 +1166,22 @@ export function useEditor(params: UseEditorParams): void {
       }
       return false;
     }
+    // Built from the config AS IT IS NOW, not the `cfg` snapshotted before the awaits: main relays
+    // `movedOut: false` (a Save As into the owner project) before this invoke returns, and writing the
+    // old config back would resurrect the flag in the persisted layout.
+    const now = configRef.current;
     configRef.current = {
-      ...cfg,
+      ...now,
       filePath: result.absPath,
       encoding: result.encoding,
       lineEnding: result.lineEnding,
       hasBom: cfg.hasBom ?? false,
     };
-    ws.updatePanelConfig(panelId, configRef.current); // persist path into the layout blob
+    // `movedOut` named explicitly: the store MERGES, so an absent key would leave the layout's flag standing.
+    ws.updatePanelConfig(panelId, {
+      ...configRef.current,
+      movedOut: configRef.current.movedOut === true ? true : undefined,
+    });
     fileMissingRef.current = false; // a successful save (re)created the file on disk
     publishState();
     // Save-As gave the document a new name, and the name is what decides the language (FR-002a):
@@ -1170,6 +1216,9 @@ export function useEditor(params: UseEditorParams): void {
   };
 
   const save = async (): Promise<boolean> => {
+    // Save is unavailable while moved out (FR-036): the file belongs to another project now, and main
+    // would refuse it. Save As is the way out, so nothing here is silent — the notice says why.
+    if (movedOutRef.current) return false;
     const cfg = configRef.current;
     // Pathed → save in place; new/unpathed → choose a location (name pre-filled).
     return cfg.filePath ? writeTo(cfg.filePath, false) : chooseThenSave();
@@ -1288,6 +1337,11 @@ export function useEditor(params: UseEditorParams): void {
       fileMissingRef.current = false;
       unloadableRef.current = false; // the path read, so whatever the banner was about is over
       unloadableDetailRef.current = undefined;
+      // A file opened in place is this project's own file: the moved-out state belongs to the document it left.
+      if (movedOutRef.current) {
+        applyMovedOut(false);
+        ws.updatePanelConfig(panelId, { movedOut: undefined });
+      }
       publishState();
       // …and the counts belong to the new document too (040 FR-007). Same race, same remedy: see
       // `republishCounts`.
@@ -1362,6 +1416,7 @@ export function useEditor(params: UseEditorParams): void {
     registerEditorActions(panelId, {
       save,
       saveAs,
+      saveForClose: () => (movedOutRef.current ? saveAs() : save()),
       isDirty: () => dirtyRef.current,
       openFile,
       revert,
@@ -1491,6 +1546,7 @@ export function useEditor(params: UseEditorParams): void {
            * whatever the setting was when the hook first ran.
            */
           gutterCompartment.of(metaRef.current.settings.showGutter ? lineNumbers() : []),
+          readOnlyCompartment.of(movedOutExtensions(movedOutRef.current)),
           drawSelection(),
           highlightActiveLine(),
           /**
@@ -2073,6 +2129,9 @@ export function useEditor(params: UseEditorParams): void {
         // no document change will come along to republish them.
         republishCounts();
       }
+      // 050 FR-035 — the move took the file out of this panel's project (true), or an undo / redo brought
+      // it back (false). A `movedTo` with no flag is an ordinary move and leaves the state as it is.
+      if (typeof msg.movedOut === 'boolean') applyMovedOut(msg.movedOut);
       // 024 US1 (FR-001a): the document's wrap changed at the authority — possibly because a
       // Panel in ANOTHER window toggled it. One document, one answer, so this view follows.
       if (typeof msg.wordWrap === 'boolean') applyWordWrapFromSync(wrapDocKeyRef.current, msg.wordWrap);
@@ -2200,6 +2259,8 @@ export function useEditor(params: UseEditorParams): void {
         // load, so without adopting the authority's answer the editor would quietly go back to
         // presenting remembered text as the file (027 / #161).
         unloadableRef.current = !!existing.unloadable;
+        // 050 R18 — the authority's word on it joins the persisted one: a remount reads it.
+        if (existing.movedOut === true || movedOutRef.current) applyMovedOut(true);
         initialise(existing);
         /*
          * 044 T158 — a mount WITHOUT a load (this branch) still has to reach this panel's history: main
@@ -2220,7 +2281,28 @@ export function useEditor(params: UseEditorParams): void {
         // project switch, a window reload — would otherwise show remembered text as the file with
         // nothing to say it is not. The verdict comes back on the sync channel, whichever way it
         // goes, so nothing here waits for it.
-        bridge?.verifyPath?.(panelId);
+        // A moved-out document holds no path this panel can serve: nothing to verify (050 FR-035).
+        if (!movedOutRef.current) bridge?.verifyPath?.(panelId);
+        else openAnswered();
+        return;
+      }
+      // 050 R19 — mounted MOVED OUT with no live document: the file is another project's now, so it is
+      // neither read nor registered (a load would be refused, and a refusal is a "could not be read"
+      // notice the user must not see). The notice says it all; the view stays empty and read-only.
+      if (movedOutRef.current) {
+        // Unsaved text that survived the restart (FR-036 "MUST keep them") is in the recovery snapshot,
+        // keyed by panel — reading it touches no file. It is registered with main as a MOVED-OUT document
+        // (no claim, no watch, no read), so Save As has a document to write.
+        const snapshot = await bridge?.recoverOne?.(panelId);
+        if (snapshot && snapshot.text.length > 0 && !cancelled) {
+          bridge?.register({ ...buildMeta(), movedOut: true, text: '' });
+          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history);
+          const state = await bridge?.getContent?.(panelId);
+          if (state) initialise(state);
+        }
+        publishState();
+        openAnswered();
+        onReadyRef.current?.();
         return;
       }
       // Launch-time crash recovery: in-progress content saved to a recovery temp
