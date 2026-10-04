@@ -158,6 +158,34 @@ describe('document.* IPC', () => {
     ).toBe('sql');
   });
 
+  it('carries the rows of the files inside a renamed folder (#471)', async () => {
+    await call('document.setState', { projectId, relPath: 'folder/a.txt', languageId: 'sql' });
+    const moved = await call('document.movePath', {
+      projectId,
+      fromRelPath: 'folder',
+      toRelPath: 'folder2',
+    });
+    expect(moved.result.moved).toBe(true);
+    expect(
+      (await call('document.getState', { projectId, relPath: 'folder2/a.txt' })).result.state.languageId,
+    ).toBe('sql');
+  });
+
+  it('refuses a move INTO a project the owner does not have', async () => {
+    await call('document.setState', { projectId, relPath: 'x.txt', languageId: 'sql' });
+    const moved = await call('document.movePath', {
+      projectId,
+      fromRelPath: 'x.txt',
+      toRelPath: 'x.txt',
+      toProjectId: 'no-such-project',
+    });
+    expect(moved.error).toBeDefined();
+    // Nothing moved: the row is still where it was.
+    expect(
+      (await call('document.getState', { projectId, relPath: 'x.txt' })).result.state.languageId,
+    ).toBe('sql');
+  });
+
   it('reports moved:false for a file with no override — the common case, not an error', async () => {
     const moved = await call('document.movePath', {
       projectId,

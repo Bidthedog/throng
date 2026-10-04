@@ -88,12 +88,12 @@ async function recordUndo(result: TransferResult, services: Services): Promise<v
 /**
  * A language override follows a MOVED file (016 FR-028e; 050 FR-016, R10).
  *
- * Within one project that is the daemon's own `movePath`. Across projects there is no such call —
- * `movePath` is scoped to one — so it is composed: read the override in the source, write it in the
- * target, clear the source. A file with no override is the common case and is not a failure, and
+ * One daemon `movePath` per moved item, naming the target project when it differs. The daemon does
+ * it in one transaction, and a moved FOLDER carries the overrides of every file beneath it (#471) —
+ * which a read-write-clear composed here could not, since an override is keyed to a file and the
+ * folder's own path has none. A file with no override is the common case and is not a failure, and
  * neither is a store that cannot be reached: a file operation must never fail because a preference
- * could not follow it. (A moved FOLDER carries the override of the folder path itself only; the daemon
- * has no way to enumerate the overrides beneath it.)
+ * could not follow it.
  *
  * Exported because an UNDO of a cross-project move is a move too, and carries the override back.
  */
@@ -114,15 +114,7 @@ export async function carryOverrides(
     const toRel = rel(toProject, to);
     if (!fromRel || !toRel) continue;
     try {
-      if (fromProject === toProject) {
-        await services.documents.movePath(fromProject, fromRel, toRel);
-      } else {
-        const state = await services.documents.getState(fromProject, fromRel);
-        if (state?.languageId) {
-          await services.documents.setState(toProject, toRel, state.languageId);
-          await services.documents.setState(fromProject, fromRel, null);
-        }
-      }
+      await services.documents.movePath(fromProject, fromRel, toRel, toProject);
     } catch {
       /* see the doc comment: nothing here is worth failing an operation over */
     }

@@ -1,11 +1,9 @@
 /**
  * 050 T037 (FR-016, research R10) — a language override follows a file that a paste MOVED.
  *
- * `documents.movePath` renames within ONE project, so a cross-project cut-paste composes the carry from
- * the two project-scoped calls the daemon does offer: read the override in the source
- * (`getState`), write it in the target (`setState`), clear the source. Within one project it is still
- * the single `movePath` it always was. A COPY carries nothing: the copy is a new document, and
- * inheriting a language chosen for a different file would be a guess.
+ * One `documents.movePath` per moved item; across projects it names the target project, and a moved
+ * folder carries the overrides of the files beneath it (#471). A COPY carries nothing: the copy is a
+ * new document, and inheriting a language chosen for a different file would be a guess.
  */
 import { waitFor } from '@testing-library/react';
 import { createElement } from 'react';
@@ -33,7 +31,7 @@ afterEach(() => {
 const mount = () => mountExplorer(standardHost, { extra: createElement(TransferCompletionHost) });
 
 describe('language override carry after a paste (050 T037)', () => {
-  it('moves the override ACROSS projects: read in the source, written in the target, cleared in the source', async () => {
+  it('moves the override ACROSS projects: one movePath naming the target project', async () => {
     const m = await mount();
     m.daemon.seedOverride('project-a', 'src/main.ts', 'typescript');
 
@@ -52,10 +50,38 @@ describe('language override carry after a paste (050 T037)', () => {
 
     await waitFor(() => expect(m.daemon.override('project-b', 'lib/main.ts')).toBe('typescript'));
     expect(m.daemon.override('project-a', 'src/main.ts')).toBeUndefined();
-    // …and it was composed from getState/setState, not a (project-local) movePath.
-    const methods = m.daemon.calls.map((c) => c.method);
-    expect(methods).toContain('document.getState');
-    expect(methods).not.toContain('document.movePath');
+    // …as ONE daemon call naming both projects, so a folder's files can follow it too (#471).
+    const moves = m.daemon.calls.filter((c) => c.method === 'document.movePath');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]!.params).toMatchObject({
+      projectId: 'project-a',
+      fromRelPath: 'src/main.ts',
+      toProjectId: 'project-b',
+      toRelPath: 'lib/main.ts',
+    });
+  });
+
+  it('carries the overrides of the files inside a FOLDER moved across projects (#471)', async () => {
+    const m = await mount();
+    m.daemon.seedOverride('project-a', 'src/a.sql', 'sql');
+    m.daemon.seedOverride('project-a', 'src/deep/b.zz', 'elvish');
+
+    m.transfer.done({
+      jobId: 'job-1',
+      sourceProjectId: 'project-a',
+      targetProjectId: 'project-b',
+      placed: ['D:/projects/other/lib/src'],
+      undo: {
+        kind: 'move',
+        items: [{ from: 'C:/projects/demo/src', to: 'D:/projects/other/lib/src' }],
+        projects: { source: 'project-a', target: 'project-b' },
+        at: 1,
+      },
+    });
+
+    await waitFor(() => expect(m.daemon.override('project-b', 'lib/src/a.sql')).toBe('sql'));
+    expect(m.daemon.override('project-b', 'lib/src/deep/b.zz')).toBe('elvish');
+    expect(m.daemon.override('project-a', 'src/a.sql')).toBeUndefined();
   });
 
   it('writes nothing when the moved file had no override', async () => {
@@ -74,8 +100,9 @@ describe('language override carry after a paste (050 T037)', () => {
       },
     });
 
-    await waitFor(() => expect(m.daemon.calls.map((c) => c.method)).toContain('document.getState'));
+    await waitFor(() => expect(m.daemon.calls.map((c) => c.method)).toContain('document.movePath'));
     expect(m.daemon.calls.map((c) => c.method)).not.toContain('document.setState');
+    expect(m.daemon.override('project-b', 'lib/plain.txt')).toBeUndefined();
   });
 
   it('still uses movePath inside ONE project', async () => {

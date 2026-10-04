@@ -43,14 +43,23 @@ export class DocumentClient {
   /**
    * Carry the document's state with the file across an in-throng rename, move, or Save-As.
    *
+   * A folder carries the state of every file beneath it (#471). `toProjectId` names the project
+   * the item moved into, when it is not `projectId` (050 FR-016).
+   *
    * `false` simply means the file had no override — the common case. Callers must not treat it as
    * a failure.
    */
-  async movePath(projectId: string, fromRelPath: string, toRelPath: string): Promise<boolean> {
+  async movePath(
+    projectId: string,
+    fromRelPath: string,
+    toRelPath: string,
+    toProjectId?: string,
+  ): Promise<boolean> {
     const result = await this.bridge.invoke<DocumentMovePathResult>('document.movePath', {
       projectId,
       fromRelPath,
       toRelPath,
+      ...(toProjectId !== undefined && toProjectId !== projectId ? { toProjectId } : {}),
     });
     return result.moved;
   }
