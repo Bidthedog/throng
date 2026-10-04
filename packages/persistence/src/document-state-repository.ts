@@ -75,23 +75,52 @@ export class DocumentStateRepository {
    * A SINGLE atomic statement, deliberately — not a client-side get → set-new → delete-old, which
    * is three round-trips with two windows in which a crash leaves the override duplicated or lost.
    *
+   * A FOLDER carries every row beneath it, at any depth (#471). Overrides are per file, so the
+   * folder's own path never has a row — and every caller hands over the moved item's own path, so
+   * matching only that path left the files inside a renamed folder keyed to paths that no longer
+   * exist. The prefix is matched with `substr`, not `LIKE`: a name holding `%` or `_` must not
+   * widen the match, and the trailing `/` keeps a sibling such as `folder-old/` out of it.
+   *
+   * `toProjectId` moves the rows into another project (050 FR-016) — the same file, now owned by
+   * the project it was moved to (Principle I). It defaults to `projectId`.
+   *
    * `false` when there was no row: most files carry no override, so that is the COMMON CASE, not
-   * an error. A row already at the destination is replaced — the moved row describes the file that
-   * now lives there.
+   * an error. A row already at a destination path is replaced — the moved row describes the file
+   * that now lives there. A destination row the move does not land on is left alone: a folder
+   * merge keeps the destination's other files.
    */
-  movePath(ownerUser: string, projectId: string, fromRelPath: string, toRelPath: string): boolean {
+  movePath(
+    ownerUser: string,
+    projectId: string,
+    fromRelPath: string,
+    toRelPath: string,
+    toProjectId: string = projectId,
+  ): boolean {
+    if (projectId === toProjectId && fromRelPath === toRelPath) return false;
+    const prefix = `${fromRelPath}/`;
     const move = this.db.transaction(() => {
-      this.db
+      const rows = this.db
         .prepare(
-          `DELETE FROM document_state WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
+          `SELECT rel_path FROM document_state
+            WHERE owner_user = ? AND project_id = ?
+              AND (rel_path = ? OR substr(rel_path, 1, ?) = ?)`,
         )
-        .run(ownerUser, projectId, toRelPath);
-      return this.db
-        .prepare(
-          `UPDATE document_state SET rel_path = ?, updated_at = ?
-            WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
-        )
-        .run(toRelPath, new Date().toISOString(), ownerUser, projectId, fromRelPath).changes;
+        .all(ownerUser, projectId, fromRelPath, prefix.length, prefix) as { rel_path: string }[];
+      if (rows.length === 0) return 0;
+      const clear = this.db.prepare(
+        `DELETE FROM document_state WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
+      );
+      const rekey = this.db.prepare(
+        `UPDATE document_state SET project_id = ?, rel_path = ?, updated_at = ?
+          WHERE owner_user = ? AND project_id = ? AND rel_path = ?`,
+      );
+      const now = new Date().toISOString();
+      for (const { rel_path: from } of rows) {
+        const to = toRelPath + from.slice(fromRelPath.length);
+        clear.run(ownerUser, toProjectId, to);
+        rekey.run(toProjectId, to, now, ownerUser, projectId, from);
+      }
+      return rows.length;
     });
     return move() > 0;
   }

@@ -39,11 +39,16 @@ export interface DocumentSetStateResult {
   state: DocumentStateDto;
 }
 
-/** Carry a document's state with the file across an in-throng rename or move (FR-028e). */
+/**
+ * Carry a document's state with the file across an in-throng rename or move (FR-028e). A folder
+ * carries the state of every file beneath it (#471).
+ */
 export interface DocumentMovePathParams {
   projectId: string;
   fromRelPath: string;
   toRelPath: string;
+  /** The project the item moved INTO (050 FR-016); absent → `projectId`. */
+  toProjectId?: string;
 }
 export interface DocumentMovePathResult {
   /** false when there was no row — the common case, not an error. */

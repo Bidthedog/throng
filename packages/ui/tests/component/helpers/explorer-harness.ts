@@ -209,13 +209,20 @@ export function fakeDaemon() {
         case 'document.pruneMissing':
           return Promise.resolve({ pruned: 0 } as TResult);
         case 'document.movePath': {
-          const from = key(p.projectId!, p.fromRelPath!);
-          const lang = overrides.get(from);
-          if (lang !== undefined) {
-            overrides.delete(from);
-            overrides.set(key(p.projectId!, p.toRelPath!), lang);
+          // The daemon's contract: the item's own row and every row beneath it (#471), into
+          // `toProjectId` when given.
+          const fromRel = p.fromRelPath!;
+          const toProject = p.toProjectId ?? p.projectId!;
+          const moving = [...overrides].filter(([k]) => {
+            const [proj, rel] = k.split('|') as [string, string];
+            return proj === p.projectId && (rel === fromRel || rel.startsWith(`${fromRel}/`));
+          });
+          for (const [k, lang] of moving) {
+            const rel = k.slice(p.projectId!.length + 1);
+            overrides.delete(k);
+            overrides.set(key(toProject, p.toRelPath! + rel.slice(fromRel.length)), lang);
           }
-          return Promise.resolve({ moved: lang !== undefined } as TResult);
+          return Promise.resolve({ moved: moving.length > 0 } as TResult);
         }
         case 'document.getState': {
           const lang = overrides.get(key(p.projectId!, p.relPath!));

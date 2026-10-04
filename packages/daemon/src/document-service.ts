@@ -84,11 +84,20 @@ export class DocumentIpcService {
 
   private movePath(params: unknown): DocumentMovePathResult {
     const p = asObject(params);
+    const owner = this.owner();
+    const projectId = requireString(p, 'projectId');
+    // Absent → the move stays inside `projectId`. Present → it must name one of THIS owner's
+    // projects: rows are never written under a project the caller does not have.
+    const toProjectId = p.toProjectId === undefined ? projectId : requireString(p, 'toProjectId');
+    if (toProjectId !== projectId && this.projectRoot(owner, toProjectId) === null) {
+      throw new RpcError(`Unknown project "${toProjectId}"`, JSON_RPC_INVALID_PARAMS);
+    }
     const moved = this.repo.movePath(
-      this.owner(),
-      requireString(p, 'projectId'),
+      owner,
+      projectId,
       requireString(p, 'fromRelPath'),
       requireString(p, 'toRelPath'),
+      toProjectId,
     );
     return { moved };
   }
