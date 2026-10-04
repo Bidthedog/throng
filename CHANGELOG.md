@@ -62,6 +62,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **Left arrow** on the File Explorer's root row no longer collapses the whole project tree ([#448](https://github.com/Bidthedog/throng/issues/448)).
 - Renaming or moving a folder keeps the language overrides of the files inside it ([#471](https://github.com/Bidthedog/throng/issues/471)).
 - Pressing on a menu item and dragging onto another highlights only the item under the pointer, not both.
+- A terminal's running command is tracked again while any program on the machine was started with an unusual control character in its command line; until now one such program made every terminal look idle.
 
 ## 1.0.0-alpha8 — 2026-09-30
 
