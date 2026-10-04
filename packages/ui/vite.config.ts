@@ -32,6 +32,50 @@ function failOnOversizedChunks(): Plugin {
 }
 
 /**
+ * The Markdown preview pipeline's libraries (R21): loaded by dynamic import on the first preview mount.
+ * `chunkFor` routes them to the `preview` chunk and `failOnEagerPreview` proves that chunk stays lazy.
+ */
+const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
+
+/**
+ * A chunk rule cannot make code lazy, only a dynamic import can — and one chunk rule that swept the
+ * lazily-imported Markdown body into an eagerly-loaded chunk turned every such import into a no-op,
+ * loading the whole pipeline with the app (Rolldown said so only as an INEFFECTIVE_DYNAMIC_IMPORT
+ * warning). This fails the build when any entry reaches a `PREVIEW_VENDOR` module through static
+ * imports alone.
+ */
+function failOnEagerPreview(): Plugin {
+  return {
+    name: 'throng:fail-on-eager-preview',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = new Map(
+        Object.values(bundle)
+          .filter((out) => out.type === 'chunk')
+          .map((chunk) => [chunk.fileName, chunk]),
+      );
+      const eager = new Set<string>();
+      const pending = [...chunks.values()].filter((c) => c.isEntry).map((c) => c.fileName);
+      while (pending.length > 0) {
+        const name = pending.pop()!;
+        if (eager.has(name)) continue;
+        eager.add(name);
+        pending.push(...(chunks.get(name)?.imports ?? []));
+      }
+      const offenders = [...eager].filter((name) =>
+        chunks.get(name)!.moduleIds.some((id) => PREVIEW_VENDOR.test(id.replace(/\\/g, '/'))),
+      );
+      if (offenders.length > 0) {
+        this.error(
+          `the Markdown preview pipeline loads with the app (R21) — eager chunks holding it: ` +
+            `${offenders.join(', ')}. Keep the modules behind its dynamic imports out of eager chunks in chunkFor.`,
+        );
+      }
+    },
+  };
+}
+
+/**
  * The `@lezer/*` packages that are the parser RUNTIME rather than a language: the LR engine, the
  * syntax-tree model and the highlight tags. Every grammar depends on them, so they stay in one
  * shared chunk; everything else under `@lezer/` is a language's parse tables and rides with it.
@@ -45,7 +89,7 @@ const SHARED_LEZER = new Set(['common', 'lr', 'highlight']);
 export default defineConfig({
   root: fileURLToPath(new URL('./src/renderer', import.meta.url)),
   base: './',
-  plugins: [react(), failOnOversizedChunks()],
+  plugins: [react(), failOnOversizedChunks(), failOnEagerPreview()],
   // Force a single React/ReactDOM instance regardless of how npm hoists the
   // workspace tree. Without this, a stale nested `react` in a package's
   // node_modules bundles a second React copy, leaving hook consumers (e.g.
@@ -72,7 +116,7 @@ export default defineConfig({
         strictExecutionOrder: true,
         codeSplitting: {
           includeDependenciesRecursively: false,
-          groups: [{ name: chunkFor }],
+          groups: [{ name: chunkFor, debugName: 'chunkFor' }],
         },
       },
     },
@@ -95,6 +139,9 @@ function chunkFor(rawId: string): string | null {
   if (/\/packages\/core\//.test(id)) return 'core';
   // The preview panel and its providers — the app's own code, but its largest self-contained area.
   // Its own chunk keeps the app chunk under 500 kB (047 took it to 525 kB).
+  // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
+  // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
+  if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
@@ -132,7 +179,7 @@ function chunkFor(rawId: string): string | null {
   // The Markdown preview pipeline (R21): loaded by dynamic import on the first preview
   // mount, so it must not ride in the eagerly-loaded `vendor` chunk. `@lezer/highlight`
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
-  if (/\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//.test(id))
+  if (PREVIEW_VENDOR.test(id))
     return 'preview';
   return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
 }
