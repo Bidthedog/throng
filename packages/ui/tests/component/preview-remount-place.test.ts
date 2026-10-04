@@ -238,7 +238,9 @@ describe('#459 — a standalone preview shown again comes back at its own place 
         scrollTop: before.scrollTop,
       });
     }
-  });
+    // Twenty real remounts, each waiting out the table pass: ~8 s on an idle machine, so the project's
+    // 15 s default left no headroom and the full component run timed it out under load.
+  }, 60_000);
 });
 
 describe('#459 — a parented preview with sync on keeps its own place, not the editor’s line (FR-084)', () => {
