@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, parseAppSettings, DEFAULT_EXCLUDE_GLOBS } from '@throng/core';
+import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
 
 describe('AppSettings explorer section (004 T004/T005)', () => {
   it('defaults to recycle delete and the VS Code exclude list', () => {
@@ -58,6 +59,25 @@ describe('AppSettings explorer section (004 T004/T005)', () => {
     expect(parseAppSettings({ explorer: { autoRevealActiveFile: false } }).explorer.autoRevealActiveFile).toBe(
       false,
     );
+  });
+
+  it('replaces into the Recycle Bin by default, and accepts permanent (050 FR-018f)', () => {
+    expect(DEFAULT_APP_SETTINGS.explorer.replaceMode).toBe('recycle');
+    expect(parseAppSettings({ explorer: { replaceMode: 'permanent' } }).explorer.replaceMode).toBe('permanent');
+  });
+
+  it('coerces an invalid replace mode back to the default, independent of the delete mode (050 FR-018f)', () => {
+    const s = parseAppSettings({ explorer: { replaceMode: 'nuke', deleteMode: 'permanent' } });
+    expect(s.explorer.replaceMode).toBe('recycle');
+    expect(s.explorer.deleteMode).toBe('permanent');
+  });
+
+  it('describes the replace mode directly after the delete mode (050 FR-018f "shown beside it")', () => {
+    const keys = SETTINGS_METADATA.map((d) => d.key);
+    expect(keys.indexOf('explorer.replaceMode')).toBe(keys.indexOf('explorer.deleteMode') + 1);
+    const d = SETTINGS_METADATA.find((m) => m.key === 'explorer.replaceMode');
+    expect(d?.allowedValues).toEqual(['recycle', 'permanent']);
+    expect(d?.group).toBe('File Explorer');
   });
 
   it('coerces a non-boolean follow setting back to the default (#188)', () => {

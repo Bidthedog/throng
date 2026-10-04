@@ -281,7 +281,7 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
       await menuItem('Cut').click();
       await tree.getByText('assets', { exact: true }).click({ button: 'right' });
       await menuItem('Paste').click();
-      await toggleFolder(tree, 'assets'); // expand via the chevron (#121)
+      // The paste reveals what it placed, opening `assets` (050 FR-025b) — no chevron needed.
       // Exactly one README.md remains (under assets) — it MOVED, not copied. The
       // count retries while the watcher re-reads the root and drops the stale row.
       await expect(tree.locator('.tree-label', { hasText: 'README.md' })).toHaveCount(1);
@@ -354,11 +354,11 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
 
       // Copy README.md, paste at the root → a de-duplicated "README copy.md". Use the exact
       // menu-item testIds: a `hasText:'Copy'` locator now also matches "Copy Path" (#156), which is
-      // ambiguous under Playwright strict mode.
+      // ambiguous under Playwright strict mode. The Paste row names what will land (050 FR-025a).
       await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
       await win.getByTestId('menu-item-Copy').click();
       await tree.locator('.tree-row--root').click({ button: 'right' });
-      await win.getByTestId('menu-item-Paste').click();
+      await win.getByTestId('menu-item-Paste "README.md"').click();
       await expect(tree.getByText('README copy.md', { exact: true })).toBeVisible();
       await expect(tree.getByText('README.md', { exact: true })).toBeVisible(); // original kept
 

@@ -144,7 +144,7 @@ const registered = new Set<string>();
 
 function asEditor(panelId: string, over: Partial<EditorActions> = {}): { openFile: ReturnType<typeof vi.fn> } {
   const openFile = vi.fn(() => Promise.resolve());
-  registerEditorActions(panelId, {
+  const actions = {
     save: () => Promise.resolve(true),
     saveAs: () => Promise.resolve(true),
     isDirty: () => false,
@@ -152,7 +152,10 @@ function asEditor(panelId: string, over: Partial<EditorActions> = {}): { openFil
     revert: () => {},
     reloadFromDisk: () => Promise.resolve(true),
     ...over,
-  } as EditorActions);
+  } as EditorActions;
+  // An ordinary editor's save-for-close IS its save (a moved-out one's is Save As, 050 FR-036).
+  actions.saveForClose = over.saveForClose ?? (() => actions.save());
+  registerEditorActions(panelId, actions);
   registered.add(panelId);
   return { openFile };
 }

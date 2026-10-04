@@ -154,9 +154,10 @@ test('an advertised shortcut inside the menu runs the action and closes it — C
       await expect(win.getByTestId('menu-item-Copy')).toBeVisible();
       await win.keyboard.press('Control+c');
       await expect(win.getByTestId('context-menu')).toHaveCount(0);
-      // Paste at the root → a de-duplicated copy proves Ctrl+C actually copied.
+      // Paste at the root → a de-duplicated copy proves Ctrl+C actually copied. The row names what
+      // will land (050 FR-025a), which is also the first proof the copy reached the clipboard.
       await tree.locator('.tree-row--root').click({ button: 'right' });
-      await win.getByTestId('menu-item-Paste').click();
+      await win.getByTestId('menu-item-Paste "thing.txt"').click();
       await expect(tree.getByText('thing copy.txt', { exact: true })).toBeVisible({ timeout: 6000 });
     });
   } finally {

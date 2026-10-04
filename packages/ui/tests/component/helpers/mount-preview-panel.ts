@@ -150,6 +150,8 @@ export interface MountedPreview {
     open: ReturnType<typeof vi.fn>;
   };
   push(update: PreviewUpdate): void;
+  /** 050 — main's `throng:preview:pathChanged` broadcast, to every window. */
+  pushPathChanged(evt: { panelId: string; filePath: string; movedOut?: boolean }): void;
   unmount(): void;
 }
 
@@ -172,6 +174,10 @@ export interface MountPreviewOptions {
   wrap?: (children: ReactElement) => ReactElement;
   /** 044 T232 — fields main's attach answer carries beyond the text (a parent, a saved place). */
   attach?: Partial<PreviewUpdate>;
+  /** 050 — further persisted `config` fields on the panel (`movedOut`, say), beside `filePath`. */
+  config?: Record<string, unknown>;
+  /** 050 R26 — do not reset the per-window preview store: this mount is a remount of an earlier one. */
+  keepPreviewStore?: boolean;
 }
 
 export interface MountedPreviewWindow extends MountedPreview {
@@ -198,11 +204,14 @@ export async function mountMarkdownPreview(
   setActivePane('workspace');
   // The store is per window and module-level: every mount here reuses panel id `p1`, and a previous
   // test's revision would make this mount's attach look stale.
-  __resetPreviewStore();
+  // 050 R26 — a REMOUNT keeps the window's store: the preview store outlives the panel's view.
+  if (!opts.keepPreviewStore) __resetPreviewStore();
   __resetPreviewOpenStore();
   const providerId = opts.providerId ?? 'markdown';
   const updateListeners = new Set<(u: PreviewUpdate) => void>();
   const openChangedListeners = new Set<(evt: PreviewOpenChanged) => void>();
+  type PathChanged = { panelId: string; filePath: string; movedOut?: boolean };
+  const pathChangedListeners = new Set<(evt: PathChanged) => void>();
   const configListeners = new Set<(payload: { settings: unknown }) => void>();
   const openExternal = vi.fn();
   const generalOpenExternal = vi.fn();
@@ -246,7 +255,10 @@ export async function mountMarkdownPreview(
       openChangedListeners.add(cb);
       return () => openChangedListeners.delete(cb);
     }),
-    onPathChanged: vi.fn(() => () => {}),
+    onPathChanged: vi.fn((cb: (evt: PathChanged) => void) => {
+      pathChangedListeners.add(cb);
+      return () => pathChangedListeners.delete(cb);
+    }),
     onPlace: vi.fn(() => () => {}),
     onFocus: vi.fn(() => () => {}),
   };
@@ -315,7 +327,7 @@ export async function mountMarkdownPreview(
   await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
   const layout = captured.ws!.layout as WorkspaceLayout;
   const id = (collectPanels(layout.tabs[0].root) as Panel[])[0].id;
-  act(() => captured.ws!.setPanelType(id, PREVIEW_KIND, { filePath }));
+  act(() => captured.ws!.setPanelType(id, PREVIEW_KIND, { filePath, ...opts.config }));
   const push = (u: PreviewUpdate): void => {
     act(() => {
       for (const l of [...updateListeners]) l(u);
@@ -332,6 +344,11 @@ export async function mountMarkdownPreview(
     openInto,
     revealDocument,
     push,
+    pushPathChanged: (evt) => {
+      act(() => {
+        for (const l of [...pathChangedListeners]) l(evt);
+      });
+    },
     ws: () => captured.ws as Ws,
     setSettings: (settings) => {
       act(() => {

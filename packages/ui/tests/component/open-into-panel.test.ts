@@ -50,6 +50,8 @@ function asEditor(panelId: string, over: Partial<EditorActions> = {}) {
     reloadFromDisk: vi.fn(() => Promise.resolve(true)),
     ...over,
   };
+  // An ordinary editor's save-for-close IS its save (a moved-out one's is Save As, 050 FR-036).
+  Object.assign(actions, { saveForClose: over.saveForClose ?? (() => actions.save()) });
   registerEditorActions(panelId, actions as unknown as EditorActions);
   registered.add(panelId);
   return actions;

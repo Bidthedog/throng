@@ -166,6 +166,21 @@ describe('activating a tab reports EVERY editor whose file is gone (FR-100)', ()
     expect(reported.calls.map((c) => c.panelId)).toEqual(['gone']);
   });
 
+  it('skips a panel a move took out of its project (050 FR-035, SC-012)', () => {
+    // Its file is another project's now: the moved notice is its one notice, and a "Couldn't open" for the
+    // same file would be the second. Skipped on the live flag, and on the persisted one for a panel whose
+    // editor has not mounted to publish anything.
+    const layoutTab = seed('t1', [{ id: 'live', unloadable: true }, { id: 'cfg', missing: true }, { id: 'gone', missing: true }]);
+    setEditorState('live', { movedOut: true });
+    const root = layoutTab.root as { children: { id: string; config?: unknown }[] };
+    root.children[1]!.config = { filePath: 'D:/other/cfg.txt', movedOut: true };
+    setLayout([layoutTab], 't1');
+    mount();
+    runScan();
+
+    expect(reported.calls.map((c) => c.panelId)).toEqual(['gone']);
+  });
+
   it('reports nothing at all when every file is there', () => {
     setLayout([seed('t1', [{ id: 'a' }, { id: 'b' }])], 't1');
     mount();

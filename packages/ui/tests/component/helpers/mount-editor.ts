@@ -131,6 +131,8 @@ export interface EditorHarness {
   /** The document as the view holds it. */
   text(): string;
   readonly calls: Record<string, ReturnType<typeof vi.fn>>;
+  /** The panel's `config` in the last layout the store persisted (`undefined` before any save). */
+  savedPanelConfig(): Record<string, unknown> | undefined;
   /** Unmount the whole tree — for a test about what its listeners leave behind. */
   unmount(): void;
   /**
@@ -225,6 +227,8 @@ export function mountEditor(opts: {
   panelConfig?: Record<string, unknown>;
   /** 044 US7 — mount by a restoring LOAD rather than by adopting a live document (see `restoring`). */
   restoreByLoad?: boolean;
+  /** 050 — the crash-recovery snapshot `recoverOne` answers for this panel (unsaved text that survived a restart). */
+  recovered?: { text: string; version?: number; history?: unknown };
 }): EditorHarness {
   const panelId = opts.panelId ?? 'p-ed';
   const projectRoot = opts.projectRoot ?? 'C:/proj';
@@ -234,6 +238,8 @@ export function mountEditor(opts: {
   /** Subscribers to the config hot-reload channel — see {@link EditorHarness.pushSettings}. */
   const configListeners: ((payload: unknown) => void)[] = [];
   const dispatched: unknown[] = [];
+  /** Every layout the workspace store persisted (`workspace.save`), oldest first. */
+  const savedLayouts: WorkspaceLayout[] = [];
   /** Files this harness will serve to a subsequent `openFile`, keyed by path. */
   const pendingOpens = new Map<string, EditorDoc>();
   /**
@@ -266,6 +272,11 @@ export function mountEditor(opts: {
     redo: vi.fn(),
     // The one-buffer oracle (FR-011a): the file is open nowhere else and not refused, unless a test says so.
     openInto: vi.fn(() => Promise.resolve({ action: 'open' })),
+    // 050 — a crash-recovery snapshot for this panel, when a test seeds one (`opts.recovered`).
+    recoverOne: vi.fn(() => Promise.resolve(opts.recovered ?? null)),
+    restoreRecovered: vi.fn((_id: string, text: string) => {
+      current = { ...current, text, dirty: true };
+    }),
   };
 
   /*
@@ -392,11 +403,12 @@ export function mountEditor(opts: {
   const layout: WorkspaceLayout = createDefaultLayout(PROJECT, { tab: 't1', panel: panelId });
   layout.tabs[0].root = panel;
   const bridge: ThrongBridge = {
-    invoke<T>(method: string): Promise<T> {
+    invoke<T>(method: string, args?: unknown): Promise<T> {
       switch (method) {
         case 'workspace.load':
           return Promise.resolve({ layout, restored: true } as T);
         case 'workspace.save':
+          savedLayouts.push((args as { layout: WorkspaceLayout }).layout);
           return Promise.resolve({ ok: true } as T);
         case 'workspace.loadSubWorkspaces':
         case 'subworkspace.list':
@@ -508,6 +520,10 @@ export function mountEditor(opts: {
   return {
     dispatched,
     calls,
+    savedPanelConfig: () => {
+      const root = savedLayouts.at(-1)?.tabs[0]?.root as { config?: Record<string, unknown> } | undefined;
+      return root?.config;
+    },
     unmount: () => rendered.unmount(),
     remount: () => {
       mountKey += 1;
