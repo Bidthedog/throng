@@ -29,11 +29,16 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha9 — 2026-10-04
+
 ### Added
+- **Cut, copy and paste files between projects** ([#7](https://github.com/Bidthedog/throng/issues/7)): cut or copy in one project's File Explorer, switch, and paste in another; the Paste item names what will land and where it came from, a name already taken asks **Replace**, **Skip** or **Keep both**, a large paste shows progress with a cancel that can roll it back, and **Ctrl+Z** undoes a move between projects from either one. An editor left open on a file moved away stays read-only and says where it went.
+- **When Paste replaces an item** setting: send an item a paste or drag replaces to the Recycle Bin (the default, so undo can bring it back) or delete it for good.
+- **Drop a file from the File Explorer on a tab strip's +** to open it in a new tab.
 - **Split a panel in any direction** ([#433](https://github.com/Bidthedog/throng/issues/433)): a panel's **+** button now opens **Split Down / Up / Right / Left**, putting a new empty panel on that side of the panel you clicked; the same four are under **Split** in every panel's right-click menus, and **Ctrl+Shift+Alt+End** then an arrow splits the active panel from the keyboard.
 - **Drop a panel along a whole edge** ([#433](https://github.com/Bidthedog/throng/issues/433)): drag a panel to the very edge of the panel area to make a full-height column or a full-width row beside everything else.
 - **Destroy a panel from the keyboard** ([#461](https://github.com/Bidthedog/throng/issues/461)): **Ctrl+Shift+Alt+F4** destroys the focused panel of any type, a terminal included, with the same confirmations as its menu's Destroy.
-- **See other instances of the selected text** ([#324](https://github.com/Bidthedog/throng/issues/324)): selecting text in an editor or a Markdown preview softly tints every other place it appears, in the same tint search matches use ([#325](https://github.com/Bidthedog/throng/issues/325)); a whole word tints whole words only. Turn it off with **Highlight other occurrences of the selection**.
+- **See other instances of the selected text** ([#324](https://github.com/Bidthedog/throng/issues/324)): selecting text in an editor or a Markdown preview softly tints every other place it appears, in the same tint search matches use ([#325](https://github.com/Bidthedog/throng/issues/325)); a whole word tints whole words only. Turn it off with **Highlight other occurrences of the selection**; the tint is the **Selection Occurrence Highlight** and **Inactive Selection Occurrence Highlight** theme colours.
 - **A selection stays visible after you click away** ([#457](https://github.com/Bidthedog/throng/issues/457)): an editor or preview keeps its selection in a quieter colour while another panel has focus; click back and it is active again, ready to copy.
 - **Replace All asks about folded sections**: when some matches are inside folded sections, choose to replace and unfold, replace and keep them folded, or cancel.
 
@@ -54,6 +59,9 @@ What changed in each release of throng, written for someone deciding whether to 
 - A panel sent to a sub-workspace window keeps its place there: an editor's caret, selection and scroll, a terminal's scroll-back position and selection, and an open find bar.
 - Collapsing or expanding a preview section while find is open no longer leaves the match outlines where the text used to be.
 - **Collapse All** in a Markdown editor shows a document's single H1 as collapsed, like every other section.
+- **Left arrow** on the File Explorer's root row no longer collapses the whole project tree ([#448](https://github.com/Bidthedog/throng/issues/448)).
+- Renaming or moving a folder keeps the language overrides of the files inside it ([#471](https://github.com/Bidthedog/throng/issues/471)).
+- Pressing on a menu item and dragging onto another highlights only the item under the pointer, not both.
 
 ## 1.0.0-alpha8 — 2026-09-30
 
