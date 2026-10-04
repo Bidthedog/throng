@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+import { runApp, createProject, firstPanelId, cleanupTemp, daemonRpc } from './harness.js';
 
 /**
  * Clear whichever notice a restore may have raised about the file that is not there.
@@ -26,6 +26,52 @@ function recoveredText(userDataDir: string, panelId: string): string | null {
   } catch {
     return null; // not written yet, or a transient read of a mid-write file
   }
+}
+
+/**
+ * Whether the DAEMON's stored layout for `projectId` holds `panelId` as an editor on `fileName` —
+ * read through `workspace.load` over the pipe, never through the window (#472).
+ *
+ * The restart test ends session 1 with an ABNORMAL exit: the harness destroys the window, so the
+ * close-time drain (019 FR-010) never runs and whatever the renderer's 400ms layout autosave has not
+ * yet sent is lost — by design, that is what a crash costs. Session 1's body is a chain of layout
+ * edits (create → type → open → delete) each well inside 400ms of the last, so the debounce never
+ * fires before teardown. Measured: `workspace.load` answered `restored:false reason:missing` at every
+ * step of session 1, up to the instant before teardown. The editor reached disk only if the timer
+ * happened to fire inside teardown's ~350ms of settle waits — on the gate runner it often did not,
+ * and session 2 restored the synthesised default: one Blank Panel, no `.editor-panel` at all.
+ *
+ * So the test waits for the layout exactly as it already waits for the recovery snapshot: on the
+ * persisted artefact itself, not on time.
+ */
+async function persistedAsEditor(
+  pipeName: string,
+  projectId: string,
+  panelId: string,
+  fileName: string,
+): Promise<boolean> {
+  const loaded = (await daemonRpc(pipeName, 'workspace.load', { projectId })) as {
+    restored?: boolean;
+    layout?: { tabs?: { root?: unknown }[] };
+  } | null;
+  if (loaded?.restored !== true) return false;
+  const find = (node: unknown): Record<string, unknown> | null => {
+    if (node === null || typeof node !== 'object') return null;
+    const n = node as Record<string, unknown>;
+    if (n.id === panelId && n.type === 'panel') return n;
+    for (const child of Array.isArray(n.children) ? n.children : []) {
+      const hit = find(child);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  for (const tab of loaded.layout?.tabs ?? []) {
+    const panel = find(tab.root);
+    if (!panel) continue;
+    const filePath = (panel.config as { filePath?: unknown } | undefined)?.filePath;
+    return panel.kind === 'editor' && typeof filePath === 'string' && filePath.endsWith(fileName);
+  }
+  return false;
 }
 
 async function dismissNoticeIfPresent(win: Page): Promise<void> {
@@ -134,9 +180,14 @@ test('after a restart, a deleted-file editor restores its content (not blank) fr
   try {
     // Session 1: open the file, delete it (→ dirty + recovery temp written), close.
     await runApp(
-      async (_app, win) => {
+      async (_app, win, ctx) => {
         await createProject(win, 'Del2', root);
         const pid = await firstPanelId(win);
+        const switchId = await win
+          .locator('.project-item', { hasText: 'Del2' })
+          .locator('[data-testid^="project-switch-"]')
+          .getAttribute('data-testid');
+        const projectId = (switchId ?? '').replace('project-switch-', '');
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
         await win.getByTestId(`panel-type-confirm-${pid}`).click();
         await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
@@ -158,6 +209,13 @@ test('after a restart, a deleted-file editor restores its content (not blank) fr
           .poll(() => (recoveredText(userDataDir, pid) ?? '').includes('KEEP-BODY-77'), {
             timeout: 15_000,
             message: `the recovery snapshot for panel "${pid}" was never written to disk`,
+          })
+          .toBe(true);
+        // The restart below only restores what reached the daemon; see `persistedAsEditor` (#472).
+        await expect
+          .poll(() => persistedAsEditor(ctx.pipeName, projectId, pid, 'keep.txt'), {
+            timeout: 15_000,
+            message: `the layout holding editor panel "${pid}" on keep.txt was never saved to the daemon`,
           })
           .toBe(true);
       },
