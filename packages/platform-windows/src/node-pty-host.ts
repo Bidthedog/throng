@@ -459,6 +459,15 @@ async function processSnapshot(now: number): Promise<Map<number, ChildProcess[]>
   return snapshotInFlight;
 }
 
+/**
+ * Every C0 control character. Windows PowerShell's `ConvertTo-Json` leaves some of them raw — 0x1A
+ * (SUB) for one — and a raw one inside a string is invalid JSON, so one command line ANYWHERE on the
+ * machine (a Claude Code background session started with a multi-line prompt carries one) failed the
+ * whole parse and every terminal's command read as nothing. The ones it does escape arrive as `\r` /
+ * `\n` text and are untouched; between tokens a space is equivalent.
+ */
+const RAW_CONTROL_CHARS = new RegExp(`[${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}]`, 'g');
+
 async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
   const byParent = new Map<number, ChildProcess[]>();
   let json: string;
@@ -484,7 +493,7 @@ async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
     CreationDate?: string | null;
   }>;
   try {
-    const parsed: unknown = JSON.parse(json);
+    const parsed: unknown = JSON.parse(json.replace(RAW_CONTROL_CHARS, ' '));
     rows = Array.isArray(parsed) ? parsed : [parsed as never];
   } catch {
     return byParent;
