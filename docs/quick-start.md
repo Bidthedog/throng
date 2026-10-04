@@ -47,7 +47,8 @@ Removing a project from throng never deletes anything on disk.
 
 The centre pane is a dock of **tabs**, each holding **panels**.
 
-- **New tab** with **+** on the tab strip.
+- **New tab** with **+** on the tab strip, or drop a file from the File Explorer on **+** to open it in a
+  new tab.
 - **Split a panel** with the **+** in its header: choose **Split Down**, **Up**, **Right** or
   **Left** and a new empty panel appears on that side. The same four are under **Split** in the
   panel's right-click menus, and from the keyboard press
@@ -87,6 +88,18 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 Click a file in the **File Explorer** to open it in the last active editor, or drag one in from
 Windows Explorer. The panel it opens in flashes briefly, and the keyboard stays in the tree, so you
 can keep browsing or press **F2** to rename the file.
+
+- **Move and copy files between projects** with [Cut, Copy and Paste](key-bindings.md#file-explorer)
+  in the tree: cut or copy in one project, switch, and paste in another. The Paste menu item names
+  what will land and which project it came from. Items picked from different folders keep their
+  folder structure where they land. An editor or preview left open on a file you moved to another
+  project stays where it was, read-only, saying where the file went; **Save As** keeps any unsaved
+  text by saving it into that project.
+- **A name that is already taken** asks first — **Replace**, **Skip** or **Keep both** — and a
+  replaced item goes to the Recycle Bin unless [When Paste replaces an item](preferences.md#file-explorer)
+  says otherwise.
+- **A large paste** (over 5 MB) that takes more than a moment shows a progress bar with a cancel button; cancelling asks whether to keep what has
+  landed or roll the whole paste back. **Ctrl+Z** undoes a move between projects from either one.
 
 - **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
 - **31 languages** are highlighted; the language picker in the status bar corrects a wrong guess.

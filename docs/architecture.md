@@ -487,7 +487,8 @@ copy, delete to the Recycle Bin, and undo.
   `core/src/fs/path-id.ts` and `core/src/fileop-undo/undo-stack.ts`.
 - Main: `files-service.ts`, `files-ipc.ts`, `node-file-system.ts` (the `IFileSystem` binding,
   with the Recycle Bin), `node-file-watcher.ts`, `explorer-watcher.ts`, `recycle-bin-restore.ts`,
-  `undo-service.ts` and `in-app-moves.ts`.
+  `undo-service.ts` and `in-app-moves.ts`; `file-clipboard.ts`, `transfer-service.ts` and
+  `transfer-ipc.ts` for the clipboard and pastes.
 - Renderer: `renderer/explorer/`, with the tree on react-arborist and drag and drop on `@dnd-kit`.
 - Daemon and persistence: the per-project undo and redo stack is stored through `fileopUndo.*` and
   `FileOpUndoRepository`, so an undo survives a restart.
@@ -496,6 +497,14 @@ All filesystem work happens in UI main, not in the renderer (sandboxed) and not 
 (which walks no files). A project's root is **exclusive**: no two projects share a root or nest
 inside each other, so every file belongs to exactly one project. Paths arrive with mixed separators
 and are normalised before any comparison or map key (`path-id.ts`).
+
+The File Explorer clipboard is the application's, not a tree's: main holds one, by absolute path,
+pushes it to every window, and follows in-app moves and deletes. Every paste and drag runs as a job
+in main's transfer engine, one at a time inside the same queue and move bracket as every other file
+operation: sources may come from any project's root, the target is always inside the active one, a
+name clash is a question to the window that started the job, and the job's journal is what Cancel
+rolls back and what the undo entry is built from. A move between projects is one undo entry held in
+both projects' stacks.
 
 Binds: [I. Project-First Context Isolation](../.specify/memory/constitution.md#i-project-first-context-isolation),
 [II. Platform-Abstracted Core](../.specify/memory/constitution.md#ii-platform-abstracted-core-os-agnostic).
