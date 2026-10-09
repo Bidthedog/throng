@@ -62,6 +62,16 @@ export interface EditorUiState {
    * in the moved notice. It holds no claim on the file, reads nothing, and is never reported as missing.
    */
   movedOut?: boolean;
+  /**
+   * A Replace landed on this DIRTY document's path (052 FR-012): the buffer is kept, the path is another
+   * document's now, and the panel shows ONE replaced notice — Save As or Discard. Plain Save is refused.
+   */
+  replaced?: boolean;
+  /**
+   * How many times the replaced condition has been reported again while its notice stands (052 FR-012,
+   * *one condition, one notice*) — a Ctrl+S the authority refused. Each increase flashes the notice.
+   */
+  replacedFlash?: number;
   ownerProjectId?: string;
 }
 
@@ -105,6 +115,11 @@ export function setEditorState(panelId: string, patch: Partial<EditorUiState>): 
   };
   states.set(panelId, { ...prev, ...patch, panelId });
   emit();
+}
+
+/** The replaced condition was reported again (a refused Ctrl+S): flash its notice rather than raise a second. */
+export function flashReplacedNotice(panelId: string): void {
+  setEditorState(panelId, { replacedFlash: (states.get(panelId)?.replacedFlash ?? 0) + 1 });
 }
 
 export function removeEditorState(panelId: string): void {

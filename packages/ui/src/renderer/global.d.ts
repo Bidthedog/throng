@@ -98,6 +98,8 @@ declare global {
       onAppCloseBegin?: (cb: () => void) => () => void;
       onAppClosePrompt?: (cb: (info: AppClosePromptInfo) => void) => () => void;
       onAppCloseClosing?: (cb: (info: { message: string }) => void) => () => void;
+      /** Closing with Terminate all: every terminal exit from now on is throng's own (005 US3). */
+      onAppCloseTerminating?: (cb: () => void) => () => void;
       appCloseChoice?: (choice: 'leave' | 'terminate' | 'cancel') => void;
       // The shutdown drain (019 / FR-010): settle this window's deferred writes and ack.
       // Correlated by `requestId` so a stale ack cannot satisfy a later drain.
@@ -244,7 +246,10 @@ declare global {
          * Rejects when the daemon call fails.
          */
         closeIdle: (params: { projectId: string; exceptPanelIds?: string[] }) => Promise<{ closed: string[] }>;
-        killAll: (params: { projectId: string; exceptPanelIds?: string[] }) => Promise<{ killed: string[] }>;
+        killAll: (params: {
+          projectId: string;
+          exceptPanelIds?: string[];
+        }) => Promise<{ killed: string[]; failed: Array<{ panelId: string; reason: string }> }>;
         // Daemon capabilities (FR-025a): { elevated } gates the "run as admin" control.
         capabilities: () => Promise<{ elevated: boolean }>;
         // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
@@ -254,10 +259,10 @@ declare global {
         onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => () => void;
         /** The shell's working directory changed (012): shown in the panel title. */
         onCwd: (cb: (e: { panelId: string; cwd: string }) => void) => () => void;
-        /** 025 FR-019: the terminal's current foreground command, or null when idle. */
-        onCommand?: (cb: (e: { panelId: string; command: string | null }) => void) => () => void;
+        /** 025 FR-019: the terminal's current foreground command, or null when idle; 053 `arch` of its program. */
+        onCommand?: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => () => void;
         onExit: (
-          cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void,
+          cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number }) => void,
         ) => () => void;
       };
       // File Explorer tree (004): directory reads + file operations, confined to
@@ -628,11 +633,25 @@ declare global {
           unloadable?: boolean;
           /** 050 FR-035 — the document is moved out of its project (a remount shows the moved notice). */
           movedOut?: boolean;
+          /** 052 FR-012 — a Replace landed on this dirty document's path; a remount shows the replaced notice. */
+          replaced?: boolean;
           /** The FILE's own encoding, learnt from its bytes — never the app defaults (FR-023). */
           encoding: import('@throng/core').EncodingId;
           hasBom: boolean;
           lineEnding: import('@throng/core').LineEndingId;
         } | null>;
+        /**
+         * 052 R7 — re-link a restored linked panel to its owner's document. Resolves the owner's state (this
+         * panel then adopts it), or `null` when the owner is not open — drop `linkedTo` and load `filePath`.
+         */
+        link: (panelId: string, ownerId: string, tabId?: string) => Promise<import('@throng/core').ResetDocumentMsg | null>;
+        /**
+         * 052 FR-012 — drop a replaced document's buffer and recovery temp. Main links the panel to the path's
+         * owner (`linkedTo` = that panel, the relay carries it) or loads the path itself (`linkedTo` = null).
+         */
+        discardReplaced: (
+          panelId: string,
+        ) => Promise<{ ok: true; linkedTo: string | null } | { ok: false; error: string }>;
         chooseSavePath: (req: {
           defaultDir?: string;
           defaultName?: string;
@@ -690,6 +709,16 @@ declare global {
              * Absent on a move that changes neither.
              */
             movedOut?: boolean;
+            /**
+             * 052 R7 — this panel now shows that OWNER panel's document (a Replace landed its file on this
+             * panel's path), or `null` when it no longer does. `undefined`: this message does not speak of it.
+             */
+            linkedTo?: string | null;
+            /**
+             * 052 FR-012 — a Replace landed on this DIRTY document's path: it keeps its buffer, owns no path
+             * (`true`), until Save As, its path coming back unclaimed or a discard make it ordinary (`false`).
+             */
+            replaced?: boolean;
             /** 047 R3 — a document or standalone preview's fold state changed; `key`, not `panelId`, names it. */
             foldState?: { key: string; state: import('@throng/core').FoldState };
             /**
@@ -719,6 +748,11 @@ export type EditorLoadResult =
       hasBom: boolean;
       lineEnding: 'lf' | 'crlf' | 'cr';
       relativeFolder: string | null;
+      /**
+       * 052 R1 — the path was already held by another live panel's document, so this panel is now a view of
+       * THAT document (the id is its owner's) rather than a second one. Absent on an ordinary load.
+       */
+      linkedTo?: string;
     }
   // 018 / US9 — the reasons a load can be REFUSED, kept distinct from the reasons it can FAIL.
   // `out-of-tree` is a file that exists and is not permitted here; `folder` is not a file at all;
@@ -743,7 +777,7 @@ export type EditorDropResult =
 /** Result of `window.throng.editor.save`. */
 export type EditorSaveResult =
   | { ok: true; absPath: string; encoding: 'utf8'; lineEnding: 'lf' | 'crlf' | 'cr' }
-  | { ok: false; reason: 'out-of-tree' | 'no-location' | 'io'; error: string };
+  | { ok: false; reason: 'out-of-tree' | 'no-location' | 'io' | 'replaced'; error: string };
 
 /** Result of `window.throng.editor.saveAll`. */
 export interface EditorSaveAllResult {
@@ -791,7 +825,14 @@ export type TerminalAttachEnvelope =
   | {
       ok: true;
       status: 'running' | 'exited';
+      /** The session this attach landed on; the view takes only that session's exit (051 MT-01). */
+      sessionId?: number;
       scrollback: string;
+      /** 053 — the window title the running program last set, kept by the daemon; absent on a cold start. */
+      windowTitle?: string;
+      /** 053 — the running command and its architecture, as the daemon last observed them. */
+      command?: string | null;
+      arch?: string | null;
       /** The session's shared grid — the attaching view conforms its xterm to it (008 FR-009). */
       grid?: { cols: number; rows: number };
       /**

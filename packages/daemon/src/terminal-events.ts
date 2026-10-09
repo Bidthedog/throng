@@ -48,8 +48,9 @@ export class TerminalEvents {
     code: number | null,
     signal: string | undefined,
     unexpected: boolean,
+    sessionId?: number,
   ): void {
-    this.emit(TERMINAL_EXIT_NOTIFICATION, { panelId, code, signal, unexpected });
+    this.emit(TERMINAL_EXIT_NOTIFICATION, { panelId, code, signal, unexpected, sessionId });
   }
 
   /**
@@ -68,9 +69,13 @@ export class TerminalEvents {
     this.emit(TERMINAL_CWD_NOTIFICATION, { panelId, cwd });
   }
 
-  /** 025 FR-019: which command now holds this terminal, or null when it went idle. */
-  publishCommand(panelId: string, command: string | null): void {
-    this.emit(TERMINAL_COMMAND_NOTIFICATION, { panelId, command });
+  /**
+   * 025 FR-019: which command now holds this terminal, or null when it went idle — with 053's `arch`
+   * of the program it names, null when idle or unreadable — and `observedAt`, when the reading behind it began
+   * (epoch ms), so a renderer can tell a window title that arrived after the reading from one before it.
+   */
+  publishCommand(panelId: string, command: string | null, arch: string | null = null, observedAt?: number): void {
+    this.emit(TERMINAL_COMMAND_NOTIFICATION, { panelId, command, arch, ...(observedAt !== undefined ? { observedAt } : {}) });
   }
 
   private emit(method: string, params: unknown): void {

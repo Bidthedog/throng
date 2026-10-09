@@ -28,8 +28,17 @@ export interface IWorkspaceStore {
   load(ownerUser: string, projectId: string): WorkspaceLoadResult;
   /** Persist a project's layout document whole (debounced by the caller). */
   save(ownerUser: string, projectId: string, layout: WorkspaceLayout): void;
-  /** All of the owner's detached sub-workspaces (US4). */
-  loadSubWorkspaces(ownerUser: string): SubWorkspace[];
+  /**
+   * All of the owner's detached sub-workspaces (US4). A row that cannot be parsed is skipped; `onCorrupt` (052
+   * FR-009) is told its id, for a caller that must count it.
+   */
+  loadSubWorkspaces(ownerUser: string, onCorrupt?: (id: string, error: unknown) => void): SubWorkspace[];
   /** Replace the owner's persisted sub-workspace set (US4). */
   persistSubWorkspaces(ownerUser: string, subWorkspaces: SubWorkspace[]): void;
+  /** 052 R3 — upsert ONE record, keeping its position (a new id is appended last); siblings are untouched. */
+  saveSubWorkspace(ownerUser: string, subWorkspace: SubWorkspace): void;
+  /** 052 R3 — delete the named records; answers the ids that existed. */
+  deleteSubWorkspaces(ownerUser: string, ids: readonly string[]): string[];
+  /** 052 R2 — run `body` as one transaction: every write in it lands, or none does. */
+  atomically<T>(body: () => T): T;
 }

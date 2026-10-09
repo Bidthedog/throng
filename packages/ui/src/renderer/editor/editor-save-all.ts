@@ -51,7 +51,9 @@ export async function saveAllEditors(params: {
     const actions = getEditorActions(panelId);
     // 050 FR-036 — Save is unavailable on an editor whose file moved to another project: passed by,
     // like a clean one, and never counted a failure.
-    if (getEditorState(panelId)?.movedOut) continue;
+    // A REPLACED document (052 FR-012) likewise: its path is another file's, the authority refuses a plain Save.
+    const st = getEditorState(panelId);
+    if (st?.movedOut || st?.replaced) continue;
     if (actions?.isDirty()) await actions.save();
   }
 }

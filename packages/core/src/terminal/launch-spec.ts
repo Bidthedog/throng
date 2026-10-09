@@ -184,10 +184,16 @@ export function resolveLaunchSpec(
     // with spaces is correct here precisely BECAUSE the parts keep their own quoting: the command
     // arrives exactly as the user wrote it rather than re-escaped into something cmd cannot read.
     if (NEEDS_VERBATIM_COMMAND_LINE.has(flavour.id ?? '')) {
+      // cmd's own rule for `/K <text>`: when the text starts with a quote and is not exactly one quoted program
+      // name, it removes the first and the LAST quote on the line. A command that starts with a quoted program
+      // path and quotes anything after it — `"C:\Program Files\nodejs\node.exe" "…npm-cli.js" run dev`, which is
+      // what command memory saves for `npm run dev` — therefore ran as something else (051 MT-04). One more pair
+      // of quotes around the whole command is cmd's documented way out: that is the pair it strips.
+      const verbatim = [...withoutDuplicates, ...expandCommandRecipe(recipe, `"${command}"`)];
       return finish({
         file: flavour.file,
         args: expanded,
-        commandLine: expanded.join(' '),
+        commandLine: verbatim.join(' '),
         cwd: projectRoot,
         ...(env ? { env } : {}),
       });

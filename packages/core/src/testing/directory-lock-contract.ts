@@ -35,18 +35,18 @@ export interface DirectoryLockContractEnv {
  * directory stays locked until every handle is released. Throws on first
  * violation.
  */
-export function runDirectoryLockContract(env: DirectoryLockContractEnv): void {
+export async function runDirectoryLockContract(env: DirectoryLockContractEnv): Promise<void> {
   const lock = env.make();
 
   // 1. Held lock blocks delete + rename, but not writes inside; release re-permits.
   const dirA = env.makeDir();
   try {
-    const handle = lock.acquire(dirA);
+    const handle = await lock.acquire(dirA);
     assert(handle.path === dirA, `acquire().path must echo the locked path; got ${handle.path}`);
     assert(env.tryWriteInside(dirA) === true, 'writes to files inside a locked dir must still succeed');
     assert(env.tryDelete(dirA) === false, 'deleting a locked dir must fail');
     assert(env.tryRename(dirA) === false, 'renaming/moving a locked dir must fail');
-    lock.release(handle);
+    await lock.release(handle);
     assert(env.tryDelete(dirA) === true, 'deleting must succeed after release');
   } finally {
     env.cleanup(dirA);
@@ -55,19 +55,19 @@ export function runDirectoryLockContract(env: DirectoryLockContractEnv): void {
   // 2. acquire on a non-existent path throws.
   let threw = false;
   try {
-    lock.acquire(env.nonExistentPath());
+    await lock.acquire(env.nonExistentPath());
   } catch {
     threw = true;
   }
-  assert(threw, 'acquire() on a non-existent path must throw');
+  assert(threw, 'acquire() on a non-existent path must reject');
 
   // 3. release is idempotent; releasing an unknown handle is a safe no-op.
   const dirC = env.makeDir();
   try {
-    const handle = lock.acquire(dirC);
-    lock.release(handle);
-    lock.release(handle); // double release — must not throw
-    lock.release({ path: dirC }); // never-acquired handle — must not throw
+    const handle = await lock.acquire(dirC);
+    await lock.release(handle);
+    await lock.release(handle); // double release — must not throw
+    await lock.release({ path: dirC }); // never-acquired handle — must not throw
     assert(env.tryDelete(dirC) === true, 'dir must be deletable after release');
   } finally {
     env.cleanup(dirC);
@@ -76,12 +76,12 @@ export function runDirectoryLockContract(env: DirectoryLockContractEnv): void {
   // 4. Re-entrancy: stays locked until all handles release.
   const dirD = env.makeDir();
   try {
-    const h1 = lock.acquire(dirD);
-    const h2 = lock.acquire(dirD);
+    const h1 = await lock.acquire(dirD);
+    const h2 = await lock.acquire(dirD);
     assert(env.tryDelete(dirD) === false, 'dir must be locked while any handle is held');
-    lock.release(h1);
+    await lock.release(h1);
     assert(env.tryDelete(dirD) === false, 'dir must stay locked while a second handle is held');
-    lock.release(h2);
+    await lock.release(h2);
     assert(env.tryDelete(dirD) === true, 'dir must be deletable once all handles release');
   } finally {
     env.cleanup(dirD);

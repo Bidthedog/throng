@@ -11,9 +11,13 @@ export interface LockHandle {
   readonly path: string;
 }
 
+/**
+ * Both operations are async (051 R7): taking and letting go of a folder waits on the OS, and that
+ * wait must never stop the daemon serving other terminals.
+ */
 export interface IDirectoryLock {
-  /** Lock `absPath`; throws if it does not exist or cannot be locked. */
-  acquire(absPath: string): LockHandle;
-  /** Release a held lock; idempotent, and a no-op for an unknown handle. */
-  release(handle: LockHandle): void;
+  /** Lock `absPath`; rejects if it does not exist or cannot be locked. */
+  acquire(absPath: string): Promise<LockHandle>;
+  /** Release a held lock, settling once the folder is free; idempotent, and a no-op for an unknown handle. */
+  release(handle: LockHandle): Promise<void>;
 }

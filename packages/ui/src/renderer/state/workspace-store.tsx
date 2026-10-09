@@ -43,6 +43,7 @@ import {
   // 039 (#293) — decides every terminal Panel's reload state when a project's layout loads.
   applyReloadMode,
   updatePanelConfig as opUpdatePanelConfig,
+  moveLayoutTabs,
   type Edge,
   type Panel,
   type PanelConfig,
@@ -53,8 +54,9 @@ import {
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { registerSplitRunner } from '../workspace/split-panel.js';
 import type { WorkspaceClient } from './workspace-client.js';
-import { registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
+import { inFlightSavesByProject, registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
+import { useProjectsOptional } from './projects-store.js';
 import { useServicesOptional } from '../composition-root.js';
 import { beginOperation } from '../workspace/operation.js';
 import { destroySubWorkspace } from '../workspace/destroy-sub-workspace.js';
@@ -275,8 +277,44 @@ export function WorkspaceProvider({
     if (!pending) return;
     // Tracked as well as awaited: a save is not one hop (a sub-workspace's is two round-trips),
     // and this same promise is what a concurrent drain must await rather than race.
-    await trackLayoutSave(client.save(pending.projectId, boundForSave(pending)));
+    await trackLayoutSave(client.save(pending.projectId, boundForSave(pending)), pending.projectId);
   }, [client, boundForSave]);
+
+  /*
+   * 052 T025 — moves heard while a project load is pending (see the listener below and the load effect).
+   * Roots come from the projects when there are any; a store mounted without them flags nothing moved out.
+   */
+  const loadInFlightRef = useRef(false);
+  const movesDuringLoadRef = useRef<{ from: string; to: string }[]>([]);
+  const projectsCtx = useProjectsOptional();
+  const projectsForMovesRef = useRef(projectsCtx?.projects);
+  projectsForMovesRef.current = projectsCtx?.projects;
+
+  /*
+   * 052 FR-005 (research R4) — the project-switch race. A save built BEFORE a move was heard carries
+   * pre-move paths, and landing after main's walk it would put them back, with this window no longer
+   * holding that project to repair it. So a move heard while a project's save is in flight chains ONE
+   * scoped follow after that save settles (`only` ignores `held`); it writes nothing if the save already
+   * carried followed paths. No save in flight, no call.
+   */
+  useEffect(
+    () =>
+      window.throng?.files?.onMoved?.(({ moves }) => {
+        // 052 T025 — a project LOAD in flight: its layout was read before this move reached the daemon, and
+        // nothing patches a layout that has not arrived. Remembered, and applied to what the load returns.
+        if (loadInFlightRef.current) movesDuringLoadRef.current.push(...moves);
+        for (const [projectId, settled] of inFlightSavesByProject()) {
+          // A sub-workspace window's own layout is held by that window; the walk never touches it.
+          if (SubWorkspaceWorkspaceClient.subWorkspaceIdOf(projectId) !== null) continue;
+          void settled.then(() =>
+            client
+              .followMoves({ moves, held: { projectIds: [], subWorkspaceIds: [] }, only: { projectIds: [projectId] } })
+              .catch(() => undefined),
+          );
+        }
+      }),
+    [client],
+  );
 
   // Join the window's drain (019 FR-010). Registered for as long as the provider is mounted,
   // so the close settles this layout wherever it is hosted — main window or sub-workspace (C6).
@@ -296,7 +334,7 @@ export function WorkspaceProvider({
           // pending to report, so this is the only record that the write exists; without it a
           // drain arriving now acks a write that is still in flight, and the close that follows
           // destroys the window mid-round-trip (019 FR-010).
-          void trackLayoutSave(client.save(pending.projectId, boundForSave(pending)));
+          void trackLayoutSave(client.save(pending.projectId, boundForSave(pending)), pending.projectId);
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
@@ -329,6 +367,8 @@ export function WorkspaceProvider({
      */
     beginOperation(activeProjectId);
     setLoading(true);
+    loadInFlightRef.current = true;
+    movesDuringLoadRef.current = [];
     void client
       .load(activeProjectId)
       .then((result) => {
@@ -388,8 +428,24 @@ export function WorkspaceProvider({
             return;
           }
         }
-        setLayout(restorable);
-        if (restorable !== result.layout) scheduleSave(restorable);
+        /*
+         * 052 T025 — the moves heard while this load was in flight, applied to the layout it returned (core's
+         * rule, as `MovedPathSync` applies it to a held one). Idempotent when the daemon's read already
+         * followed them. Marked for save only when something changed.
+         */
+        const heard = movesDuringLoadRef.current;
+        movesDuringLoadRef.current = [];
+        const movedTabs =
+          heard.length === 0
+            ? null
+            : moveLayoutTabs(
+                restorable.tabs,
+                heard,
+                (panel) => projectsForMovesRef.current?.find((p) => p.id === panel.originProjectId)?.rootFolder,
+              );
+        const loaded = movedTabs === null ? restorable : { ...restorable, tabs: movedTabs };
+        setLayout(loaded);
+        if (loaded !== result.layout) scheduleSave(loaded);
         setRestoreFailed(result.restored === false && result.reason === 'corrupt');
         // A layout that was not restored was SYNTHESISED by the repository just now — a default
         // whose panel ids were generated on the spot. Persist it immediately, because until it is
@@ -398,13 +454,16 @@ export function WorkspaceProvider({
         // cannot see this project's panels at all or sees a phantom set that matches nothing.
         // Autosave alone never covers this — it only fires when the layout CHANGES, so a project the
         // user opens and does not edit would stay unsaved forever.
-        if (result.restored === false) scheduleSave(result.layout);
+        if (result.restored === false) scheduleSave(loaded);
       })
       .catch(() => {
         if (!cancelled) setRestoreFailed(false);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          loadInFlightRef.current = false;
+        }
       });
     return () => {
       cancelled = true;

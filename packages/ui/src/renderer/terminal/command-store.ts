@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { getTerminalTitle, getTerminalTitleSetAt } from './title-store.js';
 
 /**
  * Live foreground commands per terminal panel (025 FR-019), the twin of `cwd-store.ts`.
@@ -15,7 +16,28 @@ import { useSyncExternalStore } from 'react';
  * would silently turn "still running" into "nothing was running" and lose the user's command.
  */
 const commands = new Map<string, string | null>();
+/**
+ * The architecture of the process holding each terminal (053 FR-003 `{arch}`), kept beside its command
+ * because the daemon sends the two in one notification and one does not outlive the other.
+ */
+const archs = new Map<string, string>();
+/**
+ * 053 FR-003 `{title}` — the window title each panel's shell showed at its last prompt (the last
+ * observation of nothing running). A shell's title is not a program's; see {@link peekProgramTitle}.
+ */
+const promptTitles = new Map<string, string>();
 const listeners = new Set<() => void>();
+
+/**
+ * Bumped on every change, so a surface naming MANY panels subscribes once — the same shape as
+ * `title-store.ts`'s version (#294).
+ */
+let version = 0;
+
+function emit(): void {
+  version += 1;
+  for (const l of listeners) l();
+}
 let unsubscribeBridge: (() => void) | null = null;
 
 /**
@@ -34,11 +56,39 @@ export function ensureTerminalCommandBridge(): void {
 function ensureBridge(): void {
   if (unsubscribeBridge) return;
   unsubscribeBridge =
-    window.throng?.terminal?.onCommand?.((e) => {
-      if (commands.get(e.panelId) === e.command) return;
-      commands.set(e.panelId, e.command);
-      for (const l of listeners) l();
-    }) ?? null;
+    // `arch` is absent while the OS gave none, and from a command that has gone.
+    window.throng?.terminal?.onCommand?.((e) => record(e.panelId, e.command, e.arch ?? undefined, e.observedAt)) ?? null;
+}
+
+/**
+ * `observedAt` is when the daemon began the reading behind this observation (epoch ms; absent from a view's attach
+ * reply). A title that arrived AFTER it cannot be the prompt's: the program that set it started after the reading,
+ * which is why the reading saw nothing running. The program's output and the daemon's observations travel on separate
+ * channels, so that stale "nothing running" can arrive after the program's title — and, snapshotted as the prompt's,
+ * the program's own title was never shown (053 FR-003; a program titling itself once as it starts lost it 1 run in 9).
+ * Such a title leaves the previous snapshot in place.
+ */
+function record(panelId: string, command: string | null, arch: string | undefined, observedAt?: number): void {
+  if (commands.get(panelId) === command && archs.get(panelId) === arch) return;
+  if (command === null) {
+    const atPrompt = getTerminalTitle(panelId);
+    const arrivedAfterReading = observedAt !== undefined && (getTerminalTitleSetAt(panelId) ?? 0) > observedAt;
+    if (atPrompt === undefined) promptTitles.delete(panelId);
+    else if (!arrivedAfterReading) promptTitles.set(panelId, atPrompt);
+  }
+  commands.set(panelId, command);
+  if (arch === undefined) archs.delete(panelId);
+  else archs.set(panelId, arch);
+  emit();
+}
+
+/**
+ * 053 — record what the daemon said holds a panel's terminal when a view (re-)attached: the same value
+ * the `terminal.command` notification carried, which a mounting view dropped and the daemon will not
+ * send again while it is unchanged.
+ */
+export function reportTerminalCommand(panelId: string, command: string | null, arch?: string | null): void {
+  record(panelId, command, arch ?? undefined);
 }
 
 /**
@@ -78,7 +128,57 @@ export function peekTerminalCommand(panelId: string): string | null | undefined 
  * be replaced by a command that has already exited").
  */
 export function forgetTerminalCommand(panelId: string): void {
-  commands.delete(panelId);
+  // A name already showing the old command re-renders to the new terminal's: FR-016.
+  const had = commands.delete(panelId);
+  if (archs.delete(panelId) || had) emit();
+}
+
+/**
+ * Titles a shell sets for itself (053 FR-003): Git Bash's prompt (`MINGW64:/d/git/throng`, and the
+ * other MSYS2 environments), and a program's own path — how cmd, PowerShell and Windows PowerShell
+ * title their window, cmd with ` - <command>` while one runs, either with `Administrator: ` first.
+ */
+const SHELL_TITLE = /^(?:(?:MINGW(?:32|64)|MSYS|UCRT64|CLANG(?:32|64|ARM64)):|(?:Administrator: )?[A-Za-z]:\\[^"]*?\.(?:exe|com)(?: - |$))/i;
+
+/**
+ * The window title the running program set (053 `{title}`): `undefined` while nothing runs, and for
+ * a title the shell set — one of {@link SHELL_TITLE}'s forms, or the title its last prompt showed
+ * (cmd's `<that> - <command>` included).
+ *
+ * By form rather than by when it arrived: a program restored with its terminal, or one whose view
+ * remounts on a project switch, titled itself before the daemon's next observation, and is still its
+ * own title.
+ */
+export function peekProgramTitle(panelId: string): string | undefined {
+  if (!commands.get(panelId)) return undefined;
+  const title = getTerminalTitle(panelId);
+  if (title === undefined || SHELL_TITLE.test(title)) return undefined;
+  const atPrompt = promptTitles.get(panelId);
+  if (atPrompt !== undefined && (title === atPrompt || title.startsWith(`${atPrompt} - `))) return undefined;
+  return title;
+}
+
+/**
+ * The architecture last observed for `panelId`'s command (053 `{arch}`), read without subscribing.
+ * `undefined` until one is reported, and again once the command goes — the OS gave none.
+ */
+export function peekTerminalArch(panelId: string): string | undefined {
+  return archs.get(panelId);
+}
+
+/** Re-render when ANY panel's command or architecture changes; read them with the `peek` functions. */
+export function useTerminalCommandVersion(): number {
+  return useSyncExternalStore(
+    (notify) => {
+      ensureBridge();
+      listeners.add(notify);
+      return () => {
+        listeners.delete(notify);
+      };
+    },
+    () => version,
+    () => version,
+  );
 }
 
 /**

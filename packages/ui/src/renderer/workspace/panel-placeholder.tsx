@@ -64,7 +64,9 @@ import { edgeDropId, panelDragId, useDragState } from './drag-state.js';
 import { setActivePane, useActivePane } from './active-pane.js';
 import { useWindowFocus } from './use-window-focus.js';
 import { usePanelFlash } from './panel-flash.js';
-import { useTerminalCwd } from '../terminal/cwd-store.js';
+import { useTerminalCommandVersion } from '../terminal/command-store.js';
+import { useTerminalCwdVersion } from '../terminal/cwd-store.js';
+import { terminalTitleSource, useTerminalTitleContextVersion } from '../terminal/title-context.js';
 import { useTerminalTitle } from '../terminal/title-store.js';
 import { useEditorFailure } from '../editor/editor-failure.js';
 import { useEditorState } from '../editor/editor-state.js';
@@ -187,12 +189,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const workspaceHoldsPane = useActivePane() === 'workspace';
   const showsActive = isActive && workspaceHoldsPane;
   const isActiveDimmed = showsActive && !windowForeground;
-  // The terminal's live working directory (012), shown in the header so the path is
-  // visible even when a full-screen program hides the prompt. Undefined for
-  // non-terminal panels (no cwd is ever pushed for their id).
-  const terminalCwd = useTerminalCwd(panel.id);
-  // US10 (#89): a terminal's live window title replaces the panel name in the header when present.
+  // US10 (#89): a terminal's live window title is one of the values its name can be rendered from.
   const terminalTitle = useTerminalTitle(panel.id);
+  // 053 FR-001, FR-013 — and the others: the observed command, the working directory (which the
+  // header used to draw as a separate element, 012) and the template with its limits. Subscribed for
+  // the re-render only; `terminalTitleSource` below reads the values.
+  useTerminalCommandVersion();
+  useTerminalCwdVersion();
+  useTerminalTitleContextVersion();
   // The file path an editor names itself after: the live editor state when it has registered, and
   // the panel's own `config.filePath` otherwise (#97 follow-up). `setPanelType(editor, …)` writes
   // the path onto the panel synchronously, while `editorUi` registers a beat later when the
@@ -257,9 +261,11 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // falling back to the persisted config inside `panelDisplayTitle`. A PARENTED preview takes its
   // parent editor's displayed name, which main forwards on each update as `parent.title` (published by
   // `EditorTitlePublisher`), so it follows a rename of that editor live.
+  const terminalSource = terminalTitleSource(panel);
   const titleSources = {
     terminalTitle,
     editorFilePath,
+    ...(terminalSource ? { terminal: terminalSource } : {}),
     ...(isPreview ? { previewFilePath: previewUi?.filePath, previewParentTitle: previewUi?.parent?.title } : {}),
   };
   /*
@@ -550,7 +556,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
          * The title goes on the HEADER rather than on the inner span: put it on the span and the
          * tooltip would change meaning as the pointer moved two pixels sideways.
          */
-        title={effectiveTitle}
+        title={fullTitle}
         onContextMenu={(e) => {
           e.preventDefault();
           const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
@@ -857,15 +863,6 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             effectiveTitle
           )}
         </span>
-        {panel.kind === 'terminal' && terminalCwd ? (
-          <span
-            className="panel-box__cwd"
-            data-testid={`panel-cwd-${panel.id}`}
-            title={terminalCwd}
-          >
-            {terminalCwd}
-          </span>
-        ) : null}
         {panel.kind === 'editor' && editorUi ? (
           <span
             className="panel-box__file"

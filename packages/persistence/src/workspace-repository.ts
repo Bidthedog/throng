@@ -89,7 +89,7 @@ export class WorkspaceRepository implements IWorkspaceStore {
       });
   }
 
-  loadSubWorkspaces(ownerUser: string): SubWorkspace[] {
+  loadSubWorkspaces(ownerUser: string, onCorrupt?: (id: string, error: unknown) => void): SubWorkspace[] {
     const rows = this.db
       .prepare(`SELECT * FROM sub_workspaces WHERE owner_user = ? ORDER BY position, updated_at`)
       .all(ownerUser) as SubWorkspaceRow[];
@@ -108,8 +108,9 @@ export class WorkspaceRepository implements IWorkspaceStore {
           tabs: content.tabs,
           activeTabId: content.activeTabId,
         });
-      } catch {
-        /* skip corrupt sub-workspace row */
+      } catch (error) {
+        // Skip a corrupt sub-workspace row; a caller that must account for it (052 FR-009) is told.
+        onCorrupt?.(row.id, error);
       }
     }
     return result;
@@ -139,6 +140,47 @@ export class WorkspaceRepository implements IWorkspaceStore {
       });
     });
     replace();
+  }
+
+  /**
+   * 052 R3 — upsert ONE sub-workspace record. An existing row keeps its `position`; a new id is appended last.
+   * Siblings are never read or written, so a writer that owns one record cannot put back a stale copy of another.
+   */
+  saveSubWorkspace(ownerUser: string, sub: SubWorkspace): void {
+    this.db
+      .prepare(
+        `INSERT INTO sub_workspaces (id, owner_user, name, colour, bounds_json, content_json, updated_at, position)
+         VALUES (?, ?, ?, ?, ?, ?, ?,
+                 (SELECT COALESCE(MAX(position), -1) + 1 FROM sub_workspaces WHERE owner_user = ?))
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           colour = excluded.colour,
+           bounds_json = excluded.bounds_json,
+           content_json = excluded.content_json,
+           updated_at = excluded.updated_at`,
+      )
+      .run(
+        sub.id,
+        ownerUser,
+        sub.name,
+        sub.colour,
+        JSON.stringify(sub.bounds),
+        serializeSubWorkspaceContent(sub),
+        new Date().toISOString(),
+        ownerUser,
+      );
+  }
+
+  /** 052 R3 — delete the named records; answers the ids that existed. */
+  deleteSubWorkspaces(ownerUser: string, ids: readonly string[]): string[] {
+    const remove = this.db.prepare(`DELETE FROM sub_workspaces WHERE owner_user = ? AND id = ?`);
+    const run = this.db.transaction(() => ids.filter((id) => remove.run(ownerUser, id).changes > 0));
+    return run();
+  }
+
+  /** 052 R2 — run `body` in one transaction: every write in it lands, or none does. */
+  atomically<T>(body: () => T): T {
+    return this.db.transaction(body)();
   }
 
   private tryParseLayout(json: string, projectId: string): WorkspaceLayout | null {

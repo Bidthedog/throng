@@ -80,8 +80,22 @@ export class DocumentAuthority {
 
   private readonly history = new UndoHistory();
 
+  /**
+   * The id every outgoing message names. Fixed for the document's life, except for one hand-over: 052
+   * FR-011's owner closing while a linked panel remains, where the SAME document — text, version,
+   * history — passes to that panel and must from then on speak in its id ({@link rekey}).
+   */
+  get documentId(): string {
+    return this.id;
+  }
+
+  /** 052 FR-011 — the document passes to another panel. Nothing else about it changes. */
+  rekey(documentId: string): void {
+    this.id = documentId;
+  }
+
   constructor(
-    readonly documentId: string,
+    private id: string,
     initialText = '',
     /** Injected so a test can hold time still and prove the run-grouping rule exactly. */
     private readonly now: () => number = Date.now,

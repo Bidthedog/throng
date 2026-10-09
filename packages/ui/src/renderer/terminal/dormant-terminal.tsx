@@ -50,10 +50,9 @@ export function DormantTerminal({
   onReload: () => void;
 }): ReactElement {
   const maxNameLength = useAppSettings().tabs.maxNameLength;
-  // The SAME resolver the tab popover uses, given the same live sources. A dormant panel has no
-  // shell, so ordinarily there is no window title and the flavour label names it — but the title
-  // store is keyed by panel id and outlives an unmount, so a panel that HELD a terminal and was
-  // later left dormant still has one, and it must win here exactly as it does in the header.
+  // The SAME resolver the tab popover uses, given the same live sources, so a dormant panel reads
+  // exactly as its header does: its title template (053) over whatever the stores still hold —
+  // never a running command, which its terminal's end forgot.
   const [{ name }] = usePanelDisplayNames([panel], maxNameLength);
 
   return (

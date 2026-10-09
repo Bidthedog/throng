@@ -48,8 +48,9 @@ import {
   getEditorState,
   setEditorState,
   removeEditorState,
+  flashReplacedNotice,
 } from './editor-state.js';
-import { registerEditorActions, unregisterEditorActions, type EditorLoadNavigation } from './editor-actions.js';
+import { getEditorActions, registerEditorActions, unregisterEditorActions, type EditorLoadNavigation } from './editor-actions.js';
 import { setPanelHistory } from '../navigation/history-store.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { getActivePane } from '../workspace/active-pane.js';
@@ -1038,6 +1039,12 @@ export function useEditor(params: UseEditorParams): void {
    * order to wait on an answer rather than on 300 ms.
    */
   const openPendingRef = useRef(false);
+  /**
+   * A Replace landed on this DIRTY document's path (052 FR-012): the buffer is kept, the path is another
+   * document's now, and the panel says so in its one replaced notice. The AUTHORITY decides it and relays it
+   * (`replaced`); this only mirrors it, so a remount reads it from `getContent` rather than from a relay.
+   */
+  const replacedRef = useRef(false);
 
   // Build the metadata UI main needs for confinement / mirror. It rides with every dispatched
   // change because it is MUTABLE — projects come and go, a Save-As re-points the file — and the
@@ -1073,6 +1080,7 @@ export function useEditor(params: UseEditorParams): void {
       openPending: openPendingRef.current,
       ownerProjectId: metaRef.current.ownerProjectId,
       movedOut: movedOutRef.current,
+      replaced: replacedRef.current,
     });
   };
 
@@ -1161,7 +1169,10 @@ export function useEditor(params: UseEditorParams): void {
       allProjectRoots: meta.allProjectRoots,
     });
     if (!result || result.ok !== true) {
-      if (result && 'reason' in result) {
+      if (result && 'reason' in result && result.reason === 'replaced') {
+        // The standing replaced notice already says it (one condition, one notice) — flashed, not repeated.
+        flashReplacedNotice(panelId);
+      } else if (result && 'reason' in result) {
         reportSaveError(result.reason, metaRef.current.rootless ? 'subworkspace' : 'project');
       }
       return false;
@@ -1219,6 +1230,12 @@ export function useEditor(params: UseEditorParams): void {
     // Save is unavailable while moved out (FR-036): the file belongs to another project now, and main
     // would refuse it. Save As is the way out, so nothing here is silent — the notice says why.
     if (movedOutRef.current) return false;
+    // A REPLACED document's path is another file's: a plain Save is refused by the authority, so it is not
+    // even asked — the standing notice flashes instead (052 FR-012, one condition one notice).
+    if (replacedRef.current) {
+      flashReplacedNotice(panelId);
+      return false;
+    }
     const cfg = configRef.current;
     // Pathed → save in place; new/unpathed → choose a location (name pre-filled).
     return cfg.filePath ? writeTo(cfg.filePath, false) : chooseThenSave();
@@ -1332,8 +1349,12 @@ export function useEditor(params: UseEditorParams): void {
         encoding: loaded.encoding,
         hasBom: loaded.hasBom,
         lineEnding: loaded.lineEnding,
+        // 052 R1 — the path was held by another panel's document, so this panel now shows THAT one (the
+        // relay that said so arrived before this answer, and this assignment must not undo it).
+        ...(loaded.linkedTo !== undefined ? { linkedTo: loaded.linkedTo } : {}),
       };
-      ws.updatePanelConfig(panelId, configRef.current);
+      // `linkedTo` named explicitly: the store MERGES, so an ordinary open must remove a stale link.
+      ws.updatePanelConfig(panelId, { ...configRef.current, linkedTo: loaded.linkedTo });
       fileMissingRef.current = false;
       unloadableRef.current = false; // the path read, so whatever the banner was about is over
       unloadableDetailRef.current = undefined;
@@ -1416,7 +1437,8 @@ export function useEditor(params: UseEditorParams): void {
     registerEditorActions(panelId, {
       save,
       saveAs,
-      saveForClose: () => (movedOutRef.current ? saveAs() : save()),
+      // Moved out or REPLACED (052 FR-012): a plain Save is refused, so "save first" is Save As.
+      saveForClose: () => (movedOutRef.current || replacedRef.current ? saveAs() : save()),
       isDirty: () => dirtyRef.current,
       openFile,
       revert,
@@ -2132,6 +2154,24 @@ export function useEditor(params: UseEditorParams): void {
       // 050 FR-035 — the move took the file out of this panel's project (true), or an undo / redo brought
       // it back (false). A `movedTo` with no flag is an ordinary move and leaves the state as it is.
       if (typeof msg.movedOut === 'boolean') applyMovedOut(msg.movedOut);
+      /*
+       * 052 R7 — LINKED to another panel's document (a Replace landed its file on this panel's path), or no
+       * longer. The reset that rides with it (the owner's state, or this panel's own once it becomes the owner)
+       * was applied above. The PERSISTED link is `MovedPathSync`'s, once per window; this is the view's copy.
+       *
+       * Unlinked with NO reset: the owner moved away from the shared path (an undo, a rename) and this panel's
+       * own document is gone from main, so it reads the path it carries as an ordinary editor.
+       */
+      if (typeof msg.linkedTo === 'string') {
+        configRef.current = { ...configRef.current, linkedTo: msg.linkedTo };
+      } else if (msg.linkedTo === null) {
+        const { linkedTo: _unlinked, ...unlinked } = configRef.current;
+        configRef.current = unlinked;
+        const own = configRef.current.filePath;
+        if (!msg.reset && own) void getEditorActions(panelId)?.openFile(own);
+      }
+      // 052 FR-012 — a Replace landed on this dirty document's path (true), or its replaced state cleared (false).
+      if (typeof msg.replaced === 'boolean') replacedRef.current = msg.replaced;
       // 024 US1 (FR-001a): the document's wrap changed at the authority — possibly because a
       // Panel in ANOTHER window toggled it. One document, one answer, so this view follows.
       if (typeof msg.wordWrap === 'boolean') applyWordWrapFromSync(wrapDocKeyRef.current, msg.wordWrap);
@@ -2241,7 +2281,23 @@ export function useEditor(params: UseEditorParams): void {
     void (async () => {
       const bridge = win()?.editor;
       // Already open (moved panel / mirrored view): adopt UI main's document as it stands.
-      const existing = await bridge?.getContent?.(panelId);
+      let existing = await bridge?.getContent?.(panelId);
+      /*
+       * 052 R7 — a restored LINKED panel: main has no link after a restart, so it is re-made from the config.
+       * The owner open → this panel shows the owner's document (main answers `getContent` for it from now on)
+       * and takes the adoption route below. The owner not open → the link is dropped, from the view and from
+       * the layout, and `filePath` loads as an ordinary editor. Nothing is shown to the user about it.
+       */
+      const ownerId = configRef.current.linkedTo;
+      if (!existing && ownerId && !cancelled) {
+        const linked = await bridge?.link?.(panelId, ownerId, metaRef.current.tabId);
+        if (linked) existing = await bridge?.getContent?.(panelId);
+        if (!existing) {
+          const { linkedTo: _dropped, ...ordinary } = configRef.current;
+          configRef.current = ordinary;
+          ws.updatePanelConfig(panelId, { linkedTo: undefined });
+        }
+      }
       if (existing && cancelled === false) {
         configRef.current = {
           ...configRef.current,
@@ -2261,6 +2317,7 @@ export function useEditor(params: UseEditorParams): void {
         unloadableRef.current = !!existing.unloadable;
         // 050 R18 — the authority's word on it joins the persisted one: a remount reads it.
         if (existing.movedOut === true || movedOutRef.current) applyMovedOut(true);
+        replacedRef.current = existing.replaced === true;
         initialise(existing);
         /*
          * 044 T158 — a mount WITHOUT a load (this branch) still has to reach this panel's history: main
@@ -2285,6 +2342,31 @@ export function useEditor(params: UseEditorParams): void {
         if (!movedOutRef.current) bridge?.verifyPath?.(panelId);
         else openAnswered();
         return;
+      }
+      /*
+       * 052 T024 — mounted REPLACED with no live document (a restart): the path is another document's now, so
+       * it is neither loaded nor claimed. The unsaved text that survived (the recovery snapshot) is registered
+       * as a REPLACED document — detached, so Save As is the way out — exactly as a moved-out one is. With
+       * nothing to keep there is nothing to show: the flag is dropped and the path loads as an ordinary editor.
+       */
+      if (configRef.current.replaced === true && !cancelled) {
+        const snapshot = await bridge?.recoverOne?.(panelId);
+        if (snapshot && snapshot.text.length > 0 && !cancelled) {
+          bridge?.register({ ...buildMeta(), replaced: true, text: '' });
+          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history);
+          const state = await bridge?.getContent?.(panelId);
+          if (state) {
+            replacedRef.current = state.replaced === true;
+            initialise(state);
+          }
+          publishState();
+          openAnswered();
+          onReadyRef.current?.();
+          return;
+        }
+        const { replaced: _gone, ...ordinary } = configRef.current;
+        configRef.current = ordinary;
+        ws.updatePanelConfig(panelId, { replaced: undefined });
       }
       // 050 R19 — mounted MOVED OUT with no live document: the file is another project's now, so it is
       // neither read nor registered (a load would be refused, and a refusal is a "could not be read"
@@ -2326,6 +2408,12 @@ export function useEditor(params: UseEditorParams): void {
             hasBom: loaded.hasBom,
             lineEnding: loaded.lineEnding,
           };
+          // 052 R1 — the path was already held (the owner loaded first, or this panel's own link lost the
+          // race): this panel is a view of the holder's document, and the link goes back into the layout.
+          if (loaded.linkedTo !== undefined) {
+            configRef.current = { ...configRef.current, linkedTo: loaded.linkedTo };
+            ws.updatePanelConfig(panelId, { linkedTo: loaded.linkedTo });
+          }
           fileMissingRef.current = false;
           unloadableRef.current = false;
           unloadableDetailRef.current = undefined;

@@ -22,9 +22,9 @@
  *
  * The residue this leaves is a race in BOTH directions, and both are healed the same way (fix round 1,
  * item 4):
- * - **A purged record can come back.** While a sub-workspace window is saving, its own
- *   load-all/replace/persist round trip can interleave with this walk's, and land AFTER it — putting a
- *   purged CLOSED record back with the preview still in it.
+ * - **A purged record could come back** — closed by 052 R3: every sub-workspace writer, this walk included,
+ *   now writes only the records it changed (`workspace.saveSubWorkspace` / `deleteSubWorkspaces`), so a
+ *   window's save can no longer put back a purged CLOSED record it merely carried along.
  * - **This walk can overwrite a fresher write.** `held` is a snapshot taken once, at the START of the
  *   walk, but the walk itself makes one `workspace.load`/`workspace.loadSubWorkspaces` round trip per
  *   record and then, much later, the matching write. A project can become held — the user switches to
@@ -37,10 +37,11 @@
  * failed to remove, is filtered out the next time its layout loads, so nothing is ever mounted from it
  * either way.
  *
- * ══ NO NEW RPC ══
+ * ══ NO RPC OF ITS OWN ══
  *
- * The walk composes the daemon's existing methods — `projects.list`, `workspace.load/save`,
- * `workspace.loadSubWorkspaces/persistSubWorkspaces` — and core's pure operations: `removePanelsWhere`
+ * The walk composes the daemon's general methods — `projects.list`, `workspace.load/save`,
+ * `workspace.loadSubWorkspaces`, and the per-record `workspace.saveSubWorkspace/deleteSubWorkspaces`
+ * (052 R3) — and core's pure operations: `removePanelsWhere`
  * for a project layout (a workspace's last panel becomes an empty panel, 002 FR-016) and
  * `stripPanelFromSubWorkspaces` for a sub-workspace (one left with no panel is dropped, 003 FR-026b).
  *
@@ -84,7 +85,7 @@ export interface PreviewPurgeDeps {
    * Tell every window a sub-workspace record just changed or was deleted (044 US4 fix round 1, item 1)
    * — the exact broadcast a hand destroy sends (`destroy-sub-workspace.ts`'s `notifyChanged`), so the
    * sidebar's sub-workspace list and an open detach context refresh even though no window made this
-   * edit. Called once per affected id, only after `workspace.persistSubWorkspaces` has actually landed.
+   * edit. Called once per affected id, only after its record's write has actually landed.
    */
   notifySubWorkspaceChanged(id: string): void;
 }
@@ -149,35 +150,28 @@ export async function purgeUnloadedPreviews(
   const { subWorkspaces } = await deps.call<{ subWorkspaces: SubWorkspace[] }>('workspace.loadSubWorkspaces', {});
   const deletedSubWorkspaceIds: string[] = [];
   const changedSubWorkspaceIds: string[] = [];
-  let changed = false;
-  const kept: SubWorkspace[] = [];
+  const rewritten: SubWorkspace[] = [];
   for (const sub of subWorkspaces) {
-    if (held.subWorkspaceIds.has(sub.id)) {
-      kept.push(sub);
-      continue;
-    }
+    if (held.subWorkspaceIds.has(sub.id)) continue;
     const doomed = sub.tabs.flatMap((tab) => collectPanels(tab.root).filter(isPurged)).map((p) => p.id);
-    if (doomed.length === 0) {
-      kept.push(sub);
-      continue;
-    }
-    changed = true;
+    if (doomed.length === 0) continue;
     removedPanelIds.push(...doomed);
     // One record at a time: a synced panel id can also sit in a HELD record, which must not be touched.
     let list: SubWorkspace[] = [sub];
     for (const panelId of doomed) list = stripPanelFromSubWorkspaces(list, panelId).list;
     if (list.length === 0) deletedSubWorkspaceIds.push(sub.id);
     else {
-      kept.push(...list);
+      rewritten.push(...list);
       changedSubWorkspaceIds.push(sub.id);
     }
   }
-  if (changed) {
-    await deps.call('workspace.persistSubWorkspaces', { subWorkspaces: kept });
-    // Only once the record has actually landed (item 1) — a broadcast ahead of the write could race a
-    // window's own refresh against a persist that has not happened yet.
-    for (const id of [...changedSubWorkspaceIds, ...deletedSubWorkspaceIds]) deps.notifySubWorkspaceChanged(id);
-  }
+  // 052 R3 — only the records this purge changed are written, one at a time: a whole-set persist would put back
+  // a stale copy of every other record, including one the follow-moves walk has just rewritten (FR-005).
+  for (const subWorkspace of rewritten) await deps.call('workspace.saveSubWorkspace', { subWorkspace });
+  if (deletedSubWorkspaceIds.length > 0) await deps.call('workspace.deleteSubWorkspaces', { ids: deletedSubWorkspaceIds });
+  // Only once the records have actually landed (item 1) — a broadcast ahead of the write could race a window's
+  // own refresh against a write that has not happened yet.
+  for (const id of [...changedSubWorkspaceIds, ...deletedSubWorkspaceIds]) deps.notifySubWorkspaceChanged(id);
 
   return { removedPanelIds, deletedSubWorkspaceIds, changedSubWorkspaceIds };
 }

@@ -83,11 +83,11 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     // 3. resize does not throw.
     host.resize(handle, 100, 40);
 
-    // 4. listChildPids: a running command surfaces a child pid that an idle shell
+    // 4. probeChildPids: a running command surfaces a child pid that an idle shell
     //    does not. (Asserting "appears while busy" rather than "idle === []" keeps
     //    this robust to ConPTY infrastructure pids across Windows versions.)
     await sleep(400); // let the shell settle back to its prompt after the echo
-    const idlePids = new Set(host.listChildPids(handle));
+    const idlePids = new Set(await host.probeChildPids(handle));
     host.write(handle, env.startChildLine());
     /*
      * ══ THIS BUDGET AND THE CHILD'S LIFETIME ARE RELATED, AND USED TO BE INVERTED ══
@@ -108,10 +108,21 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
      * a process that is already dead. The caller's child now lives ~39 s, beyond both waits.
      */
     await waitFor(
-      () => host.listChildPids(handle).some((pid) => !idlePids.has(pid)),
+      async () => (await host.probeChildPids(handle)).some((pid) => !idlePids.has(pid)),
       15_000,
       'a new child pid to appear while a command runs',
     );
+
+    // 4a. 051 FR-011: probes asked together are answered together — and never block the caller.
+    //     Waited out first: a host may serve a probe from a read that settled moments ago, which
+    //     answers without a tick and so proves nothing about blocking.
+    await sleep(400);
+    let probeTicks = 0;
+    const probeTicker = setInterval(() => (probeTicks += 1), 10);
+    const together = await Promise.all([host.probeChildPids(handle), host.probeChildPids(handle)]);
+    clearInterval(probeTicker);
+    assert(together[0].length > 0 && together[1].length > 0, 'concurrent probes must both see the running child');
+    assert(probeTicks > 0, 'probeChildPids must not block the event loop');
 
     // 4b. listChildProcesses (025 FR-022): the same descendants, WITH command lines, and with
     //     ppids expressed relative to the handle this caller holds.
@@ -119,7 +130,7 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     //     That last part is the whole reason this obligation exists. `PtyAgentHost` identifies a
     //     terminal by a synthetic key, not an OS pid, so an implementation that forwards raw OS
     //     ppids leaves every direct child unmatchable and silently disables command memory. It is
-    //     invisible to `listChildPids`, which only ever counts pids and never inspects a ppid.
+    //     invisible to `probeChildPids`, which only ever counts pids and never inspects a ppid.
     //     Waited for, not asserted once: the pid check above proves a child EXISTS, but this call
     //     takes its own process snapshot which may be momentarily stale. Asserting immediately made
     //     the obligation itself flaky, which is worse than not having it.
@@ -154,20 +165,29 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     const dead = await host.listChildProcesses({ pid: 999_999_999 }).catch(() => 'REJECTED');
     assert(dead !== 'REJECTED', 'listChildProcesses must resolve, never reject, for a dead handle');
 
-    // 6. kill → onExit fires.
+    // 6. end → resolves only after onExit has fired, without blocking the caller (051 FR-010).
     let exited = false;
     host.onExit(handle, () => {
       exited = true;
     });
-    host.kill(handle);
-    await waitFor(() => exited, 8000, 'onExit after kill');
+    let ticks = 0;
+    const ticker = setInterval(() => (ticks += 1), 10);
+    await host.end(handle, 8000);
+    clearInterval(ticker);
+    assert(exited, 'end() must resolve only once the exit has been observed');
+    assert(ticks > 0, 'end() must not block the event loop');
+
+    // 6a. ending a terminal that is already gone resolves (edge case: ending one already exiting).
+    await host.end(handle, 8000);
   } finally {
-    try {
-      host.kill(handle);
-    } catch {
-      /* already dead */
-    }
+    await host.end(handle, 8000).catch(() => {});
   }
+
+  // 6b. 051 FR-014: an end immediately after start — before the host process can have been
+  //     identified — still resolves; the caller's no-orphans check proves the host went too.
+  const host3 = env.make();
+  const early = host3.start({ ...env.interactiveShell, cwd: env.cwd, cols: 80, rows: 24 });
+  await host3.end(early, 8000);
 
   // 7. a self-exiting process delivers onExit with a numeric exit code.
   const host2 = env.make();

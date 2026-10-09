@@ -154,16 +154,10 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           // 049 FR-000a: the moved panels' view and transient UI state reaches main BEFORE the new
           // window can exist, so its renderer's claim always finds it.
           await stashPanelState(movedPanelIds(layout, kind, id));
-          // Clone semantics: the main layout is untouched; persist the new
-          // sub-workspace (appended to the existing set, which the persist path
-          // replaces wholesale) and open its window.
-          const { subWorkspaces: existing } = await bridge.invoke<WorkspaceLoadSubsResult>(
-            'workspace.loadSubWorkspaces',
-            {},
-          );
-          await bridge.invoke('workspace.persistSubWorkspaces', {
-            subWorkspaces: [...existing, result.subWorkspace],
-          });
+          // Clone semantics: the main layout is untouched; persist the new sub-workspace ALONE
+          // (052 R3 — a per-record upsert, so no sibling is rewritten from a stale copy) and open
+          // its window.
+          await bridge.invoke('workspace.saveSubWorkspace', { subWorkspace: result.subWorkspace });
           clearError();
           await refresh();
           open(subId);
@@ -209,8 +203,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           // 049 FR-000a: stash first, so a window that is already open and reloads on `notifyChanged`
           // claims state that is already in main.
           await stashPanelState(movedPanelIds(layout, kind, id));
-          const next = all.map((s) => (s.id === subId ? updated! : s));
-          await bridge.invoke('workspace.persistSubWorkspaces', { subWorkspaces: next });
+          await bridge.invoke('workspace.saveSubWorkspace', { subWorkspace: updated });
           clearError();
           // Refresh an open window of the target (if any), the sidebar counts, and
           // the menus. We don't force the window open — the add is non-disruptive.
@@ -238,7 +231,16 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           const affected = findPanelLocations(all, panelId);
           if (affected.length === 0) return; // panel not mirrored anywhere persisted
           const { list, deletedIds } = stripPanelFromSubWorkspaces(all, panelId);
-          await bridge.invoke('workspace.persistSubWorkspaces', { subWorkspaces: list });
+          // Per record (052 R3): each affected survivor is saved, the emptied are deleted, and no
+          // unaffected record is sent at all.
+          for (const survivor of list) {
+            if (affected.includes(survivor.id)) {
+              await bridge.invoke('workspace.saveSubWorkspace', { subWorkspace: survivor });
+            }
+          }
+          if (deletedIds.length > 0) {
+            await bridge.invoke('workspace.deleteSubWorkspaces', { ids: deletedIds });
+          }
           // Open windows of surviving affected sub-workspaces reload from the
           // stripped set; windows of emptied (deleted) sub-workspaces are closed.
           for (const id of affected) {

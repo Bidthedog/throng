@@ -28,7 +28,7 @@ export interface ProcessTreeRow {
  *     process cannot predate the process that created it. This drops the false descendants a
  *     recycled pid would otherwise hand command memory, cycle or not;
  *   • a process already visited is never visited again. Creation times are not always known
- *     (`listChildPids` reads pids alone, and CIM leaves some unreadable), so termination cannot
+ *     (`probeChildPids` reads pids alone, and CIM leaves some unreadable), so termination cannot
  *     rest on the first guard.
  */
 export function descendantsOf<T extends ProcessTreeRow>(

@@ -230,6 +230,18 @@ export interface FieldDescriptor {
    * user's own label for the row lives.
    */
   confirmWhen?: { is: string | number | boolean };
+  /**
+   * A rule the value must satisfy beyond its type, bounds and allowed set (053 FR-008): `null` when
+   * the value is acceptable, else a message naming what is wrong. One function serves both the
+   * control, which refuses to commit a value it rejects, and settings validity, which reports a
+   * hand-edited one — a second copy of the rule would drift. Absent means no further rule.
+   */
+  validate?: (value: unknown) => string | null;
+  /**
+   * The control sits on its own line under the description, the full width of the row, rather than
+   * in the narrow column beside it (053 FR-014) — for a value too long to read in that column.
+   */
+  wide?: boolean;
 }
 
 export type MetadataRegistry = readonly FieldDescriptor[];

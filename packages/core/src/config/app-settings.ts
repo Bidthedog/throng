@@ -20,6 +20,7 @@ import { parsePreviewSettings, previewSettingsDefaults } from './preview-setting
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 import type { PreviewSettings } from '../preview/settings-types.js';
 import { DEFAULT_PROTOCOL_ALLOWLIST } from '../links/protocol-uri.js';
+import { DEFAULT_TERMINAL_TITLE_TEMPLATE } from '../terminal/title-template.js';
 import {
   KNOWN_FILE_EXTENSIONS,
   resolveKnownExtensions,
@@ -161,6 +162,16 @@ export interface TerminalSettings {
    * notice surfaces (FR-029).
    */
   reloadMode: TerminalReloadMode;
+  /**
+   * 053 FR-014: the template a terminal panel's name is rendered from (contracts/title-template.md).
+   * Read as written, valid or not: an invalid one renders as the default and settings validity
+   * reports it through the descriptor's `validate` (FR-008), so what the user typed is never erased.
+   */
+  titleTemplate: string;
+  /** 053 FR-012: the longest `{command}` a name shows, in characters, before it is shortened. */
+  titleCommandMaxLength: number;
+  /** 053 FR-012: the longest `{path}` a name shows, in characters, before middle folders drop. */
+  titlePathMaxLength: number;
 }
 
 /** 039 FR-020 (#293). A closed set, rendered as a `select` so both states are named (039 D-4). */
@@ -748,6 +759,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     // 039 FR-021: the default is exactly what throng does today, so this setting is a no-op until
     // a user goes looking for it.
     reloadMode: 'automatic',
+    // 053 FR-009: `ping localhost -t | Git Bash (D:\git\throng)`.
+    titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
+    titleCommandMaxLength: 40,
+    titlePathMaxLength: 40,
   },
   editor: {
     openOnClick: 'single',
@@ -1143,6 +1158,11 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   const reloadMode = TERMINAL_RELOAD_MODES.includes(v.reloadMode as TerminalReloadMode)
     ? (v.reloadMode as TerminalReloadMode)
     : fallback.reloadMode;
+  // 053 FR-014. The template is kept as written even when it does not parse (see the field's doc).
+  const titleTemplate =
+    typeof v.titleTemplate === 'string' ? v.titleTemplate : fallback.titleTemplate;
+  const titleCommandMaxLength = wholeNumber(v.titleCommandMaxLength, fallback.titleCommandMaxLength);
+  const titlePathMaxLength = wholeNumber(v.titlePathMaxLength, fallback.titlePathMaxLength);
   return {
     flavours,
     disabledBuiltins,
@@ -1156,6 +1176,9 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     defaultRememberDirectory,
     defaultRunAsAdmin,
     reloadMode,
+    titleTemplate,
+    titleCommandMaxLength,
+    titlePathMaxLength,
   };
 }
 
@@ -1182,6 +1205,10 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     defaultRememberDirectory: t.defaultRememberDirectory,
     defaultRunAsAdmin: t.defaultRunAsAdmin,
     reloadMode: t.reloadMode,
+    // 053 FR-014 — the same note applies.
+    titleTemplate: t.titleTemplate,
+    titleCommandMaxLength: t.titleCommandMaxLength,
+    titlePathMaxLength: t.titlePathMaxLength,
   };
 }
 

@@ -22,6 +22,7 @@ import { SUB_WORKSPACE_CAPABILITIES, WindowDispatcher } from './keybindings/wind
 import { TitleBar } from './title-bar/title-bar.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
+import { TerminalTitleContextFeeder } from './terminal/title-context.js';
 import {
   SubWorkspaceWindowContext,
   type SubWorkspaceWindowIdentity,
@@ -170,6 +171,8 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           activeProjectId={SubWorkspaceWorkspaceClient.layoutProjectId(subWorkspaceId)}
         >
           {identity ? <SubWorkspaceTitle name={identity.name} /> : null}
+          {/* 053 FR-013 — this window follows the same template as the main one (Principle XI). */}
+          <TerminalTitleContextFeeder />
           <HoverSuppression />
           <PanelRenameSync />
           <PanelDestroySync />

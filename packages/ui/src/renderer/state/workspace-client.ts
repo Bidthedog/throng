@@ -1,5 +1,7 @@
 import type { WorkspaceLayout } from '@throng/core';
 import type {
+  WorkspaceFollowMovesParams,
+  WorkspaceFollowMovesResult,
   WorkspaceLoadResultDto,
   WorkspaceSaveResult,
   WorkspaceSummaryResult,
@@ -20,6 +22,11 @@ export class WorkspaceClient {
 
   save(projectId: string, layout: WorkspaceLayout): Promise<WorkspaceSaveResult> {
     return this.bridge.invoke<WorkspaceSaveResult>('workspace.save', { projectId, layout });
+  }
+
+  /** 052 R4 — rewrite layouts for in-app moves; the renderer only ever calls it scoped (`only`). */
+  followMoves(params: WorkspaceFollowMovesParams): Promise<WorkspaceFollowMovesResult> {
+    return this.bridge.invoke<WorkspaceFollowMovesResult>('workspace.followMoves', params);
   }
 
   summary(): Promise<WorkspaceSummaryResult> {

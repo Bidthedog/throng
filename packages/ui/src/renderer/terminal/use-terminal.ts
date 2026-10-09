@@ -60,6 +60,7 @@ import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
 import { reportTerminalCwd } from './cwd-store.js';
 import { setTerminalTitle, clearTerminalTitle } from './title-store.js';
+import { reportTerminalCommand } from './command-store.js';
 import { TerminalOutputGate } from './output-gate.js';
 import { consumeExplicitRetype } from './explicit-retype.js';
 import { clearKeyboardMode, peekKeyboardMode, saveKeyboardMode } from './keyboard-mode-store.js';
@@ -1472,8 +1473,23 @@ export function useTerminal(opts: UseTerminalOptions): void {
       if (e.panelId !== panelId || disposed) return;
       conformGrid(e.cols, e.rows);
     });
-    const offExit = bridge.onExit((e) => {
-      if (e.panelId !== panelId) return;
+    /*
+     * 051 MT-01 — take only the exit of the session THIS view attached.
+     *
+     * A panel id outlives its sessions. Reopening a project straight after Unload with End Terminals
+     * mounts this view — and this subscription — while the terminal the Unload is ending is still
+     * going, and its exit (code 1, from taskkill) is published under the same panel id. Taken as this
+     * view's own, it reverted the panel with "Terminal exited (code 1)" while the fresh shell the
+     * attach went on to start kept running with nothing showing it. So an exit arriving before the
+     * attach has answered is held until the answer names the session, and only that session's is
+     * taken. An exit naming no session (a daemon older than the id) is taken as before.
+     */
+    let attachedSession: number | undefined;
+    let attachAnswered = false;
+    const heldExits: { code: number | null; unexpected: boolean; sessionId?: number }[] = [];
+    const isOurs = (e: { sessionId?: number }): boolean =>
+      e.sessionId === undefined || attachedSession === undefined || e.sessionId === attachedSession;
+    const forgetProgram = (): void => {
       // The program is gone: forget what IT negotiated, so the next one to run in this panel does
       // not inherit a protocol it never asked for (the same bug, pointing the other way).
       clearKeyboardMode(panelId);
@@ -1483,7 +1499,22 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // startup and had no reason to repeat, so the header fell back to the flavour label for the
       // life of the session and Reset Name could not bring it back.
       clearTerminalTitle(panelId);
+    };
+    const takeExit = (e: { code: number | null; unexpected: boolean }): void => {
+      forgetProgram();
       if (!disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
+    };
+    const offExit = bridge.onExit((e) => {
+      if (e.panelId !== panelId) return;
+      if (!attachAnswered) {
+        // Whichever session this was, a program in this panel has ended, and the attached one's
+        // output is still gated: forgetting now cannot touch what it announces. Only the REPORT
+        // waits for the answer to say whose exit this is.
+        forgetProgram();
+        heldExits.push(e);
+        return;
+      }
+      if (isOurs(e)) takeExit(e);
     });
     /*
      * Focus reports are only honest when focus actually moved (028 follow-up).
@@ -1564,6 +1595,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
       })
       .then((res) => {
         if (disposed) return;
+        attachAnswered = true;
+        // Held exits (MT-01): with no session to match them against, they are not this view's to
+        // take — a failed or still-starting attach is reported on its own.
+        const held = heldExits.splice(0);
         if (!res.ok) {
           // A non-fatal attach timeout (008 FR-005): the session may still be launching.
           // Show the "still starting" state + retry; do NOT revert to the form or kill it.
@@ -1574,7 +1609,14 @@ export function useTerminal(opts: UseTerminalOptions): void {
           onErrorRef.current(res.error.message, res.cause);
           return;
         }
+        attachedSession = res.sessionId;
         onAttachedRef.current?.(res.cwdFallback); // a successful attach clears any "still starting" state
+        // 053 — the window title the running program last set, kept by the daemon: the replayed tail is
+        // bounded and withheld on the alternate screen, so the sequence that set it may not be in it.
+        if (typeof res.windowTitle === 'string') setTerminalTitle(panelId, res.windowTitle);
+        // …and the command it last observed: this panel dropped it as it mounted, and an unchanged
+        // command is never published again — so a project switch would name none until it changed.
+        if (res.command !== undefined) reportTerminalCommand(panelId, res.command, res.arch);
         // Conform to the session's shared grid BEFORE replaying scrollback, so a view
         // joining an existing session (whose minimum it may not move — e.g. a larger
         // window mirroring a smaller one) renders the replayed screen at the right size
@@ -1708,6 +1750,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
           // again would double a full-screen repaint the user sees as a flash.
           if (res.grid && res.redrawn !== true) requestRedraw(panelId, 'attach');
           else if (res.redrawn === true) countReconcile(panelId, 'attach');
+          // The attached session may have exited before this answer arrived (MT-01): take that one.
+          const ours = held.find((e) => e.sessionId !== undefined && e.sessionId === attachedSession);
+          if (ours) takeExit(ours);
         }
       })
       .catch((err: unknown) => {

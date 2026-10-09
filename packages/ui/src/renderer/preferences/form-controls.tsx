@@ -469,38 +469,60 @@ function NumberControl({ descriptor, value, disabled, onCommit }: SettingControl
 
 function TextControl({ descriptor, value, onCommit }: SettingControlProps): ReactElement {
   const [text, setText] = useState<string>(value === undefined ? '' : String(value));
+  // 053 FR-008 — the descriptor's own rule, when it has one. The message is held until the text is
+  // edited again, and the commit is refused, so the last valid value stays what is saved.
+  const [error, setError] = useState<string | null>(null);
   const focused = useRef(false);
   useEffect(() => {
-    if (!focused.current) setText(value === undefined ? '' : String(value));
+    if (!focused.current) {
+      setText(value === undefined ? '' : String(value));
+      setError(null);
+    }
   }, [value]);
+  /** Commit `raw` unless the descriptor rejects it; reports whether it was accepted. */
+  const commit = (raw: string): boolean => {
+    const message = descriptor.validate?.(raw) ?? null;
+    setError(message);
+    if (message !== null) return false;
+    if (raw !== value) onCommit(raw);
+    return true;
+  };
   return (
-    <input
-      type="text"
-      className="ctl ctl--text ctl__input"
-      data-testid={testId(descriptor.key)}
-      value={text}
-      onFocus={() => {
-        focused.current = true;
-      }}
-      onChange={(e) => setText(e.target.value)}
-      // ENTER COMMITS, everywhere. Blur is the only way this field used to accept an answer, so a user
-      // who typed a value and pressed Enter — as anyone would — saw nothing happen, and had to guess
-      // that they were supposed to click elsewhere instead. Enter is the confirm key; every box in the
-      // window honours it now.
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter') return;
-        const raw = e.currentTarget.value;
-        if (raw !== value) onCommit(raw);
-        e.currentTarget.blur();
-      }}
-      onBlur={(e) => {
-        focused.current = false;
-        // Commit the live input value, not the `text` closure — same stale-render race the
-        // NumberControl above fixes (a fast paste-then-tab could otherwise drop the edit).
-        const raw = e.currentTarget.value;
-        if (raw !== value) onCommit(raw);
-      }}
-    />
+    <>
+      <input
+        type="text"
+        className={error !== null ? 'ctl ctl--text ctl__input ctl__input--invalid' : 'ctl ctl--text ctl__input'}
+        data-testid={testId(descriptor.key)}
+        aria-invalid={error !== null}
+        value={text}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(null);
+        }}
+        // ENTER COMMITS, everywhere. Blur is the only way this field used to accept an answer, so a user
+        // who typed a value and pressed Enter — as anyone would — saw nothing happen, and had to guess
+        // that they were supposed to click elsewhere instead. Enter is the confirm key; every box in the
+        // window honours it now. A refused value keeps focus, so the message is read where it was typed.
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          if (commit(e.currentTarget.value)) e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          focused.current = false;
+          // Commit the live input value, not the `text` closure — same stale-render race the
+          // NumberControl above fixes (a fast paste-then-tab could otherwise drop the edit).
+          commit(e.currentTarget.value);
+        }}
+      />
+      {error !== null ? (
+        <span className="ctl__error" data-testid={`${testId(descriptor.key)}-invalid`}>
+          {error}
+        </span>
+      ) : null}
+    </>
   );
 }
 

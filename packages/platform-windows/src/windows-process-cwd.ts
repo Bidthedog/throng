@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import process from 'node:process';
-import type { IProcessCwd } from '@throng/core';
+import { TERMINAL_END_TIMEOUT_MS, type IProcessCwd } from '@throng/core';
 
 /**
  * Windows {@link IProcessCwd} (012 revision). Reads a process's current working
@@ -10,7 +10,10 @@ import type { IProcessCwd } from '@throng/core';
  *   OpenProcess(QUERY_INFORMATION|VM_READ) → NtQueryInformationProcess(basic) →
  *   PEB.ProcessParameters → RTL_USER_PROCESS_PARAMETERS.CurrentDirectory.DosPath.
  *
- * Done in-process via koffi (a prebuilt FFI — no native build step). Every native
+ * Done in-process via koffi (a prebuilt FFI — no native build step), and every call through koffi's
+ * `.async`, which runs it on a worker thread (051 R6): a process that answers slowly — or not at all —
+ * never stops the daemon serving terminals, and a whole read is bounded by `TERMINAL_END_TIMEOUT_MS`.
+ * Every native
  * read is checked and every pid is isolated in try/catch, so a gone/denied process
  * (or any failure) yields *no* entry rather than throwing — the daemon poller must
  * never crash on a terminal that just exited. x64-only (the field offsets below are
@@ -27,17 +30,26 @@ const UNICODE_STRING_BUFFER_OFFSET = 8; // UNICODE_STRING.Buffer (after Length/M
 const PROCESS_QUERY_INFORMATION = 0x0400;
 const PROCESS_VM_READ = 0x0010;
 
-interface Ffi {
-  openProcess(access: number, inherit: boolean, pid: number): unknown;
-  closeHandle(handle: unknown): boolean;
-  ntQueryBasic(handle: unknown, buf: Buffer, size: number): number;
-  readMemory(handle: unknown, address: bigint, buf: Buffer, size: number): boolean;
+/** The four native calls, each settling off the event loop. Exported for tests to substitute. */
+export interface ProcessCwdFfi {
+  openProcess(access: number, inherit: boolean, pid: number): Promise<unknown>;
+  closeHandle(handle: unknown): Promise<boolean>;
+  ntQueryBasic(handle: unknown, buf: Buffer, size: number): Promise<number>;
+  readMemory(handle: unknown, address: bigint, buf: Buffer, size: number): Promise<boolean>;
 }
 
-let ffi: Ffi | null | undefined;
+/** A koffi function's `.async(...args, callback)`, as a promise. */
+type KoffiFn = { async: (...args: unknown[]) => void };
+function callAsync<T>(fn: KoffiFn, ...args: unknown[]): Promise<T> {
+  return new Promise((resolve, reject) =>
+    fn.async(...args, (error: unknown, result: T) => (error ? reject(error) : resolve(result))),
+  );
+}
+
+let ffi: ProcessCwdFfi | null | undefined;
 
 /** Lazily bind the ntdll/kernel32 functions via koffi (once). null if unavailable. */
-function loadFfi(): Ffi | null {
+function loadFfi(): ProcessCwdFfi | null {
   if (ffi !== undefined) return ffi;
   try {
     const koffi = require('koffi');
@@ -60,12 +72,11 @@ function loadFfi(): Ffi | null {
       'void *',
     ]);
     ffi = {
-      openProcess: (access, inherit, pid) => OpenProcess(access, inherit, pid),
-      closeHandle: (handle) => CloseHandle(handle) as boolean,
+      openProcess: (access, inherit, pid) => callAsync(OpenProcess, access, inherit, pid),
+      closeHandle: (handle) => callAsync(CloseHandle, handle),
       // ProcessBasicInformation == 0.
-      ntQueryBasic: (handle, buf, size) => NtQueryInformationProcess(handle, 0, buf, size, null) as number,
-      readMemory: (handle, address, buf, size) =>
-        ReadProcessMemory(handle, address, buf, size, null) as boolean,
+      ntQueryBasic: (handle, buf, size) => callAsync(NtQueryInformationProcess, handle, 0, buf, size, null),
+      readMemory: (handle, address, buf, size) => callAsync(ReadProcessMemory, handle, address, buf, size, null),
     };
   } catch {
     ffi = null; // koffi missing or the libraries failed to load → feature simply off
@@ -74,60 +85,78 @@ function loadFfi(): Ffi | null {
 }
 
 export class WindowsProcessCwd implements IProcessCwd {
+  constructor(
+    /** Test seam: the native calls. Defaults to koffi's bindings, loaded once. */
+    private readonly api?: ProcessCwdFfi | null,
+    private readonly timeoutMs: number = TERMINAL_END_TIMEOUT_MS,
+  ) {}
+
+  /**
+   * Every pid is read concurrently. Whatever has not answered within the limit is simply absent
+   * from the result, so its terminal keeps the last cwd it reported (FR-013) — the read itself never
+   * waits longer than that.
+   */
   async read(pids: readonly number[]): Promise<Map<number, string>> {
     const out = new Map<number, string>();
-    if (process.arch !== 'x64') return out; // offsets below are the 64-bit layout
-    const api = loadFfi();
+    if (process.arch !== 'x64' && this.api === undefined) return out; // offsets are the 64-bit layout
+    const api = this.api === undefined ? loadFfi() : this.api;
     if (!api) return out;
-    for (const pid of pids) {
-      const cwd = readOne(api, pid);
-      if (cwd) out.set(pid, cwd);
-    }
-    return out;
+    const all = Promise.all(
+      pids.map(async (pid) => {
+        const cwd = await readOne(api, pid);
+        if (cwd) out.set(pid, cwd);
+      }),
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, this.timeoutMs);
+      timer.unref?.();
+    });
+    await Promise.race([all, limit]);
+    clearTimeout(timer);
+    return new Map(out);
   }
 }
 
 /** Read one process's cwd, or null on any failure (never throws). */
-function readOne(api: Ffi, pid: number): string | null {
+async function readOne(api: ProcessCwdFfi, pid: number): Promise<string | null> {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   let handle: unknown = null;
   try {
-    handle = api.openProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+    handle = await api.openProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
     if (!handle) return null;
 
     // PROCESS_BASIC_INFORMATION → PebBaseAddress.
     const pbi = Buffer.alloc(48);
-    if (api.ntQueryBasic(handle, pbi, pbi.length) !== 0) return null;
+    if ((await api.ntQueryBasic(handle, pbi, pbi.length)) !== 0) return null;
     const pebBase = pbi.readBigUInt64LE(PBI_PEB_OFFSET);
     if (pebBase === 0n) return null;
 
     // PEB.ProcessParameters (a remote pointer).
     const ptrBuf = Buffer.alloc(8);
-    if (!api.readMemory(handle, pebBase + PEB_PROCESS_PARAMETERS_OFFSET, ptrBuf, 8)) return null;
+    if (!(await api.readMemory(handle, pebBase + PEB_PROCESS_PARAMETERS_OFFSET, ptrBuf, 8))) return null;
     const processParameters = ptrBuf.readBigUInt64LE(0);
     if (processParameters === 0n) return null;
 
     // CurrentDirectory.DosPath (a UNICODE_STRING: Length @0, Buffer @+8).
     const usBuf = Buffer.alloc(16);
-    if (!api.readMemory(handle, processParameters + RTL_CURRENT_DIRECTORY_OFFSET, usBuf, 16)) return null;
+    if (!(await api.readMemory(handle, processParameters + RTL_CURRENT_DIRECTORY_OFFSET, usBuf, 16))) return null;
     const length = usBuf.readUInt16LE(0); // bytes of UTF-16 text
     const bufferPtr = usBuf.readBigUInt64LE(UNICODE_STRING_BUFFER_OFFSET);
     if (length === 0 || length > 0x8000 || bufferPtr === 0n) return null;
 
     // The path text itself.
     const pathBuf = Buffer.alloc(length);
-    if (!api.readMemory(handle, bufferPtr, pathBuf, length)) return null;
+    if (!(await api.readMemory(handle, bufferPtr, pathBuf, length))) return null;
     const cwd = pathBuf.toString('utf16le').replace(/\\+$/, ''); // drop a trailing separator
     return cwd.length > 0 ? cwd : null;
   } catch {
     return null;
   } finally {
     if (handle) {
-      try {
-        api.closeHandle(handle);
-      } catch {
+      await api.closeHandle(handle).catch(() => {
         /* handle already invalid */
-      }
+      });
     }
   }
 }

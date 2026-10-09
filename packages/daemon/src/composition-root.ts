@@ -17,6 +17,7 @@ import type {
 } from '@throng/core';
 import {
   DEFAULT_APP_SETTINGS,
+  TERMINAL_END_TIMEOUT_MS,
   ProjectCategoryService,
   ProjectService,
   countPanels,
@@ -213,6 +214,9 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   );
   // One elevation probe shared by the service (capabilities) and the routing.
   const elevation = new WindowsElevation();
+  // Probed NOW, while composing, rather than on the first terminal start: the probe is a synchronous
+  // `whoami`, allowed only before the service serves (051 FR-017), and the answer is cached after.
+  elevation.isElevated();
   // Local host: spawns terminals at the daemon's own integrity (elevated when the
   // app was launched elevated). Admin ("run as admin") terminals use this.
   const localPty = new NodePtyHost();
@@ -272,6 +276,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     attachColdStartDelayMs,
     new WindowsProcessCwd(), // 012: poll each terminal's shell cwd for the panel title
     readCommandPollMs(env), // 025 FR-019c: the shared command-observation interval
+    TERMINAL_END_TIMEOUT_MS, // 051 FR-013a: the one limit every end and the shutdown wait read
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);

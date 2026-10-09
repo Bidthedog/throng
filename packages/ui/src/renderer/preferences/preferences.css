@@ -380,6 +380,23 @@
   justify-content: flex-end;
 }
 
+/* 053 FR-014 — a wide control: its own line under the description, the whole text column wide. One
+   line still — a template is a single line, so the field scrolls rather than wraps. */
+.settings-row__control--wide {
+  flex-direction: column; /* the field, then any error under it */
+  align-items: stretch;
+  max-width: none;
+  min-width: 0;
+  margin-top: 6px;
+  padding-top: 0;
+}
+
+.settings-row__control--wide .ctl__input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--throng-font-editor-family, 'Consolas', monospace);
+}
+
 .ctl__input,
 .ctl--select,
 .ctl__textarea {

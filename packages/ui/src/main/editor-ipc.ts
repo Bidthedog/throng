@@ -177,6 +177,8 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     coordinator.register(toMeta(event, raw), text, {
       unloadable: raw.unloadable === true,
       movedOut: raw.movedOut === true,
+      // 052 T024 — `replaced`: a panel restored with `config.replaced`, registered detached, Save refused.
+      replaced: raw.replaced === true,
     });
   });
 
@@ -275,6 +277,30 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
    */
   ipcMain.on('throng:editor:verifyPath', (_event, panelId: unknown) => {
     if (typeof panelId === 'string') void coordinator.verifyPath(panelId);
+  });
+
+  /**
+   * 052 FR-012 — Discard on a replaced document: its buffer goes, and the panel shows the file now at its
+   * path (linked to that file's editor, or read itself when none holds it). contracts/editor-replace.md.
+   */
+  ipcMain.handle('throng:editor:discardReplaced', (_event, panelId: unknown) =>
+    typeof panelId === 'string'
+      ? coordinator.discardReplaced(panelId)
+      : { ok: false, error: 'No such open document.' },
+  );
+
+  /**
+   * 052 R7 "Persisted" — a panel restored with `config.linkedTo` re-links to its owner's document. `null`
+   * means the owner is not open: the renderer drops the link and loads `filePath` itself.
+   */
+  ipcMain.handle('throng:editor:link', (event, raw: unknown) => {
+    const req = raw as { panelId?: unknown; ownerId?: unknown; tabId?: unknown } | null;
+    if (typeof req?.panelId !== 'string' || typeof req.ownerId !== 'string') return null;
+    // R7b — the linked panel's own window, stamped here like every DocMeta, so a hand-over raises it.
+    return coordinator.link(req.panelId, req.ownerId, {
+      windowId: windowIdOf(event),
+      tabId: typeof req.tabId === 'string' ? req.tabId : null,
+    });
   });
 
   ipcMain.handle('throng:editor:resync', (_event, panelId: unknown) =>

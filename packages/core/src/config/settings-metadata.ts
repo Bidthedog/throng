@@ -22,6 +22,7 @@ import {
 import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from './metadata.js';
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
+import { validateTitleTemplate } from '../terminal/title-template.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -901,6 +902,41 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'Start terminal programs with FORCE_HYPERLINK=1, so tools that can emit clickable links — Claude Code among them — do. This applies to terminals started afterwards and does not change one that is already running, because a program’s environment is fixed when it starts. A FORCE_HYPERLINK you have set yourself is never overridden, in either direction. Turning this off does not stop throng recognising paths a program prints as plain text.',
     group: 'Terminal',
     control: 'toggle',
+  },
+  {
+    // 053 FR-014 / FR-008. The parser is the validator, so Preferences and settings validity refuse
+    // exactly what the renderer cannot parse.
+    key: 'terminals.titleTemplate',
+    label: 'Terminal title template',
+    description:
+      'What a terminal panel is named; its icon is always shown. {command} the running command · {app} its program · {arch} its architecture · {title} the title it set · {shell} the terminal type · {path} the directory · {folder} its last folder · {project} the project · {admin} Admin when elevated. Text shows as typed; (( )) {{ }} show a bracket or brace. ( … ), or a placeholder followed by an operator, is a C# expression: "strings" with placeholders inside, c ? a : b, a ?? b, a || b, a && b, !a. A value is true when not empty. The default shows claude: work on links | Git Bash (D:\\git\\throng), ping localhost -t | Git Bash (D:\\git\\throng) or Git Bash (D:\\git\\throng).',
+    group: 'Terminal',
+    control: 'text',
+    validate: validateTitleTemplate,
+    wide: true,
+  },
+  {
+    // 053 FR-012. Slider steps are at least 1% of the range, as every slider's are (018 FR-034).
+    key: 'terminals.titleCommandMaxLength',
+    label: 'Longest command in a terminal title',
+    description:
+      'How many characters of the running command a terminal panel’s name shows before it is cut short with an ellipsis.',
+    group: 'Terminal',
+    control: 'slider',
+    min: 10,
+    max: 200,
+    step: 5,
+  },
+  {
+    key: 'terminals.titlePathMaxLength',
+    label: 'Longest directory in a terminal title',
+    description:
+      'How many characters of the working directory a terminal panel’s name shows. A longer one keeps its drive and last folder and drops folders from the middle.',
+    group: 'Terminal',
+    control: 'slider',
+    min: 10,
+    max: 200,
+    step: 5,
   },
 
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE

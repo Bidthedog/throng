@@ -75,7 +75,7 @@ import { installNavigationGuards, installRendererRequestFilter } from './rendere
 import { createPreviewProtocolHandler, PREVIEW_SCHEME } from './preview-protocol.js';
 import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
-import { walkMovedLayouts } from './moved-layout-walk.js';
+import { heldRecords, walkMovedLayouts } from './moved-layout-walk.js';
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
@@ -136,7 +136,7 @@ import { WindowsShellDetection, WindowsElevation, lookupHolder } from '@throng/p
 import { createShellDetectionService } from './shell-detection-service.js';
 import { DaemonEvents } from './daemon-events.js';
 import { DaemonSupervisor } from './daemon-supervisor.js';
-import { registerTerminalIpc } from './terminal-ipc.js';
+import { registerTerminalIpc, UNLOAD_RPC_TIMEOUT_MS } from './terminal-ipc.js';
 
 /** Result envelope for the generic renderer RPC bridge — preserves JSON-RPC
  *  error codes across the contextBridge boundary (002 / research D10). */
@@ -1688,6 +1688,33 @@ if (isPrimaryInstance)
     history: historyService,
     broadcastFilesMoved: (moves) => historyPush.broadcastFilesMoved(moves),
     clipboard: fileClipboard,
+    // 050 R19, 052 FR-001 (R1, R2) — every in-app move, whatever route it took, rewrites the layouts no window
+    // holds, so a project or sub-workspace shown later (or after a restart) has its panels' new paths and
+    // `movedOut` flags. The held records are the windows' own (`MovedPathSync` & co.), on preview-purge's O6.
+    layouts: {
+      followMoves: (moves) => {
+        void walkMovedLayouts(
+          {
+            call: <T>(method: string, params: unknown) => daemonClient.call<T>(method, params),
+            held: async () => {
+              const { projects } = await daemonClient.call<{ projects: Array<{ id: string; isActive?: boolean }> }>(
+                'projects.list',
+                {},
+              );
+              return heldRecords(projects, windowManager.childIds());
+            },
+            notifySubWorkspaceChanged: (id) =>
+              broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:subworkspace:changed:push', id),
+          },
+          moves,
+        ).catch((error: unknown) => {
+          // Best-effort (FR-009): a layout the walk could not rewrite keeps its old path; the move stands.
+          diagnostics.log.warn(
+            `[files] rewriting unheld layouts after a move failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      },
+    },
   });
   filesService.setOnMoveStarted(inAppMoves.started);
   filesService.setOnMoved(inAppMoves.moved);
@@ -1718,34 +1745,6 @@ if (isPrimaryInstance)
     clipboard: fileClipboard,
     // Read live, so a change in Preferences applies to the next clash without a restart (FR-018f).
     replaceMode: () => currentSettings.explorer.replaceMode,
-    // 050 R19 (FR-016, FR-035) — once a job's moves land, rewrite the layouts no window holds, so a
-    // project shown later (or after a restart) has its panels' new paths and `movedOut` flags. The held
-    // records are the windows' own (`MovedPathSync` & co.), on the same O6 rule as the preview purge.
-    afterMoves: (moves) => {
-      void walkMovedLayouts(
-        {
-          call: <T>(method: string, params: unknown) => daemonClient.call<T>(method, params),
-          held: async () => {
-            const { projects } = await daemonClient.call<{ projects: Array<{ id: string; isActive?: boolean }> }>(
-              'projects.list',
-              {},
-            );
-            return {
-              projectIds: new Set(projects.filter((p) => p.isActive === true).map((p) => p.id)),
-              subWorkspaceIds: new Set(windowManager.childIds()),
-            };
-          },
-          notifySubWorkspaceChanged: (id) =>
-            broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:subworkspace:changed:push', id),
-        },
-        moves,
-      ).catch((error: unknown) => {
-        // Best-effort: a layout the walk could not rewrite keeps its old path, as before this walk existed.
-        diagnostics.log.warn(
-          `[transfer] rewriting unheld layouts after a move failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
-    },
   });
   // 050 R11 (FR-019f) — asked FIRST by the main window's close handler, below. The prompt goes to the
   // main window through the TDZ-safe ref: the window does not exist yet when this is built.
@@ -2093,8 +2092,14 @@ if (isPrimaryInstance)
     if (choice !== 'terminate' && choice !== 'leave') return; // cancel/unknown → stay open
     void (async () => {
       if (choice === 'terminate') {
+        // 005 US3 — every window first, so each terminal's exit reaches a panel that knows throng
+        // ended it: no notice, and no revert for the drain below to persist. Sent before the kill on
+        // the same channel order the exits will follow.
+        broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:terminating', null);
         try {
-          await daemonClient.call('terminal.killAll', {});
+          // 051 FR-015a (R8): nothing may be left behind, so an end that fails is forced; the call
+          // settles within two end limits, which the 2 s default budget cannot cover.
+          await daemonClient.call('terminal.killAll', { escalate: true }, UNLOAD_RPC_TIMEOUT_MS);
         } catch {
           /* best-effort; still allow the close */
         }

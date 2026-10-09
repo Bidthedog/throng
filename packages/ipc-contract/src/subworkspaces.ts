@@ -1,7 +1,7 @@
 // JSON-RPC shapes for the `subworkspace.*` methods (003 / contracts/ipc-subworkspaces.md).
 // Post-creation management of first-class sub-workspaces; scoped to the current
 // owner_user (resolved by the daemon via IUserContext). Creation is not a method —
-// detach persists via the existing workspace.persistSubWorkspaces path.
+// detach persists the new record via workspace.saveSubWorkspace (052 R3: one record at a time).
 
 export const SUBWORKSPACE_LIST_METHOD = 'subworkspace.list';
 export const SUBWORKSPACE_RENAME_METHOD = 'subworkspace.rename';

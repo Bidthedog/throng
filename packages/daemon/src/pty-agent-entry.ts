@@ -22,6 +22,7 @@ import { NodePtyHost } from '@throng/platform-windows';
 import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 import { answerChildPids } from './pty-agent-childpids.js';
+import { answerAttachedProcs } from './pty-agent-attached.js';
 import { createAgentLogger } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
@@ -111,15 +112,16 @@ function send(ev: AgentEvent): void {
  * disconnects OR is detected dead — so the agent never lingers holding orphaned
  * `conhost.exe` processes after its daemon is gone (the orphan we observed, T134).
  */
-function shutdown(): never {
-  log('shutdown: disposing pty host and exiting 0');
+let shuttingDown = false;
+function shutdown(): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log('shutdown: ending every terminal, escalating any that resist (051 FR-015a), then exiting 0');
   if (heartbeat) clearInterval(heartbeat);
-  try {
-    pty.dispose();
-  } catch (error) {
-    log(`shutdown: pty.dispose threw (ignored): ${errText(error)}`);
-  }
-  process.exit(0);
+  void pty
+    .dispose()
+    .catch((error: unknown) => log(`shutdown: pty.dispose failed (ignored): ${errText(error)}`))
+    .finally(() => process.exit(0));
 }
 
 /**
@@ -203,14 +205,34 @@ function onCommand(msg: AgentCommand): void {
       if (h) pty.resize(h, msg.cols, msg.rows);
       break;
     }
-    case 'kill': {
-      log(`cmd kill key=${msg.key}`);
+    // 051: the agent's own host ends the terminal and the outcome goes back as `ended`; the agent
+    // keeps serving its other terminals meanwhile.
+    case 'end': {
+      log(`cmd end key=${msg.key} limit=${msg.timeoutMs}ms`);
       const h = handles.get(msg.key);
-      if (h) pty.kill(h);
+      void (h ? pty.end(h, msg.timeoutMs) : Promise.resolve()).then(
+        () => send({ ev: 'ended', reqId: msg.reqId, ok: true }),
+        (error: unknown) => {
+          log(`end failed key=${msg.key}: ${errText(error)}`);
+          send({ ev: 'ended', reqId: msg.reqId, ok: false, reason: (error as Error).message });
+        },
+      );
+      break;
+    }
+    case 'forceEnd': {
+      log(`cmd forceEnd key=${msg.key} limit=${msg.timeoutMs}ms`);
+      const h = handles.get(msg.key);
+      void (h ? pty.forceEnd(h, msg.timeoutMs) : Promise.resolve({ survivors: [] })).then(({ survivors }) =>
+        send({ ev: 'forceEnded', reqId: msg.reqId, survivors }),
+      );
       break;
     }
     // 046: async, so the agent keeps serving its other terminals while the snapshot is taken, and a
     // failure is reported as one rather than as an idle-looking empty list (pty-agent-childpids.ts).
+    case 'attachedprocs': {
+      void answerAttachedProcs(pty.listAttachedProcesses?.bind(pty), (key) => handles.get(key), msg, log).then(send);
+      break;
+    }
     case 'childpids': {
       void answerChildPids((h) => pty.probeChildPids(h), handles.get(msg.key), msg, log).then(send);
       break;

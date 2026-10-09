@@ -13,6 +13,8 @@ import { useSyncExternalStore } from 'react';
  */
 const MAX_TITLE_LEN = 256;
 const titles = new Map<string, string>();
+/** When each panel's current title arrived (epoch ms) — see `command-store.ts` `record`. */
+const setAt = new Map<string, number>();
 const listeners = new Set<() => void>();
 
 /**
@@ -30,17 +32,25 @@ function emit(): void {
 export function setTerminalTitle(panelId: string, raw: string): void {
   const next = raw.slice(0, MAX_TITLE_LEN);
   if (!next) {
+    setAt.delete(panelId);
     if (titles.delete(panelId)) emit();
     return;
   }
   if (titles.get(panelId) === next) return;
   titles.set(panelId, next);
+  setAt.set(panelId, Date.now());
   emit();
 }
 
 /** Drop a panel's title when its SESSION ends — not when a view of it unmounts (#295). */
 export function clearTerminalTitle(panelId: string): void {
+  setAt.delete(panelId);
   if (titles.delete(panelId)) emit();
+}
+
+/** When this panel's current title arrived (epoch ms), or `undefined` when it has none. */
+export function getTerminalTitleSetAt(panelId: string): number | undefined {
+  return setAt.get(panelId);
 }
 
 /** This panel's live title, read without subscribing — for callers naming several panels at once. */

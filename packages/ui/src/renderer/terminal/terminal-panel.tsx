@@ -41,6 +41,7 @@ import {
   useTerminalCommand,
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
+import { ensureAppTerminatingBridge, isAppTerminating } from './app-terminating.js';
 import { requestRedraw } from './redraw.js';
 import { setTerminalDebugLogging, terminalDebug } from './debug-log.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
@@ -531,8 +532,10 @@ export function TerminalPanel({
   // What makes a value "stranded" is that it was already there when this terminal mounted.
   const strandedAtMount = useRef(panel.terminalMemory?.observedCommand);
   const stranded = strandedAtMount.current;
+  // A stranded `null` is an observation too (051 FR-046): the terminal was last seen with nothing
+  // running — an Unload or a crash ended it at a bare prompt — so its saved command is cleared.
   const recovered =
-    stranded === undefined || stranded === null
+    stranded === undefined
       ? null
       : captureDecision(rawConfig.rememberCommand, rawConfig.startupCommand, stranded);
   const recoveredValue = recovered?.save === true ? recovered.value : undefined;
@@ -585,6 +588,7 @@ export function TerminalPanel({
   // into a later one that never ran it (FR-017).
   useEffect(() => {
     ensureTerminalCommandBridge();
+    ensureAppTerminatingBridge();
     forgetTerminalCommand(panel.id);
 
     // FR-019 / US2 scenario 7 — an abrupt end (app crash, daemon crash, machine restart) never
@@ -617,6 +621,11 @@ export function TerminalPanel({
     if (!terminalConfig.rememberCommand) return;
     if (observedNow === undefined) return;
     if (lastPersistedCommand.current === observedNow) return;
+    // Closing with Terminate all: throng is ending this terminal's programs, so what the observation sees from now
+    // on — "nothing running", once a program is killed before its shell — is throng's doing, not the user's.
+    // Saved, it read on the next launch as a command the user stopped (051 FR-046), and the remembered command was
+    // lost (MT-11 step 9). The last observation before the close is what the next launch must recover.
+    if (isAppTerminating()) return;
     lastPersistedCommand.current = observedNow;
     ws.setTerminalMemory(panel.id, { observedCommand: observedNow });
   }, [panel.id, observedNow, terminalConfig.rememberCommand, ws]);
@@ -669,6 +678,9 @@ export function TerminalPanel({
         // would be wrong if the rule ever changes.
         observed ?? null,
       );
+      // 053 — the capture has read it, and nothing runs in this panel any more: its name must not
+      // keep naming the command (or its program and architecture) the ended terminal last ran.
+      forgetTerminalCommand(panel.id);
       const memory: Record<string, unknown> = {
         flavourId: config.flavourId,
         shellArguments: terminalConfig.shellArguments,
@@ -727,7 +739,10 @@ export function TerminalPanel({
   // nothing left on screen tying it to a terminal. With several open, "Terminal exited (code 1)"
   // names no terminal at all — the identity has to travel with the message.
   const onExit = useCallback(
-    ({ code, unexpected }: { code: number | null; unexpected: boolean }) =>
+    ({ code, unexpected }: { code: number | null; unexpected: boolean }) => {
+      // Closing with Terminate all (005 US3): throng ended it, and the panel stays a terminal so the
+      // next launch starts it fresh — no notice, no revert for the close to persist.
+      if (isAppTerminating()) return;
       end(
         terminalExitNotice(code, {
           projectName: meta?.projectName,
@@ -739,7 +754,8 @@ export function TerminalPanel({
         }),
         code,
         unexpected,
-      ),
+      );
+    },
     [end, meta, panel, config.flavourLabel],
   );
   /**

@@ -22,6 +22,7 @@
  * Save-All across windows, crash recovery and the cross-window mirror are all served
  * from the authority's text, with no renderer round-trip for content.
  */
+import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
   createOpenRegistry,
@@ -70,6 +71,9 @@ import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-re
  * the change and drift out of step with its own document.
  */
 const BULK_EDIT_VIEW_ID = '__throng:bulk-edit__';
+
+/** 052 FR-012 (data-model "Coordinator document state") — a plain Save of a replaced document. */
+const REPLACED_SAVE_REFUSAL = 'This file was replaced. Use Save As to keep your changes.';
 
 /**
  * `PreviewService`'s (044 u7) window onto the editor registry — contracts/preview-ipc.md §3
@@ -229,6 +233,13 @@ interface CoordDoc {
    * owner root clears it — unless another panel claimed that path meanwhile.
    */
   movedOut?: boolean;
+  /**
+   * 052 FR-012 (data-model "Coordinator document state") — a Replace landed on `absPath` while this document
+   * held unsaved changes. Like `movedOut` it holds no registry claim and no watch: the file at `absPath` is
+   * the moved document's now. The buffer, dirty state and history are kept; a plain Save is refused and
+   * Save As is the way out. It does not follow moves of `absPath`, which name the other document's file.
+   */
+  replaced?: boolean;
   /** Watch on the doc's folder for external changes (soft detection, FR-028). */
   watch?: Disposable;
   recoveryTimer?: ReturnType<typeof setTimeout>;
@@ -242,6 +253,17 @@ interface CoordDoc {
    * document — it is the same document to the listener.
    */
   reported: { path: string | null; dirty: boolean; contentless: boolean };
+}
+
+/**
+ * 052 FR-011 — a panel showing another panel's document. `windowId`/`tabId` are the LINKED panel's own
+ * (R7b): the owner's record must never take them from a linked view's dispatch, and a hand-over must give
+ * the document the window it now lives in, or `focusExisting` raises the wrong one.
+ */
+interface LinkEntry {
+  owner: string;
+  windowId: string;
+  tabId: string | null;
 }
 
 /** Metadata a renderer supplies when it loads/creates or edits a document. */
@@ -300,6 +322,19 @@ export interface EditorSyncMsg {
    * document, in every window — wrap is document state, so one document has one answer.
    */
   wordWrap?: boolean;
+  /**
+   * 052 FR-011 (contracts/editor-replace.md) — set: this panel now shows the document of the panel named,
+   * and rides with a `reset` carrying that document's state. `null`: the link ended — the owner moved away
+   * from the shared path (the renderer loads its own `filePath`), or the owner closed and this panel is the
+   * owner now (with a `reset` re-keyed to this panel's id).
+   */
+  linkedTo?: string | null;
+  /**
+   * 052 FR-012 — `true`: a Replace landed on this dirty document's path; it keeps its buffer, holds no claim,
+   * and a plain Save is refused. `false`: it is an ordinary document again (Save As, Discard, or its path
+   * came back unclaimed).
+   */
+  replaced?: boolean;
   /**
    * The `verifyPath` a mounting view asked for has ANSWERED (#369). Carries no state.
    *
@@ -386,12 +421,53 @@ export interface OpenOwnership {
 export class EditorCoordinator {
   private readonly registry = createOpenRegistry();
   private readonly docs = new Map<string, CoordDoc>();
+  /**
+   * 052 FR-011 (research R7) — linked panel id → the panel id whose document it shows. A linked panel has
+   * no `CoordDoc` of its own: every call naming it resolves to the owner's ({@link docFor}), and every
+   * relay naming the owner is sent under its id too ({@link relay}). One document, one more view.
+   */
+  private readonly links = new Map<string, LinkEntry>();
 
   constructor(
     private readonly service: EditorService,
     private readonly recovery: EditorRecovery,
     private readonly deps: CoordinatorDeps,
   ) {}
+
+  /** The document a panel shows: its own, or — for a linked panel — its owner's (052 FR-011). */
+  private docFor(panelId: string): CoordDoc | undefined {
+    const own = this.docs.get(panelId);
+    if (own) return own;
+    const link = this.links.get(panelId);
+    return link === undefined ? undefined : this.docs.get(link.owner);
+  }
+
+  /** The first panel linked to `ownerId` — who inherits its document when it lets go of it (052 FR-011). */
+  private heirOf(ownerId: string): string | undefined {
+    for (const [linked, link] of this.links) if (link.owner === ownerId) return linked;
+    return undefined;
+  }
+
+  /** Point every link to `fromId` at `toId` instead, telling each linked panel (links are one hop). */
+  private repointLinks(fromId: string, toId: string, reset: ResetDocumentMsg): void {
+    for (const [linked, link] of this.links) {
+      if (link.owner !== fromId) continue;
+      link.owner = toId;
+      this.deps.relaySync(-1, { panelId: linked, linkedTo: toId, reset });
+    }
+  }
+
+  /**
+   * Relay to every window — once under the panel named, and once more under each panel linked to it
+   * (052 contracts/editor-replace.md, "Relay fan-out"). The fan-out is the existing multi-view stream,
+   * keyed by a second panel id; nothing else about the message changes.
+   */
+  private relay(msg: EditorSyncMsg): void {
+    this.deps.relaySync(-1, msg);
+    for (const [linked, link] of this.links) {
+      if (link.owner === msg.panelId) this.deps.relaySync(-1, { ...msg, panelId: linked });
+    }
+  }
 
   /**
    * Can this path be opened into a document with these roots? (018 / US9.)
@@ -446,7 +522,7 @@ export class EditorCoordinator {
       navigation?: EditorLoadNavigation;
       history?: PersistedHistory;
     },
-  ): Promise<LoadResult> {
+  ): Promise<LoadResult | (Extract<LoadResult, { ok: true }> & { linkedTo: string })> {
     // Ownership (FR-036, and 018 / US9 SC-012). This check used to live HERE, and it was three
     // different kinds of wrong: it compared the UNRESOLVED path (so a symlink inside the project
     // walked straight out of it), it had no outside-all-projects branch (so a sub-workspace editor
@@ -492,9 +568,60 @@ export class EditorCoordinator {
       }
       return result;
     }
+    /*
+     * 052 R1 (006 FR-011a) — another panel's document already holds this path. Every ordinary open asks
+     * `openInto` first and focuses that panel instead, so a load gets here only by a route that skips the
+     * question: a restored linked panel whose owner had not loaded yet reads the path itself, and then the
+     * owner loads it too. Minting a second document would overwrite the first one's claim — two buffers on
+     * one file. Whichever loads SECOND joins the first's document as a linked panel. Asked after the read,
+     * because the claim can change across that await.
+     */
+    const holder = this.holderOf(meta.absPath, meta.panelId);
+    if (holder) {
+      // A replaced document's unsaved work is never dropped by a load; Discard is its one way out (FR-012).
+      if (this.docs.get(meta.panelId)?.replaced) {
+        return { ok: false, reason: 'io', error: 'This file was replaced. Discard your changes to show it.' };
+      }
+      this.joinHolder(meta, holder);
+      this.recordNavigation(meta.panelId, meta.absPath, meta.navigation, meta.history);
+      return {
+        ...result,
+        text: holder.authority.text,
+        encoding: holder.encoding,
+        hasBom: holder.hasBom,
+        lineEnding: holder.lineEnding,
+        linkedTo: holder.panelId,
+      };
+    }
     await this.replaceDoc(meta, result, { readable: true });
     this.recordNavigation(meta.panelId, meta.absPath, meta.navigation, meta.history);
     return result;
+  }
+
+  /** Another panel's live document holding `absPath`'s claim, if any (052 R1). */
+  private holderOf(absPath: string, panelId: string): CoordDoc | undefined {
+    const at = openOrFocus(this.registry, absPath);
+    return at.action === 'focus' && at.panelId !== panelId ? this.docs.get(at.panelId) : undefined;
+  }
+
+  /**
+   * 052 R1 — make `meta.panelId` a linked view of `holder`'s document. Its own previous document (a different
+   * file — the same file would be the holder) goes as a re-pointed panel's always does, unless other panels
+   * are linked to it, in which case it is handed to the first of them (R4) rather than closed under them.
+   */
+  private joinHolder(meta: { panelId: string; windowId: string; tabId: string | null }, holder: CoordDoc): void {
+    const view = { windowId: meta.windowId, tabId: meta.tabId };
+    const previous = this.docs.get(meta.panelId);
+    if (previous) {
+      const heir = this.heirOf(meta.panelId);
+      if (heir === undefined) {
+        this.linkToOwner(previous, holder, view);
+        return;
+      }
+      this.handOver(previous, heir);
+    }
+    this.links.set(meta.panelId, { owner: holder.panelId, ...view });
+    this.deps.relaySync(-1, { panelId: meta.panelId, linkedTo: holder.panelId, reset: this.stateOf(holder) });
   }
 
   /**
@@ -512,7 +639,21 @@ export class EditorCoordinator {
     // the layout), so a lingering temp holding the OLD file's content would otherwise
     // be restored OVER the new file on the next launch (the freshly-loaded file is
     // clean — there is nothing to recover for it yet).
-    const previous = this.docs.get(meta.panelId);
+    let previous = this.docs.get(meta.panelId);
+    // 052 — a linked panel that loads a file of its own is no longer a view of its owner's document.
+    this.links.delete(meta.panelId);
+    /*
+     * 052 R4 — an OWNER opening a different file in place (from the tree, or Back/Forward) must not take its
+     * linked panels with it: the reset below would fan out to them and drag them to the new file. They keep
+     * the file they show — the document passes to the first of them — and this panel starts afresh.
+     */
+    if (previous && previous.absPath !== meta.absPath) {
+      const heir = this.heirOf(meta.panelId);
+      if (heir !== undefined) {
+        this.handOver(previous, heir);
+        previous = undefined;
+      }
+    }
     if (previous?.absPath && previous.absPath !== meta.absPath) {
       this.disposeWatch(previous);
       unregisterPanel(this.registry, meta.panelId);
@@ -564,9 +705,9 @@ export class EditorCoordinator {
      * receives its own broadcast) is caught up before anything else is told about the swap.
      */
     if (!opts.readable) {
-      this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+      this.relay({ panelId: doc.panelId, unloadable: true });
     } else if (previous?.unloadable) {
-      this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: false });
+      this.relay({ panelId: doc.panelId, unloadable: false });
     }
     this.announceReplacement(doc, previous);
   }
@@ -610,7 +751,7 @@ export class EditorCoordinator {
       deletedAbsPaths.some((gone) => isUnderPath(file, gone));
     for (const doc of this.docs.values()) {
       // 050 FR-035 — a moved-out document has let go of its file: deleting it is not this panel's news.
-      if (!doc.absPath || doc.fileMissing || doc.movedOut || !isUnder(doc.absPath)) continue;
+      if (!doc.absPath || doc.fileMissing || doc.movedOut || doc.replaced || !isUnder(doc.absPath)) continue;
       // A document that never had its file in this panel (the FR-106d stand-in, a failed restore) and holds
       // nothing the user typed has no buffer for FR-099 to keep: an in-app delete leaves it exactly as the
       // folder watch does (`onDiskChange`). One it WAS typed into is dirty, and kept like any other.
@@ -637,7 +778,7 @@ export class EditorCoordinator {
       }
       void this.snapshot(doc);
       // -1: broadcast to ALL windows (no editing renderer to exclude).
-      this.deps.relaySync(-1, { panelId: doc.panelId, deleted: true, dirty: true, unloadable: true });
+      this.relay({ panelId: doc.panelId, deleted: true, dirty: true, unloadable: true });
       this.notifyAfterMutation(doc, false); // isolated, so one listener throw cannot skip the next doc
     }
   }
@@ -659,6 +800,9 @@ export class EditorCoordinator {
    */
   async markRestored(restoredAbsPaths: readonly string[]): Promise<void> {
     if (restoredAbsPaths.length === 0) return;
+    // 052 FR-013 — a replaced document whose path is back and unclaimed holds it again (`markDeleted` skips
+    // replaced documents, so none of them is `fileMissing` and the loop below never sees one).
+    this.reclaimReplaced((abs) => restoredAbsPaths.some((back) => isUnderPath(abs, back)));
     const isUnder = (file: string): boolean =>
       restoredAbsPaths.some((back) => isUnderPath(file, back));
     for (const doc of this.docs.values()) {
@@ -684,7 +828,7 @@ export class EditorCoordinator {
         this.broadcastReset(doc);
       }
       // -1: broadcast to ALL windows — no editing renderer to exclude, exactly as markDeleted does.
-      this.deps.relaySync(-1, {
+      this.relay({
         panelId: doc.panelId,
         deleted: false,
         unloadable: false,
@@ -734,13 +878,37 @@ export class EditorCoordinator {
    */
   markMoved(moves: readonly MovePair[]): void {
     const detached: { doc: CoordDoc; newAbs: string }[] = [];
+    const moving: { doc: CoordDoc; newAbs: string }[] = [];
     for (const doc of this.docs.values()) {
       // The bracket closes on EVERY doc it opened, moved or not — a flag left set would suppress
       // the dirtying a genuine external delete is entitled to, for the rest of the session.
       doc.movePending = false;
-      if (!doc.absPath) continue;
+      // 052 FR-012 — a replaced document's path names the moved document's file now, not its own.
+      if (!doc.absPath || doc.replaced) continue;
       const newAbs = movedPathOf(doc.absPath, moves);
-      if (newAbs === null) continue;
+      if (newAbs !== null) moving.push({ doc, newAbs });
+    }
+    // Collected first, so a document a Replace disposes below is never visited, and a document whose own
+    // path is also moving in this batch (a swap) is never mistaken for the one being replaced.
+    const movingIds = new Set(moving.map((m) => m.doc.panelId));
+    for (const { doc, newAbs } of moving) {
+      /*
+       * 052 R7 — panels linked to this document share the path it is leaving. Usually they follow it: a rename
+       * or a move of the shared file is a move of their document, and `relay` fans the `movedTo` below out to
+       * them. Only when the path it leaves EXISTS again — an undo, which restored the replaced file from the
+       * Recycle Bin inside this very bracket — does each go back to showing its own file. Then the unlink goes
+       * out BEFORE the owner's `movedTo`, so the fan-out never re-points it at the owner's new path.
+       */
+      // T028 — asked only of a document that HAS linked panels, and never for a move onto its own path (a
+      // case-only rename): the old spelling "exists" there because it is the same file.
+      if (
+        doc.absPath !== null &&
+        this.heirOf(doc.panelId) !== undefined &&
+        !samePath(doc.absPath, newAbs) &&
+        existsSync(doc.absPath)
+      ) {
+        this.unlinkFrom(doc.panelId);
+      }
       // 050 FR-035 — a moved-out document is settled AFTER every ordinary one, so "has another editor
       // claimed the path it returns to?" is asked of the registry as this batch leaves it, not halfway.
       if (doc.movedOut) {
@@ -752,6 +920,9 @@ export class EditorCoordinator {
         this.moveDetached(doc, newAbs);
         continue;
       }
+      // 052 FR-010 — a Replace onto a path another panel's document holds. Asked BEFORE the registry
+      // follows, because the claim being overwritten is the evidence.
+      const victim = this.claimantOf(newAbs, doc.panelId, movingIds);
       // The one-buffer registry follows the file: the new path now focuses this editor, and the
       // old one is free — a stale claim there would refuse a later Save-As onto it (`:480`).
       // Unregister-then-register is the pair `save()` already uses for Save-As (`:503-505`).
@@ -763,13 +934,192 @@ export class EditorCoordinator {
       this.watchDoc(doc);
       // -1: every window. A move is a property of the DOCUMENT, so every replica learns it from
       // the one authority rather than each discovering it for itself (Principle XI).
-      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: newAbs });
+      this.relay({ panelId: doc.panelId, movedTo: newAbs });
       // ONE `repointed`, not the `unregistered`+`registered` pair the registry churn above might
       // suggest: this is the SAME document, wearing a new path (FR-013c). After the relay, and
       // isolated, so a throwing listener cannot cost a later document its move.
       this.announcePath(doc);
+      if (victim) this.settleReplaced(victim, doc);
     }
     for (const { doc, newAbs } of detached) this.moveDetached(doc, newAbs);
+    // 052 FR-013 — an undo moves the mover off a replaced document's path (and restores its file from the
+    // Recycle Bin inside the same bracket); asked once the batch has settled the registry.
+    this.reclaimReplaced((abs) => moves.some((m) => isUnderPath(abs, m.from)));
+    /*
+     * 052 FR-012 (R7a) — a Replace whose mover is NOT an open document here (its file was never open, or it
+     * is detached by a cross-project move) found no victim above, yet the target's editor may hold unsaved
+     * work. It becomes replaced all the same, or a plain Save would write over the moved file. A clean one is
+     * left alone: its folder watch reloads it to the moved content (FR-011 with one panel).
+     */
+    for (const { to } of moves) {
+      const at = openOrFocus(this.registry, to);
+      if (at.action !== 'focus' || movingIds.has(at.panelId)) continue;
+      const held = this.docs.get(at.panelId);
+      if (held && !held.replaced && this.hasOwnWork(held)) this.markReplaced(held);
+    }
+  }
+
+  /**
+   * 052 FR-013 (research R7) — a replaced document whose path nobody claims any more, and which EXISTS again
+   * on disk, takes it back: claim, watch, `registered`, and the panel's notice clears. Its unsaved changes
+   * are still unsaved. The same reclaim rule `moveDetached` applies to a document coming back into its
+   * project. `candidate` narrows it to paths this event could have given back (vacated by a move, or
+   * restored) — an unrelated move elsewhere must never hand a replaced document its old claim.
+   */
+  private reclaimReplaced(candidate: (absPath: string) => boolean): void {
+    for (const doc of this.docs.values()) {
+      if (!doc.replaced || !doc.absPath || !candidate(doc.absPath)) continue;
+      if (openOrFocus(this.registry, doc.absPath).action === 'focus' || !existsSync(doc.absPath)) continue;
+      doc.replaced = false;
+      registerOpen(this.registry, doc.absPath, { panelId: doc.panelId, windowId: doc.windowId });
+      this.watchDoc(doc);
+      this.relay({ panelId: doc.panelId, replaced: false });
+      this.announcePath(doc);
+    }
+  }
+
+  /** The document of ANOTHER panel claiming `absPath` that is not itself moving away in this batch. */
+  private claimantOf(absPath: string, panelId: string, movingIds: ReadonlySet<string>): CoordDoc | undefined {
+    const at = openOrFocus(this.registry, absPath);
+    if (at.action !== 'focus' || at.panelId === panelId || movingIds.has(at.panelId)) return undefined;
+    return this.docs.get(at.panelId);
+  }
+
+  /**
+   * 052 FR-011 / FR-012 — `owner` has just landed on the path `victim` held (a Replace). The registry is
+   * already `owner`'s; this decides what becomes of `victim`'s panel.
+   *
+   * - No work of its own → its document is disposed and the panel is LINKED to `owner`'s: one document,
+   *   one claim, shown by both panels. Panels that were linked to `victim` follow it to `owner`.
+   * - Unsaved work → it becomes REPLACED (see `CoordDoc.replaced`): nothing merged, nothing lost.
+   */
+  private settleReplaced(victim: CoordDoc, owner: CoordDoc): void {
+    if (this.hasOwnWork(victim)) {
+      this.markReplaced(victim);
+      return;
+    }
+    this.linkToOwner(victim, owner);
+  }
+
+  /**
+   * Did the user type into this buffer? Not `authority.dirty` alone: a document whose file went missing
+   * is force-dirtied (`markDeleted`), and a Replace trashes the very file the victim's folder watch is
+   * watching — so a clean victim can arrive here dirty for no reason of its own (`missingSince`).
+   */
+  private hasOwnWork(doc: CoordDoc): boolean {
+    const since = doc.missingSince;
+    return since ? since.wasDirty || since.text !== doc.authority.text : doc.authority.dirty;
+  }
+
+  /**
+   * Dispose `victim`'s document and show `owner`'s in its panel instead (052 FR-011). `view` is where that
+   * panel lives, when the caller knows better than the victim's own record (a load names its window).
+   */
+  private linkToOwner(victim: CoordDoc, owner: CoordDoc, view?: { windowId: string; tabId: string | null }): void {
+    const id = victim.panelId;
+    const wrapKey = this.wrapKey(victim);
+    if (victim.recoveryTimer) clearTimeout(victim.recoveryTimer);
+    this.disposeWatch(victim);
+    unregisterPanel(this.registry, id);
+    this.docs.delete(id);
+    this.forgetWordWrapIfClosed(wrapKey);
+    void this.recovery.remove(id);
+    const reset = this.stateOf(owner);
+    // A panel that was showing the victim's document shows the owner's now — one hop, never a chain.
+    this.repointLinks(id, owner.panelId, reset);
+    this.links.set(id, {
+      owner: owner.panelId,
+      windowId: view?.windowId ?? victim.windowId,
+      tabId: view !== undefined ? view.tabId : victim.tabId,
+    });
+    // Not through `relay`: this message names the linked panel, not the owner.
+    this.deps.relaySync(-1, { panelId: id, linkedTo: owner.panelId, reset, ...(victim.replaced ? { replaced: false } : {}) });
+    const told = victim.reported.path;
+    victim.reported.path = null;
+    if (told !== null) this.tell('unregistered', (l) => l.unregistered(told, id));
+    // After `unregistered`, as `destroy` orders it: a preview falling back to standalone seeds from this key.
+    this.forgetFoldIfUnused(wrapKey);
+  }
+
+  /**
+   * 052 FR-012 — the Replace landed on unsaved work: let go of the path (claim and watch), keep the
+   * buffer, dirty state and history, and say so once. The lifecycle listener hears `unregistered`, as for a
+   * moved-out document: this panel no longer stands for that file.
+   */
+  private markReplaced(doc: CoordDoc): void {
+    unregisterPanel(this.registry, doc.panelId);
+    this.disposeWatch(doc);
+    doc.replaced = true;
+    this.relay({ panelId: doc.panelId, replaced: true });
+    this.announceDetached(doc);
+  }
+
+  /**
+   * 052 R7 "Persisted" — a panel restored with `config.linkedTo` asks to show its owner's document again.
+   *
+   * Returns the owner's state to adopt, or `null` when the owner is not open (or `panelId` holds a document
+   * of its own) — the renderer's cue to drop `linkedTo` and load `filePath` as an ordinary editor. A link to
+   * a panel that is itself linked lands on that panel's owner: links are one hop, never a chain.
+   */
+  link(panelId: string, ownerId: string, view?: { windowId: string; tabId?: string | null }): ResetDocumentMsg | null {
+    const owner = this.docFor(ownerId);
+    if (!owner || owner.panelId === panelId || this.docs.has(panelId)) return null;
+    this.links.set(panelId, { owner: owner.panelId, windowId: view?.windowId ?? owner.windowId, tabId: view?.tabId ?? null });
+    return this.stateOf(owner);
+  }
+
+  /**
+   * 052 FR-012 — Discard on a replaced document: drop its buffer and recovery temp, and show the file that
+   * is at its path now. That is FR-011's outcome — linked to the path's owner — or, when nobody holds the
+   * path, the panel reads it itself (and shows the could-not-read state if it cannot).
+   */
+  async discardReplaced(panelId: string): Promise<{ ok: true; linkedTo: string | null } | { ok: false; error: string }> {
+    const doc = this.docs.get(panelId);
+    const abs = doc?.absPath;
+    if (!doc?.replaced || !abs) return { ok: false, error: 'This document was not replaced.' };
+    if (doc.recoveryTimer) {
+      clearTimeout(doc.recoveryTimer);
+      doc.recoveryTimer = undefined;
+    }
+    await this.recovery.remove(panelId);
+    // Asked after the await: the path may have been claimed, or released, while the temp was removed.
+    if (this.docs.get(panelId) !== doc) return { ok: false, error: 'This document was closed.' };
+    const at = openOrFocus(this.registry, abs);
+    const owner = at.action === 'focus' ? this.docs.get(at.panelId) : undefined;
+    if (owner) {
+      this.linkToOwner(doc, owner);
+      return { ok: true, linkedTo: owner.panelId };
+    }
+    const meta = {
+      panelId,
+      windowId: doc.windowId,
+      ownerKind: doc.ownerKind,
+      ownerProjectId: doc.ownerProjectId,
+      ownerRoot: doc.ownerRoot,
+      allProjectRoots: doc.allProjectRoots,
+      tabId: doc.tabId,
+      absPath: abs,
+    };
+    const res = await this.service.load({
+      absPath: abs,
+      ownerRoot: doc.ownerRoot,
+      ownerKind: doc.ownerKind,
+      allProjectRoots: doc.allProjectRoots,
+    });
+    if (this.docs.get(panelId) !== doc) return { ok: false, error: 'This document was closed.' };
+    const content = res.ok ? res : { text: '', encoding: doc.encoding, hasBom: doc.hasBom, lineEnding: doc.lineEnding };
+    await this.replaceDoc(meta, content, { readable: res.ok });
+    this.relay({ panelId, replaced: false });
+    return { ok: true, linkedTo: null };
+  }
+
+  /** End every link to `ownerId`: each linked panel goes back to loading its own `filePath` (052 R7). */
+  private unlinkFrom(ownerId: string): void {
+    for (const [linked, link] of [...this.links]) {
+      if (link.owner !== ownerId) continue;
+      this.links.delete(linked);
+      this.deps.relaySync(-1, { panelId: linked, linkedTo: null });
+    }
   }
 
   /**
@@ -798,12 +1148,12 @@ export class EditorCoordinator {
       doc.movedOut = false;
       registerOpen(this.registry, newAbs, { panelId: doc.panelId, windowId: doc.windowId });
       this.watchDoc(doc);
-      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: newAbs, movedOut: false });
+      this.relay({ panelId: doc.panelId, movedTo: newAbs, movedOut: false });
       this.announcePath(doc);
       return;
     }
     doc.movedOut = true;
-    this.deps.relaySync(-1, wasOut ? { panelId: doc.panelId, movedTo: newAbs } : { panelId: doc.panelId, movedTo: newAbs, movedOut: true });
+    this.relay(wasOut ? { panelId: doc.panelId, movedTo: newAbs } : { panelId: doc.panelId, movedTo: newAbs, movedOut: true });
     if (!wasOut) this.announceDetached(doc);
   }
 
@@ -823,8 +1173,9 @@ export class EditorCoordinator {
    * takes the `getContent` path and never attempts a load at all, so without this the banner
    * silently disappears and the editor goes back to presenting remembered text as the file.
    */
-  register(meta: DocMeta, text = '', opts: { unloadable?: boolean; movedOut?: boolean } = {}): void {
+  register(meta: DocMeta, text = '', opts: { unloadable?: boolean; movedOut?: boolean; replaced?: boolean } = {}): void {
     const previous = this.docs.get(meta.panelId);
+    this.links.delete(meta.panelId); // 052 — a document of its own ends any link (see `replaceDoc`)
     const doc: CoordDoc = {
       panelId: meta.panelId,
       windowId: meta.windowId,
@@ -843,18 +1194,23 @@ export class EditorCoordinator {
     doc.unloadable = opts.unloadable === true;
     // A mount that failed to read its path never read it here: nothing of the file's for FR-099 to keep.
     doc.neverRead = doc.unloadable;
-    if (opts.movedOut === true && meta.absPath) {
+    if ((opts.movedOut === true || opts.replaced === true) && meta.absPath) {
       /*
        * 050 FR-035/FR-036 — a panel restored with `config.movedOut` (after a restart, or a layout no window
        * held during the move) whose unsaved text the renderer is about to restore. It is detached from the
        * start: no claim, no watch, nothing read, and the lifecycle listener is told nothing about a file
        * that is another project's. Save As then works through the same exception as a live move-out.
+       *
+       * 052 T024 — `config.replaced` restores the same way, for the same reason: the file at `absPath` is
+       * the moved document's, and the buffer about to be restored is the user's unsaved work from BEFORE the
+       * Replace. Claiming the path would make a plain Save write that work over the moved file.
        */
       if (previous?.absPath) {
         this.disposeWatch(previous);
         unregisterPanel(this.registry, meta.panelId);
       }
-      doc.movedOut = true;
+      if (opts.movedOut === true) doc.movedOut = true;
+      else doc.replaced = true;
       this.docs.set(meta.panelId, doc);
       const told = doc.reported.path;
       doc.reported.path = null;
@@ -940,7 +1296,7 @@ export class EditorCoordinator {
    * release the next change it has buffered.
    */
   dispatchChange(meta: DocMeta, change: DispatchChangeMsg): void {
-    const doc = this.docs.get(change.documentId);
+    const doc = this.docFor(change.documentId);
     if (!doc) return; // the buffer was destroyed under a live view — nothing to apply it to
     if (doc.movedOut) {
       // 050 FR-035 — read-only. A view that typed anyway (a keystroke in flight as the move landed) is
@@ -948,7 +1304,14 @@ export class EditorCoordinator {
       this.broadcastReset(doc);
       return;
     }
-    this.refreshMeta(doc, meta);
+    // 052 R7b — a linked panel's view restates where IT lives; that is the link's record, not the owner's.
+    const link = meta.panelId !== doc.panelId ? this.links.get(meta.panelId) : undefined;
+    if (link) {
+      link.windowId = meta.windowId;
+      link.tabId = meta.tabId;
+    } else {
+      this.refreshMeta(doc, meta);
+    }
 
     const canonical = doc.authority.dispatch(change);
     if (!canonical) {
@@ -961,7 +1324,7 @@ export class EditorCoordinator {
 
     if (!doc.authority.dirty) doc.diskChanged = false; // clean again → clear any pending notice
     this.scheduleRecovery(doc); // (debounced; independent of dirty — FR-041/053)
-    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.relay({ panelId: doc.panelId, change: canonical });
     this.notifyAfterMutation(doc, true);
   }
 
@@ -1100,7 +1463,7 @@ export class EditorCoordinator {
     }
 
     this.scheduleRecovery(doc);
-    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.relay({ panelId: doc.panelId, change: canonical });
     this.notifyAfterMutation(doc, true);
     /*
      * FR-083b — `applicable` and the document AFTER the dispatch, so the commit can say what each
@@ -1140,7 +1503,7 @@ export class EditorCoordinator {
    * nothing to revert TO and the request is refused rather than silently blanking it.
    */
   revert(panelId: string): boolean {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     const saved = doc?.authority.savedText;
     if (!doc || saved === null || saved === undefined) return false;
 
@@ -1181,7 +1544,7 @@ export class EditorCoordinator {
    * `editor-missing-aggregate`. The caller gets the reason and decides.
    */
   async reload(panelId: string): Promise<LoadResult | { ok: false; reason: 'no-location'; error: string }> {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc) return { ok: false, reason: 'io', error: 'No such open document.' };
     if (!doc.absPath) {
       return { ok: false, reason: 'no-location', error: 'This document has no file to reload from.' };
@@ -1189,6 +1552,11 @@ export class EditorCoordinator {
     if (doc.movedOut) {
       // 050 FR-035 — the file is another project's now; this panel reads nothing.
       return { ok: false, reason: 'out-of-tree', error: 'This file moved to another project.' };
+    }
+    if (doc.replaced) {
+      // 052 FR-012 — reading the path would put the moved document's content over the user's changes.
+      // Discard is the explicit, one-way route to that outcome.
+      return { ok: false, reason: 'io', error: 'This file was replaced. Discard your changes to show it.' };
     }
     const res = await this.service.load({
       absPath: doc.absPath,
@@ -1229,7 +1597,7 @@ export class EditorCoordinator {
     void this.recovery.remove(doc.panelId);
     this.broadcastReset(doc);
     // -1: every window showing this document. The banner is per document, not per view.
-    this.deps.relaySync(-1, {
+    this.relay({
       panelId: doc.panelId,
       unloadable: false,
       deleted: false,
@@ -1276,7 +1644,7 @@ export class EditorCoordinator {
     doc.encoding = res.encoding;
     doc.hasBom = res.hasBom;
     doc.lineEnding = res.lineEnding;
-    this.deps.relaySync(-1, {
+    this.relay({
       panelId: doc.panelId,
       unloadable: false,
       deleted: false,
@@ -1284,7 +1652,7 @@ export class EditorCoordinator {
     });
     if (res.text !== doc.authority.text && !doc.diskChanged) {
       doc.diskChanged = true;
-      this.deps.relaySync(-1, { panelId: doc.panelId, externalChange: true });
+      this.relay({ panelId: doc.panelId, externalChange: true });
     }
     // The buffer is kept, so in practice nothing flipped; asked anyway rather than assumed.
     this.notifyAfterMutation(doc, false);
@@ -1325,12 +1693,12 @@ export class EditorCoordinator {
      * next one added would otherwise be the one that forgets.
      */
     try {
-      const doc = this.docs.get(panelId);
+      const doc = this.docFor(panelId);
       const abs = doc?.absPath;
       if (!doc || !abs) return;
       // 050 FR-035 — a moved-out document reads nothing: its path is another project's, and "could not
       // be read" would be a false claim about a file that is fine where it went.
-      if (doc.movedOut) return;
+      if (doc.movedOut || doc.replaced) return; // 052 FR-012 — nor a replaced one: the file is the moved document's
       const req = {
         absPath: abs,
         ownerRoot: doc.ownerRoot,
@@ -1340,27 +1708,27 @@ export class EditorCoordinator {
       const decision = await this.service.resolveEntry(req).catch(() => ({ ok: false }) as const);
       // The document can be re-pointed or destroyed inside that await (019) — anything decided about
       // the old path is an answer to a question nobody is asking any more.
-      if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+      if (this.docFor(panelId) !== doc || doc.absPath !== abs) return;
       if (!decision.ok) {
         if (!doc.unloadable) {
           doc.unloadable = true;
-          this.deps.relaySync(-1, { panelId: doc.panelId, unloadable: true });
+          this.relay({ panelId: doc.panelId, unloadable: true });
           this.notifyAfterMutation(doc, false); // reports a `contentless` flip, should this ever make one
         }
         return;
       }
       if (!doc.unloadable && !doc.fileMissing) return; // nothing was wrong; nothing to do
       const res = await this.service.load(req);
-      if (this.docs.get(panelId) !== doc || doc.absPath !== abs) return;
+      if (this.docFor(panelId) !== doc || doc.absPath !== abs) return;
       if (res.ok) this.pathCameBack(doc, res);
     } finally {
-      this.deps.relaySync(-1, { panelId, verified: true });
+      this.relay({ panelId, verified: true });
     }
   }
 
   /** The authority's current state, for a view that is mounting or has fallen out of step. */
   resync(panelId: string): ResetDocumentMsg | null {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc) return null;
     return this.stateOf(doc);
   }
@@ -1369,12 +1737,12 @@ export class EditorCoordinator {
     panelId: string,
     step: (doc: CoordDoc) => CanonicalChangeMsg | null,
   ): void {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc || doc.movedOut) return; // 050 FR-035 — a moved-out document is read-only
     const canonical = step(doc);
     if (!canonical) return; // nothing left to undo/redo — not an error
     this.scheduleRecovery(doc);
-    this.deps.relaySync(-1, { panelId: doc.panelId, change: canonical });
+    this.relay({ panelId: doc.panelId, change: canonical });
     this.notifyAfterMutation(doc, true);
   }
 
@@ -1448,7 +1816,7 @@ export class EditorCoordinator {
 
   /** The document's wrap, seeded from the `editor.defaultWordWrap` preference on first sight. */
   wordWrapFor(panelId: string, seedDefault: boolean): boolean {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc) return seedDefault;
     const key = this.wrapKey(doc);
     const cur = this.wordWrap.get(key);
@@ -1466,13 +1834,13 @@ export class EditorCoordinator {
    * document, so every panel on this file gets the same one.
    */
   setWordWrap(panelId: string, on: boolean): void {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc) return;
     const key = this.wrapKey(doc);
     if (this.wordWrap.get(key) === on) return;
     this.wordWrap.set(key, on);
     for (const [id, other] of this.docs) {
-      if (this.wrapKey(other) === key) this.deps.relaySync(-1, { panelId: id, wordWrap: on });
+      if (this.wrapKey(other) === key) this.relay({ panelId: id, wordWrap: on });
     }
   }
 
@@ -1515,7 +1883,7 @@ export class EditorCoordinator {
   /** The `file:<path>` key for an EDITOR panel (an unpathed document's own `panel:<id>`), or `undefined`
    *  when `panelId` names no open document — the counterpart to `PreviewService.foldKeyFor`. */
   foldKeyForPanel(panelId: string): string | undefined {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     return doc ? this.wrapKey(doc) : undefined;
   }
 
@@ -1589,7 +1957,7 @@ export class EditorCoordinator {
    * that no longer exists.
    */
   private broadcastReset(doc: CoordDoc): void {
-    this.deps.relaySync(-1, { panelId: doc.panelId, reset: this.stateOf(doc) });
+    this.relay({ panelId: doc.panelId, reset: this.stateOf(doc) });
   }
 
   // ── Document lifecycle listener (044 u4, contracts/preview-ipc.md §3) ─────────────────────────
@@ -1705,15 +2073,22 @@ export class EditorCoordinator {
     ownerKind?: EditorOwnerKind;
     ownerRoot?: string | null;
     allProjectRoots?: readonly string[];
-  }): Promise<SaveResult | { ok: false; reason: 'no-location'; error: string }> {
-    const doc = this.docs.get(payload.panelId);
+  }): Promise<SaveResult | { ok: false; reason: 'no-location' | 'replaced'; error: string }> {
+    const doc = this.docFor(payload.panelId);
     if (!doc) return { ok: false, reason: 'io', error: 'No such open document.' };
+    // 052 FR-012 — the file at this path is the moved document's now; a plain Save must never write over it.
+    // The same refusal shape as a moved-out document's (`saveMovedOut`), asked before the claim check below,
+    // which would otherwise answer with a reason that names the wrong cause.
+    if (doc.replaced && payload.absPath === undefined) {
+      return { ok: false, reason: 'replaced', error: REPLACED_SAVE_REFUSAL };
+    }
+    const wasReplaced = doc.replaced === true;
     const target = payload.absPath ?? doc.absPath;
     if (!target) return { ok: false, reason: 'no-location', error: 'Choose where to save first.' };
     // Save-As onto a path already open in ANOTHER editor would bind two buffers to
     // one file (violates the app-wide one-buffer rule, FR-011a).
     // A moved-out document holds no claim (050 FR-035), so ANY claim on its target is another editor's.
-    if (target !== doc.absPath || doc.movedOut) {
+    if (target !== doc.absPath || doc.movedOut || doc.replaced) {
       const at = openOrFocus(this.registry, target);
       if (at.action === 'focus' && at.panelId !== doc.panelId) {
         return { ok: false, reason: 'io', error: 'That file is already open in another editor.' };
@@ -1766,12 +2141,24 @@ export class EditorCoordinator {
     void this.recovery.remove(doc.panelId);
     // Mirror the clean state to any other window showing this document, so a synced
     // editor's unsaved dot clears everywhere on save (FR-034). No origin to exclude.
-    this.deps.relaySync(-1, { panelId: doc.panelId, dirty: false });
+    this.relay({ panelId: doc.panelId, dirty: false });
+    if (wasReplaced) {
+      // 052 FR-012 — Save As kept the changes: an ordinary document at its new path, claimed and watched
+      // above. `reported.path` was cleared when it was replaced, so `announcePath` says `registered`.
+      doc.replaced = false;
+      this.relay({ panelId: doc.panelId, replaced: false });
+    }
     if (wasMovedOut) {
       // 050 FR-036 — a Save As into its own project: an ordinary editor of that file again, claimed and
       // watched above. `reported.path` was cleared when it moved out, so `announcePath` says `registered`.
       doc.movedOut = false;
-      this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: target, movedOut: false });
+      this.relay({ panelId: doc.panelId, movedTo: target, movedOut: false });
+    } else if (pathChanged && this.heirOf(doc.panelId) !== undefined) {
+      // 052 R3 — the document lives at `target` now, and every PANEL showing it must say so: the Save As may
+      // have been made through either one, and the other would keep the path it just left. Only when the
+      // document has linked panels — a lone panel's own view already knows, and 044 T043 pins that a save
+      // otherwise relays no `movedTo` (`editor-coordinator-lifecycle.integration.test.ts`).
+      this.relay({ panelId: doc.panelId, movedTo: target });
     }
     // FR-013c / FR-013a — only now, with the save fully settled and relayed. A Save As of a pathed
     // document is one `repointed`, exactly as an in-app move; the first Save As of an unpathed one is
@@ -1833,8 +2220,8 @@ export class EditorCoordinator {
       doc.recoveryTimer = undefined;
     }
     void this.recovery.remove(doc.panelId);
-    this.deps.relaySync(-1, { panelId: doc.panelId, dirty: false });
-    this.deps.relaySync(-1, { panelId: doc.panelId, movedTo: target, movedOut: true });
+    this.relay({ panelId: doc.panelId, dirty: false });
+    this.relay({ panelId: doc.panelId, movedTo: target, movedOut: true });
     if (pathChanged) this.tellHistory('rewriteCurrent', (h) => h.rewriteCurrent(doc.panelId, target));
     this.notifyAfterMutation(doc, false);
     return result;
@@ -1859,6 +2246,8 @@ export class EditorCoordinator {
       activeProjectId: ctx.activeProjectId,
     })
       // 050 FR-036 — Save is unavailable on a moved-out document; Save All passes it by, as it would a clean one.
+      // 052 R5 — a replaced one is NOT passed by: `save` refuses it, so it lands in `failed` as `replaced`, and
+      // a caller closing its panel (Unload, Remove → Save) stops rather than dropping the changes silently.
       .filter((id) => this.docs.get(id)?.authority.dirty && !this.docs.get(id)?.movedOut);
     const { pathed, unpathed } = partitionByPathed(ids, scopeEditors);
     const saved: string[] = [];
@@ -1874,7 +2263,16 @@ export class EditorCoordinator {
   /** Tear down a document (Panel destroy/close): stop watching, unregister, clean temp. */
   destroy(panelId: string): void {
     const doc = this.docs.get(panelId);
-    if (!doc) return;
+    if (!doc) {
+      // 052 FR-011 — a linked panel has no document of its own; closing it ends only the link.
+      this.links.delete(panelId);
+      return;
+    }
+    const heir = this.heirOf(panelId);
+    if (heir !== undefined) {
+      this.handOver(doc, heir);
+      return;
+    }
     const wrapKey = this.wrapKey(doc);
     if (doc.recoveryTimer) clearTimeout(doc.recoveryTimer);
     this.disposeWatch(doc);
@@ -1893,6 +2291,45 @@ export class EditorCoordinator {
     // `makeStandalone` → `reparentFold(…, wrapKey, false)`), which seeds its new `panel:<id>` entry by
     // reading `wrapKey`'s CURRENT fold state. Forgetting it any earlier would seed from nothing.
     this.forgetFoldIfUnused(wrapKey);
+  }
+
+  /**
+   * 052 FR-011 (contracts/editor-replace.md) — the owner panel closes while `heir` still shows its document.
+   *
+   * The document is not closed: it is the same document, re-keyed to `heir`. Text, version, dirty state and
+   * undo history all carry over; nothing is read from disk. The claim and the recovery temp move to the new
+   * id, every other linked panel is re-pointed at `heir`, and the lifecycle listener hears the old panel's
+   * document go and the new one's arrive — the panel ids are what changed.
+   */
+  private handOver(doc: CoordDoc, heir: string): void {
+    const from = doc.panelId;
+    const view = this.links.get(heir);
+    this.links.delete(heir);
+    this.docs.delete(from);
+    doc.panelId = heir;
+    doc.authority.rekey(heir);
+    // R7b — the document lives where its new panel does, so `focusExisting` raises that window.
+    if (view) {
+      doc.windowId = view.windowId;
+      doc.tabId = view.tabId;
+    }
+    this.docs.set(heir, doc);
+    unregisterPanel(this.registry, from);
+    if (doc.absPath && !doc.movedOut && !doc.replaced) {
+      registerOpen(this.registry, doc.absPath, { panelId: heir, windowId: doc.windowId });
+    }
+    // The temp is keyed by panel id: the old one would be an orphan, and a dirty document needs one under
+    // its new id, or a crash now would lose the work the hand-over just preserved.
+    void this.recovery.remove(from);
+    if (doc.authority.dirty) this.scheduleRecovery(doc);
+    const reset = this.stateOf(doc);
+    this.deps.relaySync(-1, { panelId: heir, linkedTo: null, reset });
+    this.repointLinks(from, heir, reset);
+    const told = doc.reported.path;
+    if (told !== null) {
+      this.tell('unregistered', (l) => l.unregistered(told, from));
+      this.tell('registered', (l) => l.registered(told, heir));
+    }
   }
 
   /**
@@ -1915,6 +2352,8 @@ export class EditorCoordinator {
     unloadable: boolean;
     /** 050 FR-035 — a move took the file out of this document's project; it is detached and read-only. */
     movedOut: boolean;
+    /** 052 FR-012 — a Replace landed on this document's path while it was dirty (see `CoordDoc.replaced`). */
+    replaced: boolean;
     /**
      * 044 — the document has NO content of its file to follow: its path cannot be read and has never been
      * read in its panel (the FR-106d stand-in, a restore-time unloadable register). A parented preview shows
@@ -1926,7 +2365,7 @@ export class EditorCoordinator {
     hasBom: boolean;
     lineEnding: LineEndingId;
   } | null {
-    const doc = this.docs.get(panelId);
+    const doc = this.docFor(panelId);
     if (!doc) return null;
     return {
       text: doc.authority.text,
@@ -1939,6 +2378,8 @@ export class EditorCoordinator {
       unloadable: !!doc.unloadable,
       // 050 FR-035 — a remount shows the moved notice from this, without reading.
       movedOut: !!doc.movedOut,
+      // 052 FR-012 — a remount shows the replaced notice from this, without a relay.
+      replaced: !!doc.replaced,
       contentless: isContentless(doc),
       // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
       // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
@@ -2117,7 +2558,7 @@ export class EditorCoordinator {
     } else if (!doc.diskChanged) {
       // Dirty editor: warn ONCE that the on-disk file diverged (save will overwrite).
       doc.diskChanged = true;
-      this.deps.relaySync(-1, { panelId: doc.panelId, externalChange: true });
+      this.relay({ panelId: doc.panelId, externalChange: true });
     }
   }
 
