@@ -2496,20 +2496,22 @@ export class EditorCoordinator {
     // branch, i.e. #87 by the back door) or, worse, resets a re-pointed document to the OLD file's
     // content (the clean branch). Both are answers to a question nobody is asking any more.
     if (doc.absPath !== watchedPath) return;
+    // THRONG is moving this file right now (019, FR-004). Whatever the watch finds at the path meanwhile is the
+    // move's doing, not news: the file gone (it is in flight, and `markMoved` is about to say where it went —
+    // dirtying it here is #87), or a DIFFERENT file there (052: undoing a Replace restores the replaced file to
+    // this path inside the same bracket, and reading that as an outside edit raised "File changed on disk" on a
+    // dirty buffer, or silently reset a clean one to the other file's text).
+    //
+    // No timer decides this and none may be added: the bracket `FilesService` opens BEFORE the first `fs.move`
+    // and closes in a `finally` owns the whole window, so there is nothing left to outlast. A grace period here
+    // is the `terminate-all` accident in miniature (FR-011). `markMoved` re-watches what moved, and a panel left
+    // on a restored path reads it fresh.
+    if (doc.movePending) return;
     if (res.ok && (doc.unloadable || doc.fileMissing)) {
       this.pathCameBack(doc, res);
       return;
     }
     if (!res.ok) {
-      // THRONG is moving this file right now (019, FR-004). It is not missing — it is in flight,
-      // and `markMoved` is about to say where it went. Dirtying it here is #87: the buffer goes
-      // dirty behind the user, and the save they then make re-creates the file at the path the
-      // move just emptied, silently undoing it.
-      //
-      // No timer decides this and none may be added: the bracket `FilesService` opens BEFORE the
-      // first `fs.move` and closes in a `finally` owns the whole window, so there is nothing left
-      // to outlast. A grace period here is the `terminate-all` accident in miniature (FR-011).
-      if (doc.movePending) return;
       // Disappeared out from under us (external delete/rename) — same as an in-app
       // delete: keep the buffer, mark dirty + file-missing (FR-099). `markDeleted` itself leaves an
       // untyped `neverRead` document alone (the FR-106d stand-in, a failed restore): its file was already

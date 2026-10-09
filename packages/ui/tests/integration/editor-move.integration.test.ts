@@ -267,6 +267,42 @@ describe('the move bracket (FR-004) opens and closes exactly', () => {
     coord.markMoved([{ from, to }]);
   });
 
+  /*
+   * 052 — undoing a Replace moves the replacing file away and restores the replaced one from the Recycle Bin to the
+   * same path, all inside one bracket. The restore is a shell rename, so the watch can wake while the bracket is
+   * still open and find the path holding DIFFERENT content. Seen 1 run in 21 of editor-replace-open.e2e.ts as a
+   * "File changed on disk" notice on a dirty editor nobody else had touched.
+   */
+  it('a file REPLACED in flight is not an external change: a dirty buffer gets no notice (052)', async () => {
+    const at = join(root, 'dest', 'note.txt');
+    await writeFile(at, 'replacing\n');
+    await coord.load({ ...meta('p1', at), absPath: at });
+    editDocument(coord, meta('p1', at), 'replacing + my unsaved edit\n');
+
+    coord.beginMove([at]);
+    await rename(at, join(root, 'note.txt')); // the replacing file goes back where it came from…
+    await writeFile(at, 'the file it replaced\n'); // …and the replaced one is restored in its place
+    await new Promise((r) => setTimeout(r, 300)); // the watch fires while the bracket is open
+
+    expect(msgs().filter((m) => m.externalChange), 'the restore was reported as an external change').toEqual([]);
+    expect(coord.getContent('p1')).toMatchObject({ text: 'replacing + my unsaved edit\n', dirty: true });
+    coord.markMoved([{ from: at, to: join(root, 'note.txt') }]);
+  });
+
+  it('…and a CLEAN buffer is not reset to the restored file’s content inside the bracket (052)', async () => {
+    const at = join(root, 'dest', 'note.txt');
+    await writeFile(at, 'replacing\n');
+    await coord.load({ ...meta('p1', at), absPath: at });
+
+    coord.beginMove([at]);
+    await rename(at, join(root, 'note.txt'));
+    await writeFile(at, 'the file it replaced\n');
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(coord.getContent('p1')?.text, 'the moving document took the restored file’s text').toBe('replacing\n');
+    coord.markMoved([{ from: at, to: join(root, 'note.txt') }]);
+  });
+
   it('closes on a doc the move never reached, so a later external delete still dirties it (FR-009)', async () => {
     const other = join(root, 'other.txt');
     await writeFile(other, 'body\n');
