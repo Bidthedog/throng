@@ -224,7 +224,8 @@ source, the Electron app loads `dist`**, so unit and component tests all agreed 
 against an app that did not. If an E2E disagrees with a unit test about a constant, check the emitted
 file before the code: `rm packages/core/tsconfig.tsbuildinfo`, `rm -rf packages/core/dist`, rebuild.
 
-CI does not run the full suite on a push. It runs the **`@core` lane** — capped at 50 tests, one
+CI runs on a non-draft pull request to master (and on dispatch), never on a bare push, and it does not
+run the full suite. It runs the **`@core` lane** — capped at 50 tests, one
 job, one worker. The rest runs in the release lane before an installer is built. See *Two lanes* in
 `docs/testing.md`.
 
@@ -236,7 +237,8 @@ else must be green locally first.
 
 ### Testing something that only CI can answer
 
-Just push. Every job runs on every push, and `E2E (@core)` is four to five minutes.
+Push, then mark the PR ready (`gh pr ready`): every job runs on a ready PR and re-runs on each push
+to it; a draft or a bare branch push starts nothing. `E2E (@core)` is four to five minutes.
 
 **There used to be a `[ci-admin-only]` marker** that skipped the E2E lane so an elevated-path change
 did not pay for it. It is gone, and the arithmetic is why: it existed to avoid spending
@@ -246,7 +248,7 @@ required check that a commit message can disable is not a check.
 
 ### Every E2E test carries two tags
 
-A significance tag — **`@core`** (gates every push, capped at **50**) or **`@extended`** (the release
+A significance tag — **`@core`** (gates every ready PR, capped at **50**) or **`@extended`** (the release
 lane) — and a category tag: `@boot @terminal @editor @explorer @prefs @window @persistence
 @failure`. `packages/ui/tests/unit/e2e-tags.test.ts` fails the build for a test carrying neither,
 because selection is by `--grep` composed with `grepInvert`: an untagged test runs in NEITHER lane,

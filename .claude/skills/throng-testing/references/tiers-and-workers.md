@@ -98,14 +98,14 @@ executed tests bound what the machine DOES.
 
 **The `@core` lane, measured separately on 2026-08-17** at `f9534c7`, one worker, invoked the way
 `scripts/ci-e2e-run.ps1` invokes it (`npm run test:e2e:raw -- --grep @core`) — which is what gates
-every push:
+every ready PR:
 
 | pass | tests | time | failed | flaky |
 | --- | --- | --- | --- | --- |
 | 1 | 35 | **2.1 min** | 0 | 0 |
 | 2 | 35 | **2.1 min** | 0 | 0 |
 
-Run TWICE deliberately: a lane that gates every push has to be trusted, and one green run cannot
+Run TWICE deliberately: a lane that gates every ready PR has to be trusted, and one green run cannot
 distinguish a stable suite from a lucky one. Two passes 1 second apart in wall-clock, both clean.
 
 That is the figure to compare against the ~36 runner-minutes the three-shard arrangement used to
