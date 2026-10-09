@@ -18,7 +18,7 @@ MT-06 – MT-10 test spec 052 (`specs/052-follow-moves-unheld-layouts/spec.md`).
 | MT-10 | Replace onto an open file whose source is not open | signed off | 2faa7767f7ac | 2026-10-09 | |
 | MT-11 | Every terminal names its running command, shell and directory | signed off | 070561703731 | 2026-10-09 | |
 | MT-12 | A custom title template renames every terminal at once | signed off | 070561703731 | 2026-10-09 | |
-| MT-13 | The title template is documented in Preferences | signed off | a9af5a96e7a1 | 2026-10-09 | |
+| MT-13 | The title template is documented in Preferences | signed off | 102070d9deff | 2026-10-09 | |
 
 ## MT-01: Switch project straight after unloading with End Terminals
 
