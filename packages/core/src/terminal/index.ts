@@ -78,7 +78,9 @@ export {
 } from './kitty-keyboard.js';
 export {
   captureDecision,
+  commandDisplay,
   foregroundCommand,
+  foregroundProcess,
   normaliseCommand,
   isResolvedForm,
   isCapturableCommand,
@@ -88,6 +90,18 @@ export {
   type CaptureOutcome,
   type CaptureReason,
 } from './command-capture.js';
+export {
+  DEFAULT_TERMINAL_TITLE_TEMPLATE,
+  TITLE_PLACEHOLDERS,
+  parseTitleTemplate,
+  renderTitleTemplate,
+  validateTitleTemplate,
+  type TitlePlaceholder,
+  type TitleTemplate,
+  type TitleTemplateExpression,
+  type TitleTemplateNode,
+  type TitleTemplateParse,
+} from './title-template.js';
 export {
   resolveStartDirectory,
   fallbackToReport,
@@ -103,6 +117,11 @@ export {
   type WheelRoute,
 } from './wheel-decision.js';
 export { trackAltScreen } from './alt-screen.js';
+export {
+  createWindowTitleScan,
+  scanWindowTitle,
+  type WindowTitleScan,
+} from './window-title.js';
 export {
   createNegotiationScan,
   scanKeyboardNegotiation,
@@ -122,3 +141,5 @@ export {
   reconnectsReleasedBy,
   type PendingReconnect,
 } from './reconnect.js';
+export { assignConhosts } from './conhost-assignment.js';
+export { escalationTargets } from './escalation-targets.js';

@@ -12,7 +12,9 @@
  *    to every window, which rewrites `config.history` and a preview's `config.filePath` for the panels its
  *    layout holds.
  * 4. `clipboard.followMoves` (050 FR-009) — the File Explorer clipboard re-points a pending item by the same
- *    prefix rule an editor follows (019 FR-005). Last, because nothing before it reads the clipboard.
+ *    prefix rule an editor follows (019 FR-005).
+ * 5. `layouts.followMoves` (052 FR-001, R1) — every layout no window holds. Every in-app move — rename, move,
+ *    transfer, undo, redo, roll-back — closes through here, which is why the walk lives here and nowhere else.
  *
  * Extracted from `main.ts` so the integration suite can drive the real order.
  *
@@ -47,6 +49,11 @@ export interface InAppMoveDeps {
   broadcastFilesMoved(moves: readonly MovePair[]): void;
   /** 050 FR-009 — the application File Explorer clipboard follows a pending item to its new path. */
   clipboard: { followMoves(moves: readonly MovePair[]): void };
+  /**
+   * 052 FR-001 (R1) — the layouts no window holds follow too. Fire-and-forget: the walk runs in the daemon and the
+   * move never waits for it. Optional so a suite that does not exercise it omits it; `main.ts` always passes one.
+   */
+  layouts?: { followMoves(moves: readonly MovePair[]): void };
 }
 
 export interface InAppMoveCallbacks {
@@ -86,6 +93,9 @@ export function createInAppMoveCallbacks(deps: InAppMoveDeps): InAppMoveCallback
         isolated('history.announce', () => deps.history.announce(panelId), undefined);
       }
       isolated('clipboard.followMoves', () => deps.clipboard.followMoves(moves), undefined);
+      // Last: by now every window has been told (`broadcastFilesMoved`), so a held layout has followed before the
+      // daemon walks the unheld ones (052 R4).
+      if (deps.layouts) isolated('layouts.followMoves', () => deps.layouts!.followMoves(moves), undefined);
     },
   };
 }

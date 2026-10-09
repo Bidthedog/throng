@@ -466,6 +466,11 @@ export function ProjectsProvider({
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
 }
 
+/** The projects, or `null` outside a `ProjectsProvider` — for a store that works without them (052 T025). */
+export function useProjectsOptional(): ProjectsContextValue | null {
+  return useContext(ProjectsContext);
+}
+
 export function useProjects(): ProjectsContextValue {
   const ctx = useContext(ProjectsContext);
   if (!ctx) throw new Error('useProjects must be used within a ProjectsProvider');

@@ -37,7 +37,7 @@ export function movedPathOf(absPath: string, moves: readonly MovedPathPair[]): s
   return null;
 }
 
-type PathedConfig = { filePath?: string; history?: PersistedHistory; movedOut?: true } & Record<string, unknown>;
+type PathedConfig = { filePath?: string; history?: PersistedHistory; movedOut?: true; replaced?: true } & Record<string, unknown>;
 
 /**
  * One editor or preview panel's config after `moves`, or `null` when the moves touch nothing in it.
@@ -56,6 +56,9 @@ export function movedPanelConfig(
 ): Record<string, unknown> | null {
   if (panel.kind !== EDITOR_KIND && panel.kind !== PREVIEW_KIND) return null;
   const config = (panel.config ?? {}) as PathedConfig;
+  // 052 T024 — a replaced editor has let go of its path: the file there is another document's now, and the live
+  // coordinator never moves a replaced document, so its saved layout must not either.
+  if (config.replaced === true) return null;
   const shownOf = (c: PathedConfig): string | undefined =>
     panel.kind === PREVIEW_KIND ? previewPathOf(c as PreviewPanelConfig) : c.filePath;
   const shownBefore = shownOf(config);
@@ -79,34 +82,61 @@ export function movedPanelConfig(
   return next;
 }
 
-/** `movedPanelConfig` over every panel under `node`; the same node back when nothing changed. */
+/** The file a preview panel shows, if `panel` is one. */
+function previewShown(panel: Panel): string | undefined {
+  return panel.kind === PREVIEW_KIND ? previewPathOf(panel.config as PreviewPanelConfig | undefined) : undefined;
+}
+
+/** Every panel under `node`, depth first. */
+function panelsUnder(node: LayoutNode, into: Panel[] = []): Panel[] {
+  if (node.type === 'panel') into.push(node);
+  else for (const child of node.children) panelsUnder(child, into);
+  return into;
+}
+
+/**
+ * `movedPanelConfig` over every panel under `node`; the same node back when nothing changed.
+ *
+ * `heldPreviewPaths` (052 FR-006, R6) — files a preview in the same layout already shows and that this batch does
+ * not move. A preview whose move lands on one of them keeps its old path and history, as 044 FR-012 keeps a live
+ * preview in `PreviewService.moved`.
+ */
 export function moveLayoutNode(
   node: LayoutNode,
   moves: readonly MovedPathPair[],
   rootOf: (panel: Panel) => string | undefined,
+  heldPreviewPaths: readonly string[] = [],
 ): LayoutNode {
   if (node.type === 'panel') {
     const config = movedPanelConfig(node, moves, rootOf(node));
-    return config === null ? node : { ...node, config };
+    if (config === null) return node;
+    const shownAfter = previewShown({ ...node, config });
+    if (shownAfter !== undefined && heldPreviewPaths.some((held) => samePath(held, shownAfter))) return node;
+    return { ...node, config };
   }
   let changed = false;
   const children = node.children.map((child) => {
-    const moved = moveLayoutNode(child, moves, rootOf);
+    const moved = moveLayoutNode(child, moves, rootOf, heldPreviewPaths);
     if (moved !== child) changed = true;
     return moved;
   });
   return changed ? { ...node, children } : node;
 }
 
-/** `moveLayoutNode` over every tab; `null` when nothing in them changed. */
+/** `moveLayoutNode` over every tab of ONE layout; `null` when nothing in them changed. */
 export function moveLayoutTabs(
   tabs: readonly Tab[],
   moves: readonly MovedPathPair[],
   rootOf: (panel: Panel) => string | undefined,
 ): Tab[] | null {
+  // The layout's previews whose file this batch leaves where it is — the "already there" of 044 FR-012.
+  const heldPreviewPaths = tabs
+    .flatMap((tab) => panelsUnder(tab.root))
+    .map(previewShown)
+    .filter((shown): shown is string => shown !== undefined && movedPathOf(shown, moves) === null);
   let changed = false;
   const next = tabs.map((tab) => {
-    const root = moveLayoutNode(tab.root, moves, rootOf);
+    const root = moveLayoutNode(tab.root, moves, rootOf, heldPreviewPaths);
     if (root === tab.root) return tab;
     changed = true;
     return { ...tab, root };

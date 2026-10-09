@@ -11,6 +11,7 @@ import {
   requestedStartDirectory,
   isTransportFailure,
   submitsCommand,
+  TERMINAL_END_TIMEOUT_MS,
   type IClipboard,
   type IForegroundHandoff,
   type FailureCause,
@@ -97,10 +98,13 @@ function isFailureCause(value: unknown): value is FailureCause {
  * measured at 0.55–0.7 s a snapshot on a quiet machine (`Get-CimInstance Win32_Process`, five cold
  * runs), and the daemon caps one at 5 s before it gives up and counts the terminal busy. The daemon
  * shares one snapshot across a call's terminals, so a call costs one snapshot, not one per terminal.
- * 10 s is twice that 5 s cap: a slow machine still gets its answer, and a call that exceeds even
- * this is a daemon that is not answering, which the renderer reports rather than waits on.
+ *
+ * 051: `killAll` now resolves only once every end has SETTLED — an end, and for app-close Terminate
+ * all a forced end after it, each bounded by `TERMINAL_END_TIMEOUT_MS`, plus the de-elevated agent's
+ * one-second answer margin on each. The budget clears that with room to spare; a call that exceeds
+ * even this is a daemon that is not answering, which the caller reports rather than waits on.
  */
-export const UNLOAD_RPC_TIMEOUT_MS = 10_000;
+export const UNLOAD_RPC_TIMEOUT_MS = 2 * (TERMINAL_END_TIMEOUT_MS + 1000) + 3000;
 
 /**
  * 046 — the params a renderer may send to `closeIdle` / `killAll`, or a throw (which the renderer

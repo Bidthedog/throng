@@ -39,7 +39,7 @@ const layoutFlushers = new Set<() => Promise<void>>();
  * does: the module, not the writer, is the only place that can know. A save is added when it is
  * STARTED and dropped when it lands.
  */
-const inFlightSaves = new Set<Promise<unknown>>();
+const inFlightSaves = new Map<Promise<unknown>, string | undefined>();
 
 /** Join this window's drain for as long as the provider is mounted. Returns the un-register. */
 export function registerLayoutFlusher(flush: () => Promise<void>): () => void {
@@ -57,12 +57,12 @@ export function registerLayoutFlusher(flush: () => Promise<void>): () => void {
  * land must not wedge the close, and its failure is surfaced through the existing reload path
  * exactly as before.
  */
-export function trackLayoutSave(save: Promise<unknown>): Promise<void> {
+export function trackLayoutSave(save: Promise<unknown>, projectId?: string): Promise<void> {
   const settled = save.then(
     () => undefined,
     () => undefined,
   );
-  inFlightSaves.add(settled);
+  inFlightSaves.set(settled, projectId);
   void settled.then(() => {
     inFlightSaves.delete(settled);
   });
@@ -80,5 +80,24 @@ export function trackLayoutSave(save: Promise<unknown>): Promise<void> {
  */
 export async function settleLayoutSaves(): Promise<void> {
   await Promise.all([...layoutFlushers].map((flush) => flush()));
-  await Promise.all([...inFlightSaves]);
+  await Promise.all([...inFlightSaves.keys()]);
+}
+
+/**
+ * The saves in flight right now, grouped by the project each carries (052 R4).
+ *
+ * A move heard while a project's save is on the wire cannot know whether that save was built before or after
+ * the window applied the move, so it chains a scoped `workspace.followMoves` after the save settles. Empty
+ * when nothing is in flight — which is the whole of "no call is made". A save tracked without a project id
+ * (a caller that does not say) is left out: there is nothing to scope a follow to.
+ */
+export function inFlightSavesByProject(): Map<string, Promise<void>> {
+  const byProject = new Map<string, Promise<unknown>[]>();
+  for (const [save, projectId] of inFlightSaves) {
+    if (projectId === undefined) continue;
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), save]);
+  }
+  return new Map(
+    [...byProject].map(([projectId, saves]) => [projectId, Promise.all(saves).then(() => undefined)]),
+  );
 }

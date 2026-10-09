@@ -1,6 +1,14 @@
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
-import type { ChildProcess, IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
+import {
+  TERMINAL_END_TIMEOUT_MS,
+  type ChildProcess,
+  type IPtyHost,
+  type ProcessSurvivor,
+  type PtyExit,
+  type PtyHandle,
+  type PtyStartOptions,
+} from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 
 /**
@@ -39,10 +47,17 @@ export class PtyAgentHost implements IPtyHost {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly dataCbs = new Map<number, Set<(chunk: string) => void>>();
   private readonly exitCbs = new Map<number, Set<(e: PtyExit) => void>>();
-  private readonly childpids = new Map<number, number[]>();
+  /** 051: the in-flight end per key, so a second request returns the same outcome. */
+  private readonly endings = new Map<number, Promise<void>>();
+  /** 051: settles an in-flight end — by the agent's `ended`, its own timer, or the key failing. */
+  private readonly endWaiters = new Map<number, { key: number; settle: (outcome: Error | null) => void }>();
+  private readonly forceEndWaiters = new Map<number, (survivors: ProcessSurvivor[]) => void>();
+  private endReqId = 1;
   /** 025: in-flight `childprocs` requests, resolved when the agent answers. */
   private readonly childprocWaiters = new Map<number, (procs: ChildProcess[]) => void>();
   private childprocReqId = 1;
+  /** 051 — in-flight `attachedprocs` requests: the answer by key, or the failure. */
+  private readonly attachedWaiters = new Map<number, (answer: Record<string, ChildProcess[]> | Error) => void>();
   /** 046: in-flight AWAITED `childpids` requests (reqId ≥ 1; reqId 0 is the fire-and-forget refresh). */
   private readonly childpidWaiters = new Map<number, (answer: number[] | Error) => void>();
   private childpidReqId = 1;
@@ -190,8 +205,14 @@ export class PtyAgentHost implements IPtyHost {
   private forgetKey(key: number): void {
     this.dataCbs.delete(key);
     this.exitCbs.delete(key);
-    this.childpids.delete(key);
     this.liveKeys.delete(key);
+    // A terminal that is gone has ended, whatever its in-flight end was still waiting for.
+    for (const [reqId, waiter] of this.endWaiters) {
+      if (waiter.key === key) {
+        this.endWaiters.delete(reqId);
+        waiter.settle(null);
+      }
+    }
     const timer = this.readyTimers.get(key);
     if (timer) {
       clearTimeout(timer);
@@ -236,10 +257,25 @@ export class PtyAgentHost implements IPtyHost {
         this.exitCbs.get(ev.key)?.forEach((cb) => cb({ code: 1 }));
         this.forgetKey(ev.key);
         break;
+      case 'ended': {
+        const waiter = this.endWaiters.get(ev.reqId);
+        if (waiter) {
+          this.endWaiters.delete(ev.reqId);
+          waiter.settle(ev.ok ? null : new Error(ev.reason ?? 'the terminal agent could not end it'));
+        }
+        break;
+      }
+      case 'forceEnded': {
+        const waiter = this.forceEndWaiters.get(ev.reqId);
+        if (waiter) {
+          this.forceEndWaiters.delete(ev.reqId);
+          waiter(ev.survivors);
+        }
+        break;
+      }
       case 'childpids': {
-        // A FAILED probe is not "no children" (046): it neither overwrites the cache nor resolves a
-        // waiter with an idle-looking empty list — the waiter rejects, and the caller counts busy.
-        if (!ev.failed) this.childpids.set(ev.key, ev.pids);
+        // A FAILED probe is not "no children" (046): the waiter rejects with it rather than being
+        // handed an idle-looking empty list, and the caller counts the terminal busy.
         const waiter = this.childpidWaiters.get(ev.reqId);
         if (waiter) {
           this.childpidWaiters.delete(ev.reqId);
@@ -252,6 +288,14 @@ export class PtyAgentHost implements IPtyHost {
         if (waiter) {
           this.childprocWaiters.delete(ev.reqId);
           waiter(ev.procs);
+        }
+        break;
+      }
+      case 'attachedprocs': {
+        const waiter = this.attachedWaiters.get(ev.reqId);
+        if (waiter) {
+          this.attachedWaiters.delete(ev.reqId);
+          waiter(ev.failed ? new Error('the PTY agent could not read attached processes') : ev.byKey);
         }
         break;
       }
@@ -314,8 +358,57 @@ export class PtyAgentHost implements IPtyHost {
     this.sendCmd({ op: 'resize', key: handle.pid, cols, rows });
   }
 
-  kill(handle: PtyHandle): void {
-    this.sendCmd({ op: 'kill', key: handle.pid });
+  /**
+   * 051 — the agent ends the terminal with its own host and answers `ended`. Rejects with the
+   * agent's reason, or by itself one second past the limit if the agent never answers (the agent's
+   * own limit fires first, so a missing answer means the agent is wedged or gone).
+   */
+  end(handle: PtyHandle, timeoutMs: number): Promise<void> {
+    const key = handle.pid;
+    if (!this.liveKeys.has(key)) return Promise.resolve();
+    const existing = this.endings.get(key);
+    if (existing) return existing;
+    const reqId = this.endReqId++;
+    const ending = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.endWaiters.delete(reqId);
+        reject(new Error(`the terminal agent did not answer within ${Math.round((timeoutMs + 1000) / 1000)} seconds`));
+      }, timeoutMs + 1000);
+      timer.unref?.();
+      this.endWaiters.set(reqId, {
+        key,
+        settle: (outcome) => {
+          clearTimeout(timer);
+          if (outcome) reject(outcome);
+          else resolve();
+        },
+      });
+      this.sendCmd({ op: 'end', key, reqId, timeoutMs });
+    });
+    this.endings.set(key, ending);
+    const clear = (): void => {
+      if (this.endings.get(key) === ending) this.endings.delete(key);
+    };
+    ending.then(clear, clear);
+    return ending;
+  }
+
+  /** 051 FR-015a — escalation in the agent; no answer in time resolves with no survivors. */
+  forceEnd(handle: PtyHandle, timeoutMs: number): Promise<{ survivors: ProcessSurvivor[] }> {
+    const reqId = this.endReqId++;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.forceEndWaiters.delete(reqId);
+        console.warn(`[terminal] the terminal agent did not report a forced end of terminal ${handle.pid}`);
+        resolve({ survivors: [] });
+      }, timeoutMs + 1000);
+      timer.unref?.();
+      this.forceEndWaiters.set(reqId, (survivors) => {
+        clearTimeout(timer);
+        resolve({ survivors });
+      });
+      this.sendCmd({ op: 'forceEnd', key: handle.pid, reqId, timeoutMs });
+    });
   }
 
   onData(handle: PtyHandle, cb: (chunk: string) => void): () => void {
@@ -332,17 +425,9 @@ export class PtyAgentHost implements IPtyHost {
     return () => set.delete(cb);
   }
 
-  /** Best-effort: returns the last child-pids the agent reported (refreshing async). */
-  listChildPids(handle: PtyHandle): number[] {
-    this.sendCmd({ op: 'childpids', key: handle.pid, reqId: 0 });
-    return this.childpids.get(handle.pid) ?? [];
-  }
-
   /**
-   * 046 (Unload): the agent's CURRENT answer, awaited. `listChildPids` above returns the previous
-   * reply — nothing at all for a session never asked — so a close decision made on it would end a
-   * running process. Rejects when the agent does not answer in time (wedged, gone, or the terminal
-   * already ended), and the caller treats that as busy.
+   * 046 (Unload): the agent's CURRENT answer, awaited. Rejects when the agent does not answer in
+   * time (wedged, gone, or the terminal already ended), and the caller treats that as busy.
    */
   probeChildPids(handle: PtyHandle): Promise<number[]> {
     const reqId = this.childpidReqId++;
@@ -350,7 +435,7 @@ export class PtyAgentHost implements IPtyHost {
       const timer = setTimeout(() => {
         this.childpidWaiters.delete(reqId);
         reject(new Error(`the PTY agent did not report child processes for terminal ${handle.pid}`));
-      }, 5000);
+      }, TERMINAL_END_TIMEOUT_MS);
       timer.unref?.();
       this.childpidWaiters.set(reqId, (answer) => {
         clearTimeout(timer);
@@ -362,12 +447,9 @@ export class PtyAgentHost implements IPtyHost {
   }
 
   /**
-   * 025 FR-022. Unlike `listChildPids` this genuinely awaits the agent's answer, because the
-   * caller is an observation loop rather than a close decision — and a stale answer would
-   * capture the wrong command.
-   *
-   * Resolves to `[]` if the agent does not answer within the timeout, so a wedged agent leaves
-   * the last known command in place rather than clearing it (FR-019e) and never stalls the poll.
+   * 025 FR-022. Resolves to `[]` if the agent does not answer within the timeout, so a wedged
+   * agent leaves the last known command in place rather than clearing it (FR-019e) and never
+   * stalls the poll.
    */
   async listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]> {
     const reqId = this.childprocReqId++;
@@ -379,15 +461,40 @@ export class PtyAgentHost implements IPtyHost {
       const timer = setTimeout(() => {
         this.childprocWaiters.delete(reqId);
         resolve([]);
-      }, 5000);
+      }, TERMINAL_END_TIMEOUT_MS);
       timer.unref?.();
       this.childprocWaiters.set(reqId, done);
       this.sendCmd({ op: 'childprocs', key: handle.pid, reqId });
     });
   }
 
-  /** Disconnect from the agent (daemon shutdown); the agent exits on close. */
-  dispose(): void {
+  /**
+   * 051 FR-040/FR-041 — the agent's terminals in one request. Rejects when the agent reports a
+   * failure or does not answer in time: unknown, never "nothing attached" (FR-042).
+   */
+  listAttachedProcesses(handles: readonly PtyHandle[]): Promise<Map<number, ChildProcess[]>> {
+    const reqId = this.childprocReqId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.attachedWaiters.delete(reqId);
+        reject(new Error('the PTY agent did not report attached processes'));
+      }, TERMINAL_END_TIMEOUT_MS);
+      timer.unref?.();
+      this.attachedWaiters.set(reqId, (answer) => {
+        clearTimeout(timer);
+        if (answer instanceof Error) return reject(answer);
+        resolve(new Map(Object.entries(answer).map(([key, procs]) => [Number(key), procs])));
+      });
+      this.sendCmd({ op: 'attachedprocs', keys: handles.map((h) => h.pid), reqId });
+    });
+  }
+
+  /**
+   * Disconnect from the agent (daemon shutdown); the agent ends its terminals — escalating any that
+   * resist (051 FR-015a) — and exits on close. The daemon has already ended this host's terminals
+   * through `end`, so there is nothing left here to wait for.
+   */
+  async dispose(): Promise<void> {
     this.disposing = true; // suppress fail-all + relaunch on this deliberate close
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);

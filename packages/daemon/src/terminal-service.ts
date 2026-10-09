@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import {
-  foregroundCommand,
+  TERMINAL_END_TIMEOUT_MS,
+  foregroundProcess,
+  normaliseCommand,
   isBusy,
   shouldDeElevate,
   type ChildProcess,
@@ -11,6 +13,9 @@ import {
   type PtyHandle,
   appendScrollback,
   trackAltScreen,
+  createWindowTitleScan,
+  scanWindowTitle,
+  type WindowTitleScan,
   createNegotiationScan,
   scanKeyboardNegotiation,
   type NegotiationScan,
@@ -35,6 +40,8 @@ import {
   type TerminalCapabilitiesResult,
   type TerminalCloseIdleResult,
   type TerminalDetachParams,
+  type TerminalEndFailure,
+  type TerminalKillAllParams,
   type TerminalKillAllResult,
   type TerminalKillParams,
   type TerminalRepaintParams,
@@ -75,6 +82,20 @@ const REPAINT_RESTORE_MS = 60;
 /** How often to poll each live terminal's shell working directory (012 revision). */
 const CWD_POLL_MS = 1000;
 
+/**
+ * 053 `{arch}` — the longest an observation waits on an executable's architecture (Principle XII).
+ * A read that has not answered by then publishes `null`; the host caches the eventual answer, so a
+ * later pass sees it and republishes, because a change of arch alone is a change.
+ */
+const ARCH_READ_LIMIT_MS = 250;
+
+/**
+ * 051 FR-005 — how long a terminal whose end FAILED still counts its exit as the end throng asked
+ * for. A timed-out end's `taskkill` may still land a moment later, and that exit is the user's own
+ * doing, not an unexpected one (005 FR-017). Past this, the terminal is an ordinary running one.
+ */
+export const END_SETTLE_GRACE_MS = 2000;
+
 /** One view's most-recently-reported character dimensions. */
 interface ViewDims {
   cols: number;
@@ -83,6 +104,8 @@ interface ViewDims {
 
 /** A live terminal session — the daemon's in-memory record keyed by panelId. */
 interface Session {
+  /** This session among every session one panel id has had: what its exit names (051 MT-01). */
+  readonly id: number;
   /** Durable identity/tag (Principle III): owning project, panel, cwd. */
   readonly panelId: string;
   readonly projectId: string;
@@ -139,6 +162,12 @@ interface Session {
    */
   negotiation: NegotiationScan;
   /**
+   * 053 — the window title the program last set (OSC 0/2), followed for the same reason: a view that
+   * re-attaches rebuilds from a bounded tail, empty on the alternate screen, which may no longer hold
+   * the sequence. Every attach hands it back, so the new view's header names the program as before.
+   */
+  windowTitle: WindowTitleScan;
+  /**
    * The grid is stale because every view has gone (028 follow-up). The next attach MUST push a real
    * resize even when the recomputed grid equals the stored one, because the program needs a window
    * change to redraw and the stored value no longer reflects anything on screen.
@@ -152,8 +181,20 @@ interface Session {
   scrollback: string;
   status: 'running' | 'exited';
   exit?: { code: number | null; signal?: string };
-  /** Set when the user deliberately killed it → exit is *not* unexpected (FR-017). */
+  /**
+   * Set while an end throng asked for is in flight or has succeeded → the exit is *not* unexpected
+   * (FR-017). Reset when that end fails (051 FR-005), so a later genuine exit is unexpected again.
+   */
   userKilled: boolean;
+  /**
+   * 051 — the in-flight end, resolving to the failure reason or `null`. Non-null ⇔ this is an
+   * ENDING terminal: never reattached (FR-004), never probed for busy.
+   */
+  ending: Promise<string | null> | null;
+  /** 051 FR-004 — its panel was given a fresh terminal while this one was ending; its exit is not published. */
+  superseded: boolean;
+  /** 051 FR-015a — a failure of the in-flight end is escalated rather than left running. */
+  escalate: boolean;
   /** Display labels for the app-close warning (refreshed on reattach). */
   meta?: TerminalMeta;
   readonly disposers: Array<() => void>;
@@ -181,6 +222,13 @@ function viewIdOf(params: { viewId?: unknown }): string {
  */
 export class TerminalService {
   private readonly sessions = new Map<string, Session>();
+  private nextSessionId = 1;
+  /** 051 FR-004 — ending sessions whose panel already has a fresh terminal; still ended at shutdown. */
+  private readonly endingSessions = new Set<Session>();
+  /** 051 FR-015 — every end and escalation started and not yet settled; shutdown waits for them. */
+  private readonly inFlight = new Set<Promise<unknown>>();
+  /** 051 FR-015a — set once shutdown begins: from then on a failed end is escalated, never reattached. */
+  private shuttingDown = false;
   /** In-flight repaint restores, keyed by panelId — also the coalescing guard (028). */
   private readonly repaintTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -216,6 +264,12 @@ export class TerminalService {
      * (Principle X) and a test can drive it without waiting a real second.
      */
     private readonly commandPollMs: number = 1000,
+    /**
+     * 051 FR-013a — how long an end may take before it counts as failed, and the bound on every
+     * wait at shutdown. Injected from the one constant (`TERMINAL_END_TIMEOUT_MS`) by the
+     * composition root; a test substitutes its own.
+     */
+    private readonly endTimeoutMs: number = TERMINAL_END_TIMEOUT_MS,
   ) {
     if (this.processCwd) {
       this.cwdTimer = setInterval(() => void this.pollCwd(), CWD_POLL_MS);
@@ -233,7 +287,7 @@ export class TerminalService {
   private readonly cwdTimer?: ReturnType<typeof setInterval>;
   /** Last foreground command published per panel (025). Retained across a detach so the value
    *  FREEZES rather than clearing when nothing is observing (FR-019f). */
-  private readonly lastCommand = new Map<string, string | null>();
+  private readonly lastCommand = new Map<string, { command: string | null; arch: string | null }>();
   private readonly commandTimer?: ReturnType<typeof setInterval>;
 
   /**
@@ -287,28 +341,74 @@ export class TerminalService {
    */
   private async pollCommands(): Promise<void> {
     if (this.events.sinkCount === 0) return;
-    const running = [...this.sessions.values()].filter((s) => s.status === 'running');
+    const running = [...this.sessions.values()].filter((s) => s.status === 'running' && !s.ending);
     if (running.length === 0) return;
-    await Promise.all(running.map((s) => this.observeCommand(s)));
+    // Before any reading starts: a window title that arrived after this cannot be the prompt's (053 FR-003).
+    const observedAt = Date.now();
+    // 051 FR-041 — the attached processes of every terminal on a host, in ONE request per host.
+    // `null` is a request that FAILED, which is not the same as a terminal with nothing attached.
+    const attachedByHost = new Map<IPtyHost, Promise<Map<number, ChildProcess[]> | null>>();
+    for (const s of running) {
+      if (attachedByHost.has(s.host) || !s.host.listAttachedProcesses) continue;
+      const handles = running.filter((o) => o.host === s.host).map((o) => o.handle);
+      attachedByHost.set(s.host, s.host.listAttachedProcesses(handles).catch(() => null));
+    }
+    await Promise.all(running.map((s) => this.observeCommand(s, attachedByHost.get(s.host), observedAt)));
   }
 
   /** Observe one session's foreground command and publish it if it changed. */
-  private async observeCommand(session: Session): Promise<void> {
+  private async observeCommand(
+    session: Session,
+    attachedOnHost?: Promise<Map<number, ChildProcess[]> | null>,
+    observedAt: number = Date.now(),
+  ): Promise<void> {
     let children: ChildProcess[];
+    let attachedOnThisHost: Map<number, ChildProcess[]> | null | undefined;
     try {
-      children = await session.host.listChildProcesses(session.handle);
+      [children, attachedOnThisHost] = await Promise.all([
+        session.host.listChildProcesses(session.handle),
+        attachedOnHost,
+      ]);
     } catch {
       return; // FR-019e: keep the last known value rather than clearing it.
     }
-    const command = foregroundCommand(
+    const chosen = foregroundProcess(
       session.handle.pid,
       children,
       session.shellImage,
       session.shellStartedAt,
+      attachedOnThisHost?.get(session.handle.pid),
     );
-    if (this.lastCommand.get(session.panelId) === command) return;
-    this.lastCommand.set(session.panelId, command);
-    this.events.publishCommand(session.panelId, command);
+    const command = chosen === null ? null : normaliseCommand(chosen.commandLine);
+    // 051 FR-042 — a failed attached request cannot say "nothing is running": the command may be
+    // one only it could see. Keep the last value rather than clearing it (025 FR-019e).
+    if (command === null && attachedOnThisHost === null) return;
+    const arch = chosen === null ? null : await this.readArch(session.host, chosen.executablePath);
+    // The observation is async: if the panel has a newer terminal by now, this one's result is not its.
+    if (this.sessions.get(session.panelId) !== session) return;
+    const last = this.lastCommand.get(session.panelId);
+    if (last && last.command === command && last.arch === arch) return;
+    this.lastCommand.set(session.panelId, { command, arch });
+    this.events.publishCommand(session.panelId, command, arch, observedAt);
+  }
+
+  /**
+   * 053 `{arch}` — the architecture of `path` through the host, or `null` when the host cannot read
+   * one, there is no path, or the read has not answered within {@link ARCH_READ_LIMIT_MS}. Never
+   * throws, and never holds a lock.
+   */
+  private async readArch(host: IPtyHost, path: string | undefined): Promise<string | null> {
+    if (!path || !host.executableArch) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ARCH_READ_LIMIT_MS);
+      timer.unref?.();
+    });
+    try {
+      return await Promise.race([host.executableArch(path).catch(() => null), limit]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Pick the PTY host for a terminal: the de-elevated agent for an unchecked
@@ -351,44 +451,88 @@ export class TerminalService {
   killForProject(projectId: string): void {
     for (const session of [...this.sessions.values()]) {
       if (session.projectId === projectId && !session.rootless && session.status === 'running') {
-        session.userKilled = true;
-        try {
-          session.host.kill(session.handle);
-        } catch {
-          /* best-effort */
-        }
+        // The project is going: nothing could ever reattach a terminal whose end failed, so a
+        // failure escalates rather than leaving a process no surface can reach (Principle III).
+        void this.beginEnd(session, true);
       }
     }
   }
 
   /**
-   * Daemon shutdown: kill every live session (reaping each terminal's OS host) and
-   * dispose both PTY hosts, so exiting the daemon process never orphans `conhost.exe`
-   * hosts or a de-elevated agent. Synchronous — the caller runs it before exit.
+   * Daemon shutdown (051 FR-015, FR-015a): end every live session — and every ending one — and
+   * WAIT, within the end limit, for each to settle. A failure is escalated to a forced end of the
+   * whole tree, never left to reattach, and anything that survives that is logged. Then dispose
+   * both hosts: the local one sweeps any host process never attributed, and the agent's close
+   * makes the agent do the same for its own terminals.
    */
-  shutdown(): void {
-    for (const session of [...this.sessions.values()]) {
-      if (session.status === 'running') {
-        session.userKilled = true;
-        try {
-          session.host.kill(session.handle);
-        } catch {
-          /* best-effort */
-        }
+  async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    const live = [...this.sessions.values(), ...this.endingSessions].filter((s) => s.status === 'running');
+    await Promise.all(live.map((session) => this.beginEnd(session, true)));
+    await Promise.all([...this.inFlight]);
+    for (const host of [this.pty, this.deElevatedPty]) {
+      try {
+        await host?.dispose?.();
+      } catch {
+        /* best-effort */
       }
     }
-    // Sweep any stragglers + tear down the de-elevated agent (its `dispose()` ends the
-    // pipe, which makes the agent reap its own terminals and exit).
-    try {
-      this.pty.dispose?.();
-    } catch {
-      /* best-effort */
+  }
+
+  /** Remember a settling end so shutdown can wait for it (FR-015). */
+  private track<T>(promise: Promise<T>): Promise<T> {
+    this.inFlight.add(promise);
+    const forget = (): void => void this.inFlight.delete(promise);
+    promise.then(forget, forget);
+    return promise;
+  }
+
+  /**
+   * Start ending a session — the one path every end takes (051 R2/R4). Returns at once; the promise
+   * resolves to the failure reason, or `null` when the end completed (or was escalated with nothing
+   * surviving). Never rejects.
+   *
+   * - Success: the observed exit publishes as user-initiated (005 FR-017) through `handleExit`.
+   * - Failure, escalating (shutdown, Terminate all, project delete, a superseded or detached
+   *   session): a forced end of the whole tree; survivors are logged and become the reason.
+   * - Failure otherwise: the session is an ordinary running terminal again and reattaches on the
+   *   next load (FR-005).
+   *
+   * A second request for a session already ending returns the same promise; whether that end
+   * escalates on failure is decided WHEN it fails, so shutdown starting meanwhile still counts.
+   */
+  private beginEnd(session: Session, escalate = false): Promise<string | null> {
+    if (session.ending) {
+      if (escalate) session.escalate = true;
+      return session.ending;
     }
-    try {
-      this.deElevatedPty?.dispose?.();
-    } catch {
-      /* best-effort */
-    }
+    session.userKilled = true;
+    session.escalate = escalate;
+    const ending = session.host.end(session.handle, this.endTimeoutMs).then(
+      () => null,
+      async (error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (session.escalate || session.superseded || this.shuttingDown) {
+          const { survivors } = await session.host.forceEnd(session.handle, this.endTimeoutMs);
+          for (const { pid, name } of survivors) {
+            console.warn(`[terminal] ${session.panelId}: still running after a forced end: pid ${pid} (${name || 'unknown'})`);
+          }
+          return survivors.length > 0 ? `${reason}; ${survivors.length} of its processes could not be ended` : null;
+        }
+        // FR-005: an ordinary terminal again — once an exit from the end's own late kill has had
+        // its chance to arrive (review finding 6).
+        const settle = setTimeout(() => {
+          if (session.status === 'running' && !session.ending) session.userKilled = false;
+        }, END_SETTLE_GRACE_MS);
+        settle.unref?.();
+        return reason;
+      },
+    );
+    const settled = ending.finally(() => {
+      if (session.ending === settled) session.ending = null;
+    });
+    session.ending = settled;
+    return this.track(settled);
   }
 
   private async attach(rawParams: unknown): Promise<TerminalAttachResult> {
@@ -417,7 +561,14 @@ export class TerminalService {
     //     user-initiated destroy-then-create (FR-007 explicit request): terminate the old
     //     session, then fall through to cold-start the requested launch below.
     const existing = this.sessions.get(panelId);
-    if (existing && existing.status === 'running') {
+    if (existing && existing.status === 'running' && existing.ending) {
+      // 051 FR-004 — throng is already ending this one: never hand it back to a panel. The panel
+      // gets a fresh terminal below, as it does after an End Terminals Unload; the ending session
+      // finishes on its own, unpublished, and is escalated if its end fails (R4).
+      existing.superseded = true;
+      this.sessions.delete(panelId);
+      this.endingSessions.add(existing);
+    } else if (existing && existing.status === 'running') {
       if (!explicit) {
         if (params.meta) existing.meta = params.meta; // refresh labels (e.g. a rename)
         existing.views.set(viewId, { cols: params.cols, rows: params.rows });
@@ -437,6 +588,10 @@ export class TerminalService {
          * makes it worth replaying again, and any later attach gets it.
          */
         const replay = existing.altScreen ? '' : existing.scrollback;
+        // 053 — a re-attaching view starts with no command (a mounting panel drops the one it showed), and
+        // the daemon publishes only a change: hand it the running one in the answer, so a project switch
+        // names the command, and the program's title, from the view's first frame.
+        const observed = this.lastCommand.get(panelId);
         /*
          * The session was left with no views at all, so this view is a REBUILD (every tab switch
          * unmounts its panels). Force the redraw here rather than letting the view ask for it in a
@@ -454,7 +609,10 @@ export class TerminalService {
         }
         return {
           status: 'running',
+          sessionId: existing.id,
           scrollback: replay,
+          windowTitle: existing.windowTitle.title,
+          ...(observed ? { command: observed.command, arch: observed.arch } : {}),
           grid: existing.grid,
           redrawn,
           altScreen: existing.altScreen,
@@ -480,7 +638,7 @@ export class TerminalService {
      */
     if (!rootless) {
       try {
-        this.locks.acquire(projectId, launch.cwd);
+        await this.locks.acquire(projectId, launch.cwd);
       } catch (error) {
         throw new RpcError(
           `Failed to launch terminal: ${(error as Error).message}`,
@@ -520,7 +678,7 @@ export class TerminalService {
       });
     } catch (error) {
       // Launch failure (FR-019): release the lock we just took and surface it.
-      if (!rootless) this.locks.release(projectId);
+      if (!rootless) await this.locks.release(projectId);
       // 029: carry a cause where the shell's own failure has one — a cwd that vanished between the
       // lock and the spawn, a permission refusal. An unclassifiable launch failure (a missing
       // flavour, a broken shell path) yields `undefined`, and the panel then reverts exactly as it
@@ -533,6 +691,7 @@ export class TerminalService {
     }
 
     const session: Session = {
+      id: this.nextSessionId++,
       panelId,
       projectId,
       cwd: launch.cwd,
@@ -547,9 +706,13 @@ export class TerminalService {
       scrollback: '',
       altScreen: false,
       negotiation: createNegotiationScan(),
+      windowTitle: createWindowTitleScan(),
       gridStale: false,
       status: 'running',
       userKilled: false,
+      ending: null,
+      superseded: false,
+      escalate: false,
       meta: params.meta,
       disposers: [],
     };
@@ -571,6 +734,7 @@ export class TerminalService {
         session.altScreen = trackAltScreen(session.altScreen, chunk);
         // #290 — the other half a rebuilt view must be TOLD rather than left to infer.
         session.negotiation = scanKeyboardNegotiation(session.negotiation, chunk);
+        session.windowTitle = scanWindowTitle(session.windowTitle, chunk);
         this.events.publishOutput(panelId, chunk);
         if (startupCommandPending) {
           startupCommandPending = false;
@@ -592,12 +756,18 @@ export class TerminalService {
     );
     session.disposers.push(host.onExit(handle, (e) => this.handleExit(session, e)));
     this.sessions.set(panelId, session);
+    // 053 — what was last published for this panel belonged to its previous terminal. Kept, it would
+    // swallow this one's first observation whenever that matched (a remembered command relaunched after
+    // End Terminals or a restart), and the panel — which dropped the old value as it mounted — would name
+    // no command until it changed. An exit clears the cwd but not the command; a new terminal clears both.
+    this.lastCwd.delete(panelId);
+    this.lastCommand.delete(panelId);
     // Test seam (008 FR-005): simulate a slow-starting shell. The session is already
     // registered, so a client that times out and retries reuses it immediately.
     if (this.attachColdStartDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.attachColdStartDelayMs));
     }
-    return { status: 'running', scrollback: '', grid: session.grid };
+    return { status: 'running', sessionId: session.id, scrollback: '', grid: session.grid };
   }
 
   /**
@@ -774,19 +944,17 @@ export class TerminalService {
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
     this.lastCwd.delete(session.panelId); // a reused panelId must re-publish its cwd
     this.lastCommand.delete(session.panelId); // 025: and its command
-    if (!session.rootless) this.locks.release(session.projectId);
-    try {
-      session.host.kill(session.handle);
-    } catch {
-      /* best-effort — the process may already be gone */
-    }
+    if (!session.rootless) void this.locks.release(session.projectId);
+    // The surface that owned it is gone, so a failed end is escalated: nothing could reattach it.
+    void this.beginEnd(session, true);
   }
 
   private handleExit(session: Session, exit: PtyExit): void {
     if (session.status === 'exited') return; // already torn down
     session.status = 'exited';
     session.exit = exit;
-    this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
+    const current = this.sessions.get(session.panelId) === session;
+    if (current) this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
     const unexpected = !session.userKilled;
     for (const dispose of session.disposers) {
       try {
@@ -795,9 +963,26 @@ export class TerminalService {
         /* ignore */
       }
     }
-    this.sessions.delete(session.panelId);
-    if (!session.rootless) this.locks.release(session.projectId);
-    this.events.publishExit(session.panelId, exit.code, exit.signal, unexpected);
+    // A superseded session's panel already has a fresh terminal (051 FR-004): it is not this
+    // session's to remove from the map, nor to report an exit on.
+    if (current) this.sessions.delete(session.panelId);
+    this.endingSessions.delete(session);
+    if (session.superseded) {
+      if (!session.rootless) void this.locks.release(session.projectId);
+      return;
+    }
+    // The exit is reported once the lock has gone (051 R7): the order the UI has always seen —
+    // folder released, then told — without the release stopping every other terminal.
+    const released = session.rootless ? Promise.resolve() : this.locks.release(session.projectId);
+    void released
+      .catch(() => {})
+      .then(() => {
+        // A release can take seconds (the folder is polled until free), and the panel may have been
+        // given a fresh terminal meanwhile: this exit is no longer its terminal's (051 MT-01).
+        const now = this.sessions.get(session.panelId);
+        if (now && now !== session) return;
+        this.events.publishExit(session.panelId, exit.code, exit.signal, unexpected, session.id);
+      });
   }
 
   private write(rawParams: unknown): TerminalOkResult {
@@ -826,10 +1011,10 @@ export class TerminalService {
   private kill(rawParams: unknown): TerminalOkResult {
     const params = asObject(rawParams) as unknown as TerminalKillParams;
     const session = this.sessions.get(params.panelId);
-    if (session && session.status === 'running') {
-      session.userKilled = true;
-      session.host.kill(session.handle);
-    }
+    // 051 FR-003 — acknowledged at once; the outcome arrives as the exit. Escalated on failure: this
+    // is the panel being closed or destroyed, so FR-005's reattach would have nothing to reattach to
+    // and the terminal would be orphaned (Principle III; review finding 1).
+    if (session && session.status === 'running') void this.beginEnd(session, true);
     return { ok: true };
   }
 
@@ -859,9 +1044,9 @@ export class TerminalService {
     const listed = [...this.sessions.values()].filter(
       (session) => !params.projectId || session.projectId === params.projectId,
     );
-    // Probing child pids is expensive (per-session ConPTY helper) — only when explicitly
-    // requested, so a plain count (e.g. the app-close prompt) is fast. When requested, the probe is
-    // AWAITED (046): Unload decides from this whether to ask before ending anything.
+    // Probing child pids reads the process table — only when explicitly requested, so a plain count
+    // (e.g. the app-close prompt) is free. When requested, every probe is awaited TOGETHER, so one
+    // OS read answers all of them (046, 051 FR-011).
     const busy = params.includeBusy
       ? await Promise.all(listed.map((session) => this.probeBusy(session)))
       : listed.map(() => false);
@@ -890,29 +1075,16 @@ export class TerminalService {
     return { sessions };
   }
 
-  private isBusy(session: Session): boolean {
-    if (session.status !== 'running') return false;
-    try {
-      return isBusy(session.host.listChildPids(session.handle));
-    } catch {
-      return true; // safe default: never silently treat a possibly-busy shell as idle
-    }
-  }
-
   /**
-   * The busy classification from a CURRENT answer (046), for Unload's count and `closeIdle`. Both
-   * production hosts offer `probeChildPids`: the agent's synchronous answer can be stale, and the
-   * local host's blocks the event loop for a whole process-table scan per terminal. Awaited all
-   * together, the local host serves them from ONE snapshot. A probe that fails or times out counts as
-   * busy — never silently treat a possibly-busy shell as idle. A host without it is asked through
-   * {@link isBusy}, where a throw means the same.
+   * The busy classification from a CURRENT answer (046), for Unload's count and `closeIdle`.
+   * Awaited all together, a host serves them from ONE read (051 FR-011). A probe that fails or times
+   * out counts as busy — never silently treat a possibly-busy shell as idle (FR-012). An ENDING
+   * session is not asked: it is going, so it is not busy with anything the caller could keep.
    */
   private async probeBusy(session: Session): Promise<boolean> {
-    if (session.status !== 'running') return false;
-    const probe = session.host.probeChildPids?.bind(session.host);
-    if (!probe) return this.isBusy(session);
+    if (session.status !== 'running' || session.ending) return false;
     try {
-      return isBusy(await probe(session.handle));
+      return isBusy(await session.host.probeChildPids(session.handle));
     } catch {
       return true;
     }
@@ -929,35 +1101,35 @@ export class TerminalService {
    */
   private async closeIdle(rawParams: unknown): Promise<TerminalCloseIdleResult> {
     const inScope = sessionScope(rawParams);
-    const candidates = [...this.sessions.values()].filter((s) => inScope(s) && s.status === 'running');
+    const candidates = [...this.sessions.values()].filter((s) => inScope(s) && s.status === 'running' && !s.ending);
     const busy = await Promise.all(candidates.map((session) => this.probeBusy(session)));
     const closed: string[] = [];
     for (const [i, session] of candidates.entries()) {
       // Re-checked after the await: the session may have exited, or been replaced, meanwhile.
       if (busy[i] || session.status !== 'running' || this.sessions.get(session.panelId) !== session) continue;
-      session.userKilled = true;
-      session.host.kill(session.handle);
+      void this.beginEnd(session);
       closed.push(session.panelId);
     }
     return { closed };
   }
 
   /**
-   * Kill every session (the app-close "terminate all" choice, FR-015e). Optionally
-   * scoped to one project — Unload's End terminals (046 FR-034). Returns the panelIds killed.
+   * End every session in scope (the app-close "terminate all" choice, FR-015e; Unload's End
+   * terminals, 046 FR-034) and resolve with the OUTCOME once every end has settled (051 FR-002,
+   * FR-005) — concurrently, within one end limit (two with `escalate`), while the daemon keeps
+   * serving every other request (FR-001).
    */
-  private killAll(rawParams: unknown): TerminalKillAllResult {
+  private async killAll(rawParams: unknown): Promise<TerminalKillAllResult> {
     const inScope = sessionScope(rawParams);
-    const killed: string[] = [];
-    for (const session of [...this.sessions.values()]) {
-      if (!inScope(session)) continue;
-      if (session.status === 'running') {
-        session.userKilled = true;
-        session.host.kill(session.handle);
-        killed.push(session.panelId);
-      }
+    const escalate = (rawParams as TerminalKillAllParams | undefined)?.escalate === true;
+    const ending = [...this.sessions.values()].filter((s) => inScope(s) && s.status === 'running');
+    const outcomes = await Promise.all(ending.map((session) => this.beginEnd(session, escalate)));
+    const failed: TerminalEndFailure[] = [];
+    for (const [i, session] of ending.entries()) {
+      const reason = outcomes[i];
+      if (reason) failed.push({ panelId: session.panelId, reason });
     }
-    return { killed };
+    return { killed: ending.map((s) => s.panelId), failed };
   }
 }
 

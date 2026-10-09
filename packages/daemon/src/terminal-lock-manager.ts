@@ -13,7 +13,11 @@ import type { IDirectoryLock, LockHandle } from '@throng/core';
  * terminal closed — so the folder stayed undeletable long after its own terminal had gone.
  */
 export class TerminalLockManager {
-  private readonly locks = new Map<string, { handle: LockHandle; count: number }>();
+  /**
+   * `ready` is the lock being taken or held (051 R7: taking one waits on the OS). Kept as a promise
+   * so terminals of one project that start together share ONE lock rather than racing for two.
+   */
+  private readonly locks = new Map<string, { ready: Promise<LockHandle>; count: number }>();
 
   constructor(
     private readonly directoryLock: IDirectoryLock,
@@ -26,24 +30,36 @@ export class TerminalLockManager {
    * `cwd` is the terminal's own start folder, locked only when the project's root cannot be
    * resolved — the behaviour before #385, kept for a project the store does not hold.
    */
-  acquire(projectId: string, cwd: string): void {
-    const existing = this.locks.get(projectId);
-    if (existing) {
-      existing.count += 1;
-      return;
+  async acquire(projectId: string, cwd: string): Promise<void> {
+    let entry = this.locks.get(projectId);
+    if (entry) {
+      entry.count += 1;
+    } else {
+      entry = { ready: this.directoryLock.acquire(this.rootOf?.(projectId) ?? cwd), count: 1 };
+      this.locks.set(projectId, entry);
     }
-    const handle = this.directoryLock.acquire(this.rootOf?.(projectId) ?? cwd);
-    this.locks.set(projectId, { handle, count: 1 });
+    try {
+      await entry.ready;
+    } catch (error) {
+      // A lock that could not be taken counts for no terminal: the next start tries afresh.
+      entry.count -= 1;
+      if (entry.count <= 0 && this.locks.get(projectId) === entry) this.locks.delete(projectId);
+      throw error;
+    }
   }
 
-  /** Register a closed terminal for `projectId`, releasing the lock if it was the last. */
-  release(projectId: string): void {
+  /**
+   * Register a closed terminal for `projectId`, releasing the lock if it was the last. Settles once
+   * the folder is free (051 R7), so a caller that reports the close afterwards reports a free folder.
+   */
+  async release(projectId: string): Promise<void> {
     const existing = this.locks.get(projectId);
     if (!existing) return;
     existing.count -= 1;
     if (existing.count <= 0) {
-      this.directoryLock.release(existing.handle);
       this.locks.delete(projectId);
+      const handle = await existing.ready.catch(() => null);
+      if (handle) await this.directoryLock.release(handle);
     }
   }
 

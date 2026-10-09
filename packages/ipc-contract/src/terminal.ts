@@ -78,6 +78,11 @@ export const TERMINAL_COMMAND_NOTIFICATION = 'terminal.command';
 export interface TerminalCommandNotification {
   panelId: string;
   command: string | null;
+  /**
+   * 053 `{arch}` — `x64`, `x86` or `arm64` for the process `command` names; null or absent when idle
+   * or unreadable. A change of `arch` alone is published like a change of `command`.
+   */
+  arch?: string | null;
 }
 
 /** Resolved at (re)start; never persisted. cwd = project root. */
@@ -171,8 +176,27 @@ export interface TerminalCapabilitiesResult {
 
 export interface TerminalAttachResult {
   status: 'running' | 'exited';
+  /**
+   * Which session this attach landed on — the id every `terminal.exit` of that session carries.
+   * A panel id outlives its sessions: a view must only take an exit for the session it attached,
+   * never one still ending from before (051 MT-01). Absent from a daemon older than this field.
+   */
+  sessionId?: number;
   /** Buffered scrollback to replay into the view on (re)attach. */
   scrollback: string;
+  /**
+   * 053 — the window title the running program last set (OSC 0/2), `''` for none. A re-attaching view
+   * sets it at once: the replayed tail is bounded, and withheld on the alternate screen, so the sequence
+   * may not be in it. Absent from a cold start and from a daemon older than this field.
+   */
+  windowTitle?: string;
+  /**
+   * 053 — the command the daemon last observed holding this running session, and its architecture, as
+   * `terminal.command` last published them. A re-attaching view takes them at once rather than waiting
+   * for a change that may never come. Absent until the first observation, and from a cold start.
+   */
+  command?: string | null;
+  arch?: string | null;
   /**
    * The session's current shared grid (008 FR-009). The attaching view MUST size its
    * xterm to this immediately — so a view JOINING an existing session (whose minimum it
@@ -318,16 +342,36 @@ export interface TerminalCloseIdleParams {
   exceptPanelIds?: string[];
 }
 
-export type TerminalKillAllParams = TerminalCloseIdleParams;
+export interface TerminalKillAllParams extends TerminalCloseIdleParams {
+  /**
+   * 051 FR-015a — escalate an end that fails or times out to a forced end of the whole process tree,
+   * and list only what survives that in `failed`. App-close "Terminate all" sends it: nothing may be
+   * left behind. Unload does not: a failed end there leaves the terminal running, to reattach.
+   */
+  escalate?: boolean;
+}
 
 export interface TerminalCloseIdleResult {
   /** The panelIds whose idle shells were closed. */
   closed: string[];
 }
 
+/** 051 — one end that did not complete. */
+export interface TerminalEndFailure {
+  panelId: string;
+  /** User-readable, e.g. "did not end within 5 seconds". */
+  reason: string;
+}
+
+/**
+ * Resolved once every end in scope has SETTLED (051 FR-002, FR-005) — while the daemon keeps serving
+ * every other request (FR-001).
+ */
 export interface TerminalKillAllResult {
-  /** The panelIds whose sessions were ended. */
+  /** The panelIds whose sessions were asked to end. */
   killed: string[];
+  /** The ends that did not complete; always a subset of `killed`. */
+  failed: TerminalEndFailure[];
 }
 
 export interface TerminalOkResult {
@@ -346,6 +390,8 @@ export interface TerminalExitNotification {
   signal?: string;
   /** True when the process exited without a user-initiated kill (FR-017). */
   unexpected: boolean;
+  /** The session that exited — the `sessionId` its attach returned (051 MT-01). */
+  sessionId?: number;
 }
 
 export interface TerminalFlavourMissingNotification {

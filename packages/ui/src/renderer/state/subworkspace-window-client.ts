@@ -13,10 +13,9 @@ import type { ThrongBridge } from './bridge.js';
  * (`WorkspaceProvider` + `TabGroup`) unchanged: `load` hydrates the sub-workspace
  * and presents it as a {@link WorkspaceLayout}; `save` writes the edited tabs back.
  *
- * Saves go through the FULL set (`workspace.loadSubWorkspaces` → replace this one →
- * `workspace.persistSubWorkspaces`) because the persist path replaces the whole
- * owner set — writing only this sub-workspace would drop the siblings. The window's
- * own identity (name/colour/bounds/owner) is preserved across the round-trip.
+ * Saves write ONLY this window's record (`workspace.saveSubWorkspace`, 052 R3) — never the whole
+ * owner set, which would overwrite a sibling with a stale copy. The window's own identity
+ * (name/colour/bounds/owner) is preserved across the round-trip.
  */
 export class SubWorkspaceWorkspaceClient extends WorkspaceClient {
   /** Last-loaded identity of this window's sub-workspace, reused when saving. */
@@ -67,14 +66,14 @@ export class SubWorkspaceWorkspaceClient extends WorkspaceClient {
       'workspace.loadSubWorkspaces',
       {},
     );
-    const next = subWorkspaces.map((s) =>
-      s.id === this.subWorkspaceId
-        ? { ...s, tabs: layout.tabs, activeTabId: layout.activeTabId }
-        : s,
-    );
-    await this.subBridge.invoke<WorkspaceSaveResult>('workspace.persistSubWorkspaces', {
-      subWorkspaces: next,
-    });
+    // Our own record only (052 R3): the read above is for the current identity, and the write names
+    // nothing else, so a sibling the follow-moves walk rewrote in between is never overwritten.
+    const own = subWorkspaces.find((s) => s.id === this.subWorkspaceId);
+    if (own) {
+      await this.subBridge.invoke<WorkspaceSaveResult>('workspace.saveSubWorkspace', {
+        subWorkspace: { ...own, tabs: layout.tabs, activeTabId: layout.activeTabId },
+      });
+    }
     if (this.cached) {
       this.cached = { ...this.cached, tabs: layout.tabs, activeTabId: layout.activeTabId };
     }

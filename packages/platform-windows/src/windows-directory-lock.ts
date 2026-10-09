@@ -2,10 +2,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { renameSync, statSync } from 'node:fs';
 import process from 'node:process';
 
-/** Block the current thread for `ms` (used to bound-wait for process teardown). */
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
+/** Wait `ms` on a timer — never the thread (051 R7): the daemon serves every terminal meanwhile. */
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 import type { IDirectoryLock, LockHandle } from '@throng/core';
 
 /**
@@ -37,7 +35,7 @@ function withCode(error: Error, code: string): Error {
 export class WindowsDirectoryLock implements IDirectoryLock {
   private readonly held = new Map<LockHandle, ChildProcess>();
 
-  acquire(absPath: string): LockHandle {
+  async acquire(absPath: string): Promise<LockHandle> {
     let isDir: boolean;
     try {
       isDir = statSync(absPath).isDirectory();
@@ -61,7 +59,7 @@ export class WindowsDirectoryLock implements IDirectoryLock {
     });
     // Let the OS finish creating the process so its cwd lock is in effect before
     // this returns (the holder is established at process creation).
-    sleepSync(30);
+    await sleep(30);
     if (typeof child.pid !== 'number') {
       throw new Error(`Cannot lock "${absPath}": failed to start the lock holder`);
     }
@@ -70,7 +68,7 @@ export class WindowsDirectoryLock implements IDirectoryLock {
     return handle;
   }
 
-  release(handle: LockHandle): void {
+  async release(handle: LockHandle): Promise<void> {
     const child = this.held.get(handle);
     if (!child) return; // idempotent / unknown handle → no-op
     this.held.delete(handle);
@@ -95,7 +93,7 @@ export class WindowsDirectoryLock implements IDirectoryLock {
         // ENOENT → the folder is already gone, so it is certainly not locked.
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
       }
-      sleepSync(15);
+      await sleep(15);
     }
   }
 }

@@ -125,7 +125,12 @@ export function PanelTypeForm({
       // reusing the old one. Set locally BEFORE typing the panel (which mounts the
       // terminal and attaches); the mirror in other windows never runs this, so it
       // reuses the new session. Only a terminal attaches.
-      if (result.kind === 'terminal') markExplicitRetype(panelId);
+      if (result.kind === 'terminal') {
+        markExplicitRetype(panelId);
+        // 051 FR-046 — an observation the previous terminal left behind (a start failure reverted it
+        // here without an orderly end) must not clear the startup command the user just confirmed.
+        ws.setTerminalMemory(panelId, { observedCommand: undefined });
+      }
       // 048 FR-132 — the keyboard goes into the new content, clicked or pressed: parked for the view
       // that replaces this form, since the Confirm button that held focus unmounts with it.
       requestPanelFocusAfterRetype(panelId);

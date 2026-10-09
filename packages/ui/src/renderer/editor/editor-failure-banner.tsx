@@ -10,6 +10,7 @@ import { getEditorActions } from './editor-actions.js';
 import { NOT_THE_FILE, useEditorFailure } from './editor-failure.js';
 import { useEditorState } from './editor-state.js';
 import { MovedOutNotice } from './moved-out-notice.js';
+import { ReplacedNotice } from './replaced-notice.js';
 
 /**
  * "This is not your file" — the standing statement an editor makes while its path cannot be read
@@ -86,6 +87,9 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
       />
     );
   }
+
+  // 052 FR-012 — a Replace landed on this dirty document's path: its own notice, with Save As and Discard.
+  if (state?.replaced) return <ReplacedNotice panelId={panelId} />;
 
   if (!failure) return null;
 

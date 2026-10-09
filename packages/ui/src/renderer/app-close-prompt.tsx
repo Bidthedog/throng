@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { useChoose } from './confirm-dialog.js';
+import { markAppTerminating } from './terminal/app-terminating.js';
 import type { AppCloseTerminal } from './global.js';
 
 type CloseState =
@@ -114,6 +115,7 @@ export function AppClosePrompt(): ReactElement | null {
       const choice = (v ?? 'cancel') as 'leave' | 'terminate' | 'cancel';
       if (choice === 'cancel') setState(null);
       else setState({ phase: 'busy', message: choice === 'leave' ? LEAVE_MSG : TERMINATE_MSG });
+      if (choice === 'terminate') markAppTerminating();
       window.throng?.appCloseChoice?.(choice);
     });
   }, [state, choose]);

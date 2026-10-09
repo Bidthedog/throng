@@ -23,7 +23,15 @@
 import { editorAutoTitle } from '../editor/path-display.js';
 import { FIND_IN_FILES_KIND, findInFilesPanelType } from '../find-in-files/panel-type.js';
 import { PREVIEW_KIND } from '../preview/panel-type.js';
+import { commandDisplay } from '../terminal/command-capture.js';
+import {
+  DEFAULT_TERMINAL_TITLE_TEMPLATE,
+  parseTitleTemplate,
+  renderTitleTemplate,
+  type TitleTemplate,
+} from '../terminal/title-template.js';
 import { countGraphemes, truncateGraphemes } from '../text/grapheme.js';
+import { lastFolder, shortenEnd, shortenPath } from '../text/path-shorten.js';
 import type { Panel, PreviewPanelConfig } from './model.js';
 import { previewPathOf } from './persisted-paths.js';
 import { BLANK_PANEL_NAME, isDefaultPanelName } from './unique-name.js';
@@ -42,6 +50,39 @@ export interface PanelTitleSources {
   previewParentTitle?: string | null;
   /** The file a preview currently shows — live state first; the persisted config is the fallback. */
   previewFilePath?: string | null;
+  /**
+   * 053 FR-001 — what a terminal panel's name is rendered from: the live values, the template as
+   * text (its parse is memoised here) and the two shortening limits (FR-012). Absent → the terminal
+   * is named as before 053, by its window title or its shell, so a caller that does not pass it is
+   * unchanged.
+   */
+  terminal?: {
+    values: TerminalTitleValues;
+    template: string;
+    limits: { command: number; path: number };
+  };
+}
+
+/**
+ * The raw values a terminal's name is rendered from (053 data-model.md). Raw on purpose: core derives
+ * `{command}` and `{app}` from the observed command line and `{path}` / `{folder}` from the
+ * directory, so every surface shortens and names them the same way.
+ */
+export interface TerminalTitleValues {
+  /** The observed command line, as the OS reported it; absent or null while nothing runs. */
+  command?: string | null;
+  /** The running program's architecture — `x64`, `x86`, `arm64`. */
+  arch?: string | null;
+  /** The window title the program or shell set (OSC 0/2). */
+  title?: string | null;
+  /** The shell's label, else its flavour id. */
+  shell: string;
+  /** The working directory, as the daemon or the shell's OSC 9;9 reported it. */
+  cwd?: string | null;
+  /** The owning project's name; for a sub-workspace's panel, the sub-workspace's. */
+  project?: string | null;
+  /** Whether the terminal runs elevated — `{admin}` renders `Admin`. */
+  admin: boolean;
 }
 
 /**
@@ -168,8 +209,67 @@ function fallbackTitle(panel: Panel): string {
   return isDefaultPanelName(panel.title) ? BLANK_PANEL_NAME : panel.title;
 }
 
+/**
+ * Parsed templates by text (053 T010). Every panel and every render asks for the same one or two
+ * templates, so each is parsed once. An unparsable text maps to the default's parse (FR-008: a
+ * persisted invalid template renders as the default). Cleared rather than evicted when it grows —
+ * only a user typing templates one after another could fill it.
+ */
+const PARSED_TEMPLATES = new Map<string, TitleTemplate>();
+const MAX_PARSED_TEMPLATES = 32;
+
+function compiledTemplate(text: string): TitleTemplate {
+  const cached = PARSED_TEMPLATES.get(text);
+  if (cached) return cached;
+  const parsed = parseTitleTemplate(text);
+  const root = parsed.ok ? parsed.root : compiledTemplate(DEFAULT_TERMINAL_TITLE_TEMPLATE);
+  if (PARSED_TEMPLATES.size >= MAX_PARSED_TEMPLATES) PARSED_TEMPLATES.clear();
+  PARSED_TEMPLATES.set(text, root);
+  return root;
+}
+
+/**
+ * An absolute Windows path to a program, anywhere in a window title. cmd titles itself
+ * `C:\WINDOWS\system32\cmd.exe - ping …`, and elevated shells prefix `Administrator: `.
+ */
+const EXECUTABLE_PATH = /[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*([^\\/:*?"<>|\r\n]+?)\.(?:exe|com|bat|cmd)\b/gi;
+
+/** 053 FR-011 — `{title}` names a program the way `{app}` does: by its bare name, never its full path. */
+function withoutExecutablePaths(title: string): string {
+  return title.replace(EXECUTABLE_PATH, '$1');
+}
+
+/**
+ * A terminal's name from its template (053 FR-001, FR-003, FR-012). Trimmed; an empty render names
+ * the panel by its shell, as `{shell}` alone would. `null` only when there is not even a shell to
+ * name it by, so the caller's own fallback applies.
+ */
+function terminalTemplateTitle(panel: Panel, source: NonNullable<PanelTitleSources['terminal']>): string | null {
+  const { values, template, limits } = source;
+  const shell =
+    usable(values.shell) ?? usable(panel.config?.flavourLabel) ?? usable(panel.config?.flavourId) ?? '';
+  const { command, app } = commandDisplay(values.command ?? '');
+  const cwd = values.cwd ?? '';
+  const rendered = renderTitleTemplate(compiledTemplate(template), {
+    command: shortenEnd(command, limits.command),
+    app,
+    arch: values.arch ?? '',
+    title: withoutExecutablePaths(values.title ?? ''),
+    shell,
+    path: shortenPath(cwd, limits.path),
+    folder: lastFolder(cwd),
+    project: values.project ?? '',
+    admin: values.admin ? 'Admin' : '',
+  }).trim();
+  return usable(rendered) ?? usable(shell);
+}
+
 function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
   if (panel.kind === 'terminal') {
+    if (sources.terminal) {
+      const named = terminalTemplateTitle(panel, sources.terminal);
+      if (named) return named;
+    }
     const live = usable(sources.terminalTitle);
     if (live) return live;
     // Prefer the captured flavour LABEL ("Command Prompt"); fall back to the flavour id for panels

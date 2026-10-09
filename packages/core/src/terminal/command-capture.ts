@@ -65,7 +65,78 @@ export function foregroundCommand(
   children: readonly ChildProcess[],
   shellImage?: string,
   shellStartedAt?: number,
+  /**
+   * 051 FR-040 — every process attached to the terminal's console, when the OS could say. Consulted
+   * only when the shell has no direct child to report (FR-044), so a command the shell started
+   * directly reads exactly as before. `undefined` means unknown, and the direct-children answer
+   * stands alone (025 FR-022).
+   */
+  attached?: readonly ChildProcess[],
 ): string | null {
+  const chosen = foregroundProcess(shellPid, children, shellImage, shellStartedAt, attached);
+  return chosen === null ? null : normaliseCommand(chosen.commandLine);
+}
+
+/**
+ * The PROCESS {@link foregroundCommand} names, chosen by exactly the same rules from the same
+ * arguments — so the daemon can read what else it needs about it, such as its executable's
+ * architecture (053 `{arch}`), without choosing twice. `null` when nothing qualifies.
+ */
+export function foregroundProcess(
+  shellPid: number,
+  children: readonly ChildProcess[],
+  shellImage?: string,
+  shellStartedAt?: number,
+  attached?: readonly ChildProcess[],
+): ChildProcess | null {
+  const direct = directChildProcess(shellPid, children, shellImage, shellStartedAt);
+  if (direct !== null || attached === undefined) return direct;
+  return attachedProcess(shellPid, attached, shellImage, shellStartedAt);
+}
+
+/** Console hosts are attached to every terminal and are never its command (051 FR-043). */
+const CONSOLE_HOSTS = new Set(['conhost.exe', 'openconsole.exe']);
+
+/**
+ * 051 FR-040–FR-043 — the command among the processes attached to a terminal's console.
+ *
+ * Excluded: the shell, anything running the shell's own executable (its re-execs, as in
+ * `resolveShellPid`), console hosts, and a process older than the shell (#280). throng's own helper
+ * leaves itself out of the list it reports. Of what remains, only ROOTS are candidates — a process
+ * whose parent is not itself attached — so a command's own helpers stay its business (025 FR-022a),
+ * and the most recently started root wins (025's tie-break). Nothing left → nothing running (FR-042).
+ */
+function attachedProcess(
+  shellPid: number,
+  attached: readonly ChildProcess[],
+  shellImage?: string,
+  shellStartedAt?: number,
+): ChildProcess | null {
+  const shell = shellImage === undefined ? '' : imageName(shellImage);
+  const candidates = attached.filter((p) => {
+    if (p.pid === shellPid) return false;
+    const image = imageName(p.commandLine);
+    if (shell !== '' && image === shell) return false;
+    if (CONSOLE_HOSTS.has(image)) return false;
+    return shellStartedAt === undefined || p.startedAt >= shellStartedAt;
+  });
+  const pids = new Set(candidates.map((p) => p.pid));
+  let best: ChildProcess | null = null;
+  for (const p of candidates) {
+    if (pids.has(p.ppid)) continue; // a helper of another candidate, not a command of its own
+    if (!isCapturableCommand(p.commandLine)) continue;
+    if (best === null || p.startedAt >= best.startedAt) best = p;
+  }
+  return best;
+}
+
+/** 025 FR-022/FR-022a — the most recent direct child of the (effective) shell. */
+function directChildProcess(
+  shellPid: number,
+  children: readonly ChildProcess[],
+  shellImage?: string,
+  shellStartedAt?: number,
+): ChildProcess | null {
   const effectiveShell = resolveShellPid(shellPid, children, shellImage);
   /*
    * Compare candidates against the EFFECTIVE shell, not the pid throng launched. Where
@@ -87,7 +158,7 @@ export function foregroundCommand(
     if (!isCapturableCommand(child.commandLine)) continue;
     if (best === null || child.startedAt >= best.startedAt) best = child;
   }
-  return best === null ? null : normaliseCommand(best.commandLine);
+  return best;
 }
 
 /** The executable's file name from a command line, lower-cased. '' when it cannot be read. */
@@ -196,6 +267,19 @@ function bareName(exe: string): string {
 }
 
 /**
+ * An observed command line as a terminal's name shows it (053 FR-003, FR-011): `command` is the
+ * program by its bare name followed by the arguments unchanged, `app` the bare name alone. The OS
+ * reports the resolved image (`"C:\WINDOWS\system32\PING.EXE" -t host`), and a name must never
+ * carry that path — this gives `ping -t host` and `ping`. An empty line gives two empty strings.
+ */
+export function commandDisplay(line: string): { command: string; app: string } {
+  const { exe, rest } = splitCommand(line);
+  const app = bareName(exe);
+  if (app === '') return { command: '', app: '' };
+  return { command: rest === '' ? app : `${app} ${rest}`, app };
+}
+
+/**
  * Whether `observed` is just `saved` with its executable resolved to a full path (025 FR-017).
  *
  * The OS reports the command line a launcher built, and shells resolve a command to its image
@@ -225,11 +309,12 @@ export type CaptureReason =
   | 'nothing-running'
   | 'not-capturable'
   | 'unchanged'
-  | 'saved';
+  | 'saved'
+  | 'cleared';
 
 export type CaptureOutcome =
-  | { save: false; reason: Exclude<CaptureReason, 'saved'> }
-  | { save: true; reason: 'saved'; value: string };
+  | { save: false; reason: Exclude<CaptureReason, 'saved' | 'cleared'> }
+  | { save: true; reason: 'saved' | 'cleared'; value: string };
 
 /**
  * The whole memory rule, in one function.
@@ -238,12 +323,12 @@ export type CaptureOutcome =
  * |--------|-----------------|-----------------------------------------|
  * | off    | anything        | unchanged — only a user edit changes it |
  * | on     | a live command  | saved becomes that command              |
- * | on     | nothing running | **unchanged** — never cleared           |
+ * | on     | nothing running | **cleared**                             |
  *
- * The "never cleared" row is the one that carries the user's intent: a terminal sitting at a
- * bare prompt when it ends says nothing about what the panel should run next time, so the
- * previous value stands. A command that has already finished is likewise never captured,
- * because `observed` only ever holds something alive at the moment of observation.
+ * 051 FR-046 supersedes 025 FR-017's "never cleared": with memory on, the saved command is what
+ * was running when the terminal ended — a terminal that ended at a bare prompt starts at one. A
+ * command that has already finished is never captured, because `observed` only ever holds
+ * something alive at the moment of observation.
  */
 export function captureDecision(
   rememberCommand: boolean,
@@ -251,7 +336,11 @@ export function captureDecision(
   observed: string | null,
 ): CaptureOutcome {
   if (!rememberCommand) return { save: false, reason: 'memory-off' };
-  if (observed === null) return { save: false, reason: 'nothing-running' };
+  if (observed === null) {
+    return (saved ?? '').trim() === ''
+      ? { save: false, reason: 'nothing-running' }
+      : { save: true, reason: 'cleared', value: '' };
+  }
   if (!isCapturableCommand(observed)) return { save: false, reason: 'not-capturable' };
   const value = observed.trim();
   if ((saved ?? '') === value) return { save: false, reason: 'unchanged' };

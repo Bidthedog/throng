@@ -1,38 +1,31 @@
 /**
- * After a move lands, rewrite the layouts NO WINDOW HOLDS (050 R19, FR-016, FR-035).
+ * After a move lands, have the daemon rewrite the layouts NO WINDOW HOLDS (050 R19, FR-016, FR-035; 052 FR-001).
  *
  * ══ WHY ══
  *
  * A window patches the layouts it holds from the move signals (`MovedPathSync`, `PreviewPathSync`,
  * `HistoryMirrorSync`). A project no window was showing kept the moved file's OLD path, so showing it later
- * raised "Couldn't open … (missing)" (MT-02) — the FR-016 defect "including for panels in other windows".
- * FR-035 needs the same walk: a panel whose file a move took out of its project must already say so when its
- * project is shown later, or after a restart, without reading the file.
+ * raised "Couldn't open … (missing)" (050 MT-02); a closed sub-workspace did the same after a plain rename (#397).
  *
- * ══ WHAT IT DOES TO EACH EDITOR AND PREVIEW PANEL ══
+ * ══ WHERE THE WORK HAPPENS ══
  *
- * - `config.filePath` and every `config.history` entry follow the move — `movedPathOf`, the rule an open
- *   document follows, and core's `rewritePaths`, the rule a live history follows.
- * - When the file the panel SHOWS (an editor's `filePath`; a preview's `previewPathOf`) was moved: outside
- *   the panel's project root → `movedOut: true`; inside it → the key is dropped (an undo brought it back —
- *   whether another editor holds it meanwhile is settled when the panel next mounts and `openInto`
- *   answers). A panel's project is its `originProjectId`, else the layout's own project; a sub-workspace's
- *   own panel (`subworkspace:<id>`) belongs to no project and is never flagged.
+ * In the daemon, as one `workspace.followMoves` (052 R2): one synchronous transaction, so no save can land between
+ * the walk's read of a record and its write — the race that let the old main-side walk of load/save round trips
+ * lose a window's change, or have its own undone (FR-005). The per-panel rule is core's `moveLayoutTabs`.
  *
- * ══ ONE WRITER PER RECORD, IDEMPOTENT ══
+ * ══ WHO HOLDS WHAT ══
  *
- * Exactly `preview-purge.ts`'s discipline, for exactly its reasons: the `held` records are the windows' to
- * write; a record that did not restore is never written (saving it would persist the daemon's default); a
- * record nothing in the move touches is never written, so a second walk over the same moves writes nothing.
+ * `preview-purge.ts`'s O6: the ACTIVE project's layout (the main window) and each open sub-workspace window's own
+ * record. A loaded-but-inactive project is held by no window — the renderer keeps no cache of it — so the walk
+ * covers it (052 FR-008).
  */
-import { moveLayoutTabs, type Panel, type SubWorkspace, type WorkspaceLayout } from '@throng/core';
 import type { MovePair } from './files-service.js';
 import type { HeldRecords } from './preview-purge.js';
 
 export interface MovedLayoutWalkDeps {
   /** The daemon RPC — `daemonClient.call` in main. */
   call<T>(method: string, params: unknown): Promise<T>;
-  /** The records a window holds right now (`preview-purge.ts`'s O6). */
+  /** The records a window holds right now (`heldRecords`). */
   held(): Promise<HeldRecords>;
   /** The broadcast a sub-workspace record change sends, once the write has landed. */
   notifySubWorkspaceChanged(id: string): void;
@@ -41,47 +34,31 @@ export interface MovedLayoutWalkDeps {
 export interface MovedLayoutWalkResult {
   changedProjectIds: string[];
   changedSubWorkspaceIds: string[];
+  skipped: number;
 }
 
-/** The per-panel rule is core's `movedPanelConfig` (`workspace/moved-paths.ts`), shared with the renderer. */
-const rewriteTabs = moveLayoutTabs;
+/** O6 from the daemon's project list and the open sub-workspace windows. */
+export function heldRecords(
+  projects: ReadonlyArray<{ id: string; isActive?: boolean }>,
+  openSubWorkspaceIds: readonly string[],
+): HeldRecords {
+  return {
+    projectIds: new Set(projects.filter((p) => p.isActive === true).map((p) => p.id)),
+    subWorkspaceIds: new Set(openSubWorkspaceIds),
+  };
+}
 
 /** Rewrite the moved paths in every project layout and sub-workspace record no window holds. */
 export async function walkMovedLayouts(
   deps: MovedLayoutWalkDeps,
   moves: readonly MovePair[],
 ): Promise<MovedLayoutWalkResult> {
-  const result: MovedLayoutWalkResult = { changedProjectIds: [], changedSubWorkspaceIds: [] };
-  if (moves.length === 0) return result;
+  if (moves.length === 0) return { changedProjectIds: [], changedSubWorkspaceIds: [], skipped: 0 };
   const held = await deps.held();
-  const { projects } = await deps.call<{ projects: Array<{ id: string; rootFolder: string }> }>('projects.list', {});
-  const roots = new Map(projects.map((p) => [p.id, p.rootFolder] as const));
-  const projectRootOf = (fallbackProjectId: string | undefined) => (panel: Panel): string | undefined =>
-    roots.get(panel.originProjectId) ?? (fallbackProjectId !== undefined ? roots.get(fallbackProjectId) : undefined);
-
-  // ── Project layouts ──
-  for (const { id: projectId } of projects) {
-    if (held.projectIds.has(projectId)) continue;
-    const loaded = await deps.call<{ layout: WorkspaceLayout; restored: boolean }>('workspace.load', { projectId });
-    if (!loaded.restored) continue;
-    const tabs = rewriteTabs(loaded.layout.tabs, moves, projectRootOf(projectId));
-    if (tabs === null) continue;
-    await deps.call('workspace.save', { projectId, layout: { ...loaded.layout, tabs } });
-    result.changedProjectIds.push(projectId);
-  }
-
-  // ── Sub-workspace records ──
-  const { subWorkspaces } = await deps.call<{ subWorkspaces: SubWorkspace[] }>('workspace.loadSubWorkspaces', {});
-  const next = subWorkspaces.map((sub) => {
-    if (held.subWorkspaceIds.has(sub.id)) return sub;
-    const tabs = rewriteTabs(sub.tabs, moves, projectRootOf(undefined));
-    if (tabs === null) return sub;
-    result.changedSubWorkspaceIds.push(sub.id);
-    return { ...sub, tabs };
+  const result = await deps.call<MovedLayoutWalkResult>('workspace.followMoves', {
+    moves,
+    held: { projectIds: [...held.projectIds], subWorkspaceIds: [...held.subWorkspaceIds] },
   });
-  if (result.changedSubWorkspaceIds.length > 0) {
-    await deps.call('workspace.persistSubWorkspaces', { subWorkspaces: next });
-    for (const id of result.changedSubWorkspaceIds) deps.notifySubWorkspaceChanged(id);
-  }
+  for (const id of result.changedSubWorkspaceIds) deps.notifySubWorkspaceChanged(id);
   return result;
 }

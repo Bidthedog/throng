@@ -111,6 +111,10 @@ function checkValue(d: FieldDescriptor, value: unknown): SettingsProblem | null 
     foundText: show(value),
   });
 
+  // 053 FR-008 — the descriptor's own rule, the one its control applies before committing.
+  const invalid = d.validate?.(value) ?? null;
+  if (invalid !== null) return problem(`is invalid: ${invalid}`);
+
   const { lo, hi } = boundsOf(d);
   if (typeof lo === 'number' || typeof hi === 'number') {
     if (typeof value !== 'number' || !Number.isFinite(value)) {

@@ -137,10 +137,10 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[throng-daemon] ${signal} received — shutting down`);
-    // Kill live terminals FIRST so exiting the daemon never orphans their conhost.exe
-    // hosts (or a de-elevated agent). Synchronous; done before the process exits.
+    // End live terminals FIRST so exiting the daemon never orphans their conhost.exe hosts (or a
+    // de-elevated agent) — and WAIT for those ends, escalating any that fail (051 FR-015, FR-015a).
     try {
-      terminals.shutdown();
+      await terminals.shutdown();
     } catch (error) {
       console.warn('[throng-daemon] terminal shutdown error:', error);
     }

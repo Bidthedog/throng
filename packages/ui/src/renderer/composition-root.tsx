@@ -11,6 +11,7 @@ import { ProjectsProvider } from './state/projects-store.js';
 import { SubWorkspacesProvider } from './state/subworkspaces-store.js';
 import { ConfirmProvider } from './confirm-dialog.js';
 import { ReplaceAllPrompt } from './search/replace-all-prompt.js';
+import { TerminalTitleContextFeeder } from './terminal/title-context.js';
 import { NotificationProvider } from './common/notification.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
@@ -130,6 +131,8 @@ export function CompositionRoot(): ReactElement {
               <ProjectsProvider client={services.projects}>
                 <SubWorkspacesProvider client={services.subWorkspaces}>
                   <ReplaceAllPrompt />
+                  {/* 053 — the template, limits and names a terminal panel's title is rendered from. */}
+                  <TerminalTitleContextFeeder />
                   <App />
                   {/* 045 FR-166 — one link hint per WINDOW (each renderer is its own process). */}
                   <LinkHint />

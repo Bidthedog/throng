@@ -1102,22 +1102,6 @@ textarea,
 }
 
 /* The Panel's assigned type, shown as a small muted pill after its name (005). */
-/* The terminal's live working directory (012), shown after the panel title so the
-   path is visible even when a full-screen program hides the prompt. Muted, and the
-   first thing to truncate when the header is tight (the name always wins). */
-.panel-box__cwd {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-left: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--throng-colour-textMuted);
-  direction: rtl; /* keep the tail (the deepest folder) visible when truncated */
-  text-align: left;
-}
-
 /* Panel-type marker icon (012) — a small glyph at the head of the title, before
    the name, indicating the panel's type. Replaces the former type/flavour text
    pill; the type and flavour now live in its hover title. */

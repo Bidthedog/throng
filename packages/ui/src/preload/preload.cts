@@ -131,6 +131,12 @@ contextBridge.exposeInMainWorld('throng', {
     ipcRenderer.on('throng:appClose:closing', handler);
     return () => ipcRenderer.removeListener('throng:appClose:closing', handler);
   },
+  // Closing with Terminate all, announced to every window before any terminal is ended (005 US3).
+  onAppCloseTerminating: (cb: () => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on('throng:appClose:terminating', handler);
+    return () => ipcRenderer.removeListener('throng:appClose:terminating', handler);
+  },
   appCloseChoice: (choice: 'leave' | 'terminate' | 'cancel') =>
     ipcRenderer.send('throng:appClose:choice', choice),
   // The shutdown drain (019 / FR-010, issue #86): before allowing the close, main asks each
@@ -454,15 +460,20 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:terminal:cwd', handler);
       return () => ipcRenderer.removeListener('throng:terminal:cwd', handler);
     },
-    // 025 FR-019: which command currently holds a terminal — the twin of onCwd above.
-    onCommand: (cb: (e: { panelId: string; command: string | null }) => void) => {
-      const handler = (_event: unknown, e: { panelId: string; command: string | null }): void => cb(e);
+    // 025 FR-019: which command currently holds a terminal — the twin of onCwd above — and 053's
+    // `arch` of the program it names (null/absent when idle or unreadable), and when the reading began, passed
+    // through unchanged.
+    onCommand: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => {
+      const handler = (_event: unknown, e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }): void =>
+        cb(e);
       ipcRenderer.on('throng:terminal:command', handler);
       return () => ipcRenderer.removeListener('throng:terminal:command', handler);
     },
-    onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean }) => void) => {
-      const handler = (_event: unknown, e: { panelId: string; code: number | null; unexpected: boolean }): void =>
-        cb(e);
+    onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number }) => void) => {
+      const handler = (
+        _event: unknown,
+        e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number },
+      ): void => cb(e);
       ipcRenderer.on('throng:terminal:exit', handler);
       return () => ipcRenderer.removeListener('throng:terminal:exit', handler);
     },
@@ -810,6 +821,11 @@ contextBridge.exposeInMainWorld('throng', {
     verifyPath: (panelId: string) => ipcRenderer.send('throng:editor:verifyPath', panelId),
     /** The authority's current text + version, for a view that has fallen out of step. */
     resync: (panelId: string) => ipcRenderer.invoke('throng:editor:resync', panelId),
+    /** 052 FR-012 — Discard on a replaced document: show the file now at its path instead. */
+    discardReplaced: (panelId: string) => ipcRenderer.invoke('throng:editor:discardReplaced', panelId),
+    /** 052 R7 — a restored linked panel re-links to its owner; `null` when the owner is not open. */
+    link: (panelId: string, ownerId: string, tabId?: string | null) =>
+      ipcRenderer.invoke('throng:editor:link', { panelId, ownerId, tabId }),
     /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
     restoreRecovered: (panelId: string, text: string, history?: unknown) =>
       ipcRenderer.invoke('throng:editor:restoreRecovered', { panelId, text, history }),
@@ -855,6 +871,10 @@ contextBridge.exposeInMainWorld('throng', {
         movedTo?: string;
         /** 050 FR-035 — with `movedTo`: true = moved out of the panel's project, false = back in it. */
         movedOut?: boolean;
+        /** 052 FR-011 — set: this panel shows that panel's document now (with `reset`); null: unlinked. */
+        linkedTo?: string | null;
+        /** 052 FR-012 — true: a Replace landed on this dirty document's path; false: ordinary again. */
+        replaced?: boolean;
         /** 047 R3 — a document or standalone preview's fold state changed. `key` names it, not `panelId`. */
         foldState?: { key: string; state: unknown };
       }) => void,
@@ -871,6 +891,8 @@ contextBridge.exposeInMainWorld('throng', {
         wordWrap?: boolean;
           movedTo?: string;
           movedOut?: boolean;
+          linkedTo?: string | null;
+          replaced?: boolean;
           foldState?: { key: string; state: unknown };
         },
       ): void => cb(msg);

@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-restricted-imports -- FR-017: startup only, before the service serves (main.ts reaps a dead daemon's orphans before `server.start()`)
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 

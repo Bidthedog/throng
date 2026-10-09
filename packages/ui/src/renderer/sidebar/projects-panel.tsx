@@ -20,7 +20,7 @@ import { IconButton } from '../common/icon-button.js';
 import { useErrorNotice } from '../common/notification.js';
 import { allEditorStates, useDirtyProjectKey } from '../editor/editor-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
-import { saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
+import { failedBeyondSaveAs, saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import {
   DndContext,
@@ -610,7 +610,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
         // 050 FR-036 — a moved-out editor is passed by Save All; Save As is its way to keep the text.
         if (
           !result ||
-          result.failed.length > 0 ||
+          failedBeyondSaveAs(result.failed).length > 0 ||
           result.skippedUnpathed.length > 0 ||
           !(await saveDirtyMovedOutEditors(id))
         ) {

@@ -132,6 +132,7 @@ interface PanelFailureBannerRetryProps extends PanelFailureBannerCommon {
   onCancel: () => void;
   onClose?: never;
   copyable?: never;
+  actions?: never;
 }
 
 /**
@@ -151,9 +152,37 @@ interface PanelFailureBannerCloseProps extends PanelFailureBannerCommon {
   copyable?: boolean;
   onRetry?: never;
   onCancel?: never;
+  actions?: never;
 }
 
-export type PanelFailureBannerProps = PanelFailureBannerRetryProps | PanelFailureBannerCloseProps;
+/**
+ * One decision a standing notice offers (052 FR-012). The label IS the consequence being consented to — the
+ * constitution's exception for decision buttons — so it is text, drawn as the button type that names its weight:
+ * `confirm` for the safe way out, `destroy` for the one that gives something up.
+ */
+export interface PanelFailureAction {
+  label: string;
+  type: 'confirm' | 'destroy';
+  onClick: () => void;
+}
+
+/**
+ * 052 FR-012 — a condition the USER resolves by choosing: the replaced notice (a Replace landed on a document that
+ * has unsaved changes). No Try again (nothing to retry), no Close (the notice goes when the condition does), and
+ * Copy details only where asked. The actions lead, in the order given.
+ */
+interface PanelFailureBannerDecisionProps extends PanelFailureBannerCommon {
+  actions: readonly PanelFailureAction[];
+  copyable?: boolean;
+  onRetry?: never;
+  onCancel?: never;
+  onClose?: never;
+}
+
+export type PanelFailureBannerProps =
+  | PanelFailureBannerRetryProps
+  | PanelFailureBannerCloseProps
+  | PanelFailureBannerDecisionProps;
 
 /**
  * Where the detail is (FR-041, T069b) — fixed wording, not the implementer's choice.
@@ -235,7 +264,12 @@ export function PanelFailureBanner({
   onCancel,
   onClose,
   copyable = false,
+  actions,
 }: PanelFailureBannerProps): ReactElement {
+  // Which of the three variants this is. Retry and Close are told apart by their callbacks, a decision
+  // banner by its `actions`; every control below keys on one of these rather than on a negation.
+  const isRetry = onRetry !== undefined || (onClose === undefined && actions === undefined);
+  const hasClose = onClose !== undefined;
   const copy = useCopyToClipboard();
   const { notify } = useNotify();
   const [retrying, setRetrying] = useState(false);
@@ -302,7 +336,7 @@ export function PanelFailureBanner({
         {retryFailed ? <span className="panel-failure__retry-failed">{RETRY_FAILED}</span> : null}
         {/* A Close banner (044 FR-027) has no Copy control, so a pointer to one would name a route that is
             not there (030 FR-041): it draws none. */}
-        {onClose === undefined ? (
+        {isRetry ? (
           <span className="panel-failure__pointer">{notified ? POINTER : POINTER_COPY_ONLY}</span>
         ) : null}
       </div>
@@ -312,7 +346,17 @@ export function PanelFailureBanner({
         labels are 029's own, unchanged, which is what keeps the terminal's shipped behaviour and
         its tests describing the same thing they always did.
       */}
-      {onClose === undefined ? (
+      {actions?.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className={`panel-failure__action panel-failure__action--${action.type}`}
+          onClick={action.onClick}
+        >
+          {action.label}
+        </button>
+      ))}
+      {isRetry ? (
         <IconButton
           token="retry"
           title="Try again"
@@ -326,7 +370,7 @@ export function PanelFailureBanner({
         ships `⎘` for it — a component that hard-coded 📋 would ignore the user's icon pack and
         render something the rest of the application does not use.
       */}
-      {onClose === undefined || copyable ? (
+      {isRetry || copyable ? (
         <IconButton
           token="copy"
           title="Copy details"
@@ -342,19 +386,19 @@ export function PanelFailureBanner({
                 detail,
                 note,
                 retryFailed,
-                pointer: onClose !== undefined ? 'none' : notified ? 'notified' : 'copy-only',
+                pointer: !isRetry ? 'none' : notified ? 'notified' : 'copy-only',
               }),
               subject,
             )
           }
         />
       ) : null}
-      {onClose === undefined ? (
-        <IconButton token="dismiss" title="Clear panel type" className="panel-failure__control" onClick={onCancel} />
-      ) : (
+      {isRetry ? (
+        <IconButton token="dismiss" title="Clear panel type" className="panel-failure__control" onClick={() => onCancel?.()} />
+      ) : hasClose ? (
         // 044 FR-027 — Close, the panel's own removal, in the last slot.
         <IconButton token="dismiss" title="Close" className="panel-failure__control" onClick={onClose} />
-      )}
+      ) : null}
     </div>
   );
 }

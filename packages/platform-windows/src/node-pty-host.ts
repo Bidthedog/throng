@@ -1,8 +1,10 @@
 import { createRequire } from 'node:module';
-import { execFile, execFileSync } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFileOffLoop } from './off-loop-exec.js';
 import process from 'node:process';
 import {
+  TERMINAL_END_TIMEOUT_MS,
+  assignConhosts,
+  escalationTargets,
   passthroughDeElevator,
   sanitizeSpawnEnv,
   shouldDeElevate,
@@ -10,13 +12,14 @@ import {
   type IElevationState,
   type ChildProcess,
   type IPtyHost,
+  type ProcessSurvivor,
   type PtyHandle,
   type PtyStartOptions,
 } from '@throng/core';
 import { dropInheritedModulePath } from './spawn-env-windows.js';
 import { descendantsOf, type ProcessTreeRow } from './process-tree.js';
-
-const execFileAsync = promisify(execFile);
+import { ATTACHED_HELPER_SOURCE, readAttachedProcesses } from './attached-processes.js';
+import { createExecutableArchReader } from './executable-arch.js';
 
 /**
  * Windows `IPtyHost` (005 Phase C) over node-pty/ConPTY, owned by the **daemon**.
@@ -37,7 +40,7 @@ interface NodePty {
   onExit(cb: (e: { exitCode: number; signal?: number }) => void): { dispose(): void };
 }
 
-interface NodePtyModule {
+export interface NodePtyModule {
   spawn(
     file: string,
     args: string[] | string,
@@ -58,6 +61,8 @@ interface Session {
   readonly proc: NodePty;
   /** Spawn order — lets us attribute conhosts positionally (created in spawn order). */
   readonly seq: number;
+  /** Epoch ms read just before the spawn: no host created earlier can be this session's (051 R5). */
+  readonly spawnedAt: number;
   /**
    * The OS pid of this terminal's `conhost.exe` host (a child of THIS process, a
    * sibling of the shell). Discovered shortly after spawn. Needed because when a
@@ -65,25 +70,77 @@ interface Session {
    * conhost can no longer be reaped via node-pty — so we taskkill it by pid.
    */
   conhostPid: number | null;
+  /** Settles once an attribution pass that started AFTER this spawn has run (051 FR-014). */
+  conhostReady: Promise<void>;
+  /** Resolves when the shell's exit is observed. */
+  readonly exited: Promise<void>;
+  /** Resolves once, after the exit, the host has been reaped. */
+  reaped: Promise<void>;
+  /** The in-flight end, so a second request returns the same outcome. */
+  ending: Promise<void> | null;
 }
+
+/** What `NodePtyHost` can be handed instead of the real thing — node-pty itself, and the limit. */
+export interface NodePtyHostDeps {
+  /** node-pty, or a stand-in for tests. Loaded lazily from `node-pty` when absent. */
+  pty?: NodePtyModule;
+  /** The limit for every OS request this host makes on its own behalf (051 FR-013a). */
+  timeoutMs?: number;
+}
+
+/** Resolve `true` if `promise` settles within `ms`, `false` otherwise; never rejects. */
+function within(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  if (ms <= 0) return Promise.race([promise.then(() => true, () => true), Promise.resolve(false)]);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+    );
+  });
+}
+
+const inSeconds = (ms: number): string => {
+  const s = Math.round(ms / 1000);
+  return s === 1 ? '1 second' : `${s} seconds`;
+};
 
 export class NodePtyHost implements IPtyHost {
   private readonly pty: NodePtyModule;
+  private readonly limitMs: number;
   private readonly sessions = new Map<number, Session>();
   private seqCounter = 0;
+  /** Hosts of exited sessions whose reap is still running — never candidates for a new session. */
+  private readonly reaping = new Set<number>();
+  /** Attribution passes run one at a time, each on a fresh snapshot (051 R5). */
+  private attribution: Promise<void> = Promise.resolve();
+  private readonly archReader = createExecutableArchReader();
 
   /**
    * @param elevation reports whether the daemon itself is elevated (FR-025a).
    * @param deElevator OS mechanism that rewrites a launch to run de-elevated
    *   (FR-025c mixed mode). Defaults to the no-op passthrough — in which case an
    *   elevated daemon spawns every terminal elevated (the pre-mixed-mode behaviour).
+   * @param deps node-pty and the request limit; production passes neither.
    */
   constructor(
     private readonly elevation?: IElevationState,
     private readonly deElevator: IDeElevator = passthroughDeElevator,
+    deps: NodePtyHostDeps = {},
   ) {
-    const require = createRequire(import.meta.url);
-    this.pty = require('node-pty') as NodePtyModule;
+    this.limitMs = deps.timeoutMs ?? TERMINAL_END_TIMEOUT_MS;
+    if (deps.pty) {
+      this.pty = deps.pty;
+    } else {
+      const require = createRequire(import.meta.url);
+      this.pty = require('node-pty') as NodePtyModule;
+    }
   }
 
   start(opts: PtyStartOptions): PtyHandle {
@@ -103,6 +160,7 @@ export class NodePtyHost implements IPtyHost {
     // to give cmd the user's own quoting intact (it never un-escapes a quoted argv entry).
     const spawnArgs: string[] | string =
       opts.commandLine !== undefined && file === opts.file ? opts.commandLine : args;
+    const spawnedAt = Date.now();
     const proc = this.pty.spawn(file, spawnArgs, {
       cwd: opts.cwd,
       cols: opts.cols,
@@ -173,57 +231,90 @@ export class NodePtyHost implements IPtyHost {
        * @core tests.
        */
     });
-    const session: Session = { proc, seq: this.seqCounter++, conhostPid: null };
+    let observeExit!: () => void;
+    const session: Session = {
+      proc,
+      seq: this.seqCounter++,
+      spawnedAt,
+      conhostPid: null,
+      conhostReady: Promise.resolve(),
+      exited: new Promise<void>((resolve) => (observeExit = resolve)),
+      reaped: Promise.resolve(),
+      ending: null,
+    };
     this.sessions.set(proc.pid, session);
-    // Discover this terminal's conhost pid NOW, at spawn, while it is unambiguous and
-    // before the terminal can be killed/exited. The ConPTY host exists by the time
-    // spawn() returns, so this resolves it in one pass. Doing it here (not in the
-    // exit/kill hot path) keeps process termination — and its notifications — prompt.
-    this.attributeConhosts();
     proc.onExit(() => {
-      // The shell exited on its OWN. taskkill of the shell is what triggers this, but
-      // node-pty 1.1.0 never closes the pseudoconsole for a self-exited shell — so its
-      // conhost.exe host would leak. Reap it by the pid we tracked at spawn.
-      const s = this.sessions.get(proc.pid);
-      this.sessions.delete(proc.pid);
-      if (s?.conhostPid) this.taskkill(s.conhostPid);
+      observeExit();
+      // The shell exited — on its own, or because `end` asked. node-pty 1.1.0 never closes the
+      // pseudoconsole for an exited shell, so its conhost.exe host would leak: reap it by the pid
+      // attributed at spawn, once that attribution has run (051 FR-014).
+      session.reaped = this.reapAfterExit(proc.pid, session);
     });
+    // Discover this terminal's conhost pid now, while it is unambiguous — but on an ASYNC snapshot
+    // (051 R5): the synchronous scan this replaced stopped every terminal for ~0.6 s per start.
+    session.conhostReady = this.queueAttribution();
     return { pid: proc.pid };
   }
 
+  /** Remove the exited session and end its host, after the session's attribution has run. */
+  private async reapAfterExit(pid: number, session: Session): Promise<void> {
+    await session.conhostReady;
+    // The pass that should have found it may have failed (a timed-out table read); one more, while
+    // the session is still listed as pending, so its host is not left behind (review finding 4).
+    if (session.conhostPid === null) await this.queueAttribution();
+    const host = session.conhostPid;
+    if (host !== null) this.reaping.add(host);
+    if (this.sessions.get(pid) === session) this.sessions.delete(pid);
+    if (host === null) return;
+    await this.taskkill(host, true, this.limitMs).catch(() => {});
+    this.reaping.delete(host);
+  }
+
   /**
-   * Attribute this process's not-yet-known `conhost.exe` hosts to pending sessions.
-   * node-pty creates each terminal's conhost during spawn, so any conhost a session
-   * owns is NEWER than one left orphaned by an earlier terminal — we therefore assign
-   * the NEWEST unclaimed conhosts (by creation order) to the pending sessions (in spawn
-   * order). Robust against a lingering orphan and against several terminals starting
-   * close together, and it never mis-attributes (hence never taskkills) a live host.
+   * Queue one attribution pass. Passes run one at a time and each reads a FRESH table started after
+   * every spawn it serves — a table read before a spawn cannot contain that spawn's host.
    */
-  private attributeConhosts(): void {
-    const pending = [...this.sessions.values()]
-      .filter((s) => s.conhostPid === null)
-      .sort((a, b) => a.seq - b.seq);
-    if (pending.length === 0) return;
-    const claimed = new Set(
-      [...this.sessions.values()].map((s) => s.conhostPid).filter((p): p is number => p !== null),
-    );
-    const free = conhostChildren(process.pid).filter((pid) => !claimed.has(pid)); // creation order
-    const mine = free.slice(Math.max(0, free.length - pending.length)); // the newest N
-    for (let i = 0; i < Math.min(mine.length, pending.length); i += 1) {
-      pending[i].conhostPid = mine[i];
+  private queueAttribution(): Promise<void> {
+    const pass = this.attribution.then(() => this.attributeConhosts());
+    this.attribution = pass.catch(() => {});
+    return this.attribution;
+  }
+
+  /** Attribute this process's not-yet-known console hosts to pending sessions (`assignConhosts`). */
+  private async attributeConhosts(): Promise<void> {
+    if (![...this.sessions.values()].some((s) => s.conhostPid === null)) return;
+    const hosts = await conhostChildren(process.pid, this.limitMs);
+    // Listed AFTER the read, so a terminal that spawned during it is pending too: every host in the
+    // table then belongs to a listed session or to none, which is what `assignConhosts` relies on.
+    const pending = [...this.sessions.values()].filter((s) => s.conhostPid === null);
+    const claimed = new Set([
+      ...[...this.sessions.values()].map((s) => s.conhostPid).filter((p): p is number => p !== null),
+      ...this.reaping,
+    ]);
+    const assigned = assignConhosts(pending, hosts, claimed);
+    for (const session of pending) {
+      const pid = assigned.get(session.seq);
+      if (pid !== undefined) session.conhostPid = pid;
     }
   }
 
-  private taskkill(pid: number): void {
-    try {
-      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        timeout: 5000,
-        stdio: 'ignore',
-      });
-    } catch {
-      /* already gone */
-    }
+  /**
+   * `taskkill /F` one pid — with its tree by default. Resolves when the OS has carried it out or the
+   * process was already gone (exit 128); rejects with the OS's own words otherwise (051 FR-013).
+   */
+  private taskkill(pid: number, tree: boolean, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      execFileOffLoop(
+        'taskkill',
+        ['/PID', String(pid), ...(tree ? ['/T'] : []), '/F'],
+        { windowsHide: true, timeout: Math.max(1, timeoutMs), encoding: 'utf8' },
+        (error, _stdout, stderr) => {
+          if (!error) return resolve();
+          if ((error as { code?: unknown }).code === 128) return resolve(); // not found: already gone
+          reject(new Error(String(stderr || error.message).trim() || 'the operating system refused to end it'));
+        },
+      );
+    });
   }
 
   write(handle: PtyHandle, data: string): void {
@@ -238,36 +329,95 @@ export class NodePtyHost implements IPtyHost {
     }
   }
 
-  kill(handle: PtyHandle): void {
+  /**
+   * End the terminal (051 R2): a HIDDEN `taskkill /T` of the shell takes the shell and its running
+   * command (FR-018) — node-pty's own kill() forks a console-list helper that flashes a console per
+   * kill. node-pty then observes the exit, and the host reaps the conhost: `taskkill` of the shell
+   * does not reach it, because the conhost is a sibling under THIS process, not a child of the shell.
+   *
+   * Nothing here blocks: the outcome arrives as the promise settling, within `timeoutMs`.
+   */
+  end(handle: PtyHandle, timeoutMs: number): Promise<void> {
     const session = this.sessions.get(handle.pid);
-    if (!session) return;
-    this.sessions.delete(handle.pid);
-    // 1) Kill the shell tree with a HIDDEN taskkill (shell + its running command,
-    //    FR-018). node-pty observes the shell's exit and emits its `exit` event, so
-    //    the daemon releases the root lock and notifies the UI. We avoid node-pty's
-    //    own kill() (it forks a console-list helper that flashes a console per kill).
-    this.taskkill(handle.pid);
-    // 2) Reap this terminal's conhost.exe host. taskkill of the shell does NOT — the
-    //    conhost is a sibling under THIS process, not a child of the shell — and
-    //    node-pty never closes the pseudoconsole for an already-exited shell. Reap by
-    //    tracked pid. (If killed within ~200ms of spawn, before attribution, the conhost
-    //    lingers until the daemon-shutdown dispose() sweep — a negligible window.)
-    if (session.conhostPid) this.taskkill(session.conhostPid);
+    if (!session) return Promise.resolve();
+    if (!session.ending) {
+      const ending: Promise<void> = this.runEnd(handle.pid, session, timeoutMs).catch((error: unknown) => {
+        // Only an end in flight is shared. A failed one must not answer every later request with the
+        // same old refusal and no taskkill (review finding 2).
+        if (session.ending === ending) session.ending = null;
+        throw error;
+      });
+      session.ending = ending;
+    }
+    return session.ending;
+  }
+
+  private async runEnd(pid: number, session: Session, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let refusal: Error | null = null;
+    // FR-014 / Principle III: a command its shell started through a launcher that has already exited
+    // is attached to the terminal's console but outside the shell's tree, so `taskkill /T` of the
+    // shell never reaches it — and it outlived every end (found by command-memory-attached). Asked
+    // BEFORE the shell goes, because the console can only be named through a living process.
+    const attached = await attachedPids(pid, Math.min(ATTACHED_READ_LIMIT_MS, timeoutMs / 2));
+    // Not awaited on its own: a taskkill that never returns must not outlast the limit.
+    void this.taskkill(pid, true, Math.max(1, deadline - Date.now())).catch((error: Error) => {
+      refusal = error;
+    });
+    for (const other of attached) {
+      if (other === pid || other === session.conhostPid || other === process.pid) continue;
+      void this.taskkill(other, true, Math.max(1, deadline - Date.now())).catch(() => {});
+    }
+    // A refusal is only final if the shell is still there: taskkill /T also reports children it
+    // could not reach, while the shell itself is gone.
+    if (!(await within(session.exited, deadline - Date.now()))) {
+      throw refusal ?? new Error(`did not end within ${inSeconds(timeoutMs)}`);
+    }
+    // FR-014: the host is ended after the exit, once identified — even if the end beat the
+    // identification. Bounded by the same limit; past it, the exit handler still reaps the host.
+    await within(session.reaped, deadline - Date.now());
   }
 
   /**
-   * Release every live PTY (daemon shutdown). Reaps each terminal's `conhost.exe` so
-   * exiting the daemon process never leaves orphaned pseudoconsole hosts behind.
+   * Escalation (051 FR-015a). Reads ONE fresh process table, ends every target individually and
+   * forcibly — no `/T`: the targets already ARE the tree, walked by parent pid so a shell that has
+   * already exited does not hide its descendants — then asks which of them is still alive.
    */
-  dispose(): void {
-    for (const [pid, session] of [...this.sessions]) {
-      this.taskkill(pid);
-      if (session.conhostPid) this.taskkill(session.conhostPid);
+  async forceEnd(handle: PtyHandle, timeoutMs: number): Promise<{ survivors: ProcessSurvivor[] }> {
+    const session = this.sessions.get(handle.pid);
+    // Without the session, the pid is not known to be this host's shell any more — it may have been
+    // recycled — so nothing is walked from it (review finding 3). Its exit has already been reaped.
+    if (!session) return { survivors: [] };
+    let rows: ProcessTreeRow[] = [];
+    try {
+      rows = [...(await readPidTable(timeoutMs)).values()].flat();
+    } catch (error) {
+      console.warn(`[terminal] forced end of ${handle.pid}: the process table could not be read (${String(error)})`);
     }
+    const targets = escalationTargets(rows, handle.pid, session.conhostPid, process.pid, session.spawnedAt);
+    await Promise.all(targets.map((pid) => this.taskkill(pid, false, timeoutMs).catch(() => {})));
+    return { survivors: await aliveAmong(targets, timeoutMs) };
+  }
+
+  /**
+   * Release every live PTY (shutdown, 051 FR-015a): end each, escalate any end that fails, log what
+   * survives. Then reap any conhost.exe host of ours never attributed to a session (e.g. one spawned
+   * moments before shutdown), so exiting never leaves an orphaned pseudoconsole host behind.
+   */
+  async dispose(): Promise<void> {
+    await Promise.all(
+      [...this.sessions.keys()].map(async (pid) => {
+        try {
+          await this.end({ pid }, this.limitMs);
+        } catch {
+          const { survivors } = await this.forceEnd({ pid }, this.limitMs);
+          logSurvivors(survivors);
+        }
+      }),
+    );
     this.sessions.clear();
-    // Final safety net: reap any conhost.exe host of ours we never attributed to a
-    // session (e.g. one spawned moments before shutdown).
-    for (const pid of conhostChildren(process.pid)) this.taskkill(pid);
+    const hosts = await conhostChildren(process.pid, this.limitMs);
+    await Promise.all(hosts.map(({ pid }) => this.taskkill(pid, true, this.limitMs).catch(() => {})));
   }
 
   onData(handle: PtyHandle, cb: (chunk: string) => void): () => void {
@@ -286,30 +436,22 @@ export class NodePtyHost implements IPtyHost {
     return () => sub.dispose();
   }
 
-  /** Throws when the process table cannot be read — see {@link descendantPids}. */
-  listChildPids(handle: PtyHandle): number[] {
-    return descendantPids(handle.pid);
-  }
-
   /**
-   * 046 (Unload) — the same pids, from an ASYNC snapshot shared by every terminal asked about
-   * together, and REJECTING when the table cannot be read.
+   * 046 (Unload), 051 FR-011 — descendant pids from an ASYNC snapshot shared by every terminal asked
+   * about together, REJECTING when the table cannot be read.
    *
-   * `listChildPids` scans the whole process table synchronously, once per terminal: measured at
-   * 0.55–0.7 s a scan (`Get-CimInstance Win32_Process`, five cold runs), so three terminals froze the
-   * daemon's one event loop — every terminal's output — for ~2 s and ran past main's call budget.
-   * Here the scan runs off the loop, and concurrent callers share one. A failure is never `[]`:
-   * that is what an idle shell looks like, and Unload would end a running process on it.
+   * A snapshot costs 0.55–0.7 s (`Get-CimInstance Win32_Process`, five cold runs); the synchronous
+   * per-terminal scan this replaced froze the daemon's one event loop — every terminal's output —
+   * for ~2 s with three terminals. A failure is never `[]`: that is what an idle shell looks like,
+   * and Unload would end a running process on it.
    */
   probeChildPids(handle: PtyHandle): Promise<number[]> {
     return pidTableSnapshot().then((byParent) => descendantsOf(byParent, handle.pid).map((row) => row.pid));
   }
 
   /**
-   * 025 FR-019/FR-022. Deliberately **async** — this runs on a repeating observation, and the
-   * daemon is single-threaded, so it must never block the event loop (FR-019b). That is the one
-   * thing separating it from `listChildPids` above, whose synchronous whole-table scan on the
-   * close path is a known pre-existing defect tracked as issue 190 and deliberately untouched here.
+   * 025 FR-019/FR-022. Async — this runs on a repeating observation, and the daemon is
+   * single-threaded, so it must never block the event loop (FR-019b).
    *
    * Resolves to `[]` on any failure so a bad snapshot leaves the last known command in place
    * rather than clearing it (FR-019e).
@@ -317,30 +459,157 @@ export class NodePtyHost implements IPtyHost {
   async listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]> {
     return descendantProcesses(handle.pid);
   }
+
+  /** 051 FR-040/FR-041 — one hidden helper run for every handle (`attached-processes.ts`). */
+  listAttachedProcesses(handles: readonly PtyHandle[]): Promise<Map<number, ChildProcess[]>> {
+    return readAttachedProcesses(
+      handles.map((h) => h.pid),
+      runAttachedHelper,
+      async () => {
+        const byPid = new Map<number, ChildProcess>();
+        for (const rows of (await processSnapshot(Date.now())).values()) for (const r of rows) byPid.set(r.pid, r);
+        return byPid;
+      },
+    );
+  }
+
+  /** 053 `{arch}` — the PE header's machine field, cached by path for this host's life. */
+  executableArch(path: string): Promise<string | null> {
+    return this.archReader(path);
+  }
+}
+
+/** How long an end waits to learn what is attached before it ends the shell anyway. */
+const ATTACHED_READ_LIMIT_MS = 1000;
+
+/**
+ * The pids attached to one shell's console, for an end (FR-014). `[]` when the helper fails or is
+ * slower than `limitMs`: an end never waits on this past its bound, it only ends less.
+ */
+async function attachedPids(shellPid: number, limitMs: number): Promise<number[]> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<number[]>((resolve) => {
+    timer = setTimeout(() => resolve([]), limitMs);
+  });
+  const read = runAttachedHelper([shellPid])
+    .then((out) => {
+      const pids = (JSON.parse(out) as Record<string, number[] | null>)[String(shellPid)];
+      return Array.isArray(pids) ? pids : [];
+    })
+    .catch(() => []);
+  const pids = await Promise.race([read, late]);
+  clearTimeout(timer);
+  return pids;
+}
+
+/** The attached-process helper, as a hidden node process off this event loop (051 FR-010). */
+function runAttachedHelper(shellPids: readonly number[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let koffiPath: string;
+    try {
+      koffiPath = createRequire(import.meta.url).resolve('koffi');
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    execFileOffLoop(
+      process.execPath,
+      ['-e', ATTACHED_HELPER_SOURCE, koffiPath, ...shellPids.map(String)],
+      {
+        encoding: 'utf8',
+        timeout: TERMINAL_END_TIMEOUT_MS,
+        windowsHide: true,
+        // Sanitised like every environment this host hands a child (#172); run as plain node.
+        env: { ...sanitizeSpawnEnv(process.env), ELECTRON_RUN_AS_NODE: '1' },
+      },
+      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+    );
+  });
+}
+
+
+/**
+ * A process's stdout, as a promise — the only way this host asks the OS anything (051 FR-010). Like every process
+ * this host starts, it is started on a worker thread (`off-loop-exec.ts`): a start is synchronous, measured at
+ * 60-230 ms while terminals end, and on this loop it held every terminal's input and output.
+ */
+function run(file: string, args: string[], timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFileOffLoop(
+      file,
+      args,
+      { encoding: 'utf8', timeout: Math.max(1, timeoutMs), windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+    );
+  });
 }
 
 /**
- * The pids of `conhost.exe` / `OpenConsole.exe` `--headless` processes that are direct children of
- * `parentPid`, in creation order. Each corresponds to one ConPTY the process owns.
+ * The `conhost.exe` / `OpenConsole.exe` `--headless` processes that are direct children of
+ * `parentPid`, with their OS creation time in epoch ms. Each corresponds to one ConPTY the process
+ * owns. A failed read is no hosts — attribution simply retries on the next pass.
  */
-function conhostChildren(parentPid: number): number[] {
+async function conhostChildren(
+  parentPid: number,
+  timeoutMs: number,
+): Promise<Array<{ pid: number; createdAt: number }>> {
   try {
-    const out = execFileSync(
+    const out = await run(
       'powershell.exe',
       [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | Sort-Object CreationDate | ForEach-Object { $_.ProcessId }`,
+        `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${parentPid} -and $_.CommandLine -match '--headless' } | ForEach-Object { "$($_.ProcessId) $(([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds())" }`,
       ],
-      { encoding: 'utf8', timeout: 5000, windowsHide: true },
+      timeoutMs,
     );
     return out
       .split(/\r?\n/)
-      .map((l) => Number(l.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0);
+      .map((l) => l.trim().split(/\s+/).map(Number))
+      .filter(([pid, at]) => Number.isFinite(pid) && pid! > 0 && Number.isFinite(at))
+      .map(([pid, at]) => ({ pid: pid!, createdAt: at! }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Which of `pids` is still running, with its image name (051 FR-015a's survivor report). An empty
+ * answer on failure, with a warning: the caller has already done everything it can.
+ */
+async function aliveAmong(pids: number[], timeoutMs: number): Promise<ProcessSurvivor[]> {
+  if (pids.length === 0) return [];
+  try {
+    const out = await run(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        // `exit 0`: a pid that is already gone makes Get-Process exit 1 even when told to be silent,
+        // and a mostly-ended tree is exactly when this runs — that is the answer, not a failure.
+        `Get-Process -Id ${pids.join(',')} -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Id),$($_.ProcessName)" }; exit 0`,
+      ],
+      timeoutMs,
+    );
+    const survivors: ProcessSurvivor[] = [];
+    for (const line of out.split(/\r?\n/)) {
+      const comma = line.indexOf(',');
+      const pid = Number(line.slice(0, comma));
+      if (comma > 0 && Number.isFinite(pid)) survivors.push({ pid, name: line.slice(comma + 1).trim() });
+    }
+    return survivors;
+  } catch (error) {
+    console.warn(`[terminal] could not check what survived a forced end (${String(error)})`);
+    return [];
+  }
+}
+
+/** FR-015a — a process still running after escalation goes to the log by pid and name. */
+export function logSurvivors(survivors: ProcessSurvivor[]): void {
+  for (const { pid, name } of survivors) {
+    console.warn(`[terminal] still running after a forced end: pid ${pid} (${name || 'unknown'})`);
   }
 }
 
@@ -348,10 +617,15 @@ const PID_TABLE_ARGS = [
   '-NoProfile',
   '-NonInteractive',
   '-Command',
-  'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId),$($_.ParentProcessId)" }',
+  'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId),$($_.ParentProcessId),$(([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds())" }',
 ];
-/** A snapshot's own cap. One measured at 0.55–0.7 s; past this the answer is "unknown" (busy). */
-const PID_TABLE_TIMEOUT_MS = 5000;
+/** A snapshot's own cap (051 FR-013a). One measured at 0.55–0.7 s; past this the answer is "unknown" (busy). */
+const PID_TABLE_TIMEOUT_MS = TERMINAL_END_TIMEOUT_MS;
+
+/** One FRESH pid table, never shared — escalation must see the tree as it is now. */
+async function readPidTable(timeoutMs: number): Promise<Map<number, ProcessTreeRow[]>> {
+  return parsePidTable(await run('powershell.exe', PID_TABLE_ARGS, timeoutMs));
+}
 
 /**
  * `pid,ppid` lines → a parent-indexed table. THROWS on a table with no rows: every live system has
@@ -361,34 +635,19 @@ const PID_TABLE_TIMEOUT_MS = 5000;
 function parsePidTable(csv: string): Map<number, ProcessTreeRow[]> {
   const childrenByParent = new Map<number, ProcessTreeRow[]>();
   for (const line of csv.split(/\r?\n/)) {
-    const comma = line.indexOf(',');
-    if (comma < 0) continue;
-    const pid = Number(line.slice(0, comma));
-    const ppid = Number(line.slice(comma + 1));
+    const [pidText, ppidText, startText] = line.trim().split(',');
+    if (ppidText === undefined) continue;
+    const pid = Number(pidText);
+    const ppid = Number(ppidText);
     if (!Number.isFinite(pid) || !Number.isFinite(ppid)) continue;
-    const row = { pid, ppid };
+    const started = Number(startText);
+    const row = Number.isFinite(started) && started > 0 ? { pid, ppid, startedAt: started } : { pid, ppid };
     const list = childrenByParent.get(ppid);
     if (list) list.push(row);
     else childrenByParent.set(ppid, [row]);
   }
   if (childrenByParent.size === 0) throw new Error('the process table came back empty');
   return childrenByParent;
-}
-
-/**
- * All live descendant pids of `rootPid`, via a single synchronous process snapshot.
- *
- * THROWS when the snapshot fails (046 review #2) — it used to return `[]`, which is what an idle
- * shell looks like, so a PowerShell timeout on a loaded machine classified a running build as idle.
- * The daemon's busy check catches the throw and counts the terminal busy.
- */
-function descendantPids(rootPid: number): number[] {
-  const csv = execFileSync('powershell.exe', PID_TABLE_ARGS, {
-    encoding: 'utf8',
-    timeout: PID_TABLE_TIMEOUT_MS,
-    windowsHide: true,
-  });
-  return descendantsOf(parsePidTable(csv), rootPid).map((row) => row.pid);
 }
 
 /**
@@ -407,7 +666,7 @@ function pidTableSnapshot(): Promise<Map<number, ProcessTreeRow[]>> {
   if (pidTableInFlight && fresh) return pidTableInFlight;
   pidTableSettledAt = 0;
   const snapshot = new Promise<string>((resolve, reject) => {
-    execFile(
+    execFileOffLoop(
       'powershell.exe',
       PID_TABLE_ARGS,
       { encoding: 'utf8', timeout: PID_TABLE_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
@@ -469,34 +728,46 @@ async function processSnapshot(now: number): Promise<Map<number, ChildProcess[]>
 const RAW_CONTROL_CHARS = new RegExp(`[${String.fromCharCode(0)}-${String.fromCharCode(0x1f)}]`, 'g');
 
 async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
-  const byParent = new Map<number, ChildProcess[]>();
   let json: string;
   try {
-    const { stdout } = await execFileAsync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress",
-      ],
-      { encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+    json = await new Promise<string>((resolve, reject) =>
+      execFileOffLoop(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate,ExecutablePath | ConvertTo-Json -Compress",
+        ],
+        { timeout: TERMINAL_END_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+        (error, stdout) => (error ? reject(error) : resolve(stdout)),
+      ),
     );
-    json = stdout;
-  } catch {
-    return byParent; // FR-019e: a failed observation keeps the last known value; it never clears it.
+  } catch (error) {
+    throw new Error('the process table could not be read', { cause: error });
   }
+  return parseProcessTable(json);
+}
+
+/**
+ * The `Get-CimInstance Win32_Process` snapshot, indexed by parent pid. Throws when it is not JSON.
+ * `ExecutablePath` (053 `{arch}`), like `CommandLine`, is null for processes this user cannot
+ * inspect; that is an empty string, never a dropped row.
+ */
+export function parseProcessTable(json: string): Map<number, ChildProcess[]> {
+  const byParent = new Map<number, ChildProcess[]>();
   let rows: Array<{
     ProcessId?: number;
     ParentProcessId?: number;
     CommandLine?: string | null;
     CreationDate?: string | null;
+    ExecutablePath?: string | null;
   }>;
   try {
     const parsed: unknown = JSON.parse(json.replace(RAW_CONTROL_CHARS, ' '));
     rows = Array.isArray(parsed) ? parsed : [parsed as never];
-  } catch {
-    return byParent;
+  } catch (error) {
+    throw new Error('the process table could not be parsed', { cause: error });
   }
 
   for (const row of rows) {
@@ -508,6 +779,7 @@ async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
       ppid,
       commandLine: typeof row.CommandLine === 'string' ? row.CommandLine : '',
       startedAt: parseCimDate(row.CreationDate),
+      executablePath: typeof row.ExecutablePath === 'string' ? row.ExecutablePath : '',
     };
     const list = byParent.get(ppid);
     if (list) list.push(entry);
@@ -519,7 +791,9 @@ async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
 
 /** All live descendants of `rootPid`, walked from the shared snapshot. */
 async function descendantProcesses(rootPid: number): Promise<ChildProcess[]> {
-  const byParent = await processSnapshot(Date.now());
+  // FR-019e: for command memory's child list a failed read is `[]`, which leaves the last known value
+  // in place. The attached path takes the rejection instead (FR-042, review finding 5).
+  const byParent = await processSnapshot(Date.now()).catch(() => new Map<number, ChildProcess[]>());
   return descendantsOf(byParent, rootPid);
 }
 

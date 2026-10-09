@@ -28,6 +28,9 @@ import {
   type PanelTitleSources,
 } from '@throng/core';
 import { getEditorState, useEditorStateVersion } from '../editor/editor-state.js';
+import { useTerminalCommandVersion } from '../terminal/command-store.js';
+import { useTerminalCwdVersion } from '../terminal/cwd-store.js';
+import { terminalTitleSource, useTerminalTitleContextVersion } from '../terminal/title-context.js';
 import { getTerminalTitle, useTerminalTitleVersion } from '../terminal/title-store.js';
 
 /**
@@ -54,7 +57,14 @@ function editorFilePath(panel: Panel): string | null {
  * name subscribes itself (`useTerminalTitleVersion` / `useEditorStateVersion`), as the hook below does.
  */
 export function panelTitleSources(panel: Panel): PanelTitleSources {
-  return { terminalTitle: getTerminalTitle(panel.id), editorFilePath: editorFilePath(panel) };
+  const terminal = terminalTitleSource(panel);
+  return {
+    terminalTitle: getTerminalTitle(panel.id),
+    editorFilePath: editorFilePath(panel),
+    // 053 — a terminal is named from the template over its live values (command, directory, title)
+    // and the window's settings; `undefined` for any other kind, and before the context is fed.
+    ...(terminal ? { terminal } : {}),
+  };
 }
 
 /**
@@ -111,6 +121,10 @@ export function usePanelDisplayNames(panels: Panel[], maxNameLength?: number): P
   // number of hook calls does not depend on how many panels there are.
   useTerminalTitleVersion();
   useEditorStateVersion();
+  // 053 FR-013 — and the other sources of a terminal's templated name.
+  useTerminalCommandVersion();
+  useTerminalCwdVersion();
+  useTerminalTitleContextVersion();
 
   return panels.map((panel) => ({
     name: panelDisplayTitle(panel, panelTitleSources(panel), maxNameLength),

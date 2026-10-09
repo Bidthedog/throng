@@ -16,7 +16,7 @@
 import { planUnload, projectPanelIdsInSubWorkspaces } from '@throng/core';
 import type { Tab, UnloadTerminalAction } from '@throng/core';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
-import { saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
+import { failedBeyondSaveAs, saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
 import { settleLayoutSaves } from '../state/layout-saves.js';
 import type { EditorSaveAllResult } from '../global.js';
 
@@ -85,7 +85,7 @@ export async function unloadProject(
       // text is Save As, asked here, and a cancelled one stops the unload like any other unsaved change.
       if (
         !result ||
-        result.failed.length > 0 ||
+        failedBeyondSaveAs(result.failed).length > 0 ||
         result.skippedUnpathed.length > 0 ||
         !(await saveDirtyMovedOutEditors(id))
       ) {
@@ -137,7 +137,17 @@ export async function unloadProject(
   // (FR-086, constitution III stated exception).
   if (action === 'endTerminals') {
     try {
-      await window.throng!.terminal!.killAll({ projectId: id, exceptPanelIds: spare });
+      // 051 FR-002/FR-005 — resolves once every end has settled. A failed end leaves an ordinary
+      // running terminal, which reattaches when the project opens again.
+      const { failed } = await window.throng!.terminal!.killAll({ projectId: id, exceptPanelIds: spare });
+      const n = failed?.length ?? 0;
+      if (n > 0) {
+        problems.push(
+          n === 1
+            ? `1 of its terminals could not be ended; it is still running and reattaches when you open ${projectName} again`
+            : `${n} of its terminals could not be ended; they are still running and reattach when you open ${projectName} again`,
+        );
+      }
     } catch (err) {
       problems.push(
         `throng could not end its terminals (${reasonOf(err)}). Some of them may still be running; they reattach when you open ${projectName} again`,

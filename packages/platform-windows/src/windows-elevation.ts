@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-restricted-imports -- FR-017: startup only, before the service serves (the daemon's composition root probes once; the answer is cached)
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import process from 'node:process';

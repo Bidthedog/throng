@@ -441,6 +441,23 @@ export function SettingsTab({
    * map did.
    */
   function row(d: FieldDescriptor): ReactElement {
+    // 053 FR-014 — a wide setting's control takes its own line under the description, the full width
+    // of the text column, instead of the narrow column beside it.
+    const control = (
+      <div
+        className={d.wide ? 'settings-row__control settings-row__control--wide' : 'settings-row__control'}
+        title={inertReason(d) ?? undefined}
+      >
+        <SettingControl
+          descriptor={d}
+          value={shownValue(d)}
+          options={dynamicOptions(d, themes, detected)}
+          optionLabels={dynamicOptionLabels(d, detected)}
+          disabled={isInert(d)}
+          onCommit={(v) => commit(d, v)}
+        />
+      </div>
+    );
     return (
             <div className="settings-row" key={d.key} data-testid={`setting-${d.key}`}>
               <div className="settings-row__meta">
@@ -455,20 +472,9 @@ export function SettingsTab({
                     {inertReason(d)}
                   </p>
                 ) : null}
+                {d.wide ? control : null}
               </div>
-              <div
-                className="settings-row__control"
-                title={inertReason(d) ?? undefined}
-              >
-                <SettingControl
-                  descriptor={d}
-                  value={shownValue(d)}
-                  options={dynamicOptions(d, themes, detected)}
-                  optionLabels={dynamicOptionLabels(d, detected)}
-                  disabled={isInert(d)}
-                  onCommit={(v) => commit(d, v)}
-                />
-              </div>
+              {d.wide ? null : control}
               <RowActions
                 kind="setting"
                 itemKey={d.key}

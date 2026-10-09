@@ -85,12 +85,6 @@ export interface TransferDeps {
   /** `explorer.replaceMode`, read live (FR-018f). Absent = the default, `recycle`. */
   replaceMode?: () => 'recycle' | 'permanent';
   /**
-   * 050 R19 — a job's (or an undo's, a redo's) moves have landed and the bracket is closed: rewrite the
-   * layouts no window holds (`moved-layout-walk.ts`). Called once per job with exactly the pairs that
-   * moved (after a roll back, what still stands), never with none. Fire-and-forget; a throw is dropped.
-   */
-  afterMoves?: (moves: readonly MovePair[]) => void;
-  /**
    * The least time between two progress events that only move the bytes (FR-039, R23): a large file
    * reports every chunk, and the window needs a bar, not an event per 64 KB. A state change is never held
    * back. 0 sends every byte report. Default {@link BYTES_TICK_MS}.
@@ -441,10 +435,8 @@ export class TransferService {
       const envelope = failure(e, 'lock', holder);
       return envelope.cause ? { error: envelope.error, cause: envelope.cause } : { error: envelope.error };
     } finally {
-      if (moves.length > 0) {
-        this.closeBracket(moved);
-        this.movesLanded(moved);
-      }
+      // Closing the bracket is what tells every consumer, the unheld-layout walk included (052 R1).
+      if (moves.length > 0) this.closeBracket(moved);
     }
   }
 
@@ -458,16 +450,6 @@ export class TransferService {
       this.deps.files.endMoveBracket(moves);
     } catch (err) {
       console.error('[transfer] closing the move bracket threw:', err);
-    }
-  }
-
-  /** 050 R19 — tell `afterMoves` what moved, isolated: the walk never fails the job that triggered it. */
-  private movesLanded(moves: readonly MovePair[]): void {
-    if (moves.length === 0 || !this.deps.afterMoves) return;
-    try {
-      this.deps.afterMoves(moves);
-    } catch (err) {
-      console.error('[transfer] afterMoves threw:', err);
     }
   }
 
@@ -614,9 +596,7 @@ export class TransferService {
       // moved files on it, greyed in their new home (FR-006).
       this.clipboardAfter(job);
       if (bracketOpen) {
-        const pairs = this.movedPairs(job);
-        this.closeBracket(pairs);
-        this.movesLanded(pairs);
+        this.closeBracket(this.movedPairs(job));
       }
     }
     const result = this.resultOf(job, job.failures);

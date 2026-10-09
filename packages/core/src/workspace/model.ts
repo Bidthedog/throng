@@ -71,6 +71,20 @@ export type EditorPanelConfig = {
    * the holding window's `MovedPathSync`; cleared (absent) when a move brings the path back inside.
    */
   movedOut?: true;
+  /**
+   * 052 FR-011 (R7) — this panel shows ANOTHER panel's document: a Replace landed the owner's file on the path
+   * this panel had open. `filePath` equals the owner's. Restored as a link while the owner is mounted; with the
+   * owner gone the key is dropped and `filePath` loads as an ordinary editor. Never rewritten by a move — panel
+   * ids do not move.
+   */
+  linkedTo?: string;
+  /**
+   * 052 T024 (FR-012) — a Replace landed on this DIRTY document's path: its buffer is kept, it holds no claim and
+   * is Saved As or discarded, never plainly saved. Written from the `replaced` relay by the holding window's
+   * `MovedPathSync`, so it survives a restart: the restore registers the document as replaced with the unsaved
+   * text that survived instead of loading the path another document holds. Absent once the state clears.
+   */
+  replaced?: true;
 };
 
 /**

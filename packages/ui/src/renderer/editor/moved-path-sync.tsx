@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { collectPanels } from '@throng/core';
+import { EDITOR_KIND, collectPanels, movedPanelConfig, type Panel } from '@throng/core';
+import { useProjects } from '../state/projects-store.js';
+import { getEditorState } from './editor-state.js';
 import { useWorkspace } from '../state/workspace-store.js';
 
 /**
@@ -34,10 +36,75 @@ export function MovedPathSync(): null {
   const ws = useWorkspace();
   const wsRef = useRef(ws);
   wsRef.current = ws;
+  const { projects } = useProjects();
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+
+  /*
+   * 052 FR-007 (research R5) — every editor panel the layout holds, shown or not, follows `throng:files:moved`.
+   * A panel in a tab not shown since launch has no coordinator document and so never hears `movedTo`; this pass
+   * is what carries its `filePath` (and `movedOut`) into the layout the next save persists. Core's rule, the same
+   * one main's walk applies, and idempotent: a mounted editor that already followed its `movedTo` is unchanged.
+   * Only `filePath` and `movedOut` are written — a history is `HistoryMirrorSync`'s.
+   */
+  useEffect(
+    () =>
+      window.throng?.files?.onMoved?.(({ moves }) => {
+        const { layout, updatePanelConfig } = wsRef.current;
+        for (const tab of layout?.tabs ?? []) {
+          for (const panel of collectPanels(tab.root) as Panel[]) {
+            if (panel.kind !== EDITOR_KIND) continue;
+            // A panel with a live editor state has a document, and the authority tells it (`movedTo`, handled
+            // below) — except a REPLACED one, whose path is another file's now and which must not follow it
+            // (052 R6). Only panels nobody has mounted have no state, and only they need this pass.
+            if (getEditorState(panel.id) !== undefined) continue;
+            const root = projectsRef.current.find((p) => p.id === panel.originProjectId)?.rootFolder;
+            const next = movedPanelConfig(panel, moves, root);
+            if (next === null) continue;
+            const held = panel.config as { filePath?: string; movedOut?: unknown } | undefined;
+            const filePath = typeof next.filePath === 'string' ? next.filePath : undefined;
+            const movedOut = next.movedOut === true;
+            const pathChanged = filePath !== undefined && filePath !== held?.filePath;
+            if (!pathChanged && (held?.movedOut === true) === movedOut) continue;
+            updatePanelConfig(panel.id, {
+              ...(filePath !== undefined ? { filePath } : {}),
+              movedOut: movedOut ? true : undefined,
+            });
+          }
+        }
+      }),
+    [],
+  );
 
   useEffect(
     () =>
       window.throng?.editor?.onSync?.((msg) => {
+        // 052 R7 — a Replace linked this panel to the owner's document, or unlinked it. The panel id is the
+        // owner's identity and never moves, so the link is written as given and never rewritten by a move.
+        // Checked against the held config first, like everything below: a repeat writes nothing.
+        if (msg.linkedTo !== undefined) {
+          const linkedLayout = wsRef.current.layout;
+          const linkedPanel = linkedLayout?.tabs
+            .flatMap((tab) => collectPanels(tab.root))
+            .find((p) => p.id === msg.panelId);
+          if (linkedPanel?.kind === 'editor') {
+            const heldLink = (linkedPanel.config as { linkedTo?: string } | undefined)?.linkedTo;
+            const nextLink = msg.linkedTo ?? undefined;
+            if (heldLink !== nextLink) wsRef.current.updatePanelConfig(msg.panelId, { linkedTo: nextLink });
+          }
+        }
+        // 052 T024 — the replaced state rides the layout too: written while it stands, removed when it clears.
+        if (typeof msg.replaced === 'boolean') {
+          const replacedPanel = wsRef.current.layout?.tabs
+            .flatMap((tab) => collectPanels(tab.root))
+            .find((p) => p.id === msg.panelId);
+          if (replacedPanel?.kind === 'editor') {
+            const heldReplaced = (replacedPanel.config as { replaced?: true } | undefined)?.replaced === true;
+            if (heldReplaced !== msg.replaced) {
+              wsRef.current.updatePanelConfig(msg.panelId, { replaced: msg.replaced ? true : undefined });
+            }
+          }
+        }
         // A move names the new path; so does a REPLACEMENT, which may be a different file put into the
         // panel from another window it is synced to (044 FR-110) — the same fact about the same panel.
         const filePath = typeof msg.movedTo === 'string' ? msg.movedTo : msg.reset?.filePath;

@@ -9,6 +9,13 @@ import { useSyncExternalStore } from 'react';
  */
 const cwds = new Map<string, string>();
 const listeners = new Set<() => void>();
+/** Bumped on every change, so a surface naming MANY panels subscribes once (053; see `title-store.ts`). */
+let version = 0;
+
+function emit(): void {
+  version += 1;
+  for (const l of listeners) l();
+}
 let unsubscribeBridge: (() => void) | null = null;
 
 function subscribe(notify: () => void): () => void {
@@ -17,7 +24,7 @@ function subscribe(notify: () => void): () => void {
       window.throng?.terminal?.onCwd?.((e) => {
         if (cwds.get(e.panelId) === e.cwd) return;
         cwds.set(e.panelId, e.cwd);
-        for (const l of listeners) l();
+        emit();
       }) ?? null;
   }
   listeners.add(notify);
@@ -37,7 +44,7 @@ function subscribe(notify: () => void): () => void {
 export function reportTerminalCwd(panelId: string, cwd: string): void {
   if (!cwd || cwds.get(panelId) === cwd) return;
   cwds.set(panelId, cwd);
-  for (const l of listeners) l();
+  emit();
 }
 
 /**
@@ -54,5 +61,18 @@ export function useTerminalCwd(panelId: string): string | undefined {
     subscribe,
     () => cwds.get(panelId),
     () => undefined,
+  );
+}
+
+/**
+ * Re-render when ANY panel's working directory changes; read the values with {@link peekTerminalCwd}.
+ * What lets a terminal's templated name (053 `{path}`, `{folder}`) follow the shell from a surface
+ * that names several panels at once.
+ */
+export function useTerminalCwdVersion(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => version,
+    () => version,
   );
 }

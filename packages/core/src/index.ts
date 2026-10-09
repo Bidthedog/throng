@@ -43,6 +43,7 @@ export type {
   IConfigSettings,
 } from './config/settings.js';
 export { defaultPipeName, sanitisePipeToken } from './config/pipe-endpoint.js';
+export { TERMINAL_END_TIMEOUT_MS } from './config/terminal-limits.js';
 export { compareVersions, isPlaceholderVersion, matchReleaseVersions } from './config/product-version.js';
 export type { ReleaseVersionSources, VersionMatchResult } from './config/product-version.js';
 export { evaluatePublishGate } from './config/publish-gate.js';
@@ -129,6 +130,7 @@ export type {
   PtyHandle,
   PtyExit,
   ChildProcess,
+  ProcessSurvivor,
 } from './abstractions/pty-host.js';
 export type { IDirectoryLock, LockHandle } from './abstractions/directory-lock.js';
 
@@ -298,6 +300,8 @@ export type { MatchSpan, CompiledQuery } from './picker/match.js';
 export { rankFilePath, rankStable, QUICK_OPEN_MAX_ROWS } from './picker/rank.js';
 // 031 US4 — grapheme-cluster counting and truncation (FR-033a-c, FR-037a-e).
 export { countGraphemes, truncateGraphemes, wasTruncated } from './text/grapheme.js';
+// 053 FR-012 — shortening `{command}` and `{path}` in a terminal's name; `{folder}`.
+export { shortenEnd, shortenPath, lastFolder } from './text/path-shorten.js';
 // 031 FR-040 — the persistence half: names are bounded at the layout WRITE boundary, never on read.
 export { boundLayoutNames } from './workspace/bound-names.js';
 // 031 FR-053a — where a new tab lands. Declared by the OPERATION (see app-settings.ts for why),
@@ -768,7 +772,9 @@ export {
   type PendingReconnect,
   type TerminalReloadAction,
   captureDecision,
+  commandDisplay,
   foregroundCommand,
+  foregroundProcess,
   normaliseCommand,
   isResolvedForm,
   isCapturableCommand,
@@ -822,6 +828,9 @@ export {
   type KeyChord,
   appendScrollback,
   trackAltScreen,
+  createWindowTitleScan,
+  scanWindowTitle,
+  type WindowTitleScan,
   createNegotiationScan,
   scanKeyboardNegotiation,
   type NegotiationScan,
@@ -831,6 +840,18 @@ export {
   type MouseReportingState,
   type WheelContext,
   type WheelRoute,
+  assignConhosts,
+  escalationTargets,
+  DEFAULT_TERMINAL_TITLE_TEMPLATE,
+  TITLE_PLACEHOLDERS,
+  parseTitleTemplate,
+  renderTitleTemplate,
+  validateTitleTemplate,
+  type TitlePlaceholder,
+  type TitleTemplate,
+  type TitleTemplateExpression,
+  type TitleTemplateNode,
+  type TitleTemplateParse,
 } from './terminal/index.js';
 export {
   countPanels,
@@ -873,7 +894,7 @@ export {
 } from './workspace/panel-title-migration.js';
 export type { Edge, NewTabIds, SplitDirection } from './workspace/operations.js';
 export { panelDisplayTitle, previewTitleParts, PREVIEW_TITLE_SUFFIX } from './workspace/panel-title.js';
-export type { PanelTitleSources, PreviewTitleParts } from './workspace/panel-title.js';
+export type { PanelTitleSources, PreviewTitleParts, TerminalTitleValues } from './workspace/panel-title.js';
 // 011 FR-030/031 — which verb a Panel's own removal controls wear. Extracted from a ternary inside
 // the panel header (035 T058), where it could only be read by launching the app.
 export { panelRemovalVerb } from './workspace/removal-verbs.js';

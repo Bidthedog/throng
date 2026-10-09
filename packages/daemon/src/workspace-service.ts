@@ -4,16 +4,23 @@ import {
   WORKSPACE_LOAD_SUBS_METHOD,
   WORKSPACE_PERSIST_SUBS_METHOD,
   WORKSPACE_SUMMARY_METHOD,
+  WORKSPACE_FOLLOW_MOVES_METHOD,
+  WORKSPACE_SAVE_SUB_METHOD,
+  WORKSPACE_DELETE_SUBS_METHOD,
   JSON_RPC_INVALID_PARAMS,
+  type WorkspaceFollowMovesParams,
+  type WorkspaceFollowMovesResult,
 } from '@throng/ipc-contract';
 import {
   validateMainLayout,
   migratePanelTitles,
   countPanels,
+  moveLayoutTabs,
   ProjectNotFoundError,
   type IProjectStore,
   type IUserContext,
   type IWorkspaceStore,
+  type Panel,
   type SubWorkspace,
   type WorkspaceLayout,
 } from '@throng/core';
@@ -116,6 +123,26 @@ export class WorkspaceIpcService {
       return { ok: true } as const;
     });
 
+    // 052 R3 — one record at a time, so no writer can put back a stale copy of a sibling (FR-005).
+    router.register(WORKSPACE_SAVE_SUB_METHOD, (params) => {
+      const sub = asObject(params).subWorkspace as SubWorkspace | undefined;
+      if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string' || !Array.isArray(sub.tabs)) {
+        throw new RpcError('A "subWorkspace" record is required', JSON_RPC_INVALID_PARAMS);
+      }
+      this.deps.workspaceStore.saveSubWorkspace(this.owner, migratePanelTitles(sub));
+      return { ok: true } as const;
+    });
+
+    router.register(WORKSPACE_DELETE_SUBS_METHOD, (params) => {
+      const ids = asObject(params).ids;
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) {
+        throw new RpcError('"ids" must be an array of strings', JSON_RPC_INVALID_PARAMS);
+      }
+      return { ok: true, deleted: this.deps.workspaceStore.deleteSubWorkspaces(this.owner, ids as string[]) } as const;
+    });
+
+    router.register(WORKSPACE_FOLLOW_MOVES_METHOD, (params) => this.followMoves(params));
+
     router.register(WORKSPACE_SUMMARY_METHOD, () => {
       // Aggregate counts across all of the owner's projects for the window title
       // (FR-040). A project with no saved layout contributes its default 1 tab/1
@@ -130,5 +157,79 @@ export class WorkspaceIpcService {
       }
       return { projects: projects.length, tabs, panels };
     });
+  }
+
+  /**
+   * 052 R2 — after an in-app move, rewrite every layout no window holds (FR-001 – FR-004, FR-006, FR-009).
+   *
+   * Synchronous from first read to last write, inside one transaction: the daemon serves one request at a time, so
+   * no save can land between this walk's read of a record and its write of it — the race that made the old
+   * main-side walk able to lose a window's change, or have its own undone (FR-005).
+   *
+   * A record that cannot be read or written is left exactly as it was, counted in `skipped`, and logged once; it
+   * never fails the walk, and the walk never fails the move (FR-009).
+   */
+  private followMoves(params: unknown): WorkspaceFollowMovesResult {
+    const raw = asObject(params);
+    const moves = raw.moves as WorkspaceFollowMovesParams['moves'] | undefined;
+    const held = raw.held as WorkspaceFollowMovesParams['held'] | undefined;
+    const only = raw.only as WorkspaceFollowMovesParams['only'] | undefined;
+    if (!Array.isArray(moves) || !held || !Array.isArray(held.projectIds) || !Array.isArray(held.subWorkspaceIds)) {
+      throw new RpcError('"moves" and "held" are required', JSON_RPC_INVALID_PARAMS);
+    }
+    const result: WorkspaceFollowMovesResult = { changedProjectIds: [], changedSubWorkspaceIds: [], skipped: 0 };
+    if (moves.length === 0) return result;
+
+    // `only` names the records to walk whatever `held` says (R4: a renderer's save that was in flight); otherwise
+    // every record a window does not hold.
+    const walks = (id: string, heldIds: readonly string[], onlyIds: readonly string[] | undefined): boolean =>
+      only !== undefined ? (onlyIds ?? []).includes(id) : !heldIds.includes(id);
+    const skip = (kind: string, id: string, why: unknown): void => {
+      result.skipped += 1;
+      console.warn(`[workspace] followMoves skipped ${kind} ${id}: ${why instanceof Error ? why.message : String(why)}`);
+    };
+
+    const store = this.deps.workspaceStore;
+    const projectList = this.deps.projectStore.list(this.owner);
+    const roots = new Map(projectList.map((p) => [p.id, p.rootFolder] as const));
+    const rootOf = (fallbackProjectId: string | undefined) => (panel: Panel): string | undefined =>
+      roots.get(panel.originProjectId) ?? (fallbackProjectId !== undefined ? roots.get(fallbackProjectId) : undefined);
+
+    store.atomically(() => {
+      for (const { id: projectId } of projectList) {
+        if (!walks(projectId, held.projectIds, only?.projectIds)) continue;
+        try {
+          const loaded = store.load(this.owner, projectId);
+          if (!loaded.restored) {
+            // Never write a record that did not restore: saving would persist the default the store synthesised.
+            if (loaded.reason === 'corrupt') skip('project', projectId, 'its saved layout could not be read');
+            continue;
+          }
+          const layout = migratePanelTitles(loaded.layout);
+          const tabs = moveLayoutTabs(layout.tabs, moves, rootOf(projectId));
+          if (tabs === null) continue;
+          store.save(this.owner, projectId, { ...layout, tabs });
+          result.changedProjectIds.push(projectId);
+        } catch (error) {
+          skip('project', projectId, error);
+        }
+      }
+
+      const corrupt = (id: string, error: unknown): void => {
+        if (walks(id, held.subWorkspaceIds, only?.subWorkspaceIds)) skip('sub-workspace', id, error);
+      };
+      for (const sub of store.loadSubWorkspaces(this.owner, corrupt)) {
+        if (!walks(sub.id, held.subWorkspaceIds, only?.subWorkspaceIds)) continue;
+        try {
+          const tabs = moveLayoutTabs(sub.tabs, moves, rootOf(undefined));
+          if (tabs === null) continue;
+          store.saveSubWorkspace(this.owner, migratePanelTitles({ ...sub, tabs }));
+          result.changedSubWorkspaceIds.push(sub.id);
+        } catch (error) {
+          skip('sub-workspace', sub.id, error);
+        }
+      }
+    });
+    return result;
   }
 }
