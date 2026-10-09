@@ -132,7 +132,7 @@ entire reason the runner exists.
 
 | lane | machine | when |
 |---|---|---|
-| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every non-draft PR to master, and dispatch |
 | `gate.yml` dispatch — the full gate | GitHub-hosted | On demand, the loop above |
 | `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
 

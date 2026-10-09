@@ -32,7 +32,7 @@ says done; `only` is for getting there.
 
 | lane | machine | when |
 |---|---|---|
-| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every push to master, every PR |
+| `ci.yml` — lint, tests, `@core` E2E | GitHub-hosted | Every non-draft PR to master, and dispatch |
 | `gate.yml` dispatch — the full gate | GitHub-hosted | On demand |
 | `gate.yml` nightly | GitHub-hosted | 01:00 UTC, master only |
 
