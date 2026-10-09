@@ -102,7 +102,11 @@ async function memoryTerminal(win: Page, project: string, root: string, flavour:
  * during its start-up with a screen of bare prompts and never ran it.
  */
 async function expectPrompt(term: Locator, flavour: string): Promise<void> {
-  await expect(term).toContainText(flavour === 'git-bash' ? 'MINGW64' : '>', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
+  // Git Bash's prompt names its MSYS2 environment, which is the installer's choice — MINGW64 here, UCRT64 on the
+  // hosted runner — so any of them is a prompt.
+  await expect(term).toContainText(flavour === 'git-bash' ? /MINGW(?:32|64)|UCRT64|CLANG(?:32|64|ARM64)|MSYS/ : '>', {
+    timeout: TERMINAL_OUTPUT_TIMEOUT_MS,
+  });
 }
 
 /** Type a command and wait for its output. */
