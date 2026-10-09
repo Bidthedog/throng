@@ -13,9 +13,9 @@ MT-06 – MT-10 test spec 052 (`specs/052-follow-moves-unheld-layouts/spec.md`).
 | MT-05 | Ending a terminal ends a command its launcher left behind | signed off | 070561703731 | 2026-10-09 | |
 | MT-06 | A rename reaches a closed sub-workspace and an unloaded project | signed off | 750756182653 | 2026-10-09 | |
 | MT-07 | A tab not shown since launch follows a rename across a restart | signed off | 750756182653 | 2026-10-09 | |
-| MT-08 | Replace onto a clean open file: both panels share it; undo restores both | signed off | 51fba5bcc4cc | 2026-10-09 | |
-| MT-09 | Replace onto a dirty open file keeps the changes, with Save As and Discard | signed off | ae3618b3f9f9 | 2026-10-09 | |
-| MT-10 | Replace onto an open file whose source is not open | signed off | 2faa7767f7ac | 2026-10-09 | |
+| MT-08 | Replace onto a clean open file: both panels share it; undo restores both | signed off | 407c795aee1e | 2026-10-09 | |
+| MT-09 | Replace onto a dirty open file keeps the changes, with Save As and Discard | signed off | 407c795aee1e | 2026-10-09 | |
+| MT-10 | Replace onto an open file whose source is not open | signed off | 407c795aee1e | 2026-10-09 | |
 | MT-11 | Every terminal names its running command, shell and directory | signed off | 070561703731 | 2026-10-09 | |
 | MT-12 | A custom title template renames every terminal at once | signed off | 070561703731 | 2026-10-09 | |
 | MT-13 | The title template is documented in Preferences | signed off | 102070d9deff | 2026-10-09 | |
