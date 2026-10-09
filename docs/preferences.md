@@ -63,7 +63,7 @@ when it writes the file; a retired key it once used is dropped.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Remove a project | `confirmations.destroyProject` | `double` | `none` · `single` · `double` | Confirmations before a project is removed. It is unregistered; no files are deleted. |
-| Unload project: default terminal action | `projects.unloadTerminalAction` | `keepRunning` | `keepRunning` (Keep terminals running) · `endTerminals` (End terminals) | What the project menu's **Unload Project** row does to the project's terminals; the menu's second Unload row does the other — **Unload Project and End Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep leaves every terminal alive, idle shells included, and reattaches each when the project is next loaded; End ends every terminal, running processes included. Neither row asks anything; the only prompt Unload can show is the usual one for unsaved editors. |
+| Unload project: default terminal action | `projects.unloadTerminalAction` | `keepRunning` | `keepRunning` (Keep terminals running) · `endTerminals` (End terminals) | What the project menu's **Unload Project** row does to the project's terminals; the menu's second Unload row does the other — **Unload Project and End Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep leaves every terminal alive, idle shells included, and reattaches each when the project is next loaded; End ends every terminal, running processes included; one that cannot be ended stays running, says so once, and reattaches when the project is next loaded. Neither row asks anything; the only prompt Unload can show is the usual one for unsaved editors. |
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
 | Destroy a panel | `confirmations.destroyPanel` | `double` | `none` · `single` · `double` | Confirmations before a panel is destroyed. |
 | Destroy a sub-workspace | `confirmations.destroySubWorkspace` | `double` | `none` · `single` · `double` | Confirmations before a sub-workspace is destroyed. |
@@ -200,6 +200,24 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Run as administrator by default | `terminals.defaultRunAsAdmin` | off | on · off | Ticks **Run as administrator** on new terminal panels. Whether a terminal can be elevated still depends on throng itself running elevated; this never elevates anything on its own. |
 | Command tracking interval | `terminals.commandPollMs` | 1,000 | 250 – 5,000 ms, step 250 | How often throng checks which command a terminal is running. Lower notices a new command sooner; higher does less work. |
 | Tell programs that links are supported | `terminals.advertiseHyperlinks` | on | on · off | Start terminal programs with `FORCE_HYPERLINK=1`, so tools that can print clickable links — Claude Code among them — do. Applies to terminals started afterwards. A `FORCE_HYPERLINK` the launching environment already carries is never overridden, in either direction, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`. Off does not stop throng recognising paths printed as plain text. |
+| Terminal title template | `terminals.titleTemplate` | `({title} ? "{app}: {title} \| " : {command} ? "{command} \| " : ""){shell}({path} ? " ({path})" : "")` | a [title template](#terminal-title-templates) | What a terminal panel is named, everywhere it is named. The panel-type icon is always shown beside it. |
+| Longest command in a terminal title | `terminals.titleCommandMaxLength` | 40 | 10 – 200, step 5 | `{command}` beyond this is shortened, with `…`. |
+| Longest directory in a terminal title | `terminals.titlePathMaxLength` | 40 | 10 – 200, step 5 | `{path}` beyond this keeps its root and last folder and drops folders from the middle. |
+
+### Terminal title templates
+
+`{command}` the running command · `{app}` its program · `{arch}` its architecture · `{title}` the title the running
+program set · `{shell}` the terminal type · `{path}` the working directory · `{folder}` its last folder ·
+`{project}` the owning project · `{admin}` `Admin` when elevated. Each is empty when there is nothing to show.
+
+- **Text shows as typed**, quotes included; `{name}` shows its value. `((` `))` `{{` `}}` show a bracket or brace.
+- **An expression** is `( … )`, or a placeholder followed by an operator. It is C#: text is a `"string"` (placeholders
+  work inside; `""` is a quote), and the operators are `c ? a : b`, `a ?? b`, `a || b`, `a && b` and `!a`, with C#'s
+  precedence. A value is true when it is not empty; `||`, `&&` and `!` may only be a condition before `?`.
+- The default, `({title} ? "{app}: {title} | " : {command} ? "{command} | " : ""){shell}({path} ? " ({path})" : "")`,
+  reads `claude: work on links | Git Bash (D:\git\throng)` while a program that titled itself runs,
+  `ping localhost -t | Git Bash (D:\git\throng)` while a command runs, and `Git Bash (D:\git\throng)` at a prompt.
+- In text, `((` is a bracket, so an expression that opens on a bracket needs a space: `( ({title} ?? {app}) ? … )`.
 
 ## Editor · Indentation
 

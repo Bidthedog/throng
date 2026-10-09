@@ -349,8 +349,8 @@ two `IPtyHost`s and chooses one per terminal:
 The daemon launches the agent at startup, de-elevated through `WindowsDeElevatedLauncher` when the
 daemon is elevated and as a plain child otherwise. The agent owns a private named pipe
 (`throng.ptyagent.<pid>.<id>`), and the daemon connects down to it. They speak a line-JSON protocol
-(`start`, `write`, `resize`, `kill`, `childpids`, `childprocs` one way; `ready`, `started`, `data`,
-`exit`, `error` the other), and each terminal is keyed by an integer the daemon assigns. The agent's
+(`start`, `write`, `resize`, `end`, `forceEnd`, `childpids`, `childprocs` one way; `ready`, `started`,
+`data`, `exit`, `error`, `ended`, `forceEnded` the other), and each terminal is keyed by an integer the daemon assigns. The agent's
 first frame names the daemon's pid, so the agent can end its terminals and exit if the daemon dies
 without closing the pipe.
 
@@ -370,6 +370,29 @@ deleted, the app closes with "end all", the shell exits by itself, or the daemon
 terminal deliberately leaves its panel in place, empty and ready to reuse. An unexpected exit shows
 the shell's output and exit code. A new daemon reaps de-elevation agents, headless conhosts and
 directory-lock holders whose parent has already died.
+
+**Ending without stopping the daemon.** One event loop serves every terminal, so nothing on it waits
+for the OS. `IPtyHost.end(handle, timeoutMs)` resolves once the exit has been observed and rejects
+with the reason when the end is refused or takes longer than `TERMINAL_END_TIMEOUT_MS` (5 s). While
+an end is in flight the session is *ending*: never reattached, never probed for busy. A failed end
+leaves an ordinary running terminal that reattaches on the next load. Daemon shutdown, app-close
+Terminate all, project deletion and a superseded end do not leave it running: they escalate with
+`forceEnd`, which ends the shell's whole tree and its console host by individual pid and logs
+anything that survives. `terminal.killAll` resolves with `{killed, failed}` once every end has
+settled. The root lock, the cwd read and every process-table read are asynchronous too, and every
+process the host starts (`taskkill`, the attached-process helper, PowerShell) is started on a worker
+thread (`off-loop-exec.ts`): starting a process is synchronous on Windows, and on the daemon's loop
+each start held every terminal's input and output. An ESLint rule fails the build on
+`execSync`, `execFileSync`, `spawnSync` or `Atomics.wait` in the daemon or platform sources. The two
+startup-only exceptions, the orphan reaper and the elevation probe, are marked at the call.
+
+**A terminal's name comes from a template.** `core/terminal/title-template.ts` parses and validates the
+[terminal title template](preferences.md#terminal-title-templates), and `core/workspace/panel-title.ts`
+renders it, shortening long commands and paths (`path-shorten.ts`). The values come from two channels
+that the renderer joins in `title-context.ts`: the daemon's once-a-second command observation
+(`terminal.command`, with the program's architecture and when its reading began) and the window title
+the program sets through its own output. A title that is the shell's own, or the one its prompt
+showed, is never presented as the program's.
 
 **The keyboard belongs to the terminal.** A chord throng consumes never reaches the shell, so which
 keys may be bound in a terminal scope is decided by the constitution's reserved and shadowable tiers.
@@ -505,6 +528,13 @@ operation: sources may come from any project's root, the target is always inside
 name clash is a question to the window that started the job, and the job's journal is what Cancel
 rolls back and what the undo entry is built from. A move between projects is one undo entry held in
 both projects' stacks.
+
+Every in-app move, whatever its route, ends in `in-app-moves.ts`. Open windows follow it for every
+panel they hold, shown or not. Then the daemon's `workspace.followMoves` rewrites every layout no
+window holds: unloaded and inactive projects, and closed sub-workspaces. It does this in one
+transaction, so no window's save can interleave with it. Sub-workspace records are written one at a
+time (`workspace.saveSubWorkspace`), never as a whole set, so no writer can put back a stale copy of
+another's record.
 
 Binds: [I. Project-First Context Isolation](../.specify/memory/constitution.md#i-project-first-context-isolation),
 [II. Platform-Abstracted Core](../.specify/memory/constitution.md#ii-platform-abstracted-core-os-agnostic).
