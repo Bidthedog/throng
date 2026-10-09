@@ -2,7 +2,7 @@ name: CI
 
 # Quality gates for throng (see the constitution, "Static analysis & linting"
 # and Principle V). Lint + type-check + the vitest layers + the Playwright-Electron
-# E2E suite all run on every push to master and every pull request.
+# E2E suite all run on every non-draft pull request to master (see `on:` below).
 #
 # Everything runs on Windows: throng is a Windows-first app whose terminal stack is
 # ConPTY / node-pty and whose de-elevation path shells out to Windows tools, so the
@@ -16,15 +16,20 @@ name: CI
 # the better-sqlite3 / node-pty native builds fail at `npm ci`. windows-2022 ships
 # VS 2022, which node-gyp detects. Revisit when node-gyp/npm gain VS 2026 support.
 
+# When it runs: a pull request to master that is NOT a draft, and an explicit dispatch. Nothing else.
+# A push to a branch or a draft PR starts nothing; marking the PR ready is what starts a run, and a
+# push to a ready PR re-runs it. The merge to master is not re-tested — the PR's run on its head
+# commit already tested that tree, and the merge needs that run green. Every job carries the draft
+# guard: `github.event.pull_request.draft` is empty on workflow_dispatch, so `!= true` lets it through.
 on:
-  push:
-    branches: [master]
   pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
-# A newer push to the same branch/PR cancels an in-flight run to save runner time.
+# A newer push to the same PR cancels an in-flight run to save runner time.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -34,6 +39,7 @@ env:
 jobs:
   lint:
     name: Lint & type-check
+    if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
@@ -51,6 +57,7 @@ jobs:
 
   test:
     name: Unit / integration / contract
+    if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -95,6 +102,7 @@ jobs:
 
   e2e:
     name: E2E (@core)
+    if: github.event.pull_request.draft != true
     runs-on: windows-2022
     # ONE JOB, the critical lane only (034 FR-056).
     #
@@ -222,6 +230,7 @@ jobs:
   # signal — and both are now REQUIRED checks on master, so neither can be quietly absent.
   e2e-admin:
     name: E2E (@admin, elevated)
+    if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 20
     env:

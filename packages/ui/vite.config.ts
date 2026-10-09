@@ -143,6 +143,9 @@ function chunkFor(rawId: string): string | null {
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
   if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
+  // The terminal panel and its stores — the next largest self-contained area, split for the same
+  // reason (053's title templates took the app chunk to 501 kB).
+  if (/\/src\/renderer\/terminal\//.test(id)) return 'app-terminal';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
   if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';

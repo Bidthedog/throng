@@ -40,7 +40,7 @@ env:
 jobs:
   # THE FULL E2E SUITE, and this is the only place it runs (034 FR-056, constitution v5.0.0).
   #
-  # CI gates every push on the `@core` lane — 35 critical journeys, single digit minutes. That is a
+  # CI gates every ready PR on the `@core` lane — 35 critical journeys, single digit minutes. That is a
   # deliberately smaller net, and this job is the other half of the trade: everything tagged
   # `@extended` runs here, once, before an installer is built. Without it the reduced CI surface
   # would not be a reduction, it would be a hole.
