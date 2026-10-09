@@ -87,9 +87,9 @@ test('Automatic starts a real shell — the control that proves this test can SE
      * assumptions rather than one — which is why this comment names them individually (#112: guard
      * per assumption, not per file).
      *
-     *   • `panel-cwd-<id>` (:96) — the working directory is read back from the shell the daemon
-     *     started. Under the de-elevated agent that readback never reaches the panel, so the
-     *     element does not appear at all and the poll burns its full 30s.
+     *   • the header title's `title` (:96) — the working directory is read back from the shell the
+     *     daemon started. Under the de-elevated agent that readback never reaches the panel, so the
+     *     directory does not appear in the title at all and the poll burns its full 30s.
      *   • `conhostChildren(daemon)` (:104) — an elevated daemon routes terminals through the agent,
      *     so the conhosts are the AGENT's children and the daemon's count is 0.
      *
@@ -111,7 +111,7 @@ test('Automatic starts a real shell — the control that proves this test can SE
         // A real shell, in the project's directory — not merely a rendered surface. `basename`
         // rather than the whole path, matching the idiom the other terminal specs use: the status
         // bar shows a display path, not necessarily the absolute one.
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', new RegExp(basename(root).replace(/\W/g, '.')), {
           timeout: 30_000,
         });
 
@@ -128,7 +128,7 @@ test('Automatic starts a real shell — the control that proves this test can SE
 
 test('Manual starts NO shell and no conhost, and offers Reload on each panel (039 FR-022/FR-023/FR-026)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
     /*
-     * Guarded for the daemon-owned-conhost assumption only — this test never reads `panel-cwd`.
+     * Guarded for the daemon-owned-conhost assumption only — this test never reads the directory from the header title.
      * `expect(baseline.length).toBeGreaterThan(0)` (:127) is the line that failed on the runner, in
      * 3s rather than the 30s the sibling test spent, because a zero count fails immediately.
      *

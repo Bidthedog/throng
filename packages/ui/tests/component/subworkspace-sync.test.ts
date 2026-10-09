@@ -19,7 +19,7 @@
  * `project-settings-dialog.test.ts` puts its seam at the bridge: `syncToExisting` RE-READS
  * `workspace.loadSubWorkspaces` before every add and RE-READS it again afterwards, so a bridge that
  * echoed a canned reply would leave every assertion below reading its own fixture back. Here the
- * fake holds the sub-workspace set as real state, `workspace.persistSubWorkspaces` REPLACES it, and
+ * fake holds the sub-workspace set as real state, `workspace.saveSubWorkspace` UPSERTS one record into it, and
  * `subworkspace.list` DERIVES `tabCount` / `panelCount` from whatever was last persisted — using the
  * same two lines the real repository uses (`packages/persistence/src/subworkspace-repository.ts:24`
  * `tabCount: tabs.length`, `:25` `panelCount: tabs.reduce((n, tab) => n + countPanels(tab.root), 0)`).
@@ -151,10 +151,21 @@ function fakeDaemon(
         case 'workspace.loadSubWorkspaces':
           reply = { subWorkspaces: subs };
           break;
-        case 'workspace.persistSubWorkspaces': {
-          subs = (params as { subWorkspaces: SubWorkspace[] }).subWorkspaces;
+        case 'workspace.saveSubWorkspace': {
+          // Per-record upsert (052 R3); `persists` records the set as it stands after each write.
+          const next = (params as { subWorkspace: SubWorkspace }).subWorkspace;
+          subs = subs.some((s) => s.id === next.id)
+            ? subs.map((s) => (s.id === next.id ? next : s))
+            : [...subs, next];
           persists.push(subs);
           reply = { ok: true };
+          break;
+        }
+        case 'workspace.deleteSubWorkspaces': {
+          const ids = (params as { ids: string[] }).ids;
+          subs = subs.filter((s) => !ids.includes(s.id));
+          persists.push(subs);
+          reply = { ok: true, deleted: ids };
           break;
         }
         case 'subworkspace.list':
@@ -583,7 +594,7 @@ describe('detaching into a NEW sub-workspace (FR-012/FR-018)', () => {
  *
  * The defect it was filed for is on the RENDERER side of that: `detach-context.tsx:158` used to
  * swallow the rejection in a fire-and-forget async block, so the user saw nothing at all. What
- * reaches the renderer from a failed persist is a rejected `workspace.persistSubWorkspaces` — and a
+ * reaches the renderer from a failed persist is a rejected `workspace.saveSubWorkspace` — and a
  * rejection raised by an aborting trigger is not distinguishable, there, from any other. So the
  * trigger is an elaborate way of arranging one rejected promise, and the rest of the launch is the
  * cost of arranging it.
@@ -601,7 +612,7 @@ describe('detaching into a NEW sub-workspace (FR-012/FR-018)', () => {
  */
 describe('a failed create surfaces, and leaves nothing behind (migrated from subworkspace-persist-error.e2e.ts:15)', () => {
   const FAILING = {
-    method: 'workspace.persistSubWorkspaces',
+    method: 'workspace.saveSubWorkspace',
     message: 'simulated persist failure',
   };
 

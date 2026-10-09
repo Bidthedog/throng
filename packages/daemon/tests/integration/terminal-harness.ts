@@ -38,7 +38,13 @@ export async function startTerminalDaemon(opts: { elevated?: boolean } = {}): Pr
   service.register(router);
   const server = new IpcServer({ pipeName }, router, events);
   await server.start();
-  return { pipeName, events, service, lockManager, router, server, stop: () => server.stop() };
+  // Stops as the daemon does (`main.ts`): every terminal ended, and its end awaited (051 FR-015),
+  // before the server goes — so a test's directory is free to remove the moment `stop` resolves.
+  const stop = async (): Promise<void> => {
+    await service.shutdown();
+    await server.stop();
+  };
+  return { pipeName, events, service, lockManager, router, server, stop };
 }
 
 let rpcId = 0;
@@ -70,7 +76,8 @@ export function rpcCall(pipeName: string, method: string, params: unknown): Prom
 }
 
 export interface EventsSocket {
-  notifications: Array<{ method: string; params: any }>;
+  /** Each frame with the time it arrived (051 FR-021 measures the gaps between them). */
+  notifications: Array<{ method: string; params: any; at: number }>;
   close(): void;
 }
 
@@ -78,7 +85,7 @@ export interface EventsSocket {
 export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
   return new Promise((resolve, reject) => {
     const socket: Socket = connect(pipeName);
-    const notifications: Array<{ method: string; params: any }> = [];
+    const notifications: Array<{ method: string; params: any; at: number }> = [];
     let buffer = '';
     let resolved = false;
     socket.setEncoding('utf8');
@@ -95,7 +102,7 @@ export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
           try {
             const msg = JSON.parse(line) as { id?: number; result?: unknown; method?: string; params?: unknown };
             if (msg.method) {
-              notifications.push({ method: msg.method, params: msg.params });
+              notifications.push({ method: msg.method, params: msg.params, at: Date.now() });
             } else if (!resolved && msg.result) {
               resolved = true;
               resolve({ notifications, close: () => socket.end() });

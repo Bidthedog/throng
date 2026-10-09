@@ -29,6 +29,24 @@ describe('answerChildPids (review #2)', () => {
     expect(logged.join('\n')).toContain('powershell timed out');
   });
 
+  it('051 FR-011 — ten requests arriving together are probed together, so the host answers them from one read', async () => {
+    // The one-read guarantee is NodePtyHost's (busy-probe.test.ts); what the agent owes it is never
+    // serialising the requests, which would turn ten probes into ten reads.
+    let inFlight = 0;
+    let peak = 0;
+    const probe = async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return [1];
+    };
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) => answerChildPids(probe, { pid: 500 + i }, { ...msg, reqId: i }, () => {})),
+    );
+    expect(peak).toBe(10);
+  });
+
   it('a key the agent no longer holds has no children — the terminal is gone, not unknown', async () => {
     const ev = await answerChildPids(() => Promise.reject(new Error('not called')), undefined, msg, () => {});
     expect(ev).toEqual({ ev: 'childpids', key: 7, reqId: 3, pids: [] });

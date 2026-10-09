@@ -104,7 +104,7 @@ async function withTerminal(
 
         const term = win.getByTestId(`terminal-${pid}`);
         await expect(term).toBeVisible();
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', new RegExp(basename(root).replace(/\W/g, '.')), {
           timeout: 25_000,
         });
         await body({ app, win, pid, data, term });

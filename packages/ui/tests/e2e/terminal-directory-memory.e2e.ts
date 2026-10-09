@@ -28,7 +28,7 @@ const FLAVOURS = ['cmd', 'windows-powershell', 'pwsh', 'git-bash'] as const;
  * never seen.
  *
  * THAT FILE IS NOW GONE (034 FR-045), absorbed here. Its whole body was: confirm a cmd
- * terminal, assert `panel-cwd-<pid>` shows the project root, type `cd deepdir`, assert the
+ * terminal, assert the header title (`panel-handle-<pid>`'s `title`) shows the project root, type `cd deepdir`, assert the
  * header follows. The `[cmd]` case below performs exactly those steps and then asserts two
  * things it never did — that the live xterm node SURVIVES the recording (no tear-down flash),
  * and that the directory reaches the persisted layout, which is what the next launch reads.
@@ -141,7 +141,7 @@ for (const flavour of FLAVOURS) {
 
           const term = win.getByTestId(`terminal-${pid}`);
           await expect(term).toBeVisible();
-          await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
+          await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', new RegExp(basename(root).replace(/\W/g, '.')), {
             timeout: 25_000,
           });
 
@@ -164,7 +164,7 @@ for (const flavour of FLAVOURS) {
           // The daemon's cwd observation is what directory memory is built on. Asserting the
           // header first separates "the shell never reported it" from "we saw it and failed to
           // persist it" — two very different bugs that look identical from the outside.
-          await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('deepdir', {
+          await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /deepdir/, {
             timeout: 25_000,
           });
 
@@ -220,13 +220,13 @@ test('with "Reopen in the last directory" OFF, nothing is remembered (FR-027a)',
         await expect(term).toBeVisible();
         // Wait for the shell to settle at the project root before typing, exactly as the
         // remembered case does — otherwise the `cd` races the prompt and never registers.
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText(basename(root), {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', new RegExp(basename(root).replace(/\W/g, '.')), {
           timeout: 25_000,
         });
         await term.click();
         await win.keyboard.type('cd deepdir');
         await win.keyboard.press('Enter');
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('deepdir', {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /deepdir/, {
           timeout: 25_000,
         });
 

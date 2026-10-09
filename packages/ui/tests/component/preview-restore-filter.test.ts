@@ -220,8 +220,8 @@ describe('a restored sub-workspace never mounts such a preview either (FR-067)',
     const bridge: ThrongBridge = {
       invoke<T>(method: string, params?: unknown): Promise<T> {
         if (method === 'workspace.loadSubWorkspaces') return Promise.resolve({ subWorkspaces: persisted.at(-1) ?? [sub] } as T);
-        if (method === 'workspace.persistSubWorkspaces') {
-          persisted.push((params as { subWorkspaces: SubWorkspace[] }).subWorkspaces);
+        if (method === 'workspace.saveSubWorkspace') {
+          persisted.push([(params as { subWorkspace: SubWorkspace }).subWorkspace]);
           return Promise.resolve({ ok: true } as T);
         }
         return Promise.reject(new Error(`unexpected RPC from the sub-workspace restore filter: ${method}`));
@@ -260,8 +260,8 @@ describe('a sub-workspace left with nothing to restore destroys itself instead (
     const bridge: ThrongBridge = {
       invoke<T>(method: string, params?: unknown): Promise<T> {
         if (method === 'workspace.loadSubWorkspaces') return Promise.resolve({ subWorkspaces: persisted.at(-1) ?? [sub] } as T);
-        if (method === 'workspace.persistSubWorkspaces') {
-          persisted.push((params as { subWorkspaces: SubWorkspace[] }).subWorkspaces);
+        if (method === 'workspace.saveSubWorkspace') {
+          persisted.push([(params as { subWorkspace: SubWorkspace }).subWorkspace]);
           return Promise.resolve({ ok: true } as T);
         }
         if (method === 'subworkspace.delete') {
@@ -280,7 +280,7 @@ describe('a sub-workspace left with nothing to restore destroys itself instead (
     await waitFor(() => expect(closeSubWorkspace).toHaveBeenCalledWith(SUB));
     expect(deleted).toEqual([SUB]);
     // The filter never fell back to persisting an empty-panel placeholder through the window's own
-    // `save` (`workspace.persistSubWorkspaces`) — the destroy route is the only write this run makes.
+    // `save` (`workspace.saveSubWorkspace`) — the destroy route is the only write this run makes.
     expect(persisted).toEqual([]);
   });
 });

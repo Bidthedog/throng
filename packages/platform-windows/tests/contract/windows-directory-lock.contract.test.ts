@@ -6,9 +6,9 @@ import { runDirectoryLockContract } from '@throng/core/testing';
 import { WindowsDirectoryLock } from '@throng/platform-windows';
 
 describe('WindowsDirectoryLock', () => {
-  it('satisfies the IDirectoryLock contract over real temp directories', () => {
+  it('satisfies the IDirectoryLock contract over real temp directories', async () => {
     let counter = 0;
-    runDirectoryLockContract({
+    await runDirectoryLockContract({
       make: () => new WindowsDirectoryLock(),
       makeDir: () => mkdtempSync(join(tmpdir(), 'throng-lock-')),
       nonExistentPath: () => join(tmpdir(), `throng-lock-missing-${Date.now()}-${counter++}`),

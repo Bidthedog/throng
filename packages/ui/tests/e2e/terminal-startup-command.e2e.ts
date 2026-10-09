@@ -248,8 +248,14 @@ test('the empty-panel form pre-fills from what the panel remembered (FR-007a)', 
      * test of FR-005 ("what the Panel remembered wins over the preference"). Before, the preference
      * and the memory agreed and the assertion could not tell them apart.
      */
-    await expect(win.getByTestId('terminal-startup-command')).toHaveValue('echo PREFILL_MARKER');
     await expect(win.getByTestId('terminal-remember-command')).toBeChecked();
+    await expect(win.getByTestId('terminal-flavour')).toHaveValue('cmd');
+    /*
+     * The Startup Command is the one remembered field that is now EMPTY, on purpose: 051 FR-046 supersedes 025
+     * FR-017 — with command memory on, a terminal that ends with nothing running clears its saved Startup Command,
+     * a typed one included. The `echo` had finished long before `exit`, so this panel ended at a bare prompt.
+     */
+    await expect(win.getByTestId('terminal-startup-command')).toHaveValue('');
   });
   } finally {
     cleanupTemp(root);

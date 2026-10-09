@@ -105,10 +105,21 @@ function fakeDaemon(projects: Record<string, Stored>, subs: SubWorkspace[]) {
         return Promise.resolve({ ok: true } as T);
       case 'workspace.loadSubWorkspaces':
         return Promise.resolve({ subWorkspaces: structuredClone(state.subs) } as T);
-      case 'workspace.persistSubWorkspaces':
+      // 052 R3 — the purge writes one record at a time, never the whole set.
+      case 'workspace.saveSubWorkspace': {
         writes.push({ method, params: structuredClone(params) });
-        state.subs = structuredClone(p.subWorkspaces!);
+        const one = structuredClone((params as { subWorkspace: SubWorkspace }).subWorkspace);
+        const at = state.subs.findIndex((s) => s.id === one.id);
+        if (at >= 0) state.subs[at] = one;
+        else state.subs.push(one);
         return Promise.resolve({ ok: true } as T);
+      }
+      case 'workspace.deleteSubWorkspaces': {
+        writes.push({ method, params: structuredClone(params) });
+        const ids = (params as { ids: string[] }).ids;
+        state.subs = state.subs.filter((s) => !ids.includes(s.id));
+        return Promise.resolve({ ok: true, deleted: ids } as T);
+      }
       default:
         return Promise.reject(new Error(`unexpected RPC from the preview purge: ${method}`));
     }
@@ -222,7 +233,11 @@ describe('purgeUnloadedPreviews over sub-workspace records (FR-063)', () => {
     expect(byId.has('emptied'), 'a sub-workspace cannot exist empty (003 FR-026b)').toBe(false);
     expect(panelIds(byId.get('untouched')!.tabs)).toEqual(['u1']);
     expect(panelIds(byId.get('held')!.tabs)).toEqual(['h1']);
-    expect(daemon.writes.filter((w) => w.method === 'workspace.persistSubWorkspaces')).toHaveLength(1);
+    // Only the records the purge changed are written — never a copy of the untouched or held ones (052 FR-005).
+    expect(daemon.writes).toEqual([
+      { method: 'workspace.saveSubWorkspace', params: { subWorkspace: byId.get('keeps-one') } },
+      { method: 'workspace.deleteSubWorkspaces', params: { ids: ['emptied'] } },
+    ]);
     expect(result.deletedSubWorkspaceIds).toEqual(['emptied']);
     // 044 US4 fix round 1, item 1 — a rewritten-but-kept record ('keeps-one') and a deleted one
     // ('emptied') both get the same broadcast a hand destroy sends; an untouched or held record does

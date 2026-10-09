@@ -37,8 +37,11 @@ class FakePtyHost implements IPtyHost {
   }
   write(): void {}
   resize(): void {}
-  kill(handle: PtyHandle): void {
+  async end(handle: PtyHandle): Promise<void> {
     this.killed.push(handle.pid);
+  }
+  async forceEnd(): Promise<{ survivors: never[] }> {
+    return { survivors: [] };
   }
   onData(): () => void {
     return () => {};
@@ -47,7 +50,7 @@ class FakePtyHost implements IPtyHost {
     this.exitCbs.set(handle.pid, cb);
     return () => this.exitCbs.delete(handle.pid);
   }
-  listChildPids(): number[] {
+  async probeChildPids(): Promise<number[]> {
     return [];
   }
   /** Test helper: fire the process-exit the real host emits asynchronously after kill. */
@@ -56,7 +59,7 @@ class FakePtyHost implements IPtyHost {
   }
 }
 
-const noopLock = { acquire: () => ({ path: 'x' }), release: () => {} };
+const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {} };
 
 function makeService() {
   const host = new FakePtyHost();

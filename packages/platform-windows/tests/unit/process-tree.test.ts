@@ -3,7 +3,7 @@ import { descendantsOf } from '../../src/process-tree.js';
 
 /**
  * The descendant walk behind command memory (`listChildProcesses`) and the close-time busy check
- * (`listChildPids`) must terminate on ANY process table Windows can hand it.
+ * (`probeChildPids`) must terminate on ANY process table Windows can hand it.
  *
  * Windows reuses pids, and a process keeps the parent pid it was born with after that parent has
  * exited. So a snapshot can say "X's parent is 100" when 100 is now a DIFFERENT process — the
@@ -81,7 +81,7 @@ describe('descendantsOf', () => {
   });
 
   it('terminates on a cycle even when no creation times are known', () => {
-    // `listChildPids` reads pids and parent pids only, so the age check has nothing to compare and
+    // `probeChildPids` reads pids and parent pids only, so the age check has nothing to compare and
     // the walk itself must refuse to revisit a process.
     const byParent = table([
       { pid: 200, ppid: 100, name: 'a' },

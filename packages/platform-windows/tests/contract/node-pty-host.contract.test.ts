@@ -1,18 +1,38 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { runPtyHostContract } from '@throng/core/testing';
 import { NodePtyHost } from '@throng/platform-windows';
 
 const cmd = process.env.ComSpec ?? 'cmd.exe';
+
+/** This process's live ConPTY hosts — every one belongs to a terminal some host here started. */
+function ownConhosts(): number[] {
+  const out = execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'conhost.exe' -or $_.Name -eq 'OpenConsole.exe') -and $_.ParentProcessId -eq ${process.pid} } | ForEach-Object { $_.ProcessId }`,
+    ],
+    { encoding: 'utf8', windowsHide: true },
+  );
+  return out
+    .split(/\r?\n/)
+    .map(Number)
+    .filter((n) => n > 0);
+}
 
 describe('NodePtyHost', () => {
   it(
     'satisfies the IPtyHost contract against a real shell',
     async () => {
       const cwd = mkdtempSync(join(tmpdir(), 'throng-pty-'));
+      const before = new Set(ownConhosts());
       try {
         await runPtyHostContract({
           make: () => new NodePtyHost(),
@@ -32,6 +52,15 @@ describe('NodePtyHost', () => {
            */
           startChildLine: () => 'ping -n 40 127.0.0.1\r\n',
         });
+        // 051 FR-014 / Principle III: every host the contract started — including the one ended
+        // before it could be identified, and the self-exited one reaped after its exit — is gone.
+        const deadline = Date.now() + 10_000;
+        let left = ownConhosts().filter((pid) => !before.has(pid));
+        while (left.length > 0 && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 250));
+          left = ownConhosts().filter((pid) => !before.has(pid));
+        }
+        expect(left, 'console hosts left behind by the contract').toEqual([]);
       } finally {
         rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }

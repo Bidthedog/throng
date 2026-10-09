@@ -13,7 +13,7 @@ import { TerminalService } from '../../src/terminal-service.js';
  * 046 US4 review #1 — Unload's busy decision on a terminal hosted by the de-elevated PTY agent.
  *
  * On an elevated throng every ordinary terminal runs in the agent (FR-025c), and the agent answers
- * a child-process query over a pipe, i.e. LATER. `PtyAgentHost.listChildPids` is synchronous: it
+ * a child-process query over a pipe, i.e. LATER. `PtyAgentHost` once offered a synchronous probe: it
  * sends the query and returns whatever the previous answer was — nothing at all for a session never
  * asked before. Unload asks exactly once: `terminal.list {includeBusy}` to decide whether to show a
  * dialog, then `terminal.closeIdle` to close the idle shells. If both read that empty cache, a shell
@@ -106,14 +106,15 @@ const unusedLocal: IPtyHost = {
   },
   write: () => {},
   resize: () => {},
-  kill: () => {},
+  end: () => Promise.resolve(),
+  forceEnd: () => Promise.resolve({ survivors: [] }),
   onData: () => () => {},
   onExit: () => () => {},
-  listChildPids: () => [],
+  probeChildPids: () => Promise.resolve([]),
   listChildProcesses: () => Promise.resolve([]),
 };
 
-const noopLock = { acquire: () => ({ path: 'x' }), release: () => {} };
+const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {} };
 
 let agent: FakeAgent | undefined;
 let host: PtyAgentHost | undefined;
