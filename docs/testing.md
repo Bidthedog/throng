@@ -95,7 +95,7 @@ Every E2E test carries exactly one significance tag and at least one category ta
 
 | Tag | Where it runs | Cap |
 | --- | --- | --- |
-| `@core` | every CI push (`ci.yml`, one job, one worker), and locally | **50** — a hard ceiling, guarded |
+| `@core` | every CI run of a non-draft pull request (`ci.yml`, one job, one worker), and locally | **50** — a hard ceiling, guarded |
 | `@extended` | the release lane, before an installer is built | none |
 
 Category tags — `@boot @terminal @editor @explorer @prefs @window @persistence @failure` — say what a

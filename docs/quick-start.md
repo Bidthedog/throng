@@ -72,6 +72,9 @@ Make a panel a **Terminal** and choose its **flavour** — Windows PowerShell, P
 Prompt, Git Bash, or one of your own — with optional shell arguments and a startup command such as
 `npm run dev`. Confirm, and you have a live shell at the project root.
 
+- **A terminal's name says what it is running**, its shell and its folder —
+  `ping localhost -t | Git Bash (D:\git\throng)` — and you can reshape it with the
+  [terminal title template](preferences.md#terminal-title-templates).
 - **Terminals outlive the window.** A background service owns them, so closing throng leaves them
   running; reopen it and they reattach with their scrollback. Closing asks what to do with any still
   busy.

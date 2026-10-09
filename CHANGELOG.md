@@ -29,6 +29,22 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+- **Terminals named after what they are running** ([#476](https://github.com/Bidthedog/throng/issues/476)): a terminal panel's name shows its running command, its shell and its folder — `ping localhost -t | Git Bash (D:\git\throng)` — and a program that titles itself shows as `node: <its title>`; the name returns to the shell and folder when the command stops.
+- **Terminal title template** setting: reshape every terminal's name from placeholders for the command, program, its title and architecture, the shell, the path or folder, the project and an administrator marker, with **Terminal command length** and **Terminal path length** limits for long commands and deep folders.
+- **Renames and moves reach every layout** ([#397](https://github.com/Bidthedog/throng/issues/397)): renaming or moving a file updates the panels that show it in closed sub-workspaces, unloaded projects and tabs not on screen, so they open the file at its new path next time.
+
+### Fixed
+- **Switching project straight after Unload with End Terminals** no longer fails with a timeout or snaps back ([#468](https://github.com/Bidthedog/throng/issues/468)).
+- **Other terminals keep responding while terminals end or start** ([#190](https://github.com/Bidthedog/throng/issues/190)): ending several terminals at once no longer stalls typing, output or other requests.
+- **Terminate all on close leaves nothing running**: a terminal that will not end is forced to, with its running command and console host, and the next launch starts it fresh with its remembered command.
+- **Command memory remembers a command started through a launcher** ([#193](https://github.com/Bidthedog/throng/issues/193)), such as `docker run` in Git Bash or `npm run` in cmd, and ending the terminal ends that command too; a remembered command with a quoted program path now runs again in cmd.
+- **Replace onto a file that is open** ([#111](https://github.com/Bidthedog/throng/issues/111)): the open panels show the file that replaced it; one with unsaved changes says so once and offers **Save As…** or **Discard**, and unloading or removing its project with **Save** asks where to keep them.
+- **A terminal that cannot be ended on Unload stays running**, says so once, and reattaches the next time the project loads.
+
+### Changed
+- A terminal's working directory is part of its name rather than separate text after it.
+
 ## 1.0.0-alpha9 — 2026-10-04
 
 ### Added
