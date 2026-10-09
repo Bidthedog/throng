@@ -102,6 +102,41 @@ export default tseslint.config(
     },
   },
 
+  // 051 FR-020: nothing in the daemon or the platform layer may wait on the OS on the event loop —
+  // one synchronous process call stops every terminal at once (#468). Startup-only calls made before
+  // the service serves are FR-017's exceptions, each marked at its call with the reason.
+  // `windows-shell-detection.ts` runs only in UI main (shell discovery for the picker), never in the
+  // daemon, so it is outside the rule rather than excepted call by call.
+  {
+    files: ['packages/daemon/src/**/*.ts', 'packages/platform-windows/src/**/*.ts'],
+    ignores: ['packages/platform-windows/src/windows-shell-detection.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['child_process', 'node:child_process'].map((name) => ({
+            name,
+            importNames: ['execSync', 'execFileSync', 'spawnSync'],
+            message:
+              'A synchronous process call stops every terminal while it runs (051 FR-020). Use the async form with a timeout.',
+          })),
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='Atomics'][callee.property.name='wait']",
+          message: 'Atomics.wait blocks the daemon thread (051 FR-020). Wait on a timer instead.',
+        },
+        {
+          selector: "CallExpression[callee.property.name=/^(execSync|execFileSync|spawnSync)$/]",
+          message:
+            'A synchronous process call stops every terminal while it runs (051 FR-020). Use the async form with a timeout.',
+        },
+      ],
+    },
+  },
+
   // React renderer: hooks correctness rules. `exhaustive-deps` is advisory
   // (surfaced as a warning, does not fail CI) — the rules-of-hooks check that
   // catches genuine bugs stays an error.
