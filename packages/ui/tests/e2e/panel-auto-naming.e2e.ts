@@ -121,6 +121,7 @@ interface LayoutPanelNode {
   type?: string;
   id?: string;
   title?: string;
+  kind?: string;
   children?: LayoutPanelNode[];
 }
 
@@ -128,6 +129,25 @@ function findPanelTitle(node: LayoutPanelNode, panelId: string): string | undefi
   if (node.type === 'panel') return node.id === panelId ? node.title : undefined;
   for (const child of node.children ?? []) {
     const found = findPanelTitle(child, panelId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function findPanelKind(node: LayoutPanelNode, panelId: string): string | undefined {
+  if (node.type === 'panel') return node.id === panelId ? node.kind : undefined;
+  for (const child of node.children ?? []) {
+    const found = findPanelKind(child, panelId);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** The persisted kind of one panel (`terminal`, `editor`…), found by id across every tab in a layout document. */
+function panelKindInLayout(layoutJson: string, panelId: string): string | undefined {
+  const layout = JSON.parse(layoutJson) as { tabs?: { root: LayoutPanelNode }[] };
+  for (const tab of layout.tabs ?? []) {
+    const found = findPanelKind(tab.root, panelId);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -180,7 +200,9 @@ test('a generated name the daemon adjusts is not a rename — the panel still au
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId(`panel-type-confirm-${b}`).click();
         await expect(win.getByTestId(`terminal-${b}`)).toBeVisible();
-        await expect(win.getByTestId(`panel-title-${b}`)).toContainText('cmd.exe', { timeout: 15_000 });
+        // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
+        // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
+        await expect(win.getByTestId(`panel-title-${b}`)).toContainText('Command Prompt', { timeout: 15_000 });
       },
       { dataDir },
     );
@@ -240,6 +262,7 @@ test('a New Tab panel takes its name from the file its editor opens (#218)', { t
 
 test('a terminal that reattaches to its running session keeps its name (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = makeProject('throng-reattach-name-');
+  const dataDir = mkdtempSync(join(tmpdir(), 'throng-reattach-name-data-'));
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'ReattachNames', root);
@@ -248,7 +271,9 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
       await win.getByTestId('terminal-flavour').selectOption('cmd');
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
-      await expect(win.getByTestId(`panel-title-${pid}`)).toContainText('cmd.exe', {
+      // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
+      // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
+      await expect(win.getByTestId(`panel-title-${pid}`)).toContainText('Command Prompt', {
         timeout: 15_000,
       });
 
@@ -266,6 +291,10 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
        * than replicating a fault — a panel with a terminal in it must never settle on a placeholder,
        * whether the name arrives from the replay or from the flavour fallback behind it.
        */
+      // The reload must find the panel SAVED as a terminal. Its name now appears the moment it is confirmed (053's
+      // template names the shell before it has started), well inside the layout save's debounce — a reload then
+      // brings back the untyped panel the last save held, which is a test racing a debounce, not a reattach.
+      await expectLayoutSaved(dataDir, 'ReattachNames', (json) => panelKindInLayout(json, pid) === 'terminal');
       await reloadWindow(win);
       await enterProject(win, 'ReattachNames');
       const restored = win.getByTestId(`panel-title-${pid}`);
@@ -277,9 +306,10 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
         })
         .toBe(false);
 
-    });
+    }, { dataDir });
   } finally {
     cleanupTemp(root);
+    cleanupTemp(dataDir);
   }
 });
 
@@ -299,7 +329,9 @@ test('a terminal panel keeps its name across a restart (#218 B)', { tag: ['@exte
         await win.getByTestId('terminal-flavour').selectOption('cmd');
         await win.getByTestId(`panel-type-confirm-${term}`).click();
         await expect(win.getByTestId(`terminal-${term}`)).toBeVisible();
-        await expect(win.getByTestId(`panel-title-${term}`)).toContainText('cmd.exe', {
+        // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
+        // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
+        await expect(win.getByTestId(`panel-title-${term}`)).toContainText('Command Prompt', {
           timeout: 15_000,
         });
 
