@@ -160,6 +160,14 @@ describe("Unload's daemon calls get a budget that covers a process snapshot (bra
     expect(budgetOf(method)).toBeGreaterThan(HOST_SNAPSHOT_CAP_MS);
   });
 
+  it('051 — killAll resolves only once every end settles, so its budget clears two end limits', async () => {
+    // An end, then (Terminate all) a forced end — each bounded by the one limit, plus the agent's
+    // own one-second answer margin on each.
+    const { TERMINAL_END_TIMEOUT_MS } = await import('@throng/core');
+    await handler('throng:terminal:killAll')(EVENT, { projectId: 'proj-1' });
+    expect(budgetOf('terminal.killAll')).toBeGreaterThan(2 * (TERMINAL_END_TIMEOUT_MS + 1000));
+  });
+
   it('list with includeBusy passes one too', async () => {
     await handler('throng:terminal:list')(EVENT, 'proj-1', { includeBusy: true });
     expect(budgetOf('terminal.list')).toBeGreaterThan(HOST_SNAPSHOT_CAP_MS);

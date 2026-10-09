@@ -6,6 +6,11 @@ import {
   useTerminalTitle,
 } from '../../src/renderer/terminal/title-store.js';
 import { useTerminal } from '../../src/renderer/terminal/use-terminal.js';
+import {
+  forgetTerminalCommand,
+  peekTerminalArch,
+  peekTerminalCommand,
+} from '../../src/renderer/terminal/command-store.js';
 
 /**
  * REPRODUCTION for #295 — a terminal loses its live window title when its view unmounts.
@@ -153,6 +158,42 @@ afterEach(() => {
   clearTerminalTitle(PANEL);
   container.remove();
   Reflect.deleteProperty(window, 'throng');
+});
+
+describe('053 — a view attaching to a running session takes the title the daemon kept', () => {
+  it('sets the title the program announced before this view existed (a throng restart)', async () => {
+    const bridge = fakeTerminalBridge();
+    bridge.attach.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 'running', sessionId: 1, scrollback: '', windowTitle: '✳ work on links' } as never),
+    );
+    (window as unknown as { throng?: unknown }).throng = { terminal: bridge };
+
+    mountTerminal(container, 'pwsh');
+
+    await vi.waitFor(() => expect(readTitle()).toBe('✳ work on links'));
+  });
+
+  it('takes the running command from the answer, without waiting for the next observation', async () => {
+    const bridge = fakeTerminalBridge();
+    bridge.attach.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 'running', sessionId: 1, scrollback: '', command: 'claude', arch: 'x64' } as never),
+    );
+    (window as unknown as { throng?: unknown }).throng = { terminal: bridge };
+
+    mountTerminal(container, 'pwsh');
+
+    await vi.waitFor(() => expect(peekTerminalCommand(PANEL)).toBe('claude'));
+    expect(peekTerminalArch(PANEL)).toBe('x64');
+    forgetTerminalCommand(PANEL);
+  });
+
+  it('an attach with no title leaves the store alone (a cold start, or an older daemon)', async () => {
+    setTerminalTitle(PANEL, TITLE);
+    mountTerminal(container, 'pwsh');
+    await act(async () => {});
+
+    expect(readTitle()).toBe(TITLE);
+  });
 });
 
 describe.each(FLAVOURS)('a title the %s program announced once', (flavourId) => {

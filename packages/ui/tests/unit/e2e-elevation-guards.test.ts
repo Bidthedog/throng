@@ -55,8 +55,8 @@ const PROBES: readonly { id: string; why: string; re: RegExp }[] = [
   },
   {
     id: 'shell-reported-cwd',
-    why: 'the working directory is read back from the shell the daemon started; under the de-elevated agent that readback does not reach the panel, so `panel-cwd-<id>` never appears',
-    re: /panel-cwd-/,
+    why: 'the working directory is read back from the shell the daemon started; under the de-elevated agent that readback does not reach the panel, so the directory never appears in its header title (`panel-handle-<id>`’s `title`, 053)',
+    re: /panel-handle-\$\{\w+\}`\)\)\.toHaveAttribute\('title'/,
   },
 ];
 

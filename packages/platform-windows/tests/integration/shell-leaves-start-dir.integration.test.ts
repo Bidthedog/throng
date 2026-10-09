@@ -100,7 +100,7 @@ afterEach(async () => {
     host.onExit(handle, () => {
       exited = true;
     });
-    host.kill(handle);
+    void host.end(handle, 5000).catch(() => {});
     await waitFor(() => exited, 5000);
     running = undefined;
   }

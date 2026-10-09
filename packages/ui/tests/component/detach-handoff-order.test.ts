@@ -65,11 +65,15 @@ function fakeDaemon(layout: WorkspaceLayout, initial: SubWorkspace[], log: strin
         case 'workspace.loadSubWorkspaces':
           reply = { subWorkspaces: subs };
           break;
-        case 'workspace.persistSubWorkspaces':
+        case 'workspace.saveSubWorkspace': {
           log.push('persist');
-          subs = (params as { subWorkspaces: SubWorkspace[] }).subWorkspaces;
+          const next = (params as { subWorkspace: SubWorkspace }).subWorkspace;
+          subs = subs.some((s) => s.id === next.id)
+            ? subs.map((s) => (s.id === next.id ? next : s))
+            : [...subs, next];
           reply = { ok: true };
           break;
+        }
         case 'subworkspace.list':
           reply = { subWorkspaces: subs.map((s) => ({ id: s.id, name: s.name ?? '', colour: s.colour ?? '', tabCount: s.tabs.length, panelCount: s.tabs.length })) };
           break;

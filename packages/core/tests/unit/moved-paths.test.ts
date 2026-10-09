@@ -101,6 +101,12 @@ describe('movedPanelConfig', () => {
     expect(movedPanelConfig(editor({ filePath: 'D:/a/x.md' }), out, undefined)).toEqual({ filePath: 'D:/b/in/x.md' });
   });
 
+  // 052 T024 — a replaced editor has let go of its path: the file there is another document's, and a move of it is
+  // not this panel's news (the live coordinator never moves a replaced document either).
+  it('a replaced editor does not follow a move of the path it was replaced at', () => {
+    expect(movedPanelConfig(editor({ filePath: 'D:/a/x.md', replaced: true }), within, ROOT_A)).toBeNull();
+  });
+
   it('untouched, or not an editor/preview: null', () => {
     expect(movedPanelConfig(editor({ filePath: 'D:/a/other.md' }), out, ROOT_A)).toBeNull();
     expect(movedPanelConfig(plain, out, ROOT_A)).toBeNull();
@@ -127,5 +133,47 @@ describe('moveLayoutTabs', () => {
     expect(panels[0]!.config).toEqual({ filePath: 'D:/b/in/x.md', movedOut: true });
     expect(panels[1]).toBe(plain);
     expect(moveLayoutTabs(next!, out, () => ROOT_A)).toBeNull();
+  });
+
+  // 052 FR-006 (R6) — 044 FR-012's collision rule, inside one saved layout.
+  it('a preview moved onto a file another preview in the layout already shows keeps its old path and history', () => {
+    const moving = preview({ filePath: 'D:/a/x.md', history: { v: 1, entries: [{ filePath: 'D:/a/x.md' }], index: 0 } }, 'v1');
+    const holder = preview({ filePath: 'D:/a/sub/x.md' }, 'v2');
+    const tabs: Tab[] = [{ id: 't1', title: 'T1', root: row(moving, holder) }];
+
+    expect(moveLayoutTabs(tabs, within, () => ROOT_A)).toBeNull();
+  });
+
+  it('a preview moved in the same batch is not "already there"', () => {
+    const first = preview({ filePath: 'D:/a/x.md' }, 'v1');
+    const second = preview({ filePath: 'D:/a/sub/x.md' }, 'v2');
+    const tabs: Tab[] = [{ id: 't1', title: 'T1', root: row(first, second) }];
+    const swap = [
+      { from: 'D:/a/x.md', to: 'D:/a/sub/x.md' },
+      { from: 'D:/a/sub/x.md', to: 'D:/a/y.md' },
+    ];
+
+    const panels = (moveLayoutTabs(tabs, swap, () => ROOT_A)![0]!.root as { children: Panel[] }).children;
+    expect(panels[0]!.config).toEqual({ filePath: 'D:/a/sub/x.md' });
+    expect(panels[1]!.config).toEqual({ filePath: 'D:/a/y.md' });
+  });
+
+  it('an editor on the destination does not hold a preview back (the rule is preview against preview)', () => {
+    const tabs: Tab[] = [{ id: 't1', title: 'T1', root: row(preview({ filePath: 'D:/a/x.md' }), editor({ filePath: 'D:/a/sub/x.md' })) }];
+    const panels = (moveLayoutTabs(tabs, within, () => ROOT_A)![0]!.root as { children: Panel[] }).children;
+    expect(panels[0]!.config).toEqual({ filePath: 'D:/a/sub/x.md' });
+  });
+
+  it('a chain of moves ends at the last path; a folder matches by segment; a case-only rename follows', () => {
+    const tabs: Tab[] = [{ id: 't1', title: 'T1', root: editor({ filePath: 'D:/a/x.md' }) }];
+    const once = moveLayoutTabs(tabs, [{ from: 'D:/a/x.md', to: 'D:/a/b.md' }], () => ROOT_A)!;
+    const twice = moveLayoutTabs(once, [{ from: 'D:/a/b.md', to: 'D:/a/c.md' }], () => ROOT_A)!;
+    expect((twice[0]!.root as Panel).config).toEqual({ filePath: 'D:/a/c.md' });
+
+    const docsOld: Tab[] = [{ id: 't1', title: 'T1', root: editor({ filePath: 'D:/a/docs-old/r.md' }) }];
+    expect(moveLayoutTabs(docsOld, [{ from: 'D:/a/docs', to: 'D:/a/notes' }], () => ROOT_A)).toBeNull();
+
+    const caseOnly = moveLayoutTabs(tabs, [{ from: 'D:/a/x.md', to: 'D:/a/X.md' }], () => ROOT_A)!;
+    expect((caseOnly[0]!.root as Panel).config).toEqual({ filePath: 'D:/a/X.md' });
   });
 });

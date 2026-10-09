@@ -3,6 +3,9 @@ import {
   FIND_IN_FILES_KIND,
   findInFilesPanelType,
   panelDisplayTitle,
+  DEFAULT_TERMINAL_TITLE_TEMPLATE,
+  type PanelTitleSources,
+  type TerminalTitleValues,
   type Panel,
 } from '../../src/index.js';
 
@@ -306,5 +309,150 @@ describe('a Find in Files panel is titled for what it is (FR-060, T166)', () => 
       expect(panelDisplayTitle(p, {}, 24)).toBe('Find & Replace in Files:');
       expect(panelDisplayTitle(p, {}, 28)).toBe('Find & Replace in Files: nee');
     });
+  });
+});
+
+/**
+ * 053 FR-001 — a terminal panel is named by its rendered title template, given `sources.terminal`.
+ *
+ * The values arrive raw — the observed command line as the OS reported it, the working directory as
+ * the shell reported it — and core derives every placeholder from them: `{command}` / `{app}`
+ * through `commandDisplay`, `{path}` shortened, `{folder}` the last folder, `{admin}` the word.
+ */
+describe('panelDisplayTitle — terminal title template (053)', () => {
+  const gitBash = panel({ kind: 'terminal', config: { flavourLabel: 'Git Bash' } });
+  const PING = '"C:\\WINDOWS\\system32\\PING.EXE" localhost -t';
+  const values = (over: Partial<TerminalTitleValues> = {}): TerminalTitleValues => ({
+    shell: 'Git Bash',
+    cwd: 'D:\\git\\throng',
+    admin: false,
+    ...over,
+  });
+  const terminal = (
+    over: Partial<TerminalTitleValues> = {},
+    template = DEFAULT_TERMINAL_TITLE_TEMPLATE,
+    limits = { command: 40, path: 40 },
+  ): PanelTitleSources => ({ terminal: { values: values(over), template, limits } });
+
+  it('renders the default template while a command runs, by the command’s bare name (FR-009, FR-011)', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ command: PING }))).toBe(
+      'ping localhost -t | Git Bash (D:\\git\\throng)',
+    );
+  });
+
+  it('renders the default template at a bare prompt (FR-009)', () => {
+    expect(panelDisplayTitle(gitBash, terminal())).toBe('Git Bash (D:\\git\\throng)');
+    expect(panelDisplayTitle(gitBash, terminal({ command: null }))).toBe('Git Bash (D:\\git\\throng)');
+  });
+
+  it('drops the directory group when the directory is not known', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ cwd: null }))).toBe('Git Bash');
+  });
+
+  it('puts a program that titled itself first under the default template (FR-009)', () => {
+    const claude = '"C:\\Users\\me\\.local\\bin\\claude.exe"';
+    expect(panelDisplayTitle(gitBash, terminal({ command: claude, title: 'work on links' }))).toBe(
+      'claude: work on links | Git Bash (D:\\git\\throng)',
+    );
+  });
+
+  it('names an executable in {title} by its bare name — cmd titles itself by its full path (FR-011)', () => {
+    const cmd = panel({ kind: 'terminal', config: { flavourLabel: 'Command Prompt' } });
+    const titled = (title: string): string =>
+      panelDisplayTitle(cmd, terminal({ shell: 'Command Prompt', title }, '{title}'));
+    expect(titled('C:\\WINDOWS\\system32\\cmd.exe')).toBe('cmd');
+    expect(titled('C:\\WINDOWS\\system32\\cmd.exe - ping  localhost -t')).toBe('cmd - ping  localhost -t');
+    expect(titled('Administrator: C:\\Program Files\\Git\\bin\\bash.exe')).toBe('Administrator: bash');
+    expect(titled('MINGW64:/d/git/throng')).toBe('MINGW64:/d/git/throng');
+    expect(titled('claude')).toBe('claude');
+  });
+
+  it('renders a custom template', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ command: PING }, '{app} in {folder}'))).toBe(
+      'ping in throng',
+    );
+  });
+
+  it('names the panel by its shell when the template renders to nothing', () => {
+    expect(panelDisplayTitle(gitBash, terminal({}, '{command}'))).toBe('Git Bash');
+    expect(panelDisplayTitle(gitBash, terminal({}, '  ({arch})  '))).toBe('Git Bash');
+  });
+
+  it('renders an unparsable template as the default (FR-008)', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ command: PING }, '({shell}'))).toBe(
+      'ping localhost -t | Git Bash (D:\\git\\throng)',
+    );
+  });
+
+  it('shortens {command} to its limit with an ellipsis (FR-012)', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ command: PING }, '{command}', { command: 10, path: 40 }))).toBe(
+      'ping loca…',
+    );
+  });
+
+  it('shortens {path} keeping its root and last folder (FR-012)', () => {
+    const cwd = 'D:\\git\\throng\\packages\\core\\src';
+    expect(panelDisplayTitle(gitBash, terminal({ cwd }, '{path}', { command: 40, path: 12 }))).toBe(
+      'D:\\…\\src',
+    );
+  });
+
+  it('never shortens {folder}, and {app} carries no path or extension', () => {
+    const cwd = 'D:\\git\\throng\\packages\\core\\a-folder-name-longer-than-the-limit';
+    expect(
+      panelDisplayTitle(gitBash, terminal({ cwd, command: PING }, '{app} {folder}', { command: 10, path: 10 })),
+    ).toBe('ping a-folder-name-longer-than-the-limit');
+  });
+
+  it('still bounds the whole name by tabs.maxNameLength (031 FR-037)', () => {
+    expect(panelDisplayTitle(gitBash, terminal({ command: PING }), 12)).toBe('ping localho');
+  });
+
+  it('renders every placeholder from its value', () => {
+    const t = '{command}|{app}|{arch}|{title}|{shell}|{path}|{folder}|{project}|{admin}';
+    expect(
+      panelDisplayTitle(
+        gitBash,
+        terminal({ command: PING, arch: 'x64', title: 'claude', project: 'throng', admin: true }, t),
+      ),
+    ).toBe('ping localhost -t|ping|x64|claude|Git Bash|D:\\git\\throng|throng|throng|Admin');
+  });
+
+  it('renders {admin} empty for a terminal that is not elevated', () => {
+    expect(panelDisplayTitle(gitBash, terminal({}, '{shell}({admin} ? " [{admin}]" : "")'))).toBe('Git Bash');
+    expect(panelDisplayTitle(gitBash, terminal({ admin: true }, '{shell}({admin} ? " [{admin}]" : "")'))).toBe(
+      'Git Bash [Admin]',
+    );
+  });
+
+  describe('User Story 2’s acceptance scenarios, exactly as written (SC-004)', () => {
+    it('1. `({title} ?? {app}) | {shell}`: claude sets its title; ping does not', () => {
+      const t = '({title} ?? {app}) | {shell}';
+      const claude = '"C:\\Users\\me\\.local\\bin\\claude.exe"';
+      expect(panelDisplayTitle(gitBash, terminal({ command: claude, title: 'claude' }, t))).toBe(
+        'claude | Git Bash',
+      );
+      expect(panelDisplayTitle(gitBash, terminal({ command: PING }, t))).toBe('ping | Git Bash');
+    });
+
+    it('2. literal brackets: `{shell} (({folder}))` is `Git Bash (throng)`', () => {
+      expect(panelDisplayTitle(gitBash, terminal({}, '{shell} (({folder}))'))).toBe('Git Bash (throng)');
+    });
+
+    it('3. `{shell}({path} ? " ({path})" : "")` with no directory known: no empty brackets', () => {
+      expect(panelDisplayTitle(gitBash, terminal({ cwd: null }, '{shell}({path} ? " ({path})" : "")'))).toBe(
+        'Git Bash',
+      );
+    });
+
+    it('6. `{title} ? "WOOP" : "WAAP"`: WOOP while a title is set, WAAP otherwise', () => {
+      expect(panelDisplayTitle(gitBash, terminal({ title: 'x' }, '{title} ? "WOOP" : "WAAP"'))).toBe('WOOP');
+      expect(panelDisplayTitle(gitBash, terminal({}, '{title} ? "WOOP" : "WAAP"'))).toBe('WAAP');
+    });
+  });
+
+  it('names a terminal exactly as before when no `sources.terminal` is given', () => {
+    expect(panelDisplayTitle(gitBash)).toBe('Git Bash');
+    expect(panelDisplayTitle(gitBash, { terminalTitle: 'MINGW64:/d' })).toBe('MINGW64:/d');
   });
 });

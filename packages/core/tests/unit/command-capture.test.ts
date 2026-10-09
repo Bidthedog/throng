@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   captureDecision,
   foregroundCommand,
+  foregroundProcess,
   isCapturableCommand,
   MAX_CAPTURABLE_COMMAND_LENGTH,
   shouldNotifyCaptureOutcome,
@@ -60,6 +61,40 @@ describe('foregroundCommand — which command had control (025 FR-022)', () => {
   });
 });
 
+/**
+ * 053 T014 — the chosen process itself, so the daemon can read its executable's architecture.
+ * Same arguments and the same choice as `foregroundCommand`, which now delegates to it.
+ */
+describe('foregroundProcess — the process that had control (053)', () => {
+  it('returns null at an idle prompt', () => {
+    expect(foregroundProcess(SHELL, [])).toBeNull();
+  });
+
+  it('returns the chosen direct child whole, executable path included', () => {
+    const ping = child({
+      pid: 201,
+      commandLine: 'C:\\WINDOWS\\system32\\PING.EXE -t host',
+      executablePath: 'C:\\WINDOWS\\system32\\PING.EXE',
+      startedAt: 2_000,
+    });
+    expect(foregroundProcess(SHELL, [child(), ping])).toBe(ping);
+  });
+
+  it('rejects a pid-reuse impostor exactly as foregroundCommand does (#280)', () => {
+    const impostor = child({ pid: 201, startedAt: 500 });
+    expect(foregroundProcess(SHELL, [impostor], undefined, 1_000)).toBeNull();
+  });
+
+  it('falls back to an attached root process when the shell has no direct child (051 FR-040)', () => {
+    const attached = [
+      child({ pid: SHELL, ppid: 1, commandLine: 'cmd.exe', startedAt: 900 }),
+      child({ pid: 400, ppid: 7, commandLine: 'claude', startedAt: 3_000 }),
+    ];
+    expect(foregroundProcess(SHELL, [], 'cmd.exe', 900, attached)).toBe(attached[1]);
+    expect(foregroundCommand(SHELL, [], 'cmd.exe', 900, attached)).toBe('claude');
+  });
+});
+
 describe('isCapturableCommand (025 FR-023)', () => {
   it('accepts an ordinary command', () => {
     expect(isCapturableCommand('ping -t bbc.co.uk')).toBe(true);
@@ -109,10 +144,12 @@ describe('captureDecision — the six worked examples (025 US2)', () => {
     expect(captureDecision(true, '', null)).toEqual({ save: false, reason: 'nothing-running' });
   });
 
-  it('4. started with `npm run dev`, stopped it -> stays `npm run dev` (never cleared)', () => {
+  it('4. started with `npm run dev`, stopped it -> cleared (051 FR-046 supersedes 025 FR-017)', () => {
+    // Nothing is running when the terminal ends, so nothing runs when it starts again.
     expect(captureDecision(true, 'npm run dev', null)).toEqual({
-      save: false,
-      reason: 'nothing-running',
+      save: true,
+      reason: 'cleared',
+      value: '',
     });
   });
 

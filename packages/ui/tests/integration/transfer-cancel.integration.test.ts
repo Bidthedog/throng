@@ -162,6 +162,32 @@ describe('Roll back (FR-019a, FR-019b, SC-007)', () => {
     expect(clipboard.get()).toBe(snapshot);
   });
 
+  // 052 T030 (FR-001, edge case *The move fails or is rolled back*) — a cut roll back that cannot put one item back
+  // closes the move bracket with THAT pair still standing, so every consumer of `moved` — the unheld-layout walk
+  // among them (`in-app-moves-follow-layouts`) — ends at the path the file actually has.
+  it('a cut roll back that cannot return one item closes the bracket with that pair standing', async () => {
+    await setup((inner) => {
+      class NoMoveBack extends FsDecorator {
+        override async move(s: string, d: string): Promise<string> {
+          if (s.startsWith(h.rootB) && s.endsWith('three.txt')) throw new Error('The file is in use.');
+          return super.move(s, d);
+        }
+      }
+      return new NoMoveBack(inner);
+    });
+    const run = pasteFromA('cut', 'three.txt', 'big.bin');
+    await fs.started.promise;
+    h.svc.cancel(run.jobId);
+    await waitFor(() => h.cancelChoices.length === 1);
+    h.svc.finishCancel(run.jobId, 'rollback');
+    const r = await run.result;
+    expect(r.rollbackFailures).toEqual([expect.objectContaining({ name: 'three.txt' })]);
+    expect(h.bracket.at(-1)).toEqual({
+      kind: 'moved',
+      moves: [{ from: join(h.rootA, 'three.txt'), to: join(h.rootB, 'dest', 'three.txt') }],
+    });
+  });
+
   it('names every item roll back could not restore (edge case *Roll back cannot finish*)', async () => {
     await setup((inner) => {
       class NoRestore extends FsDecorator {

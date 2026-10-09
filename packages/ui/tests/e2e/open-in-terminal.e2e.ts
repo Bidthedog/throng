@@ -227,7 +227,7 @@ test('AS-2/AS-2a — every enabled flavour opens an active, focused terminal in 
          * construction. FR-032's containment is inherited from `resolveStartDirectory` and asserted
          * at that unit; `nested` being under the root is the observable half of it here.
          */
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('nested', {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /nested/, {
           timeout: 40_000,
         });
 
@@ -273,7 +273,7 @@ test('AS-3 — a right-clicked file opens its terminal in the file’s parent fo
       const pid = await newPanelId(win, before);
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 30_000 });
       // The FOLDER the file lives in, never the file — a shell cannot have a file as a directory.
-      await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('nested', { timeout: 40_000 });
+      await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /nested/, { timeout: 40_000 });
     });
   } finally {
     cleanupTemp(root);
@@ -300,7 +300,7 @@ test('B5 — the start directory is persisted, and the reopened project restarts
         const level = await openTerminalSubmenu(win, tree.getByText('nested', { exact: true }));
         await level.locator('.context-menu__item').first().click();
         const pid = await newPanelId(win, before);
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('nested', {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /nested/, {
           timeout: 40_000,
         });
 
@@ -336,7 +336,7 @@ test('B5 — the start directory is persisted, and the reopened project restarts
 
         await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible({ timeout: 40_000 });
         // `nested`, not the project root — the root is where a panel with no start directory lands.
-        await expect(win.getByTestId(`panel-cwd-${pid}`)).toContainText('nested', {
+        await expect(win.getByTestId(`panel-handle-${pid}`)).toHaveAttribute('title', /nested/, {
           timeout: 40_000,
         });
       },

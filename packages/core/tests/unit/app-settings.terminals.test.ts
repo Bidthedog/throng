@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAppSettings, DEFAULT_APP_SETTINGS } from '@throng/core';
+import { parseAppSettings, DEFAULT_APP_SETTINGS, DEFAULT_TERMINAL_TITLE_TEMPLATE } from '@throng/core';
 
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
   it('defaults to empty flavours / disabledBuiltins / defaultShellArguments (+ showStatusBar on) when absent', () => {
@@ -21,6 +21,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
       reloadMode: 'automatic',
+      // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
+      titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
+      titleCommandMaxLength: 40,
+      titlePathMaxLength: 40,
     });
     expect(DEFAULT_APP_SETTINGS.terminals).toEqual({
       flavours: [],
@@ -40,6 +44,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
       reloadMode: 'automatic',
+      // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
+      titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
+      titleCommandMaxLength: 40,
+      titlePathMaxLength: 40,
     });
   });
 
@@ -176,6 +184,10 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       defaultRememberDirectory: true,
       defaultRunAsAdmin: false,
       reloadMode: 'automatic',
+      // 053 FR-014 — asserted on their own in `terminal-title-settings.test.ts`.
+      titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
+      titleCommandMaxLength: 40,
+      titlePathMaxLength: 40,
     });
   });
 });

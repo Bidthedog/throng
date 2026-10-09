@@ -23,6 +23,11 @@ vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   return { ...actual, execFileSync, execFile };
 });
+// The host starts its processes through the off-loop runner (051 FR-010); here it hands them to the mock above.
+vi.mock('../../src/off-loop-exec.js', () => ({
+  execFileOffLoop: (file: string, args: string[], options: unknown, callback: unknown) =>
+    (execFile as unknown as (...a: unknown[]) => unknown)(file, args, options, callback),
+}));
 
 /** A fresh module per test: the shared snapshot is module state, and must not leak between tests. */
 async function newHost() {
@@ -42,12 +47,9 @@ beforeEach(() => {
 });
 
 describe('a failed probe never reads as idle (review #2)', () => {
-  it('listChildPids THROWS when the snapshot fails, rather than returning []', async () => {
-    execFileSync.mockImplementation(() => {
-      throw new Error('spawnSync powershell.exe ETIMEDOUT');
-    });
+  it('offers no synchronous probe at all (051 FR-010, R9)', async () => {
     const host = await newHost();
-    expect(() => host.listChildPids({ pid: 100 })).toThrow();
+    expect('listChildPids' in host).toBe(false);
   });
 
   it('probeChildPids REJECTS when the snapshot fails', async () => {
@@ -85,6 +87,25 @@ describe('one async snapshot serves every terminal asked about together (review 
     expect(gone).toEqual([]);
     expect(execFile).toHaveBeenCalledTimes(1);
     expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it('051 FR-011 — ten terminals decided together cost ONE read, and one failure rejects all ten', async () => {
+    execFile.mockImplementation((_f: string, _a: string[], _o: unknown, cb: Callback) => {
+      setTimeout(() => cb(null, TABLE, ''), 5);
+    });
+    let host = await newHost();
+    const ten = Array.from({ length: 10 }, (_, i) => host.probeChildPids({ pid: 100 + i }));
+    await Promise.all(ten);
+    expect(execFile).toHaveBeenCalledTimes(1);
+
+    execFile.mockReset();
+    execFile.mockImplementation((_f: string, _a: string[], _o: unknown, cb: Callback) => {
+      setTimeout(() => cb(new Error('CIM refused')), 5);
+    });
+    host = await newHost();
+    const failed = await Promise.allSettled(Array.from({ length: 10 }, (_, i) => host.probeChildPids({ pid: 100 + i })));
+    expect(failed.every((r) => r.status === 'rejected')).toBe(true);
+    expect(execFile).toHaveBeenCalledTimes(1);
   });
 
   it('a later call takes a FRESH snapshot — the sharing never outlives the one call', async () => {

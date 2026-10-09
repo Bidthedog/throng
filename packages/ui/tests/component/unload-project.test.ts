@@ -46,6 +46,12 @@ import { ConfirmProvider, useChoose, useConfirm } from '../../src/renderer/confi
 import { DirtyCloseDialog } from '../../src/renderer/editor/dirty-close-dialog.js';
 import { __resetDirtyCloseStore } from '../../src/renderer/editor/dirty-close-store.js';
 import { unloadProject, type UnloadCollaborators } from '../../src/renderer/sidebar/unload-project.js';
+import { setEditorState, removeEditorState } from '../../src/renderer/editor/editor-state.js';
+import {
+  registerEditorActions,
+  unregisterEditorActions,
+  type EditorActions,
+} from '../../src/renderer/editor/editor-actions.js';
 
 const PROJECT_ID = 'proj-1';
 const PROJECT_NAME = 'Widgets';
@@ -301,6 +307,80 @@ describe('the unsaved-editor prompt still comes first, and is the only prompt (F
       (await screen.findByTestId('dirty-close-save')).click();
     });
     await run;
+
+    expect(deps.unloadProject).not.toHaveBeenCalled();
+    expect(deps.reportFailure).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 052 FR-012 — a REPLACED dirty editor (a Replace landed another file on its path) cannot plain-Save: main's Save
+ * All reports it as `failed` with reason `replaced`, by design, so nothing writes over the moved file. Unload's
+ * Save must then do what that editor's own notice offers — Save As — rather than stop. Reported from MT-09 step 6:
+ * choosing Save raised "Couldn't unload" and Save As was never offered.
+ */
+describe('Save at the dirty prompt, with a replaced editor (052 FR-012, MT-09 step 6)', () => {
+  const REPLACED_FAILED: FakeSaveAllResult = { saved: [], skippedUnpathed: [], failed: [{ panelId: 'rep', reason: 'replaced' }] };
+
+  function replacedEditor(saveAsOk: boolean): ReturnType<typeof vi.fn> {
+    setEditorState('rep', {
+      filePath: 'D:/proj/dest/note.md',
+      displayName: 'note.md',
+      dirty: true,
+      replaced: true,
+      ownerProjectId: PROJECT_ID,
+    });
+    const saveForClose = vi.fn(() => Promise.resolve(saveAsOk));
+    registerEditorActions('rep', { saveForClose, isDirty: () => true } as unknown as EditorActions);
+    return saveForClose;
+  }
+
+  afterEach(() => {
+    removeEditorState('rep');
+    unregisterEditorActions('rep');
+  });
+
+  async function unloadChoosingSave(deps: UnloadCollaborators): Promise<void> {
+    const run = unloadProject(PROJECT_ID, PROJECT_NAME, undefined, deps);
+    await screen.findByTestId('dirty-close-dialog');
+    await act(async () => {
+      (await screen.findByTestId('dirty-close-save')).click();
+    });
+    await run;
+  }
+
+  it('asks where to save the replaced file’s changes, then unloads', async () => {
+    fakeBridge({ saveAll: () => Promise.resolve(REPLACED_FAILED) });
+    const saveForClose = replacedEditor(true);
+    const deps = collaborators({ isDirty: () => true });
+
+    await unloadChoosingSave(deps);
+
+    expect(saveForClose, 'Save As was never offered for the replaced editor').toHaveBeenCalledTimes(1);
+    expect(deps.reportFailure).not.toHaveBeenCalled();
+    expect(deps.unloadProject).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it('a cancelled Save As stops the unload — nothing is lost silently', async () => {
+    fakeBridge({ saveAll: () => Promise.resolve(REPLACED_FAILED) });
+    replacedEditor(false);
+    const deps = collaborators({ isDirty: () => true });
+
+    await unloadChoosingSave(deps);
+
+    expect(deps.unloadProject).not.toHaveBeenCalled();
+    expect(deps.reportFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it('a replaced editor beside a genuinely failed save still stops the unload', async () => {
+    fakeBridge({
+      saveAll: () =>
+        Promise.resolve({ saved: [], skippedUnpathed: [], failed: [...REPLACED_FAILED.failed, { panelId: 'e1', reason: 'io' }] }),
+    });
+    replacedEditor(true);
+    const deps = collaborators({ isDirty: () => true });
+
+    await unloadChoosingSave(deps);
 
     expect(deps.unloadProject).not.toHaveBeenCalled();
     expect(deps.reportFailure).toHaveBeenCalledTimes(1);

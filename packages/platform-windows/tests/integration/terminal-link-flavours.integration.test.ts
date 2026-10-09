@@ -133,8 +133,8 @@ const host = new NodePtyHost();
 const detected = await new WindowsShellDetection().detectInstalledShells();
 const roots: string[] = [];
 
-afterAll(() => {
-  host.dispose();
+afterAll(async () => {
+  await host.dispose(); // ends every shell first (051): a directory a shell still sits in cannot be removed
   for (const r of roots) rmSync(r, { recursive: true, force: true });
 });
 
@@ -191,7 +191,7 @@ function startPty(opts: { file: string; args: string[]; cwd: string; env?: Recor
     write: (s) => host.write(handle, s),
     stop: () => {
       off();
-      host.kill(handle);
+      void host.end(handle, 5000).catch(() => {});
     },
   };
 }

@@ -33,7 +33,7 @@ import { RpcRouter } from '../../src/rpc-router.js';
  * thing that can produce the fresh answer.
  */
 
-const noopLock = { acquire: () => ({ path: 'x' }), release: () => {} };
+const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {} };
 const launch = { file: 'C:/cmd.exe', args: [], cwd: 'C:/proj' };
 
 class FakeHost implements IPtyHost {
@@ -45,14 +45,17 @@ class FakeHost implements IPtyHost {
   }
   write(): void {}
   resize(): void {}
-  kill(): void {}
+  async end(): Promise<void> {}
+  async forceEnd(): Promise<{ survivors: never[] }> {
+    return { survivors: [] };
+  }
   onData(): () => void {
     return () => {};
   }
   onExit(_handle: PtyHandle, _cb: (e: PtyExit) => void): () => void {
     return () => {};
   }
-  listChildPids(): number[] {
+  async probeChildPids(): Promise<number[]> {
     return [];
   }
   listChildProcesses(): Promise<ChildProcess[]> {

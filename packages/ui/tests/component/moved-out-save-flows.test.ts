@@ -18,13 +18,14 @@ import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.
  */
 
 const ids: string[] = [];
-function editor(id: string, o: { movedOut?: boolean; dirty?: boolean; project?: string; saveAsOk?: boolean }) {
+function editor(id: string, o: { movedOut?: boolean; replaced?: boolean; dirty?: boolean; project?: string; saveAsOk?: boolean }) {
   ids.push(id);
   setEditorState(id, {
     filePath: `D:/other/${id}.txt`,
     displayName: `${id}.txt`,
     dirty: o.dirty ?? true,
     movedOut: o.movedOut ?? false,
+    replaced: o.replaced ?? false,
     ownerProjectId: o.project ?? 'p1',
   });
   const actions = {
@@ -73,7 +74,34 @@ describe('Save All', () => {
   });
 });
 
+describe('Save All and a replaced document (052 FR-012)', () => {
+  it('passes a replaced editor by, as a moved-out one: a plain save is refused there', async () => {
+    const replaced = editor('rep', { replaced: true });
+    const ok = editor('ok', {});
+
+    await saveAllEditors({ layout: layout(['rep', 'ok']), activeProjectId: 'p1', scope: 'all' });
+
+    expect(replaced.save).not.toHaveBeenCalled();
+    expect(ok.save).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('closing flows that save first', () => {
+  it('Save As a dirty REPLACED editor too, so an unload or removal never drops its buffer (052 FR-012)', async () => {
+    const replaced = editor('rep', { replaced: true });
+    const clean = editor('cleanrep', { replaced: true, dirty: false });
+
+    expect(await saveDirtyMovedOutEditors('p1')).toBe(true);
+
+    expect(replaced.saveForClose).toHaveBeenCalledTimes(1);
+    expect(clean.saveForClose).not.toHaveBeenCalled();
+  });
+
+  it('a cancelled Save As on a replaced editor stops the flow', async () => {
+    editor('rep', { replaced: true, saveAsOk: false });
+    expect(await saveDirtyMovedOutEditors('p1')).toBe(false);
+  });
+
   it('Save As every dirty moved-out editor of the project, and say so when all went through', async () => {
     const a = editor('a', { movedOut: true });
     const other = editor('other', { movedOut: true, project: 'p2' });

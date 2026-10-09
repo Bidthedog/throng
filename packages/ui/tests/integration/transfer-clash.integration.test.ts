@@ -1,7 +1,19 @@
 import { join } from 'node:path';
-import { utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, utimes } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ClashAnswer, ClashQuestion, ClipboardItem } from '@throng/core';
+import { ChangeSet } from '@codemirror/state';
+import {
+  DEFAULT_APP_SETTINGS,
+  type ClashAnswer,
+  type ClashQuestion,
+  type ClipboardItem,
+  type IFileWatcher,
+} from '@throng/core';
+import { NodeFileSystem } from '../../src/main/node-file-system.js';
+import { EditorService } from '../../src/main/editor-service.js';
+import { EditorCoordinator, type DocMeta, type EditorSyncMsg } from '../../src/main/editor-coordinator.js';
+import { EditorRecovery } from '../../src/main/editor-recovery.js';
 import { disposeHarness, exists, makeHarness, put, snapshotTree, type Harness } from './helpers/transfer-harness.js';
 
 /**
@@ -212,5 +224,216 @@ describe('within one project (US5 AS5)', () => {
     }).result;
     expect(h.questions).toHaveLength(1);
     expect(r.placed).toEqual([join(h.rootB, 'dest', 'a copy.txt')]);
+  });
+});
+
+/**
+ * Replace onto an open file, end to end through the real `TransferService` and the real coordinator
+ * (052 US3, FR-010 – FR-013, SC-004 — T017, T018). The move bracket is wired exactly as `main.ts` wires it:
+ * `beginMove` when it opens, `markMoved` when it closes, `markRestored` when a delete is restored.
+ */
+describe('Replace onto an open editor (052 FR-010 – FR-013)', () => {
+  let coordinator: EditorCoordinator;
+  let relays: EditorSyncMsg[];
+  let recoveryDir: string;
+  /** `src/x.md` — the file moved with Replace, open in panel A. */
+  let src: string;
+  /** `dest/x.md` — the file it replaces, open in panel B. */
+  let dest: string;
+
+  afterEach(async () => {
+    await rm(recoveryDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  });
+
+  function meta(panelId: string, absPath: string): DocMeta {
+    return {
+      panelId,
+      windowId: 'w1',
+      ownerKind: 'project',
+      ownerProjectId: 'B',
+      ownerRoot: h.rootB,
+      allProjectRoots: [h.rootA, h.rootB],
+      tabId: 't1',
+      absPath,
+      encoding: 'utf8',
+      hasBom: false,
+      lineEnding: 'lf',
+    };
+  }
+
+  async function setupEditors(fileWatcher?: IFileWatcher): Promise<void> {
+    answers = [];
+    h = await makeHarness({ answer: () => answers.shift() ?? { choice: 'cancel' } });
+    recoveryDir = await mkdtemp(join(tmpdir(), 'throng-rec-'));
+    relays = [];
+    coordinator = new EditorCoordinator(
+      new EditorService(new NodeFileSystem(async () => {}), () => DEFAULT_APP_SETTINGS),
+      new EditorRecovery(recoveryDir),
+      {
+        relaySync: (_exclude, msg) => relays.push(msg),
+        persistUndoHistory: () => true,
+        ...(fileWatcher ? { fileWatcher } : {}),
+      },
+    );
+    h.files.setOnMoveStarted((paths) => coordinator.beginMove(paths));
+    h.files.setOnMoved((moves) => coordinator.markMoved(moves));
+    h.files.setOnRestored((paths) => void coordinator.markRestored(paths));
+    src = join(h.rootB, 'src', 'x.md');
+    dest = join(h.rootB, 'dest', 'x.md');
+    await put(src, 'moved\n');
+    await put(dest, 'replaced\n');
+  }
+
+  /** Type into a panel's document, as its view would. */
+  function type(panelId: string, text: string): void {
+    const v = coordinator.getContent(panelId)!;
+    coordinator.dispatchChange(meta(panelId, v.absPath!), {
+      documentId: panelId,
+      viewId: `view-${panelId}`,
+      changes: ChangeSet.of([{ from: 0, insert: text }], v.text.length).toJSON(),
+      baseVersion: v.version,
+      selectionBefore: null,
+    });
+  }
+
+  /** Cut `src/x.md` onto `dest/`, answering Replace. Returns the job's undo entry. */
+  async function replaceSrcOntoDest() {
+    answers = [{ choice: 'replace', applyToAll: false }];
+    const r = await h.svc.paste(1, join(h.rootB, 'dest'), {
+      mode: 'cut',
+      items: [{ absPath: src, projectId: 'B', projectRoot: h.rootB }],
+    }).result;
+    expect(r.failures).toEqual([]);
+    expect(await readFile(dest, 'utf8')).toBe('moved\n');
+    return r.undo!;
+  }
+
+  /** Every open path has exactly one buffer (006 FR-011a): each claim names a distinct, live panel. */
+  function expectOneBufferPerPath(): void {
+    const docs = coordinator.list();
+    const paths = docs.map((d) => d.absPath!.replace(/\\/g, '/').toLowerCase());
+    expect(new Set(paths).size).toBe(paths.length);
+  }
+
+  it('undo after a clean Replace: A goes back to src, and B unlinks and loads the restored dest', async () => {
+    await setupEditors();
+    await coordinator.load(meta('pA', src));
+    await coordinator.load(meta('pB', dest));
+    const undo = await replaceSrcOntoDest();
+    expect(relays).toContainEqual(expect.objectContaining({ panelId: 'pB', linkedTo: 'pA' }));
+    expect(coordinator.list().map((d) => d.panelId)).toEqual(['pA']);
+
+    relays.length = 0;
+    expect(await h.svc.applyUndo(undo, 'undo')).toMatchObject({ ok: true });
+    expect(await readFile(src, 'utf8')).toBe('moved\n');
+    expect(await readFile(dest, 'utf8')).toBe('replaced\n');
+    expect(coordinator.getContent('pA')).toMatchObject({ absPath: src, text: 'moved\n' });
+    // B unlinked BEFORE A's move went out, so it never followed A to src.
+    const unlink = relays.findIndex((m) => m.panelId === 'pB' && m.linkedTo === null);
+    expect(unlink).toBeGreaterThanOrEqual(0);
+    expect(relays.some((m) => m.panelId === 'pB' && m.movedTo !== undefined)).toBe(false);
+    expect(coordinator.getContent('pB')).toBeNull();
+
+    // The renderer answers `linkedTo: null` by loading its own filePath.
+    expect(await coordinator.load(meta('pB', dest))).toMatchObject({ ok: true, text: 'replaced\n' });
+    expect(await coordinator.openInto(src)).toMatchObject({ action: 'focus', panelId: 'pA' });
+    expect(await coordinator.openInto(dest)).toMatchObject({ action: 'focus', panelId: 'pB' });
+    expectOneBufferPerPath();
+  });
+
+  it('undo after a dirty Replace: A goes back to src, and B re-claims dest still dirty', async () => {
+    await setupEditors();
+    await coordinator.load(meta('pA', src));
+    await coordinator.load(meta('pB', dest));
+    type('pB', 'mine ');
+    const undo = await replaceSrcOntoDest();
+    expect(coordinator.getContent('pB')).toMatchObject({ replaced: true, dirty: true });
+
+    relays.length = 0;
+    expect(await h.svc.applyUndo(undo, 'undo')).toMatchObject({ ok: true });
+    expect(await readFile(dest, 'utf8')).toBe('replaced\n');
+    expect(coordinator.getContent('pA')).toMatchObject({ absPath: src, text: 'moved\n' });
+    // B did not follow A's file back to src — it stayed on its own path, and holds it again.
+    expect(coordinator.getContent('pB')).toMatchObject({
+      absPath: dest,
+      text: 'mine replaced\n',
+      dirty: true,
+      replaced: false,
+    });
+    expect(relays).toContainEqual({ panelId: 'pB', replaced: false });
+    expect(await coordinator.openInto(src)).toMatchObject({ action: 'focus', panelId: 'pA' });
+    expect(await coordinator.openInto(dest)).toMatchObject({ action: 'focus', panelId: 'pB' });
+    expectOneBufferPerPath();
+    // An ordinary document again: Save writes its changes over the restored file.
+    expect(await coordinator.save({ panelId: 'pB' })).toMatchObject({ ok: true });
+    expect(await readFile(dest, 'utf8')).toBe('mine replaced\n');
+  });
+
+  /*
+   * T018 — only `dest/x.md` is open (research R7, "Only one side open"). Nothing new is built for this: the
+   * folder watch already gives FR-011's and FR-012's outcomes, and these pin it. The watch is fired by hand,
+   * once the Replace has landed, so the test decides when the event arrives rather than a timer.
+   */
+  class ManualWatcher implements IFileWatcher {
+    private readonly subs = new Set<{ dir: string; cb: (path: string) => void }>();
+    watch(dir: string, cb: (path: string) => void): { dispose(): void } {
+      const sub = { dir, cb };
+      this.subs.add(sub);
+      return { dispose: () => this.subs.delete(sub) };
+    }
+    fire(path: string): void {
+      for (const s of [...this.subs]) if (s.dir === join(path, '..')) s.cb(path);
+    }
+  }
+
+  it('only dest open and clean: it reloads to the moved content, with one buffer', async () => {
+    const watcher = new ManualWatcher();
+    await setupEditors(watcher);
+    await coordinator.load(meta('pB', dest));
+    await replaceSrcOntoDest();
+    watcher.fire(dest);
+    await expect.poll(() => coordinator.getContent('pB')?.text).toBe('moved\n');
+    expect(coordinator.getContent('pB')).toMatchObject({ absPath: dest, dirty: false });
+    expect(coordinator.list().map((d) => d.panelId)).toEqual(['pB']);
+    expect(await coordinator.openInto(dest)).toMatchObject({ action: 'focus', panelId: 'pB' });
+    expect(coordinator.isOpen(src)).toBe(false);
+  });
+
+  /*
+   * 052 R7a (code review) — T018 first pinned "keeps its buffer, external-change notice" here, which left a
+   * plain Ctrl+S free to write over the moved file. US3 scenario 2 asks for the replaced state whether or not
+   * the moved file is open: the notice, the kept buffer, and a refused Save.
+   */
+  it('only dest open and dirty: it becomes replaced — buffer kept, plain Save refused', async () => {
+    const watcher = new ManualWatcher();
+    await setupEditors(watcher);
+    await coordinator.load(meta('pB', dest));
+    type('pB', 'mine ');
+    relays.length = 0;
+    await replaceSrcOntoDest();
+    expect(relays).toContainEqual({ panelId: 'pB', replaced: true });
+    watcher.fire(dest); // released with the claim: nothing reaches the replaced document
+    expect(coordinator.getContent('pB')).toMatchObject({ absPath: dest, text: 'mine replaced\n', dirty: true, replaced: true });
+    expect(await coordinator.save({ panelId: 'pB' })).toMatchObject({ ok: false, reason: 'replaced' });
+    expect(await readFile(dest, 'utf8')).toBe('moved\n');
+  });
+
+  it('a cross-project Replace onto a dirty open file makes it replaced, too', async () => {
+    await setupEditors();
+    const fromA = join(h.rootA, 'x.md');
+    await put(fromA, 'moved\n');
+    await coordinator.load({ ...meta('pA', fromA), ownerProjectId: 'A', ownerRoot: h.rootA });
+    await coordinator.load(meta('pB', dest));
+    type('pB', 'mine ');
+    answers = [{ choice: 'replace', applyToAll: false }];
+    const r = await h.svc.paste(1, join(h.rootB, 'dest'), {
+      mode: 'cut',
+      items: [{ absPath: fromA, projectId: 'A', projectRoot: h.rootA }],
+    }).result;
+    expect(r.failures).toEqual([]);
+    expect(coordinator.getContent('pA')).toMatchObject({ movedOut: true, absPath: dest });
+    expect(coordinator.getContent('pB')).toMatchObject({ replaced: true, dirty: true, text: 'mine replaced\n' });
+    expect(await coordinator.save({ panelId: 'pB' })).toMatchObject({ ok: false, reason: 'replaced' });
+    expect(await readFile(dest, 'utf8')).toBe('moved\n');
   });
 });

@@ -22,8 +22,8 @@ let host: NodePtyHost | undefined;
 let handle: PtyHandle | undefined;
 let cwd: string | undefined;
 
-afterEach(() => {
-  if (host && handle) host.kill(handle);
+afterEach(async () => {
+  if (host && handle) await host.end(handle, 8000).catch(() => {});
   bystander?.kill();
   if (cwd) rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   bystander = host = handle = cwd = undefined;

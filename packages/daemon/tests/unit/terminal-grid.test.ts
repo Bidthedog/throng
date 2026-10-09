@@ -39,8 +39,11 @@ class RecordingPtyHost implements IPtyHost {
   resize(handle: PtyHandle, cols: number, rows: number): void {
     this.resizes.push({ pid: handle.pid, cols, rows });
   }
-  kill(handle: PtyHandle): void {
+  async end(handle: PtyHandle): Promise<void> {
     this.killed.push(handle.pid);
+  }
+  async forceEnd(): Promise<{ survivors: never[] }> {
+    return { survivors: [] };
   }
   onData(): () => void {
     return () => {};
@@ -48,12 +51,12 @@ class RecordingPtyHost implements IPtyHost {
   onExit(): () => void {
     return () => {};
   }
-  listChildPids(): number[] {
+  async probeChildPids(): Promise<number[]> {
     return [];
   }
 }
 
-const noopLock = { acquire: () => ({ path: 'x' }), release: () => {} };
+const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {} };
 
 function makeService() {
   const host = new RecordingPtyHost();

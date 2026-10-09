@@ -59,6 +59,10 @@ export interface EditorDoc {
   absPath?: string | null;
   fileMissing?: boolean;
   unloadable?: boolean;
+  /** 052 FR-012 — a Replace landed on this dirty document's path: `getContent` says so, so a remount shows the notice. */
+  replaced?: boolean;
+  /** 052 R1 — a LOAD of this path found another panel's document holding it: the answer names that holder. */
+  linkedTo?: string;
   encoding?: string;
   hasBom?: boolean;
   lineEnding?: string;
@@ -133,6 +137,8 @@ export interface EditorHarness {
   readonly calls: Record<string, ReturnType<typeof vi.fn>>;
   /** The panel's `config` in the last layout the store persisted (`undefined` before any save). */
   savedPanelConfig(): Record<string, unknown> | undefined;
+  /** The panel's `terminalMemory` in the last layout the store persisted (`undefined` before any save). */
+  savedPanelMemory(): Record<string, unknown> | undefined;
   /** Unmount the whole tree — for a test about what its listeners leave behind. */
   unmount(): void;
   /**
@@ -229,6 +235,12 @@ export function mountEditor(opts: {
   restoreByLoad?: boolean;
   /** 050 — the crash-recovery snapshot `recoverOne` answers for this panel (unsaved text that survived a restart). */
   recovered?: { text: string; version?: number; history?: unknown };
+  /**
+   * 052 US3 — what `editor.link(panelId, ownerId)` answers on a restore: the OWNER's document, which this
+   * panel then adopts (its `getContent` answers that document from then on), or `null` — the owner is not
+   * open, so the panel drops its link and loads `filePath` itself. Absent means `null`.
+   */
+  linkOwner?: EditorDoc | null;
 }): EditorHarness {
   const panelId = opts.panelId ?? 'p-ed';
   const projectRoot = opts.projectRoot ?? 'C:/proj';
@@ -262,7 +274,10 @@ export function mountEditor(opts: {
     }
   };
   const calls: Record<string, ReturnType<typeof vi.fn>> = {
-    register: vi.fn(),
+    // 052 T024 — registering a document as REPLACED (a restore of one): detached, so `getContent` says so.
+    register: vi.fn((meta?: { replaced?: boolean }) => {
+      if (meta?.replaced === true) current = { ...current, replaced: true };
+    }),
     destroy: vi.fn(),
     verifyPath: vi.fn(),
     save: vi.fn(() => Promise.resolve({ ok: true })),
@@ -274,6 +289,22 @@ export function mountEditor(opts: {
     openInto: vi.fn(() => Promise.resolve({ action: 'open' })),
     // 050 — a crash-recovery snapshot for this panel, when a test seeds one (`opts.recovered`).
     recoverOne: vi.fn(() => Promise.resolve(opts.recovered ?? null)),
+    // 052 US3 — re-link a restored linked panel to its owner's document (see `opts.linkOwner`).
+    link: vi.fn((_id: string, ownerId: string) => {
+      if (!opts.linkOwner) return Promise.resolve(null);
+      current = { dirty: false, ...opts.linkOwner };
+      return Promise.resolve({
+        documentId: ownerId,
+        text: current.text,
+        version: current.version,
+        dirty: current.dirty ?? false,
+        filePath: current.absPath ?? undefined,
+      });
+    }),
+    // Save As's dialog: cancelled unless a test says otherwise.
+    chooseSavePath: vi.fn(() => Promise.resolve(null as string | null)),
+    // 052 FR-012 — drop a replaced document's buffer; the outcome reaches the view as a relay.
+    discardReplaced: vi.fn(() => Promise.resolve({ ok: true, linkedTo: null })),
     restoreRecovered: vi.fn((_id: string, text: string) => {
       current = { ...current, text, dirty: true };
     }),
@@ -337,6 +368,7 @@ export function mountEditor(opts: {
           encoding: next.encoding ?? 'utf8',
           hasBom: next.hasBom ?? false,
           lineEnding: next.lineEnding ?? 'lf',
+          ...(next.linkedTo !== undefined ? { linkedTo: next.linkedTo } : {}),
         });
       })),
       getContent: () =>
@@ -349,6 +381,7 @@ export function mountEditor(opts: {
           absPath: current.absPath ?? null,
           fileMissing: current.fileMissing ?? false,
           unloadable: current.unloadable ?? false,
+          replaced: current.replaced ?? false,
           encoding: current.encoding ?? 'utf8',
           hasBom: current.hasBom ?? false,
           lineEnding: current.lineEnding ?? 'lf',
@@ -523,6 +556,10 @@ export function mountEditor(opts: {
     savedPanelConfig: () => {
       const root = savedLayouts.at(-1)?.tabs[0]?.root as { config?: Record<string, unknown> } | undefined;
       return root?.config;
+    },
+    savedPanelMemory: () => {
+      const root = savedLayouts.at(-1)?.tabs[0]?.root as { terminalMemory?: Record<string, unknown> } | undefined;
+      return root?.terminalMemory;
     },
     unmount: () => rendered.unmount(),
     remount: () => {
