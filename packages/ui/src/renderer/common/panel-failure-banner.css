@@ -97,7 +97,10 @@
 .panel-failure__action {
   flex: 0 0 auto;
   font: inherit;
-  border: 1px solid transparent;
+  /* Width and style only: each type below sets its own border colour from its tokens (FR-047 — no literal
+     colour here, and `transparent` in the shorthand serialises as one). */
+  border-width: 1px;
+  border-style: solid;
   border-radius: 3px;
   padding: 2px 10px;
   cursor: pointer;
