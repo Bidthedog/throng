@@ -339,6 +339,7 @@ export class PtyAgentHost implements IPtyHost {
       key,
       file: opts.file,
       args: opts.args,
+      ...(opts.commandLine !== undefined ? { commandLine: opts.commandLine } : {}),
       cwd: opts.cwd,
       cols: opts.cols,
       rows: opts.rows,

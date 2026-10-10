@@ -174,6 +174,7 @@ function onCommand(msg: AgentCommand): void {
         const h = pty.start({
           file: msg.file,
           args: msg.args,
+          ...(msg.commandLine !== undefined ? { commandLine: msg.commandLine } : {}),
           cwd: msg.cwd,
           cols: msg.cols,
           rows: msg.rows,

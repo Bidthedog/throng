@@ -16,7 +16,9 @@ export type AgentCommand =
   // First frame: tells the agent which pid to watch so it can self-terminate (and
   // reap its terminals) if the daemon dies WITHOUT a clean pipe close (T134).
   | { op: 'hello'; daemonPid: number }
-  | { op: 'start'; key: number; file: string; args: string[]; cwd: string; cols: number; rows: number; env?: Record<string, string> }
+  // `commandLine` is cmd's verbatim line (`resolveLaunchSpec`), passed through so the agent starts cmd exactly as the
+  // direct host does: without it node-pty quotes each argument and escapes the command's own quotes past cmd.
+  | { op: 'start'; key: number; file: string; args: string[]; commandLine?: string; cwd: string; cols: number; rows: number; env?: Record<string, string> }
   | { op: 'write'; key: number; data: string }
   | { op: 'resize'; key: number; cols: number; rows: number }
   // 051: an end with an outcome, answered by `ended` once the agent's own host has settled it.
