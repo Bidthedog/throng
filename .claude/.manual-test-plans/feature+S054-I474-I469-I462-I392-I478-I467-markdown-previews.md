@@ -5,7 +5,7 @@ Spec: `specs/054-markdown-previews/spec.md`
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
 | MT-01 | Restored previews are reused by Last Active | needs retest | | | failed: After restart with Tab 1 active, opening MD 2 (previewed in unvisited Tab 2) replaced Tab 1's preview instead of switching to Tab 2 and focusing MD 2's preview; correct once Tab 2 had been visited |
-| MT-02 | Tick task-list checkboxes from a preview | untested | | | |
+| MT-02 | Tick task-list checkboxes from a preview | needs retest | | | failed: Toggling works, but each toggle flashes: the preview visibly redraws (links and tables flash, tables resize in place), and the dirty indicator flashes on the project list, tab, editor and explorer entry |
 | MT-03 | Find in Files opens Markdown by the default open action | untested | | | |
 | MT-04 | Mermaid diagrams in a Markdown preview | untested | | | |
 | MT-05 | Standalone Mermaid previews and preview types | untested | | | |
