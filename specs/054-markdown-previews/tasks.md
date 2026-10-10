@@ -98,8 +98,8 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 **Goal**: FR-010 – FR-014. **Independent test**: nested fixture, Collapse All Inside This H2.
 
-- [ ] T049 [P] [US6] Test: `collapseWithin` / `expandWithin` set the section and every descendant individually, leave others, a leaf acts as its own section — in `packages/core/tests/unit/fold-state.test.ts`
-- [ ] T050 [US6] Implement in `packages/core/src/outline/fold-state.ts`
+- [x] T049 [P] [US6] Test: `collapseWithin` / `expandWithin` set the section and every descendant individually, leave others, a leaf acts as its own section — in `packages/core/tests/unit/fold-state.test.ts`
+- [x] T050 [US6] Implement in `packages/core/src/outline/fold-state.ts`
 - [x] T051 [P] [US6] Test: actions `markdown.collapseAllInside` / `markdown.expandAllInside` exist, MARKDOWN_SURFACES, unbound, described in metadata; collisions empty — in `packages/core/tests/unit/keybindings-054.test.ts`
 - [x] T052 [US6] Implement in `packages/core/src/config/keybindings.ts` and `keybindings-metadata.ts`
 - [ ] T053 [P] [US6] Component test: preview and editor body menus show one Outlining submenu with the six rows in contract order, none at top level, All Inside absent before the first heading, no submenu for non-Markdown, shortcuts shown; choosing All Inside folds the right sections in both linked views — update `preview-fold-menu.test.ts`, `editor-markdown-fold-menu.test.ts` (047 FR-036 supersession) and `packages/ui/tests/unit/menu-sections.test.ts`

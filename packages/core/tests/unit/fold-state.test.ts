@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   collapseAll,
+  collapseWithin,
   expandAll,
+  expandWithin,
   initialFold,
   isCollapsed,
   prune,
@@ -116,6 +118,33 @@ const records: HeadingRecord[] = [
   { level: 1, text: 'B', slug: 'b', line: 3 },
 ];
 const tree = buildSymbolTree(records);
+
+/** 054 T049 — Collapse / Expand All Inside This Section (FR-013): the section and every descendant. */
+describe('collapseWithin / expandWithin (054 FR-013)', () => {
+  it('collapses the section and every section nested under it, individually, leaving the rest', () => {
+    const s = collapseWithin(initialFold('expanded'), tree, 'a');
+    expect(['a', 'a-1', 'a-1-i'].map((slug) => isCollapsed(s, slug))).toEqual([true, true, true]);
+    expect(isCollapsed(s, 'b')).toBe(false);
+  });
+
+  it('expands the section and every section nested under it, leaving the rest', () => {
+    const s = expandWithin(initialFold('collapsed'), tree, 'a-1');
+    expect(['a-1', 'a-1-i'].map((slug) => isCollapsed(s, slug))).toEqual([false, false]);
+    expect(isCollapsed(s, 'a')).toBe(true);
+    expect(isCollapsed(s, 'b')).toBe(true);
+  });
+
+  it('a leaf acts as its own section', () => {
+    const s = collapseWithin(initialFold('expanded'), tree, 'b');
+    expect(s.flipped).toEqual(['b']);
+  });
+
+  it('an unknown slug changes nothing', () => {
+    const s0 = initialFold('expanded');
+    expect(collapseWithin(s0, tree, 'zz')).toBe(s0);
+    expect(expandWithin(s0, tree, 'zz')).toBe(s0);
+  });
+});
 
 describe('revealing — expands a section and its ancestors (FR-040)', () => {
   it('expands the target slug and every ancestor, leaving unrelated slugs alone', () => {

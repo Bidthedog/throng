@@ -1064,7 +1064,9 @@ export type { DocumentSymbol, HeadingRecord } from './outline/document-symbol.js
 // 047 — one fold state per document or standalone preview (data-model.md "FoldState", research R3).
 export {
   collapseAll,
+  collapseWithin,
   expandAll,
+  expandWithin,
   initialFold,
   isCollapsed,
   prune,
