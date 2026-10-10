@@ -11,7 +11,10 @@
  * the folder context menu each ask. One opener rather than three that must be kept in step.
  */
 import { useEffect, type ReactElement } from 'react';
+import { defaultOpenActionFor, normaliseForCompare } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
+import { requestPreviewOpen } from '../preview/open-preview.js';
+import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { initialFindInFilesGrouping } from './find-in-files-store.js';
@@ -25,6 +28,7 @@ import {
   openResultRow,
   registerResultOpener,
   registerResultOpenTargets,
+  resolveResultPath,
   type ResultOpenRequest,
 } from './result-open.js';
 
@@ -60,6 +64,9 @@ export function FindInFilesChrome(): ReactElement | null {
    * `EditorOpenListener` reads this same key for the tree's own opens.
    */
   const editorOpenTarget = useAppSettings().editor.openTarget;
+  /** 054 FR-030 — what decides whether a result opens as a preview: the file's provider and its default. */
+  const previewSettings = useAppSettings().editor.previews;
+  const previewProviders = usePreviewProviders();
 
   /*
    * FR-037 and FR-087 in ONE effect, registered and torn down together.
@@ -85,7 +92,34 @@ export function FindInFilesChrome(): ReactElement | null {
     const open = (request: ResultOpenRequest): void => {
       const root = request.projectRoot ?? projectRoot;
       if (root === null || root === '') return;
-      void openResultRow({ ws, projectRoot: root, openTarget: editorOpenTarget, request });
+      const inEditor = (): void => {
+        void openResultRow({ ws, projectRoot: root, openTarget: editorOpenTarget, request });
+      };
+      /*
+       * 054 FR-030 (supersedes 044 FR-054) — a row with no named destination opens where the reader reads
+       * the file: its preview when its provider's default open action is Preview, through the one
+       * `preview.open` every entry point uses (Last Active reuse, New Preview Panel, an existing preview
+       * focused — FR-004). The match travels with it as a pending reveal; a match the preview cannot show,
+       * or a preview main refuses, opens the editor at the match instead (FR-032). An Open In row names
+       * its own destination, which wins (044 FR-055).
+       */
+      const absPath = resolveResultPath(root, request.relPath);
+      const owner = projects.find((p) => normaliseForCompare(p.rootFolder) === normaliseForCompare(root))?.id;
+      if (
+        request.target === undefined &&
+        owner !== undefined &&
+        defaultOpenActionFor(previewProviders.registry, previewSettings, absPath) === 'preview'
+      ) {
+        void requestPreviewOpen({
+          absPath,
+          projectId: owner,
+          reveal: { from: request.from, to: request.to, text: request.text ?? '', line: request.line ?? null, fallback: inEditor },
+        }).then((opened) => {
+          if (!opened) inEditor();
+        });
+        return;
+      }
+      inEditor();
     };
     registerResultOpener(open);
     // No `editorOpenTarget` here on purpose: the preference decides where a DOUBLE-CLICK lands, and
@@ -99,7 +133,7 @@ export function FindInFilesChrome(): ReactElement | null {
       registerResultOpener(null);
       registerResultOpenTargets(null);
     };
-  }, [ws, projectRoot, editorOpenTarget]);
+  }, [ws, projectRoot, projects, editorOpenTarget, previewProviders, previewSettings]);
 
   useEffect(() => {
     const open = (request: FindInFilesRequest): boolean =>

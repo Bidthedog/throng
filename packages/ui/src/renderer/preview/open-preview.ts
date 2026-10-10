@@ -45,7 +45,7 @@ import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
 import { setPreviewReservation } from './preview-reservations.js';
 import { findHeading } from './link-dom.js';
-import { revealPreviewFragment } from './preview-panel-handles.js';
+import { revealPreviewFragment, setPendingReveal, type PreviewReveal } from './preview-panel-handles.js';
 import { candidateFor, recordLastActivePreview } from './last-active-preview.js';
 
 /** What asking for a preview names: the file, its project, and the panel that asked, if one did. */
@@ -77,6 +77,11 @@ export interface PreviewOpenIntent {
    * show where the file went. File Explorer's opens set it; window-local, like `keepFocus`.
    */
   flash?: boolean;
+  /**
+   * 054 FR-031 — a Find in Files match to reveal in the preview this open shows. Window-local, like
+   * `keepFocus`: handed to whichever panel main's answer names as a pending reveal, never sent to main.
+   */
+  reveal?: Omit<PreviewReveal, 'absPath'>;
 }
 
 /**
@@ -288,6 +293,8 @@ export async function openPreview({
     if (!here) return;
     if (ws.layout !== null) rememberShown(tabHolding(ws.layout, panelId)?.id, panelId);
     if (intent.flash === true) requestPanelFlash(panelId);
+    // 054 FR-031 — the match goes with the preview that shows the file, whichever route it took here.
+    if (intent.reveal !== undefined) setPendingReveal(panelId, { ...intent.reveal, absPath: intent.absPath });
   };
 
   switch (answer.kind) {
