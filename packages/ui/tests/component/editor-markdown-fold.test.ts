@@ -251,6 +251,27 @@ describe('markdownFoldCommand — the six markdown.* actions', () => {
     const view = new EditorView({ state: EditorState.create({ doc: 'just a paragraph', extensions: [markdown()] }) });
     expect(markdownFoldCommand('collapseAll', deps('k'))(view)).toBe(false);
   });
+
+  /*
+   * 054 FR-011 — Collapse / Expand All Inside This Hn: the section at the cursor and everything nested
+   * beneath it, each set individually; sections outside it untouched.
+   */
+  it('collapseAllInside folds the cursor’s section and its descendants only; expandAllInside undoes exactly that', () => {
+    const doc = ['# Intro', 'p0', '## A', 'p1', '### A1', 'p2', '## B', 'p3'].join('\n');
+    const view = new EditorView({ state: EditorState.create({ doc, extensions: [markdown()] }) });
+    const key = `test-key-${Math.random()}`;
+    view.dispatch({ selection: { anchor: view.state.doc.line(4).from } }); // inside "## A", above "### A1"
+    expect(markdownFoldCommand('collapseAllInside', deps(key))(view)).toBe(true);
+    expect([...documentFoldState(key, initialFold('expanded')).flipped].sort()).toEqual(['a', 'a1']);
+    expect(markdownFoldCommand('expandAllInside', deps(key))(view)).toBe(true);
+    expect(documentFoldState(key, initialFold('expanded')).flipped).toEqual([]);
+  });
+
+  it('All Inside is a no-op before the first heading', () => {
+    const view = new EditorView({ state: EditorState.create({ doc: `lead\n${DOC}`, extensions: [markdown()] }) });
+    view.dispatch({ selection: { anchor: 0 } });
+    expect(markdownFoldCommand('collapseAllInside', deps('k2'))(view)).toBe(false);
+  });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *

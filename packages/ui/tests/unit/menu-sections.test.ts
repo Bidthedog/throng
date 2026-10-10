@@ -527,6 +527,31 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Editor content menu', build: () => editorMenu('TypeScript') },
   { name: 'Editor content menu — language undetected', build: () => editorMenu(undefined) },
   {
+    // 054 FR-010 — a Markdown document's fold rows, now ONE Outlining submenu in View & state.
+    name: 'Editor content menu — Markdown, with its Outlining submenu (054 FR-010)',
+    build: () =>
+      editorContentMenu({
+        view: {} as EditorView,
+        panelId: 'p1',
+        viewId: 'v1',
+        lineEnding: () => 'lf',
+        wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+        gotoLine: { open: noop, chord: 'Ctrl+G' },
+        languageName: 'Markdown',
+        markdownFold: {
+          section: { slug: 'a', level: 2, collapsed: false },
+          hasSections: true,
+          collapseSection: noop,
+          expandSection: noop,
+          collapseAllInside: noop,
+          expandAllInside: noop,
+          collapseAll: noop,
+          expandAll: noop,
+          chords: {},
+        },
+      }),
+  },
+  {
     name: 'Editor content menu — offering a preview, Synchronise Scrolling on (044 FR-122b)',
     build: () => editorMenuWithPreview(true),
   },
