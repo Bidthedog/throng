@@ -32,8 +32,9 @@
  *   happens after sanitising, on the inserted DOM, so no highlighter ever produces an HTML string (R5).
  *   Every code block — a fence, an invalid front matter block, a nested front matter value — is drawn by
  *   the one `renderFence(info, code)`, which is where #392 (Mermaid) will slot in.
- * - a leading `[ ]` / `[x]` in a list item as a DISABLED checkbox (R1 — an in-repo rule, not an
- *   unmaintained plugin in a security-sensitive path).
+ * - a leading `[ ]` / `[x]` in a list item as a checkbox (R1 — an in-repo rule, not an unmaintained
+ *   plugin in a security-sensitive path) carrying `data-task-line`, the item's document line, and this
+ *   render's nonce, so the preview can toggle it (054 R4, FR-020).
  *
  * ══ FRONT MATTER (FR-085, R4) ══
  *
@@ -277,7 +278,15 @@ function taskLists(state: StateCore): void {
     first.content = first.content.slice(marker[0].length);
     inline.content = inline.content.slice(marker[0].length);
     const checkbox = new state.Token('throng_task_checkbox', 'input', 0);
-    checkbox.meta = { checked: marker[1] !== ' ' };
+    const render = renderState(state.env);
+    // 054 R4: the ITEM's line (its `list_item_open`), so a nested item names its own line, offset to
+    // the document's like every `data-source-line`.
+    const itemLine = tokens[i - 2].map?.[0];
+    checkbox.meta = {
+      checked: marker[1] !== ' ',
+      line: itemLine === undefined ? null : itemLine + render.lineOffset,
+      nonce: render.nonce,
+    };
     inline.children?.unshift(checkbox);
   }
 }
@@ -369,8 +378,13 @@ function createMarkdownIt(): MarkdownItInstance {
   md.core.ruler.push('throng_task_lists', taskLists);
   md.core.ruler.push('throng_block_attributes', blockAttributes);
 
-  md.renderer.rules.throng_task_checkbox = (tokens, idx) =>
-    tokens[idx].meta?.checked === true ? '<input type="checkbox" checked disabled>' : '<input type="checkbox" disabled>';
+  // 054 FR-020 (supersedes 044 FR-080's disabled box): enabled, carrying the item's source line and this
+  // render's nonce — the sanitiser keeps the line only on a box carrying the nonce, and removes the nonce.
+  md.renderer.rules.throng_task_checkbox = (tokens, idx) => {
+    const meta = tokens[idx].meta as { checked: boolean; line: number | null; nonce: string } | undefined;
+    const line = meta?.line === null || meta?.line === undefined ? '' : ` data-task-line="${meta.line}" data-task-nonce="${meta.nonce}"`;
+    return `<input type="checkbox"${line}${meta?.checked === true ? ' checked' : ''}>`;
+  };
 
   md.renderer.rules.fence = (tokens, idx, _options, _env, renderer) => {
     const token = tokens[idx];

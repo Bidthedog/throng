@@ -81,11 +81,14 @@ describe('gfm.md — each FR-080 construct renders (FR-080)', () => {
     );
   });
 
-  it('renders the task list as disabled checkboxes, one checked', () => {
+  // 054 FR-020 supersedes 044 FR-080's "disabled": a task box is toggleable, and carries its item's
+  // 0-based source line for the toggle (R4).
+  it('renders the task list as enabled checkboxes carrying their source line, one checked', () => {
     const inputs = openTags(out, 'input');
     expect(inputs).toHaveLength(2);
-    for (const input of inputs) expect(input).toMatch(/\sdisabled(?=[\s>=])/);
+    for (const input of inputs) expect(input).not.toMatch(/\sdisabled(?=[\s>=])/);
     expect(inputs.map((i) => /\schecked(?=[\s>=])/.test(i))).toEqual([false, true]);
+    expect(inputs.map((i) => attr(i, 'data-task-line'))).toEqual(['32', '33']);
     expect(out).toMatch(/<input[^>]*>\s*Unchecked task/);
   });
 
@@ -113,6 +116,23 @@ describe('task list markers the u5 review asked to pin (carried to T086)', () =>
     expect(inputs.map((i) => /\schecked(?=[\s>=])/.test(i))).toEqual([false, true]);
     expect(out).toContain('plain child');
     expect(out).not.toContain('[x] child');
+  });
+
+  it('gives each nested item its OWN line, not its parent paragraph\'s (054 R4)', () => {
+    const out = html('- [ ] parent\n  - [x] child\n\n1. [X] ordered');
+    expect(openTags(out, 'input').map((i) => attr(i, 'data-task-line'))).toEqual(['0', '1', '3']);
+  });
+
+  it('offsets the task line by the front matter, so it is the document\'s line (054 R4)', () => {
+    const out = html('---\ntitle: x\n---\n\n- [ ] after front matter');
+    expect(openTags(out, 'input').map((i) => attr(i, 'data-task-line'))).toEqual(['4']);
+  });
+
+  it('carries this render\'s nonce on each box the pipeline emitted, for the sanitiser to verify', () => {
+    const sanitise = vi.fn((out: string, _context: PipelineContext) => out);
+    const out = createMarkdownPipeline(sanitise).render('- [ ] a').fragment;
+    const nonce = sanitise.mock.calls[0][1].headingNonce;
+    expect(openTags(out, 'input').map((i) => attr(i, 'data-task-nonce'))).toEqual([nonce]);
   });
 
   it('accepts * and + bullets, not only -', () => {

@@ -250,6 +250,29 @@ describe('what a document cannot plant through the hooks (T096)', () => {
     expect(input?.hasAttribute('checked')).toBe(true);
   });
 
+  // 054 R4 / FR-020: a PIPELINE task box stays enabled and keeps its numeric source line; nothing the
+  // document writes itself can claim one, so a raw checkbox can never ask for a toggle.
+  it('keeps a task box enabled with its numeric data-task-line, and drops the nonce', () => {
+    const input = render('- [x] done\n- [ ] todo').querySelectorAll('input');
+    expect([...input].map((i) => i.getAttribute('data-task-line'))).toEqual(['0', '1']);
+    expect([...input].map((i) => i.hasAttribute('disabled'))).toEqual([false, false]);
+    expect([...input].some((i) => i.hasAttribute('data-task-nonce'))).toBe(false);
+  });
+
+  it('refuses a data-task-line the document wrote itself, forging the nonce or not', () => {
+    const fragment = render(
+      '<input type="checkbox" data-task-line="3">\n\n<input type="checkbox" data-task-line="4" data-task-nonce="0011223344556677">',
+    );
+    for (const input of fragment.querySelectorAll('input')) {
+      expect(input.hasAttribute('data-task-line'), input.outerHTML).toBe(false);
+      expect(input.hasAttribute('disabled'), input.outerHTML).toBe(true);
+    }
+  });
+
+  it('removes a non-numeric data-task-line', () => {
+    expect(render('<p data-task-line="x1">p</p>').querySelector('[data-task-line]')).toBeNull();
+  });
+
   it('removes an input with no type at all (a text box by default)', () => {
     expect(render('<input value="x">').querySelector('input')).toBeNull();
   });
