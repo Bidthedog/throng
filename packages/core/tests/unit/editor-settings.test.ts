@@ -60,8 +60,6 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
-        // 047 FR-015a — a standalone preview reuses the last active one, shipped ON.
-        openTarget: 'lastActive',
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
@@ -69,11 +67,17 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           markdown: {
             enabled: true,
             defaultOpenAction: 'editor',
+            // 054 FR-051 — 047 FR-015a's openTarget moved from `previews` into each text provider.
+            openTarget: 'lastActive',
+            // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
+            renderMermaid: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,
             headingJumpMs: 200,
           },
+          // 054 FR-005 — the shipped Mermaid provider (text, no own settings).
+          mermaid: { enabled: true, defaultOpenAction: 'editor', openTarget: 'lastActive' },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence
@@ -166,6 +170,9 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     expect(s.editor.previews.providers.markdown).toEqual({
       enabled: false,
       defaultOpenAction: 'editor',
+      // 054 FR-051 / FR-041 — the per-provider openTarget and Render Mermaid diagrams.
+      openTarget: 'lastActive',
+      renderMermaid: true,
       loadRemoteImages: true,
       showFrontMatter: true,
       gutter: true,
@@ -179,9 +186,10 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
     // The declared range reaches the preview leaves too, because their descriptors are in the registry.
     expect(parseSettingsGuarded({ editor: { previews: { updateDelayMs: 99_999 } } }).value.editor.previews.updateDelayMs).toBe(5000);
     // An unknown provider id survives the guarded read too, not just the bare parse.
+    // 054 FR-005 — `mermaid` ships now, so the unknown id is a provider no build registers.
     expect(
-      parseSettingsGuarded({ editor: { previews: { providers: { mermaid: { enabled: false } } } } }).value.editor
-        .previews.providers.mermaid,
+      parseSettingsGuarded({ editor: { previews: { providers: { graphviz: { enabled: false } } } } }).value.editor
+        .previews.providers.graphviz,
     ).toEqual({ enabled: false });
   });
 
@@ -274,8 +282,6 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         copyFormat: 'rich',
         // 044 FR-114 (iteration 2026-09-15) — editor → preview scroll sync, shipped ON.
         syncScroll: true,
-        // 047 FR-015a — a standalone preview reuses the last active one, shipped ON.
-        openTarget: 'lastActive',
         providers: {
           // FR-117 (iteration 2026-09-15) — Markdown's own Show front matter, shipped ON.
           // 047 FR-032b/FR-042d — the preview gutter (shipped ON) and the heading-jump duration
@@ -283,11 +289,17 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
           markdown: {
             enabled: true,
             defaultOpenAction: 'editor',
+            // 054 FR-051 — 047 FR-015a's openTarget moved from `previews` into each text provider.
+            openTarget: 'lastActive',
+            // 054 FR-041 — Markdown's Render Mermaid diagrams, shipped ON.
+            renderMermaid: true,
             loadRemoteImages: true,
             showFrontMatter: true,
             gutter: true,
             headingJumpMs: 200,
           },
+          // 054 FR-005 — the shipped Mermaid provider (text, no own settings).
+          mermaid: { enabled: true, defaultOpenAction: 'editor', openTarget: 'lastActive' },
         },
       },
       // 045 FR-060/FR-120 (#394) — Editor · Links. Both detection switches on and a 2 s existence

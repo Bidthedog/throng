@@ -81,7 +81,10 @@ function providerDefaults(provider: PreviewProviderDescriptor): ProviderSettings
   // Every provider ships ENABLED. FR-065 requires it of Markdown, and the descriptor has no field to
   // say otherwise — none is added until a provider actually needs to ship off.
   const out: ProviderSettings = { enabled: true };
-  if (provider.kind === 'text') out.defaultOpenAction = DEFAULT_OPEN_ACTION_SHIPPED;
+  if (provider.kind === 'text') {
+    out.defaultOpenAction = DEFAULT_OPEN_ACTION_SHIPPED;
+    out.openTarget = OPEN_TARGET_SHIPPED;
+  }
   for (const s of provider.settings ?? []) out[s.leaf] = s.default;
   return out;
 }
@@ -93,7 +96,6 @@ export function previewSettingsDefaults(registry: PreviewProviderRegistry): Prev
     maxWaitMs: MAX_WAIT.shipped,
     copyFormat: COPY_FORMAT_SHIPPED,
     syncScroll: SYNC_SCROLL_SHIPPED,
-    openTarget: OPEN_TARGET_SHIPPED,
     providers: Object.fromEntries(registry.list().map((p) => [p.id, providerDefaults(p)])),
   };
 }
@@ -110,6 +112,7 @@ function ownSettingDescriptor(
     description: s.description,
     group: GROUP,
     subgroup: SUBGROUP,
+    subsection: provider.displayName,
     // A bounded number takes the slider (018 SC-007's converse guard: bounds imply the control).
     control:
       s.control === 'number' && typeof s.min === 'number' && typeof s.max === 'number'
@@ -132,7 +135,10 @@ function ownSettingDescriptor(
  * they are drawn DISABLED, not hidden, while it is off — the existing single-condition mechanism, and
  * no new descriptor field. A binary provider has no default-open-action descriptor at all (FR-051).
  */
-export function previewSettingsDescriptors(registry: PreviewProviderRegistry): FieldDescriptor[] {
+export function previewSettingsDescriptors(
+  registry: PreviewProviderRegistry,
+  trailing: Readonly<Record<string, readonly FieldDescriptor[]>> = {},
+): FieldDescriptor[] {
   const out: FieldDescriptor[] = [
     {
       key: `${PREFIX}.updateDelayMs`,
@@ -158,17 +164,6 @@ export function previewSettingsDescriptors(registry: PreviewProviderRegistry): F
       max: MAX_WAIT.max,
       step: MAX_WAIT.step,
     },
-    {
-      key: `${PREFIX}.copyFormat`,
-      label: 'Preview copy format',
-      description:
-        'What Copy puts on the clipboard from a preview: formatted text that keeps headings, lists and links when pasted into a document, or plain text alone.',
-      group: GROUP,
-      subgroup: SUBGROUP,
-      control: 'select',
-      allowedValues: PREVIEW_COPY_FORMATS,
-      optionLabels: { rich: 'Rich text', plain: 'Plain text' },
-    },
     // FR-113, FR-114. Deliberately NO `enabledWhen`: it applies to every text provider, so no one
     // provider being off may draw it disabled. The description names both directions (FR-121) and the
     // two other places the same setting is switched from (FR-122f), so the key binder's search and a
@@ -182,47 +177,67 @@ export function previewSettingsDescriptors(registry: PreviewProviderRegistry): F
       subgroup: SUBGROUP,
       control: 'toggle',
     },
-    // 047 FR-015a (research R8) — a STATIC leaf, like syncScroll above: it belongs to no provider and
-    // is never drawn disabled by one. Governs where a STANDALONE open lands; a file already previewed
-    // is always focused instead (FR-013), whatever this says.
+    // 054 contract order (menus-commands-controls-054.md "Preferences layout"): scrolling, then copy.
     {
-      key: `${PREFIX}.openTarget`,
-      label: 'Open previews in',
+      key: `${PREFIX}.copyFormat`,
+      label: 'Preview copy format',
       description:
-        'Last Active reuses the most recently used preview in the tab you are looking at; otherwise a new preview opens.',
+        'What Copy puts on the clipboard from a preview: formatted text that keeps headings, lists and links when pasted into a document, or plain text alone.',
       group: GROUP,
       subgroup: SUBGROUP,
       control: 'select',
-      allowedValues: PREVIEW_OPEN_TARGETS,
-      optionLabels: { lastActive: 'Last Active', new: 'New Preview Panel' },
+      allowedValues: PREVIEW_COPY_FORMATS,
+      optionLabels: { rich: 'Rich text', plain: 'Plain text' },
     },
   ];
 
   for (const provider of registry.list()) {
     const enabledKey = providerKey(provider.id, 'enabled');
     const enabledWhen = { key: enabledKey, is: true };
+    // 054 FR-050 — every row of a provider sits in its own subsection, named for it.
+    const subsection = provider.displayName;
     out.push({
       key: enabledKey,
       label: `${provider.displayName}: Enabled`,
       description: `Offer previews of ${provider.displayName} files. When off, every preview of these files closes and their preview commands are shown disabled.`,
       group: GROUP,
       subgroup: SUBGROUP,
+      subsection,
       control: 'toggle',
     });
     if (provider.kind === 'text') {
       out.push({
         key: providerKey(provider.id, 'defaultOpenAction'),
         label: `${provider.displayName}: Default open action`,
-        description: `What opening a ${provider.displayName} file from File Explorer or Quick Open does: open it in an editor, or open its preview. Find in Files results and Open In always open an editor.`,
+        // 054 FR-030 (T029) — Find in Files follows it now; only Open In's editor targets do not.
+        description: `What opening a ${provider.displayName} file from File Explorer, Quick Open or a Find in Files result does: open it in an editor, or open its preview. Open In's editor targets always open an editor.`,
         group: GROUP,
         subgroup: SUBGROUP,
+        subsection,
         control: 'select',
         allowedValues: DEFAULT_OPEN_ACTIONS,
         optionLabels: { editor: 'Editor', preview: 'Preview' },
         enabledWhen,
       });
+      // 054 FR-051 – FR-053 — 047 FR-015a's "Open previews in", one per provider, labelled with its name
+      // (FR-052). Governs where a STANDALONE open lands; a file already previewed is always focused
+      // instead (047 FR-013), whatever this says.
+      out.push({
+        key: providerKey(provider.id, 'openTarget'),
+        label: `${provider.displayName}: Open previews in`,
+        description: `Where a ${provider.displayName} preview opens: Last Active reuses the most recently used ${provider.displayName} preview in the tab you are looking at; otherwise a new preview opens.`,
+        group: GROUP,
+        subgroup: SUBGROUP,
+        subsection,
+        control: 'select',
+        allowedValues: PREVIEW_OPEN_TARGETS,
+        optionLabels: { lastActive: 'Last Active', new: 'New Preview Panel' },
+        enabledWhen,
+      });
     }
     for (const s of provider.settings ?? []) out.push(ownSettingDescriptor(provider, s, enabledWhen));
+    // Rows the caller files under this provider (`editor.markdownSectionsOpen`, FR-051), keys unchanged.
+    for (const d of trailing[provider.id] ?? []) out.push({ ...d, group: GROUP, subgroup: SUBGROUP, subsection });
   }
   return out;
 }
@@ -240,9 +255,24 @@ function ownLeaf(s: ProviderSettingDeclaration, v: unknown): boolean | string | 
   return s.allowedValues === undefined || s.allowedValues.includes(v) ? v : s.default;
 }
 
-function parseProvider(provider: PreviewProviderDescriptor, raw: unknown): ProviderSettings {
+const openTargetOf = (v: unknown): PreviewOpenTarget | undefined =>
+  PREVIEW_OPEN_TARGETS.includes(v as PreviewOpenTarget) ? (v as PreviewOpenTarget) : undefined;
+
+/**
+ * `legacyOpenTarget` — the retired top-level leaf (047 FR-015a), migrated into every text provider that
+ * has no valid value of its own (054 FR-053). The provider's own value wins, so a second parse of the
+ * output changes nothing.
+ */
+function parseProvider(
+  provider: PreviewProviderDescriptor,
+  raw: unknown,
+  legacyOpenTarget: PreviewOpenTarget | undefined,
+): ProviderSettings {
   const fallback = providerDefaults(provider);
-  if (!isRecord(raw)) return fallback;
+  if (!isRecord(raw)) {
+    if (provider.kind === 'text' && legacyOpenTarget !== undefined) fallback.openTarget = legacyOpenTarget;
+    return fallback;
+  }
   const out: ProviderSettings = {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
   };
@@ -251,6 +281,7 @@ function parseProvider(provider: PreviewProviderDescriptor, raw: unknown): Provi
     out.defaultOpenAction = DEFAULT_OPEN_ACTIONS.includes(raw.defaultOpenAction as DefaultOpenAction)
       ? (raw.defaultOpenAction as DefaultOpenAction)
       : fallback.defaultOpenAction;
+    out.openTarget = openTargetOf(raw.openTarget) ?? legacyOpenTarget ?? OPEN_TARGET_SHIPPED;
   }
   for (const s of provider.settings ?? []) out[s.leaf] = ownLeaf(s, raw[s.leaf]);
   return out;
@@ -274,7 +305,7 @@ export function parsePreviewSettings(raw: unknown, registry: PreviewProviderRegi
     }
   }
   for (const provider of registry.list()) {
-    providers[provider.id] = parseProvider(provider, rawProviders[provider.id]);
+    providers[provider.id] = parseProvider(provider, rawProviders[provider.id], openTargetOf(raw.openTarget));
   }
   return {
     updateDelayMs: nonNegative(raw.updateDelayMs, UPDATE_DELAY.shipped),
@@ -283,9 +314,6 @@ export function parsePreviewSettings(raw: unknown, registry: PreviewProviderRegi
       ? (raw.copyFormat as PreviewCopyFormat)
       : COPY_FORMAT_SHIPPED,
     syncScroll: typeof raw.syncScroll === 'boolean' ? raw.syncScroll : SYNC_SCROLL_SHIPPED,
-    openTarget: PREVIEW_OPEN_TARGETS.includes(raw.openTarget as PreviewOpenTarget)
-      ? (raw.openTarget as PreviewOpenTarget)
-      : OPEN_TARGET_SHIPPED,
     providers,
   };
 }
@@ -314,6 +342,20 @@ export function defaultOpenActionFor(
   if (settings?.enabled !== true) return 'editor';
   if (provider.kind === 'binary') return 'preview';
   return settings.defaultOpenAction === 'preview' ? 'preview' : 'editor';
+}
+
+/**
+ * 054 FR-051 — where a standalone preview of `path` opens: its text provider's own Open previews in, else
+ * `'lastActive'` (the shipped value) for a file no text provider claims.
+ */
+export function previewOpenTargetFor(
+  registry: PreviewProviderRegistry,
+  s: PreviewSettings,
+  path: string,
+): PreviewOpenTarget {
+  const provider = registry.forPath(path);
+  if (provider === undefined) return OPEN_TARGET_SHIPPED;
+  return s.providers[provider.id]?.openTarget ?? OPEN_TARGET_SHIPPED;
 }
 
 /**

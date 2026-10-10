@@ -1125,6 +1125,8 @@ export {
   parsePreviewSettings,
   effectiveMaxWaitMs,
   defaultOpenActionFor,
+  // 054 FR-051 — the file's own provider's Open previews in.
+  previewOpenTargetFor,
   remoteImagesPermitted,
   providersTurnedOff,
 } from './config/preview-settings.js';

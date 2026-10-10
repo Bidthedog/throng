@@ -19,7 +19,7 @@ an editor even when Preview is the default open action). Added in clarification 
 section), because diagram Full Pane shares its mechanism.
 
 This feature builds on spec **044** (file previews) and spec **047** (Markdown preview enhancements).
-It **supersedes** or narrows seven of their requirements, each restated where it is replaced:
+It **supersedes** or narrows nine of their requirements, each restated where it is replaced:
 
 | Superseded | By | What changes |
 |---|---|---|
@@ -27,6 +27,8 @@ It **supersedes** or narrows seven of their requirements, each restated where it
 | 044 FR-080 | FR-021 | Task lists render as checkboxes that toggle the source, not read-only ones |
 | 044 FR-086 | FR-040 | A `mermaid` fenced block renders as a diagram, not as code (math is unchanged) |
 | 047 FR-036 | FR-010 | The fold rows move from the top level of the body context menu into an **Outlining** submenu |
+| 047 FR-015a | FR-051, FR-053 | "Open previews in" becomes one setting per preview type; the old value is migrated to each |
+| 047 (R3) `editor.markdownSectionsOpen` "no subgroup" | FR-051, FR-054 | Filed under Editor → Previews → Markdown, key unchanged |
 | 040 FR-035 | FR-050a | Preferences fields gain a second, optional nesting level (`subsection`) under `subgroup`; still no recursion |
 | 044 FR-090 | FR-008 | A link to a file of a different preview type no longer opens in place |
 | 044 FR-054 | FR-030 | A Find in Files result honours the default open action when the provider can reveal a match; 044 *Finding 4*'s "043 FR-037 / FR-087c untouched" note no longer holds for such providers |

@@ -32,6 +32,7 @@ import { describe, it, expect } from 'vitest';
 import { SETTINGS_METADATA, settingsLeaves } from '../../src/config/settings-metadata.js';
 import { DEFAULT_APP_SETTINGS } from '../../src/config/app-settings.js';
 import type { FieldDescriptor } from '../../src/config/metadata.js';
+import { SHIPPED_PREVIEW_PROVIDERS } from '../../src/preview/providers/index.js';
 
 const CURSOR_KEY = 'editor.statusBar.showCursorPosition';
 const COUNTS_KEY = 'editor.statusBar.showCounts';
@@ -197,6 +198,12 @@ describe('the three status-bar settings sit together under Editor → Status Bar
     // `Editor → Links`, because FR-061 requires the default link action and both detection switches
     // "together in one place". A third permitted pair, not a third loosening — a link key in any
     // other subsection, or a non-link key in `Links`, is still a stray.
+    //
+    // 054 FR-050 / FR-051 amend it a third time, inside `Previews`: each provider's rows sit in a
+    // subsection named for the provider, and that subsection may carry an Editor setting that is only
+    // about that provider (`editor.markdownSectionsOpen` in Markdown). Permitted only in `Previews`
+    // and only in a subsection named after a SHIPPED provider — any other placement is still a stray.
+    const providerSubsections = new Set(SHIPPED_PREVIEW_PROVIDERS.list().map((p) => p.displayName));
     const strays = SETTINGS_METADATA.filter(
       (d) =>
         d.group === 'Editor' &&
@@ -205,6 +212,8 @@ describe('the three status-bar settings sit together under Editor → Status Bar
         d.key !== CURSOR_KEY &&
         d.key !== COUNTS_KEY &&
         !(d.subgroup === 'Previews' && d.key.startsWith('editor.previews.')) &&
+        // 054 FR-051 — a provider subsection's Editor row (Markdown sections open) is not a stray.
+        !(d.subgroup === 'Previews' && d.subsection !== undefined && providerSubsections.has(d.subsection)) &&
         !(d.subgroup === 'Links' && d.key.startsWith('editor.links.')),
     ).map((d) => d.key);
     expect(strays).toEqual([]);
