@@ -61,7 +61,9 @@ maximise. Shift+Enter and Ctrl+Enter must keep reaching terminals and editors.
 
 ## Constitution Check
 
-*GATE: evaluated before Phase 0 and re-evaluated after Phase 1.* Constitution v5.9.0.
+*GATE: evaluated before Phase 0 and re-evaluated after Phase 1.* Constitution v5.9.0, amended to
+**v5.10.0** by this feature (Principle IV recorded exception for `Alt+Shift+Enter`, found at
+implementation: no modifier tier admits `Shift+Alt`, and the chord takes a secondary terminal binding).
 
 | Principle | Assessment |
 |---|---|

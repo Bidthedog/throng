@@ -561,6 +561,15 @@ starting state; repeat with a diagram's Full Pane.
     Shift+Enter still does. **Shift+Enter** and **Ctrl+Enter** MUST keep their current behaviour in
     terminals and editors, and a test MUST assert both still reach a focused terminal and editor
     unchanged once the binding ships.
+    *Principle IV recorded exception (constitution v5.10.0).* **What it displaces:** in a terminal,
+    `Alt+Shift+Enter` today reaches the program as a modified Enter (`CSI 13;4 u` under the kitty
+    keyboard protocol, a line feed otherwise) — a secondary binding whose end, a line break without
+    submitting, `Shift+Enter` still reaches. **Why no free chord serves:** the maintainer chose it
+    (clarification 2026-10-10) because it is the full-screen toggle Visual Studio users already know;
+    the tier-2 forms are taken or worse — `Ctrl+Alt+Enter` is `search.replaceAll`, and
+    `Ctrl+Shift+Enter` is a chord terminal programs bind more often than `Alt+Shift+Enter`. It sits
+    outside the modifier tiers as `editor.columnSelect*`'s `Shift+Alt` does. The title-menu row and the
+    header control remain the canonical routes (Principle VI).
 - **FR-072**: Restoring MUST return the target to its exact previous position and size; the tab's
   layout underneath MUST be unchanged, its other panels hidden while maximised, never closed.
 - **FR-073**: Maximising is **per tab**. Switching to another tab and back MUST show the target still
