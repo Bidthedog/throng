@@ -99,7 +99,7 @@ test('a standalone .mmd file previews as one diagram through the Mermaid provide
   const svg = win.getByTestId(`diagram-frame-${id}-diagram-0`).locator('svg').first();
   await expect(svg).toBeVisible({ timeout: 15_000 });
   await expect(svg).toContainText('Begin here');
-  await expect(win.getByTestId(`panel-title-${id}`)).toContainText('flow.mmd');
+  await expect(win.getByTestId(`panel-title-${id}`)).toHaveText('flow - Preview'); // 044 FR-031, as Markdown
 });
 
 test('a Mermaid source that does not parse shows the inline notice instead of a drawing', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
