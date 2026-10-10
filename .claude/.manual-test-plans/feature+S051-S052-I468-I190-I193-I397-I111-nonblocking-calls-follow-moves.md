@@ -9,15 +9,15 @@ MT-06 – MT-10 test spec 052 (`specs/052-follow-moves-unheld-layouts/spec.md`).
 | MT-01 | Switch project straight after unloading with End Terminals | signed off | 070561703731 | 2026-10-09 | |
 | MT-02 | Other terminals keep flowing while terminals end and start | signed off | 070561703731 | 2026-10-09 | |
 | MT-03 | Terminate all on close leaves nothing running | signed off | 070561703731 | 2026-10-09 | |
-| MT-04 | Command memory remembers a command started through a launcher | signed off | 070561703731 | 2026-10-09 | |
+| MT-04 | Command memory remembers a command started through a launcher | signed off | f23762471c5f | 2026-10-10 | |
 | MT-05 | Ending a terminal ends a command its launcher left behind | signed off | 070561703731 | 2026-10-09 | |
 | MT-06 | A rename reaches a closed sub-workspace and an unloaded project | signed off | 750756182653 | 2026-10-09 | |
 | MT-07 | A tab not shown since launch follows a rename across a restart | signed off | 750756182653 | 2026-10-09 | |
 | MT-08 | Replace onto a clean open file: both panels share it; undo restores both | signed off | 407c795aee1e | 2026-10-09 | |
 | MT-09 | Replace onto a dirty open file keeps the changes, with Save As and Discard | signed off | 407c795aee1e | 2026-10-09 | |
 | MT-10 | Replace onto an open file whose source is not open | signed off | 407c795aee1e | 2026-10-09 | |
-| MT-11 | Every terminal names its running command, shell and directory | signed off | 070561703731 | 2026-10-09 | |
-| MT-12 | A custom title template renames every terminal at once | signed off | 070561703731 | 2026-10-09 | |
+| MT-11 | Every terminal names its running command, shell and directory | signed off | f23762471c5f | 2026-10-10 | |
+| MT-12 | A custom title template renames every terminal at once | signed off | f23762471c5f | 2026-10-10 | |
 | MT-13 | The title template is documented in Preferences | signed off | 102070d9deff | 2026-10-09 | |
 
 ## MT-01: Switch project straight after unloading with End Terminals
