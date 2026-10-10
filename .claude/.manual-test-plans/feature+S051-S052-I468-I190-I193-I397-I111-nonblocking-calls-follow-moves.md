@@ -6,9 +6,9 @@ MT-06 – MT-10 test spec 052 (`specs/052-follow-moves-unheld-layouts/spec.md`).
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Switch project straight after unloading with End Terminals | signed off | 070561703731 | 2026-10-09 | |
+| MT-01 | Switch project straight after unloading with End Terminals | signed off | 97dfe6be0863 | 2026-10-10 | |
 | MT-02 | Other terminals keep flowing while terminals end and start | signed off | 070561703731 | 2026-10-09 | |
-| MT-03 | Terminate all on close leaves nothing running | signed off | 070561703731 | 2026-10-09 | |
+| MT-03 | Terminate all on close leaves nothing running | signed off | 97dfe6be0863 | 2026-10-10 | |
 | MT-04 | Command memory remembers a command started through a launcher | signed off | f23762471c5f | 2026-10-10 | |
 | MT-05 | Ending a terminal ends a command its launcher left behind | signed off | 070561703731 | 2026-10-09 | |
 | MT-06 | A rename reaches a closed sub-workspace and an unloaded project | signed off | 750756182653 | 2026-10-09 | |
