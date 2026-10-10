@@ -1481,6 +1481,53 @@ export class EditorCoordinator {
   }
 
   /**
+   * Apply an edit computed from main to an OPEN document, as one undo entry (054 FR-024, FR-025).
+   *
+   * {@link bulkReplace}'s path, generalised: the edit is decided by `decide` against the authority's
+   * CURRENT text, in the same synchronous turn as the dispatch, so nothing can land between the check and
+   * the edit. `mergeClass: null` keeps it one entry that absorbs no neighbouring keystroke, and the
+   * canonical change is relayed to every window like any other edit. `wasClean` is sampled before the
+   * dispatch, the only moment it has a useful answer — see `bulkReplace`.
+   *
+   * `null` when no open document holds `absPath`. A document whose file moved out of its project is
+   * read-only (050 FR-035) and refuses as `movedOut`.
+   */
+  applyExternalEdit<R extends string>(req: {
+    absPath: string;
+    decide: (text: string) => { changes: readonly { from: number; to: number; insert: string }[] } | { refuse: R };
+  }):
+    | { kind: 'applied'; documentId: string; wasClean: boolean }
+    | { kind: 'refused'; reason: R | 'movedOut' }
+    | null {
+    const at = openOrFocus(this.registry, req.absPath);
+    if (at.action !== 'focus') return null;
+    const doc = this.docs.get(at.panelId);
+    if (!doc) return null;
+    if (doc.movedOut) return { kind: 'refused', reason: 'movedOut' };
+
+    const wasClean = !doc.authority.dirty;
+    const decided = req.decide(doc.authority.text);
+    if ('refuse' in decided) return { kind: 'refused', reason: decided.refuse };
+
+    const canonical = doc.authority.dispatch({
+      documentId: doc.panelId,
+      viewId: BULK_EDIT_VIEW_ID,
+      changes: ChangeSet.of([...decided.changes], doc.authority.text.length).toJSON(),
+      baseVersion: doc.authority.version,
+      selectionBefore: null,
+      mergeClass: null,
+    });
+    if (!canonical) {
+      this.broadcastReset(doc);
+      return null;
+    }
+    this.scheduleRecovery(doc);
+    this.relay({ panelId: doc.panelId, change: canonical });
+    this.notifyAfterMutation(doc, true);
+    return { kind: 'applied', documentId: doc.panelId, wasClean };
+  }
+
+  /**
    * Undo (or redo) the last change to a document, whichever view made it (FR-026c).
    *
    * Invoked from a view, but performed HERE, because the stack belongs to the document.
