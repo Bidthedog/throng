@@ -193,7 +193,14 @@ function asTaskToggle(payload: unknown): TaskToggleRequest | null {
   if (typeof line !== 'number' || !Number.isInteger(line) || line < 0 || line > TOGGLE_MAX_LINE) return null;
   if (typeof expectChecked !== 'boolean') return null;
   if (typeof itemText !== 'string' || itemText.length > TOGGLE_MAX_ITEM_TEXT) return null;
-  return { panelId, filePath, line, expectChecked, itemText };
+  const req: TaskToggleRequest = { panelId, filePath, line, expectChecked, itemText };
+  if (p.occurrence !== undefined) {
+    const o = record(p.occurrence);
+    const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= TOGGLE_MAX_LINE;
+    if (!count(o.index) || !count(o.of) || o.index >= o.of) return null;
+    req.occurrence = { index: o.index, of: o.of };
+  }
+  return req;
 }
 
 export function registerPreviewIpc(

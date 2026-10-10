@@ -212,6 +212,11 @@ export interface TaskToggleRequest {
   expectChecked: boolean;
   /** The item's text after the marker, trimmed — the relocation fingerprint (FR-027). */
   itemText: string;
+  /**
+   * Which of the task items sharing `itemText` the clicked one is, in the DRAWN source (`taskOccurrence`).
+   * With duplicated text it is what tells the clicked item apart when the source has moved (FR-027).
+   */
+  occurrence?: { index: number; of: number };
 }
 
 /** Why a toggle was refused; the file is left untouched in every case. */

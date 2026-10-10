@@ -42,9 +42,15 @@ export interface TaskToggleEditors {
 /** The preview run a panel shows — `PreviewService.run` satisfies it. */
 export type TaskToggleRunLookup = (panelId: string) => { projectRoot: string; filePath: string } | undefined;
 
-/** A save refusal, said in the toggle's vocabulary. */
-function saveRefusal(reason: string): TaskToggleRefusal {
-  if (reason === 'readOnly' || reason === 'locked' || reason === 'missing' || reason === 'outOfTree') return reason;
+/**
+ * A save refusal, said in the toggle's vocabulary. `EditorService` reports every OS failure as `io` with
+ * the error's message, so the code that names the cause is read from that message.
+ */
+function saveRefusal(reason: string, error: string): TaskToggleRefusal {
+  if (reason === 'out-of-tree') return 'outOfTree';
+  if (/\b(?:EACCES|EPERM|EROFS)\b/.test(error)) return 'readOnly';
+  if (/\b(?:EBUSY|ETXTBSY)\b/.test(error)) return 'locked';
+  if (/\bENOENT\b/.test(error)) return 'missing';
   return 'io';
 }
 
@@ -74,7 +80,7 @@ export class TaskToggleService {
       absPath,
       { allowed: confinement.allowed, isOpen: (p) => this.editors.isOpen(p) },
       (text) => {
-        const located = locateTaskToggle(text, req.line, req.expectChecked, req.itemText);
+        const located = locateTaskToggle(text, req.line, req.expectChecked, req.itemText, req.occurrence);
         return located.ok
           ? { next: applyTaskToggle(text, located), value: null }
           : { next: null, value: located.reason };
@@ -93,11 +99,13 @@ export class TaskToggleService {
   }
 
   private async inBuffer(req: TaskToggleRequest, absPath: string): Promise<TaskToggleResponse> {
+    let toggledLine = req.line;
     const applied = this.editors.applyExternalEdit<TaskToggleLocateRefusal>({
       absPath,
       decide: (text) => {
-        const located = locateTaskToggle(text, req.line, req.expectChecked, req.itemText);
+        const located = locateTaskToggle(text, req.line, req.expectChecked, req.itemText, req.occurrence);
         if (!located.ok) return { refuse: located.reason };
+        toggledLine = located.line;
         return { changes: [{ from: located.offset, to: located.offset + 1, insert: located.insert }] };
       },
     });
@@ -108,6 +116,22 @@ export class TaskToggleService {
     // FR-025 — the user's own unsaved edits are never written out by a toggle.
     if (!applied.wasClean) return { ok: true, savedToDisk: false };
     const saved = await this.editors.save({ panelId: applied.documentId });
-    return saved.ok ? { ok: true, savedToDisk: true } : { ok: false, reason: saveRefusal(saved.reason) };
+    if (saved.ok) return { ok: true, savedToDisk: true };
+    /*
+     * FR-028 — refused, and the box keeps its state: the toggle is taken back out of the buffer, or the
+     * document would show (and a later Ctrl+S write) the change the notice says did not happen. Located
+     * afresh in the current text, as the inverse of what was applied, so typing during the failed save is
+     * left alone; the document's dirty flag compares content, so it reads clean again.
+     */
+    this.editors.applyExternalEdit<TaskToggleLocateRefusal>({
+      absPath,
+      decide: (text) => {
+        const back = locateTaskToggle(text, toggledLine, !req.expectChecked, req.itemText, req.occurrence);
+        return back.ok
+          ? { changes: [{ from: back.offset, to: back.offset + 1, insert: back.insert }] }
+          : { refuse: back.reason };
+      },
+    });
+    return { ok: false, reason: saveRefusal(saved.reason, saved.error) };
   }
 }

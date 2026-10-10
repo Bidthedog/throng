@@ -136,6 +136,20 @@ describe('refusals (FR-028)', () => {
     }
   });
 
+  it('an OPEN, clean document whose save fails → refused, and the toggle is taken back out of the buffer', async () => {
+    const path = join(root, 'ro-open.md');
+    await writeFile(path, '- [ ] t\n');
+    await coord.load({ ...meta('p1', path), absPath: path });
+    await chmod(path, 0o444);
+    try {
+      expect(await service.toggle(request(path, 0, false, 't'))).toEqual({ ok: false, reason: 'readOnly' });
+      expect(coord.getContent('p1')).toMatchObject({ text: '- [ ] t\n', dirty: false });
+      expect(await readFile(path, 'utf8')).toBe('- [ ] t\n');
+    } finally {
+      await chmod(path, 0o666);
+    }
+  });
+
   it('a file outside the preview’s project → outOfTree', async () => {
     const path = join(outside, 'x.md');
     await writeFile(path, '- [ ] t\n');

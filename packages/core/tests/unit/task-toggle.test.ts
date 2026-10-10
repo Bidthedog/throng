@@ -3,13 +3,21 @@
  * FR-027, FR-029; contracts/preview-ipc-054.md).
  */
 import { describe, expect, it } from 'vitest';
-import { applyTaskToggle, locateTaskToggle, taskItemText } from '../../src/preview/task-toggle.js';
+import { applyTaskToggle, locateTaskToggle, taskItemText, taskOccurrence } from '../../src/preview/task-toggle.js';
 
-const toggled = (text: string, line: number, expectChecked: boolean, itemText: string): string => {
-  const located = locateTaskToggle(text, line, expectChecked, itemText);
+const toggledAt = (
+  text: string,
+  line: number,
+  expectChecked: boolean,
+  itemText: string,
+  occurrence?: { index: number; of: number },
+): string => {
+  const located = locateTaskToggle(text, line, expectChecked, itemText, occurrence);
   if (!located.ok) throw new Error(`refused: ${located.reason}`);
   return applyTaskToggle(text, located);
 };
+const toggled = (text: string, line: number, expectChecked: boolean, itemText: string): string =>
+  toggledAt(text, line, expectChecked, itemText);
 
 describe('locateTaskToggle — every list shape (FR-023)', () => {
   it.each([
@@ -69,9 +77,40 @@ describe('locateTaskToggle — the source moved since the render (FR-027)', () =
     expect(toggled('- [ ] dup\n- [ ] dup', 1, false, 'dup')).toBe('- [ ] dup\n- [x] dup');
   });
 
+  it('a stale line holding ANOTHER item with the same text toggles the clicked occurrence, not that one', () => {
+    // Drawn: `- [ ] a / - [ ] TBD / - [ ] b / - [ ] TBD`; the second TBD (line 3, occurrence 1 of 2) is
+    // clicked after two lines were inserted at the top, so line 3 now holds the FIRST TBD.
+    const now = 'x\ny\n- [ ] a\n- [ ] TBD\n- [ ] b\n- [ ] TBD\n';
+    expect(toggledAt(now, 3, false, 'TBD', { index: 1, of: 2 })).toBe('x\ny\n- [ ] a\n- [ ] TBD\n- [ ] b\n- [x] TBD\n');
+  });
+
+  it('refuses ambiguous when duplicated text gained or lost an occurrence since the render', () => {
+    expect(locateTaskToggle('- [ ] TBD\n- [ ] TBD\n- [ ] TBD', 1, false, 'TBD', { index: 1, of: 2 })).toEqual({
+      ok: false,
+      reason: 'ambiguous',
+    });
+  });
+
+  it('with the occurrence unchanged, toggles that occurrence wherever it moved', () => {
+    expect(toggledAt('- [ ] TBD\n- [ ] TBD', 1, false, 'TBD', { index: 1, of: 2 })).toBe('- [ ] TBD\n- [x] TBD');
+  });
+
   it('never treats a non-list line as a task', () => {
     expect(locateTaskToggle('[ ] t', 0, false, 't')).toEqual({ ok: false, reason: 'not-found' });
     expect(locateTaskToggle('-[ ] t', 0, false, 't')).toEqual({ ok: false, reason: 'not-found' });
+  });
+});
+
+describe('taskOccurrence — which of the same-text items a drawn line is', () => {
+  it('counts task items with that text, in document order', () => {
+    const drawn = '- [ ] a\n- [ ] TBD\n- [ ] b\n- [x] TBD\n';
+    expect(taskOccurrence(drawn, 1, 'TBD')).toEqual({ index: 0, of: 2 });
+    expect(taskOccurrence(drawn, 3, 'TBD')).toEqual({ index: 1, of: 2 });
+    expect(taskOccurrence(drawn, 0, 'a')).toEqual({ index: 0, of: 1 });
+  });
+
+  it('is undefined when the line is not a task item with that text', () => {
+    expect(taskOccurrence('- [ ] a\nplain', 1, 'plain')).toBeUndefined();
   });
 });
 

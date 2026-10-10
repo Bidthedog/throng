@@ -46,6 +46,9 @@ describe('throng:preview:toggleTask', () => {
     ['a non-boolean expectChecked', { ...VALID, expectChecked: 'false' }],
     ['a non-string itemText', { ...VALID, itemText: null }],
     ['an itemText over 1 KiB', { ...VALID, itemText: 'x'.repeat(1025) }],
+    ['an occurrence index past its count', { ...VALID, occurrence: { index: 2, of: 2 } }],
+    ['a non-integer occurrence', { ...VALID, occurrence: { index: 0.5, of: 2 } }],
+    ['an occurrence that is not an object', { ...VALID, occurrence: 3 }],
     ['no payload', undefined],
   ])('refuses %s as io without calling the service', async (_name, payload) => {
     let called = false;
@@ -55,6 +58,16 @@ describe('throng:preview:toggleTask', () => {
     });
     expect(await handler(event, payload)).toEqual({ ok: false, reason: 'io' });
     expect(called).toBe(false);
+  });
+
+  it('forwards a valid occurrence (FR-027)', async () => {
+    const seen: TaskToggleRequest[] = [];
+    const handler = wire(async (req) => {
+      seen.push(req);
+      return { ok: true, savedToDisk: true };
+    });
+    await handler(event, { ...VALID, occurrence: { index: 1, of: 2 } });
+    expect(seen).toEqual([{ ...VALID, occurrence: { index: 1, of: 2 } }]);
   });
 
   it('accepts an empty itemText and line 0', async () => {

@@ -57,28 +57,55 @@ function editAt(line: SourceLine, index: number, expectChecked: boolean): TaskTo
   return { ok: true, offset: line.start + (match[1] as string).length, insert: checked ? ' ' : 'x', line: index };
 }
 
+/** Which of the task items with `itemText` a drawn `line` is: `index` of `of`, in document order. */
+export interface TaskOccurrence {
+  index: number;
+  of: number;
+}
+
+function matchesOf(lines: readonly SourceLine[], wanted: string): number[] {
+  const out: number[] = [];
+  lines.forEach((l, i) => {
+    if (taskItemText(l.text) === wanted) out.push(i);
+  });
+  return out;
+}
+
 /**
- * The marker to toggle: the task item at `line` when its text is `itemText`, else the ONE task item
- * anywhere with that text. A toggle never lands on a different item (FR-027): two candidates refuse as
- * `ambiguous`, none as `not-found`, and an item already in the other state as `changed`.
+ * The renderer's half of FR-027: in the source it DREW, which occurrence of its text the item at `line`
+ * is. `undefined` when that line is not a task item with that text.
+ */
+export function taskOccurrence(drawn: string, line: number, itemText: string): TaskOccurrence | undefined {
+  const matches = matchesOf(linesOf(drawn), itemText.trim());
+  const index = matches.indexOf(line);
+  return index < 0 ? undefined : { index, of: matches.length };
+}
+
+/**
+ * The marker to toggle. A toggle never lands on a different item (FR-027):
+ *
+ * - text no task item has → `not-found`; text exactly one has → that item, wherever it moved;
+ * - text several items share → the clicked OCCURRENCE when their count is unchanged since the render, and
+ *   `ambiguous` when it changed — the line alone cannot say which, because a stale line may now hold
+ *   another item with the same text. Without an occurrence (an older caller), the item at `line` if its
+ *   text matches, else `ambiguous`;
+ * - an item already in the other state → `changed`.
  */
 export function locateTaskToggle(
   text: string,
   line: number,
   expectChecked: boolean,
   itemText: string,
+  occurrence?: TaskOccurrence,
 ): TaskToggleLocation {
   const lines = linesOf(text);
-  const wanted = itemText.trim();
-  const atLine = lines[line];
-  if (atLine !== undefined && taskItemText(atLine.text) === wanted) return editAt(atLine, line, expectChecked);
-  const matches: number[] = [];
-  lines.forEach((l, i) => {
-    if (taskItemText(l.text) === wanted) matches.push(i);
-  });
+  const matches = matchesOf(lines, itemText.trim());
   if (matches.length === 0) return { ok: false, reason: 'not-found' };
-  if (matches.length > 1) return { ok: false, reason: 'ambiguous' };
-  const index = matches[0] as number;
+  let index: number | undefined;
+  if (matches.length === 1) index = matches[0];
+  else if (occurrence !== undefined) index = occurrence.of === matches.length ? matches[occurrence.index] : undefined;
+  else index = matches.includes(line) ? line : undefined;
+  if (index === undefined) return { ok: false, reason: 'ambiguous' };
   return editAt(lines[index] as SourceLine, index, expectChecked);
 }
 
