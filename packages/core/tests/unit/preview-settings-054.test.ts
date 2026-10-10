@@ -6,7 +6,9 @@
  * shipped registry and `SETTINGS_METADATA` are asserted where the claim is about what ships.
  */
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_APP_SETTINGS, parseAppSettings } from '../../src/config/app-settings.js';
 import {
+  defaultOpenActionFor,
   parsePreviewSettings,
   previewOpenTargetFor,
   previewSettingsDefaults,
@@ -121,6 +123,23 @@ describe('the Previews descriptors (FR-050 – FR-052)', () => {
     expect(d.description).not.toContain('Find in Files results and Open In always open an editor');
   });
 
+  it('ships a text provider’s declared default open action, Editor when it declares none (FR-050)', () => {
+    const diagrams: PreviewProviderDescriptor = { ...sketch, id: 'diagrams', extensions: ['.dg'], defaultOpenAction: 'preview' };
+    const d = previewSettingsDefaults(registryOf(notes, diagrams));
+    expect(d.providers.diagrams?.defaultOpenAction).toBe('preview');
+    expect(d.providers.notes?.defaultOpenAction).toBe('editor');
+  });
+
+  it('takes a provider’s own enabled-row wording when it declares one, the generated wording otherwise', () => {
+    const worded: PreviewProviderDescriptor = { ...sketch, enabledLabel: 'Preview .sk files', enabledDescription: 'Only .sk.' };
+    const rows = previewSettingsDescriptors(registryOf(notes, worded));
+    expect(rows.find((x) => x.key === 'editor.previews.providers.sketch.enabled')).toMatchObject({
+      label: 'Sketch: Preview .sk files',
+      description: 'Only .sk.',
+    });
+    expect(rows.find((x) => x.key === 'editor.previews.providers.notes.enabled')?.label).toBe('Notes: Enabled');
+  });
+
   it('appends caller-supplied rows to a provider’s subsection, after its own', () => {
     const extra: FieldDescriptor = { key: 'editor.extra', label: 'Extra', description: 'd', group: 'Editor', control: 'toggle' };
     const rows = previewSettingsDescriptors(REGISTRY, { notes: [extra] });
@@ -160,7 +179,45 @@ describe('what ships (FR-005, FR-041, FR-050)', () => {
       'Markdown: Heading jump scroll duration (ms)',
       'Markdown sections open',
     ]);
-    expect(inSubsection('Mermaid')).toEqual(['Mermaid: Enabled', 'Mermaid: Default open action', 'Mermaid: Open previews in']);
+    expect(inSubsection('Mermaid')).toEqual([
+      'Mermaid: Preview .mmd files',
+      'Mermaid: Default open action',
+      'Mermaid: Open previews in',
+    ]);
+  });
+
+  // MT-04 change request: a diagram file is opened to be looked at, so Mermaid ships Preview. Markdown
+  // keeps 044 FR-050's Editor.
+  it('opens a .mmd / .mermaid file as its preview on a fresh config, and a Markdown file in an editor', () => {
+    const fresh = parseAppSettings({}).editor.previews;
+    expect(fresh.providers.mermaid?.defaultOpenAction).toBe('preview');
+    expect(fresh.providers.markdown?.defaultOpenAction).toBe('editor');
+    expect(DEFAULT_APP_SETTINGS.editor.previews.providers.mermaid?.defaultOpenAction).toBe('preview');
+    expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, fresh, 'D:/p/flow.mmd')).toBe('preview');
+    expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, fresh, 'D:/p/flow.MERMAID')).toBe('preview');
+    expect(defaultOpenActionFor(SHIPPED_PREVIEW_PROVIDERS, fresh, 'D:/p/README.md')).toBe('editor');
+  });
+
+  it('keeps a stored Editor choice for Mermaid, and an invalid one falls back to Preview', () => {
+    const chosen = parsePreviewSettings({ providers: { mermaid: { defaultOpenAction: 'editor' } } }, SHIPPED_PREVIEW_PROVIDERS);
+    expect(chosen.providers.mermaid?.defaultOpenAction).toBe('editor');
+    const bad = parsePreviewSettings({ providers: { mermaid: { defaultOpenAction: 'sideways' } } }, SHIPPED_PREVIEW_PROVIDERS);
+    expect(bad.providers.mermaid?.defaultOpenAction).toBe('preview');
+  });
+
+  // Change request: Mermaid's Enabled governs standalone files only; fenced diagrams in a Markdown
+  // preview answer to Markdown's Render Mermaid diagrams (FR-041, FR-049).
+  it('words Mermaid’s enabled toggle as standalone files only, and leaves Markdown’s wording alone', () => {
+    const mermaid = SETTINGS_METADATA.find((d) => d.key === 'editor.previews.providers.mermaid.enabled') as FieldDescriptor;
+    expect(mermaid.label).toBe('Mermaid: Preview .mmd files');
+    expect(mermaid.description).toContain('.mmd');
+    expect(mermaid.description).toContain('.mermaid');
+    expect(mermaid.description).toContain('Render Mermaid diagrams');
+    const markdown = SETTINGS_METADATA.find((d) => d.key === 'editor.previews.providers.markdown.enabled') as FieldDescriptor;
+    expect(markdown.label).toBe('Markdown: Enabled');
+    expect(markdown.description).toBe(
+      'Offer previews of Markdown files. When off, every preview of these files closes and their preview commands are shown disabled.',
+    );
   });
 
   it('keeps the Markdown sections open key (FR-054)', () => {

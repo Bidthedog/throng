@@ -61,7 +61,11 @@ Editor
       Markdown: Render Mermaid diagrams, Markdown: Load remote images, Markdown: Show front matter,
       Markdown: Preview gutter, Markdown: Heading jump scroll duration (ms), Markdown sections open
     Mermaid                      (subsection)
-      Mermaid: Enabled, Mermaid: Default open action, Mermaid: Open previews in
+      Mermaid: Preview .mmd files, Mermaid: Default open action (ships Preview), Mermaid: Open previews in
 ```
+
+*Amended after MT-04: Mermaid's enabled toggle is worded "Preview .mmd files" because it governs standalone
+`.mmd` / `.mermaid` files only (fenced diagrams answer to Markdown: Render Mermaid diagrams), and its default
+open action ships as Preview, superseding 044 FR-050's Editor for Mermaid only.*
 
 Test ids: `settings-subsection-<group>-<subgroup>-<subsection>`.

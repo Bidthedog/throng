@@ -30,7 +30,7 @@ What changed in each release of throng, written for someone deciding whether to 
 ## Unreleased
 
 ### Added
-- **Mermaid diagrams in previews** ([#392](https://github.com/Bidthedog/throng/issues/392)): a `mermaid` block in a Markdown preview draws as its diagram, a `.mmd` / `.mermaid` file has its own **Mermaid Preview**, and each diagram has Fit, Full Size, Zoom and Full Pane controls; copying one gives its source as text and a picture as rich content.
+- **Mermaid diagrams in previews** ([#392](https://github.com/Bidthedog/throng/issues/392)): a `mermaid` block in a Markdown preview draws as its diagram, a `.mmd` / `.mermaid` file has its own **Mermaid Preview** and opens as it by default, and each diagram has Fit, Full Size, Zoom and Full Pane controls; copying one gives its source as text and a picture as rich content.
 - **Task lists you can tick** ([#462](https://github.com/Bidthedog/throng/issues/462)): clicking a checkbox in a preview changes the file, through the open editor when there is one, as one undoable edit.
 - **Maximise a panel** ([#467](https://github.com/Bidthedog/throng/issues/467)) to fill its tab, from its header, its menu or **Shift+Alt+Enter**.
 - **Outlining submenu** ([#469](https://github.com/Bidthedog/throng/issues/469)) in Markdown editors and previews, with **Collapse / Expand All Inside This Section**.

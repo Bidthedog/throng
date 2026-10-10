@@ -166,8 +166,8 @@ The settings in this table apply to every preview type.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Mermaid: Enabled | `editor.previews.providers.mermaid.enabled` | on | on · off | Offer previews of `.mmd` and `.mermaid` files, drawn as their diagram. Off, every such preview closes. |
-| Mermaid: Default open action | `editor.previews.providers.mermaid.defaultOpenAction` | `editor` | `editor` · `preview` | What opening a Mermaid file from File Explorer, Quick Open or a Find in Files result does. |
+| Mermaid: Preview .mmd files | `editor.previews.providers.mermaid.enabled` | on | on · off | Offer previews of standalone `.mmd` and `.mermaid` files, drawn as their diagram. Off, every such preview closes. Diagrams inside a Markdown preview are not affected — **Markdown: Render Mermaid diagrams** controls those. |
+| Mermaid: Default open action | `editor.previews.providers.mermaid.defaultOpenAction` | `preview` | `editor` · `preview` | What opening a Mermaid file from File Explorer, Quick Open or a Find in Files result does. Ships as `preview`, so a diagram file opens as its diagram; **Open In**'s editor targets always open an editor. |
 | Mermaid: Open previews in | `editor.previews.providers.mermaid.openTarget` | `lastActive` | `lastActive` (Last Active) · `new` (New Preview Panel) | As **Markdown: Open previews in**, for Mermaid previews; a Markdown preview is never reused for a Mermaid file, or the reverse. |
 
 ### Links

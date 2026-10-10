@@ -82,7 +82,8 @@ function providerDefaults(provider: PreviewProviderDescriptor): ProviderSettings
   // say otherwise — none is added until a provider actually needs to ship off.
   const out: ProviderSettings = { enabled: true };
   if (provider.kind === 'text') {
-    out.defaultOpenAction = DEFAULT_OPEN_ACTION_SHIPPED;
+    // 044 FR-050 ships Editor; a provider may declare Preview instead (Mermaid, 054 MT-04).
+    out.defaultOpenAction = provider.defaultOpenAction ?? DEFAULT_OPEN_ACTION_SHIPPED;
     out.openTarget = OPEN_TARGET_SHIPPED;
   }
   for (const s of provider.settings ?? []) out[s.leaf] = s.default;
@@ -198,8 +199,10 @@ export function previewSettingsDescriptors(
     const subsection = provider.displayName;
     out.push({
       key: enabledKey,
-      label: `${provider.displayName}: Enabled`,
-      description: `Offer previews of ${provider.displayName} files. When off, every preview of these files closes and their preview commands are shown disabled.`,
+      label: `${provider.displayName}: ${provider.enabledLabel ?? 'Enabled'}`,
+      description:
+        provider.enabledDescription ??
+        `Offer previews of ${provider.displayName} files. When off, every preview of these files closes and their preview commands are shown disabled.`,
       group: GROUP,
       subgroup: SUBGROUP,
       subsection,
