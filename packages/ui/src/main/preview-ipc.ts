@@ -31,6 +31,8 @@ import type {
   PreviewPlaceMessage,
   PreviewRefreshResponse,
   PreviewUpdate,
+  TaskToggleRequest,
+  TaskToggleResponse,
 } from '@throng/core';
 import { broadcastToWindows, type BroadcastContents, type BroadcastTarget } from './broadcast.js';
 import type { PreviewPush, PreviewService } from './preview-service.js';
@@ -172,7 +174,46 @@ function quietly(channel: string, call: () => void): void {
   }
 }
 
-export function registerPreviewIpc(ipc: PreviewIpcMain, service: PreviewIpcService): void {
+/** 054 — the task toggle behind `throng:preview:toggleTask`; `TaskToggleService` satisfies it. */
+export interface PreviewTaskToggle {
+  toggle(req: TaskToggleRequest): Promise<TaskToggleResponse>;
+}
+
+const TOGGLE_MAX_LINE = 1_000_000;
+const TOGGLE_MAX_ITEM_TEXT = 1024;
+const TOGGLE_MALFORMED: TaskToggleResponse = { ok: false, reason: 'io' };
+
+/** contracts/preview-ipc-054.md — anything outside the shape is refused before the service sees it. */
+function asTaskToggle(payload: unknown): TaskToggleRequest | null {
+  const p = record(payload);
+  const panelId = text(p.panelId);
+  const filePath = text(p.filePath);
+  const { line, expectChecked, itemText } = p;
+  if (panelId === null || filePath === null) return null;
+  if (typeof line !== 'number' || !Number.isInteger(line) || line < 0 || line > TOGGLE_MAX_LINE) return null;
+  if (typeof expectChecked !== 'boolean') return null;
+  if (typeof itemText !== 'string' || itemText.length > TOGGLE_MAX_ITEM_TEXT) return null;
+  return { panelId, filePath, line, expectChecked, itemText };
+}
+
+export function registerPreviewIpc(
+  ipc: PreviewIpcMain,
+  service: PreviewIpcService,
+  taskToggle?: PreviewTaskToggle,
+): void {
+  // 054 FR-022 – FR-029 — the one input in a preview that changes the source. A malformed request never
+  // reaches the service, and a throw is an answer rather than a rejection across the bridge.
+  ipc.handle('throng:preview:toggleTask', async (_event, payload) => {
+    const req = asTaskToggle(payload);
+    if (req === null || taskToggle === undefined) return TOGGLE_MALFORMED;
+    try {
+      return await taskToggle.toggle(req);
+    } catch (err) {
+      console.error('[preview-ipc] toggleTask failed:', err);
+      return TOGGLE_MALFORMED;
+    }
+  });
+
   ipc.handle('throng:preview:open', async (event, payload) => {
     const req = asOpen(payload);
     if (req === null) return OPEN_FAILED;

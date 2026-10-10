@@ -97,7 +97,7 @@ function source(relative: string): string {
 }
 
 describe('throng:preview:* — channels and kinds (§1)', () => {
-  it('registers the seven invokes and the four sends, and nothing else', () => {
+  it('registers the eight invokes and the four sends, and nothing else', () => {
     const ipc = fakeIpc();
     registerPreviewIpc(ipc, recordingService());
 
@@ -109,6 +109,7 @@ describe('throng:preview:* — channels and kinds (§1)', () => {
       'throng:preview:openPaths',
       'throng:preview:refresh',
       'throng:preview:resolveWikiTargets',
+      'throng:preview:toggleTask', // 054 — preview-ipc-054.contract.test.ts
     ]);
     expect([...ipc.ons.keys()].sort()).toEqual([
       'throng:preview:destroyed',

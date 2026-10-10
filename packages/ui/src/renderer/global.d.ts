@@ -555,6 +555,13 @@ declare global {
           panelId: string,
           targets: { path: string; rooted: boolean }[],
         ) => Promise<{ resolved: (string | null)[] }>;
+        /**
+         * 054 FR-022 – FR-029 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source.
+         * Main locates the marker in the CURRENT text and edits one character; the preview never writes.
+         */
+        toggleTask: (
+          request: import('@throng/core').TaskToggleRequest,
+        ) => Promise<import('@throng/core').TaskToggleResponse>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
         publishEditorTitle: (panelId: string, title: string) => void;
         /** FR-010 — this window's layout does not hold the parent a `place` named. */
