@@ -31,6 +31,7 @@ It **supersedes** or narrows nine of their requirements, each restated where it 
 | 047 (R3) `editor.markdownSectionsOpen` "no subgroup" | FR-051, FR-054 | Filed under Editor → Previews → Markdown, key unchanged |
 | 040 FR-035 | FR-050a | Preferences fields gain a second, optional nesting level (`subsection`) under `subgroup`; still no recursion |
 | 044 FR-090 | FR-008 | A link to a file of a different preview type no longer opens in place |
+| 044 FR-050 | FR-042 | Mermaid's default open action ships as **Preview** (maintainer, MT-04, 2026-10-10); Markdown still ships Editor |
 | 044 FR-054 | FR-030 | A Find in Files result honours the default open action when the provider can reveal a match; 044 *Finding 4*'s "043 FR-037 / FR-087c untouched" note no longer holds for such providers |
 
 044 FR-055 (Open In's editor targets always open an editor), 044 FR-021 (document commands inert while a preview has focus), 044 FR-081/FR-082/FR-093
@@ -486,7 +487,9 @@ starting state; repeat with a diagram's Full Pane.
 - **FR-042**: A **Mermaid text provider** MUST register for `.mmd` and `.mermaid` through 044's provider
   contract, and get everything 044 gives a text provider unchanged: the editor status-bar preview
   button, Open In → Preview, parented live preview, standalone preview following the disk, the preview
-  title menu, layout persistence, and an enable/default-open entry under **Editor - Previews**.
+  title menu, layout persistence, and an enable/default-open entry under **Editor - Previews**. Its
+  default open action ships as **Preview** (supersedes 044 FR-050 for Mermaid), and its enable row
+  names standalone `.mmd` / `.mermaid` files only — fenced diagrams follow FR-040's own setting.
   Adding it MUST require no change to the preview panel, its menus, the status bar or the preferences
   page beyond its own registration and settings (044 User Story 5).
 - **FR-043**: The standalone provider and the embedded rendering MUST use one renderer. The seam that
