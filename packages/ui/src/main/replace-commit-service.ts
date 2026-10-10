@@ -31,21 +31,17 @@ import { Text } from '@codemirror/state';
 import {
   MAX_COMMIT_SNIPPET_CHARS,
   applyReplacements,
-  decode,
-  encode,
-  isDecodableUtf8,
-  isProbablyBinary,
   postCommitSnippets,
   resolveSaveConfinement,
   toAbsPath,
   verifyEdits,
   type AppSettings,
-  type EncodeOptions,
   type IFileSystem,
   type Match,
   type MatchModes,
   type SnippetView,
 } from '@throng/core';
+import { rewriteFailureFor, textFileRewrite } from './text-file-rewrite.js';
 
 /** One file's worth of intended writes, as the panel listed them (data-model §6). */
 export interface CommitTarget {
@@ -457,66 +453,33 @@ export class ReplaceCommitService {
     allowed: (candidate: string) => boolean,
     budget: number,
   ): Promise<PathOutcome | { kind: 'becameOpen' }> {
-    let realPath: string;
-    try {
-      if (!(await this.fs.exists(absPath))) return { kind: 'failed', reason: 'missing' };
-      realPath = await this.fs.realpath(absPath);
-    } catch (e) {
-      return { kind: 'failed', reason: reasonFor(e) };
+    /*
+     * Confinement on the RESOLVED path, the binary and not-UTF-8 refusals (FR-058), the file's own
+     * encoding, BOM and endings (FR-056), and R8's last `isOpen` with nothing between it and the write —
+     * all `textFileRewrite`'s, shared with 054's task toggle.
+     */
+    const outcome = await textFileRewrite(
+      this.fs,
+      absPath,
+      { allowed, isOpen: (p) => this.editors.isOpen(p) },
+      (text) => {
+        // FR-054, unconditionally, against the text as it is NOW — which is why the bytes are read
+        // here and the scan's own metadata was deliberately discarded rather than carried. The
+        // replacement goes in because a match this same commit has already moved is RE-RESOLVED
+        // rather than refused, and the shift it caused is a function of the replacement's length.
+        const checked = verifyEdits(text, request.term, request.modes, target.edits, request.replacement);
+        const next =
+          checked.applicable.length === 0 ? null : applyReplacements(text, checked.applicable, request.replacement);
+        return { next, value: checked };
+      },
+    );
+    if (outcome.kind === 'failed' || outcome.kind === 'becameOpen') return outcome;
+    const checked = outcome.value;
+    if (outcome.kind === 'unchanged') {
+      return { kind: 'disk', applied: [], refusedAny: checked.gone.length > 0 };
     }
-
-    // Confinement on the RESOLVED path, because a rule applied to a symlink rather than to its
-    // target is not a rule — `EditorService.resolveEntry`'s precedent, and the reason `..` in a
-    // relPath cannot walk a commit out of the project it was scanned in.
-    if (!allowed(realPath)) return { kind: 'failed', reason: 'outOfTree' };
-
+    const next = outcome.next;
     try {
-      const bytes = await this.fs.readBytes(realPath);
-      if (isProbablyBinary(bytes)) return { kind: 'failed', reason: 'binary' };
-      /*
-       * The NUL scan above is not a text test, and this is the file it lets through.
-       *
-       * A Windows-1252 or Latin-1 file has no NULs, so it passes as text; `decode` then runs a
-       * NON-FATAL decoder that turns every byte it cannot read into `U+FFFD`, and `encode` writes
-       * `EF BF BD` back over it. Every accented character in the file is destroyed — not just the
-       * ones near a match — in a file nobody opened, with no in-app undo by design (FR-057a). R9
-       * relied on interleaved NULs to catch UTF-16; a single-byte encoding has no such tell, so the
-       * question has to be asked outright and answered by REFUSING the file (FR-058).
-       */
-      if (!isDecodableUtf8(bytes)) return { kind: 'failed', reason: 'encoding' };
-      const file = decode(bytes);
-
-      // FR-054, unconditionally, against the text as it is NOW — which is why the bytes are read
-      // here and the scan's own metadata was deliberately discarded rather than carried. The
-      // replacement goes in because a match this same commit has already moved is RE-RESOLVED
-      // rather than refused, and the shift it caused is a function of the replacement's length.
-      const checked = verifyEdits(
-        file.text,
-        request.term,
-        request.modes,
-        target.edits,
-        request.replacement,
-      );
-      if (checked.applicable.length === 0) {
-        return { kind: 'disk', applied: [], refusedAny: checked.gone.length > 0 };
-      }
-
-      const next = applyReplacements(file.text, checked.applicable, request.replacement);
-      // The SAME metadata the decode reported. Not the app's defaults, and not anything recorded at
-      // scan time: this file's own bytes are the only authority on how it must be written back.
-      const opts: EncodeOptions = {
-        encoding: file.encoding,
-        hasBom: file.hasBom,
-        lineEnding: file.lineEnding,
-      };
-      // FR-056 — a file that MIXES endings keeps every one of them. Without this, the dominant
-      // ending is re-applied to every line and a three-line edit arrives as a whole-file diff.
-      if (file.mixedLineEndings) opts.mixedLineEndings = file.mixedLineEndings;
-      const out = encode(next, opts);
-
-      // R8's last check, with nothing between it and the write.
-      if (this.editors.isOpen(absPath)) return { kind: 'becameOpen' };
-      await this.fs.writeBytes(realPath, out);
       /*
        * FR-083c — immediately, with nothing between it and the write.
        *
@@ -617,10 +580,4 @@ function snippetChars(edits: readonly AppliedEdit[]): number {
 }
 
 /** An OS error, said in the vocabulary FR-058 reports (data-model §6). */
-function reasonFor(e: unknown): FailedCommit['reason'] {
-  const code = (e as { code?: string } | null)?.code;
-  if (code === 'ENOENT') return 'missing';
-  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return 'readOnly';
-  if (code === 'EBUSY' || code === 'ETXTBSY') return 'locked';
-  return 'io';
-}
+const reasonFor: (e: unknown) => FailedCommit['reason'] = rewriteFailureFor;
