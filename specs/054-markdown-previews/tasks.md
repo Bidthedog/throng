@@ -111,7 +111,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 - [x] T055 [US7] Test: `parsePreviewSettings` migrates top-level `openTarget` to every provider's `openTarget` (Markdown and Mermaid) when absent; a provider's own value wins; re-parse is a no-op; the retired top-level leaf is not in the parse output (the section rebuild 019 FR-023 relies on — a write therefore drops it; top-level hand-added keys are a different case, `settings-validity.test.ts:57`); descriptors placed per FR-051 (shared under Previews, provider leaves with `subsection: displayName`, labels `"<displayName>: Open previews in"`); `editor.markdownSectionsOpen` in Previews → Markdown with key unchanged — in `packages/core/tests/unit/preview-settings.test.ts`, `settings-metadata-040.test.ts`, `settings-047.test.ts`
 - [x] T056 [US7] Implement in `packages/core/src/config/preview-settings.ts`, `packages/core/src/preview/settings-types.ts`, `packages/core/src/config/settings-metadata.ts`; switch readers of `previews.openTarget` (`open-preview.ts`, `file-tree.tsx`, links) to the provider's
-- [ ] T057 [P] [US7] Component test: Settings tab renders Editor → Previews with shared rows then Markdown and Mermaid subsections in contract order; search "open previews" finds both provider rows; an all-filtered subsection disappears — update `packages/ui/tests/component/settings-tab-previews.test.ts`, `settings-tab-subgroups.test.ts`
+- [x] T057 [P] [US7] Component test: Settings tab renders Editor → Previews with shared rows then Markdown and Mermaid subsections in contract order; search "open previews" finds both provider rows; an all-filtered subsection disappears — update `packages/ui/tests/component/settings-tab-previews.test.ts`, `settings-tab-subgroups.test.ts`
 - [x] T058 [US7] Add `packages/core/tests/unit/settings-inertness-054.test.ts` (every new leaf has a descriptor and a production reader) and satisfy it
 
 ## Phase 10: User Story 8 — maximise panels and sections (P2)
@@ -131,7 +131,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 ## Phase 11: E2E (real window only)
 
 - [ ] T068 [P] Test E2E `packages/ui/tests/e2e/preview-mermaid.e2e.ts` (`@extended @editor`): a `.md` with a flowchart renders an SVG with themed fill in a dark theme; a `.mmd` standalone preview renders; invalid source shows the notice — own app
-- [ ] T069 [P] Test E2E `packages/ui/tests/e2e/maximise-terminal.e2e.ts` (`@extended @window`): three split panels; Alt+Shift+Enter in a terminal maximises it; Shift+Enter still sends `\x1b[13;2u` to a kitty-negotiating program (reuse `terminal-modified-enter` harness); restore leaves the layout unchanged
+- [x] T069 [P] Test E2E `packages/ui/tests/e2e/maximise-terminal.e2e.ts` (`@extended @window`): three split panels; Alt+Shift+Enter in a terminal maximises it; Shift+Enter still sends `\x1b[13;2u` to a kitty-negotiating program (reuse `terminal-modified-enter` harness); restore leaves the layout unchanged
 - [ ] T070 Re-seed `packages/ui/tests/e2e/e2e-budget.json`; add T069's spec to `packages/ui/tests/e2e/parallel-plan.json` serial tier if `tier-plan.test.ts` requires it
 
 ## Phase 12: Polish & cross-cutting
