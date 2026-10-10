@@ -72,10 +72,13 @@
  *   right-click sends, and a user's rebinding is honoured (Principle X). A key handler of its own would
  *   never see the keys, and would ignore the binding if it did.
  */
+import { createPortal } from 'react-dom';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -94,6 +97,10 @@ import {
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
 import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
+import { claimRenderedBlocks, type BlockRendererEntry } from '../../blocks/block-renderers.js';
+import { DiagramBlock } from '../../diagram/diagram-block.js';
+import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
+import { DIAGRAM_HOST_CLASS, DIAGRAM_LANG_ATTRIBUTE, DIAGRAM_SOURCE_ATTRIBUTE } from '../../diagram/diagram-host.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
 import { useActiveTheme, useIconPacks } from '../../../config/config-store.js';
@@ -142,6 +149,13 @@ function markdownRenderer(): Promise<MarkdownRenderer> {
       throw error;
     });
   return renderer;
+}
+
+/** One diagram the draw found: the host it stands in, its source and the renderer that claimed it (054 US4). */
+interface DiagramMount {
+  readonly host: HTMLElement;
+  readonly source: string;
+  readonly entry: BlockRendererEntry;
 }
 
 /** The class the focused link carries (FR-096b); `markdown.css` draws the indicator. */
@@ -318,6 +332,40 @@ export function MarkdownBody({
   const tableHandSetRef = useRef(new Map<number, TableHandSet>());
   const theme = useActiveTheme();
   const packs = useIconPacks();
+  /*
+   * ── 054 US4 — diagrams (FR-040 – FR-048, research R5) ──
+   *
+   * A fence a block renderer claims is replaced, in the fragment, by a host element, and a `DiagramBlock` is
+   * portalled into it. The hosts are kept BY ORDINAL across draws: the next draw puts the same element back
+   * where its fence now is, so the block — its last good render, its zoom and pan — survives every edit
+   * elsewhere in the document, and an unchanged diagram is never drawn again (FR-044, FR-046g). The
+   * host is the anchor the scroll keeper sees (`data-source-line`), and carries its source for copy.
+   */
+  const renderMermaid = providerSettings.renderMermaid !== false;
+  const renderMermaidRef = useRef(renderMermaid);
+  renderMermaidRef.current = renderMermaid;
+  const diagramHostsRef = useRef<HTMLElement[]>([]);
+  const [diagrams, setDiagrams] = useState<readonly DiagramMount[]>([]);
+  const diagramTheme = useMemo(() => diagramThemeFrom(theme), [theme]);
+  const claimDiagrams = useCallback((fragment: DocumentFragment): void => {
+    const claimed = claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current);
+    const mounts = claimed.map((block, ordinal): DiagramMount => {
+      const host = diagramHostsRef.current[ordinal] ?? fragment.ownerDocument.createElement('div');
+      host.className = DIAGRAM_HOST_CLASS;
+      host.setAttribute(DIAGRAM_LANG_ATTRIBUTE, block.lang);
+      host.setAttribute(DIAGRAM_SOURCE_ATTRIBUTE, block.source);
+      if (block.line !== null) host.setAttribute('data-source-line', String(block.line));
+      else host.removeAttribute('data-source-line');
+      block.pre.replaceWith(host);
+      return { host, source: block.source, entry: block.entry };
+    });
+    diagramHostsRef.current = mounts.map((m) => m.host);
+    setDiagrams((prev) =>
+      prev.length === mounts.length && prev.every((m, i) => m.host === mounts[i].host && m.source === mounts[i].source && m.entry === mounts[i].entry)
+        ? prev
+        : mounts,
+    );
+  }, []);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const packsRef = useRef(packs);
@@ -693,6 +741,9 @@ export function MarkdownBody({
           first.classList.add(FRONT_MATTER_CLASS);
         }
         for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
+        // 054 FR-040, FR-043 — every fence a block renderer claims becomes a diagram host, before insertion
+        // (so the place below is measured with it) and before highlighting (so it is never highlighted).
+        claimDiagrams(fragment);
         const scroller = scrollerOf(body);
         const file = filePath;
         const previous = shown.current;
@@ -801,7 +852,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, renderMermaid, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
@@ -1024,6 +1075,7 @@ export function MarkdownBody({
   }, []);
 
   return (
+    <>
     <div
       ref={bodyRef}
       className="preview-markdown"
@@ -1038,5 +1090,14 @@ export function MarkdownBody({
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
     />
+    {/* 054 US4 — each diagram, drawn into the host the draw put in its fence's place. */}
+    {diagrams.map((d, ordinal) =>
+      createPortal(
+        <DiagramBlock panelId={panelId} sectionId={`diagram-${ordinal}`} source={d.source} entry={d.entry} theme={diagramTheme} />,
+        d.host,
+        `diagram-${ordinal}`,
+      ),
+    )}
+    </>
   );
 }

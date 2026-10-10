@@ -116,7 +116,9 @@ describe('a known language is highlighted after insertion (FR-080)', () => {
 describe('what stays plain (FR-086, FR-008a)', () => {
   it.each([
     ['an unknown language', 'nosuchlanguage'],
-    ['mermaid', 'mermaid'],
+    // 054 FR-040 supersedes FR-086 for Mermaid: the body hands a mermaid fence to its block renderer before
+    // highlighting, so the highlighter only ever meets one with Render Mermaid diagrams off — and leaves it plain.
+    ['mermaid (Render Mermaid diagrams off)', 'mermaid'],
     ['no info string', ''],
   ])('%s', async (_name, info) => {
     const host = body(info, 'graph TD\n  A --> B\n');

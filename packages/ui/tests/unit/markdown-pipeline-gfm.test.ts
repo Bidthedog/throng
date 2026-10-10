@@ -96,7 +96,8 @@ describe('gfm.md — each FR-080 construct renders (FR-080)', () => {
     expect(out).toMatch(/<pre data-source-line="\d+"><code data-lang="ts">function greet\(name: string\): string \{\n {2}return `Hello, \$\{name\}!`;\n\}\n<\/code><\/pre>/);
   });
 
-  it('renders the mermaid fence as ordinary code, never a diagram (FR-086)', () => {
+  // 054 FR-040: the PIPELINE still emits a mermaid fence as code — the body's block-renderer pass claims it.
+  it('renders the mermaid fence as code for the block renderer to claim, never an SVG of its own', () => {
     expect(out).toContain('<code data-lang="mermaid">graph TD\n  A --&gt; B\n  B --&gt; C\n</code>');
     expect(out).not.toMatch(/<svg/i);
   });

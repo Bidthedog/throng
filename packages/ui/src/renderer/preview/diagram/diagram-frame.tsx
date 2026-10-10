@@ -1,0 +1,249 @@
+/**
+ * The box every diagram is drawn in, with its own view controls (054 FR-046a – FR-046h, research R6).
+ *
+ * ══ THE TOOLBAR IS NOT IN THE TRANSFORMED LAYER ══
+ *
+ * The diagram sits in `__layer`, moved and scaled by one CSS `transform`; the toolbar is its sibling,
+ * pinned to the frame's top-left. So no zoom or pan can move a control (FR-046b), by construction rather
+ * than by recomputing a position.
+ *
+ * ══ VIEW STATE ══
+ *
+ * `{mode, scale, x, y}` lives here and nowhere else: never in the file, the layout or main (FR-046g). A
+ * live re-render hands this frame a new SVG and keeps the state; a reopened preview mounts a new frame,
+ * which starts from Fit.
+ *
+ * - **Fit** — `scale = clamp(width / naturalWidth, MIN_READABLE_SCALE, 1)`: shrink to the box, never
+ *   enlarge, and below the floor keep the floor and scroll sideways (FR-046a).
+ * - **Zoom In / Out** — ×1.25 per step within [DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE] (FR-046c).
+ * - **Full Size** — the frame lifts to fill the preview panel's body (its nearest positioned ancestor);
+ *   again, or Fit, puts it back (FR-046d).
+ * - **Full Pane** — hands the frame to the one maximise mechanism as a SECTION target (FR-046f, R7). The
+ *   state stays here, above the maximise layer's portal, so zoom and pan survive the move both ways.
+ * - **Middle-button drag** pans in every view, and its press is prevented so Chromium never starts its
+ *   autoscroll over a diagram (FR-046e).
+ */
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { IconButton } from '../../common/icon-button.js';
+import {
+  maximiseSection,
+  restore as restoreMaximise,
+  sectionUnmounted,
+  tabOfMaximisePanel,
+  useSectionMaximised,
+} from '../../workspace/maximise-store.js';
+import './diagram.css';
+
+export const MIN_READABLE_SCALE = 0.5;
+export const DIAGRAM_MIN_SCALE = 0.1;
+export const DIAGRAM_MAX_SCALE = 8;
+export const ZOOM_STEP = 1.25;
+
+export type DiagramViewMode = 'fit' | 'zoom' | 'fullSize';
+
+interface ViewState {
+  mode: DiagramViewMode;
+  /** The zoom in `zoom` and `fullSize` modes; Fit computes its own. */
+  scale: number;
+  x: number;
+  y: number;
+}
+
+export interface DiagramFrameProps {
+  svg: SVGSVGElement;
+  /** The preview panel the diagram is in — the maximise target's owner. */
+  panelId: string;
+  /** Unique within the panel: the diagram's ordinal (`diagram-0`) or the standalone diagram. */
+  sectionId: string;
+  /** FR-044 — the last good render, shown under a notice. */
+  dimmed?: boolean;
+}
+
+/** The SVG's drawing size, from its `viewBox` (mermaid always writes one), else its width/height. */
+function naturalSize(svg: SVGSVGElement): { width: number; height: number } {
+  const box = (svg.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/).map(Number);
+  if (box.length === 4 && box.every(Number.isFinite) && box[2]! > 0 && box[3]! > 0) return { width: box[2]!, height: box[3]! };
+  const width = Number.parseFloat(svg.getAttribute('width') ?? '');
+  const height = Number.parseFloat(svg.getAttribute('height') ?? '');
+  return { width: width > 0 ? width : 300, height: height > 0 ? height : 150 };
+}
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const FIT: ViewState = { mode: 'fit', scale: 1, x: 0, y: 0 };
+
+export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: DiagramFrameProps): ReactElement {
+  const [view, setView] = useState<ViewState>(FIT);
+  const [boxWidth, setBoxWidth] = useState(0);
+  const tabId = tabOfMaximisePanel(panelId);
+  const fullPane = useSectionMaximised(tabId ?? '', panelId, sectionId);
+  const natural = naturalSize(svg);
+
+  const fitScale = boxWidth > 0 ? clamp(boxWidth / natural.width, MIN_READABLE_SCALE, 1) : 1;
+  const scale = view.mode === 'fit' ? fitScale : view.scale;
+
+  const onFit = useCallback((): void => setView(FIT), []);
+  const onFullSize = useCallback(
+    (): void =>
+      setView((v) => (v.mode === 'fullSize' ? FIT : { ...v, mode: 'fullSize', scale: v.mode === 'fit' ? fitScale : v.scale })),
+    [fitScale],
+  );
+  const zoomBy = useCallback(
+    (factor: number): void =>
+      setView((v) => {
+        const from = v.mode === 'fit' ? fitScale : v.scale;
+        const next = clamp(from * factor, DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE);
+        return { ...v, mode: v.mode === 'fullSize' ? 'fullSize' : 'zoom', scale: next };
+      }),
+    [fitScale],
+  );
+  /*
+   * FR-046f — Full Pane. The maximise layer draws what the section registers: here, an empty host element,
+   * into which THIS component portals its own toolbar and viewport. So the state above stays where it is,
+   * and zoom and pan are the same on the way out as on the way back. Esc and the layer's Restore are the
+   * maximise mechanism's own; the toolbar's Full Pane control turns into Restore while it holds.
+   */
+  const [paneHost, setPaneHost] = useState<HTMLDivElement | null>(null);
+  const onFullPane = useCallback((): void => {
+    if (tabId === null) return;
+    if (fullPane) {
+      restoreMaximise(tabId);
+      return;
+    }
+    maximiseSection(tabId, panelId, sectionId, () => (
+      <div className="preview-diagram-pane-host" data-testid={`diagram-pane-host-${panelId}-${sectionId}`} ref={setPaneHost} />
+    ));
+  }, [tabId, fullPane, panelId, sectionId]);
+
+  // FR-046e — the middle button pans; a drag remembers where it started.
+  const drag = useRef<{ pointerId: number; x: number; y: number; fromX: number; fromY: number } | null>(null);
+  const onPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>): void => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      drag.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, fromX: view.x, fromY: view.y };
+      (e.currentTarget as Element & { setPointerCapture?: (id: number) => void }).setPointerCapture?.(e.pointerId);
+    },
+    [view.x, view.y],
+  );
+  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>): void => {
+    const d = drag.current;
+    if (d === null || d.pointerId !== e.pointerId) return;
+    const x = d.fromX + (e.clientX - d.x);
+    const y = d.fromY + (e.clientY - d.y);
+    setView((v) => ({ ...v, x, y }));
+  }, []);
+  const onPointerEnd = useCallback((e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (drag.current?.pointerId === e.pointerId) drag.current = null;
+  }, []);
+  // The compatibility mousedown and the auxclick: neither may start autoscroll or follow anything.
+  const swallowMiddle = useCallback((e: ReactMouseEvent<HTMLDivElement>): void => {
+    if (e.button === 1) e.preventDefault();
+  }, []);
+
+  // The box's width, for Fit — read at mount and whenever the box resizes.
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const frame = frameRef.current;
+    if (frame === null) return undefined;
+    setBoxWidth(frame.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => setBoxWidth(frame.clientWidth));
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
+  // The SVG itself: a clone, sized to its natural drawing size, so the layer's transform alone scales it.
+  // A callback ref, so the layer is filled again when Full Pane moves it into the maximise layer and back.
+  const layerRef = useCallback(
+    (layer: HTMLDivElement | null): void => {
+      if (layer === null) return;
+      const drawn = svg.cloneNode(true) as SVGSVGElement;
+      drawn.setAttribute('width', String(natural.width));
+      drawn.setAttribute('height', String(natural.height));
+      drawn.style.removeProperty('max-width');
+      layer.replaceChildren(drawn);
+    },
+    [svg, natural.width, natural.height],
+  );
+
+  // A diagram that leaves the document while it fills the middle section takes its target with it.
+  useEffect(
+    () => () => {
+      if (tabId !== null) sectionUnmounted(tabId, panelId, sectionId);
+    },
+    [tabId, panelId, sectionId],
+  );
+
+  const scrolls = view.mode === 'fit' && boxWidth > 0 && natural.width * MIN_READABLE_SCALE > boxWidth;
+  const classes = [
+    'preview-diagram-frame',
+    view.mode === 'fullSize' ? 'preview-diagram-frame--full-size' : '',
+    fullPane ? 'preview-diagram-frame--full-pane' : '',
+    scrolls ? 'preview-diagram-frame--scrolls' : '',
+    dimmed ? 'preview-diagram-frame--dimmed' : '',
+  ]
+    .filter((c) => c.length > 0)
+    .join(' ');
+
+  const inside = (
+    <>
+      <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label="Diagram view">
+        <IconButton token="diagramFit" title="Fit diagram" onClick={onFit} />
+        <IconButton token="diagramFullSize" title="Fill the panel" onClick={onFullSize} />
+        <IconButton token="zoomIn" title="Zoom in" onClick={() => zoomBy(ZOOM_STEP)} />
+        <IconButton token="zoomOut" title="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)} />
+        <IconButton
+          token={fullPane ? 'panelRestore' : 'diagramFullPane'}
+          title={fullPane ? 'Restore' : 'Fill the middle section'}
+          onClick={onFullPane}
+          disabled={tabId === null}
+        />
+      </div>
+      <div
+        className="preview-diagram-frame__viewport"
+        style={view.mode === 'fit' ? { height: `${natural.height * scale}px` } : undefined}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onMouseDown={swallowMiddle}
+        onAuxClick={swallowMiddle}
+      >
+        <div
+          ref={layerRef}
+          className="preview-diagram-frame__layer"
+          style={{
+            width: `${natural.width}px`,
+            transform: `translate(${view.x}px, ${view.y}px) scale(${scale})`,
+          }}
+        />
+      </div>
+    </>
+  );
+
+  const portalled = fullPane && paneHost !== null;
+  return (
+    <div
+      ref={frameRef}
+      className={classes}
+      data-testid={`diagram-frame-${panelId}-${sectionId}`}
+      data-mode={view.mode}
+      data-scale={String(scale)}
+      // While it fills the middle section, its place in the document keeps its height: nothing below jumps.
+      style={portalled ? { minHeight: `${natural.height * fitScale}px` } : undefined}
+    >
+      {portalled ? createPortal(<div className="preview-diagram-frame preview-diagram-frame--in-pane">{inside}</div>, paneHost) : inside}
+    </div>
+  );
+}

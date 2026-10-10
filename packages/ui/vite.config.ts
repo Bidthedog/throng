@@ -38,11 +38,26 @@ function failOnOversizedChunks(): Plugin {
 const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
 
 /**
+ * The Mermaid diagram renderer and the packages it pulls in (054 R5, FR-047): imported only by
+ * `preview/diagram/mermaid-renderer.ts`'s dynamic `import('mermaid')`, so a preview without a diagram —
+ * and the app's startup — never loads it. `dompurify` is shared with the preview pipeline and stays in
+ * `preview`.
+ */
+const DIAGRAM_VENDOR =
+  /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
+
+/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+const LAZY_VENDOR = [
+  { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
+  { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+];
+
+/**
  * A chunk rule cannot make code lazy, only a dynamic import can — and one chunk rule that swept the
  * lazily-imported Markdown body into an eagerly-loaded chunk turned every such import into a no-op,
  * loading the whole pipeline with the app (Rolldown said so only as an INEFFECTIVE_DYNAMIC_IMPORT
- * warning). This fails the build when any entry reaches a `PREVIEW_VENDOR` module through static
- * imports alone.
+ * warning). This fails the build when any entry reaches a `PREVIEW_VENDOR` or `DIAGRAM_VENDOR` module
+ * through static imports alone.
  */
 function failOnEagerPreview(): Plugin {
   return {
@@ -62,14 +77,16 @@ function failOnEagerPreview(): Plugin {
         eager.add(name);
         pending.push(...(chunks.get(name)?.imports ?? []));
       }
-      const offenders = [...eager].filter((name) =>
-        chunks.get(name)!.moduleIds.some((id) => PREVIEW_VENDOR.test(id.replace(/\\/g, '/'))),
-      );
-      if (offenders.length > 0) {
-        this.error(
-          `the Markdown preview pipeline loads with the app (R21) — eager chunks holding it: ` +
-            `${offenders.join(', ')}. Keep the modules behind its dynamic imports out of eager chunks in chunkFor.`,
+      for (const { pattern, what } of LAZY_VENDOR) {
+        const offenders = [...eager].filter((name) =>
+          chunks.get(name)!.moduleIds.some((id) => pattern.test(id.replace(/\\/g, '/'))),
         );
+        if (offenders.length > 0) {
+          this.error(
+            `${what} — eager chunks holding it: ` +
+              `${offenders.join(', ')}. Keep the modules behind its dynamic imports out of eager chunks in chunkFor.`,
+          );
+        }
       }
     },
   };
@@ -142,6 +159,10 @@ function chunkFor(rawId: string): string | null {
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
   if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
+  // 054 FR-047 — the two diagram modules that import a lazy vendor (mermaid; DOMPurify for the SVG profile)
+  // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
+  // React components and the rasteriser import neither and ride with whatever imports them.
+  if (/\/src\/renderer\/preview\/diagram\/(mermaid-renderer|svg-sanitise)\.ts$/.test(id)) return 'app-preview-diagram';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   // The terminal panel and its stores — the next largest self-contained area, split for the same
   // reason (053's title templates took the app chunk to 501 kB).
@@ -184,5 +205,7 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
+  // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`.
+  if (DIAGRAM_VENDOR.test(id)) return 'diagram';
   return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
 }

@@ -76,6 +76,7 @@ import {
 } from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
 import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX } from './wikilinks.js';
+import { DIAGRAM_IMAGE_ATTRIBUTE, DIAGRAM_PNG_DATA_URI } from '../../diagram/diagram-host.js';
 
 type Profile = Config & { RETURN_DOM_FRAGMENT: true };
 
@@ -311,13 +312,17 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
  * disallowed element's content (`KEEP_CONTENT`, on by default). Once `class` is gone a span says nothing,
  * so unwrapping every span — the alternative-text span included — loses nothing.
  *
- * `img` is left out too (amended 2026-09-15, US3 review). An image's `throng-preview:` or remote address
+ * A document image never travels (amended 2026-09-15, US3 review). Its `throng-preview:` or remote address
  * means nothing outside the app, so the exporter replaces each image with its alt text before sanitising
- * (`createHtmlExporter`); the allowlist is the backstop that removes any image that pass did not reach.
+ * (`createHtmlExporter`). 054 FR-049a re-admits `img` and `src` for exactly one shape — the PNG data URI a
+ * copy draws in a diagram's place, marked by the copy — and the exporter's hook removes any other image
+ * that reaches DOMPurify, so that pass still has a backstop.
  */
 export const EXPORT_PROFILE = Object.freeze({
-  ALLOWED_TAGS: PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span' && tag !== 'img'),
-  ALLOWED_ATTR: ['href', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan'],
+  // 054 FR-049a — `img` and `src` are back for ONE shape only: the PNG data URI a copy draws in a diagram's
+  // place. The exporter's hook removes every other image before DOMPurify reads its attributes.
+  ALLOWED_TAGS: PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span'),
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan'],
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
   ADD_FORBID_CONTENTS: PROFILE.ADD_FORBID_CONTENTS,
@@ -345,6 +350,16 @@ export type PreviewHtmlExporter = (selection: DocumentFragment) => string;
 export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExporter {
   const purify = DOMPurify(root);
   purify.addHook('beforeSanitizeAttributes', (node) => {
+    // 054 FR-049a — an image survives only as a copied diagram: marked by the copy, a PNG data URI, nothing else.
+    if (node.tagName?.toUpperCase() === 'IMG') {
+      const diagram = node.hasAttribute(DIAGRAM_IMAGE_ATTRIBUTE) && DIAGRAM_PNG_DATA_URI.test(node.getAttribute('src') ?? '');
+      if (!diagram) {
+        node.remove();
+        return;
+      }
+      for (const attr of [...node.attributes]) if (attr.name !== 'src' && attr.name !== 'alt') node.removeAttribute(attr.name);
+      return;
+    }
     if (node.tagName?.toUpperCase() !== 'A') return;
     node.removeAttribute('title');
     node.removeAttribute('href');
@@ -352,7 +367,7 @@ export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExport
     if (link?.kind === 'external') node.setAttribute('href', link.url);
   });
   return (selection) => {
-    for (const img of [...selection.querySelectorAll('img')]) {
+    for (const img of [...selection.querySelectorAll(`img:not([${DIAGRAM_IMAGE_ATTRIBUTE}])`)]) {
       const alt = img.getAttribute('alt') ?? '';
       if (alt.length > 0) img.replaceWith(img.ownerDocument.createTextNode(alt));
       else img.remove();

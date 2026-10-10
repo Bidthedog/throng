@@ -70,7 +70,9 @@ export function defaultPreviewSearchExclusion(node: TextModelNode): boolean {
   return (
     node.getAttribute?.('aria-hidden') === 'true' ||
     hasClass(node, 'preview-fold-toggle') ||
-    hasClass(node, 'preview-fold-gutter')
+    hasClass(node, 'preview-fold-gutter') ||
+    // 054 FR-032 — a rendered diagram: its labels are drawing, and its toolbar is chrome.
+    hasClass(node, 'preview-diagram-host')
   );
 }
 

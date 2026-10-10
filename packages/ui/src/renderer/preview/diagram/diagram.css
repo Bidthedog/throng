@@ -1,0 +1,119 @@
+/*
+ * A diagram's box, its view controls and its inline notice (054 FR-044, FR-046a – FR-046h, research R6).
+ * Colours come from theme variables only (Principle VI); the diagram's own colours are mermaid's, from the
+ * same tokens (`mermaid-renderer.ts`).
+ */
+
+/* The element the Markdown body puts where a claimed fence was: one block in the document flow. */
+.preview-diagram-host {
+  display: block;
+  margin: 0.75em 0;
+}
+
+.preview-diagram-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: var(--throng-colour-surface);
+}
+
+/* Below the minimum readable scale the box keeps that scale and scrolls sideways (FR-046a). */
+.preview-diagram-frame--scrolls {
+  overflow-x: auto;
+}
+
+/* FR-046d — the whole frame of the panel the diagram is in: the preview body is its positioned ancestor. */
+.preview-diagram-frame--full-size {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  margin: 0;
+  border-radius: 0;
+}
+
+.preview-diagram-frame--full-size .preview-diagram-frame__viewport,
+.preview-diagram-frame--in-pane .preview-diagram-frame__viewport {
+  height: 100%;
+}
+
+/* FR-046f — drawn in the maximise layer's host, over the tab's panels. */
+.preview-diagram-pane-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.preview-diagram-frame--in-pane {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+
+/* FR-044 — the last good render under a notice: still readable, visibly not current. */
+.preview-diagram-frame--dimmed .preview-diagram-frame__layer {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+/*
+ * The controls sit OUTSIDE the transformed layer, pinned top-left (FR-046b). Quiet until the reader is in
+ * the diagram, so a page of diagrams is not a page of toolbars; always shown to the keyboard.
+ */
+.preview-diagram-frame__toolbar {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: var(--throng-colour-surfaceActive);
+  opacity: 0.35;
+  transition: opacity 120ms ease-out;
+}
+
+.preview-diagram-frame:hover .preview-diagram-frame__toolbar,
+.preview-diagram-frame__toolbar:focus-within,
+.preview-diagram-frame--full-size .preview-diagram-frame__toolbar,
+.preview-diagram-frame--in-pane .preview-diagram-frame__toolbar {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-diagram-frame__toolbar {
+    transition: none;
+  }
+}
+
+.preview-diagram-frame__viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-diagram-frame--scrolls .preview-diagram-frame__viewport {
+  overflow: visible;
+}
+
+.preview-diagram-frame__layer {
+  transform-origin: 0 0;
+}
+
+.preview-diagram-frame__layer > svg {
+  display: block;
+}
+
+/* FR-044 — one inline notice naming the parse error, above the diagram (or alone). */
+.preview-diagram__notice {
+  margin: 0 0 0.4em;
+  padding: 0.35em 0.6em;
+  border-left: 3px solid var(--throng-colour-danger);
+  background: var(--throng-colour-surfaceActive);
+  color: var(--throng-colour-text);
+}
+
+.preview-diagram__notice-detail {
+  color: var(--throng-colour-textMuted);
+}

@@ -7,42 +7,16 @@
  * A success needs nothing here — main's content relay re-renders the preview, and the body's update path
  * keeps the scroll position (FR-026).
  */
+import { taskItemText, type TaskToggleRefusal, type TaskToggleRequest, type TaskToggleResponse } from '@throng/core';
 import { failureWording } from '../find-in-files/commit-replace.js';
 
-/** `throng:preview:toggleTask`'s request (contracts/preview-ipc-054.md). */
-export interface TaskToggleRequest {
-  panelId: string;
-  filePath: string;
-  /** 0-based source line, from `data-task-line`. */
-  line: number;
-  /** The state the reader saw before clicking. */
-  expectChecked: boolean;
-  /** The item's text after the marker, trimmed — main's relocation fingerprint. */
-  itemText: string;
-}
-
-export type TaskToggleRefusal =
-  | 'not-found'
-  | 'ambiguous'
-  | 'changed'
-  | 'readOnly'
-  | 'locked'
-  | 'missing'
-  | 'outOfTree'
-  | 'binary'
-  | 'encoding'
-  | 'io';
-
-export type TaskToggleResponse = { ok: true; savedToDisk: boolean } | { ok: false; reason: TaskToggleRefusal };
+export type { TaskToggleRefusal, TaskToggleRequest, TaskToggleResponse };
 
 /** What a body reports when the reader asks for a toggle; the chrome adds the panel and the file. */
 export type TaskToggle = Pick<TaskToggleRequest, 'line' | 'expectChecked' | 'itemText'>;
 
 /** The attribute the pipeline puts on a task box, and the sanitiser keeps only on its own (R4). */
 export const TASK_LINE_ATTRIBUTE = 'data-task-line';
-
-/** A list item's task marker, inside any depth of block quote: `> - [x] text` → `text`. */
-const TASK_LINE = /^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ xX]\](?:[ \t]+(.*))?$/;
 
 /** The task box `target` is, when it is one the pipeline drew — `null` for anything else. */
 export function taskBoxOf(target: EventTarget | null): HTMLInputElement | null {
@@ -59,8 +33,8 @@ export function taskBoxOf(target: EventTarget | null): HTMLInputElement | null {
 export function taskToggleFor(box: HTMLInputElement, source: string): TaskToggle {
   const line = Number(box.getAttribute(TASK_LINE_ATTRIBUTE));
   const sourceLine = source.split(/\r\n|\n|\r/)[line] ?? '';
-  const match = TASK_LINE.exec(sourceLine);
-  const itemText = match ? (match[1] ?? '').trim() : (box.parentElement?.textContent ?? '').trim();
+  // Core's grammar — the one main relocates by — so the fingerprint cannot drift from it.
+  const itemText = taskItemText(sourceLine) ?? (box.parentElement?.textContent ?? '').trim();
   return { line, expectChecked: box.defaultChecked, itemText };
 }
 
