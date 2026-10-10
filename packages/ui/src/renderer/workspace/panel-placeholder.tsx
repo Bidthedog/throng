@@ -26,7 +26,7 @@ import { PanelBody } from './panel-body.js';
 import { panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
 import { placeholderContentMenu, splitMenuItems } from './split-menu.js';
 import { useSplitMode } from './split-mode.js';
-import { toggleMaximisePanel, useTabMaximise } from './maximise-store.js';
+import { getMaximiseStack, toggleMaximisePanel, useTabMaximise } from './maximise-store.js';
 import { registerPanelDestroy } from './panel-destroy.js';
 import { isKeyboardMenu } from './keyboard-menu.js';
 import { usePreviewFailure, usePreviewState } from '../preview/preview-store.js';
@@ -513,7 +513,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       data-maximised={isMaximisedPanel ? 'true' : undefined}
       // 054 FR-072, FR-074 — hidden by a maximised target: out of the tab order and every pointer route,
       // never closed or unmounted.
-      inert={hiddenByMaximise}
+      inert={hiddenByMaximise || maximise.topSection !== null}
       data-panel-id={panel.id}
       /* 046 fix round (IMPORTANT review finding) — a marker ONLY the panel host itself emits, for
          `mouse-zoom.ts`'s `closest()` lookup. `data-panel-id` is also a test hook elsewhere in the
@@ -587,7 +587,10 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         title={fullTitle}
         onContextMenu={(e) => {
           e.preventDefault();
-          const others = (ws.layout?.tabs ?? []).filter((t) => t.id !== tabId);
+          // 054 FR-074 — a maximised tab takes no panel: its row is drawn disabled, as the tab chip's drop is.
+          const others = (ws.layout?.tabs ?? [])
+            .filter((t) => t.id !== tabId)
+            .map((t) => ({ id: t.id, title: t.title, disabled: getMaximiseStack(t.id).length > 0 }));
           // 033 US5 (T062) — the items live in `panel-header-menu.ts`, which declares their
           // sections; `ContextMenu` derives the dividers from those. This handler supplies the
           // panel's state and the action bodies that need the confirm dialog, the clipboard and the

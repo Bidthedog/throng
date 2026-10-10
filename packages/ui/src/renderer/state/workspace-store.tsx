@@ -60,6 +60,7 @@ import {
   getMaximiseStack,
   maximisedTabIds,
   panelClosed,
+  panelTypeChanged,
   registerPanelTabResolver,
   restoreAll,
 } from '../workspace/maximise-store.js';
@@ -522,12 +523,18 @@ export function WorkspaceProvider({
       },
       addPanel: (tabId, originProjectId) => {
         const panel = newId();
+        // 054 FR-074 — a placing open restores a maximised tab first, so the new panel is seen (the
+        // explorer's Open terminal here and Find in Files' new panel end here, as `createDedicatedEditor` does).
+        restoreAll(tabId);
         apply((l) => opAddPanel(l, tabId, panel, originProjectId));
         return panel;
       },
       addPanelBeside: (targetId, edge, originProjectId) => {
         const target = layout?.tabs.flatMap((t) => collectPanels(t.root)).find((p) => p.id === targetId);
         if (!target) return null;
+        // 054 FR-074 — as `addPanel`: a preview's Open in Editor places beside a maximised preview.
+        const holder = layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === targetId));
+        if (holder) restoreAll(holder.id);
         const id = newId();
         apply((l) =>
           // `addPanel`'s placeholder title (048 FR-127: the Blank Panel sequence over this layout's
@@ -558,7 +565,11 @@ export function WorkspaceProvider({
         apply((l) => opMovePanelToEdge(l, sourceId, targetId, edge)),
       // 048 FR-060 — `apply` skips the save when core returns the same layout (a no-op drop).
       movePanelToOuterEdge: (tabId, panelId, edge) => apply((l) => opMovePanelToOuterEdge(l, panelId, tabId, edge)),
-      movePanelToTab: (sourceId, tabId) => apply((l) => opMovePanelToTab(l, sourceId, tabId)),
+      movePanelToTab: (sourceId, tabId) => {
+        // 054 FR-074 — a maximised tab takes no panel (it would land hidden); the UI draws the routes disabled.
+        if (getMaximiseStack(tabId).length > 0) return;
+        apply((l) => opMovePanelToTab(l, sourceId, tabId));
+      },
       addTabFromPanel: (sourceId) => apply((l) => opAddTabFromPanel(l, sourceId, { tab: newId() })),
       removePanel: (panelId) =>
         apply((l) => {
@@ -584,11 +595,18 @@ export function WorkspaceProvider({
       closeTab: (tabId) => apply((l) => opCloseTab(l, tabId)),
       closeOtherTabs: (tabId) => apply((l) => opCloseOtherTabs(l, tabId)),
       resizeSplit: (tabId, path, sizes) => apply((l) => opResizeSplit(l, tabId, path, sizes)),
-      setPanelType: (panelId, kind, config) =>
-        apply((l) => opSetPanelType(l, panelId, kind, config)),
+      setPanelType: (panelId, kind, config) => {
+        // 054 FR-075 — a panel that changes kind stays maximised, but its sections cannot outlive the type.
+        const before = layout?.tabs.flatMap((t) => collectPanels(t.root)).find((p) => p.id === panelId);
+        if (before && before.kind !== kind) panelTypeChanged(panelId);
+        apply((l) => opSetPanelType(l, panelId, kind, config));
+      },
       convertPanelToProject: (panelId, projectId) =>
         apply((l) => opConvertPanelToProject(l, panelId, projectId)),
-      clearPanelType: (panelId) => apply((l) => opClearPanelType(l, panelId)),
+      clearPanelType: (panelId) => {
+        panelTypeChanged(panelId); // 054 FR-075 — as `setPanelType`: the panel stays, its sections go
+        apply((l) => opClearPanelType(l, panelId));
+      },
       setTerminalMemory: (panelId, memory) =>
         apply((l) => opSetTerminalMemory(l, panelId, memory)),
       setPanelDormant: (panelId, dormant) =>

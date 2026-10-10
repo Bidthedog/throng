@@ -16,14 +16,28 @@
  */
 import { useEffect, type ReactElement } from 'react';
 import { transientOverlayOpen } from '../common/transient-overlay.js';
+import { isTabGroupDragLive } from './drag-live.js';
 import { restore, useTabMaximise } from './maximise-store.js';
+
+/** An element a user types into: it uses Esc to cancel its own edit. */
+const EDITABLE = 'input, textarea, select, [contenteditable=""], [contenteditable="true"]';
 
 /** Whether something other than the maximise layer owns an Escape pressed now. */
 function escapeBelongsElsewhere(): boolean {
+  // A tab or panel drag is live: 048 FR-080 cancels it with this key, and must see it first.
+  if (isTabGroupDragLive()) return true;
   const focused = document.activeElement;
   if (focused?.closest?.('.xterm, .cm-editor')) return true;
+  // An inline editor outside the maximised target (an explorer / tab / project rename) or a focused
+  // notice cancels or dismisses itself on Esc; the step back must not eat that press.
+  if (focused?.closest?.('.notices')) return true;
+  if (focused?.matches?.(EDITABLE) && !focused.closest('.maximise-layer, [data-maximised="true"]')) return true;
   if (transientOverlayOpen()) return true;
-  return document.querySelector('.find-bar, [role="menu"], [role="dialog"], [aria-modal="true"]') !== null;
+  // A find bar, menu or dialog inside a hidden (inert) panel cannot take Esc, so it does not count.
+  for (const el of document.querySelectorAll('.find-bar, [role="menu"], [role="dialog"], [aria-modal="true"]')) {
+    if (!el.closest('[inert]')) return true;
+  }
+  return false;
 }
 
 export function MaximiseLayer({ tabId }: { tabId: string }): ReactElement | null {

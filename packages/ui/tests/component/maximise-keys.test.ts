@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultLayout, type Panel, type WorkspaceLayout } from '@throng/core';
 import { MAIN_WINDOW_CAPABILITIES, WindowDispatcher } from '../../src/renderer/keybindings/window-dispatcher.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
-import { __resetMaximise, getMaximiseStack } from '../../src/renderer/workspace/maximise-store.js';
+import { __resetMaximise, getMaximiseStack, maximisePanel, restoreAll } from '../../src/renderer/workspace/maximise-store.js';
 import { mountWorkspace, type MountedWorkspace } from './helpers/mount-workspace.js';
 
 const PROJECT = 'proj';
@@ -127,6 +127,35 @@ describe('Alt+Shift+Enter maximises the focused panel (FR-071a)', () => {
     setActivePane('files');
     expect(press(tree, MAXIMISE)).toBe(false);
     expect(shape()).toEqual([]);
+  });
+});
+
+/**
+ * Review finding 1 (FR-074) — a maximised tab hides every other panel, so the move/cycle chords must not
+ * make one active: it could not be seen and `panel.destroy` would then close it unseen.
+ * Layer: component — the claim is about the WINDOW DISPATCHER's own candidate filtering.
+ */
+describe('move/cycle focus never targets a hidden panel (FR-074)', () => {
+  const activeId = (): string | undefined => m!.ws().layout!.tabs[0].activePanelId;
+  const FOCUS_RIGHT = { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true, shiftKey: true, altKey: true } as const;
+  const CYCLE = { key: '`', code: 'Backquote', ctrlKey: true } as const;
+  const CYCLE_BACK = { key: '`', code: 'Backquote', ctrlKey: true, shiftKey: true } as const;
+
+  it.each([
+    ['focus.right', FOCUS_RIGHT],
+    ['focus.cycle', CYCLE],
+    ['focus.cycleBack', CYCLE_BACK],
+  ] as const)('%s leaves the maximised panel active', (_name, chord) => {
+    act(() => maximisePanel('t1', 'p1'));
+    press(document.body, chord);
+    expect(activeId()).toBe('p1');
+  });
+
+  it('once restored, the same chord moves again', () => {
+    act(() => maximisePanel('t1', 'p1'));
+    act(() => restoreAll('t1'));
+    press(document.body, FOCUS_RIGHT);
+    expect(activeId()).toBe('p2');
   });
 });
 

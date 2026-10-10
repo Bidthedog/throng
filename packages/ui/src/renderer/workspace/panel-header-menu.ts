@@ -189,7 +189,7 @@ export interface PanelHeaderMenuArgs {
   /** The live chords, so a rebind moves what the menu SHOWS as well as what the key does. */
   keybindings: Keybindings;
   /** The other Tabs in this window, for Send to Tab. */
-  otherTabs: readonly { id: string; title: string }[];
+  otherTabs: readonly { id: string; title: string; disabled?: boolean }[];
   editor: PanelHeaderEditorState | null;
   /**
    * True while the panel's `PanelFailureBanner` is up — an editor's OR a preview's (044, renamed from
@@ -625,6 +625,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         label: t.title,
         icon: 'tab',
         section: 'navigate' as const,
+        // 054 FR-074 — a maximised tab takes no panel; drawn disabled, not absent (Constitution VI).
+        disabled: t.disabled ?? false,
         onClick: () => actions.sendToTab(t.id),
       })),
     ],

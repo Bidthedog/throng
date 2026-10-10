@@ -52,8 +52,9 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { SplitTree } from './split-tree.js';
 import { OuterEdgeZones } from './outer-edge-zones.js';
+import { setTabGroupDragLive } from './drag-live.js';
 import { MaximiseLayer } from './maximise-layer.js';
-import { useMaximisedPanel } from './maximise-store.js';
+import { useMaximisedPanel, useTabMaximise } from './maximise-store.js';
 import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuAction } from './context-menu.js';
 import { tabContextMenu } from './tab-menu.js';
@@ -136,7 +137,9 @@ function TabChip({
   // Any unsaved editor in this Tab lights the shared dot (006, US8).
   const tabDirty = useEditorDirty(collectPanels(tab.root).map((p) => p.id));
   const drag = useDraggable({ id: tabDragId(tab.id) });
-  const drop = useDroppable({ id: tabDropId(tab.id) });
+  // 054 FR-074 — a maximised tab is modal: a panel cannot be dropped into it (it would land hidden).
+  const dropRefused = useTabMaximise(tab.id).isMaximised;
+  const drop = useDroppable({ id: tabDropId(tab.id), disabled: dropRefused });
   // Highlight only when a Panel (not a Tab) is being dragged over — moving a
   // Panel into this Tab. Tab reordering shows an insertion indicator instead.
   const panelOver = drop.isOver && draggingPanelId !== null;
@@ -389,6 +392,7 @@ function TabChip({
       ref={mergeRefs(drag.setNodeRef, drop.setNodeRef, holdChip)}
       className={`tab-chip${active ? ' tab-chip--active' : ''}${panelOver || treeOver ? ' tab-chip--over' : ''}`}
       data-testid={`tab-${tab.id}`}
+      data-drop-disabled={dropRefused ? 'true' : undefined}
       data-active={active ? 'true' : 'false'}
       onDragOver={(e) => {
         const treeDrag = getTreeDrag();
@@ -1234,6 +1238,7 @@ export function TabGroup(): ReactElement {
     closeMenu();
     endSplitMode();
     dragInfo.current = panelId ? { kind: 'panel', id: panelId } : { kind: 'tab', id: tabId! };
+    setTabGroupDragLive(true);
 
     // Drive the OS ghost from coalesced pointer moves (one tick per frame) so it
     // follows the cursor smoothly. dnd-kit's pointer capture keeps these firing
@@ -1318,6 +1323,7 @@ export function TabGroup(): ReactElement {
     closeMenu();
     endSplitMode();
     dragInfo.current = null;
+    setTabGroupDragLive(false);
     draggingOwned.current = false;
     setDraggingPanelId(null);
     setDraggingTabId(null);

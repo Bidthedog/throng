@@ -61,7 +61,7 @@ import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
-import { toggleMaximisePanel } from '../workspace/maximise-store.js';
+import { isPanelHidden, toggleMaximisePanel } from '../workspace/maximise-store.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
 
@@ -457,12 +457,15 @@ export function WindowDispatcher({
       const f = activeFocus();
       if (!f) return;
       const target = moveFocus(f.root, f.activeId, dir); // null at the edge → stay put
-      if (target && target !== f.activeId) goToPanel(f.tabId, target);
+      // 054 FR-074 — a panel a maximised target hides is not a destination: it cannot be seen, and
+      // `panel.destroy` would close it unseen.
+      if (target && target !== f.activeId && !isPanelHidden(f.tabId, target)) goToPanel(f.tabId, target);
     };
     const dispatchCycle = (step: 1 | -1): void => {
       const f = activeFocus();
       if (!f) return;
-      const target = nextInCycle(cycleOrder(f.root), f.activeId, step);
+      const visible = cycleOrder(f.root).filter((id) => id === f.activeId || !isPanelHidden(f.tabId, id));
+      const target = nextInCycle(visible, f.activeId, step);
       if (target !== f.activeId) goToPanel(f.tabId, target);
     };
 
