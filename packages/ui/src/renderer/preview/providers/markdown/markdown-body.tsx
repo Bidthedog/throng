@@ -19,7 +19,8 @@
  *
  * The host element is not `contenteditable` and never becomes so: a preview is read-only (FR-020). It is
  * focusable (`tabIndex=-1`), so the arrow, Page and Home/End keys scroll it natively (FR-096a); none of
- * them is handled here.
+ * them is handled here. The one input that changes a document is a task box's click or Space (054 FR-022),
+ * and even that only ASKS: the chrome has main change the marker, and the re-render shows it (`task-toggle.ts`).
  *
  * ══ AN UPDATE KEEPS THE READER'S PLACE; A NEW FILE STARTS AT THE TOP ══
  *
@@ -77,6 +78,7 @@ import {
   useRef,
   type MouseEvent as ReactMouseEvent,
   type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
@@ -91,6 +93,7 @@ import {
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
+import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
 import { useActiveTheme, useIconPacks } from '../../../config/config-store.js';
@@ -266,6 +269,7 @@ export function MarkdownBody({
   onHeadings,
   onRevealSection,
   resolveWikiTargets,
+  onToggleTask,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
@@ -875,8 +879,40 @@ export function MarkdownBody({
     return () => body.removeEventListener('error', onError, true);
   }, []);
 
+  /*
+   * 054 FR-022 (R4) — a task box asks the chrome for a toggle and never toggles itself: its native change is
+   * prevented, so it shows its new state only once main has changed the source and the re-render draws it,
+   * and a refusal leaves it exactly as it was (FR-028). Read against the text this body DREW, so the line
+   * and the item text are the ones on screen.
+   */
+  const onToggleTaskRef = useRef(onToggleTask);
+  onToggleTaskRef.current = onToggleTask;
+  const requestToggle = useCallback((box: HTMLInputElement): void => {
+    const drawn = shown.current;
+    if (drawn === null) return;
+    onToggleTaskRef.current?.(taskToggleFor(box, drawn.text));
+  }, []);
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+      // Space on a focused task box (FR-022). Every other key is left to the chrome and the engine.
+      if (e.key !== ' ' || e.ctrlKey || e.altKey || e.metaKey) return;
+      const box = taskBoxOf(e.target);
+      if (box === null) return;
+      e.preventDefault();
+      requestToggle(box);
+    },
+    [requestToggle],
+  );
+
   const onClick = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>): void => {
+      const box = taskBoxOf(e.target);
+      if (box !== null) {
+        e.preventDefault();
+        requestToggle(box);
+        return;
+      }
       if (!e.ctrlKey) {
         // 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own
         // plain-click remedy as far as the plain click goes (FR-094's HOVER tooltip stands unchanged).
@@ -906,7 +942,7 @@ export function MarkdownBody({
       e.preventDefault();
       onFollow(link);
     },
-    [onFollow],
+    [onFollow, requestToggle],
   );
 
   const onContextMenu = useCallback(
@@ -995,6 +1031,7 @@ export function MarkdownBody({
       tabIndex={-1}
       onMouseDown={onMouseDown}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       onContextMenu={onContextMenu}
       onFocus={onFocus}
       onBlur={onBlur}

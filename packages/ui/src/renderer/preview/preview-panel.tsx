@@ -212,6 +212,14 @@ import { usePreviewProviders } from './provider-registry-context.js';
 import { clearPreviewReservation, previewReservationFor } from './preview-reservations.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
+import {
+  TASK_NOTICE_ACTION,
+  taskNoticeMessage,
+  taskNoticeTestId,
+  type TaskToggle,
+  type TaskToggleRequest,
+  type TaskToggleResponse,
+} from './task-toggle.js';
 import './preview.css';
 import './match-frames.css';
 
@@ -772,6 +780,41 @@ export function PreviewPanel({
     lastLinkNotice.current = null;
     clear(linkNoticeTestId);
   }, [clear, linkNoticeTestId]);
+  /* ── Task-list toggles (054 FR-022, FR-028, R4) ────────────────────────────────────────────────── */
+
+  /*
+   * The body reports a task; main changes the marker. A refusal is ONE notice on this preview — the same
+   * test id every time, so a second refusal flashes the card already up rather than stacking another — and
+   * the box keeps its state because the body never let it change. A toggle that lands clears it.
+   */
+  const taskNoticeId = taskNoticeTestId(panelId);
+  const filePathRef = useRef(state?.filePath);
+  filePathRef.current = state?.filePath;
+  const onToggleTask = useCallback(
+    (task: TaskToggle): void => {
+      const filePath = filePathRef.current;
+      const bridge = window.throng?.preview as { toggleTask?: (req: TaskToggleRequest) => Promise<TaskToggleResponse> } | undefined;
+      if (filePath === undefined || bridge?.toggleTask === undefined) return;
+      void bridge
+        .toggleTask({ panelId, filePath, ...task })
+        .catch((): TaskToggleResponse => ({ ok: false, reason: 'io' }))
+        .then((answer) => {
+          if (answer.ok) {
+            clear(taskNoticeId);
+            return;
+          }
+          notify({
+            severity: 'warning',
+            subject: panelSubject(placeRef.current),
+            action: TASK_NOTICE_ACTION,
+            message: taskNoticeMessage(answer.reason),
+            testId: taskNoticeId,
+          });
+        });
+    },
+    [panelId, notify, clear, taskNoticeId],
+  );
+
   /** The body's own reports. Only the link notices are a body's to raise (FR-090e/f). */
   const onNotice = useCallback(
     (notice: PreviewNotice): void => {
@@ -2166,6 +2209,8 @@ export function PreviewPanel({
             onRevealSection={(reveal) => {
               revealRef.current = reveal;
             }}
+            // 054 FR-022 — a task box clicked or Space-pressed; main changes the marker (R4).
+            onToggleTask={onToggleTask}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a

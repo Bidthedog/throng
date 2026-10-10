@@ -261,6 +261,8 @@ export async function mountMarkdownPreview(
     }),
     onPlace: vi.fn(() => () => {}),
     onFocus: vi.fn(() => () => {}),
+    // 054 R4 — `throng:preview:toggleTask`: applied, unless a test answers a refusal.
+    toggleTask: vi.fn(() => Promise.resolve({ ok: true as const, savedToDisk: true })),
   };
   const clipboardWrite = vi.fn(() => Promise.resolve());
   const writeRich = vi.fn(() => Promise.resolve());
