@@ -63,6 +63,6 @@ describe('settings completeness picks up the new key (FR-047)', () => {
     const keys = settingsLeaves();
     expect(keys).toContain(KEY);
     expect(() => assertEveryKeyDescribed(keys, SETTINGS_METADATA)).not.toThrow();
-    expect(auditRegistry(keys, SETTINGS_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(keys, SETTINGS_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
   });
 });

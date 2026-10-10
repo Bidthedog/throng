@@ -103,7 +103,7 @@ describe('auditRegistry', () => {
 
   it('reports nothing wrong for an exact registry', () => {
     const reg: MetadataRegistry = [descriptor('a.b'), descriptor('c')];
-    expect(auditRegistry(keys, reg)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(keys, reg)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
   });
 
   it('reports a missing descriptor', () => {

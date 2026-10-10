@@ -27,6 +27,7 @@ It **supersedes** or narrows six of their requirements, each restated where it i
 | 044 FR-080 | FR-021 | Task lists render as checkboxes that toggle the source, not read-only ones |
 | 044 FR-086 | FR-040 | A `mermaid` fenced block renders as a diagram, not as code (math is unchanged) |
 | 047 FR-036 | FR-010 | The fold rows move from the top level of the body context menu into an **Outlining** submenu |
+| 040 FR-035 | FR-050a | Preferences fields gain a second, optional nesting level (`subsection`) under `subgroup`; still no recursion |
 | 044 FR-090 | FR-008 | A link to a file of a different preview type no longer opens in place |
 | 044 FR-054 | FR-030 | A Find in Files result honours the default open action when the provider can reveal a match; 044 *Finding 4*'s "043 FR-037 / FR-087c untouched" note no longer holds for such providers |
 
@@ -604,6 +605,12 @@ starting state; repeat with a diagram's Full Pane.
   **Editor → Previews → Markdown** and **Editor → Previews → Mermaid**. With Mermaid shipping, Markdown
   is no longer the only preview type, so "applies to every preview" and "Markdown only" are now
   different sets.
+- **FR-050a**: *(Narrows 040 FR-035's "one level of nesting under `group`".)* A settings descriptor MAY
+  carry an optional **`subsection`**, valid only with a `subgroup`, giving exactly one further level —
+  no deeper level and no recursion. 040 FR-036 – FR-036c apply to it unchanged: every tab that renders
+  subgroups renders subsections, a subsection is static in declaration order, unsectioned fields of a
+  subgroup render first, and an all-filtered subsection disappears with its heading. *[derived at
+  implementation, 2026-10-10: FR-050's Previews → Markdown placement needs it.]*
 - **FR-051**: The audited placement MUST be:
 
   | Setting | Today | After |

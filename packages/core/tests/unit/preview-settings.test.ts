@@ -350,7 +350,7 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
     const registryDescriptors = previewSettingsDescriptors(TEST_REGISTRY);
     // Relative to `editor.previews`, as the leaves sit inside the settings document.
     const leaves = leavesOfDeclared({ editor: { previews: defaults } }, registryDescriptors);
-    expect(auditRegistry(leaves, registryDescriptors)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(leaves, registryDescriptors)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
     expect(leaves).toContain('editor.previews.providers.notes.showOutline');
     expect(byKey(registryDescriptors, 'editor.previews.providers.notes.showOutline').label).toBe(
       'Notes: Show outline',

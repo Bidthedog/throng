@@ -12,6 +12,7 @@ describe('KEYBINDINGS_METADATA completeness (FR-047/030)', () => {
       missing: [],
       unknown: [],
       duplicated: [],
+      invalidNesting: [],
     });
   });
 
