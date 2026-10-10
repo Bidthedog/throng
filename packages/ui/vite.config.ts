@@ -8,6 +8,20 @@ import react from '@vitejs/plugin-react';
  * Vite's own `chunkSizeWarningLimit`, fail the build — and so the gate's build stage and every PR.
  * The fix is a chunk rule in `chunkFor` below, never a raised limit.
  */
+/**
+ * 054 — the only chunks allowed over the limit: each is ONE pre-bundled third-party module, which no rule
+ * in `chunkFor` can split, and each is reached only through Mermaid's own lazy `import()` (so
+ * `failOnEagerPreview` holds it out of every eagerly loaded chunk). A chunk qualifies only when it holds
+ * exactly one module and that module matches an entry here; anything else over the limit still fails.
+ */
+const UNSPLITTABLE_LAZY_MODULES: readonly { pattern: RegExp; why: string }[] = [
+  {
+    pattern: /\/node_modules\/@mermaid-js\/parser\/dist\/chunks\/mermaid-parser\.core\/chunk-[A-Z0-9]+\.mjs$/,
+    why: "Mermaid's generated Langium grammar, shipped as one file and loaded with the first diagram",
+  },
+  { pattern: /\/node_modules\/elkjs\/lib\/elk\.bundled\.js$/, why: 'the ELK layout engine, one bundled file, loaded only for an elk-layout diagram' },
+];
+
 function failOnOversizedChunks(): Plugin {
   let limitKb = 500;
   return {
@@ -19,6 +33,10 @@ function failOnOversizedChunks(): Plugin {
     generateBundle(_options, bundle) {
       const oversized = Object.values(bundle)
         .filter((out) => out.type === 'chunk')
+        .filter((chunk) => {
+          const ids = chunk.moduleIds.map((m) => m.replace(/\\/g, '/'));
+          return !(ids.length === 1 && UNSPLITTABLE_LAZY_MODULES.some((u) => u.pattern.test(ids[0] as string)));
+        })
         .map((chunk) => ({ name: chunk.fileName, kb: Buffer.byteLength(chunk.code) / 1000 }))
         .filter((c) => c.kb > limitKb);
       if (oversized.length > 0) {
@@ -207,7 +225,16 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
-  // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`.
-  if (DIAGRAM_VENDOR.test(id)) return 'diagram';
+  // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`. NOT one
+  // named group: Mermaid loads each diagram type through its own `import()`, and grouping them all made one
+  // 5 MB chunk. Ungrouped, Rolldown splits them along those imports, and `failOnEagerPreview` still refuses
+  // the build if any of them lands in an eagerly loaded chunk.
+  if (DIAGRAM_VENDOR.test(id)) {
+    // The heavy libraries several diagram types share get a lazy chunk each, so the chunk Mermaid's
+    // types have in common stays under the limit.
+    const shared = /\/node_modules\/(katex|cytoscape[a-z-]*|lodash-es|roughjs|elkjs|d3-[a-z-]+|d3)\//.exec(id);
+    if (shared) return `diagram-${shared[1].startsWith('d3') ? 'd3' : shared[1]}`;
+    return null;
+  }
   return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
 }
