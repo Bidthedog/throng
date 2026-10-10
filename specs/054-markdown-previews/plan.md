@@ -8,7 +8,7 @@ answers). Refs #474, #469, #462, #392, #478, #467.
 
 ## Summary
 
-Six pieces of work on 044/047's preview, plus a workspace mechanism they share:
+Seven pieces of work on 044/047's preview, plus a workspace mechanism they share:
 
 - **Restored reuse** (#474): per-tab preview recency is persisted on the `Tab` and seeded at restore;
   reuse is filtered by provider (R1).

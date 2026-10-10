@@ -24,7 +24,7 @@ link opens elsewhere, FR-008).
 | Leaf | Type | Default | Notes |
 |---|---|---|---|
 | `updateDelayMs`, `maxWaitMs`, `syncScroll`, `copyFormat` | unchanged | unchanged | shared, subgroup Previews |
-| ~~`openTarget`~~ | retired | — | migrated to each provider's `openTarget`, then dropped on next write |
+| ~~`openTarget`~~ | retired | — | migrated to each provider's `openTarget`; not in the parse output, so the section rebuild drops it on the next write (the mechanism 019 FR-023 relies on) |
 | `providers.<id>.enabled` | boolean | `true` | per provider |
 | `providers.<id>.defaultOpenAction` | `editor \| preview` | `editor` | text providers |
 | `providers.<id>.openTarget` | `lastActive \| new` | migrated value, else `lastActive` | **new**, every text provider |
