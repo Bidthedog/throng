@@ -37,8 +37,8 @@ describe('049 occurrence and inactive-selection tokens', () => {
     expect(() => assertThemeAreaGroups(THEME_METADATA)).not.toThrow();
   });
 
-  it('is shipped-defaults version 19 or later, so an existing install receives them (re-pinned: 049 round 2 bumps it to 20)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
+  it('is shipped-defaults version 19 or later, so an existing install receives them (re-pinned: 049 round 2 bumps it to 20, then 054 to 21)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(21);
   });
 
   it('arrive through the additive upgrade into every theme file that lacks them', () => {

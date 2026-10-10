@@ -18,7 +18,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 ## Phase 1: Setup
 
 - [ ] T001 Add `mermaid` 12.1.0 to `packages/ui/package.json` dependencies and install (lockfile updated); route `mermaid` and its transitive packages into a lazy `diagram` chunk in `packages/ui/vite.config.ts` and extend the `fail-on-eager-preview` plugin so an eager import of the chunk fails the build
-- [ ] T002 [P] Add five icon tokens `panelMaximise`, `panelRestore`, `diagramFit`, `diagramFullSize`, `diagramFullPane` to `packages/core/src/config/theme.ts` and their copy to `packages/core/src/config/theme-copy.ts`; bump `SHIPPED_DEFAULTS_VERSION` 20 → 21 in `packages/core/src/config/shipped-defaults.ts`, test first in `packages/core/tests/unit/default-themes.test.ts` (every token present in every shipped theme)
+- [x] T002 [P] Add five icon tokens `panelMaximise`, `panelRestore`, `diagramFit`, `diagramFullSize`, `diagramFullPane` to `packages/core/src/config/theme.ts` and their copy to `packages/core/src/config/theme-copy.ts`; bump `SHIPPED_DEFAULTS_VERSION` 20 → 21 in `packages/core/src/config/shipped-defaults.ts`, test first in `packages/core/tests/unit/default-themes.test.ts` (every token present in every shipped theme)
 
 ## Phase 2: Foundational
 
