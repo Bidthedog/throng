@@ -15,6 +15,7 @@ import type { PreviewBodyProps } from '../../provider-view.js';
 import { useActiveTheme } from '../../../config/config-store.js';
 import { blockRendererFor } from '../../blocks/block-renderers.js';
 import { DiagramBlock } from '../../diagram/diagram-block.js';
+import { releaseDiagramSections } from '../../diagram/diagram-sections.js';
 import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
 import {
   DIAGRAM_HOST_CLASS,
@@ -39,6 +40,13 @@ export function MermaidBody({ panelId, content, filePath, onDrawn, onBodyFailure
     onViewStateCapture(() => null);
   }, [onViewStateCapture]);
 
+  // FR-073 — the Full Pane target outlives this body (a tab switch unmounts it); it goes when the FILE does.
+  const drawnFile = useRef(filePath);
+  useEffect(() => {
+    if (drawnFile.current !== filePath) releaseDiagramSections(panelId, 0);
+    drawnFile.current = filePath;
+  }, [panelId, filePath]);
+
   useEffect(() => {
     if (entry === null) onFailureRef.current(new Error('No diagram renderer is registered for Mermaid.'));
     else onDrawnRef.current(filePath);
@@ -52,7 +60,8 @@ export function MermaidBody({ panelId, content, filePath, onDrawn, onBodyFailure
         {...{ [DIAGRAM_LANG_ATTRIBUTE]: LANG, [DIAGRAM_SOURCE_ATTRIBUTE]: text }}
       >
         {entry !== null ? (
-          <DiagramBlock panelId={panelId} sectionId="diagram-0" source={text} entry={entry} theme={diagramTheme} />
+          // Keyed by file: a diagram's last good render and view belong to the file it was drawn from.
+          <DiagramBlock key={filePath} panelId={panelId} sectionId="diagram-0" source={text} entry={entry} theme={diagramTheme} />
         ) : null}
       </div>
     </div>

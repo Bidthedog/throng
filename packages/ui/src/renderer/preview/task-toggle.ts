@@ -7,13 +7,13 @@
  * A success needs nothing here — main's content relay re-renders the preview, and the body's update path
  * keeps the scroll position (FR-026).
  */
-import { taskItemText, type TaskToggleRefusal, type TaskToggleRequest, type TaskToggleResponse } from '@throng/core';
+import { taskItemText, taskOccurrence, type TaskToggleRefusal, type TaskToggleRequest, type TaskToggleResponse } from '@throng/core';
 import { failureWording } from '../find-in-files/commit-replace.js';
 
 export type { TaskToggleRefusal, TaskToggleRequest, TaskToggleResponse };
 
 /** What a body reports when the reader asks for a toggle; the chrome adds the panel and the file. */
-export type TaskToggle = Pick<TaskToggleRequest, 'line' | 'expectChecked' | 'itemText'>;
+export type TaskToggle = Pick<TaskToggleRequest, 'line' | 'expectChecked' | 'itemText' | 'occurrence'>;
 
 /** The attribute the pipeline puts on a task box, and the sanitiser keeps only on its own (R4). */
 export const TASK_LINE_ATTRIBUTE = 'data-task-line';
@@ -35,7 +35,9 @@ export function taskToggleFor(box: HTMLInputElement, source: string): TaskToggle
   const sourceLine = source.split(/\r\n|\n|\r/)[line] ?? '';
   // Core's grammar — the one main relocates by — so the fingerprint cannot drift from it.
   const itemText = taskItemText(sourceLine) ?? (box.parentElement?.textContent ?? '').trim();
-  return { line, expectChecked: box.defaultChecked, itemText };
+  // FR-027 — which of several identical items this is, counted in the text the reader saw.
+  const occurrence = taskOccurrence(source, line, itemText);
+  return { line, expectChecked: box.defaultChecked, itemText, ...(occurrence !== undefined ? { occurrence } : {}) };
 }
 
 /** The test id of a preview's one task notice (FR-028: one notice, on the preview). */

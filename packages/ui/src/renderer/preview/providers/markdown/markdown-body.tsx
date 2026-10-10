@@ -99,6 +99,7 @@ import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../..
 import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
 import { claimRenderedBlocks, type BlockRendererEntry } from '../../blocks/block-renderers.js';
 import { DiagramBlock } from '../../diagram/diagram-block.js';
+import { releaseDiagramSections } from '../../diagram/diagram-sections.js';
 import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
 import { DIAGRAM_HOST_CLASS, DIAGRAM_LANG_ATTRIBUTE, DIAGRAM_SOURCE_ATTRIBUTE } from '../../diagram/diagram-host.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
@@ -156,6 +157,8 @@ interface DiagramMount {
   readonly host: HTMLElement;
   readonly source: string;
   readonly entry: BlockRendererEntry;
+  /** Which document this mount belongs to — a different file is a different generation (FR-044, FR-046g). */
+  readonly generation: number;
 }
 
 /** The class the focused link carries (FR-096b); `markdown.css` draws the indicator. */
@@ -347,7 +350,17 @@ export function MarkdownBody({
   const diagramHostsRef = useRef<HTMLElement[]>([]);
   const [diagrams, setDiagrams] = useState<readonly DiagramMount[]>([]);
   const diagramTheme = useMemo(() => diagramThemeFrom(theme), [theme]);
-  const claimDiagrams = useCallback((fragment: DocumentFragment): void => {
+  /**
+   * A DIFFERENT file (not an update, not a re-point) starts a new generation: its hosts are new elements and
+   * its portals new keys, so no diagram keeps the old file's last good render or view state (FR-044, 046g).
+   */
+  const diagramGenerationRef = useRef(0);
+  const claimDiagrams = useCallback((fragment: DocumentFragment, sameDocument: boolean, firstDraw: boolean): void => {
+    if (!sameDocument) {
+      diagramGenerationRef.current += 1;
+      diagramHostsRef.current = [];
+    }
+    const generation = diagramGenerationRef.current;
     const claimed = claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current);
     const mounts = claimed.map((block, ordinal): DiagramMount => {
       const host = diagramHostsRef.current[ordinal] ?? fragment.ownerDocument.createElement('div');
@@ -357,15 +370,20 @@ export function MarkdownBody({
       if (block.line !== null) host.setAttribute('data-source-line', String(block.line));
       else host.removeAttribute('data-source-line');
       block.pre.replaceWith(host);
-      return { host, source: block.source, entry: block.entry };
+      return { host, source: block.source, entry: block.entry, generation };
     });
     diagramHostsRef.current = mounts.map((m) => m.host);
+    // FR-073 — a Full Pane target outlives this body (a tab switch unmounts it), so it is released here, where
+    // the diagram is known to be gone: another file takes them all, an edit takes the ordinals past the end.
+    // A first draw is a (re)mount, whose targets belong to the diagrams it is about to draw again.
+    releaseDiagramSections(panelId, sameDocument || firstDraw ? mounts.length : 0);
     setDiagrams((prev) =>
-      prev.length === mounts.length && prev.every((m, i) => m.host === mounts[i].host && m.source === mounts[i].source && m.entry === mounts[i].entry)
+      prev.length === mounts.length &&
+      prev.every((m, i) => m.host === mounts[i].host && m.source === mounts[i].source && m.entry === mounts[i].entry && m.generation === mounts[i].generation)
         ? prev
         : mounts,
     );
-  }, []);
+  }, [panelId]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const packsRef = useRef(packs);
@@ -743,7 +761,6 @@ export function MarkdownBody({
         for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
         // 054 FR-040, FR-043 — every fence a block renderer claims becomes a diagram host, before insertion
         // (so the place below is measured with it) and before highlighting (so it is never highlighted).
-        claimDiagrams(fragment);
         const scroller = scrollerOf(body);
         const file = filePath;
         const previous = shown.current;
@@ -752,6 +769,7 @@ export function MarkdownBody({
         // document under a new path, which is an update, not a place to arrive at.
         const repointed =
           previous !== null && previous.filePath !== file && navigated !== undefined && previous.navigationSeq === navigated;
+        claimDiagrams(fragment, previous !== null && (previous.filePath === file || repointed), previous === null);
         if (previous !== null && (previous.filePath === file || repointed)) {
           // FR-024 — an UPDATE. Capture, replace and restore in one synchronous turn, so no scroll the
           // user makes can fall between the two and be undone.
@@ -1095,7 +1113,7 @@ export function MarkdownBody({
       createPortal(
         <DiagramBlock panelId={panelId} sectionId={`diagram-${ordinal}`} source={d.source} entry={d.entry} theme={diagramTheme} />,
         d.host,
-        `diagram-${ordinal}`,
+        `diagram-${d.generation}-${ordinal}`,
       ),
     )}
     </>

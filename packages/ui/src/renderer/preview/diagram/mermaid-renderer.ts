@@ -106,6 +106,9 @@ export function createMermaidRenderer(deps: MermaidRendererDeps): BlockRenderer 
         flowchart: { htmlLabels: false },
         suppressErrorRendering: true,
         fontFamily: theme.fontFamily,
+        // A `%%{init: …}%%` directive may not override these (mermaid's own lock list): the security level,
+        // injected CSS, the font and the HTML-label switch are what keep the output inside the sanitiser's profile.
+        secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'themeCSS', 'fontFamily', 'htmlLabels'],
       });
       initialisedFor = theme.key;
     }

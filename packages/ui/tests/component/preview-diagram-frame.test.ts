@@ -247,10 +247,24 @@ describe('Full Pane (FR-046f)', () => {
     expect(frame().querySelector('svg')).toBeTruthy();
   });
 
-  it('a diagram removed while it fills the middle section takes its target with it', () => {
+  it('a frame that unmounts (its tab switched away) keeps the target, and the remounted frame fills the layer again (FR-073)', () => {
     const { view, frame } = mountWithLayer();
     fireEvent.click(within(frame()).getByTitle('Fill the middle section'));
+
+    // Tab away: the panel, and so the frame, unmounts. The target is the tab's, not the frame's.
     view.rerender(createElement('div', null, createElement(MaximiseLayer, { tabId: 't1' })));
-    expect(getMaximiseStack('t1')).toEqual([]);
+    expect(getMaximiseStack('t1')).toEqual([expect.objectContaining({ kind: 'section', sectionId: 'diagram-0' })]);
+
+    // Tab back: a new frame for the same section takes the layer over.
+    view.rerender(
+      createElement(
+        'div',
+        null,
+        createElement(DiagramFrame, { svg: svgOf(800, 300), panelId: 'p1', sectionId: 'diagram-0' }),
+        createElement(MaximiseLayer, { tabId: 't1' }),
+      ),
+    );
+    expect(screen.getByTestId('maximise-layer').querySelector('.preview-diagram-frame__layer svg')).toBeTruthy();
+    expect(getMaximiseStack('t1')).toHaveLength(1);
   });
 });

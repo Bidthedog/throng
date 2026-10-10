@@ -47,6 +47,7 @@ describe('click and Space ask main to toggle the marker (FR-022)', () => {
         line: 2,
         expectChecked: false,
         itemText: 'write the spec',
+        occurrence: { index: 0, of: 1 },
       }),
     );
   });
@@ -57,6 +58,16 @@ describe('click and Space ask main to toggle the marker (FR-022)', () => {
     await waitFor(() =>
       expect(pv!.preview.toggleTask).toHaveBeenCalledWith(
         expect.objectContaining({ line: 3, expectChecked: true, itemText: '**ship** it' }),
+      ),
+    );
+  });
+
+  it('identical items are told apart: the request names which occurrence the reader ticked (FR-027)', async () => {
+    const { boxes } = await mount('- [ ] same\n- [ ] other\n- [ ] same', 'other');
+    fireEvent.click(boxes()[2]);
+    await waitFor(() =>
+      expect(pv!.preview.toggleTask).toHaveBeenCalledWith(
+        expect.objectContaining({ line: 2, itemText: 'same', occurrence: { index: 1, of: 2 } }),
       ),
     );
   });
@@ -80,6 +91,47 @@ describe('click and Space ask main to toggle the marker (FR-022)', () => {
     fireEvent.click(raw);
     await act(() => Promise.resolve());
     expect(pv!.preview.toggleTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('one request per task line until it is answered (FR-022, FR-028)', () => {
+  it('a double-click sends ONE request and raises no notice', async () => {
+    const { id, boxes } = await mount();
+    let answer!: (r: { ok: true; savedToDisk: boolean }) => void;
+    pv!.preview.toggleTask.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[0]);
+    fireEvent.keyDown(boxes()[0], { key: ' ', code: 'Space' });
+    await act(() => Promise.resolve());
+
+    expect(pv!.preview.toggleTask).toHaveBeenCalledTimes(1);
+
+    // Answered, and the re-render arrives: the box is free again.
+    await act(async () => answer({ ok: true, savedToDisk: true }));
+    pv!.push(previewUpdate({ panelId: id, revision: 2, content: { kind: 'text', text: DOC.replace('- [ ]', '- [x]') } }));
+    await waitFor(() => expect(boxes()[0].checked).toBe(true));
+    pv!.preview.toggleTask.mockResolvedValue({ ok: true, savedToDisk: true });
+    fireEvent.click(boxes()[0]);
+    await waitFor(() => expect(pv!.preview.toggleTask).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId(`preview-task-notice-${id}`)).toBeNull();
+  });
+
+  it('a refusal frees the box at once; an applied toggle holds only its own line until the re-render', async () => {
+    const { boxes } = await mount();
+    pv!.preview.toggleTask.mockResolvedValueOnce({ ok: false, reason: 'readOnly' });
+    fireEvent.click(boxes()[0]);
+    await waitFor(() => expect(pv!.preview.toggleTask).toHaveBeenCalledTimes(1));
+    await act(() => Promise.resolve());
+    fireEvent.click(boxes()[0]);
+    await waitFor(() => expect(pv!.preview.toggleTask).toHaveBeenCalledTimes(2));
+
+    // The second was applied, so line 2 now waits for main's re-render; line 3 is a different task.
+    pv!.preview.toggleTask.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(boxes()[0]);
+    fireEvent.click(boxes()[1]);
+    await waitFor(() => expect(pv!.preview.toggleTask).toHaveBeenCalledTimes(3));
+    expect(pv!.preview.toggleTask).toHaveBeenLastCalledWith(expect.objectContaining({ line: 3 }));
   });
 });
 

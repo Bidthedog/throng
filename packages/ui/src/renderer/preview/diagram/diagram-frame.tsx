@@ -38,7 +38,6 @@ import { IconButton } from '../../common/icon-button.js';
 import {
   maximiseSection,
   restore as restoreMaximise,
-  sectionUnmounted,
   tabOfMaximisePanel,
   useSectionMaximised,
 } from '../../workspace/maximise-store.js';
@@ -177,13 +176,15 @@ export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: Diagra
     [svg, natural.width, natural.height],
   );
 
-  // A diagram that leaves the document while it fills the middle section takes its target with it.
-  useEffect(
-    () => () => {
-      if (tabId !== null) sectionUnmounted(tabId, panelId, sectionId);
-    },
-    [tabId, panelId, sectionId],
-  );
+  // A frame that mounts while its section already fills the middle section (its tab was switched away from
+  // and back, FR-073) hands the layer its own host: the registered render belongs to the frame that unmounted.
+  // The target itself is released by whatever knows the diagram is gone (`diagram-sections.ts`), not here.
+  useEffect(() => {
+    if (!fullPane || paneHost !== null || tabId === null) return;
+    maximiseSection(tabId, panelId, sectionId, () => (
+      <div className="preview-diagram-pane-host" data-testid={`diagram-pane-host-${panelId}-${sectionId}`} ref={setPaneHost} />
+    ));
+  }, [fullPane, paneHost, tabId, panelId, sectionId]);
 
   const scrolls = view.mode === 'fit' && boxWidth > 0 && natural.width * MIN_READABLE_SCALE > boxWidth;
   const classes = [

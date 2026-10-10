@@ -801,19 +801,40 @@ export function PreviewPanel({
   const taskNoticeId = taskNoticeTestId(panelId);
   const filePathRef = useRef(state?.filePath);
   filePathRef.current = state?.filePath;
+  /*
+   * One request per task line at a time: every click carries the state the reader SAW, so a second request
+   * before main's re-render lands would fail `changed` and raise a notice for a toggle that worked. A line is
+   * free again when main refuses (nothing will re-render) or when the re-render arrives after an applied one.
+   */
+  const taskInFlight = useRef(new Set<number>());
+  const taskApplied = useRef(new Set<number>());
+  const revision = state?.revision;
+  const revisionRef = useRef(revision);
+  revisionRef.current = revision;
+  useEffect(() => {
+    for (const line of taskApplied.current) taskInFlight.current.delete(line);
+    taskApplied.current.clear();
+  }, [revision]);
   const onToggleTask = useCallback(
     (task: TaskToggle): void => {
       const filePath = filePathRef.current;
       const preview = window.throng?.preview;
       if (filePath === undefined || preview === undefined) return;
+      if (taskInFlight.current.has(task.line)) return;
+      taskInFlight.current.add(task.line);
+      const askedAt = revisionRef.current;
       void preview
         .toggleTask({ panelId, filePath, ...task })
         .catch((): TaskToggleResponse => ({ ok: false, reason: 'io' }))
         .then((answer) => {
           if (answer.ok) {
+            // Held until the next render of the document; nothing to wait for if it already arrived.
+            if (revisionRef.current !== askedAt) taskInFlight.current.delete(task.line);
+            else taskApplied.current.add(task.line);
             clear(taskNoticeId);
             return;
           }
+          taskInFlight.current.delete(task.line);
           notify({
             severity: 'warning',
             subject: panelSubject(placeRef.current),

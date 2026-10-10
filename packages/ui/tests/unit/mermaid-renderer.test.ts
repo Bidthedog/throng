@@ -64,6 +64,11 @@ describe('initialisation (FR-045, FR-046)', () => {
     });
   });
 
+  it('locks the settings a diagram directive could otherwise override (secure list)', () => {
+    const config = mermaid.initialize.mock.calls[0][0];
+    expect(config.secure).toEqual(expect.arrayContaining(['securityLevel', 'themeCSS', 'fontFamily', 'htmlLabels']));
+  });
+
   it('takes its colours and font from the theme tokens', () => {
     const config = mermaid.initialize.mock.calls[0][0];
     expect(config.themeVariables).toMatchObject({
