@@ -90,8 +90,14 @@ describe('renderer Content-Security-Policy (Layer 3)', () => {
     expect(policy.get('style-src')).toEqual(["'self'", "'unsafe-inline'"]);
   });
 
-  it("img-src 'self' https: throng-preview: — no data:, no http:, no blob:", () => {
-    expect(policy.get('img-src')).toEqual(["'self'", 'https:', 'throng-preview:']);
+  /*
+   * 054 FR-049a — `blob:` joins for the diagram rasteriser (`preview/diagram/rasterise.ts`), which loads
+   * the SANITISED diagram SVG from an object URL it mints itself to copy it as a PNG. Only this
+   * document's own script can mint one, and the preview sanitiser's URI allowlist refuses a `blob:` src
+   * in any rendered document, so no file can reach it. `data:` and `http:` stay out.
+   */
+  it("img-src 'self' https: throng-preview: blob: — no data:, no http:", () => {
+    expect(policy.get('img-src')).toEqual(["'self'", 'https:', 'throng-preview:', 'blob:']);
   });
 
   it.each(['object-src', 'frame-src', 'base-uri', 'form-action'])("%s 'none'", (directive) => {
