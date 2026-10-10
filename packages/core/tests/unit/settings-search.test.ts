@@ -229,4 +229,11 @@ describe('subsection-name search (040, FR-036)', () => {
     expect(fieldHaystack(EDITOR_BG, '#101010')).not.toContain('undefined');
     expect(matchesQuery('autosave', EDITOR_BG, '#101010')).toBe(false);
   });
+
+  // 054 FR-050a — the third heading level obeys the same invariant. Only the subsection says "sketch".
+  it('matches a field by its SUBSECTION heading (054 FR-050a)', () => {
+    const field: SearchableField = { ...AUTOSAVE_DELAY, subgroup: 'Previews', subsection: 'Sketch' };
+    expect(matchesQuery('sketch', field, 900)).toBe(true);
+    expect(fieldHaystack(AUTOSAVE_DELAY, 900)).not.toContain('undefined');
+  });
 });
