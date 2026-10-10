@@ -63,7 +63,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 - [ ] T026 [US3] Route the opener in `packages/ui/src/renderer/find-in-files/find-in-files-chrome.tsx` by `defaultOpenActionFor`; add `pendingReveal` to `packages/ui/src/renderer/preview/preview-panel-handles.ts` and pass `reveal` through `open-preview.ts`
 - [ ] T027 [P] [US3] Component test: a pending reveal scrolls the match's block into view, expands a folded section, paints the match with the find highlight; a match not in rendered text (hidden front matter, inside a diagram) falls back to opening the editor at the range — in `packages/ui/tests/component/preview-reveal-match.test.ts`
 - [ ] T028 [US3] Implement reveal-on-draw in `packages/ui/src/renderer/preview/preview-panel.tsx` using `blockLineFor`, `findPreviewMatches`, `revealBeforeScroll` and the CSS highlight painter; fallback through `openResultRow`
-- [ ] T029 [US3] Update the default-open-action description in `packages/core/src/config/preview-settings.ts:216` (test in `packages/core/tests/unit/preview-settings.test.ts`) to say Find in Files results follow it
+- [x] T029 [US3] Update the default-open-action description in `packages/core/src/config/preview-settings.ts:216` (test in `packages/core/tests/unit/preview-settings.test.ts`) to say Find in Files results follow it
 
 ## Phase 6: User Story 4 — Mermaid in Markdown previews (P2)
 
@@ -87,8 +87,8 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 **Goal**: FR-042, FR-049, FR-005/FR-006 for a second type. **Independent test**: `.mmd` preview follows its buffer.
 
-- [ ] T043 [US5] Test: registry has `mermaid` (`.mmd`, `.mermaid`, text); settings generated for it (enabled, defaultOpenAction) — its `openTarget` leaf and Mermaid subsection are asserted in T055 (US7); disabling it closes its previews (existing FR-063 path) — in `packages/core/tests/unit/preview-registry.test.ts` and `preview-settings.test.ts`
-- [ ] T044 [US5] Implement `packages/core/src/preview/providers/mermaid.ts` and register it in `packages/core/src/preview/providers/index.ts`
+- [x] T043 [US5] Test: registry has `mermaid` (`.mmd`, `.mermaid`, text); settings generated for it (enabled, defaultOpenAction) — its `openTarget` leaf and Mermaid subsection are asserted in T055 (US7); disabling it closes its previews (existing FR-063 path) — in `packages/core/tests/unit/preview-registry.test.ts` and `preview-settings.test.ts`
+- [x] T044 [US5] Implement `packages/core/src/preview/providers/mermaid.ts` and register it in `packages/core/src/preview/providers/index.ts`
 - [ ] T045 [P] [US5] Component test: a `.mmd` preview renders the whole file through `DiagramBlock`/`DiagramFrame`, follows content updates, shows the parse notice, sanitiser in the path; `provider-views.test.ts` view id equals descriptor id — in `packages/ui/tests/component/preview-mermaid-standalone.test.ts`
 - [ ] T046 [US5] Implement `packages/ui/src/renderer/preview/providers/mermaid/view.ts` + `mermaid-body.tsx` and register in `packages/ui/src/renderer/preview/providers/index.ts`; guard Markdown-only assumptions in `preview-panel.tsx` (`isFoldableProvider`, gutter) so they stay off for Mermaid
 - [x] T047 [P] [US5] Integration test: `PreviewService.navigate` to a file of another provider answers `reroute` (FR-008); same provider navigates in place — in `packages/ui/tests/integration/preview-service-open-target.integration.test.ts`
@@ -109,10 +109,10 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 **Goal**: FR-050 – FR-055. **Independent test**: seeded New Preview Panel survives under both providers.
 
-- [ ] T055 [US7] Test: `parsePreviewSettings` migrates top-level `openTarget` to every provider's `openTarget` (Markdown and Mermaid) when absent; a provider's own value wins; re-parse is a no-op; the retired top-level leaf is not in the parse output (the section rebuild 019 FR-023 relies on — a write therefore drops it; top-level hand-added keys are a different case, `settings-validity.test.ts:57`); descriptors placed per FR-051 (shared under Previews, provider leaves with `subsection: displayName`, labels `"<displayName>: Open previews in"`); `editor.markdownSectionsOpen` in Previews → Markdown with key unchanged — in `packages/core/tests/unit/preview-settings.test.ts`, `settings-metadata-040.test.ts`, `settings-047.test.ts`
-- [ ] T056 [US7] Implement in `packages/core/src/config/preview-settings.ts`, `packages/core/src/preview/settings-types.ts`, `packages/core/src/config/settings-metadata.ts`; switch readers of `previews.openTarget` (`open-preview.ts`, `file-tree.tsx`, links) to the provider's
+- [x] T055 [US7] Test: `parsePreviewSettings` migrates top-level `openTarget` to every provider's `openTarget` (Markdown and Mermaid) when absent; a provider's own value wins; re-parse is a no-op; the retired top-level leaf is not in the parse output (the section rebuild 019 FR-023 relies on — a write therefore drops it; top-level hand-added keys are a different case, `settings-validity.test.ts:57`); descriptors placed per FR-051 (shared under Previews, provider leaves with `subsection: displayName`, labels `"<displayName>: Open previews in"`); `editor.markdownSectionsOpen` in Previews → Markdown with key unchanged — in `packages/core/tests/unit/preview-settings.test.ts`, `settings-metadata-040.test.ts`, `settings-047.test.ts`
+- [x] T056 [US7] Implement in `packages/core/src/config/preview-settings.ts`, `packages/core/src/preview/settings-types.ts`, `packages/core/src/config/settings-metadata.ts`; switch readers of `previews.openTarget` (`open-preview.ts`, `file-tree.tsx`, links) to the provider's
 - [ ] T057 [P] [US7] Component test: Settings tab renders Editor → Previews with shared rows then Markdown and Mermaid subsections in contract order; search "open previews" finds both provider rows; an all-filtered subsection disappears — update `packages/ui/tests/component/settings-tab-previews.test.ts`, `settings-tab-subgroups.test.ts`
-- [ ] T058 [US7] Add `packages/core/tests/unit/settings-inertness-054.test.ts` (every new leaf has a descriptor and a production reader) and satisfy it
+- [x] T058 [US7] Add `packages/core/tests/unit/settings-inertness-054.test.ts` (every new leaf has a descriptor and a production reader) and satisfy it
 
 ## Phase 10: User Story 8 — maximise panels and sections (P2)
 
