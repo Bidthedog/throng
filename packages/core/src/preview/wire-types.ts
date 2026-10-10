@@ -141,6 +141,11 @@ export type PreviewNavigateResponse =
   | { kind: 'shown'; update: PreviewUpdate; fragment?: string }
   | { kind: 'focusedOther'; panelId: string }
   | { kind: 'openedInEditor' }
+  /**
+   * 054 FR-008 — the target is a file of ANOTHER preview type: nothing moved, and the renderer opens it as
+   * any open of that file would (FR-007 reuse, FR-004 focus).
+   */
+  | { kind: 'reroute' }
   | { kind: 'refused'; notice: PreviewNotice };
 
 /** `throng:preview:refresh`'s answer. `null` when the panel has no run (§1, amended). */

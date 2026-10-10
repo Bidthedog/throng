@@ -91,7 +91,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 - [ ] T044 [US5] Implement `packages/core/src/preview/providers/mermaid.ts` and register it in `packages/core/src/preview/providers/index.ts`
 - [ ] T045 [P] [US5] Component test: a `.mmd` preview renders the whole file through `DiagramBlock`/`DiagramFrame`, follows content updates, shows the parse notice, sanitiser in the path; `provider-views.test.ts` view id equals descriptor id — in `packages/ui/tests/component/preview-mermaid-standalone.test.ts`
 - [ ] T046 [US5] Implement `packages/ui/src/renderer/preview/providers/mermaid/view.ts` + `mermaid-body.tsx` and register in `packages/ui/src/renderer/preview/providers/index.ts`; guard Markdown-only assumptions in `preview-panel.tsx` (`isFoldableProvider`, gutter) so they stay off for Mermaid
-- [ ] T047 [P] [US5] Integration test: `PreviewService.navigate` to a file of another provider answers `reroute` (FR-008); same provider navigates in place — in `packages/ui/tests/integration/preview-service-open-target.integration.test.ts`
+- [x] T047 [P] [US5] Integration test: `PreviewService.navigate` to a file of another provider answers `reroute` (FR-008); same provider navigates in place — in `packages/ui/tests/integration/preview-service-open-target.integration.test.ts`
 - [ ] T048 [US5] Implement `reroute` in `packages/ui/src/main/preview-service.ts` and handle it in the renderer link-follow path (`packages/ui/src/renderer/preview/preview-panel.tsx`) as an ordinary open
 
 ## Phase 8: User Story 6 — Outlining submenu (P3)

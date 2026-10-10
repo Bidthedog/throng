@@ -270,3 +270,45 @@ describe('open — target.mode "lastActive" reuses a live standalone run (047 US
     expect(res).toMatchObject({ kind: 'placedElsewhere' });
   });
 });
+
+/** 054 T047 — a preview never moves to a file of another preview type (FR-007, FR-008). */
+describe('one preview type per provider (054)', () => {
+  it('a followed link to a file of another provider answers reroute and leaves the run where it was', async () => {
+    const a = await file('a.md');
+    const flow = await file('flow.mmd', 'graph TD; A-->B\n');
+    await attach('v1', a);
+
+    const res = await previews.navigate(REQUESTER, { panelId: 'v1', target: { absPath: flow }, intent: { kind: 'link' } });
+
+    expect(res).toEqual({ kind: 'reroute' });
+    expect(previews.run('v1')?.filePath).toBe(a);
+  });
+
+  it('a link to a file of the SAME provider still navigates in place (044 FR-090)', async () => {
+    const a = await file('a.md');
+    const b = await file('b.md');
+    await attach('v1', a);
+
+    const res = await previews.navigate(REQUESTER, { panelId: 'v1', target: { absPath: b }, intent: { kind: 'link' } });
+
+    expect(res).toMatchObject({ kind: 'shown' });
+    expect(previews.run('v1')?.filePath).toBe(b);
+  });
+
+  it('Last Active never reuses a run of another provider — a fresh placement instead', async () => {
+    const a = await file('a.md');
+    const flow = await file('flow.mmd', 'graph TD; A-->B\n');
+    await attach('v1', a);
+
+    const res = await open(flow, { mode: 'lastActive', reusePanelId: 'v1' });
+
+    expect(res).toMatchObject({ kind: 'placeLocally' });
+    expect(previews.run('v1')?.filePath).toBe(a);
+  });
+
+  it('a run records its provider id', async () => {
+    const flow = await file('flow.mmd', 'graph TD; A-->B\n');
+    await attach('v2', flow);
+    expect(previews.run('v2')?.providerId).toBe('mermaid');
+  });
+});
