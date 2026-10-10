@@ -1171,7 +1171,9 @@ export type { WikiTarget } from './preview/wiki-links.js';
 export { fairColumnWidths } from './preview/table-widths.js';
 export type { ColumnProfile, FairColumnWidthsResult } from './preview/table-widths.js';
 // Registered in `defaultPanelTypeRegistry`, `offered: false` — the Find in Files arrangement above.
-export { PREVIEW_KIND, previewPanelType } from './preview/panel-type.js';
+export { PREVIEW_KIND, previewPanelType, previewPanelTypeLabel, previewProviderIdOf } from './preview/panel-type.js';
+// 054 FR-001, FR-002 — the preview recency a restored tab starts from.
+export { initialPreviewRecency } from './workspace/preview-recency.js';
 export type { PreviewValues } from './preview/panel-type.js';
 
 // 044 — per-panel navigation history (#136): the pure reducer main's authority is built on.
