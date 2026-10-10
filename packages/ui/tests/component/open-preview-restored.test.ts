@@ -76,6 +76,18 @@ describe('a restored layout and Last Active (FR-001)', () => {
     expect(await openAnother({ mode: 'new' })).toEqual({ mode: 'new', reusePanelId: null });
   });
 
+  // MT-01 (2026-10-10) — opening the file a never-visited background tab's restored preview shows must bring
+  // THAT preview forward (FR-012), not replace the active tab's preview with it. Main knows previews only by
+  // their live runs, and a preview in a tab not yet visited since the restart has never mounted, so it has none.
+  it('opening the file a restored, never-visited background tab previews brings that tab forward (FR-012)', async () => {
+    await mount(restored({ root: split(plain('term'), preview('pv1', 'README.md')) }, { root: preview('bg', 'c.md') }));
+    await act(() => requestPreviewOpen({ absPath: `${ROOT}/c.md`, projectId: PROJECT }));
+    const calls = pv!.preview.open.mock.calls as [{ target: { reusePanelId: string | null } }][];
+    expect(calls.map(([req]) => req.target.reusePanelId)).not.toContain('pv1');
+    expect(pv!.ws().layout!.activeTabId).toBe('t2');
+    expect(pv!.ws().layout!.tabs.find((t) => t.id === 't2')!.activePanelId).toBe('bg');
+  });
+
   it('a restored preview in a BACKGROUND tab is never reused', async () => {
     await mount(restored({ root: split(plain('term'), preview('pv1', 'README.md')) }, { root: preview('bg', 'c.md') }));
     const target = await openAnother();

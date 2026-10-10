@@ -32,6 +32,7 @@ import {
   type PreviewProviderRegistry,
   collectPanels,
   normaliseForCompare,
+  samePath,
   type Panel,
   type PanelConfig,
   type PanelKind,
@@ -295,6 +296,18 @@ function shownProviderOf(layout: WorkspaceLayout, panelId: string, registry: Pre
   return path === undefined ? undefined : registry.forPath(path)?.id;
 }
 
+/**
+ * A preview panel in `layout` that persists `absPath` and has never mounted this session (no preview state),
+ * so main has no run to find it by (FR-012). A mounted one is main's to answer for: its run may have moved.
+ */
+function dormantPreviewOf(layout: WorkspaceLayout, absPath: string): string | undefined {
+  return panelsOf(layout).find((p) => {
+    if (p.kind !== PREVIEW_KIND || getPreviewState(p.id) !== undefined) return false;
+    const path = previewPathOf(p.config as PreviewPanelConfig | undefined);
+    return path !== undefined && samePath(path, absPath);
+  })?.id;
+}
+
 /** Ask main for a preview of `intent.absPath` and carry out its answer in this window. */
 export async function openPreview({
   ws: wsOrGetter,
@@ -310,6 +323,18 @@ export async function openPreview({
   // R8 — the visible tab's most recently active preview, still live in THIS window's layout; `null`
   // for `mode: 'new'` (main never consults it there) or a tab/candidate this window no longer holds.
   // 054 FR-007 — and of the opened file's own type: the provider of the file each candidate shows now.
+  // 054 FR-012 (MT-01) — a restored preview of this file in a tab not visited since the restart has never
+  // mounted, so main holds no run for it and would answer as though none existed. This window's layout is
+  // the only place it is known: bring it forward here, exactly as main's `focused` answer would.
+  const dormant = layoutBefore === null ? undefined : dormantPreviewOf(layoutBefore, intent.absPath);
+  if (dormant !== undefined && layoutBefore !== null) {
+    const ws = current();
+    focusLocalPanel(ws, layoutBefore, dormant, { keepFocus: intent.keepFocus === true });
+    rememberShown(tabHolding(layoutBefore, dormant)?.id, dormant);
+    if (intent.flash === true) requestPanelFlash(dormant);
+    if (intent.reveal !== undefined) setPendingReveal(dormant, { ...intent.reveal, absPath: intent.absPath });
+    return { kind: 'focused', panelId: dormant };
+  }
   const tabId = layoutBefore?.activeTabId;
   const providerId = registry.forPath(intent.absPath)?.id;
   const reusePanelId =

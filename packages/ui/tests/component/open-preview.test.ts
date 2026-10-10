@@ -461,7 +461,8 @@ describe('focused — the file already has its one preview (FR-012, FR-014)', ()
     const outcome = await openPreview({
       ws,
       bridge: fakeBridge({ kind: 'focused', panelId: null }),
-      intent: { absPath: FILE, projectId: PROJECT, requesterPanelId: 'ed' },
+      // A file this layout holds no preview of: one it does, never mounted, is brought forward locally (MT-01).
+      intent: { absPath: FILE.replace(/\.md$/, '-placing.md'), projectId: PROJECT, requesterPanelId: 'ed' },
     });
 
     expect(outcome).toEqual({ kind: 'focused', panelId: null });
