@@ -2,6 +2,7 @@ import { collectPanels } from '@throng/core';
 import { openFileInPanel, openFileInTab } from '../editor/editor-open.js';
 import type { RevealTarget } from '../editor/reveal-range.js';
 import { getEditorState } from '../editor/editor-state.js';
+import { isPanelHidden } from '../workspace/maximise-store.js';
 import { linkOpenInEditors, type LinkOpenInTarget, type OpenInEditorRow } from './link-open-in.js';
 
 /**
@@ -20,6 +21,7 @@ type Ws = Parameters<typeof openFileInTab>[0];
 export function currentLinkOpenInEditors(ws: Ws, targetPath?: string | null): OpenInEditorRow[] {
   return linkOpenInEditors(ws.layout, {
     heldPath: (panelId) => getEditorState(panelId)?.filePath,
+    hidden: isPanelHidden,
     ...(targetPath ? { targetPath } : {}),
   });
 }

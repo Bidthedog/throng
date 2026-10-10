@@ -975,6 +975,43 @@ textarea,
   padding: 3px;
 }
 
+/*
+ * 054 FR-070 – FR-074 (research R7) — maximise, IN PLACE. The maximised panel is never re-parented (that
+ * would remount xterm and CodeMirror): every split container between it and `.tab-body` stays static, so
+ * `position: absolute` resolves against the body and the panel covers it, its margin keeping the usual
+ * gap. The other panels keep their cells — their split sizes are untouched (FR-073) — and are hidden
+ * (`inert` is set on them by the component). A section target is drawn by `.maximise-layer` on top.
+ */
+.tab-body[data-maximised] .split,
+.tab-body[data-maximised] .split__cell {
+  position: static;
+}
+
+.tab-body[data-maximised] .panel-box--maximised {
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+}
+
+.panel-box--maximise-hidden,
+.tab-body[data-maximised] .split__divider {
+  visibility: hidden;
+}
+
+.maximise-layer {
+  position: absolute;
+  inset: 3px;
+  z-index: 3;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  margin: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
 /* --- Split tree ------------------------------------------------------- */
 .split {
   display: flex;

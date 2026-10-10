@@ -52,6 +52,8 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { SplitTree } from './split-tree.js';
 import { OuterEdgeZones } from './outer-edge-zones.js';
+import { MaximiseLayer } from './maximise-layer.js';
+import { useMaximisedPanel } from './maximise-store.js';
 import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuAction } from './context-menu.js';
 import { tabContextMenu } from './tab-menu.js';
@@ -1179,6 +1181,8 @@ export function TabGroup(): ReactElement {
    */
   const stepRef = useRef<(direction: 'left' | 'right') => boolean>(() => false);
   const hold = useHoldRepeat(chevronRepeatDelayMs, (direction) => stepRef.current(direction));
+  // 054 FR-072 — the shown tab's maximised panel, if any (read before the early return: it is a hook).
+  const maximisedPanelId = useMaximisedPanel(layout ? (layout.activeTabId ?? layout.tabs[0]?.id ?? null) : null);
 
   if (!layout) return <></>;
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0];
@@ -1841,9 +1845,11 @@ export function TabGroup(): ReactElement {
             onDismiss={() => setPickerOpen(false)}
           />
         ) : null}
-        <div className="tab-body" data-testid="tab-body">
+        {/* 054 FR-072 — `data-maximised` names the panel lifted over the body; the CSS does the rest. */}
+        <div className="tab-body" data-testid="tab-body" data-maximised={maximisedPanelId ?? undefined}>
           {activeTab ? <SplitTree node={activeTab.root} tabId={activeTab.id} path={[]} /> : null}
           {activeTab ? <OuterEdgeZones tabId={activeTab.id} panelCount={countPanels(activeTab.root)} /> : null}
+          {activeTab ? <MaximiseLayer tabId={activeTab.id} /> : null}
         </div>
       </DragStateContext.Provider>
     </DndContext>

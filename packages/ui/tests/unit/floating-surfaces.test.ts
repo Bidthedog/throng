@@ -85,6 +85,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
     'chrome — 048 FR-026\'s split-mode pulse (workspace/panel-placeholder.tsx): inset:0 over its own panel, clamped to it by construction, `pointer-events: none`, opacity-only animation; anchored to nothing, so nothing to flip away from',
   '.outer-edge-zones':
     'chrome — 048 FR-060\'s outer-edge drop bands (workspace/outer-edge-zones.tsx): inset:0 over the tab body that hosts them, each band a fixed 16px strip inside it, shown only while a panel is dragged; anchored to nothing, so nothing to flip away from',
+  '.tab-body':
+    'chrome — 054 FR-072\'s maximised panel (`.tab-body[data-maximised] .panel-box--maximised`, theme.css): the panel lifted inset over the tab body that holds it, clamped to that body by construction; anchored to nothing, so nothing to flip away from',
+  '.maximise-layer':
+    'chrome — 054 FR-070\'s section layer (workspace/maximise-layer.tsx): inset over the tab body that holds it, clamped to it by construction; anchored to nothing, so nothing to flip away from',
   '.editor-pending-chord':
     'chrome — the two-stroke chord indication (046 FR-092), pinned to the bottom-right of its own editor and clamped to it by max-width; anchored to nothing, so nothing to flip away from',
   '.tab-strip':

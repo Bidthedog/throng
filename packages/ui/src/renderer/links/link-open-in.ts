@@ -42,14 +42,17 @@ export function linkOpenInEditors(
     /** The file an editor panel shows, from the editor store. */
     readonly heldPath: (panelId: string) => string | null | undefined;
     readonly targetPath?: string | null;
+    /** 054 FR-074 — a panel hidden by a maximised target in its tab is not targetable, so no row. */
+    readonly hidden?: (tabId: string, panelId: string) => boolean;
   },
 ): OpenInEditorRow[] {
   if (!layout) return [];
-  const { heldPath, targetPath } = args;
+  const { heldPath, targetPath, hidden } = args;
   const rows: OpenInEditorRow[] = [];
   for (const tab of layout.tabs) {
     for (const panel of collectPanels(tab.root)) {
       if (panel.kind !== 'editor') continue;
+      if (hidden?.(tab.id, panel.id)) continue;
       const held = heldPath(panel.id);
       if (targetPath && held && samePath(held, targetPath)) continue;
       rows.push({ id: panel.id, name: panel.title });

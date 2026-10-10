@@ -11,6 +11,8 @@ import {
   panelDisplayTitle,
   panelRemovalVerb,
   previewTitleParts,
+  previewPanelTypeLabel,
+  previewProviderIdOf,
   PREVIEW_KIND,
   toDisplayPath,
   effectiveActivePanelId,
@@ -24,6 +26,7 @@ import { PanelBody } from './panel-body.js';
 import { panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
 import { placeholderContentMenu, splitMenuItems } from './split-menu.js';
 import { useSplitMode } from './split-mode.js';
+import { toggleMaximisePanel, useTabMaximise } from './maximise-store.js';
 import { registerPanelDestroy } from './panel-destroy.js';
 import { isKeyboardMenu } from './keyboard-menu.js';
 import { usePreviewFailure, usePreviewState } from '../preview/preview-store.js';
@@ -135,11 +138,22 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     ? { name: originProject?.name ?? subWin.name, colour: originProject?.colour ?? subWin.colour }
     : null;
   const activeColour = subWin ? ownerLabel?.colour : activeProject?.colour;
+  /*
+   * 054 FR-070 – FR-074 — this tab's maximise state. The maximised panel stays exactly where it is in the
+   * tree (no re-parenting, so a terminal or editor never remounts); CSS lifts it over the tab body and the
+   * others are hidden and `inert`. While anything in the tab is maximised the tab is modal: no drag
+   * starts, no drop zone shows, and the + is drawn disabled.
+   */
+  const maximise = useTabMaximise(tabId);
+  const isMaximisedPanel = maximise.maximisedPanelId === panel.id;
+  const hiddenByMaximise = maximise.isHidden(panel.id);
+  const tabModal = maximise.isMaximised;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: panelDragId(panel.id),
+    disabled: tabModal,
   });
 
-  const showZones = draggingPanelId !== null && draggingPanelId !== panel.id;
+  const showZones = !tabModal && draggingPanelId !== null && draggingPanelId !== panel.id;
 
   // Editor Panels surface a `filename (relative folder)` pill + the shared unsaved
   // dot (006). Non-editor Panels have no editor state, so this stays undefined.
@@ -262,11 +276,21 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // parent editor's displayed name, which main forwards on each update as `parent.title` (published by
   // `EditorTitlePublisher`), so it follows a rename of that editor live.
   const terminalSource = terminalTitleSource(panel);
+  /*
+   * 054 FR-005 (research R2) — a preview's panel TYPE is its provider's: "Markdown Preview". The run's
+   * provider once an update has named it, else the persisted / derived one (`previewProviderIdOf`).
+   */
+  const previewProvider = isPreview
+    ? previewRegistry.get(previewUi?.providerId ?? previewProviderIdOf(panel.config, previewRegistry) ?? '')
+    : undefined;
+  const previewTypeLabel = previewProvider ? previewPanelTypeLabel(previewProvider) : null;
   const titleSources = {
     terminalTitle,
     editorFilePath,
     ...(terminalSource ? { terminal: terminalSource } : {}),
-    ...(isPreview ? { previewFilePath: previewUi?.filePath, previewParentTitle: previewUi?.parent?.title } : {}),
+    ...(isPreview
+      ? { previewFilePath: previewUi?.filePath, previewParentTitle: previewUi?.parent?.title, previewTypeLabel }
+      : {}),
   };
   /*
    * 044 FR-001/FR-002/FR-004 — an editor's Open Preview affordance, against the editor's OWN project
@@ -484,8 +508,12 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
 
   return (
     <div
-      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${showsActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}`}
+      className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${showsActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}${isMaximisedPanel ? ' panel-box--maximised' : ''}${hiddenByMaximise ? ' panel-box--maximise-hidden' : ''}`}
       data-testid={`panel-${panel.id}`}
+      data-maximised={isMaximisedPanel ? 'true' : undefined}
+      // 054 FR-072, FR-074 — hidden by a maximised target: out of the tab order and every pointer route,
+      // never closed or unmounted.
+      inert={hiddenByMaximise}
       data-panel-id={panel.id}
       /* 046 fix round (IMPORTANT review finding) — a marker ONLY the panel host itself emits, for
          `mouse-zoom.ts`'s `closest()` lookup. `data-panel-id` is also a test hook elsewhere in the
@@ -609,6 +637,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               // 044 FR-122b — checked from the setting; WHERE it is drawn follows the affordance above (an
               // editor) or the provider kind (a preview), inside the builder.
               syncScroll: settings.editor.previews.syncScroll,
+              // 054 FR-071 — the same toggle the header control and `panel.toggleMaximise` run.
+              maximise: { maximised: isMaximisedPanel, toggle: () => toggleMaximisePanel(tabId, panel.id) },
               // 044 FR-111 — Back / Forward enabled exactly as the header buttons are, from the mirrored history.
               history: hasHistory && panelHistory ? { canGoBack: canGoBack(panelHistory), canGoForward: canGoForward(panelHistory) } : null,
               detach: detach
@@ -825,7 +855,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
         {panel.kind
           ? (() => {
               const desc = defaultPanelTypeRegistry.get(panel.kind);
-              const typeLabel = desc?.label ?? panel.kind;
+              // 054 FR-005 — a preview's type is its provider's ("Markdown Preview").
+              const typeLabel = (isPreview ? previewTypeLabel : null) ?? desc?.label ?? panel.kind;
               if (!desc?.icon) return null;
               // Prefer the captured flavour label; fall back to the flavour id for
               // Panels typed before the label was persisted (back-compat).
@@ -931,9 +962,23 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             split applies to the panel whose button was clicked. Nothing is added until an item is
             chosen. A real button, so Enter and Space open it and the menu's arrow keys do the rest.
           */}
+          {/*
+            054 FR-071 — Maximise / Restore, before the +. The same toggle as the title-menu row and the
+            `panel.toggleMaximise` chord; on the maximised panel it is the Restore control (FR-071).
+          */}
+          <IconButton
+            token={isMaximisedPanel ? 'panelRestore' : 'panelMaximise'}
+            title={isMaximisedPanel ? 'Restore panel' : 'Maximise panel'}
+            className=""
+            testId={`panel-maximise-${panel.id}`}
+            // The box's own pointer-down has already made this panel the active one.
+            onClick={() => toggleMaximisePanel(tabId, panel.id)}
+          />
           <IconButton
             token="add"
-            title="Split panel…"
+            // 054 FR-074 — drawn disabled, not hidden, while the tab is maximised, and saying why.
+            title={tabModal ? 'Restore the panel to add panels' : 'Split panel…'}
+            disabled={tabModal}
             className=""
             testId={`panel-add-${panel.id}`}
             ariaHasPopup="menu"

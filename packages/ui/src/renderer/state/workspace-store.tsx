@@ -53,6 +53,13 @@ import {
 } from '@throng/core';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { registerSplitRunner } from '../workspace/split-panel.js';
+import {
+  getMaximiseStack,
+  maximisedTabIds,
+  panelClosed,
+  registerPanelTabResolver,
+  restoreAll,
+} from '../workspace/maximise-store.js';
 import type { WorkspaceClient } from './workspace-client.js';
 import { inFlightSavesByProject, registerLayoutFlusher, trackLayoutSave } from './layout-saves.js';
 import { useAppSettings } from '../config/config-store.js';
@@ -158,6 +165,12 @@ export interface WorkspaceContextValue {
   setPanelDormant(panelId: string, dormant: boolean): void;
   /** Merge partial config into an already-typed Panel (006 — persist editor path). */
   updatePanelConfig(panelId: string, config: PanelConfig): void;
+  /**
+   * 054 FR-002 (research R1) — the tab's preview recency, most recent first, saved with the layout so a
+   * restored tab reuses the preview the user last had. A normal debounced save; an unchanged order or
+   * an unknown tab writes nothing.
+   */
+  setPreviewRecency(tabId: string, ids: readonly string[]): void;
   /**
    * Replace the whole layout and persist it (US7 detach): a detach trims a Tab/
    * Panel out of the main workspace, so the result is set wholesale rather than
@@ -519,6 +532,9 @@ export function WorkspaceProvider({
       splitPanel: (tabId, panelId, direction) => {
         const tab = layout?.tabs.find((t) => t.id === tabId);
         if (!tab || !collectPanels(tab.root).some((p) => p.id === panelId)) return null;
+        // 054 FR-074 — a tab with something maximised takes no new panel: every split route (the chords,
+        // the + menu, the Split submenus) ends here, so they are all refused by this one gate.
+        if (getMaximiseStack(tabId).length > 0) return null;
         const id = newId();
         // `addPanel`'s placeholder title (048 FR-127); `PanelNameSync` claims a unique one as it appears.
         apply((l) => opSplitPanel(l, tabId, panelId, direction, { id, title: nextBlankTitle(l) }));
@@ -566,6 +582,14 @@ export function WorkspaceProvider({
       setPanelDormant: (panelId, dormant) =>
         apply((l) => opSetPanelDormant(l, panelId, dormant)),
       updatePanelConfig: (panelId, config) => apply((l) => opUpdatePanelConfig(l, panelId, config)),
+      setPreviewRecency: (tabId, ids) =>
+        apply((l) => {
+          const tab = l.tabs.find((t) => t.id === tabId);
+          if (!tab) return l;
+          const held = tab.previewRecency ?? [];
+          if (held.length === ids.length && held.every((id, i) => id === ids[i])) return l;
+          return { ...l, tabs: l.tabs.map((t) => (t === tab ? { ...t, previewRecency: [...ids] } : t)) };
+        }),
       replaceLayout: (next) => {
         setLayout(next);
         scheduleSave(next);
@@ -586,6 +610,32 @@ export function WorkspaceProvider({
       }),
     [layout, value],
   );
+
+  /*
+   * 054 FR-074, FR-075 — the maximise store asks this window which tab holds a panel (for callers that
+   * have only its id), and drops what it holds for a panel or tab that has left the layout: closing the
+   * maximised panel restores its tab, and a project switch leaves nothing maximised behind.
+   */
+  useEffect(
+    () =>
+      registerPanelTabResolver(
+        (panelId) => layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === panelId))?.id ?? null,
+      ),
+    [layout],
+  );
+  useEffect(() => {
+    for (const tabId of maximisedTabIds()) {
+      const tab = layout?.tabs.find((t) => t.id === tabId);
+      if (!tab) {
+        restoreAll(tabId);
+        continue;
+      }
+      const present = new Set(collectPanels(tab.root).map((p) => p.id));
+      for (const target of getMaximiseStack(tabId)) {
+        if (!present.has(target.panelId)) panelClosed(target.panelId);
+      }
+    }
+  }, [layout]);
 
   /*
    * 029 FR-013 — publish panel id -> displayed title, so main can NAME a throng lock holder.

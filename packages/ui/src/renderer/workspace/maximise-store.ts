@@ -232,6 +232,12 @@ export function useTabMaximise(tabId: string): TabMaximise {
   return describeTab(tabId, stack);
 }
 
+/** The whole-panel target of `tabId` (`null` for none, or no tab), re-rendering on change. */
+export function useMaximisedPanel(tabId: string | null): string | null {
+  const read = (): string | null => (tabId === null ? null : maximisedPanelOf(tabId));
+  return useSyncExternalStore(subscribeMaximise, read, read);
+}
+
 /**
  * Whether the section `sectionId` of `panelId` is one of the tab's targets — what a section reads to
  * swap its Full Pane control for Restore and to leave its in-place slot empty while the layer draws it.

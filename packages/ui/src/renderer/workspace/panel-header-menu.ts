@@ -214,6 +214,11 @@ export interface PanelHeaderMenuArgs {
    * preview exactly when its provider is `text` (FR-122a). Omitted reads as off.
    */
   syncScroll?: boolean;
+  /**
+   * 054 FR-071 — whether THIS panel is the maximised one, and the toggle. Every real panel passes it; a
+   * builder called without it (the menu tables drive the builder directly) draws no row.
+   */
+  maximise?: { maximised: boolean; toggle: () => void } | null;
   actions: PanelHeaderMenuActions;
 }
 
@@ -378,6 +383,21 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
    */
   items.push(splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)));
+
+  /*
+   * 054 FR-071, FR-077 — Maximise Panel / Restore Panel, View & state, on every kind: the header control's
+   * and `panel.toggleMaximise`'s menu item. Emitted ahead of Zoom (and after a preview's Refresh).
+   */
+  if (args.maximise) {
+    const { maximised, toggle } = args.maximise;
+    items.push({
+      label: maximised ? 'Restore Panel' : 'Maximise Panel',
+      icon: maximised ? 'panelRestore' : 'panelMaximise',
+      section: 'viewState',
+      shortcut: firstBinding(keybindings, 'panel.toggleMaximise'),
+      onClick: () => toggle(),
+    });
+  }
 
   // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
   // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
