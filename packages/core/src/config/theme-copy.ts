@@ -862,21 +862,21 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   'icons.panelRestore': {
     label: 'Restore panel icon',
     description:
-      'The glyph on the Restore control of a maximised panel or a diagram in Full Pane, which puts it back where it was.',
+      'The glyph on the Restore control of a maximised panel, and on the Minimise control of a maximised diagram, which puts it back where it was.',
   },
   'icons.diagramFit': {
     label: 'Fit diagram icon',
     description: "The glyph on a diagram's Fit control, which shrinks the diagram to fit the width of its box.",
   },
-  'icons.diagramFullSize': {
-    label: 'Diagram full size icon',
+  'icons.diagramZoomReset': {
+    label: 'Diagram zoom 100% icon',
     description:
-      "The glyph on a diagram's Full Size control, which makes the diagram fill the whole panel it is in.",
+      "The glyph on a diagram's Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.",
   },
   'icons.diagramFullPane': {
-    label: 'Diagram full pane icon',
+    label: 'Diagram maximise icon',
     description:
-      "The glyph on a diagram's Full Pane control, which shows the diagram over the whole middle section until it is restored.",
+      "The glyph on a diagram's Maximise control, which shows the diagram over the whole middle section until it is minimised.",
   },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {

@@ -70,7 +70,7 @@ and the level persists with your layout.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
-| Zoom panel type in | `panel.zoomIn` | `Ctrl+Alt++`, `Ctrl+WheelUp` | Everywhere | Increase the text size of every panel of the active panel's type. Ctrl+wheel acts on the panel under the pointer. |
+| Zoom panel type in | `panel.zoomIn` | `Ctrl+Alt++`, `Ctrl+WheelUp` | Everywhere | Increase the text size of every panel of the active panel's type. Ctrl+wheel acts on the panel under the pointer. With keyboard focus inside a diagram in a preview, this and the two zoom commands below zoom just that diagram (Zoom 100% for the reset). |
 | Zoom panel type out | `panel.zoomOut` | `Ctrl+Alt+-`, `Ctrl+WheelDown` | Everywhere | Decrease the text size of every panel of the active panel's type. |
 | Reset panel type zoom | `panel.zoomReset` | `Ctrl+Alt+Numpad0`, `Ctrl+Alt+0`, `Ctrl+MiddleClick` | Everywhere | Return the active panel's type to its default text size — the keypad zero, the main-row zero, or a Ctrl+middle-click over the panel. |
 | Split Down | `panel.splitDown` | `Ctrl+Shift+Alt+End,ArrowDown` | Everywhere | Split the active panel in two and put a new empty panel below it. |

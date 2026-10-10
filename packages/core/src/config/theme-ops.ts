@@ -92,8 +92,11 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
  *
  * 048 (research R6) retires `resetName` with panel renaming — its one call site was the panel
  * header's Reset Name row — and drops it the same way.
+ *
+ * 054's MT-04 round retires `diagramFullSize` (the diagram's "Fill the panel" control, removed): the
+ * version-21 seed wrote it into every theme file, and it is dropped here for the same reason.
  */
-const REMOVED_ICON_TOKENS = ['projectList', 'resetName'] as const;
+const REMOVED_ICON_TOKENS = ['projectList', 'resetName', 'diagramFullSize'] as const;
 
 /** Migrate one theme's `icons` to the 046 iterate round 2 model: drop {@link REMOVED_ICON_TOKENS}. */
 export function migrateThemeIcons(icons: Record<string, string>): Record<string, string> {

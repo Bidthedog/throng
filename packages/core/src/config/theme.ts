@@ -603,14 +603,16 @@ export const THRONG_THEME: Theme = {
     foldPreviewExpanded: '▾',
     foldPreviewCollapsed: '▸',
     /* 054 (FR-071, FR-046b). `panelMaximise`/`panelRestore` are the panel header's maximise toggle and
-       the Restore control on anything maximised — a panel, or a diagram in Full Pane. Not the window
-       tokens (`windowMaximise`/`windowRestore`), which act on the OS window: retheming one must never
-       retheme the other. The three diagram tokens are the view controls with no existing meaning;
-       diagram Zoom In / Zoom Out reuse `zoomIn`/`zoomOut`. */
+       the Restore control on a maximised panel (a maximised diagram's Minimise wears it too). Not the
+       window tokens (`windowMaximise`/`windowRestore`), which act on the OS window: retheming one must
+       never retheme the other. The three diagram tokens are the view controls with no existing meaning;
+       diagram Zoom In / Zoom Out reuse `zoomIn`/`zoomOut`. `diagramFullPane` is the diagram's Maximise
+       control (its name predates the wording). `diagramFullSize` ("Fill the panel") was retired by
+       054's MT-04 round and `diagramZoomReset` (Zoom 100%) took its place. */
     panelMaximise: '⤢',
     panelRestore: '⤡',
     diagramFit: '⊡',
-    diagramFullSize: '⛶',
+    diagramZoomReset: '1:1',
     diagramFullPane: '⇱',
   },
 };

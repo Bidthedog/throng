@@ -16,12 +16,26 @@
  * - **Fit** — `scale = clamp(width / naturalWidth, MIN_READABLE_SCALE, 1)`: shrink to the box, never
  *   enlarge, and below the floor keep the floor and scroll sideways (FR-046a).
  * - **Zoom In / Out** — ×1.25 per step within [DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE] (FR-046c).
- * - **Full Size** — the frame lifts to fill the preview panel's body (its nearest positioned ancestor);
- *   again, or Fit, puts it back (FR-046d).
- * - **Full Pane** — hands the frame to the one maximise mechanism as a SECTION target (FR-046f, R7). The
- *   state stays here, above the maximise layer's portal, so zoom and pan survive the move both ways.
+ * - **Zoom 100%** — the actual size (scale 1), centred; sits between Zoom In and Zoom Out (MT-04 A2, which
+ *   retired Full Size, "Fill the panel").
+ * - **Maximise / Minimise** — hands the frame to the one maximise mechanism as a SECTION target (FR-046f,
+ *   R7; named Full Pane before MT-04 A1). The state stays here, above the maximise layer's portal, so zoom
+ *   and pan survive the move both ways.
  * - **Middle-button drag** pans in every view, and its press is prevented so Chromium never starts its
  *   autoscroll over a diagram (FR-046e).
+ *
+ * ══ CENTRED ══
+ *
+ * The diagram's centre sits at the centre of the VIEWPORT, on both axes, in every mode (MT-04 A3, A4): the
+ * layer's `translate` is the centring offset (measured viewport minus scaled diagram, halved) plus the pan,
+ * so the pan in the view state is a displacement from the centre and Fit / Zoom 100% reset it to zero. The
+ * viewport is measured where it is — inline or in the maximise layer — so a maximised diagram is centred in
+ * the maximised viewport, not in the place it left.
+ *
+ * ══ PANEL ZOOM ══
+ *
+ * With keyboard focus inside the frame, the panel's zoom chords and Ctrl+wheel zoom THIS diagram
+ * (`diagram-zoom.ts`, MT-04 A5). The viewport is therefore focusable.
  */
 import {
   useCallback,
@@ -41,6 +55,7 @@ import {
   tabOfMaximisePanel,
   useSectionMaximised,
 } from '../../workspace/maximise-store.js';
+import { diagramZoomKey, registerDiagramZoom, type DiagramZoomAction } from './diagram-zoom.js';
 import './diagram.css';
 
 export const MIN_READABLE_SCALE = 0.5;
@@ -48,12 +63,13 @@ export const DIAGRAM_MIN_SCALE = 0.1;
 export const DIAGRAM_MAX_SCALE = 8;
 export const ZOOM_STEP = 1.25;
 
-export type DiagramViewMode = 'fit' | 'zoom' | 'fullSize';
+export type DiagramViewMode = 'fit' | 'zoom';
 
 interface ViewState {
   mode: DiagramViewMode;
-  /** The zoom in `zoom` and `fullSize` modes; Fit computes its own. */
+  /** The zoom in `zoom` mode; Fit computes its own. */
   scale: number;
+  /** The pan, as a displacement from the centred position. */
   x: number;
   y: number;
 }
@@ -83,36 +99,54 @@ const FIT: ViewState = { mode: 'fit', scale: 1, x: 0, y: 0 };
 
 export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: DiagramFrameProps): ReactElement {
   const [view, setView] = useState<ViewState>(FIT);
-  const [boxWidth, setBoxWidth] = useState(0);
+  // The viewport's size, measured where the viewport IS (inline, or in the maximise layer) — Fit and the
+  // centring both read it.
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const tabId = tabOfMaximisePanel(panelId);
   const fullPane = useSectionMaximised(tabId ?? '', panelId, sectionId);
+  const [paneHost, setPaneHost] = useState<HTMLDivElement | null>(null);
+  const portalled = fullPane && paneHost !== null;
   const natural = naturalSize(svg);
 
-  const fitScale = boxWidth > 0 ? clamp(boxWidth / natural.width, MIN_READABLE_SCALE, 1) : 1;
+  const fitScale = size.width > 0 ? clamp(size.width / natural.width, MIN_READABLE_SCALE, 1) : 1;
   const scale = view.mode === 'fit' ? fitScale : view.scale;
+  // Centred on both axes; before the first measurement there is nothing to centre in.
+  const centreX = size.width > 0 ? (size.width - natural.width * scale) / 2 : 0;
+  // In place and fitted, the viewport is exactly as tall as the diagram (its height is set from the scale), so
+  // there is nothing to centre vertically — and its height is a CONSEQUENCE of the width, not an input.
+  const heightFollowsScale = view.mode === 'fit' && !portalled;
+  const centreY = size.height > 0 && !heightFollowsScale ? (size.height - natural.height * scale) / 2 : 0;
 
   const onFit = useCallback((): void => setView(FIT), []);
-  const onFullSize = useCallback(
-    (): void =>
-      setView((v) => (v.mode === 'fullSize' ? FIT : { ...v, mode: 'fullSize', scale: v.mode === 'fit' ? fitScale : v.scale })),
-    [fitScale],
-  );
+  // Zoom 100%: the actual size, centred (the pan is cleared, as Fit clears it).
+  const onZoomActual = useCallback((): void => setView({ mode: 'zoom', scale: 1, x: 0, y: 0 }), []);
   const zoomBy = useCallback(
     (factor: number): void =>
       setView((v) => {
         const from = v.mode === 'fit' ? fitScale : v.scale;
         const next = clamp(from * factor, DIAGRAM_MIN_SCALE, DIAGRAM_MAX_SCALE);
-        return { ...v, mode: v.mode === 'fullSize' ? 'fullSize' : 'zoom', scale: next };
+        return { ...v, mode: 'zoom', scale: next };
       }),
     [fitScale],
   );
+
+  // A5 — the panel's zoom chords and Ctrl+wheel zoom THIS diagram while focus is inside it.
+  const zoomKey = diagramZoomKey(panelId, sectionId);
+  useEffect(
+    () =>
+      registerDiagramZoom(zoomKey, (action: DiagramZoomAction): void => {
+        if (action === 'reset') onZoomActual();
+        else zoomBy(action === 'in' ? ZOOM_STEP : 1 / ZOOM_STEP);
+      }),
+    [zoomKey, zoomBy, onZoomActual],
+  );
   /*
-   * FR-046f — Full Pane. The maximise layer draws what the section registers: here, an empty host element,
+   * FR-046f — Maximise. The maximise layer draws what the section registers: here, an empty host element,
    * into which THIS component portals its own toolbar and viewport. So the state above stays where it is,
-   * and zoom and pan are the same on the way out as on the way back. Esc and the layer's Restore are the
-   * maximise mechanism's own; the toolbar's Full Pane control turns into Restore while it holds.
+   * and zoom and pan are the same on the way out as on the way back. Esc and the Minimise control are the
+   * maximise mechanism's own; the toolbar's Maximise control turns into Minimise while it holds.
    */
-  const [paneHost, setPaneHost] = useState<HTMLDivElement | null>(null);
   const onFullPane = useCallback((): void => {
     if (tabId === null) return;
     if (fullPane) {
@@ -150,17 +184,26 @@ export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: Diagra
     if (e.button === 1) e.preventDefault();
   }, []);
 
-  // The box's width, for Fit — read at mount and whenever the box resizes.
-  const frameRef = useRef<HTMLDivElement | null>(null);
+  // The viewport's size, for Fit and the centring — read when the viewport appears (it is a different
+  // element in the maximise layer) and whenever it resizes. An unchanged size keeps the same state object,
+  // so a notification that moved nothing renders nothing.
+  // The height is followed only while it is an input: in place and fitted it is the scale's echo, and following
+  // it would cost every width change a second render when the viewport's new height came back through the
+  // observer. Leaving that state measures afresh, so the first zoomed render is centred on a current height.
   useLayoutEffect(() => {
-    const frame = frameRef.current;
-    if (frame === null) return undefined;
-    setBoxWidth(frame.clientWidth);
+    if (viewportEl === null) return undefined;
+    const measure = (): void =>
+      setSize((prev) => {
+        const width = viewportEl.clientWidth;
+        const height = heightFollowsScale ? prev.height : viewportEl.clientHeight;
+        return prev.width === width && prev.height === height ? prev : { width, height };
+      });
+    measure();
     if (typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(() => setBoxWidth(frame.clientWidth));
-    observer.observe(frame);
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewportEl);
     return () => observer.disconnect();
-  }, []);
+  }, [viewportEl, heightFollowsScale]);
 
   // The SVG itself: a clone, sized to its natural drawing size, so the layer's transform alone scales it.
   // A callback ref, so the layer is filled again when Full Pane moves it into the maximise layer and back.
@@ -186,10 +229,9 @@ export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: Diagra
     ));
   }, [fullPane, paneHost, tabId, panelId, sectionId]);
 
-  const scrolls = view.mode === 'fit' && boxWidth > 0 && natural.width * MIN_READABLE_SCALE > boxWidth;
+  const scrolls = view.mode === 'fit' && size.width > 0 && natural.width * MIN_READABLE_SCALE > size.width;
   const classes = [
     'preview-diagram-frame',
-    view.mode === 'fullSize' ? 'preview-diagram-frame--full-size' : '',
     fullPane ? 'preview-diagram-frame--full-pane' : '',
     scrolls ? 'preview-diagram-frame--scrolls' : '',
     dimmed ? 'preview-diagram-frame--dimmed' : '',
@@ -201,18 +243,23 @@ export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: Diagra
     <>
       <div className="preview-diagram-frame__toolbar" role="toolbar" aria-label="Diagram view">
         <IconButton token="diagramFit" title="Fit diagram" onClick={onFit} />
-        <IconButton token="diagramFullSize" title="Fill the panel" onClick={onFullSize} />
         <IconButton token="zoomIn" title="Zoom in" onClick={() => zoomBy(ZOOM_STEP)} />
+        <IconButton token="diagramZoomReset" title="Zoom 100%" onClick={onZoomActual} />
         <IconButton token="zoomOut" title="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)} />
         <IconButton
           token={fullPane ? 'panelRestore' : 'diagramFullPane'}
-          title={fullPane ? 'Restore' : 'Fill the middle section'}
+          title={fullPane ? 'Minimise' : 'Maximise'}
           onClick={onFullPane}
           disabled={tabId === null}
         />
       </div>
       <div
+        ref={setViewportEl}
         className="preview-diagram-frame__viewport"
+        // Focusable, so the panel's zoom chords and Ctrl+wheel can zoom just this diagram (A5).
+        tabIndex={0}
+        role="group"
+        aria-label="Diagram"
         style={view.mode === 'fit' ? { height: `${natural.height * scale}px` } : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -226,25 +273,31 @@ export function DiagramFrame({ svg, panelId, sectionId, dimmed = false }: Diagra
           className="preview-diagram-frame__layer"
           style={{
             width: `${natural.width}px`,
-            transform: `translate(${view.x}px, ${view.y}px) scale(${scale})`,
+            transform: `translate(${centreX + view.x}px, ${centreY + view.y}px) scale(${scale})`,
           }}
         />
       </div>
     </>
   );
 
-  const portalled = fullPane && paneHost !== null;
   return (
     <div
-      ref={frameRef}
       className={classes}
       data-testid={`diagram-frame-${panelId}-${sectionId}`}
       data-mode={view.mode}
       data-scale={String(scale)}
+      data-diagram-zoom-key={zoomKey}
       // While it fills the middle section, its place in the document keeps its height: nothing below jumps.
       style={portalled ? { minHeight: `${natural.height * fitScale}px` } : undefined}
     >
-      {portalled ? createPortal(<div className="preview-diagram-frame preview-diagram-frame--in-pane">{inside}</div>, paneHost) : inside}
+      {portalled
+        ? createPortal(
+            <div className="preview-diagram-frame preview-diagram-frame--in-pane" data-diagram-zoom-key={zoomKey}>
+              {inside}
+            </div>,
+            paneHost,
+          )
+        : inside}
     </div>
   );
 }

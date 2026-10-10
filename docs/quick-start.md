@@ -127,8 +127,10 @@ can keep browsing or press **F2** to rename the file.
 - **Tick a task** (`- [ ]`) by clicking its checkbox in a preview: the file changes, and an open editor
   shows it at once and can undo it.
 - **Diagrams**: a `mermaid` code block in a preview draws as its diagram, and a `.mmd` or `.mermaid`
-  file previews as one. The buttons at a diagram's top left fit it, show it full size, zoom, or take it
-  **Full Pane** over the tab; drag with the middle mouse button to pan.
+  file previews as one, centred in its box. The buttons at a diagram's top left fit it, zoom it in or
+  out, show it at 100%, or **Maximise** it over the whole middle section of the tab (**Minimise**, or
+  Esc, puts it back); drag with the middle mouse button to pan. With a diagram focused, the panel zoom
+  keys and Ctrl+wheel zoom just that diagram.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   `[[wikilinks]]` follow like any other link.
 - **Back** and **Forward** (**Alt+Left** / **Alt+Right**) step through the files a panel has shown.

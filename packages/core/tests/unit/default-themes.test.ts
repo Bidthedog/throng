@@ -61,7 +61,7 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // beside them in theme.ts).
 // 75 since 048 (research R6): `resetName` retired with panel renaming (`migrateTheme` drops it).
 // 76 since 050 (FR-039, R24): `cancel`, the paste notice's own Cancel — not the `dismiss` glyph.
-// 81 since 054 (FR-071, FR-046b): `panelMaximise`, `panelRestore`, `diagramFit`, `diagramFullSize`,
+// 81 since 054 (FR-071, FR-046b): `panelMaximise`, `panelRestore`, `diagramFit`, `diagramZoomReset`,
 // `diagramFullPane`.
 const EXPECTED_ICON_TOKEN_COUNT = 81;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */

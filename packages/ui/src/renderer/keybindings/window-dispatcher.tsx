@@ -62,6 +62,7 @@ import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { isPanelHidden, toggleMaximisePanel } from '../workspace/maximise-store.js';
+import { zoomFocusedDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
 
@@ -656,17 +657,21 @@ export function WindowDispatcher({
           window.throng?.zoomReset?.();
           break;
         // Per-panel zoom (012, per-instance) — routed to the active panel by id.
+        // 054 MT-04 A5 — with keyboard focus inside a diagram, these zoom just that diagram.
         case 'panel.zoomIn': {
+          if (zoomFocusedDiagram('in')) break;
           const id = activePanelId();
           if (id) wsRef.current.bumpZoom(id, 1);
           break;
         }
         case 'panel.zoomOut': {
+          if (zoomFocusedDiagram('out')) break;
           const id = activePanelId();
           if (id) wsRef.current.bumpZoom(id, -1);
           break;
         }
         case 'panel.zoomReset': {
+          if (zoomFocusedDiagram('reset')) break;
           const id = activePanelId();
           if (id) wsRef.current.resetZoom(id);
           break;
