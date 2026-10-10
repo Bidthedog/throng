@@ -115,6 +115,8 @@ export function PreviewCommands(): null {
           settingsRef.current.editor.previews,
           intent.absPath,
         ),
+        // 054 FR-007 — Last Active per panel type, and the type recorded on a placed preview.
+        registry: registryRef.current,
       }).catch((error: unknown) => {
         // A bridge that threw is a broken bridge (failures are returned, never thrown, across it). The
         // affordance the user chose stays as it was; the cause goes to the console for diagnosis, and the

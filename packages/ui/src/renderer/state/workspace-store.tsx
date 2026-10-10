@@ -50,7 +50,10 @@ import {
   type PanelKind,
   type SplitDirection,
   type WorkspaceLayout,
+  initialPreviewRecency,
+  PREVIEW_KIND,
 } from '@throng/core';
+import { seedLastActivePreview, subscribeLastActivePreview } from '../preview/last-active-preview.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { registerSplitRunner } from '../workspace/split-panel.js';
 import {
@@ -457,6 +460,15 @@ export function WorkspaceProvider({
                 (panel) => projectsForMovesRef.current?.find((p) => p.id === panel.originProjectId)?.rootFolder,
               );
         const loaded = movedTabs === null ? restorable : { ...restorable, tabs: movedTabs };
+        /*
+         * 054 FR-001, FR-002 (research R1) — seed Last Active from EVERY tab, here at the one restore path,
+         * so a restored preview is a reuse candidate exactly as if the user had focused it — including in
+         * a tab not shown yet. The persisted order, else core's fallback for a layout saved before 054.
+         */
+        for (const tab of loaded.tabs) {
+          const kinds = new Map(collectPanels(tab.root).map((p) => [p.id, p.kind]));
+          seedLastActivePreview(tab.id, initialPreviewRecency(tab, (id) => kinds.get(id) === PREVIEW_KIND));
+        }
         setLayout(loaded);
         if (loaded !== result.layout) scheduleSave(loaded);
         setRestoreFailed(result.restored === false && result.reason === 'corrupt');
@@ -609,6 +621,17 @@ export function WorkspaceProvider({
         if (tab) value.splitPanel(tab.id, panelId, direction);
       }),
     [layout, value],
+  );
+
+  /*
+   * 054 FR-002 — a change of a tab's preview recency is saved with the layout (a normal debounced save).
+   * `setPreviewRecency` ignores a tab this window's layout does not hold.
+   */
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  useEffect(
+    () => subscribeLastActivePreview((tabId, ids) => valueRef.current.setPreviewRecency(tabId, ids)),
+    [],
   );
 
   /*

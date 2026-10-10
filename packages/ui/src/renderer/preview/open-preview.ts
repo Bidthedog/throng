@@ -27,6 +27,9 @@
  */
 import {
   PREVIEW_KIND,
+  SHIPPED_PREVIEW_PROVIDERS,
+  previewPathOf,
+  type PreviewProviderRegistry,
   collectPanels,
   normaliseForCompare,
   type Panel,
@@ -43,10 +46,12 @@ import { getEditorState } from '../editor/editor-state.js';
 import { setActivePane } from '../workspace/active-pane.js';
 import { requestPanelFocus } from '../workspace/panel-focus.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
+import { ensurePanelVisible, restoreAll } from '../workspace/maximise-store.js';
 import { setPreviewReservation } from './preview-reservations.js';
 import { findHeading } from './link-dom.js';
 import { revealPreviewFragment, setPendingReveal, type PreviewReveal } from './preview-panel-handles.js';
 import { candidateFor, recordLastActivePreview } from './last-active-preview.js';
+import { getPreviewState } from './preview-store.js';
 
 /** What asking for a preview names: the file, its project, and the panel that asked, if one did. */
 export interface PreviewOpenIntent {
@@ -161,6 +166,8 @@ export function focusLocalPanel(
 ): boolean {
   const tab = tabHolding(layout, panelId);
   if (tab === undefined) return false;
+  // 054 FR-074 — a panel a maximised one hides is shown first; a maximised panel itself stays maximised.
+  ensurePanelVisible(panelId);
   if (layout.activeTabId !== tab.id) ws.setActiveTab(tab.id);
   ws.setActivePanel(tab.id, panelId);
   // 047 FR-081 — shown, not given the keyboard: the pane that asked keeps it.
@@ -189,6 +196,7 @@ function placePreview(
   beside: string | null,
   into: string | null = null,
   keepFocus = false,
+  registry: PreviewProviderRegistry = SHIPPED_PREVIEW_PROVIDERS,
 ): string | null {
   const layout = ws.layout;
   if (layout === null) return null;
@@ -197,15 +205,22 @@ function placePreview(
   let tabId: string | undefined;
   // 047 FR-077 — an empty panel a file was dropped on takes the preview itself: no panel is added.
   const intoPanel = into === null ? undefined : panelsOf(layout).find((p) => p.id === into && p.kind === undefined);
+  // 054 FR-074 — a panel added to a maximised tab would land hidden: the tab is restored first.
+  const restoring = (id: string | undefined): string | undefined => {
+    if (id !== undefined) restoreAll(id);
+    return id;
+  };
   if (intoPanel !== undefined) {
     panelId = intoPanel.id;
     tabId = tabHolding(layout, intoPanel.id)?.id;
+    ensurePanelVisible(intoPanel.id);
   } else if (beside !== null) {
-    tabId = tabHolding(layout, beside)?.id;
+    tabId = restoring(tabHolding(layout, beside)?.id);
     panelId = tabId === undefined ? null : ws.addPanelBeside(beside, 'right', projectId);
   } else {
     tabId = layout.activeTabId ?? undefined;
-    panelId = tabId === undefined || !layout.tabs.some((t) => t.id === tabId) ? null : ws.addPanel(tabId, projectId);
+    panelId =
+      tabId === undefined || !layout.tabs.some((t) => t.id === tabId) ? null : ws.addPanel(restoring(tabId)!, projectId);
   }
   if (panelId === null || tabId === undefined) return null;
 
@@ -215,7 +230,13 @@ function placePreview(
   // the panel belongs to (`forget-preview-panel.ts`, uc-report concern 1). Recorded ON THE PANEL rather
   // than in module state, because the window that must apply the rule after a relaunch is a new process
   // with no memory of this one (review finding 2).
-  const config: PreviewPanelConfig = { filePath: absPath, placedInLayoutProjectId: layout.projectId };
+  // 054 R2 — the provider is the panel's type, written when it is placed.
+  const providerId = registry.forPath(absPath)?.id;
+  const config: PreviewPanelConfig = {
+    filePath: absPath,
+    placedInLayoutProjectId: layout.projectId,
+    ...(providerId !== undefined ? { providerId } : {}),
+  };
   ws.setPanelType(panelId, PREVIEW_KIND, config);
   window.throng?.panel?.notifyTyped?.(panelId, PREVIEW_KIND, config);
   if (layout.activeTabId !== tabId) ws.setActiveTab(tabId);
@@ -246,6 +267,11 @@ export interface OpenPreviewArgs {
    * predating US2) need not supply it.
    */
   defaultOpenTarget?: 'lastActive' | 'new';
+  /**
+   * 054 FR-007 (R1, R2) — the providers, so Last Active reuses only a preview of the opened file's own type
+   * and a placed preview records that type. Omitted: the shipped registry.
+   */
+  registry?: PreviewProviderRegistry;
 }
 
 /**
@@ -258,12 +284,24 @@ const isLivePreviewIn = (layout: WorkspaceLayout, tabId: string, panelId: string
   return tab !== undefined && collectPanels(tab.root).some((p) => p.id === panelId && p.kind === PREVIEW_KIND);
 };
 
+/**
+ * 054 FR-007 — the provider of the file preview `panelId` shows NOW: the run's current file when this window
+ * holds its state (a link may have moved it), else its persisted file (research R1).
+ */
+function shownProviderOf(layout: WorkspaceLayout, panelId: string, registry: PreviewProviderRegistry): string | undefined {
+  const running = getPreviewState(panelId)?.filePath;
+  const config = panelsOf(layout).find((p) => p.id === panelId)?.config as PreviewPanelConfig | undefined;
+  const path = running ?? previewPathOf(config);
+  return path === undefined ? undefined : registry.forPath(path)?.id;
+}
+
 /** Ask main for a preview of `intent.absPath` and carry out its answer in this window. */
 export async function openPreview({
   ws: wsOrGetter,
   bridge,
   intent,
   defaultOpenTarget = 'lastActive',
+  registry = SHIPPED_PREVIEW_PROVIDERS,
 }: OpenPreviewArgs): Promise<OpenPreviewOutcome> {
   if (bridge === undefined) return { kind: 'unavailable' };
   const current = (): PreviewPlacementWorkspace => (typeof wsOrGetter === 'function' ? wsOrGetter() : wsOrGetter);
@@ -271,10 +309,16 @@ export async function openPreview({
   const mode = intent.target?.mode ?? defaultOpenTarget;
   // R8 — the visible tab's most recently active preview, still live in THIS window's layout; `null`
   // for `mode: 'new'` (main never consults it there) or a tab/candidate this window no longer holds.
+  // 054 FR-007 — and of the opened file's own type: the provider of the file each candidate shows now.
   const tabId = layoutBefore?.activeTabId;
+  const providerId = registry.forPath(intent.absPath)?.id;
   const reusePanelId =
     mode === 'lastActive' && tabId !== undefined && layoutBefore !== null
-      ? candidateFor(tabId, (id) => isLivePreviewIn(layoutBefore, tabId, id))
+      ? candidateFor(
+          tabId,
+          (id) => isLivePreviewIn(layoutBefore, tabId, id),
+          providerId === undefined ? undefined : { id: providerId, of: (id) => shownProviderOf(layoutBefore, id, registry) },
+        )
       : null;
   const request: PreviewOpenRequest = {
     absPath: intent.absPath,
@@ -330,6 +374,7 @@ export async function openPreview({
         beside,
         intent.intoPanelId ?? null,
         intent.keepFocus === true,
+        registry,
       );
       if (panelId !== null) shown(panelId, true);
       return panelId === null ? { kind: 'unavailable' } : { kind: 'placed', panelId };

@@ -392,6 +392,19 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(within(flyout).getByTestId(`menu-item-Last Preview Panel (${shown})`)).toBeInTheDocument();
   });
 
+  /*
+   * 054 FR-007 (research R1) — Last Active reuse is per panel TYPE, and this row names what an open would
+   * reuse: a Markdown file never replaces a Mermaid preview, so with only a Mermaid preview standing in the
+   * visible tab there is nothing for README.md to reuse.
+   */
+  it('is disabled and unnamed when the visible tab’s only preview is of another type (054 FR-007)', async () => {
+    recordLastActivePreview('t1', 'pv');
+    const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/flow.mmd`) });
+    const flyout = await openInFlyout(user, tree, 'README.md');
+    const row = within(flyout).getByTestId('menu-item-Last Preview Panel');
+    expect(isDisabled(row)).toBe(true);
+  });
+
   it('a name within 16 characters shows whole, without the " - Preview" suffix (FR-080)', async () => {
     recordLastActivePreview('t1', 'pv');
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });

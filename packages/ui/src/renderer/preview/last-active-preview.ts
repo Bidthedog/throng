@@ -14,6 +14,28 @@
  */
 const byTab = new Map<string, string[]>();
 
+/*
+ * 054 FR-001, FR-002 (research R1) — the order survives a restart. The layout's `Tab.previewRecency` is its
+ * persisted form: the workspace store SEEDS each tab from it when a layout loads (`seedLastActivePreview`),
+ * and SUBSCRIBES to every change of order here, answering with a normal debounced layout save. A seed is
+ * not a change — it came from the layout — so it reports nothing.
+ */
+type RecencyListener = (tabId: string, ids: string[]) => void;
+const listeners = new Set<RecencyListener>();
+
+/** Replace `tabId`'s order with `ids` (most recent first) — a restored layout's. Reports nothing. */
+export function seedLastActivePreview(tabId: string, ids: readonly string[]): void {
+  byTab.set(tabId, [...ids]);
+}
+
+/** Hear every change of a tab's order, to persist it. Returns the unsubscribe. */
+export function subscribeLastActivePreview(listener: RecencyListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /**
  * Record `panelId` as the most recently active preview in `tabId` — written on a preview panel's
  * pointerdown AND focus (`preview-panel.tsx`), unlike the editor store's keyboard gap, and whenever an
@@ -23,15 +45,27 @@ const byTab = new Map<string, string[]>();
  */
 export function recordLastActivePreview(tabId: string, panelId: string): void {
   const list = byTab.get(tabId) ?? [];
-  byTab.set(tabId, [panelId, ...list.filter((id) => id !== panelId)]);
+  if (list[0] === panelId) return;
+  const next = [panelId, ...list.filter((id) => id !== panelId)];
+  byTab.set(tabId, next);
+  for (const listener of [...listeners]) listener(tabId, [...next]);
 }
 
 /**
  * The candidate to reuse for a new preview in `tabId` (FR-015): the most recently active panel there
  * that `isLive` still accepts, or `null` when none is. Never looks at another tab's list.
+ *
+ * 054 FR-007 — with `provider`, Last Active is per panel TYPE: a candidate counts only when the file it
+ * shows now is `provider.id`'s (`provider.of`, the caller's registry lookup), so opening a Mermaid file
+ * never reuses a Markdown preview, and the reverse.
  */
-export function candidateFor(tabId: string, isLive: (panelId: string) => boolean): string | null {
-  return byTab.get(tabId)?.find(isLive) ?? null;
+export function candidateFor(
+  tabId: string,
+  isLive: (panelId: string) => boolean,
+  provider?: { id: string; of(panelId: string): string | undefined },
+): string | null {
+  const accepts = (id: string): boolean => isLive(id) && (provider === undefined || provider.of(id) === provider.id);
+  return byTab.get(tabId)?.find(accepts) ?? null;
 }
 
 /** Test seam: drop every recorded tab between cases. */

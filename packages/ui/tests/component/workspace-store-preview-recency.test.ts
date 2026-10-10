@@ -9,7 +9,12 @@
  */
 import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDefaultLayout, type Panel, type WorkspaceLayout } from '@throng/core';
+import { createDefaultLayout, PREVIEW_KIND, type Panel, type WorkspaceLayout } from '@throng/core';
+import {
+  __resetLastActivePreview,
+  candidateFor,
+  recordLastActivePreview,
+} from '../../src/renderer/preview/last-active-preview.js';
 import { mountTabGroup, type MountedTabGroup } from './helpers/mount-tab-group.js';
 
 const PROJECT = 'proj-recency';
@@ -32,6 +37,47 @@ async function settle(ms: number): Promise<void> {
 afterEach(() => {
   m?.unmount();
   m = undefined;
+});
+
+/** t1 (shown) holds a blank panel; t2 (never mounted) holds two Markdown previews. */
+function withPreviews(previewRecency?: string[]): WorkspaceLayout {
+  const l = layout();
+  const preview = (id: string): Panel => ({
+    ...blank(id),
+    kind: PREVIEW_KIND,
+    config: { filePath: `D:/proj/${id}.md` },
+  });
+  l.tabs.push({
+    id: 't2',
+    title: 'Docs',
+    root: { type: 'split', orientation: 'row', sizes: [0.5, 0.5], children: [preview('v1'), preview('v2')] },
+    activePanelId: 'v1',
+    ...(previewRecency ? { previewRecency } : {}),
+  });
+  return l;
+}
+
+describe('the load seeds Last Active from every tab (054 FR-001, FR-002)', () => {
+  afterEach(() => __resetLastActivePreview());
+
+  it('takes the persisted order, in a tab never shown', async () => {
+    m = mountTabGroup(withPreviews(['v2', 'v1']));
+    await screen.findByTestId('panel-p1');
+    expect(candidateFor('t2', () => true)).toBe('v2');
+  });
+
+  it('falls back to the tab’s focused preview for a layout saved before 054', async () => {
+    m = mountTabGroup(withPreviews());
+    await screen.findByTestId('panel-p1');
+    expect(candidateFor('t2', () => true)).toBe('v1');
+  });
+
+  it('writes a changed order back to the layout through setPreviewRecency', async () => {
+    m = mountTabGroup(withPreviews(['v1', 'v2']));
+    await screen.findByTestId('panel-p1');
+    act(() => recordLastActivePreview('t2', 'v2'));
+    expect(m.ws().layout!.tabs[1]!.previewRecency).toEqual(['v2', 'v1']);
+  });
 });
 
 describe('setPreviewRecency (054 FR-002)', () => {
