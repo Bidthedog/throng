@@ -18,11 +18,12 @@
 import 'reflect-metadata';
 import { createServer, type Socket } from 'node:net';
 import process from 'node:process';
-import { NodePtyHost } from '@throng/platform-windows';
+import { NodePtyHost, WindowsProcessCwd } from '@throng/platform-windows';
 import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 import { answerChildPids } from './pty-agent-childpids.js';
 import { answerAttachedProcs } from './pty-agent-attached.js';
+import { answerCwds } from './pty-agent-cwds.js';
 import { createAgentLogger } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
@@ -86,6 +87,8 @@ if (!pipeName) {
 // node-pty native module; if the ABI/borrowed-token context makes that fail, this is
 // the first place it can, so it is bracketed and logged before we listen.
 let pty: NodePtyHost;
+// Binds its OS calls lazily, on the first read — constructing it cannot fail here.
+const processCwd = new WindowsProcessCwd();
 try {
   log('constructing NodePtyHost (lazily loads the node-pty native module)');
   pty = new NodePtyHost();
@@ -232,6 +235,11 @@ function onCommand(msg: AgentCommand): void {
     // failure is reported as one rather than as an idle-looking empty list (pty-agent-childpids.ts).
     case 'attachedprocs': {
       void answerAttachedProcs(pty.listAttachedProcesses?.bind(pty), (key) => handles.get(key), msg, log).then(send);
+      break;
+    }
+    // 012 / 053 FR-001: the shells' working directories, by key — the daemon cannot read them by pid (pty-agent-cwds.ts).
+    case 'cwds': {
+      void answerCwds(processCwd, (key) => handles.get(key), msg, log).then(send);
       break;
     }
     case 'childpids': {

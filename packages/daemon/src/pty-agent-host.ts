@@ -58,6 +58,7 @@ export class PtyAgentHost implements IPtyHost {
   private childprocReqId = 1;
   /** 051 — in-flight `attachedprocs` requests: the answer by key, or the failure. */
   private readonly attachedWaiters = new Map<number, (answer: Record<string, ChildProcess[]> | Error) => void>();
+  private readonly cwdWaiters = new Map<number, (answer: Record<string, string>) => void>();
   /** 046: in-flight AWAITED `childpids` requests (reqId ≥ 1; reqId 0 is the fire-and-forget refresh). */
   private readonly childpidWaiters = new Map<number, (answer: number[] | Error) => void>();
   private childpidReqId = 1;
@@ -299,6 +300,14 @@ export class PtyAgentHost implements IPtyHost {
         }
         break;
       }
+      case 'cwds': {
+        const waiter = this.cwdWaiters.get(ev.reqId);
+        if (waiter) {
+          this.cwdWaiters.delete(ev.reqId);
+          waiter(ev.byKey);
+        }
+        break;
+      }
       case 'started': {
         // The readiness ack (pty-agent-protocol.ts:26): the agent's ConPTY is spawned.
         // Whatever the shell does next — including printing nothing for a long time —
@@ -487,6 +496,26 @@ export class PtyAgentHost implements IPtyHost {
         resolve(new Map(Object.entries(answer).map(([key, procs]) => [Number(key), procs])));
       });
       this.sendCmd({ op: 'attachedprocs', keys: handles.map((h) => h.pid), reqId });
+    });
+  }
+
+  /**
+   * 012 / 053 FR-001 — the shells' working directories, which only the agent can read: the daemon knows its
+   * terminals by key, not by OS pid. An agent that does not answer in time reads as nothing known, never as an error.
+   */
+  readCwds(handles: readonly PtyHandle[]): Promise<Map<number, string>> {
+    const reqId = this.childprocReqId++;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.cwdWaiters.delete(reqId);
+        resolve(new Map());
+      }, TERMINAL_END_TIMEOUT_MS);
+      timer.unref?.();
+      this.cwdWaiters.set(reqId, (byKey) => {
+        clearTimeout(timer);
+        resolve(new Map(Object.entries(byKey).map(([key, dir]) => [Number(key), dir])));
+      });
+      this.sendCmd({ op: 'cwds', keys: handles.map((h) => h.pid), reqId });
     });
   }
 

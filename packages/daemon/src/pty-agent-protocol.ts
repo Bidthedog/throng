@@ -28,6 +28,7 @@ export type AgentCommand =
   | { op: 'childpids'; key: number; reqId: number }
   // 051 FR-040/FR-041: what is attached to each of these terminals' consoles, in one request.
   | { op: 'attachedprocs'; keys: number[]; reqId: number }
+  | { op: 'cwds'; keys: number[]; reqId: number }
   // 025: command lines too, for a Panel's command memory. Async by contract (FR-019b).
   | { op: 'childprocs'; key: number; reqId: number };
 
@@ -45,6 +46,7 @@ export type AgentEvent =
   // Keyed by terminal key; the shell's own OS pid already rewritten to its key, as `childprocs` does.
   // `failed` is a request that could not be answered — unknown, never "nothing attached".
   | { ev: 'attachedprocs'; reqId: number; byKey: Record<string, ChildProcess[]>; failed?: boolean }
+  | { ev: 'cwds'; reqId: number; byKey: Record<string, string> }
   | { ev: 'ended'; reqId: number; ok: boolean; reason?: string }
   | { ev: 'forceEnded'; reqId: number; survivors: ProcessSurvivor[] };
 
