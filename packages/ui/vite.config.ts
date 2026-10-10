@@ -5,8 +5,10 @@ import react from '@vitejs/plugin-react';
 /**
  * Vite's "Some chunks are larger than 500 kB" is only a WARNING, so it scrolled past on every build
  * while the app chunk grew through it (047 took it to 525 kB). This makes the same condition, at
- * Vite's own `chunkSizeWarningLimit`, fail the build — and so the gate's build stage and every PR.
- * The fix is a chunk rule in `chunkFor` below, never a raised limit.
+ * Vite's default 500 kB, fail the build — and so the gate's build stage and every PR. The fix is a
+ * chunk rule in `chunkFor` below, never a raised limit. The limit is this guard's own constant:
+ * Vite's `chunkSizeWarningLimit` is set above the largest UNSPLITTABLE_LAZY_MODULES chunk only so
+ * its reporter does not warn about the chunks this guard has already admitted.
  */
 /**
  * 054 — the only chunks allowed over the limit: each is ONE pre-bundled third-party module, which no rule
@@ -22,14 +24,14 @@ const UNSPLITTABLE_LAZY_MODULES: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /\/node_modules\/elkjs\/lib\/elk\.bundled\.js$/, why: 'the ELK layout engine, one bundled file, loaded only for an elk-layout diagram' },
 ];
 
+/** The chunk size limit, in kB. Vite's own default; see {@link failOnOversizedChunks}. */
+const CHUNK_LIMIT_KB = 500;
+
 function failOnOversizedChunks(): Plugin {
-  let limitKb = 500;
+  const limitKb = CHUNK_LIMIT_KB;
   return {
     name: 'throng:fail-on-oversized-chunks',
     apply: 'build',
-    configResolved(config) {
-      limitKb = config.build.chunkSizeWarningLimit;
-    },
     generateBundle(_options, bundle) {
       const oversized = Object.values(bundle)
         .filter((out) => out.type === 'chunk')
@@ -137,6 +139,9 @@ export default defineConfig({
     outDir: fileURLToPath(new URL('./dist/renderer', import.meta.url)),
     emptyOutDir: true,
     sourcemap: true,
+    // Not the limit — `failOnOversizedChunks` enforces CHUNK_LIMIT_KB. This only quiets Vite's reporter
+    // for the admitted unsplittable chunks (ELK is ~1.43 MB).
+    chunkSizeWarningLimit: 2000,
     /*
      * Vite 8 bundles with Rolldown. Its `manualChunks` compatibility layer pulls every captured module's
      * dependencies into the same chunk, which put `@codemirror/view` in `core` and the shared lezer
