@@ -15,7 +15,7 @@
   overflow: hidden;
   border: 1px solid var(--throng-colour-border);
   border-radius: 3px;
-  background: var(--throng-colour-surface);
+  background: var(--throng-colour-editorBg);
 }
 
 /* Below the minimum readable scale the box keeps that scale and scrolls sideways (FR-046a). */

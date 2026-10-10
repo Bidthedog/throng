@@ -159,6 +159,8 @@ function chunkFor(rawId: string): string | null {
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
   if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
+  // 054 FR-042 — the Mermaid provider's body, behind its view's dynamic import for the same reason.
+  if (/\/src\/renderer\/preview\/providers\/mermaid\/(?!view\.ts$)/.test(id)) return 'app-preview-mermaid';
   // 054 FR-047 — the two diagram modules that import a lazy vendor (mermaid; DOMPurify for the SVG profile)
   // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
   // React components and the rasteriser import neither and ride with whatever imports them.

@@ -2,10 +2,12 @@
  * A diagram's colours and font, from the active theme's tokens (054 FR-046, research R5).
  *
  * Concrete values, never `var(--throng-…)`: mermaid derives shades from the colours it is given, and a CSS
- * variable reference is not a colour it can compute with. `key` identifies the set, so a body re-renders
- * its diagrams exactly when the theme changes something a diagram uses.
+ * variable reference is not a colour it can compute with. A token the active theme leaves out is the
+ * default theme's (`THRONG_THEME`, which every theme falls back to) — this file paints no colour of its own.
+ * `key` identifies the set, so a body re-renders its diagrams exactly when the theme changes something a
+ * diagram uses.
  */
-import type { Theme } from '@throng/core';
+import { THRONG_THEME, type Theme } from '@throng/core';
 
 export interface DiagramTheme {
   readonly background: string;
@@ -20,17 +22,21 @@ export interface DiagramTheme {
   readonly key: string;
 }
 
+/** `token` from the active theme, else the default theme's. */
+function colour(theme: Theme, token: string): string {
+  return theme.colours[token] ?? THRONG_THEME.colours[token] ?? '';
+}
+
 export function diagramThemeFrom(theme: Theme): DiagramTheme {
-  const c = theme.colours;
-  const background = c.surface ?? c.appBg ?? '#1e1f23';
   const values = {
-    background,
-    foreground: c.text ?? '#e6e6e6',
-    muted: c.textMuted ?? c.text ?? '#9aa0aa',
-    accent: c.accent ?? '#6aa3ff',
-    border: c.border ?? '#34363c',
-    surface: c.surfaceActive ?? background,
-    selection: c.editorSelection ?? c.surfaceActive ?? background,
+    // The diagram sits on the document page, so its ground is the page's.
+    background: colour(theme, 'editorBg'),
+    foreground: colour(theme, 'editorFg'),
+    muted: colour(theme, 'textMuted'),
+    accent: colour(theme, 'accent'),
+    border: colour(theme, 'border'),
+    surface: colour(theme, 'surfaceActive'),
+    selection: colour(theme, 'editorSelection'),
     fontFamily: theme.fonts.family,
   };
   return { ...values, key: JSON.stringify(values) };

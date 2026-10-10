@@ -97,6 +97,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
     "workspace/tab-popover.tsx — the tab hover popover (031 US6 / FR-051). ANCHORED to its chip, so it has edges to run off and really does flip: it opens down-left by default and clampToViewport right-aligns it to the chip when opening at the chip's left edge would overflow the window (the LAST tab in the strip, which is where a hover is most likely to be asked for), flips it above the chip when there is no room below, and clamps whatever remains so no part leaves the viewport. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints at the wrong position first",
   '.link-hint':
     'links/link-hint.tsx — the plain-click link hint (045 FR-165, FR-166, round four). ANCHORED at the link\'s bottom-right, so `clampToViewport` (the same positioner the context menu, colour picker and tab popover share) slides it back on screen; FR-165c says staying on screen wins over not covering the link, so it is never FLIPPED to the opposite side the way those are. Measured in a layout effect and held `visibility: hidden` until placed, and `pointer-events: none` so the click that raised it keeps its ordinary meaning',
+  '.preview-diagram-frame--full-size':
+    'chrome — 054 FR-046d\'s Full Size diagram (preview/diagram/diagram.css): inset:0 over the preview body that holds it, its nearest positioned ancestor, so clamped to that body by construction; anchored to nothing, so nothing to flip away from',
+  '.preview-diagram-frame__toolbar':
+    'chrome — 054 FR-046b\'s diagram view controls (preview/diagram/diagram-frame.tsx): pinned to the top-left INSIDE its own diagram box, which clips it (overflow: hidden); anchored to nothing that moves, so nothing to flip away from',
   '.project-insert': 'a drag INSERTION MARKER inside its list — a line, not a surface',
   '.subworkspace-insert': 'a drag insertion marker inside its list',
   '.tab-insert': 'a drag insertion marker inside the tab strip',
