@@ -18,6 +18,7 @@ import {
   COMMAND_SCOPES,
   KEYBINDINGS_METADATA,
   WINDOW_HANDLED_ACTIONS as CORE_WINDOW_HANDLED_ACTIONS,
+  collectPanels,
   cycleOrder,
   effectiveActivePanelId,
   eventToToken,
@@ -60,6 +61,7 @@ import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
+import { toggleMaximisePanel } from '../workspace/maximise-store.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
 
@@ -620,6 +622,9 @@ export function WindowDispatcher({
       // 048 FR-131 — with focus where no panel is the target (a side pane, a dialog), Destroy Panel is not
       // this window's to take: the key goes on to whatever holds focus, unconsumed.
       if (action === 'panel.destroy' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
+      // 054 FR-071 — Maximise / Restore Panel acts on the same panel Destroy Panel would, and the same way
+      // passes the key on when that is none.
+      if (action === 'panel.toggleMaximise' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
       e.preventDefault();
@@ -825,6 +830,19 @@ export function WindowDispatcher({
         case 'panel.destroy': {
           const target = destroyTarget(document.activeElement, activePanelId());
           if (target) requestPanelDestroy(target);
+          break;
+        }
+        /*
+         * 054 FR-071, FR-071a — maximise or restore the panel that holds focus, in the tab that holds it.
+         * Window-handled, so it is taken here ahead of a focused terminal or editor; Shift+Enter and
+         * Ctrl+Enter resolve to nothing in this set and pass straight through.
+         */
+        case 'panel.toggleMaximise': {
+          const target = destroyTarget(document.activeElement, activePanelId());
+          const tab = target
+            ? wsRef.current.layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === target))
+            : undefined;
+          if (target && tab) toggleMaximisePanel(tab.id, target);
           break;
         }
         case 'menu.open':
