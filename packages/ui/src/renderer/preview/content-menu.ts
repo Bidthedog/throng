@@ -33,6 +33,7 @@
 import type { PreviewCopyFormat, PreviewLink } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
+import { outliningSubmenu, type OutliningArgs } from '../common/outlining-menu.js';
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -86,20 +87,7 @@ export interface PreviewContentMenuArgs {
    * ABSENT (FR-036), not disabled. Collapse All / Expand All are always present but DISABLED when
    * the document has no headings at all.
    */
-  fold?: {
-    section: { level: number; collapsed: boolean } | null;
-    hasSections: boolean;
-    collapseSection: () => void;
-    expandSection: () => void;
-    collapseAll: () => void;
-    expandAll: () => void;
-    chords?: {
-      collapseSection?: string;
-      expandSection?: string;
-      collapseAll?: string;
-      expandAll?: string;
-    };
-  } | null;
+  fold?: OutliningArgs | null;
 }
 
 /**
@@ -202,39 +190,9 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
    * absent entirely before the first heading; Collapse All / Expand All are always drawn but disabled
    * with no headings to act on. Mirrors the editor's own `editor/content-menu.ts` exactly.
    */
-  if (fold) {
-    if (fold.section) {
-      items.push(
-        fold.section.collapsed
-          ? {
-              label: `Expand This H${fold.section.level}`,
-              section: 'viewState',
-              ...(fold.chords?.expandSection !== undefined ? { shortcut: fold.chords.expandSection } : {}),
-              onClick: () => fold.expandSection(),
-            }
-          : {
-              label: `Collapse This H${fold.section.level}`,
-              section: 'viewState',
-              ...(fold.chords?.collapseSection !== undefined ? { shortcut: fold.chords.collapseSection } : {}),
-              onClick: () => fold.collapseSection(),
-            },
-      );
-    }
-    items.push({
-      label: 'Collapse All',
-      section: 'viewState',
-      disabled: !fold.hasSections,
-      ...(fold.chords?.collapseAll !== undefined ? { shortcut: fold.chords.collapseAll } : {}),
-      onClick: () => fold.collapseAll(),
-    });
-    items.push({
-      label: 'Expand All',
-      section: 'viewState',
-      disabled: !fold.hasSections,
-      ...(fold.chords?.expandAll !== undefined ? { shortcut: fold.chords.expandAll } : {}),
-      onClick: () => fold.expandAll(),
-    });
-  }
+  // 054 FR-010 supersedes the placement above: the rows are ONE Outlining submenu, built by the builder the
+  // editor's menu uses too, so the two menus cannot drift (R3).
+  if (fold) items.push(outliningSubmenu(fold));
 
   return withSplit(items, args.split);
 }

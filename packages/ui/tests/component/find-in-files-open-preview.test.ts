@@ -25,7 +25,9 @@ afterEach(() => {
 });
 
 async function mount(settings?: Record<string, unknown>): Promise<MountedPreviewWindow> {
-  pv = await mountMarkdownPreview('# Readme\n', undefined, {
+  // The match `row` names (from 12, line 3, "hello") is in the drawn document: a match the preview cannot
+  // show opens an editor instead (FR-032), which would make "no editor is opened" untrue for README.md.
+  pv = await mountMarkdownPreview('# Readme\n\n\n hello\n', undefined, {
     extras: [createElement(FindInFilesChrome, { key: 'fif' })],
     ...(settings ? { settings } : {}),
   });

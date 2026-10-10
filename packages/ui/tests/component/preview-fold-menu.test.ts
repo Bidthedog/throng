@@ -16,6 +16,7 @@ import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { previewContentMenu, type PreviewContentMenuArgs } from '../../src/renderer/preview/content-menu.js';
 import { sectionAtPoint } from '../../src/renderer/preview/fold-menu-section.js';
+import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import { __resetFoldStateStore } from '../../src/renderer/editor/fold-state-store.js';
 import { COLD, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
@@ -26,6 +27,15 @@ function baseArgs(fold?: PreviewContentMenuArgs['fold']): PreviewContentMenuArgs
 }
 
 const labels = (args: PreviewContentMenuArgs): (string | undefined)[] => previewContentMenu(args).map((m) => m.label);
+
+/*
+ * 054 FR-010 supersedes 047 FR-036's PLACEMENT: the fold rows live in one Outlining submenu, built by the
+ * shared `outliningSubmenu` (`common/outlining-menu.ts`), not at the menu's top level. What each row SAYS
+ * and does is unchanged, so the cases below read the submenu's rows; the submenu's own contract is
+ * `unit/outlining-menu.test.ts`'s.
+ */
+const outliningRows = (args: PreviewContentMenuArgs): MenuAction[] =>
+  previewContentMenu(args).find((m) => m.label === 'Outlining')?.submenu ?? [];
 
 describe('previewContentMenu — no `fold` at all (a non-Markdown provider)', () => {
   it('draws none of the four fold rows', () => {
@@ -39,13 +49,15 @@ describe('previewContentMenu — no `fold` at all (a non-Markdown provider)', ()
 
 describe('the This-Section row (FR-036)', () => {
   it('reads "Collapse This H2" for an expanded H2 section, with its chord, in viewState', () => {
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: { level: 2, collapsed: false },
         hasSections: true,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
         chords: { collapseSection: 'Ctrl+M,S' },
       }),
@@ -58,13 +70,15 @@ describe('the This-Section row (FR-036)', () => {
   });
 
   it('reads "Expand This H3" for a COLLAPSED H3 section, with its own chord — never both rows at once', () => {
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: { level: 3, collapsed: true },
         hasSections: true,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
         chords: { expandSection: 'Ctrl+M,E' },
       }),
@@ -78,13 +92,15 @@ describe('the This-Section row (FR-036)', () => {
   it('invokes collapseSection / expandSection when clicked', () => {
     const collapseSection = vi.fn();
     const expandSection = vi.fn();
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: { level: 2, collapsed: false },
         hasSections: true,
         collapseSection,
         expandSection,
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
       }),
     );
@@ -94,13 +110,15 @@ describe('the This-Section row (FR-036)', () => {
   });
 
   it('is ABSENT before the first heading (`section: null`) — not disabled, not drawn at all', () => {
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: null,
         hasSections: true,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
       }),
     );
@@ -113,13 +131,15 @@ describe('the This-Section row (FR-036)', () => {
 
 describe('Collapse All / Expand All (contracts "Preview body menu")', () => {
   it('are both always present, each with its own chord', () => {
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: null,
         hasSections: true,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
         chords: { collapseAll: 'Ctrl+M,A', expandAll: 'Ctrl+M,X' },
       }),
@@ -133,13 +153,15 @@ describe('Collapse All / Expand All (contracts "Preview body menu")', () => {
   });
 
   it('are DISABLED, not absent, when the document has no headings at all', () => {
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: null,
         hasSections: false,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll: () => {},
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll: () => {},
       }),
     );
@@ -154,13 +176,15 @@ describe('Collapse All / Expand All (contracts "Preview body menu")', () => {
   it('invoke collapseAll / expandAll when clicked', () => {
     const collapseAll = vi.fn();
     const expandAll = vi.fn();
-    const items = previewContentMenu(
+    const items = outliningRows(
       baseArgs({
         section: null,
         hasSections: true,
         collapseSection: () => {},
         expandSection: () => {},
         collapseAll,
+        collapseAllInside: () => {},
+        expandAllInside: () => {},
         expandAll,
       }),
     );
@@ -168,6 +192,47 @@ describe('Collapse All / Expand All (contracts "Preview body menu")', () => {
     items.find((m) => m.label === 'Expand All')!.onClick!();
     expect(collapseAll).toHaveBeenCalledTimes(1);
     expect(expandAll).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('054 — one Outlining submenu (FR-010 – FR-014)', () => {
+  const fold = (over: Partial<NonNullable<PreviewContentMenuArgs['fold']>> = {}): PreviewContentMenuArgs['fold'] => ({
+    section: { level: 2, collapsed: false },
+    hasSections: true,
+    collapseSection: () => {},
+    expandSection: () => {},
+    collapseAllInside: () => {},
+    expandAllInside: () => {},
+    collapseAll: () => {},
+    expandAll: () => {},
+    ...over,
+  });
+
+  it('a Markdown document has exactly one Outlining row and no fold row at the top level', () => {
+    const top = labels(baseArgs(fold()));
+    expect(top.filter((l) => l === 'Outlining')).toHaveLength(1);
+    expect(top.some((l) => /^(Collapse|Expand) /.test(l ?? ''))).toBe(false);
+  });
+
+  it('a non-Markdown provider has no Outlining row', () => {
+    expect(labels(baseArgs(undefined))).not.toContain('Outlining');
+  });
+
+  it('All Inside rows sit after This H2 and call their own handlers', () => {
+    const collapseAllInside = vi.fn();
+    const expandAllInside = vi.fn();
+    const rows = outliningRows(baseArgs(fold({ collapseAllInside, expandAllInside })));
+    expect(rows.map((r) => r.label)).toEqual([
+      'Collapse This H2',
+      'Collapse All Inside This H2',
+      'Expand All Inside This H2',
+      'Collapse All',
+      'Expand All',
+    ]);
+    rows.find((r) => r.label === 'Collapse All Inside This H2')!.onClick!();
+    rows.find((r) => r.label === 'Expand All Inside This H2')!.onClick!();
+    expect(collapseAllInside).toHaveBeenCalledTimes(1);
+    expect(expandAllInside).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -240,6 +305,7 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     m = await mountMarkdownPreview(DOC);
     const intro = await screen.findByText('intro text', {}, COLD);
     fireEvent.contextMenu(intro, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
 
     expect(await screen.findByTestId('menu-item-Collapse All')).toBeInTheDocument();
     expect(screen.getByTestId('menu-item-Expand All')).toBeInTheDocument();
@@ -250,6 +316,7 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     m = await mountMarkdownPreview(DOC);
     const bodyTwo = await screen.findByText('body two', {}, COLD);
     fireEvent.contextMenu(bodyTwo, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
 
     const row = await screen.findByTestId('menu-item-Collapse This H2');
     fireEvent.click(row);
@@ -263,13 +330,32 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     m = await mountMarkdownPreview(DOC);
     const bodyTwo = await screen.findByText('body two', {}, COLD);
     fireEvent.contextMenu(bodyTwo, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
     fireEvent.click(await screen.findByTestId('menu-item-Collapse This H2'));
     await waitFor(() => expect(bodyTwo).not.toBeVisible());
 
     const heading = await screen.findByText('Two');
     fireEvent.contextMenu(heading, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
     expect(await screen.findByTestId('menu-item-Expand This H2')).toBeInTheDocument();
     expect(screen.queryByTestId('menu-item-Collapse This H2')).toBeNull();
+  });
+
+  it('054 — Collapse All Inside This H1 folds One and the H2 nested in it; Expand All Inside opens both', async () => {
+    m = await mountMarkdownPreview(DOC);
+    const bodyOne = await screen.findByText('body one', {}, COLD);
+    const bodyTwo = screen.getByText('body two');
+    fireEvent.contextMenu(bodyOne, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
+    fireEvent.click(await screen.findByTestId('menu-item-Collapse All Inside This H1'));
+    await waitFor(() => expect(bodyOne).not.toBeVisible());
+    expect(bodyTwo).not.toBeVisible();
+
+    fireEvent.contextMenu(screen.getByText('One'), { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
+    fireEvent.click(await screen.findByTestId('menu-item-Expand All Inside This H1'));
+    await waitFor(() => expect(bodyOne).toBeVisible());
+    expect(bodyTwo).toBeVisible();
   });
 
   it('Collapse All from the menu hides every section’s content', async () => {
@@ -277,6 +363,7 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     const bodyOne = await screen.findByText('body one', {}, COLD);
     const bodyTwo = screen.getByText('body two');
     fireEvent.contextMenu(bodyOne, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
     fireEvent.click(await screen.findByTestId('menu-item-Collapse All'));
 
     await waitFor(() => expect(bodyOne).not.toBeVisible());
@@ -287,6 +374,7 @@ describe('the body menu, mounted over a real Markdown preview', () => {
     m = await mountMarkdownPreview('just a paragraph, no headings\n');
     const p = await screen.findByText('just a paragraph, no headings', {}, COLD);
     fireEvent.contextMenu(p, { clientX: 5, clientY: 5 });
+    fireEvent.click(await screen.findByTestId('menu-item-Outlining'));
 
     const collapseAll = await screen.findByTestId('menu-item-Collapse All');
     expect(collapseAll).toBeInTheDocument();

@@ -71,8 +71,8 @@ export const previewUpdate = (over: Partial<PreviewUpdate> & { revision: number 
   ...over,
 });
 
-function fakeDaemon(): ThrongBridge {
-  const layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
+function fakeDaemon(restored?: WorkspaceLayout): ThrongBridge {
+  const layout = restored ?? createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
   return {
     invoke<T>(method: string): Promise<T> {
       switch (method) {
@@ -178,6 +178,8 @@ export interface MountPreviewOptions {
   config?: Record<string, unknown>;
   /** 050 R26 — do not reset the per-window preview store: this mount is a remount of an earlier one. */
   keepPreviewStore?: boolean;
+  /** 054 US1 — a layout main restores as it is, its previews already typed: no panel is typed after load. */
+  layout?: WorkspaceLayout;
 }
 
 export interface MountedPreviewWindow extends MountedPreview {
@@ -293,7 +295,7 @@ export async function mountMarkdownPreview(
       },
     },
   });
-  const services = servicesOver(fakeDaemon());
+  const services = servicesOver(fakeDaemon(opts.layout));
   const providers = opts.providers ?? { registry: SHIPPED_PREVIEW_PROVIDERS, views: PREVIEW_PROVIDER_VIEWS };
   const view = render(
     createElement(
@@ -328,8 +330,8 @@ export async function mountMarkdownPreview(
   );
   await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
   const layout = captured.ws!.layout as WorkspaceLayout;
-  const id = (collectPanels(layout.tabs[0].root) as Panel[])[0].id;
-  act(() => captured.ws!.setPanelType(id, PREVIEW_KIND, { filePath, ...opts.config }));
+  const id = (collectPanels(layout.tabs[0].root) as Panel[]).find((p) => opts.layout === undefined || p.kind === PREVIEW_KIND)!.id;
+  if (opts.layout === undefined) act(() => captured.ws!.setPanelType(id, PREVIEW_KIND, { filePath, ...opts.config }));
   const push = (u: PreviewUpdate): void => {
     act(() => {
       for (const l of [...updateListeners]) l(u);

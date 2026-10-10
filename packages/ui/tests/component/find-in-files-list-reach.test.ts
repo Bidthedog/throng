@@ -251,7 +251,8 @@ describe('the reading position stays inside the list it is reading', () => {
     // The last row of the group that is still expanded — the one the clamped position lands on. It
     // carries the PANEL's root as well (043 T236), which a sub-workspace window has none of its own.
     expect(opened).toEqual([
-      { relPath: 'src/small.ts', from: 190, to: 196, projectRoot: PROJECT_ROOT },
+      // 054 FR-031 — with the match's line and text, for a preview to reveal it.
+      { relPath: 'src/small.ts', from: 190, to: 196, line: 19, text: 'needle', projectRoot: PROJECT_ROOT },
     ]);
   });
 

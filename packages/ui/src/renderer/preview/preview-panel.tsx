@@ -126,6 +126,9 @@ import {
   type PreviewNotice,
   type PreviewPanelConfig,
   type ProviderSettings,
+  type TaskToggleResponse,
+  collapseWithin,
+  expandWithin,
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -172,7 +175,14 @@ import {
   type LinkNotice,
 } from './preview-link-notice.js';
 import { useNotify } from '../common/notification.js';
-import { registerPreviewPanelHandles } from './preview-panel-handles.js';
+import {
+  hasPendingReveal,
+  onPendingReveal,
+  peekPendingReveal,
+  registerPreviewPanelHandles,
+  takePendingReveal,
+} from './preview-panel-handles.js';
+import { locateRevealRange } from './reveal-match.js';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import { isFileNotice, isMovedOutNotice, PreviewFileNotice, shownPreviewFailure } from './preview-notice.js';
@@ -217,8 +227,6 @@ import {
   taskNoticeMessage,
   taskNoticeTestId,
   type TaskToggle,
-  type TaskToggleRequest,
-  type TaskToggleResponse,
 } from './task-toggle.js';
 import './preview.css';
 import './match-frames.css';
@@ -322,6 +330,9 @@ const MARKDOWN_FOLD_ACTIONS = [
   'markdown.expandSection',
   'markdown.collapseAll',
   'markdown.expandAll',
+  // 054 FR-011, FR-013 — the section and every section nested in it, each individually. Shipped unbound.
+  'markdown.collapseAllInside',
+  'markdown.expandAllInside',
 ] as const;
 type MarkdownFoldActionId = (typeof MARKDOWN_FOLD_ACTIONS)[number];
 
@@ -793,9 +804,9 @@ export function PreviewPanel({
   const onToggleTask = useCallback(
     (task: TaskToggle): void => {
       const filePath = filePathRef.current;
-      const bridge = window.throng?.preview as { toggleTask?: (req: TaskToggleRequest) => Promise<TaskToggleResponse> } | undefined;
-      if (filePath === undefined || bridge?.toggleTask === undefined) return;
-      void bridge
+      const preview = window.throng?.preview;
+      if (filePath === undefined || preview === undefined) return;
+      void preview
         .toggleTask({ panelId, filePath, ...task })
         .catch((): TaskToggleResponse => ({ ok: false, reason: 'io' }))
         .then((answer) => {
@@ -1152,6 +1163,8 @@ export function PreviewPanel({
     () => ({
       collapseSection: firstBinding(keybindings, 'markdown.collapseSection'),
       expandSection: firstBinding(keybindings, 'markdown.expandSection'),
+      collapseAllInside: firstBinding(keybindings, 'markdown.collapseAllInside'),
+      expandAllInside: firstBinding(keybindings, 'markdown.expandAllInside'),
       collapseAll: firstBinding(keybindings, 'markdown.collapseAll'),
       expandAll: firstBinding(keybindings, 'markdown.expandAll'),
     }),
@@ -1180,6 +1193,13 @@ export function PreviewPanel({
         },
         expandSection: () => {
           if (found) onFoldChange(setSection(foldState, found.symbol.slug, false));
+        },
+        // 054 FR-011 — the section and everything nested in it, each set individually (core's 047 FR-037a rule).
+        collapseAllInside: () => {
+          if (found) onFoldChange(collapseWithin(foldState, headingsRef.current, found.symbol.slug));
+        },
+        expandAllInside: () => {
+          if (found) onFoldChange(expandWithin(foldState, headingsRef.current, found.symbol.slug));
         },
         collapseAll: () => onFoldChange(foldCollapseAll(foldState)),
         expandAll: () => onFoldChange(foldExpandAll(foldState)),
@@ -1227,6 +1247,8 @@ export function PreviewPanel({
       if (slug === null) return;
       if (action === 'markdown.collapseSection') onFoldChange(setSection(foldState, slug, true));
       else if (action === 'markdown.expandSection') onFoldChange(setSection(foldState, slug, false));
+      else if (action === 'markdown.collapseAllInside') onFoldChange(collapseWithin(foldState, headingsRef.current, slug));
+      else if (action === 'markdown.expandAllInside') onFoldChange(expandWithin(foldState, headingsRef.current, slug));
       else onFoldChange(setSection(foldState, slug, !isCollapsed(foldState, slug)));
     },
     [isFoldableProvider, foldState, onFoldChange, computeCurrentHeadingSlug],
@@ -1335,9 +1357,45 @@ export function PreviewPanel({
         if (pending.jump) jumpToHeading(pending.filePath, pending.fragment);
         else scrollToHeading(pending.fragment);
       }
+      // 054 FR-031 — a Find in Files match this preview was opened for, now that its file is on screen.
+      revealPendingMatchRef.current();
     },
     [panelId, scrollToHeading, jumpToHeading, settleRedraw],
   );
+
+  /* ── 054 FR-031, FR-032 — reveal a Find in Files match (research R8) ─────────────────────────── */
+
+  /*
+   * An open from a result hands this panel a pending reveal (`preview-panel-handles.ts`). It is taken once
+   * the body has drawn THAT file — at once when it already shows it (a focused preview draws nothing new),
+   * else on the draw. The match is found in what was drawn (`reveal-match.ts`); its section is unfolded,
+   * it is scrolled into view and painted as find paints its current match. A match the preview does not
+   * show — hidden front matter, a diagram — opens the editor at it instead (FR-032).
+   */
+  const revealPendingMatchRef = useRef<() => void>(() => undefined);
+  revealPendingMatchRef.current = (): void => {
+    const drawn = drawnFile.current;
+    const host = bodyHostRef.current;
+    const content = stateRef.current?.content;
+    if (drawn === null || host === null || !hasPendingReveal(panelId)) return;
+    const reveal = peekPendingReveal(panelId);
+    if (reveal === null || !samePath(reveal.absPath, drawn)) return;
+    takePendingReveal(panelId);
+    const range = content?.kind === 'text' ? locateRevealRange(host, content.text, reveal) : null;
+    if (range === null) {
+      reveal.fallback();
+      return;
+    }
+    const painter = createCssHighlightPainter(panelId);
+    painter.paint([range], 0);
+    const target = range.startContainer.parentElement ?? host;
+    // A match in a collapsed section: unfold it first; the scroll follows the redraw the fold causes.
+    const unfolding = revealBeforeScrollRef.current(range.startContainer) === true;
+    const scroll = (): void => target.scrollIntoView({ block: 'center' });
+    if (unfolding) requestAnimationFrame(scroll);
+    else scroll();
+  };
+  useEffect(() => onPendingReveal(panelId, () => revealPendingMatchRef.current()), [panelId]);
 
   /* ── Following (FR-090, FR-091) ──────────────────────────────────────────────────────────────── */
 
@@ -1417,6 +1475,12 @@ export function PreviewPanel({
             case 'refused':
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
               return;
+            case 'reroute':
+              // 054 FR-008 — another provider's file never replaces this preview in place: it is opened as an
+              // ordinary preview of its own type (FR-007 Last Active, FR-004 focus), and this one stays.
+              clearLinkNotice();
+              void requestPreviewOpen({ absPath: link.absPath, projectId: panel.originProjectId });
+              return;
             default:
               // `focusedOther` — main focused the preview that already shows the file (FR-090c). This one
               // does not change, but the link WAS followed, so an earlier link's notice goes.
@@ -1437,7 +1501,7 @@ export function PreviewPanel({
           );
         });
     },
-    [panelId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
+    [panelId, panel.originProjectId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
   );
 
   /* ── Back and Forward (044 US7: FR-102, FR-106b–d, FR-107) ───────────────────────────────────── */
@@ -1560,6 +1624,11 @@ export function PreviewPanel({
               // `throng:preview:navigate`'s `drop` intent answers `refused` with the same reason text
               // `throng:editor:resolveDrop` produced (contract §2) — reuse the same link-notice path.
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
+              return;
+            case 'reroute':
+              // 054 FR-008 — a file of another provider dropped here opens as its own type's preview.
+              clearLinkNotice();
+              void requestPreviewOpen({ absPath, projectId: panel.originProjectId });
               return;
             default:
               // `focusedOther` (FR-023, 044 FR-090c) — main focused the preview already showing it.
