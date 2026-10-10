@@ -112,7 +112,7 @@ function attachedProcess(
   shellImage?: string,
   shellStartedAt?: number,
 ): ChildProcess | null {
-  const shell = shellImage === undefined ? '' : imageName(shellImage);
+  const shell = shellImage === undefined ? '' : pathImageName(shellImage);
   const candidates = attached.filter((p) => {
     if (p.pid === shellPid) return false;
     const image = imageName(p.commandLine);
@@ -161,6 +161,15 @@ function directChildProcess(
   return best;
 }
 
+/**
+ * The executable's file name from a PATH, lower-cased — the shell's image is the path throng launched, not a command
+ * line. Read as one, `C:\Program Files\Git\bin\bash.exe` (Git for Windows' default install) named `program`,
+ * so a re-exec chain was never followed and the inner bash was remembered as the user's command.
+ */
+function pathImageName(path: string): string {
+  return path.trim().replace(/^"|"$/g, '').split(/[\\/]/).pop()?.toLowerCase() ?? '';
+}
+
 /** The executable's file name from a command line, lower-cased. '' when it cannot be read. */
 function imageName(commandLine: string): string {
   const trimmed = commandLine.trim();
@@ -189,7 +198,7 @@ function resolveShellPid(
   children: readonly ChildProcess[],
   shellImage?: string,
 ): number {
-  const target = shellImage === undefined ? '' : imageName(shellImage);
+  const target = shellImage === undefined ? '' : pathImageName(shellImage);
   if (target === '') return shellPid;
   let current = shellPid;
   // Bounded by the number of processes: each step moves strictly further down the tree.
