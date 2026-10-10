@@ -345,7 +345,10 @@ test('Terminate all on close leaves no shell, command or console host behind, an
       const table = processTable();
       const mine = pings(TARGET, table);
       const shells = table.filter((p) => mine.some((m) => m.parent === p.pid));
-      const hostParents = new Set([daemon, ...table.filter((p) => p.parent === daemon).map((p) => p.pid)]);
+      // A console host's parent is whatever started the shells: the daemon, or the PTY agent. The agent is not
+      // always the daemon's child — elevated, it is started de-elevated by another route (seen on the hosted
+      // runner) — so take the shells' own parents rather than the daemon's children.
+      const hostParents = new Set([daemon, ...shells.map((s) => s.parent)]);
       const hosts = table.filter((p) => /^conhost\.exe$/i.test(p.name) && hostParents.has(p.parent));
       ours = [...mine, ...shells, ...hosts];
       expect(shells.length, 'every ping should have a shell').toBe(10);
