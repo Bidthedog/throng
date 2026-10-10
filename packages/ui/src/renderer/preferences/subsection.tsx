@@ -41,34 +41,49 @@ export function Subsection({
   testIdPrefix,
   group,
   subgroup,
+  subsection,
+  level = subsection === undefined ? 4 : 5,
   children,
 }: {
-  /** This tab's own prefix — `settings-subgroup`, `keybindings-subgroup` or `themes-subgroup`. */
+  /**
+   * This tab's own prefix — `settings-subgroup`, `keybindings-subgroup` or `themes-subgroup`; for a
+   * nested subsection (054) `settings-subsection`, `keybindings-subsection` or `themes-subsection`.
+   */
   testIdPrefix: string;
   /** The section this subsection sits in. The id is group-qualified: two groups may share a name. */
   group: string;
   /** The subsection's name, used both as its heading and as the tail of its test id. */
   subgroup: string;
+  /**
+   * 054 FR-050a — the THIRD level, nested inside `subgroup`: its name becomes the heading and the tail
+   * of the test id (`<prefix>-<group>-<subgroup>-<subsection>`). The same component, one level down, so
+   * the six rendering rules hold there too.
+   */
+  subsection?: string;
+  /** The heading level: `h4` for a subgroup, `h5` for a subsection nested in one (054 R9). */
+  level?: 4 | 5;
   /** The already-rendered rows. The tabs each render their own row shape. */
   children: ReactNode;
 }): ReactElement {
   const headingId = useId();
+  const Heading = level === 5 ? 'h5' : 'h4';
+  const name = subsection ?? subgroup;
   return (
     <div
-      className="settings-subgroup"
+      className={`settings-subgroup${level === 5 ? ' settings-subgroup--nested' : ''}`}
       role="group"
       aria-labelledby={headingId}
       // Unslugified, space and all — every shipped id is the raw group string
       // (`settings-group-Editor · Navigation`), and slugifying only these would make them the one
       // set of ids in the registry that does not match the strings they name.
-      data-testid={`${testIdPrefix}-${group}-${subgroup}`}
+      data-testid={`${testIdPrefix}-${group}-${subgroup}${subsection === undefined ? '' : `-${subsection}`}`}
     >
       {/* Not collapsible (FR-036a, contract rule 3). The `<section>` containing it does not fold
           either, and a subsection that did would be the one foldable thing in a form full of
           things that are not. */}
-      <h4 className="settings-subgroup__title" id={headingId}>
-        {subgroup}
-      </h4>
+      <Heading className="settings-subgroup__title" id={headingId}>
+        {name}
+      </Heading>
       {children}
     </div>
   );
