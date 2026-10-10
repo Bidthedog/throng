@@ -126,6 +126,12 @@ export interface IPtyHost {
    */
   listAttachedProcesses?(handles: readonly PtyHandle[]): Promise<Map<number, ChildProcess[]>>;
   /**
+   * 012 / 053 FR-001 — each terminal's shell working directory, keyed by `handle.pid`, for a host whose handles
+   * are not OS pids (the PTY agent's are its own keys), so the daemon cannot read the shells itself. A terminal it
+   * could not read is absent. Never rejects. Optional: without it the daemon reads `handle.pid` as an OS pid.
+   */
+  readCwds?(handles: readonly PtyHandle[]): Promise<Map<number, string>>;
+  /**
    * 053 `{arch}` — the architecture of the executable at `path` (`x64`, `x86`, `arm64`), read from the
    * file rather than the process, and only for the one process a terminal is running. Resolves `null`
    * when it cannot be read or is not recognised; never rejects. Optional: a host that cannot read it

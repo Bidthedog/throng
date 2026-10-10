@@ -309,22 +309,37 @@ export class TerminalService {
    */
   private async refreshCwds(): Promise<void> {
     if (!this.processCwd) return;
-    const byPid = new Map<number, string>(); // shell pid → panelId
+    // Per host: a handle's pid is an OS pid only on a host without `readCwds`. The PTY agent's are its own keys,
+    // which name some other process or none, so its shells are read by the agent (053 FR-001 on an elevated
+    // throng, where every ordinary terminal runs through it). Keys and OS pids can collide, so never one map.
+    const byHost = new Map<IPtyHost, Map<number, string>>(); // host → handle pid → panelId
     for (const s of this.sessions.values()) {
-      if (s.status === 'running' && s.processCwdObservable) byPid.set(s.handle.pid, s.panelId);
+      if (s.status !== 'running' || !s.processCwdObservable) continue;
+      const panels = byHost.get(s.host) ?? new Map<number, string>();
+      panels.set(s.handle.pid, s.panelId);
+      byHost.set(s.host, panels);
     }
-    if (byPid.size === 0) return;
-    let cwds: Map<number, string>;
-    try {
-      cwds = await this.processCwd.read([...byPid.keys()]);
-    } catch {
-      return; // a poll failure must never disturb the daemon
-    }
-    for (const [pid, cwd] of cwds) {
-      const panelId = byPid.get(pid);
-      if (!panelId || this.lastCwd.get(panelId) === cwd) continue;
-      this.lastCwd.set(panelId, cwd);
-      this.events.publishCwd(panelId, cwd);
+    if (byHost.size === 0) return;
+    const processCwd = this.processCwd;
+    const answers = await Promise.all(
+      [...byHost].map(async ([host, panels]) => {
+        try {
+          const cwds = host.readCwds
+            ? await host.readCwds([...panels.keys()].map((pid) => ({ pid })))
+            : await processCwd.read([...panels.keys()]);
+          return { panels, cwds };
+        } catch {
+          return { panels, cwds: new Map<number, string>() }; // a poll failure must never disturb the daemon
+        }
+      }),
+    );
+    for (const { panels, cwds } of answers) {
+      for (const [pid, cwd] of cwds) {
+        const panelId = panels.get(pid);
+        if (!panelId || this.lastCwd.get(panelId) === cwd) continue;
+        this.lastCwd.set(panelId, cwd);
+        this.events.publishCwd(panelId, cwd);
+      }
     }
   }
 
