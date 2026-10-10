@@ -1153,7 +1153,13 @@ export type {
   PreviewPathChanged,
   PreviewFocusMessage,
   PreviewPlaceMessage,
+  TaskToggleRequest,
+  TaskToggleRefusal,
+  TaskToggleResponse,
 } from './preview/wire-types.js';
+// 054 US2 (FR-022 – FR-029) — the marker a preview checkbox click toggles; main applies it.
+export { applyTaskToggle, locateTaskToggle, taskItemText } from './preview/task-toggle.js';
+export type { TaskToggleEdit, TaskToggleLocateRefusal, TaskToggleLocation } from './preview/task-toggle.js';
 export { splitFrontMatter } from './preview/front-matter.js';
 export type { FrontMatterSplit } from './preview/front-matter.js';
 // 047 (data-model.md "WikiTarget", research R12, FR-050 – FR-056) — `[[Target]]` wikilinks. Main

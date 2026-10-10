@@ -194,3 +194,33 @@ export interface PreviewPlaceMessage {
   /** 047 FR-081 — echoed from the `open` that sent this: place the preview without giving it the keyboard. */
   keepFocus?: true;
 }
+
+/** 054 — `throng:preview:toggleTask` (invoke, renderer → main; contracts/preview-ipc-054.md). */
+export interface TaskToggleRequest {
+  /** The requesting preview panel. */
+  panelId: string;
+  /** Absolute path the preview shows. */
+  filePath: string;
+  /** 0-based source line, from `data-task-line`. */
+  line: number;
+  /** The state the reader saw before clicking. */
+  expectChecked: boolean;
+  /** The item's text after the marker, trimmed — the relocation fingerprint (FR-027). */
+  itemText: string;
+}
+
+/** Why a toggle was refused; the file is left untouched in every case. */
+export type TaskToggleRefusal =
+  | 'not-found'
+  | 'ambiguous'
+  | 'changed'
+  | 'readOnly'
+  | 'locked'
+  | 'missing'
+  | 'outOfTree'
+  | 'binary'
+  | 'encoding'
+  | 'io';
+
+/** `savedToDisk: false` — applied to a document with unsaved edits, and left unsaved (FR-025). */
+export type TaskToggleResponse = { ok: true; savedToDisk: boolean } | { ok: false; reason: TaskToggleRefusal };
