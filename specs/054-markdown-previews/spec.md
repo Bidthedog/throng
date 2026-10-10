@@ -19,7 +19,7 @@ an editor even when Preview is the default open action). Added in clarification 
 section), because diagram Full Pane shares its mechanism.
 
 This feature builds on spec **044** (file previews) and spec **047** (Markdown preview enhancements).
-It **supersedes** or narrows six of their requirements, each restated where it is replaced:
+It **supersedes** or narrows seven of their requirements, each restated where it is replaced:
 
 | Superseded | By | What changes |
 |---|---|---|
