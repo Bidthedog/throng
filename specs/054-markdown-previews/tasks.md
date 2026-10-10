@@ -137,7 +137,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 ## Phase 12: Polish & cross-cutting
 
 - [x] T071 [P] Docs: `docs/key-bindings.md` (3 actions with ids; Alt+Shift+Enter terminal note), `docs/preferences.md` (every new/moved leaf with key, the Previews → Markdown / Mermaid layout, Open previews in migration), `docs/quick-start.md` (task lists, diagrams and controls, maximise), `README.md` (one Highlights line), `CHANGELOG.md` unreleased — `docs-currency.test.ts` green
-- [ ] T072 Run the lint, typecheck, unit, component, integration and contract projects locally; fix anything red
+- [x] T072 Run the lint, typecheck, unit, component, integration and contract projects locally; fix anything red
 - [x] T073 Manual test plan `.claude/.manual-test-plans/feature+S054-I474-I469-I462-I392-I478-I467-markdown-previews.md` via planning-manual-tests (groups per user story, Covers FR/SC ids)
 
 ## Dependencies
