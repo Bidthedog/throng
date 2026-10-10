@@ -47,6 +47,21 @@ describe('capturing through a shell that re-execs itself (025 FR-022a)', () => {
     expect(withoutImage).toContain('bash.exe');
   });
 
+  /*
+   * Git for Windows' DEFAULT install is under `C:\Program Files\Git`. The shell's image is the launch PATH, and a
+   * path with a space read as a command line names `Program` — so the chain was never followed and the inner bash
+   * was remembered as the user's command. Seen on the hosted runner (051 gate, terminal-command-launcher E2E):
+   * observedCommand `"C:\Program Files\Git\bin\..\usr\bin\bash.exe" -i -l`.
+   */
+  it('finds the command when Git is installed under a path with a space, as by default', () => {
+    const at = (p: string) => p.split('E:\\tools\\Git').join('C:\\Program Files\\Git');
+    const tree = GIT_BASH_TREE.map((p) => ({
+      ...p,
+      commandLine: p.commandLine.includes('Program Files') || p.commandLine === CLAUDE_OBSERVED ? p.commandLine : at(p.commandLine).replace(/^C:\\Program Files\\Git\\usr\\bin\\bash\.exe/, '"C:\\Program Files\\Git\\usr\\bin\\bash.exe"'),
+    }));
+    expect(foregroundCommand(35944, tree, 'C:\\Program Files\\Git\\bin\\bash.exe')).toBe(quoteExe(CLAUDE_OBSERVED));
+  });
+
   it('follows the shell chain only, never through a command into its own helper', () => {
     // FR-022: `npm run dev` spawning node stays ONE candidate — the npm the user typed.
     const tree = [
