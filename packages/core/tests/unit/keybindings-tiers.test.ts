@@ -67,6 +67,9 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'panel.splitLeft': 'tier1', // multi-stroke
   // 048 FR-131 — Destroy Panel: tier-1 shape, and a recorded exception (function key, live in a terminal).
   'panel.destroy': 'tier1', // recorded exception (function key)
+  // 054 FR-071a — Maximise / Restore Panel: Shift+Alt, outside the tiers like column select;
+  // a recorded exception (Constitution v5.10.0, live in a terminal).
+  'panel.toggleMaximise': 'outside', // recorded exception
   'editor.toggleWordWrap': 'tier2', // recorded exception (multi-stroke, FR-091/FR-092)
   // 047 (research R5) — the six Markdown fold commands, the same multi-stroke exception as word wrap.
   'markdown.toggleSection': 'tier2', // recorded exception (multi-stroke)
@@ -75,6 +78,9 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'markdown.expandSection': 'tier2', // recorded exception (multi-stroke)
   'markdown.collapseAll': 'tier2', // recorded exception (multi-stroke)
   'markdown.expandAll': 'tier2', // recorded exception (multi-stroke)
+  // 054 FR-013 — unbound, so no chord to judge; the group's tier.
+  'markdown.collapseAllInside': 'tier2',
+  'markdown.expandAllInside': 'tier2',
   'terminal.scrollLineUp': 'tier2',
   'terminal.scrollLineDown': 'tier2',
   'editor.saveAs': 'tier2', // recorded exception (the Save pair)
@@ -149,6 +155,7 @@ const TIER_EXCEPTIONS: ReadonlySet<string> = new Set([
   'editor.columnSelectDown|Shift+Alt+ArrowDown',
   'editor.columnSelectLeft|Shift+Alt+ArrowLeft',
   'editor.columnSelectRight|Shift+Alt+ArrowRight',
+  'panel.toggleMaximise|Shift+Alt+Enter',
 ]);
 
 /**
@@ -376,6 +383,8 @@ describe('the FR-101 tier guard', () => {
       'panel.splitLeft': ['Ctrl+Shift+Alt+End,ArrowLeft'],
       // 048 FR-131 — Destroy Panel.
       'panel.destroy': ['Ctrl+Shift+Alt+F4'],
+      // 054 FR-071a — Maximise / Restore Panel.
+      'panel.toggleMaximise': ['Shift+Alt+Enter'],
       // 047 (research R5, R7) — Markdown section folding and Go to Heading.
       'markdown.toggleSection': ['Ctrl+M,M'],
       'markdown.toggleAll': ['Ctrl+M,L'],
@@ -383,6 +392,9 @@ describe('the FR-101 tier guard', () => {
       'markdown.expandSection': [], // unbound by review, 2026-09-28
       'markdown.collapseAll': ['Ctrl+M,A'],
       'markdown.expandAll': [], // unbound by review, 2026-09-28
+      // 054 FR-013 — unbound.
+      'markdown.collapseAllInside': [],
+      'markdown.expandAllInside': [],
       'preview.goToHeading': ['Ctrl+G'],
     };
     expect(DEFAULT_KEYBINDINGS.bindings).toEqual(EXPECTED);

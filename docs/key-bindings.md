@@ -78,6 +78,7 @@ and the level persists with your layout.
 | Split Right | `panel.splitRight` | `Ctrl+Shift+Alt+End,ArrowRight` | Everywhere | Split the active panel in two and put a new empty panel to its right. |
 | Split Left | `panel.splitLeft` | `Ctrl+Shift+Alt+End,ArrowLeft` | Everywhere | Split the active panel in two and put a new empty panel to its left. |
 | Destroy Panel | `panel.destroy` | `Ctrl+Shift+Alt+F4` | Everywhere | Destroy the focused panel — any type, a terminal included — exactly as its menu's Destroy (or Close) does, confirmations and all. Does nothing while a side pane has focus. |
+| Maximise / Restore Panel | `panel.toggleMaximise` | `Shift+Alt+Enter` | Everywhere | Let the focused panel fill its tab's middle section, or put it back. While it is maximised the tab's other panels are hidden and new panels cannot be added. In a terminal this chord no longer reaches the program; `Shift+Enter` still sends a line break. |
 | Focus panel to the left | `focus.left` | `Ctrl+Shift+Alt+ArrowLeft` | Everywhere | Move focus to the adjacent panel on the left. |
 | Focus panel to the right | `focus.right` | `Ctrl+Shift+Alt+ArrowRight` | Everywhere | Move focus to the adjacent panel on the right. |
 | Focus panel above | `focus.up` | `Ctrl+Shift+Alt+ArrowUp` | Everywhere | Move focus to the adjacent panel above. |
@@ -187,6 +188,8 @@ view. Collapsing a section keeps the state of the sections inside it.
 | Expand this section | `markdown.expandSection` | *(unbound)* | Editor · Preview | Expand the current section. |
 | Collapse all sections | `markdown.collapseAll` | `Ctrl+M,A` | Editor · Preview | Collapse every section, at every level. |
 | Expand all sections | `markdown.expandAll` | *(unbound)* | Editor · Preview | Expand every section, at every level. |
+| Collapse all inside this section | `markdown.collapseAllInside` | *(unbound)* | Editor · Preview | Collapse the current section and every section nested under it; the rest of the document is unchanged. |
+| Expand all inside this section | `markdown.expandAllInside` | *(unbound)* | Editor · Preview | Expand the current section and every section nested under it; the rest of the document is unchanged. |
 
 In an editor of any other language `Ctrl+M` keeps the editor's own meaning. Whether a document opens
 with its sections expanded or collapsed is [Markdown sections open](preferences.md#editor).
