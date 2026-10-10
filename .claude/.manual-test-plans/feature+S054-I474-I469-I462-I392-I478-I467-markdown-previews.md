@@ -8,7 +8,7 @@ Spec: `specs/054-markdown-previews/spec.md`
 | MT-02 | Tick task-list checkboxes from a preview | needs retest | | | failed: Toggling works, but each toggle flashes: the preview visibly redraws (links and tables flash, tables resize in place), and the dirty indicator flashes on the project list, tab, editor and explorer entry |
 | MT-03 | Find in Files opens Markdown by the default open action | signed off | 9eb9269b58c5 | 2026-10-10 | |
 | MT-04 | Mermaid diagrams in a Markdown preview | needs retest | | | failed: Lag resizing panels with diagrams; Full Pane half-renders; find bar draws over a Full Pane diagram; Fit leaves a horizontal scrollbar on wide diagrams; zoom icons misaligned; plus requested changes: Mermaid default open action Preview, Maximise/Minimise wording, Zoom 100% replacing Fill the panel, centred diagrams, zoom keys target a focused diagram |
-| MT-05 | Standalone Mermaid previews and preview types | untested | | | |
+| MT-05 | Standalone Mermaid previews and preview types | needs retest | | | failed: A standalone .mmd file (a large flowchart under a folder named UPPER TEST) does not render at all |
 | MT-06 | Outlining submenu and All Inside | untested | | | |
 | MT-07 | Preview settings layout and migration | untested | | | |
 | MT-08 | Maximise a panel or a diagram | untested | | | |
