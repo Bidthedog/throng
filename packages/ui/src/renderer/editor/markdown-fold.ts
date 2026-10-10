@@ -35,8 +35,11 @@ import { codeFolding, ensureSyntaxTree, foldEffect, foldedRanges, language, synt
 import { gutter, GutterMarker, ViewPlugin, type Command, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { Compartment, type EditorState, type Extension, type Text } from '@codemirror/state';
 import {
+  buildSymbolTree,
   collapseAll,
+  collapseWithin,
   expandAll,
+  expandWithin,
   isCollapsed,
   setSection,
   toggleAll,
@@ -312,7 +315,10 @@ export type FoldOp =
   | 'expandSection'
   | 'collapseAll'
   | 'expandAll'
-  | 'toggleAll';
+  | 'toggleAll'
+  // 054 FR-011 — the section at the cursor and every section nested beneath it.
+  | 'collapseAllInside'
+  | 'expandAllInside';
 
 export interface FoldCommandDeps {
   readonly docKey: () => string;
@@ -346,10 +352,17 @@ export function markdownFoldCommand(op: FoldOp, deps: FoldCommandDeps): Command 
       const cursorLine0 = view.state.doc.lineAt(view.state.selection.main.head).number - 1;
       const target = sectionAtLine(sections, cursorLine0);
       if (!target) return false;
-      next =
-        op === 'toggleSection'
-          ? toggleSection(current, target.slug)
-          : setSection(current, target.slug, op === 'collapseSection');
+      if (op === 'collapseAllInside' || op === 'expandAllInside') {
+        // Core's scoped rule over the heading tree; main stores whole fold states, so this is sent like
+        // Collapse All's result (054 FR-011).
+        const tree = buildSymbolTree(markdownHeadingRecords(view.state));
+        next = (op === 'collapseAllInside' ? collapseWithin : expandWithin)(current, tree, target.slug);
+      } else {
+        next =
+          op === 'toggleSection'
+            ? toggleSection(current, target.slug)
+            : setSection(current, target.slug, op === 'collapseSection');
+      }
     }
 
     setDocumentFoldState(key, next, deps.panelId);

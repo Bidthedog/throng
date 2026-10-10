@@ -220,14 +220,15 @@ describe('fenced code as <pre><code data-lang> with escaped text (FR-080, FR-086
   });
 });
 
-describe('task lists as disabled checkboxes (FR-080, R1)', () => {
-  it('turns a leading [ ] or [x] in a list item into a disabled checkbox and drops the marker', () => {
+// 054 FR-020 supersedes 044 FR-080's "disabled": the box is toggleable from the preview (R4).
+describe('task lists as checkboxes (FR-080, R1; 054 R4)', () => {
+  it('turns a leading [ ] or [x] in a list item into an enabled checkbox and drops the marker', () => {
     const out = html('- [ ] todo\n- [x] done\n- [X] also\n- plain [ ] not a task');
     const inputs = openTags(out, 'input');
     expect(inputs).toHaveLength(3);
     for (const input of inputs) {
       expect(attr(input, 'type')).toBe('checkbox');
-      expect(input).toMatch(/\sdisabled(?=[\s>=])/);
+      expect(input).not.toMatch(/\sdisabled(?=[\s>=])/);
     }
     expect(inputs.map((i) => /\schecked(?=[\s>=])/.test(i))).toEqual([false, true, true]);
     expect(out).not.toContain('[ ] todo');

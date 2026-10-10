@@ -350,3 +350,19 @@ describe('chordCandidates — Ctrl+Alt+/- declines an AltGr combination the prod
     expect(chordCandidates(usShaped)).toEqual(['Ctrl+Alt+-']);
   });
 });
+
+/*
+ * 054 FR-071a — Enter produces no character that could encode Shift, so the produced token keeps it, as
+ * a letter's and an arrow's do. Without this `Alt+Shift+Enter` (`panel.toggleMaximise`) arrived at the
+ * window listener as `Alt+Enter`, matched nothing, and was inert.
+ */
+describe('chordCandidates — Enter keeps Shift (054 FR-071a)', () => {
+  it('Alt+Shift+Enter is Shift+Alt+Enter, not Alt+Enter', () => {
+    expect(chordCandidates(ev('Enter', 'Enter', { alt: true, shift: true }))).toEqual(['Shift+Alt+Enter']);
+  });
+
+  it('Shift+Enter is Shift+Enter, and a bare Ctrl+Enter is unchanged', () => {
+    expect(chordCandidates(ev('Enter', 'Enter', { shift: true }))).toEqual(['Shift+Enter']);
+    expect(chordCandidates(ev('Enter', 'Enter', { ctrl: true }))).toEqual(['Ctrl+Enter']);
+  });
+});

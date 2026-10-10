@@ -53,11 +53,17 @@ export interface ResultOpenRequest {
    * root when it is absent.
    */
   projectRoot?: string | null;
+  /**
+   * 054 FR-031 — the matched text and its 0-based source line, for a preview to find the match in what it
+   * draws. Absent from a caller with no row (the match is then revealed in an editor only).
+   */
+  text?: string;
+  line?: number;
 }
 
 /** A row as the panel hands it over, with the root it belongs to. */
 export function requestFromRow(row: ResultRow): ResultOpenRequest {
-  return { relPath: row.relPath, from: row.from, to: row.to };
+  return { relPath: row.relPath, from: row.from, to: row.to, text: row.snippet.matched, line: row.line - 1 };
 }
 
 /**
@@ -116,7 +122,7 @@ export async function openResultRow(args: {
  * and a result row's `relPath` is POSIX by construction. Shared with the target query below so the
  * two cannot disagree about which file a menu is aimed at.
  */
-function resolveResultPath(projectRoot: string, relPath: string): string {
+export function resolveResultPath(projectRoot: string, relPath: string): string {
   return `${projectRoot.replace(/[\\/]+$/, '')}/${relPath}`;
 }
 

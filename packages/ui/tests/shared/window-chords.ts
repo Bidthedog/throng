@@ -252,6 +252,12 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
    * real dispatcher from a focused stand-in terminal, and through the real `TabGroup`, by its own file.
    */
   ['panel.destroy', { test: 'panel-destroy-chord.test.ts', key: 'F4', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  /*
+   * 054 FR-071a — `panel.toggleMaximise` (`Alt+Shift+Enter`) takes the Enter branch `chordCandidates` gained
+   * for it. Pressed through the real dispatcher from stand-in terminal and editor surfaces, beside the
+   * Shift+Enter and Ctrl+Enter it must leave alone.
+   */
+  ['panel.toggleMaximise', { test: 'maximise-keys.test.ts', key: 'Enter', mods: ['shiftKey', 'altKey'] }],
 ]);
 
 /** Where the component tests live, for resolving a `COVERED_IN_COMPONENT` claim. */

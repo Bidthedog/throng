@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type DragEvent, type ReactElement, type ReactNode } from 'react';
 
 import { useNotify } from '../common/notification.js';
+import { isPanelHiddenAnywhere } from '../workspace/maximise-store.js';
 import './drop-target.css';
 
 /**
@@ -174,6 +175,8 @@ export function PanelDropTarget({
     const listener = (e: Event): void => {
       const detail = (e as CustomEvent<OsDropDetail>).detail;
       if (!detail || detail.panelId !== panelId) return;
+      // 054 FR-074 — as the tree seam: a panel a maximised one hides takes no drop.
+      if (isPanelHiddenAnywhere(panelId)) return;
       setOver(false);
       void handle(detail.paths);
     };

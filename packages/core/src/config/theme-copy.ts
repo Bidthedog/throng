@@ -850,6 +850,34 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The disclosure triangle beside a collapsed heading in a Markdown preview’s fold gutter. Clicking it expands the section.',
   },
+  /*
+   * 054 — maximising (FR-071) and the diagram view controls (FR-046b). The panel pair is kept apart
+   * from the window pair so a theme can draw the two kinds of maximise differently.
+   */
+  'icons.panelMaximise': {
+    label: 'Maximise panel icon',
+    description:
+      "The glyph on a panel header's Maximise button and its menu row, which lets the panel fill its tab's middle section until it is restored.",
+  },
+  'icons.panelRestore': {
+    label: 'Restore panel icon',
+    description:
+      'The glyph on the Restore control of a maximised panel, and on the Minimise control of a maximised diagram, which puts it back where it was.',
+  },
+  'icons.diagramFit': {
+    label: 'Fit diagram icon',
+    description: "The glyph on a diagram's Fit control, which shrinks the diagram to fit the width of its box.",
+  },
+  'icons.diagramZoomReset': {
+    label: 'Diagram zoom 100% icon',
+    description:
+      "The glyph on a diagram's Zoom 100% control, which shows the diagram at its actual size, between the zoom-out and zoom-in controls.",
+  },
+  'icons.diagramFullPane': {
+    label: 'Diagram maximise icon',
+    description:
+      "The glyph on a diagram's Maximise control, which shows the diagram over the whole middle section until it is minimised.",
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

@@ -13,6 +13,7 @@
 import { firstBinding, type ActionId, type Keybindings, type SplitDirection } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 import { splitPanelById } from './split-panel.js';
+import { isPanelTabMaximised } from './maximise-store.js';
 
 /** The menu's order is the contract's order (FR-010): Down, Up, Right, Left. */
 const SPLIT_ROWS: readonly { direction: SplitDirection; label: string; action: ActionId }[] = [
@@ -27,11 +28,15 @@ export type RunSplit = (panelId: string, direction: SplitDirection) => void;
 
 /** The four split rows alone — the **+** button's menu, where a parent "Split" row would be noise. */
 export function splitMenuItems(panelId: string, keybindings: Keybindings, run: RunSplit): MenuAction[] {
+  // 054 FR-074 — while the panel's tab has something maximised, adding panels is off: the rows are drawn
+  // disabled, never hidden (Principle VI). Read here so every surface built from this one builder agrees.
+  const maximised = isPanelTabMaximised(panelId);
   return SPLIT_ROWS.map(
     (row): MenuAction => ({
       label: row.label,
       section: 'create',
       shortcut: firstBinding(keybindings, row.action),
+      ...(maximised ? { disabled: true } : {}),
       onClick: () => run(panelId, row.direction),
     }),
   );

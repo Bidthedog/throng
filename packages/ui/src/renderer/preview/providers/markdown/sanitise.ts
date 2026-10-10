@@ -49,7 +49,10 @@
  *    `data-throng-alt` for the body's alt-text fallback (FR-084, FR-092, FR-093). Outside a followable link
  *    its title becomes the source as written, then the document's own title (FR-120); inside one it has
  *    none.
- * 4. **`input`** — anything but a checkbox is removed; a checkbox is forced `disabled` (FR-080, FR-020).
+ * 4. **`input`** — anything but a checkbox is removed. A task box the pipeline drew — this render's
+ *    `data-task-nonce` and a digits-only `data-task-line` — stays enabled so the preview can toggle it
+ *    (054 R4, FR-020); any other checkbox loses its line and is forced `disabled` (044 FR-020). The nonce
+ *    is removed from every element, and a task line from everything but a checkbox.
  * 5. **`h1`–`h6`** — `data-heading-slug` is kept only where the element carries this render's
  *    `data-heading-nonce` AND the slug is the one the pipeline recorded for its `data-source-line`. The
  *    nonce is random per render and never reaches the DOM, so raw HTML — a `<h2 data-heading-slug="spoof">`,
@@ -73,6 +76,7 @@ import {
 } from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
 import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX } from './wikilinks.js';
+import { DIAGRAM_IMAGE_ATTRIBUTE, DIAGRAM_PNG_DATA_URI } from '../../diagram/diagram-host.js';
 
 type Profile = Config & { RETURN_DOM_FRAGMENT: true };
 
@@ -87,6 +91,8 @@ export const PROFILE = Object.freeze({
     'href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan',
     'data-source-line', 'data-lang', 'data-align', 'data-heading-slug',
     'data-heading-nonce',   // admitted only so the heading hook can verify it; the hook removes it from every element
+    'data-task-line',       // 054 R4 — kept only on a checkbox carrying this render's nonce (the input hook)
+    'data-task-nonce',      // admitted only so the input hook can verify it; removed from every element
     'data-throng-wiki-index', // 047 T061/T063 — onLink reads it to mark an unresolved wikilink (R12)
     'data-throng-wiki-href', // 047 T061 — a wikilink's href BODY, with no scheme in the value (wikilinks.ts)
   ],
@@ -240,6 +246,13 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     node.removeAttribute('data-heading-slug');
   };
 
+  /** A task box the PIPELINE drew: this render's nonce, and a line that is digits only (054 R4). */
+  const isPipelineTaskBox = (node: Element, nonce: string | null): boolean => {
+    const context = current?.context;
+    const line = node.getAttribute('data-task-line');
+    return context !== undefined && nonce !== null && nonce === context.headingNonce && line !== null && /^\d+$/.test(line);
+  };
+
   purify.addHook('afterSanitizeAttributes', (node) => {
     if (/^data:/i.test((node.getAttribute('src') ?? '').trim())) node.removeAttribute('src');
     const tag = node.tagName.toUpperCase();
@@ -256,12 +269,19 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
 
     if (tag === 'IMG') onImage(node);
 
+    const taskNonce = node.getAttribute('data-task-nonce');
+    node.removeAttribute('data-task-nonce');
     if (tag === 'INPUT') {
       if ((node.getAttribute('type') ?? '').trim().toLowerCase() !== 'checkbox') {
         node.remove();
         return;
       }
-      node.setAttribute('disabled', '');
+      if (!isPipelineTaskBox(node, taskNonce)) {
+        node.removeAttribute('data-task-line');
+        node.setAttribute('disabled', '');
+      }
+    } else if (node.hasAttribute('data-task-line')) {
+      node.removeAttribute('data-task-line');
     }
 
     const nonce = node.getAttribute('data-heading-nonce');
@@ -292,13 +312,17 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
  * disallowed element's content (`KEEP_CONTENT`, on by default). Once `class` is gone a span says nothing,
  * so unwrapping every span — the alternative-text span included — loses nothing.
  *
- * `img` is left out too (amended 2026-09-15, US3 review). An image's `throng-preview:` or remote address
+ * A document image never travels (amended 2026-09-15, US3 review). Its `throng-preview:` or remote address
  * means nothing outside the app, so the exporter replaces each image with its alt text before sanitising
- * (`createHtmlExporter`); the allowlist is the backstop that removes any image that pass did not reach.
+ * (`createHtmlExporter`). 054 FR-049a re-admits `img` and `src` for exactly one shape — the PNG data URI a
+ * copy draws in a diagram's place, marked by the copy — and the exporter's hook removes any other image
+ * that reaches DOMPurify, so that pass still has a backstop.
  */
 export const EXPORT_PROFILE = Object.freeze({
-  ALLOWED_TAGS: PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span' && tag !== 'img'),
-  ALLOWED_ATTR: ['href', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan'],
+  // 054 FR-049a — `img` and `src` are back for ONE shape only: the PNG data URI a copy draws in a diagram's
+  // place. The exporter's hook removes every other image before DOMPurify reads its attributes.
+  ALLOWED_TAGS: PROFILE.ALLOWED_TAGS.filter((tag) => tag !== 'span'),
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan'],
   ALLOW_DATA_ATTR: false,
   ALLOW_ARIA_ATTR: false,
   ADD_FORBID_CONTENTS: PROFILE.ADD_FORBID_CONTENTS,
@@ -326,6 +350,16 @@ export type PreviewHtmlExporter = (selection: DocumentFragment) => string;
 export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExporter {
   const purify = DOMPurify(root);
   purify.addHook('beforeSanitizeAttributes', (node) => {
+    // 054 FR-049a — an image survives only as a copied diagram: marked by the copy, a PNG data URI, nothing else.
+    if (node.tagName?.toUpperCase() === 'IMG') {
+      const diagram = node.hasAttribute(DIAGRAM_IMAGE_ATTRIBUTE) && DIAGRAM_PNG_DATA_URI.test(node.getAttribute('src') ?? '');
+      if (!diagram) {
+        node.remove();
+        return;
+      }
+      for (const attr of [...node.attributes]) if (attr.name !== 'src' && attr.name !== 'alt') node.removeAttribute(attr.name);
+      return;
+    }
     if (node.tagName?.toUpperCase() !== 'A') return;
     node.removeAttribute('title');
     node.removeAttribute('href');
@@ -333,7 +367,7 @@ export function createHtmlExporter(root: WindowLike = window): PreviewHtmlExport
     if (link?.kind === 'external') node.setAttribute('href', link.url);
   });
   return (selection) => {
-    for (const img of [...selection.querySelectorAll('img')]) {
+    for (const img of [...selection.querySelectorAll(`img:not([${DIAGRAM_IMAGE_ATTRIBUTE}])`)]) {
       const alt = img.getAttribute('alt') ?? '';
       if (alt.length > 0) img.replaceWith(img.ownerDocument.createTextNode(alt));
       else img.remove();

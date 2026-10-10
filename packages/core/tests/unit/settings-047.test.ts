@@ -21,10 +21,15 @@ describe('editor.markdownSectionsOpen — default and type', () => {
 describe('editor.markdownSectionsOpen — descriptor', () => {
   const d = SETTINGS_METADATA.find((m) => m.key === KEY);
 
-  it('is described, under Editor, with no subgroup', () => {
+  it('is described, under Editor → Previews → Markdown, and never disabled by the Markdown provider', () => {
     expect(d, `no descriptor for ${KEY}`).toBeDefined();
     expect(d!.group).toBe('Editor');
-    expect(d!.subgroup).toBeUndefined();
+    // 054 FR-051 — supersedes 047's "no subgroup": filed under Previews, in the Markdown subsection.
+    expect(d!.subgroup).toBe('Previews');
+    expect(d!.subsection).toBe('Markdown');
+    // 054 FR-051 — the reason 047 kept it out of Previews still holds: the editor reads it, so it is not
+    // gated on Markdown previews being enabled.
+    expect(d!.enabledWhen).toBeUndefined();
   });
 
   it('is a select offering Expanded and Collapsed, labelled "Markdown sections open"', () => {
@@ -63,6 +68,6 @@ describe('settings completeness picks up the new key (FR-047)', () => {
     const keys = settingsLeaves();
     expect(keys).toContain(KEY);
     expect(() => assertEveryKeyDescribed(keys, SETTINGS_METADATA)).not.toThrow();
-    expect(auditRegistry(keys, SETTINGS_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(keys, SETTINGS_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
   });
 });

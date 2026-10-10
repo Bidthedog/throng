@@ -28,6 +28,7 @@ import {
   PREVIEW_KIND,
   collectPanels,
   effectiveActivePanelId,
+  previewOpenTargetFor,
   type Panel,
   type PreviewProviderRegistry,
   type PreviewSettings,
@@ -107,8 +108,15 @@ export function PreviewCommands(): null {
         bridge: window.throng?.preview,
         intent,
         // 047 US2 — the setting's live value, read at CALL time so a settings change while the window
-        // is open applies to the next open rather than the one already in flight.
-        defaultOpenTarget: settingsRef.current.editor.previews.openTarget,
+        // is open applies to the next open rather than the one already in flight. 054 FR-051 — the
+        // opened file's own provider's value.
+        defaultOpenTarget: previewOpenTargetFor(
+          registryRef.current,
+          settingsRef.current.editor.previews,
+          intent.absPath,
+        ),
+        // 054 FR-007 — Last Active per panel type, and the type recorded on a placed preview.
+        registry: registryRef.current,
       }).catch((error: unknown) => {
         // A bridge that threw is a broken bridge (failures are returned, never thrown, across it). The
         // affordance the user chose stays as it was; the cause goes to the console for diagnosis, and the

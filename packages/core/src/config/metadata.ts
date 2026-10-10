@@ -100,6 +100,13 @@ export interface FieldDescriptor {
    * 007 FR-028's exhaustive control vocabulary is untouched.
    */
   subgroup?: string;
+  /**
+   * 054 FR-050a — a second, last named level under {@link subgroup} (Editor → Previews → Markdown).
+   * Valid only with a `subgroup`: {@link auditRegistry} reports one without as `invalidNesting`. There
+   * is no third level and no recursion; 040 FR-036 – FR-036c govern its rendering as they do a
+   * subgroup's.
+   */
+  subsection?: string;
   /** the control matched to the value type (FR-028/029/038). */
   control: ControlKind;
   /** allowed set for select/multiselect/enum (FR-029). */
@@ -394,6 +401,8 @@ export interface RegistryAudit {
   unknown: string[];
   /** descriptor keys that appear more than once. */
   duplicated: string[];
+  /** descriptor keys with a `subsection` but no `subgroup` (054 FR-050a). */
+  invalidNesting: string[];
 }
 
 /**
@@ -409,13 +418,15 @@ export function auditRegistry(
   const seen = new Set<string>();
   const duplicated = new Set<string>();
   const unknown: string[] = [];
+  const invalidNesting: string[] = [];
   for (const d of registry) {
     if (seen.has(d.key)) duplicated.add(d.key);
     seen.add(d.key);
     if (!keySet.has(d.key)) unknown.push(d.key);
+    if (d.subsection !== undefined && d.subgroup === undefined) invalidNesting.push(d.key);
   }
   const missing = keys.filter((k) => !seen.has(k));
-  return { missing, unknown, duplicated: [...duplicated] };
+  return { missing, unknown, duplicated: [...duplicated], invalidNesting };
 }
 
 /**
@@ -427,8 +438,9 @@ export function assertEveryKeyDescribed(
   keys: readonly string[],
   registry: MetadataRegistry,
 ): void {
-  const { missing, unknown, duplicated } = auditRegistry(keys, registry);
+  const { missing, unknown, duplicated, invalidNesting } = auditRegistry(keys, registry);
   const problems: string[] = [];
+  if (invalidNesting.length) problems.push(`subsection without a subgroup for: ${invalidNesting.join(', ')}`);
   if (missing.length) problems.push(`missing descriptors for: ${missing.join(', ')}`);
   if (unknown.length) problems.push(`descriptors for unknown keys: ${unknown.join(', ')}`);
   if (duplicated.length) problems.push(`duplicate descriptors for: ${duplicated.join(', ')}`);

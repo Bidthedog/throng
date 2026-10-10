@@ -80,6 +80,32 @@ function pathTo(tree: readonly DocumentSymbol[], slug: string): DocumentSymbol[]
   return [];
 }
 
+/** `slug`'s node and every node nested under it, or `[]` when `slug` is not in `tree`. */
+function subtreeOf(tree: readonly DocumentSymbol[], slug: string): DocumentSymbol[] {
+  const node = pathTo(tree, slug).at(-1);
+  if (node === undefined) return [];
+  const out: DocumentSymbol[] = [];
+  const walk = (n: DocumentSymbol): void => {
+    out.push(n);
+    n.children.forEach(walk);
+  };
+  walk(node);
+  return out;
+}
+
+/**
+ * 054 FR-013 — Collapse All Inside This Section: `slug` and every section nested under it, each set
+ * individually (047 FR-037a's rule, scoped); every other section untouched. A leaf is its own section.
+ */
+export function collapseWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
+  return subtreeOf(tree, slug).reduce((acc, node) => setSection(acc, node.slug, true), state);
+}
+
+/** 054 FR-013 — Expand All Inside This Section; {@link collapseWithin}'s mirror. */
+export function expandWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
+  return subtreeOf(tree, slug).reduce((acc, node) => setSection(acc, node.slug, false), state);
+}
+
 /** Expands `slug`'s section and every ancestor of it, leaving every other slug untouched (FR-040). */
 export function revealing(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
   const path = pathTo(tree, slug);

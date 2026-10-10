@@ -53,8 +53,10 @@ import {
   resolveDragEffect,
   resolveTarget,
   PREVIEW_KIND,
+  previewPathOf,
   type FlavourOption,
   type PreviewAffordance,
+  type PreviewPanelConfig,
   type TargetNode,
   type TerminalPanelConfig,
 } from '@throng/core';
@@ -529,7 +531,20 @@ export function FileTree({
           tabId !== undefined && activeTab !== undefined
             ? (() => {
                 const panels = collectPanels(activeTab.root);
-                const id = candidateFor(tabId, (pid) => panels.some((p) => p.id === pid && p.kind === PREVIEW_KIND));
+                // 054 FR-007 — per type: only a preview showing a file of THIS file's provider is reused, the
+                // same rule `openPreview` applies (the run's current file, else the persisted one).
+                const registry = previewRegistryRef.current;
+                const providerId = registry.forPath(absPath)?.id;
+                const shownProvider = (pid: string): string | undefined => {
+                  const config = panels.find((p) => p.id === pid)?.config as PreviewPanelConfig | undefined;
+                  const shown = getPreviewState(pid)?.filePath ?? previewPathOf(config);
+                  return shown === undefined ? undefined : registry.forPath(shown)?.id;
+                };
+                const id = candidateFor(
+                  tabId,
+                  (pid) => panels.some((p) => p.id === pid && p.kind === PREVIEW_KIND),
+                  providerId === undefined ? undefined : { id: providerId, of: shownProvider },
+                );
                 return id === null ? undefined : panels.find((p) => p.id === id);
               })()
             : undefined;

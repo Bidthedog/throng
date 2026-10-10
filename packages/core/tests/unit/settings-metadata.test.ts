@@ -29,6 +29,7 @@ describe('SETTINGS_METADATA completeness (FR-047)', () => {
       missing: [],
       unknown: [],
       duplicated: [],
+      invalidNesting: [],
     });
   });
 

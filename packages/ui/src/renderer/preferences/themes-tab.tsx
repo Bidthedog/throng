@@ -656,9 +656,22 @@ export function ThemesTab(): ReactElement {
               the Settings tab's `settings-group-` prefix for its sections (a collision inherited,
               not chosen); reusing the settings prefix here would extend it into ids this feature is
               adding. */}
-          {subgroups.map(({ subgroup, items: subItems }) => (
+          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
             <Subsection key={subgroup} testIdPrefix="themes-subgroup" group={group} subgroup={subgroup}>
               {subItems.map(row)}
+              {/* 054 FR-050a — the third level, as in the other two tabs. */}
+              {subsections.map(({ subsection, items: sectionItems }) => (
+                <Subsection
+                  key={subsection}
+                  testIdPrefix="themes-subsection"
+                  group={group}
+                  subgroup={subgroup}
+                  subsection={subsection}
+                  level={5}
+                >
+                  {sectionItems.map(row)}
+                </Subsection>
+              ))}
             </Subsection>
           ))}
         </section>

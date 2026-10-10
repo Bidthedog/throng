@@ -294,7 +294,16 @@ import { setAtPath } from './metadata.js';
 // than FR-025a's. Version 19 wrote both into every theme file, so this is 043's guarded value rewrite, not the
 // additive case: {@link V19_MOVED_COLOURS} records what 19 wrote and {@link planThemeValueUpgrade} moves a
 // token only where the file still holds exactly that.
-export const SHIPPED_DEFAULTS_VERSION = 20;
+//
+// Bumped by 054 (20 → 21): five icon tokens — `panelMaximise`, `panelRestore`, `diagramFit`,
+// `diagramFullSize`, `diagramFullPane` (FR-071, FR-046b). The additive case again: every payload
+// arrives, no existing value moves. The new preview settings need no bump (044's 7 → 8 reasoning).
+//
+// Bumped by 054's MT-04 round (21 → 22): one icon token, `diagramZoomReset` (the diagram's Zoom 100%
+// control), the additive case again — the maintainer's hand-testing install already holds a 21 marker, so
+// 21 is not edited to carry it. `diagramFullSize` is retired in the same round: `migrateTheme` drops the
+// stray key the 21 seed wrote (theme-ops.ts), so no bump is needed for the removal itself.
+export const SHIPPED_DEFAULTS_VERSION = 22;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved

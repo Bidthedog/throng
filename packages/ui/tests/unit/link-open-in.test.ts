@@ -63,6 +63,12 @@ describe('linkOpenInEditors — one Open In row per open editor, by name (FR-170
     expect(linkOpenInEditors(ws, { heldPath, targetPath: null }).map((e) => e.id)).toEqual(['e1', 'e2']);
   });
 
+  it('leaves out an editor a maximised panel hides in its tab — it is not targetable (054 FR-074)', () => {
+    const ws = layout(split(panel('e1', 'Notes', 'editor'), panel('e2', 'Foo', 'editor')), panel('e3', 'Readme', 'editor'));
+    const hidden = (tabId: string, panelId: string): boolean => tabId === 't1' && panelId !== 'e1';
+    expect(linkOpenInEditors(ws, { heldPath, hidden }).map((e) => e.id)).toEqual(['e1', 'e3']);
+  });
+
   it('no layout, no rows', () => {
     expect(linkOpenInEditors(null, { heldPath })).toEqual([]);
   });

@@ -253,6 +253,9 @@ const FOLD_COMMANDS = [
   'markdown.collapseAll',
   'markdown.expandAll',
   'markdown.toggleAll',
+  // 054 FR-013 — Collapse / Expand All Inside This Section.
+  'markdown.collapseAllInside',
+  'markdown.expandAllInside',
 ];
 
 /** One allowance per token, all sharing a file, kind and reason. */
@@ -360,6 +363,8 @@ const ALLOWED: readonly Allowed[] = [
     'Markdown sections open',
     'How a Markdown document’s heading sections start out, in the editor and in a fresh preview: expanded, or collapsed. Collapse All / Expand All and per-section folding still work either way.',
   ], `${SECTION_FOLDING} — the setting's descriptor and its user-facing copy`),
+  ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'identifier', ['MARKDOWN_SECTIONS_OPEN'], `${SECTION_FOLDING} — the setting's descriptor constant`),
+  ...allow(`${CORE_SRC}/config/settings-metadata.ts`, 'identifier', ['markdown'], '054 FR-051 — files the Markdown-editor setting above in the Markdown preview subsection of Preferences; layout only, it selects no provider behaviour and a new provider needs no edit'),
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'identifier', ['MARKDOWN_SURFACES'], `${SECTION_FOLDING} — the surfaces the \`markdown.*\` fold chords are live on`),
   ...allow(`${CORE_SRC}/config/keybindings.ts`, 'literal', FOLD_COMMANDS, `${SECTION_FOLDING} — the fold command ids and their default chords`),
   ...allow(`${CORE_SRC}/config/keybindings-metadata.ts`, 'literal', [...FOLD_COMMANDS, 'Markdown'], `${SECTION_FOLDING} — the fold commands' descriptors and their group name`),

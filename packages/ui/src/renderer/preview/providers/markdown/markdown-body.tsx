@@ -19,7 +19,8 @@
  *
  * The host element is not `contenteditable` and never becomes so: a preview is read-only (FR-020). It is
  * focusable (`tabIndex=-1`), so the arrow, Page and Home/End keys scroll it natively (FR-096a); none of
- * them is handled here.
+ * them is handled here. The one input that changes a document is a task box's click or Space (054 FR-022),
+ * and even that only ASKS: the chrome has main change the marker, and the re-render shows it (`task-toggle.ts`).
  *
  * ══ AN UPDATE KEEPS THE READER'S PLACE; A NEW FILE STARTS AT THE TOP ══
  *
@@ -71,12 +72,16 @@
  *   right-click sends, and a user's rebinding is honoured (Principle X). A key handler of its own would
  *   never see the keys, and would ignore the binding if it did.
  */
+import { createPortal } from 'react-dom';
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
@@ -91,6 +96,12 @@ import {
 } from '@throng/core';
 import type { PreviewBodyProps } from '../../provider-view.js';
 import { linkElementOf, linkOf, linkTargetOf, previewLinkHoverText } from '../../link-dom.js';
+import { taskBoxOf, taskToggleFor } from '../../task-toggle.js';
+import { claimRenderedBlocks, type BlockRendererEntry } from '../../blocks/block-renderers.js';
+import { DiagramBlock } from '../../diagram/diagram-block.js';
+import { releaseDiagramSections } from '../../diagram/diagram-sections.js';
+import { diagramThemeFrom } from '../../diagram/diagram-theme.js';
+import { DIAGRAM_HOST_CLASS, DIAGRAM_LANG_ATTRIBUTE, DIAGRAM_SOURCE_ATTRIBUTE } from '../../diagram/diagram-host.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
 import { useActiveTheme, useIconPacks } from '../../../config/config-store.js';
@@ -139,6 +150,15 @@ function markdownRenderer(): Promise<MarkdownRenderer> {
       throw error;
     });
   return renderer;
+}
+
+/** One diagram the draw found: the host it stands in, its source and the renderer that claimed it (054 US4). */
+interface DiagramMount {
+  readonly host: HTMLElement;
+  readonly source: string;
+  readonly entry: BlockRendererEntry;
+  /** Which document this mount belongs to — a different file is a different generation (FR-044, FR-046g). */
+  readonly generation: number;
 }
 
 /** The class the focused link carries (FR-096b); `markdown.css` draws the indicator. */
@@ -266,6 +286,7 @@ export function MarkdownBody({
   onHeadings,
   onRevealSection,
   resolveWikiTargets,
+  onToggleTask,
 }: PreviewBodyProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const text = content.kind === 'text' ? content.text : null;
@@ -314,6 +335,55 @@ export function MarkdownBody({
   const tableHandSetRef = useRef(new Map<number, TableHandSet>());
   const theme = useActiveTheme();
   const packs = useIconPacks();
+  /*
+   * ── 054 US4 — diagrams (FR-040 – FR-048, research R5) ──
+   *
+   * A fence a block renderer claims is replaced, in the fragment, by a host element, and a `DiagramBlock` is
+   * portalled into it. The hosts are kept BY ORDINAL across draws: the next draw puts the same element back
+   * where its fence now is, so the block — its last good render, its zoom and pan — survives every edit
+   * elsewhere in the document, and an unchanged diagram is never drawn again (FR-044, FR-046g). The
+   * host is the anchor the scroll keeper sees (`data-source-line`), and carries its source for copy.
+   */
+  const renderMermaid = providerSettings.renderMermaid !== false;
+  const renderMermaidRef = useRef(renderMermaid);
+  renderMermaidRef.current = renderMermaid;
+  const diagramHostsRef = useRef<HTMLElement[]>([]);
+  const [diagrams, setDiagrams] = useState<readonly DiagramMount[]>([]);
+  const diagramTheme = useMemo(() => diagramThemeFrom(theme), [theme]);
+  /**
+   * A DIFFERENT file (not an update, not a re-point) starts a new generation: its hosts are new elements and
+   * its portals new keys, so no diagram keeps the old file's last good render or view state (FR-044, 046g).
+   */
+  const diagramGenerationRef = useRef(0);
+  const claimDiagrams = useCallback((fragment: DocumentFragment, sameDocument: boolean, firstDraw: boolean): void => {
+    if (!sameDocument) {
+      diagramGenerationRef.current += 1;
+      diagramHostsRef.current = [];
+    }
+    const generation = diagramGenerationRef.current;
+    const claimed = claimRenderedBlocks(fragment, (lang) => lang !== 'mermaid' || renderMermaidRef.current);
+    const mounts = claimed.map((block, ordinal): DiagramMount => {
+      const host = diagramHostsRef.current[ordinal] ?? fragment.ownerDocument.createElement('div');
+      host.className = DIAGRAM_HOST_CLASS;
+      host.setAttribute(DIAGRAM_LANG_ATTRIBUTE, block.lang);
+      host.setAttribute(DIAGRAM_SOURCE_ATTRIBUTE, block.source);
+      if (block.line !== null) host.setAttribute('data-source-line', String(block.line));
+      else host.removeAttribute('data-source-line');
+      block.pre.replaceWith(host);
+      return { host, source: block.source, entry: block.entry, generation };
+    });
+    diagramHostsRef.current = mounts.map((m) => m.host);
+    // FR-073 — a Full Pane target outlives this body (a tab switch unmounts it), so it is released here, where
+    // the diagram is known to be gone: another file takes them all, an edit takes the ordinals past the end.
+    // A first draw is a (re)mount, whose targets belong to the diagrams it is about to draw again.
+    releaseDiagramSections(panelId, sameDocument || firstDraw ? mounts.length : 0);
+    setDiagrams((prev) =>
+      prev.length === mounts.length &&
+      prev.every((m, i) => m.host === mounts[i].host && m.source === mounts[i].source && m.entry === mounts[i].entry && m.generation === mounts[i].generation)
+        ? prev
+        : mounts,
+    );
+  }, [panelId]);
   const themeRef = useRef(theme);
   themeRef.current = theme;
   const packsRef = useRef(packs);
@@ -689,6 +759,8 @@ export function MarkdownBody({
           first.classList.add(FRONT_MATTER_CLASS);
         }
         for (const img of fragment.querySelectorAll<HTMLImageElement>(BLOCKED_IMAGE_SELECTOR)) showAltText(img);
+        // 054 FR-040, FR-043 — every fence a block renderer claims becomes a diagram host, before insertion
+        // (so the place below is measured with it) and before highlighting (so it is never highlighted).
         const scroller = scrollerOf(body);
         const file = filePath;
         const previous = shown.current;
@@ -697,6 +769,7 @@ export function MarkdownBody({
         // document under a new path, which is an update, not a place to arrive at.
         const repointed =
           previous !== null && previous.filePath !== file && navigated !== undefined && previous.navigationSeq === navigated;
+        claimDiagrams(fragment, previous !== null && (previous.filePath === file || repointed), previous === null);
         if (previous !== null && (previous.filePath === file || repointed)) {
           // FR-024 — an UPDATE. Capture, replace and restore in one synchronous turn, so no scroll the
           // user makes can fall between the two and be undone.
@@ -797,7 +870,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, renderMermaid, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting
@@ -875,8 +948,40 @@ export function MarkdownBody({
     return () => body.removeEventListener('error', onError, true);
   }, []);
 
+  /*
+   * 054 FR-022 (R4) — a task box asks the chrome for a toggle and never toggles itself: its native change is
+   * prevented, so it shows its new state only once main has changed the source and the re-render draws it,
+   * and a refusal leaves it exactly as it was (FR-028). Read against the text this body DREW, so the line
+   * and the item text are the ones on screen.
+   */
+  const onToggleTaskRef = useRef(onToggleTask);
+  onToggleTaskRef.current = onToggleTask;
+  const requestToggle = useCallback((box: HTMLInputElement): void => {
+    const drawn = shown.current;
+    if (drawn === null) return;
+    onToggleTaskRef.current?.(taskToggleFor(box, drawn.text));
+  }, []);
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+      // Space on a focused task box (FR-022). Every other key is left to the chrome and the engine.
+      if (e.key !== ' ' || e.ctrlKey || e.altKey || e.metaKey) return;
+      const box = taskBoxOf(e.target);
+      if (box === null) return;
+      e.preventDefault();
+      requestToggle(box);
+    },
+    [requestToggle],
+  );
+
   const onClick = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>): void => {
+      const box = taskBoxOf(e.target);
+      if (box !== null) {
+        e.preventDefault();
+        requestToggle(box);
+        return;
+      }
       if (!e.ctrlKey) {
         // 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own
         // plain-click remedy as far as the plain click goes (FR-094's HOVER tooltip stands unchanged).
@@ -906,7 +1011,7 @@ export function MarkdownBody({
       e.preventDefault();
       onFollow(link);
     },
-    [onFollow],
+    [onFollow, requestToggle],
   );
 
   const onContextMenu = useCallback(
@@ -988,6 +1093,7 @@ export function MarkdownBody({
   }, []);
 
   return (
+    <>
     <div
       ref={bodyRef}
       className="preview-markdown"
@@ -995,11 +1101,21 @@ export function MarkdownBody({
       tabIndex={-1}
       onMouseDown={onMouseDown}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       onContextMenu={onContextMenu}
       onFocus={onFocus}
       onBlur={onBlur}
       onPointerOver={onPointerOver}
       onPointerOut={onPointerOut}
     />
+    {/* 054 US4 — each diagram, drawn into the host the draw put in its fence's place. */}
+    {diagrams.map((d, ordinal) =>
+      createPortal(
+        <DiagramBlock panelId={panelId} sectionId={`diagram-${ordinal}`} source={d.source} entry={d.entry} theme={diagramTheme} />,
+        d.host,
+        `diagram-${d.generation}-${ordinal}`,
+      ),
+    )}
+    </>
   );
 }

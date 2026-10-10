@@ -80,6 +80,14 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Destroy Panel',
     'Destroy the focused panel, exactly as its Destroy menu item does — with the same confirmations and unsaved-changes guard. A preview is closed instead. Does nothing while focus is in a side pane.',
   ),
+  // 054 FR-071 — beside Destroy Panel. In a terminal this chord no longer reaches the program; Shift+Enter
+  // still sends a line break.
+  chord(
+    'panel.toggleMaximise',
+    'Focus & Zoom',
+    'Maximise / Restore Panel',
+    "Let the focused panel fill its tab's middle section, or put it back. While a panel is maximised the tab's other panels are hidden and new panels cannot be added. Also on each panel's header and menu.",
+  ),
   chord(
     'focus.left',
     'Focus & Zoom',
@@ -366,6 +374,18 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   ),
   chord('markdown.collapseAll', 'Markdown', 'Collapse all sections', 'Collapse every heading section.'),
   chord('markdown.expandAll', 'Markdown', 'Expand all sections', 'Expand every heading section.'),
+  chord(
+    'markdown.collapseAllInside',
+    'Markdown',
+    'Collapse all inside this section',
+    'Collapse the section containing the caret (editor) or the top of the view (preview), and every section nested under it.',
+  ),
+  chord(
+    'markdown.expandAllInside',
+    'Markdown',
+    'Expand all inside this section',
+    'Expand the section containing the caret (editor) or the top of the view (preview), and every section nested under it.',
+  ),
 
   // Search (013) — one shared find bar routed to the active panel. A terminal
   // searches its scrollback (read-only); an editor searches and replaces its file.

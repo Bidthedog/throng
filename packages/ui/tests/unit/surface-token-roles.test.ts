@@ -162,7 +162,9 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     const DIALOG_CARDS =
       /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
-      (h) => !/^\.pane--\w+$|^\.panel-box$/.test(h.selector) && !DIALOG_CARDS.test(h.selector),
+      // 054 FR-070 — `.maximise-layer` is a panel body too: the box a maximised section is drawn in, the
+      // same frame as `.panel-box` over the same tab body.
+      (h) => !/^\.pane--\w+$|^\.panel-box$|^\.maximise-layer$/.test(h.selector) && !DIALOG_CARDS.test(h.selector),
     );
     const report = offenders.map((h) => `${h.selector} (${h.where})`).sort();
     expect(

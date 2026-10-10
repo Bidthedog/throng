@@ -24,6 +24,11 @@ export interface ProviderSettings {
   enabled: boolean;
   /** Text providers only; ships `'editor'` (FR-050). Absent for a binary provider (FR-051). */
   defaultOpenAction?: DefaultOpenAction;
+  /**
+   * 054 FR-051, FR-053 — where a standalone preview of this provider's files opens. Text providers only;
+   * ships `'lastActive'`, or the value of the retired top-level `openTarget` it was migrated from.
+   */
+  openTarget?: PreviewOpenTarget;
   /** The provider's own declared leaves (FR-071). */
   [ownLeaf: string]: boolean | string | number | undefined;
 }
@@ -40,8 +45,11 @@ export interface PreviewSettings {
    * FR-114). Applies to every text provider, so no provider's enabled toggle governs it.
    */
   syncScroll: boolean;
-  /** Where a STANDALONE preview opens — `'lastActive'` (047 FR-015a). Belongs to no provider. */
-  openTarget: PreviewOpenTarget;
+  /*
+   * 047 FR-015a's top-level `openTarget` is RETIRED by 054 FR-051: each text provider carries its own
+   * (`ProviderSettings.openTarget`). It is absent from this shape on purpose — the parse migrates it and
+   * does not carry it, so the section rebuild drops it on the next write (019 FR-023's mechanism).
+   */
   /** Keyed by provider id. */
   providers: Record<string, ProviderSettings>;
 }

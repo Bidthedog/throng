@@ -108,10 +108,15 @@ describe('previewSettingsDefaults (FR-035b, FR-050, FR-060, FR-060a, FR-065, FR-
       copyFormat: 'rich',
       // FR-114 — ships on.
       syncScroll: true,
-      // 047 FR-015a — ships 'lastActive' (research R8).
-      openTarget: 'lastActive',
       providers: {
-        markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: true, showFrontMatter: true },
+        // 054 FR-051 — openTarget moved from the top level into each text provider, still 'lastActive'.
+        markdown: {
+          enabled: true,
+          defaultOpenAction: 'editor',
+          openTarget: 'lastActive',
+          loadRemoteImages: true,
+          showFrontMatter: true,
+        },
       },
     });
   });
@@ -124,7 +129,13 @@ describe('previewSettingsDefaults (FR-035b, FR-050, FR-060, FR-060a, FR-065, FR-
     const d = previewSettingsDefaults(TEST_REGISTRY);
     expect(d.providers.image).toEqual({ enabled: true });
     expect('defaultOpenAction' in d.providers.image).toBe(false);
-    expect(d.providers.notes).toEqual({ enabled: true, defaultOpenAction: 'editor', showOutline: false });
+    // 054 FR-051 — a text provider now also carries its own openTarget (a binary one still has none).
+    expect(d.providers.notes).toEqual({
+      enabled: true,
+      defaultOpenAction: 'editor',
+      openTarget: 'lastActive',
+      showOutline: false,
+    });
   });
 
   it('hands out a fresh object each call, so no caller can edit another caller’s defaults', () => {
@@ -257,23 +268,31 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
   });
 
   /*
-   * 047 T013 (data-model.md "Settings", research R8/R11, FR-015a) — `openTarget` is a STATIC leaf
-   * (belongs to no provider), like `syncScroll`: it decides where a STANDALONE preview opens.
+   * 047 T013 (data-model.md "Settings", research R8/R11, FR-015a) — `openTarget` decides where a
+   * STANDALONE preview opens. 054 FR-051 – FR-053 retired the static top-level leaf: it is now
+   * generated per TEXT provider, labelled with the provider's name and gated on its enabled toggle.
    */
-  it('describes openTarget as a select, "Open previews in", with FR-015a’s sentence, never disabled by a provider', () => {
-    const openTarget = byKey(descriptors, 'editor.previews.openTarget');
+  it('describes each text provider’s openTarget as a select, "<Provider>: Open previews in", with FR-015a’s sentence, disabled while the provider is off', () => {
+    // 054 FR-051 — the descriptor is per provider now, not `editor.previews.openTarget`.
+    const openTarget = byKey(descriptors, 'editor.previews.providers.markdown.openTarget');
     expect(openTarget).toMatchObject({
       control: 'select',
       group: 'Editor',
       subgroup: 'Previews',
-      label: 'Open previews in',
+      // 054 FR-052 — labelled with the provider's display name.
+      label: 'Markdown: Open previews in',
       allowedValues: ['lastActive', 'new'],
     });
-    expect(openTarget.description).toContain('Last Active reuses the most recently used preview');
+    // 054 FR-052 — the sentence names the provider ("…most recently used Markdown preview…").
+    expect(openTarget.description).toContain('Last Active reuses the most recently used Markdown preview');
     expect(openTarget.description).toContain('otherwise a new preview opens');
-    expect(openTarget.enabledWhen).toBeUndefined();
-    // Emitted whatever the registry holds — it is not generated per provider, like syncScroll.
-    expect(previewSettingsDescriptors(TEST_REGISTRY).map((d) => d.key)).toContain('editor.previews.openTarget');
+    // 054 FR-052 — disabled while the provider is off, like every other provider leaf.
+    expect(openTarget.enabledWhen).toEqual({ key: 'editor.previews.providers.markdown.enabled', is: true });
+    // 054 FR-051 — generated per text provider; a binary provider gets none, and no top-level row remains.
+    const testKeys = previewSettingsDescriptors(TEST_REGISTRY).map((d) => d.key);
+    expect(testKeys).toContain('editor.previews.providers.notes.openTarget');
+    expect(testKeys).not.toContain('editor.previews.providers.image.openTarget');
+    expect(testKeys).not.toContain('editor.previews.openTarget');
   });
 
   it('puts both shipped delays exactly on a slider stop', () => {
@@ -350,7 +369,7 @@ describe('previewSettingsDescriptors (FR-051, FR-061, FR-071)', () => {
     const registryDescriptors = previewSettingsDescriptors(TEST_REGISTRY);
     // Relative to `editor.previews`, as the leaves sit inside the settings document.
     const leaves = leavesOfDeclared({ editor: { previews: defaults } }, registryDescriptors);
-    expect(auditRegistry(leaves, registryDescriptors)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(leaves, registryDescriptors)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
     expect(leaves).toContain('editor.previews.providers.notes.showOutline');
     expect(byKey(registryDescriptors, 'editor.previews.providers.notes.showOutline').label).toBe(
       'Notes: Show outline',
@@ -374,9 +393,15 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
         maxWaitMs: 4000,
         copyFormat: 'plain',
         syncScroll: false,
-        openTarget: 'new',
         providers: {
-          markdown: { enabled: false, defaultOpenAction: 'preview', loadRemoteImages: false, showFrontMatter: false },
+          // 054 FR-051 — openTarget is a provider leaf now, not a top-level one.
+          markdown: {
+            enabled: false,
+            defaultOpenAction: 'preview',
+            openTarget: 'new',
+            loadRemoteImages: false,
+            showFrontMatter: false,
+          },
         },
       },
       SHIPPED_LIKE,
@@ -386,9 +411,15 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 4000,
       copyFormat: 'plain',
       syncScroll: false,
-      openTarget: 'new',
       providers: {
-        markdown: { enabled: false, defaultOpenAction: 'preview', loadRemoteImages: false, showFrontMatter: false },
+        // 054 FR-051 — openTarget kept on the provider.
+        markdown: {
+          enabled: false,
+          defaultOpenAction: 'preview',
+          openTarget: 'new',
+          loadRemoteImages: false,
+          showFrontMatter: false,
+        },
       },
     });
   });
@@ -409,9 +440,15 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
         maxWaitMs: 2000,
         copyFormat: 'html',
         syncScroll: 'yes',
-        openTarget: 'sideways',
         providers: {
-          markdown: { enabled: 'yes', defaultOpenAction: 'window', loadRemoteImages: false, showFrontMatter: 'no' },
+          // 054 FR-051 — the bad openTarget sits on the provider now, not at the top level.
+          markdown: {
+            enabled: 'yes',
+            defaultOpenAction: 'window',
+            openTarget: 'sideways',
+            loadRemoteImages: false,
+            showFrontMatter: 'no',
+          },
         },
       },
       SHIPPED_LIKE,
@@ -421,9 +458,15 @@ describe('parsePreviewSettings — tolerant per leaf', () => {
       maxWaitMs: 2000,
       copyFormat: 'rich',
       syncScroll: true,
-      openTarget: 'lastActive',
       providers: {
-        markdown: { enabled: true, defaultOpenAction: 'editor', loadRemoteImages: false, showFrontMatter: true },
+        // 054 FR-051 — the provider's openTarget falls back to its own default, 'lastActive'.
+        markdown: {
+          enabled: true,
+          defaultOpenAction: 'editor',
+          openTarget: 'lastActive',
+          loadRemoteImages: false,
+          showFrontMatter: true,
+        },
       },
     });
   });

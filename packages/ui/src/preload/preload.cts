@@ -732,6 +732,8 @@ contextBridge.exposeInMainWorld('throng', {
     /** 047 R12 (contracts/preview-ipc-047.md §3) — which `[[wikilink]]` targets name a real file. */
     resolveWikiTargets: (panelId: string, targets: { path: string; rooted: boolean }[]) =>
       ipcRenderer.invoke('throng:preview:resolveWikiTargets', { panelId, targets }),
+    /** 054 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source; main validates. */
+    toggleTask: (request: unknown) => ipcRenderer.invoke('throng:preview:toggleTask', request),
     publishEditorTitle: (panelId: string, title: string) =>
       ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
     placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),

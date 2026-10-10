@@ -524,6 +524,18 @@ describe('a preview is not renamable and not editable (FR-030, FR-020)', () => {
   });
 });
 
+/** 054 FR-005 (research R2) — a preview's panel type is its provider's: "<displayName> Preview". */
+describe('054 — the panel type is named after the provider', () => {
+  it('a preview with no file yet is titled "<provider> Preview"', async () => {
+    mount();
+    await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
+    const id = panelsIn()[0].id;
+    act(() => live().setPanelType(id, PREVIEW_KIND, { providerId: 'testText' }));
+    const provider = registry.get('testText')!;
+    await waitFor(() => expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${provider.displayName} Preview`));
+  });
+});
+
 describe('the header names a preview through panelDisplayTitle, marking the NAME when shortened (FR-031, FR-032)', () => {
   it('titles a standalone preview `<name an editor would derive> - Preview`', async () => {
     const { id } = await mountPreview();

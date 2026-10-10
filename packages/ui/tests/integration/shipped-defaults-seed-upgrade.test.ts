@@ -604,9 +604,10 @@ describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (04
     // Re-pinned: FR-124 bumps the marker to 15 (word wrap's Ctrl+E,W); the rows above are unchanged.
     // Re-pinned again: FR-127 bumps the marker to 16 (the panel reset's Ctrl+Alt+0).
     // And 047 bumps it to 17 (the Markdown fold chords, Ctrl+M,*, and Go to Heading's Ctrl+G), then
-    // to 18 (`searchMatchBorder`, FR-074), and 049 to 19 (the occurrence and inactive-selection colours), then 20 (their floors).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
-    expect(await service.readAppliedVersion()).toBe(20);
+    // to 18 (`searchMatchBorder`, FR-074), and 049 to 19 (the occurrence and inactive-selection colours), then 20 (their floors),
+    // and 054 to 21 (the maximise and diagram icon tokens), then 054 MT-04 to 22 (diagramZoomReset).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(22);
+    expect(await service.readAppliedVersion()).toBe(22);
   });
 
   it('a second upgrade writes nothing', async () => {

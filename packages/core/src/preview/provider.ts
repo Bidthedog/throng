@@ -11,6 +11,7 @@
  *
  * Types only. No OS, no DOM.
  */
+import type { DefaultOpenAction } from './settings-types.js';
 
 /**
  * `text` providers are handed text snapshots and can be parented to an editor; `binary` providers
@@ -45,6 +46,18 @@ export interface PreviewProviderDescriptor {
   remoteImagesSetting?: string;
   /** Binary providers only: the MIME types the source route may serve. */
   sourceMimeTypes?: readonly string[];
+  /**
+   * Text providers only: the SHIPPED default open action. Absent ships `'editor'` (044 FR-050). The user's
+   * stored choice always wins over it; this is only what a fresh or unset config reads.
+   */
+  defaultOpenAction?: DefaultOpenAction;
+  /**
+   * Wording for the generated enabled toggle, when `"<displayName>: Enabled"` and its generic description
+   * would mislead — e.g. Mermaid's, which governs standalone files only, not diagrams inside Markdown.
+   * The label is still prefixed with `displayName`.
+   */
+  enabledLabel?: string;
+  enabledDescription?: string;
 }
 
 /** Every registered provider, looked up by id or by a file's extension. */

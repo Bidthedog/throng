@@ -1064,7 +1064,9 @@ export type { DocumentSymbol, HeadingRecord } from './outline/document-symbol.js
 // 047 — one fold state per document or standalone preview (data-model.md "FoldState", research R3).
 export {
   collapseAll,
+  collapseWithin,
   expandAll,
+  expandWithin,
   initialFold,
   isCollapsed,
   prune,
@@ -1123,6 +1125,8 @@ export {
   parsePreviewSettings,
   effectiveMaxWaitMs,
   defaultOpenActionFor,
+  // 054 FR-051 — the file's own provider's Open previews in.
+  previewOpenTargetFor,
   remoteImagesPermitted,
   providersTurnedOff,
 } from './config/preview-settings.js';
@@ -1153,7 +1157,13 @@ export type {
   PreviewPathChanged,
   PreviewFocusMessage,
   PreviewPlaceMessage,
+  TaskToggleRequest,
+  TaskToggleRefusal,
+  TaskToggleResponse,
 } from './preview/wire-types.js';
+// 054 US2 (FR-022 – FR-029) — the marker a preview checkbox click toggles; main applies it.
+export { applyTaskToggle, locateTaskToggle, taskItemText, taskOccurrence } from './preview/task-toggle.js';
+export type { TaskOccurrence, TaskToggleEdit, TaskToggleLocateRefusal, TaskToggleLocation } from './preview/task-toggle.js';
 export { splitFrontMatter } from './preview/front-matter.js';
 export type { FrontMatterSplit } from './preview/front-matter.js';
 // 047 (data-model.md "WikiTarget", research R12, FR-050 – FR-056) — `[[Target]]` wikilinks. Main
@@ -1165,7 +1175,9 @@ export type { WikiTarget } from './preview/wiki-links.js';
 export { fairColumnWidths } from './preview/table-widths.js';
 export type { ColumnProfile, FairColumnWidthsResult } from './preview/table-widths.js';
 // Registered in `defaultPanelTypeRegistry`, `offered: false` — the Find in Files arrangement above.
-export { PREVIEW_KIND, previewPanelType } from './preview/panel-type.js';
+export { PREVIEW_KIND, previewPanelType, previewPanelTypeLabel, previewProviderIdOf } from './preview/panel-type.js';
+// 054 FR-001, FR-002 — the preview recency a restored tab starts from.
+export { initialPreviewRecency } from './workspace/preview-recency.js';
 export type { PreviewValues } from './preview/panel-type.js';
 
 // 044 — per-panel navigation history (#136): the pure reducer main's authority is built on.

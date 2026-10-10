@@ -693,6 +693,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     const other = this.runForPath(canon(target));
     if (other && other !== run) return this.focusOtherPreview(other, fragment);
 
+    // 054 FR-007, FR-008 — a preview never becomes another preview TYPE. A target of another provider is
+    // handed back for an ordinary open, which reuses or places a preview of its own type.
+    if (provider.id !== run.providerId) return { kind: 'reroute' };
+
     // 5. In place — but READ FIRST, and change nothing until the read has answered (fix round 1).
     //
     // The target's content is fetched before the run is touched, so a failed read can never leave the

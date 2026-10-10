@@ -29,6 +29,7 @@ import { useEffect, useRef } from 'react';
 import { eventToToken, normalizeToken, type ActionId, type Keybindings } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
+import { zoomFocusedDiagram } from '../preview/diagram/diagram-zoom.js';
 
 type Gesture = 'WheelUp' | 'WheelDown' | 'MiddleClick';
 
@@ -82,13 +83,17 @@ export function MouseZoomHandler(): null {
      */
     const dispatch = (action: ActionId | null, panelId: string | null): void => {
       switch (action) {
+        // 054 MT-04 A5 — a diagram that has keyboard focus takes the panel-zoom gestures for itself.
         case 'panel.zoomIn':
+          if (zoomFocusedDiagram('in')) break;
           if (panelId) wsRef.current.bumpZoom(panelId, 1);
           break;
         case 'panel.zoomOut':
+          if (zoomFocusedDiagram('out')) break;
           if (panelId) wsRef.current.bumpZoom(panelId, -1);
           break;
         case 'panel.zoomReset':
+          if (zoomFocusedDiagram('reset')) break;
           if (panelId) wsRef.current.resetZoom(panelId);
           break;
         case 'zoom.in':

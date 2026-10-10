@@ -70,6 +70,16 @@ describe('buildPreviewTextModel — the walk (R1)', () => {
     expect(buildPreviewTextModel(root).text).toBe('Section');
   });
 
+  // 054 FR-032 — a diagram's labels are drawn, not text the reader can find; a match there opens the editor.
+  it('excludes a rendered diagram, its labels and its toolbar', () => {
+    const root = el([
+      el([text('Before ')]),
+      el([el([text('A node label')]), el([text('Fit')])], { class: 'preview-diagram-host' }),
+      el([text('after')]),
+    ]);
+    expect(buildPreviewTextModel(root).text).toBe('Before after');
+  });
+
   it('includes collapsed sections — folding hides them visually, not from the model', () => {
     // A collapsed section carries no aria-hidden and no fold-toggle class of its own: it is ordinary
     // content the reader has chosen not to look at, and Find must still be able to land on it (edge

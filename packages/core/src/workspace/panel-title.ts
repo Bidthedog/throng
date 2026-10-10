@@ -51,6 +51,12 @@ export interface PanelTitleSources {
   /** The file a preview currently shows — live state first; the persisted config is the fallback. */
   previewFilePath?: string | null;
   /**
+   * 054 FR-005 — the preview's panel type label ("Markdown Preview"), named when it has no file to be
+   * named after. An input rather than a lookup, as `previewParentTitle` is: the provider registry is the
+   * caller's, not this rule's.
+   */
+  previewTypeLabel?: string | null;
+  /**
    * 053 FR-001 — what a terminal panel's name is rendered from: the live values, the template as
    * text (its parse is memoised here) and the two shortening limits (FR-012). Absent → the terminal
    * is named as before 053, by its window title or its shell, so a caller that does not pass it is
@@ -325,6 +331,9 @@ function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
     const term = usable(panel.config?.term);
     return term === null ? label : `${label}: ${term}`;
   }
+
+  // 054 FR-005 — a preview with no file to be named after is still plainly a preview of its type.
+  if (panel.kind === PREVIEW_KIND) return usable(sources.previewTypeLabel) ?? fallbackTitle(panel);
 
   // Untyped: the placeholder is what the placeholder is FOR.
   return fallbackTitle(panel);

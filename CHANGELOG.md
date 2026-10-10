@@ -30,11 +30,18 @@ What changed in each release of throng, written for someone deciding whether to 
 ## Unreleased
 
 ### Added
+- **Mermaid diagrams in previews** ([#392](https://github.com/Bidthedog/throng/issues/392)): a `mermaid` block in a Markdown preview draws as its diagram, a `.mmd` / `.mermaid` file has its own **Mermaid Preview** and opens as it by default, and each diagram has Fit, Zoom, Zoom 100% and Maximise controls; copying one gives its source as text and a picture as rich content.
+- **Task lists you can tick** ([#462](https://github.com/Bidthedog/throng/issues/462)): clicking a checkbox in a preview changes the file, through the open editor when there is one, as one undoable edit.
+- **Maximise a panel** ([#467](https://github.com/Bidthedog/throng/issues/467)) to fill its tab, from its header, its menu or **Shift+Alt+Enter**.
+- **Outlining submenu** ([#469](https://github.com/Bidthedog/throng/issues/469)) in Markdown editors and previews, with **Collapse / Expand All Inside This Section**.
+- **Preview types**: each previewable format is its own panel type (**Markdown Preview**, **Mermaid Preview**), and Last Active only reuses a preview of the same type.
 - **Terminals named after what they are running** ([#476](https://github.com/Bidthedog/throng/issues/476)): a terminal panel's name shows its running command, its shell and its folder — `ping localhost -t | Git Bash (D:\git\throng)` — and a program that titles itself shows as `node: <its title>`; the name returns to the shell and folder when the command stops.
 - **Terminal title template** setting: reshape every terminal's name from placeholders for the command, program, its title and architecture, the shell, the path or folder, the project and an administrator marker, with **Terminal command length** and **Terminal path length** limits for long commands and deep folders.
 - **Renames and moves reach every layout** ([#397](https://github.com/Bidthedog/throng/issues/397)): renaming or moving a file updates the panels that show it in closed sub-workspaces, unloaded projects and tabs not on screen, so they open the file at its new path next time.
 
 ### Fixed
+- **Restored previews are reused** ([#474](https://github.com/Bidthedog/throng/issues/474)): after a restart, opening a file with **Open previews in** set to Last Active reuses the preview you last used in that tab.
+- **Find in Files follows the default open action** ([#478](https://github.com/Bidthedog/throng/issues/478)): a Markdown result opens its preview, scrolled to the match, when Preview is the default.
 - **Switching project straight after Unload with End Terminals** no longer fails with a timeout or snaps back ([#468](https://github.com/Bidthedog/throng/issues/468)).
 - **Other terminals keep responding while terminals end or start** ([#190](https://github.com/Bidthedog/throng/issues/190)): ending several terminals at once no longer stalls typing, output or other requests.
 - **Terminate all on close leaves nothing running**: a terminal that will not end is forced to, with its running command and console host, and the next launch starts it fresh with its remembered command.
@@ -43,6 +50,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **A terminal that cannot be ended on Unload stays running**, says so once, and reattaches the next time the project loads.
 
 ### Changed
+- **Preview settings** are grouped under **Editor › Previews › Markdown** and **Mermaid**; **Open previews in** is set per preview type, and an existing choice carries over to each.
 - A terminal's working directory is part of its name rather than separate text after it.
 
 ## 1.0.0-alpha9 — 2026-10-04

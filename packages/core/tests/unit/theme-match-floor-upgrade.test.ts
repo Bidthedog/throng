@@ -23,8 +23,8 @@ function v19Theme(name: string): Theme {
 }
 
 describe('the version-19 colours 049 round 2 moved', () => {
-  it('is shipped-defaults version 20', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
+  it('is shipped-defaults version 20 or later (re-pinned: 054 bumps it to 21, then 054 MT-04 to 22)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(22);
   });
 
   it('records only tokens whose shipped value really moved, so the guard can never compare a value with itself', () => {
