@@ -17,7 +17,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `mermaid` 12.1.0 to `packages/ui/package.json` dependencies and install (lockfile updated); route `mermaid` and its transitive packages into a lazy `diagram` chunk in `packages/ui/vite.config.ts` and extend the `fail-on-eager-preview` plugin so an eager import of the chunk fails the build
+- [x] T001 Add `mermaid` 12.1.0 to `packages/ui/package.json` dependencies and install (lockfile updated); route `mermaid` and its transitive packages into a lazy `diagram` chunk in `packages/ui/vite.config.ts` and extend the `fail-on-eager-preview` plugin so an eager import of the chunk fails the build
 - [x] T002 [P] Add five icon tokens `panelMaximise`, `panelRestore`, `diagramFit`, `diagramFullSize`, `diagramFullPane` to `packages/core/src/config/theme.ts` and their copy to `packages/core/src/config/theme-copy.ts`; bump `SHIPPED_DEFAULTS_VERSION` 20 → 21 in `packages/core/src/config/shipped-defaults.ts`, test first in `packages/core/tests/unit/default-themes.test.ts` (every token present in every shipped theme)
 
 ## Phase 2: Foundational
@@ -136,7 +136,7 @@ and `packages/ui/package.json` (preview), `package-lock.json` (preview), `docs/*
 
 ## Phase 12: Polish & cross-cutting
 
-- [ ] T071 [P] Docs: `docs/key-bindings.md` (3 actions with ids; Alt+Shift+Enter terminal note), `docs/preferences.md` (every new/moved leaf with key, the Previews → Markdown / Mermaid layout, Open previews in migration), `docs/quick-start.md` (task lists, diagrams and controls, maximise), `README.md` (one Highlights line), `CHANGELOG.md` unreleased — `docs-currency.test.ts` green
+- [x] T071 [P] Docs: `docs/key-bindings.md` (3 actions with ids; Alt+Shift+Enter terminal note), `docs/preferences.md` (every new/moved leaf with key, the Previews → Markdown / Mermaid layout, Open previews in migration), `docs/quick-start.md` (task lists, diagrams and controls, maximise), `README.md` (one Highlights line), `CHANGELOG.md` unreleased — `docs-currency.test.ts` green
 - [ ] T072 Run the lint, typecheck, unit, component, integration and contract projects locally; fix anything red
 - [ ] T073 Manual test plan `specs/054-markdown-previews/manual-test-plan.md` via planning-manual-tests (groups per user story, Covers FR/SC ids)
 

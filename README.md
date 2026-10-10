@@ -38,7 +38,8 @@ goes away.
 - **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete, and cut, copy and paste between projects.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
-  a heading outline, section folding shared with the editor, and wikilinks.
+  a heading outline, section folding shared with the editor, wikilinks, clickable task lists and
+  Mermaid diagrams.
 - **Clickable links** — paths, URLs and hyperlinks in terminals, editors and previews open where they belong.
 - **Keyboard-first** — every pane, panel and project reachable from one consistent set of chords, all rebindable.
 - **Make it yours** — a visual preferences window, 14 bundled themes, icon packs and live-reloading config files.
