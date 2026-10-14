@@ -82,13 +82,15 @@ function assertSectioned(actions: MenuAction[], where: string): void {
   const groups = groupBySection(actions, (a) => a.section);
 
   // M4/M5 — one divider per boundary, so a single-section menu carries none and an empty menu
-  // carries none either.
-  expect(rendered.filter(isSeparator).length, `${where}: divider count`).toBe(
-    Math.max(0, groups.length - 1),
-  );
+  // carries none either. #483 — a boundary is a change of section, or of `group` inside one.
+  const keyOf = (a: MenuAction): string => `${a.section}|${a.group ?? ''}`;
+  const drawnActions = rendered.filter(isAction);
+  const boundaries = drawnActions.filter((a, i) => i > 0 && keyOf(a) !== keyOf(drawnActions[i - 1]!)).length;
+  expect(boundaries, `${where}: boundaries`).toBeGreaterThanOrEqual(Math.max(0, groups.length - 1));
+  expect(rendered.filter(isSeparator).length, `${where}: divider count`).toBe(boundaries);
 
-  // FR-050 — a divider appears at EVERY section change and NOWHERE else.
-  let previous: MenuSection | null = null;
+  // FR-050 — a divider appears at EVERY section (or group) change and NOWHERE else.
+  let previous: string | null = null;
   let dividerPending = false;
   rendered.forEach((item, index) => {
     if (isSeparator(item)) {
@@ -100,10 +102,10 @@ function assertSectioned(actions: MenuAction[], where: string): void {
     if (previous !== null) {
       expect(
         dividerPending,
-        `${where}: ${previous} → ${item.section} at ${index} (divider ${dividerPending ? 'present' : 'missing'})`,
-      ).toBe(item.section !== previous);
+        `${where}: ${previous} → ${keyOf(item)} at ${index} (divider ${dividerPending ? 'present' : 'missing'})`,
+      ).toBe(keyOf(item) !== previous);
     }
-    previous = item.section;
+    previous = keyOf(item);
     dividerPending = false;
   });
   expect(dividerPending, `${where}: menu ends with a divider`).toBe(false);
@@ -527,6 +529,31 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   { name: 'Editor content menu', build: () => editorMenu('TypeScript') },
   { name: 'Editor content menu — language undetected', build: () => editorMenu(undefined) },
   {
+    // 054 FR-010 — a Markdown document's fold rows, now ONE Outlining submenu in View & state.
+    name: 'Editor content menu — Markdown, with its Outlining submenu (054 FR-010)',
+    build: () =>
+      editorContentMenu({
+        view: {} as EditorView,
+        panelId: 'p1',
+        viewId: 'v1',
+        lineEnding: () => 'lf',
+        wordWrap: { on: true, toggle: noop, chord: 'Alt+Z' },
+        gotoLine: { open: noop, chord: 'Ctrl+G' },
+        languageName: 'Markdown',
+        markdownFold: {
+          section: { slug: 'a', level: 2, collapsed: false },
+          hasSections: true,
+          collapseSection: noop,
+          expandSection: noop,
+          collapseAllInside: noop,
+          expandAllInside: noop,
+          collapseAll: noop,
+          expandAll: noop,
+          chords: {},
+        },
+      }),
+  },
+  {
     name: 'Editor content menu — offering a preview, Synchronise Scrolling on (044 FR-122b)',
     build: () => editorMenuWithPreview(true),
   },
@@ -837,7 +864,8 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
  * 044 US2 fix round 1 (item 5), superseded in part by 047 FR-075 — the Files & Folders file row's Open In
  * flyout (contracts/menus-and-controls.md §5). `shapeOf` reads one level, so the flyout is pinned on its
  * own: the plain Preview row is GONE; Last Preview Panel and New Preview Panel sit after the editor
- * targets and before Terminal, OS File Explorer still first, and the top-level shape untouched.
+ * targets and before Terminal, OS File Explorer still first, and the top-level shape untouched. #483 divides
+ * the flyout into its groups: the OS reveal, the editor targets, the previews, Terminal, Search.
  */
 describe('044/047 — Files & Folders Open In → the preview rows, in each of its four states (FR-003, FR-012, FR-062, FR-075)', () => {
   const flyout = (items: MenuAction[]): MenuAction[] => items.find((i) => i.label === 'Open In')?.submenu ?? [];
@@ -850,11 +878,15 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
     const items = explorerFileWithPreview(explorerAffordance());
     expect(shapeOf(flyout(items))).toEqual([
       'OS File Explorer',
+      '—',
       'Last Active Editor',
       'New Editor',
+      '—',
       'Last Preview Panel',
       'New Preview Panel',
+      '—',
       'Terminal',
+      '—',
       'Search',
     ]);
     expect(flyout(items).map((i) => i.label)).not.toContain('Preview');
@@ -884,11 +916,15 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
     const items = explorerFileWithPreview(affordance);
     expect(shapeOf(flyout(items))).toEqual([
       'OS File Explorer',
+      '—',
       'Last Active Editor',
       'New Editor',
+      '—',
       'Last Preview Panel',
       'New Preview Panel',
+      '—',
       'Terminal',
+      '—',
       'Search',
     ]);
     expect(lastPreview(items)?.disabled).toBe(true);
@@ -901,11 +937,15 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
     const items = explorerFileWithPreview(affordance);
     expect(shapeOf(flyout(items))).toEqual([
       'OS File Explorer',
+      '—',
       'Last Active Editor',
       'New Editor',
+      '—',
       'Last Preview Panel',
       'New Preview Panel',
+      '—',
       'Terminal',
+      '—',
       'Search',
     ]);
     expect(lastPreview(items)?.disabled).toBe(true);
@@ -916,7 +956,7 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
     const affordance = explorerAffordance({ path: 'D:/project/notes.txt' });
     expect(affordance.state).toBe('absent');
     const items = explorerFileWithPreview(affordance);
-    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', 'Last Active Editor', 'New Editor', 'Terminal', 'Search']);
+    expect(shapeOf(flyout(items))).toEqual(['OS File Explorer', '—', 'Last Active Editor', 'New Editor', '—', 'Terminal', '—', 'Search']);
   });
 
   it('the top-level file row is the same shape in every state — Preview lives only in the flyout', () => {

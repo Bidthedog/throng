@@ -69,8 +69,8 @@ describe('the four fold icon tokens are described once, each with its own copy',
 });
 
 describe('shipped-defaults version 17 — the fold icon tokens reach existing installs (research R10)', () => {
-  it('is version 17 or later (re-pinned: 047 round 2 bumps it to 18 for FR-074, then 049 to 19, then 20)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
+  it('is version 17 or later (re-pinned: 047 round 2 bumps it to 18 for FR-074, then 049 to 19, then 20, then 054 to 21)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(22);
   });
 
   it('fills all four tokens into a version-16 built-in theme', () => {

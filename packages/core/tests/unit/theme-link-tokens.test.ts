@@ -196,7 +196,7 @@ describe('shipped-defaults version 11 — the link hint tokens reach existing in
     // `theme-icons-047.test.ts`.
     // Re-pinned: 047's second round bumps it to 18 for `searchMatchBorder` (FR-074).
     // Re-pinned: 049 bumps it to 19 for the occurrence and inactive-selection colour tokens.
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(20);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(22);
   });
 
   it('fills all three tokens into a version-10 built-in theme', () => {

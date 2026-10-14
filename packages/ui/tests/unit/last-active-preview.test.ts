@@ -13,6 +13,8 @@ import {
   __resetLastActivePreview,
   candidateFor,
   recordLastActivePreview,
+  seedLastActivePreview,
+  subscribeLastActivePreview,
 } from '../../src/renderer/preview/last-active-preview.js';
 
 const ALIVE = (): ((panelId: string) => boolean) => () => true;
@@ -74,5 +76,61 @@ describe('recordLastActivePreview / candidateFor', () => {
     recordLastActivePreview('t1', 'p1'); // stands in for a pointerdown
     recordLastActivePreview('t1', 'p2'); // stands in for a focus
     expect(candidateFor('t1', ALIVE())).toBe('p2');
+  });
+});
+
+/** 054 T009 — per-type Last Active (FR-007) and a recency that survives a restart (FR-001, FR-002, R1). */
+describe('054 — the provider filter (FR-007)', () => {
+  const providers: Record<string, string> = { md1: 'markdown', mmd: 'mermaid', md2: 'markdown' };
+  const of = (id: string): string | undefined => providers[id];
+
+  it('a candidate counts only when its current file is the same provider\'s', () => {
+    __resetLastActivePreview();
+    recordLastActivePreview('t1', 'md1');
+    recordLastActivePreview('t1', 'mmd'); // most recent, but a Mermaid preview
+    expect(candidateFor('t1', ALIVE(), { id: 'markdown', of })).toBe('md1');
+    expect(candidateFor('t1', ALIVE(), { id: 'mermaid', of })).toBe('mmd');
+  });
+
+  it('no same-provider candidate is null — never another provider\'s preview', () => {
+    __resetLastActivePreview();
+    recordLastActivePreview('t1', 'mmd');
+    expect(candidateFor('t1', ALIVE(), { id: 'markdown', of })).toBeNull();
+  });
+
+  it('still prunes by liveness first', () => {
+    __resetLastActivePreview();
+    recordLastActivePreview('t1', 'md1');
+    recordLastActivePreview('t1', 'md2');
+    expect(candidateFor('t1', (id) => id !== 'md2', { id: 'markdown', of })).toBe('md1');
+  });
+});
+
+describe('054 — seeded from the layout, reported back to it (FR-001, R1)', () => {
+  it('seedLastActivePreview gives a restored tab its order, most recent first', () => {
+    __resetLastActivePreview();
+    seedLastActivePreview('t1', ['p2', 'p1']);
+    expect(candidateFor('t1', ALIVE())).toBe('p2');
+    expect(candidateFor('t1', (id) => id !== 'p2')).toBe('p1');
+  });
+
+  it('a seed replaces whatever the tab held', () => {
+    __resetLastActivePreview();
+    recordLastActivePreview('t1', 'old');
+    seedLastActivePreview('t1', ['p1']);
+    expect(candidateFor('t1', ALIVE())).toBe('p1');
+    expect(candidateFor('t1', (id) => id !== 'p1')).toBeNull();
+  });
+
+  it('recording reports the new order to every subscriber; a seed reports nothing (it came FROM the layout)', () => {
+    __resetLastActivePreview();
+    const heard: [string, string[]][] = [];
+    const off = subscribeLastActivePreview((tabId, ids) => heard.push([tabId, ids]));
+    seedLastActivePreview('t1', ['p1']);
+    recordLastActivePreview('t1', 'p2');
+    recordLastActivePreview('t1', 'p2'); // already first: the order did not change
+    off();
+    recordLastActivePreview('t1', 'p1');
+    expect(heard).toEqual([['t1', ['p2', 'p1']]]);
   });
 });

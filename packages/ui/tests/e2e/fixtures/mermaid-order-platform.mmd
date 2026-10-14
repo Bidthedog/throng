@@ -1,0 +1,126 @@
+%% Order fulfilment platform — end-to-end request flow
+flowchart LR
+    %% ---------- Clients ----------
+    subgraph Clients["Clients"]
+        direction TB
+        web["Web SPA<br/>(React)"]
+        mobile["Mobile App<br/>(iOS / Android)"]
+        partner["Partner API<br/>Consumers"]
+    end
+
+    %% ---------- Edge ----------
+    subgraph Edge["Edge Layer"]
+        direction TB
+        cdn[("CDN<br/>static assets")]
+        waf{{"WAF"}}
+        gw["API Gateway<br/>rate limit + auth"]
+    end
+
+    %% ---------- Identity ----------
+    subgraph Identity["Identity"]
+        idp["OIDC Provider"]
+        tokens[("Token<br/>Cache")]
+    end
+
+    %% ---------- Core services ----------
+    subgraph Core["Core Services"]
+        direction TB
+        catalog["Catalog Service"]
+        cart["Cart Service"]
+        order["Order Service"]
+        payment["Payment Service"]
+        inventory["Inventory Service"]
+        shipping["Shipping Service"]
+    end
+
+    %% ---------- Messaging ----------
+    subgraph Bus["Event Backbone"]
+        direction TB
+        topicOrders>"orders.*"]
+        topicPay>"payments.*"]
+        topicStock>"inventory.*"]
+        dlq[["Dead Letter Queue"]]
+    end
+
+    %% ---------- Data ----------
+    subgraph Data["Data Stores"]
+        direction TB
+        pg[("PostgreSQL<br/>orders")]
+        mongo[("MongoDB<br/>catalog")]
+        redis[("Redis<br/>carts")]
+        search[("OpenSearch<br/>product index")]
+    end
+
+    %% ---------- External ----------
+    subgraph External["Third Parties"]
+        psp(["Payment Provider"])
+        carrier(["Carrier APIs"])
+        email(["Email / SMS"])
+    end
+
+    %% ---------- Observability ----------
+    subgraph Obs["Observability"]
+        otel["OTel Collector"]
+        metrics[("Metrics")]
+        logs[("Logs")]
+        traces[("Traces")]
+    end
+
+    %% Client -> edge
+    web --> cdn
+    web & mobile & partner --> waf
+    waf --> gw
+    gw -. "validate JWT" .-> idp
+    idp --- tokens
+
+    %% Edge -> services
+    gw --> catalog
+    gw --> cart
+    gw --> order
+
+    %% Service -> data
+    catalog --> mongo
+    catalog -- "sync" --> search
+    cart --> redis
+    order --> pg
+
+    %% Orchestration
+    order == "OrderPlaced" ==> topicOrders
+    topicOrders --> payment
+    topicOrders --> inventory
+    payment <--> psp
+    payment == "PaymentCaptured" ==> topicPay
+    topicPay --> order
+    topicPay --> shipping
+    inventory == "StockReserved" ==> topicStock
+    topicStock --> order
+    shipping <--> carrier
+    shipping --> email
+
+    %% Failure path
+    topicOrders -. "retries exhausted" .-> dlq
+    topicPay -. "retries exhausted" .-> dlq
+
+    %% Telemetry
+    Core -.-> otel
+    gw -.-> otel
+    otel --> metrics & logs & traces
+
+    %% ---------- Styling ----------
+    classDef client fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef edge fill:#fff3e0,stroke:#ef6c00,color:#e65100
+    classDef svc fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef store fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c
+    classDef ext fill:#eceff1,stroke:#455a64,color:#263238,stroke-dasharray: 4 3
+    classDef evt fill:#fffde7,stroke:#f9a825,color:#f57f17
+    classDef danger fill:#ffebee,stroke:#c62828,color:#b71c1c
+
+    class web,mobile,partner client
+    class cdn,waf,gw edge
+    class catalog,cart,order,payment,inventory,shipping,idp svc
+    class pg,mongo,redis,search,tokens,metrics,logs,traces store
+    class psp,carrier,email ext
+    class topicOrders,topicPay,topicStock evt
+    class dlq danger
+
+    linkStyle default stroke:#607d8b,stroke-width:1.5px

@@ -232,8 +232,14 @@ describe('an editor where Preview is not the answer (FR-050, FR-062)', () => {
  * The routes that are NOT refined
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('Find in Files and Open In always open an editor (FR-054, FR-055)', () => {
+describe('Find in Files\' editor route and Open In always open an editor (FR-054 as superseded, FR-055)', () => {
   /*
+   * 054 FR-030 supersedes FR-054: a result whose file's default open action is Preview now opens the
+   * PREVIEW, decided where the result opener is registered (`find-in-files-chrome.tsx`), and proved in
+   * `find-in-files-open-preview.test.ts`. What stays true, and is pinned below, is that `openResultRow` is
+   * the EDITOR route — the one an Editor default takes, and the one a match the preview cannot show falls
+   * back to (FR-032) — and that it never reads the default open action itself.
+   *
    * Neither route reads the default open action at all — proved STRUCTURALLY, not by racing a live
    * setting. `openResultRow` and `performOpenIn` (below) never touch `route` or `defaultOpenActionFor`;
    * they call `openFileInTab` directly, as the module doc above says (`openFromTree`/`openFromQuickOpen`

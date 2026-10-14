@@ -369,9 +369,9 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     recordLastActivePreview('t1', 'pv');
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
     const flyout = await openInFlyout(user, tree, 'README.md');
-    // The header title of a standalone preview is `<file stem> - Preview` (044 FR-031); the item names the
+    // The header title of a standalone preview is `<file name> - Preview` (054 FR-005a); the item names the
     // panel without the suffix, since it already says "Preview Panel" (FR-080).
-    const row = within(flyout).getByTestId('menu-item-Last Preview Panel (other)');
+    const row = within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)');
     expect(isDisabled(row)).toBe(false);
     expect(within(flyout).queryByTestId('menu-item-Last Preview Panel')).toBeNull();
   });
@@ -392,11 +392,24 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(within(flyout).getByTestId(`menu-item-Last Preview Panel (${shown})`)).toBeInTheDocument();
   });
 
+  /*
+   * 054 FR-007 (research R1) — Last Active reuse is per panel TYPE, and this row names what an open would
+   * reuse: a Markdown file never replaces a Mermaid preview, so with only a Mermaid preview standing in the
+   * visible tab there is nothing for README.md to reuse.
+   */
+  it('is disabled and unnamed when the visible tab’s only preview is of another type (054 FR-007)', async () => {
+    recordLastActivePreview('t1', 'pv');
+    const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/flow.mmd`) });
+    const flyout = await openInFlyout(user, tree, 'README.md');
+    const row = within(flyout).getByTestId('menu-item-Last Preview Panel');
+    expect(isDisabled(row)).toBe(true);
+  });
+
   it('a name within 16 characters shows whole, without the " - Preview" suffix (FR-080)', async () => {
     recordLastActivePreview('t1', 'pv');
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
     const flyout = await openInFlyout(user, tree, 'README.md');
-    expect(within(flyout).getByTestId('menu-item-Last Preview Panel (other)')).toBeInTheDocument();
+    expect(within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)')).toBeInTheDocument();
   });
 
   it('sends the explicit target override — never the setting — for each row', async () => {
@@ -404,7 +417,7 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
     const flyout = await openInFlyout(user, tree, 'README.md');
 
-    await user.click(within(flyout).getByTestId('menu-item-Last Preview Panel (other)'));
+    await user.click(within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)'));
     expect(opened.at(-1)).toEqual({
       absPath: `${ROOT_FOLDER}/README.md`,
       projectId: PROJECT_ID,

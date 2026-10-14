@@ -107,7 +107,8 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
 
     // 043 T236 — the request names the PANEL's root too: in a sub-workspace window the window has
     // none of its own, so the panel's is the only root the file can be resolved against.
-    expect(opened).toEqual([{ relPath: 'src/app.ts', from: 400, to: 406, projectRoot: PROJECT_ROOT }]);
+    // 054 FR-031 — the request also carries the match's line and text, so a preview can reveal it.
+    expect(opened).toEqual([{ relPath: 'src/app.ts', from: 400, to: 406, line: 8, text: 'needle', projectRoot: PROJECT_ROOT }]);
   });
 
   it('a single click opens nothing — stepping through a list is not a decision', () => {
@@ -140,7 +141,8 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
 
     // 043 T236 — the request names the PANEL's root too: in a sub-workspace window the window has
     // none of its own, so the panel's is the only root the file can be resolved against.
-    expect(opened).toEqual([{ relPath: 'src/app.ts', from: 400, to: 406, projectRoot: PROJECT_ROOT }]);
+    // 054 FR-031 — the request also carries the match's line and text, so a preview can reveal it.
+    expect(opened).toEqual([{ relPath: 'src/app.ts', from: 400, to: 406, line: 8, text: 'needle', projectRoot: PROJECT_ROOT }]);
   });
 
   it('Enter on a group HEADING collapses it rather than opening anything', () => {

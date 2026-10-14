@@ -22,7 +22,15 @@
  */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { registerBlockRenderer, type BlockRendererEntry } from '../../src/renderer/preview/blocks/block-renderers.js';
+import { createHtmlExporter } from '../../src/renderer/preview/providers/markdown/sanitise.js';
+
+/** 054 T040 — jsdom has no canvas: the PNG rasteriser is injected as this fixed image. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const rasterise = vi.hoisted(() => vi.fn());
+vi.mock('../../src/renderer/preview/diagram/rasterise.js', () => ({ rasteriseSvg: rasterise }));
+rasterise.mockImplementation(() => Promise.resolve(PNG));
 import { createPreviewProviderRegistry } from '@throng/core';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
 import { applyTableLayout } from '../../src/renderer/preview/table-layout.js';
@@ -66,8 +74,8 @@ function clearSelection(): void {
 }
 
 /** Open the body menu over plain text (not a link). */
-async function openBodyMenu(): Promise<void> {
-  fireEvent.contextMenu(screen.getByText('Release notes'));
+async function openBodyMenu(over = 'Release notes'): Promise<void> {
+  fireEvent.contextMenu(screen.getByText(over));
   await screen.findByTestId('menu-item-Select All');
 }
 
@@ -623,5 +631,91 @@ describe('a table whose hyphenated tokens are held whole (T075, FR-073, R15)', (
     expect(after.html).not.toMatch(/\sclass=/);
     // Find reads the body's text: the same characters, span or no span.
     expect(markdown().textContent).toBe(textBefore);
+  });
+});
+
+/*
+ * 054 T040 — a diagram in the copied selection (FR-049a, research R5 "Copy"). The renderer is a fake
+ * registered through the block seam, and the rasteriser is mocked to a fixed data URI: jsdom has no
+ * canvas, and what is under test is WHERE the image and the source land, and that the export profile
+ * admits that one data-URI shape and nothing else.
+ */
+describe('a diagram in the selection (054 FR-049a)', () => {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const fakeEntry: BlockRendererEntry = {
+    lang: 'mermaid',
+    load: () =>
+      Promise.resolve({
+        render: () => {
+          const svg = document.createElementNS(SVG_NS, 'svg') as SVGSVGElement;
+          svg.setAttribute('viewBox', '0 0 100 50');
+          const text = document.createElementNS(SVG_NS, 'text');
+          text.textContent = 'NodeLabel';
+          svg.appendChild(text);
+          return Promise.resolve(svg);
+        },
+      }),
+  };
+  const DIAGRAM_DOC = ['Before the diagram.', '', '```mermaid', 'graph TD', '  A --> B', '```', '', 'After the diagram.', ''].join('\n');
+  let restore: (() => void) | null = null;
+
+  async function mountDiagram(): Promise<void> {
+    restore = registerBlockRenderer(fakeEntry);
+    m = await mountMarkdownPreview(DIAGRAM_DOC);
+    await screen.findByText('Before the diagram.', {}, COLD);
+    await waitFor(() => expect(markdown().querySelector('.preview-diagram-host svg')).toBeTruthy());
+  }
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+    rasterise.mockClear();
+  });
+
+  it('plain text carries the diagram as a fenced mermaid block of its source, in place', async () => {
+    await mountDiagram();
+    selectWhole(markdown());
+    await openBodyMenu('Before the diagram.');
+    fireEvent.click(item('Copy as Plain Text'));
+
+    await waitFor(() => expect(m!.clipboardWrite).toHaveBeenCalledTimes(1));
+    const text = (m!.clipboardWrite.mock.calls[0] as unknown as [{ text: string }])[0].text;
+    expect(text).toMatch(/Before the diagram\.[\s\S]*```mermaid\ngraph TD\n {2}A --> B\n```[\s\S]*After the diagram\./);
+    expect(text).not.toContain('NodeLabel');
+    expect(text).not.toMatch(/Fit diagram|Zoom in/);
+  });
+
+  it('rich text carries ONE png data-URI image in place, and its text half the fenced source', async () => {
+    await mountDiagram();
+    selectWhole(markdown());
+    await openBodyMenu('Before the diagram.');
+    fireEvent.click(item('Copy as Rich Text'));
+
+    await waitFor(() => expect(m!.writeRich).toHaveBeenCalledTimes(1));
+    const html = richHtml();
+    const images = html.match(/<img[^>]*>/g) ?? [];
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain(`src="${PNG}"`);
+    expect(html.indexOf('Before the diagram.')).toBeLessThan(html.indexOf('<img'));
+    expect(html.indexOf('<img')).toBeLessThan(html.indexOf('After the diagram.'));
+    expect(html).not.toMatch(/<svg|NodeLabel|data-diagram/);
+    expect(richText()).toContain('```mermaid\ngraph TD');
+    expect(rasterise).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the export profile admits a diagram image and no other data URI (054 FR-049a)', () => {
+  it('keeps a png data-URI image the copy put in, and drops any other image source', () => {
+    const exporter = createHtmlExporter(window);
+    const fragment = document.createRange().createContextualFragment(
+      `<p>a</p><img data-throng-diagram-image="" src="${PNG}" alt="Diagram">` +
+        '<img data-throng-diagram-image="" src="data:image/svg+xml;base64,PHN2Zz4=" alt="x">' +
+        '<img data-throng-diagram-image="" src="data:image/png;base64,AAA$<script>" alt="y">',
+    );
+    const html = exporter(fragment);
+    const images = html.match(/<img[^>]*>/g) ?? [];
+    expect(images).toHaveLength(1);
+    expect(images[0]).toContain(`src="${PNG}"`);
+    expect(html).not.toMatch(/svg\+xml|script|data-throng/);
   });
 });

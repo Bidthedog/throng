@@ -1,6 +1,7 @@
 /**
- * 044 T074 — a PARENTED preview's header: its title follows the parent editor, and it wears the
- * source document's unsaved dot (FR-031, FR-032, FR-040, FR-041, FR-043).
+ * 044 T074 — a PARENTED preview's header: its title names the file (054 FR-005a, which superseded the
+ * parent-follows rule of 044 FR-031), and it wears the source document's unsaved dot (FR-032, FR-040,
+ * FR-041, FR-043).
  *
  * ══ WHERE THE PARENT'S TITLE COMES FROM ══
  *
@@ -24,7 +25,6 @@ import {
   collectPanels,
   createDefaultLayout,
   createPreviewProviderRegistry,
-  editorAutoTitle,
   type Panel,
   type PreviewAttachRequest,
   type PreviewUpdate,
@@ -182,34 +182,37 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
 });
 
-describe('the title follows the parent editor’s displayed name (FR-031)', () => {
-  it('reads `<parent title> - Preview` while parented', async () => {
+describe('the title names the file, parented or not (054 FR-005a, superseding 044 FR-031)', () => {
+  it('reads `<file name> - Preview`, extension included, whatever the parent editor is called', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'My Notes' } }));
-    expect(title(id).textContent).toBe('My Notes - Preview');
+    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
   });
 
-  it('updates when the parent’s title changes — a rename of the editor, forwarded by main', async () => {
+  it('a rename of the parent editor leaves it alone', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'notes' } }));
-    expect(title(id).textContent).toBe('notes - Preview');
-
     push(update({ revision: 3, content: null, parent: { panelId: 'ed', title: 'Release plan' } }));
-    expect(title(id).textContent).toBe('Release plan - Preview');
+    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
   });
 
-  it('falls back to the standalone form when the parent goes away (FR-013b)', async () => {
+  it('is the same once the parent goes away (FR-013b)', async () => {
     const { id, push } = await mountPreview();
     push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'Release plan' } }));
     push(update({ revision: 3, content: null, parent: null }));
-    expect(title(id).textContent).toBe(`${editorAutoTitle(FILE)} - Preview`);
+    expect(title(id).textContent).toBe('notes.prvtxt - Preview');
+  });
+
+  it('hovering the header shows the file’s full path', async () => {
+    const { id } = await mountPreview();
+    expect(screen.getByTestId(`panel-handle-${id}`)).toHaveAttribute('title', 'D:\\proj\\notes.prvtxt');
   });
 });
 
-describe('a long parent name is shortened in its NAME part only (FR-032)', () => {
+describe('a long file name is shortened in its NAME part only (FR-032)', () => {
   it('marks the name truncated and keeps " - Preview" whole', async () => {
     const { id, push } = await mountPreview();
-    push(update({ revision: 2, content: null, parent: { panelId: 'ed', title: 'P'.repeat(120) } }));
+    push(update({ revision: 2, content: null, filePath: `D:/proj/${'P'.repeat(120)}.md` }));
 
     const t = title(id);
     const name = t.querySelector('.panel-box__title-name');

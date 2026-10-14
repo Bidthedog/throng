@@ -7,7 +7,8 @@ import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
 /**
  * 047 T017 — the four new settings this spec adds, none of which core itself consumes (Principle X).
  *
- * `editor.previews.openTarget`, `editor.previews.providers.markdown.gutter`,
+ * `editor.previews.openTarget` (054 FR-051: now per provider — checked as
+ * `editor.previews.providers.markdown.openTarget`), `editor.previews.providers.markdown.gutter`,
  * `editor.previews.providers.markdown.headingJumpMs` and `editor.markdownSectionsOpen`. Every one of
  * them is a RENDERER concern — where a standalone preview opens (`open-preview.ts`, US2), the preview
  * gutter and heading-jump scroll (the Markdown body, US3/US4/US6), and a document's initial fold state
@@ -41,15 +42,19 @@ const FOLD_SECTION = /\b(?:fold|markdownSectionsOpen)\b/;
 /** The four keys 047 adds, with the behaviour each is supposed to move. */
 const NEW_KEYS = [
   {
-    key: 'editor.previews.openTarget',
+    // 054 FR-051 — 047's top-level `editor.previews.openTarget` is retired; the setting now lives on
+    // each text provider, so the shipped Markdown copy stands in for it here.
+    key: 'editor.previews.providers.markdown.openTarget',
     governs:
       'where a STANDALONE preview opens — reuse the last active preview panel in the visible tab, or always open a new one (FR-015a)',
     section: PREVIEW_SECTION,
     // OVERRIDE: `openTarget` alone collides with the PRE-EXISTING, unrelated `editor.openTarget`
     // (023, the editor tab-reuse target) — a bare-leaf match would credit every one of that
-    // setting's many readers to this one. `previews.openTarget` (however it is spelled: `.`, `?.`,
-    // destructured off `previews`) is the shape that actually reads THIS key.
-    leafPattern: /previews\??\.\s*openTarget\b|\{[^}]*\bopenTarget\b[^}]*\}\s*=\s*(?:\w+\.)?previews\b/,
+    // setting's many readers to this one.
+    // 054 FR-051 — the provider leaf's one production read is a call to `previewOpenTargetFor`, which
+    // resolves the file's provider and reads its `openTarget`. The old `previews.openTarget` shape
+    // now matches only doc comments naming the retired key, which would pass this guard dishonestly.
+    leafPattern: /\bpreviewOpenTargetFor\(/,
   },
   {
     key: 'editor.previews.providers.markdown.gutter',

@@ -168,3 +168,47 @@ describe('an empty subgroup string is no subgroup (FR-036c)', () => {
     expect(keys(editor.items)).toEqual(['e.blank', 'e.loose']);
   });
 });
+
+/*
+ * 054 FR-050, FR-050a (research R9) — a third level, `subsection`, under a subgroup. 040 FR-036–036c
+ * apply unchanged one level down: first-appearance order, a subgroup's unsectioned fields first, and an
+ * all-filtered subsection never constructed.
+ */
+describe('subsections nest inside their subgroup (054 FR-050a)', () => {
+  const sub = (key: string, subsection?: string): FieldDescriptor => ({
+    ...field(key, 'Editor', 'Previews'),
+    ...(subsection === undefined ? {} : { subsection }),
+  });
+
+  it('puts a subgroup’s unsectioned fields first, then its subsections in first-appearance order', () => {
+    const [editor] = groupDescriptors([
+      sub('md.enabled', 'Markdown'),
+      sub('p.delay'),
+      sub('mm.enabled', 'Mermaid'),
+      sub('md.gutter', 'Markdown'),
+      sub('p.copy'),
+    ]);
+    const [previews] = editor.subgroups;
+    expect(keys(previews.items)).toEqual(['p.delay', 'p.copy']);
+    expect(previews.subsections.map((s) => s.subsection)).toEqual(['Markdown', 'Mermaid']);
+    expect(keys(previews.subsections[0].items)).toEqual(['md.enabled', 'md.gutter']);
+    expect(keys(previews.subsections[1].items)).toEqual(['mm.enabled']);
+  });
+
+  it('constructs no subsection whose fields were all filtered out', () => {
+    const [editor] = groupDescriptors([sub('p.delay'), sub('mm.enabled', 'Mermaid')].filter((d) => d.key !== 'mm.enabled'));
+    expect(editor.subgroups[0].subsections).toEqual([]);
+  });
+
+  it('keeps a subgroup holding only subsections, with no unsectioned fields', () => {
+    const [editor] = groupDescriptors([sub('md.enabled', 'Markdown')]);
+    expect(editor.subgroups[0].items).toEqual([]);
+    expect(keys(editor.subgroups[0].subsections[0].items)).toEqual(['md.enabled']);
+  });
+
+  it('treats `subsection: ""` as absent, as `subgroup: ""` is', () => {
+    const [editor] = groupDescriptors([sub('p.delay', '')]);
+    expect(keys(editor.subgroups[0].items)).toEqual(['p.delay']);
+    expect(editor.subgroups[0].subsections).toEqual([]);
+  });
+});

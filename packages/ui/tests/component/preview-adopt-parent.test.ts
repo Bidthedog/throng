@@ -17,7 +17,7 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { editorAutoTitle } from '@throng/core';
+import { fileNameOf } from '@throng/core';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
 import { COLD, README, mountMarkdownPreview, previewUpdate, type MountedPreview } from './helpers/mount-preview-panel.js';
 
@@ -32,7 +32,7 @@ async function mountStandalone(): Promise<MountedPreview> {
 const panel = (): MountedPreview => m!;
 const title = (): string => screen.getByTestId(`panel-title-${panel().id}`).textContent ?? '';
 const dot = (): HTMLElement | null => screen.queryByTestId(`panel-unsaved-${panel().id}`);
-const STANDALONE_TITLE = `${editorAutoTitle(README)} - Preview`;
+const STANDALONE_TITLE = `${fileNameOf(README)} - Preview`;
 
 async function headerMenuLabels(): Promise<string[]> {
   fireEvent.contextMenu(screen.getByTestId(`panel-handle-${panel().id}`));
@@ -74,13 +74,13 @@ describe('becoming parented, in place (FR-013a)', () => {
     expect(document.querySelectorAll('.panel-box')).toHaveLength(panelsBefore);
   });
 
-  it('takes the parent editor’s name in its title (FR-031)', async () => {
+  it('keeps naming the file in its title, not the parent editor (054 FR-005a)', async () => {
     await mountStandalone();
     expect(title()).toBe(STANDALONE_TITLE);
 
     panel().push(previewUpdate({ panelId: panel().id, revision: 2, content: null, parent: parentOf }));
 
-    expect(title()).toBe('Release notes - Preview');
+    expect(title()).toBe(STANDALONE_TITLE);
   });
 
   it('wears the source document’s unsaved dot exactly while main says dirty (FR-040)', async () => {

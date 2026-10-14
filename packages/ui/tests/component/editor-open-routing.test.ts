@@ -61,6 +61,7 @@ import { useUnsavedOpenRequest, type UnsavedOpenChoice } from '../../src/rendere
 import { openFileInTab, openFileInPanel, EditorOpenListener } from '../../src/renderer/editor/editor-open.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { __resetPanelFlash, panelFlashRequest } from '../../src/renderer/workspace/panel-flash.js';
+import { __resetMaximise, getMaximiseStack, maximisePanel } from '../../src/renderer/workspace/maximise-store.js';
 
 const PROJECT = 'project-1';
 const FILE_A = 'D:/proj/a.txt';
@@ -984,5 +985,57 @@ describe('a refused open creates no panel, and still tells the user (FR-013, FR-
     });
 
     expect(editorPanels(live()).length, 'a missing file was treated as a refusal').toBe(before + 1);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * Focus Mode — option (a), manual test decision 2026-10-11
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('opening a file from the tree while an editor is in Focus Mode', () => {
+  /** e1 | e2 in one tab, e1 the tab's last active editor. */
+  async function twoEditors(): Promise<{ tabId: string; e1: string; e2: string; open1: ReturnType<typeof vi.fn>; open2: ReturnType<typeof vi.fn> }> {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    const e1 = panelsIn(ws)[0].id;
+    let e2 = '';
+    act(() => {
+      e2 = live().splitPanel(tabId, e1, 'right') ?? '';
+    });
+    act(() => live().setPanelType(e1, 'editor', { filePath: FILE_A }));
+    act(() => live().setPanelType(e2, 'editor', { filePath: FILE_A.replace('a.txt', 'c.txt') }));
+    const { openFile: open1 } = asEditor(e1);
+    const { openFile: open2 } = asEditor(e2);
+    setLastActiveEditor(tabId, e1);
+    expect(editorPanels(live())).toHaveLength(2);
+    return { tabId, e1, e2, open1, open2 };
+  }
+
+  afterEach(() => __resetMaximise());
+
+  it('opens it IN the maximised editor and stays in Focus Mode', async () => {
+    const { tabId, e2, open1, open2 } = await twoEditors();
+    act(() => maximisePanel(tabId, e2));
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_B);
+    });
+    expect(open2).toHaveBeenCalledWith(FILE_B);
+    expect(open1).not.toHaveBeenCalled();
+    expect(getMaximiseStack(tabId).map((t) => t.panelId)).toEqual([e2]);
+  });
+
+  it('with another kind maximised, the open restores the tab so the file is seen (control)', async () => {
+    const { tabId, e1, open1 } = await twoEditors();
+    let term = '';
+    act(() => {
+      term = live().splitPanel(tabId, e1, 'down') ?? '';
+    });
+    act(() => maximisePanel(tabId, term));
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_B);
+    });
+    expect(open1).toHaveBeenCalledWith(FILE_B);
+    expect(getMaximiseStack(tabId)).toEqual([]);
   });
 });

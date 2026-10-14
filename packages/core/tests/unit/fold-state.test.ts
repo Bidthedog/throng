@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   collapseAll,
+  canCollapseWithin,
+  canExpandWithin,
+  collapseWithin,
   expandAll,
+  expandWithin,
   initialFold,
   isCollapsed,
   prune,
@@ -116,6 +120,64 @@ const records: HeadingRecord[] = [
   { level: 1, text: 'B', slug: 'b', line: 3 },
 ];
 const tree = buildSymbolTree(records);
+
+/**
+ * 054 T049 — Collapse / Expand All Inside This Section (FR-013). Collapse folds the descendants only;
+ * Expand opens the section itself too (manual test change request, 2026-10-11).
+ */
+describe('collapseWithin / expandWithin (054 FR-013)', () => {
+  it('collapses every section nested under the section, individually, leaving the section itself and the rest', () => {
+    const s = collapseWithin(initialFold('expanded'), tree, 'a');
+    expect(['a', 'a-1', 'a-1-i'].map((slug) => isCollapsed(s, slug))).toEqual([false, true, true]);
+    expect(isCollapsed(s, 'b')).toBe(false);
+  });
+
+  it('leaves an already-collapsed target collapsed', () => {
+    const s = collapseWithin(initialFold('collapsed'), tree, 'a');
+    expect(isCollapsed(s, 'a')).toBe(true);
+  });
+
+  it('expands a collapsed target along with everything nested under it', () => {
+    const s = expandWithin(initialFold('collapsed'), tree, 'a');
+    expect(['a', 'a-1', 'a-1-i'].map((slug) => isCollapsed(s, slug))).toEqual([false, false, false]);
+    expect(isCollapsed(s, 'b')).toBe(true);
+  });
+
+  it('expands the section and every section nested under it, leaving the rest', () => {
+    const s = expandWithin(initialFold('collapsed'), tree, 'a-1');
+    expect(['a-1', 'a-1-i'].map((slug) => isCollapsed(s, slug))).toEqual([false, false]);
+    expect(isCollapsed(s, 'a')).toBe(true);
+    expect(isCollapsed(s, 'b')).toBe(true);
+  });
+
+  it('a leaf has nothing inside, so collapsing within it changes nothing', () => {
+    const s0 = initialFold('expanded');
+    expect(collapseWithin(s0, tree, 'b').flipped).toEqual([]);
+  });
+
+  it('canCollapseWithin is true while a nested section is expanded, false once all are collapsed or there are none', () => {
+    const s0 = initialFold('expanded');
+    expect(canCollapseWithin(s0, tree, 'a')).toBe(true);
+    expect(canCollapseWithin(collapseWithin(s0, tree, 'a'), tree, 'a')).toBe(false);
+    expect(canCollapseWithin(s0, tree, 'b'), 'a leaf has nothing inside').toBe(false);
+    // The target's own state does not count: collapsing within it never touches it.
+    expect(canCollapseWithin(setSection(collapseWithin(s0, tree, 'a'), 'a', true), tree, 'a')).toBe(false);
+  });
+
+  it('canExpandWithin is true while the section or one under it is collapsed, false once all are expanded', () => {
+    const s0 = initialFold('expanded');
+    expect(canExpandWithin(s0, tree, 'a')).toBe(false);
+    expect(canExpandWithin(setSection(s0, 'a-1-i', true), tree, 'a')).toBe(true);
+    expect(canExpandWithin(setSection(s0, 'a', true), tree, 'a'), 'a collapsed target opens too').toBe(true);
+    expect(canExpandWithin(expandWithin(initialFold('collapsed'), tree, 'a'), tree, 'a')).toBe(false);
+  });
+
+  it('an unknown slug changes nothing', () => {
+    const s0 = initialFold('expanded');
+    expect(collapseWithin(s0, tree, 'zz')).toBe(s0);
+    expect(expandWithin(s0, tree, 'zz')).toBe(s0);
+  });
+});
 
 describe('revealing — expands a section and its ancestors (FR-040)', () => {
   it('expands the target slug and every ancestor, leaving unrelated slugs alone', () => {
