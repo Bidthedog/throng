@@ -20,16 +20,24 @@ vi.mock('electron', () => ({
 
 const { registerClipboardIpc } = await import('../../src/main/clipboard-ipc.js');
 
-function fakeClipboard(): { clipboard: IClipboard; richCalls: Array<{ text: string; html: string }> } {
+function fakeClipboard(): {
+  clipboard: IClipboard;
+  richCalls: Array<{ text: string; html: string }>;
+  imageCalls: Array<{ png: Uint8Array; html: string }>;
+} {
   const richCalls: Array<{ text: string; html: string }> = [];
+  const imageCalls: Array<{ png: Uint8Array; html: string }> = [];
   const clipboard: IClipboard = {
     writeText: () => {},
     async writeRich(entry) {
       richCalls.push(entry);
     },
+    async writeImage(entry) {
+      imageCalls.push(entry);
+    },
     readText: () => '',
   };
-  return { clipboard, richCalls };
+  return { clipboard, richCalls, imageCalls };
 }
 
 /** Invoke a registered channel exactly as the preload bridge would. */
@@ -78,5 +86,35 @@ describe('throng:clipboard:writeRich payload validation', () => {
     await expect(invoke('throng:clipboard:writeRich', null)).resolves.toBeUndefined();
 
     expect(richCalls).toEqual([]);
+  });
+});
+
+/** 054 — Copy Diagram as Image: a bounded base64 PNG data URI, and nothing else, reaches the clipboard. */
+describe('throng:clipboard:writeImage payload validation', () => {
+  const URI = 'data:image/png;base64,iVBORw0K';
+
+  it('writes the decoded PNG with an <img> of the same URI, built in main', async () => {
+    const { clipboard, imageCalls } = fakeClipboard();
+    registerClipboardIpc(new ClipboardService(clipboard));
+
+    await invoke('throng:clipboard:writeImage', { dataUri: URI });
+
+    expect(imageCalls).toHaveLength(1);
+    expect(Array.from(imageCalls[0]!.png)).toEqual(Array.from(Buffer.from('iVBORw0K', 'base64')));
+    expect(imageCalls[0]!.html).toBe(`<img src="${URI}">`);
+  });
+
+  it.each([
+    ['not a PNG', { dataUri: 'data:image/svg+xml;base64,PHN2Zz4=' }],
+    ['markup smuggled into the URI', { dataUri: 'data:image/png;base64,AAAA"><script>' }],
+    ['not a string', { dataUri: 42 }],
+    ['no payload', null],
+  ])('ignores %s, without throwing', async (_why, payload) => {
+    const { clipboard, imageCalls } = fakeClipboard();
+    registerClipboardIpc(new ClipboardService(clipboard));
+
+    await expect(invoke('throng:clipboard:writeImage', payload)).resolves.toBeUndefined();
+
+    expect(imageCalls).toEqual([]);
   });
 });

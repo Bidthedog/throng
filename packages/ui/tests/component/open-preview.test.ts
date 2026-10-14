@@ -21,6 +21,7 @@ import {
   collectPanels,
   createDefaultLayout,
   effectiveActivePanelId,
+  initialPreviewRecency,
   setActivePanel as opSetActivePanel,
   setActiveTab as opSetActiveTab,
   setPanelType as opSetPanelType,
@@ -41,8 +42,15 @@ import { previewReservationFor, __resetPreviewReservations } from '../../src/ren
 import { __resetPanelFocus, registerPanelFocus } from '../../src/renderer/workspace/panel-focus.js';
 import { registerPreviewPanelHandles } from '../../src/renderer/preview/preview-panel-handles.js';
 import {
+  __resetMaximise,
+  getMaximiseStack,
+  maximisePanel,
+  registerPanelTabResolver,
+} from '../../src/renderer/workspace/maximise-store.js';
+import {
   __resetLastActivePreview,
   recordLastActivePreview,
+  seedLastActivePreview,
 } from '../../src/renderer/preview/last-active-preview.js';
 
 const PROJECT = 'proj-1';
@@ -224,7 +232,12 @@ describe('placeLocally beside a parent this window holds (FR-010)', () => {
       .notifyTyped;
     // The placing layout rides with it, so a window that later holds a synced view of this panel knows
     // the run is not its to end (review finding 2, `forget-preview-panel.ts`).
-    expect(notifyTyped).toHaveBeenCalledWith('new-1', PREVIEW_KIND, { filePath: FILE, placedInLayoutProjectId: PROJECT });
+    // 054 R2 — and its type: the file's provider.
+    expect(notifyTyped).toHaveBeenCalledWith('new-1', PREVIEW_KIND, {
+      filePath: FILE,
+      placedInLayoutProjectId: PROJECT,
+      providerId: 'markdown',
+    });
   });
 });
 
@@ -448,7 +461,8 @@ describe('focused — the file already has its one preview (FR-012, FR-014)', ()
     const outcome = await openPreview({
       ws,
       bridge: fakeBridge({ kind: 'focused', panelId: null }),
-      intent: { absPath: FILE, projectId: PROJECT, requesterPanelId: 'ed' },
+      // A file this layout holds no preview of: one it does, never mounted, is brought forward locally (MT-01).
+      intent: { absPath: FILE.replace(/\.md$/, '-placing.md'), projectId: PROJECT, requesterPanelId: 'ed' },
     });
 
     expect(outcome).toEqual({ kind: 'focused', panelId: null });
@@ -584,6 +598,125 @@ describe('the target sent to main', () => {
     expect(bridge.open).toHaveBeenCalledWith(
       expect.objectContaining({ target: { mode: 'lastActive', reusePanelId: null } }),
     );
+  });
+});
+
+/** 054 T011/T012 — Last Active is per panel type (FR-007), and a placed preview records its type (R2). */
+describe('054 — one preview panel type per provider', () => {
+  it('a Last Active Mermaid preview is never reused for a Markdown file; the Markdown one is', async () => {
+    const base = twoTabs();
+    const layout: WorkspaceLayout = {
+      ...base,
+      tabs: base.tabs.map((t) =>
+        t.id === 't1'
+          ? {
+              ...t,
+              root: {
+                type: 'split',
+                orientation: 'row',
+                sizes: [0.5, 0.5],
+                children: [
+                  panel('md', { kind: PREVIEW_KIND, config: { filePath: 'D:/proj/notes.md' } }),
+                  panel('mmd', { kind: PREVIEW_KIND, config: { filePath: 'D:/proj/flow.mmd' } }),
+                ],
+              },
+            }
+          : t,
+      ),
+    };
+    recordLastActivePreview('t1', 'md');
+    recordLastActivePreview('t1', 'mmd'); // most recent, but the other type
+    const bridge = fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null });
+
+    await openPreview({ ws: fakeWs(layout), bridge, intent: { absPath: FILE, projectId: PROJECT }, defaultOpenTarget: 'lastActive' });
+    expect(bridge.open).toHaveBeenLastCalledWith(expect.objectContaining({ target: { mode: 'lastActive', reusePanelId: 'md' } }));
+
+    await openPreview({
+      ws: fakeWs(layout),
+      bridge,
+      intent: { absPath: 'D:/proj/other.mermaid', projectId: PROJECT },
+      defaultOpenTarget: 'lastActive',
+    });
+    expect(bridge.open).toHaveBeenLastCalledWith(expect.objectContaining({ target: { mode: 'lastActive', reusePanelId: 'mmd' } }));
+  });
+
+  it('with only the other type standing, no candidate is sent — a new panel of the right type', async () => {
+    const ws = fakeWs(twoTabsWithPreview('t1', 'mmd', 'D:/proj/flow.mmd'));
+    recordLastActivePreview('t1', 'mmd');
+    const bridge = fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null });
+    await openPreview({ ws, bridge, intent: { absPath: FILE, projectId: PROJECT }, defaultOpenTarget: 'lastActive' });
+    expect(bridge.open).toHaveBeenCalledWith(expect.objectContaining({ target: { mode: 'lastActive', reusePanelId: null } }));
+  });
+
+  it('a restored tab seeded from its layout reuses the restored preview (FR-001)', async () => {
+    const layout = twoTabsWithPreview('t1', 'restored', 'D:/proj/old.md');
+    const tab = layout.tabs.find((t) => t.id === 't1')!;
+    seedLastActivePreview('t1', initialPreviewRecency(tab, (id) => id === 'restored'));
+    const bridge = fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null });
+    await openPreview({ ws: fakeWs(layout), bridge, intent: { absPath: FILE, projectId: PROJECT }, defaultOpenTarget: 'lastActive' });
+    expect(bridge.open).toHaveBeenCalledWith(expect.objectContaining({ target: { mode: 'lastActive', reusePanelId: 'restored' } }));
+  });
+
+  it('a placed preview records its provider as its panel type (R2)', async () => {
+    const ws = fakeWs(twoTabs());
+    const bridge = fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null });
+    const outcome = await openPreview({ ws, bridge, intent: { absPath: 'D:/proj/flow.mmd', projectId: PROJECT } });
+    expect(outcome.kind).toBe('placed');
+    const placed = allPanels(ws.layout!).find((p) => p.id === (outcome as { panelId: string }).panelId)!;
+    expect(placed.config).toMatchObject({ filePath: 'D:/proj/flow.mmd', providerId: 'mermaid' });
+  });
+});
+
+/** 054 T065 (preview half) — an open never lands in a panel a maximised one hides (FR-074, R7). */
+describe('054 — opening into a maximised tab', () => {
+  let unresolve: (() => void) | null = null;
+  beforeEach(() => {
+    __resetMaximise();
+    unresolve = registerPanelTabResolver((id) => (id === 'front' || id === 'pv' || id.startsWith('new-') ? 't1' : 't2'));
+  });
+  afterEach(() => {
+    unresolve?.();
+    __resetMaximise();
+  });
+
+  const t1WithPreviewBesideTerminal = (): WorkspaceLayout => {
+    const base = twoTabs();
+    return {
+      ...base,
+      tabs: base.tabs.map((t) =>
+        t.id === 't1'
+          ? {
+              ...t,
+              root: {
+                type: 'split',
+                orientation: 'row',
+                sizes: [0.5, 0.5],
+                children: [panel('front', { kind: 'terminal' }), panel('pv', { kind: PREVIEW_KIND, config: { filePath: FILE } })],
+              },
+            }
+          : t,
+      ),
+    };
+  };
+
+  it('focusing a preview the maximised terminal hides restores the tab first', async () => {
+    maximisePanel('t1', 'front');
+    await openPreview({ ws: fakeWs(t1WithPreviewBesideTerminal()), bridge: fakeBridge({ kind: 'focused', panelId: 'pv' }), intent: { absPath: FILE, projectId: PROJECT } });
+    expect(getMaximiseStack('t1')).toEqual([]);
+  });
+
+  it('a maximised preview reused in place stays maximised', async () => {
+    maximisePanel('t1', 'pv');
+    await openPreview({ ws: fakeWs(t1WithPreviewBesideTerminal()), bridge: fakeBridge({ kind: 'navigated', panelId: 'pv' }), intent: { absPath: FILE, projectId: PROJECT } });
+    expect(getMaximiseStack('t1')).toEqual([{ kind: 'panel', panelId: 'pv' }]);
+  });
+
+  it('placing a NEW preview into a maximised tab restores it, so the new panel is not hidden', async () => {
+    maximisePanel('t1', 'front');
+    const ws = fakeWs(twoTabs());
+    const outcome = await openPreview({ ws, bridge: fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null }), intent: { absPath: FILE, projectId: PROJECT } });
+    expect(outcome.kind).toBe('placed');
+    expect(getMaximiseStack('t1')).toEqual([]);
   });
 });
 

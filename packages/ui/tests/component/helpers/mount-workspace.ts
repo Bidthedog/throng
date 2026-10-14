@@ -37,7 +37,7 @@ export interface MountedWorkspace {
 
 export async function mountWorkspace(
   layout: WorkspaceLayout,
-  opts: { extras?: ReactElement[]; throng?: Record<string, unknown>; projectRoot?: string } = {},
+  opts: { extras?: ReactElement[]; throng?: Record<string, unknown>; projectRoot?: string; projectColour?: string } = {},
 ): Promise<MountedWorkspace> {
   const captured: { ws: Ws | null } = { ws: null };
   const saves = vi.fn();
@@ -51,7 +51,7 @@ export async function mountWorkspace(
           return Promise.resolve({ ok: true } as T);
         case 'projects.list':
           return Promise.resolve({
-            projects: [{ id: layout.projectId, name: 'Proj', rootFolder: opts.projectRoot ?? 'D:/proj' }],
+            projects: [{ id: layout.projectId, name: 'Proj', rootFolder: opts.projectRoot ?? 'D:/proj', ...(opts.projectColour ? { colour: opts.projectColour } : {}) }],
           } as T);
         case 'projects.categories.list':
           return Promise.resolve({ categories: [] } as T);

@@ -36,7 +36,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
-import { SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
+import { SettingsMetadataContext, SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
+import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 
 const DEBOUNCE_MS = 150;
 const GROUP = 'Editor';
@@ -181,6 +182,71 @@ describe('a search that empties a subgroup removes its heading too (FR-036c)', (
     expect(screen.queryByTestId(`setting-${NOT_IN_SUBGROUP}`), 'the group survives').not.toBeNull();
     expect(screen.queryByTestId(SUBGROUP_ID), 'the emptied subsection is gone').toBeNull();
     expect(screen.queryByText(SUBGROUP), 'and so is its heading').toBeNull();
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 054 FR-050a — a third level: a subsection nested in its subgroup
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('a subsection nests inside its subgroup (054 FR-050a)', () => {
+  /** Real keys, so the rows have values to draw; placement is the registry's, not the key's. */
+  const at = (key: string, subsection?: string): FieldDescriptor => {
+    const real = SETTINGS_METADATA.find((d) => d.key === key)!;
+    return { ...real, group: 'Editor', subgroup: 'Previews', ...(subsection ? { subsection } : {}) };
+  };
+  const REGISTRY: readonly FieldDescriptor[] = [
+    at('editor.statusBar.showCounts', 'Markdown'),
+    at('editor.showStatusBar'),
+    at('editor.statusBar.showCursorPosition', 'Mermaid'),
+  ];
+  const SUB_ID = 'settings-subsection-Editor-Previews-Markdown';
+
+  function mountWith(): void {
+    render(
+      createElement(
+        NotificationProvider,
+        null,
+        createElement(
+          ResetNoticeProvider,
+          null,
+          createElement(
+            ConfirmProvider,
+            null,
+            createElement(
+              SettingsMetadataContext.Provider,
+              { value: REGISTRY },
+              createElement(SettingsTab, { searchDebounceMs: DEBOUNCE_MS }),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  it('renders inside its subgroup, after the subgroup’s own rows, under an h5 heading', () => {
+    mountWith();
+    const previews = screen.getByTestId('settings-subgroup-Editor-Previews');
+    const markdown = screen.getByTestId(SUB_ID);
+    expect(previews).toContainElement(markdown);
+    expect(markdown.querySelector('h5')).toHaveTextContent('Markdown');
+    expect(screen.getByRole('group', { name: 'Markdown' })).toBe(markdown);
+    const plain = screen.getByTestId('setting-editor.showStatusBar');
+    expect(markdown).not.toContainElement(plain);
+    expect(plain.compareDocumentPosition(markdown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(markdown).toContainElement(screen.getByTestId('setting-editor.statusBar.showCounts'));
+    // Declaration order: Markdown before Mermaid.
+    const mermaid = screen.getByTestId('settings-subsection-Editor-Previews-Mermaid');
+    expect(markdown.compareDocumentPosition(mermaid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('disappears with its heading when a search empties it', () => {
+    mountWith();
+    expect(screen.queryByTestId(SUB_ID)).not.toBeNull();
+    search('showcursorposition');
+    expect(screen.queryByTestId(SUB_ID)).toBeNull();
+    expect(screen.queryByText('Markdown')).toBeNull();
+    expect(screen.queryByTestId('settings-subsection-Editor-Previews-Mermaid')).not.toBeNull();
   });
 });
 

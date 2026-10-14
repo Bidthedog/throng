@@ -74,4 +74,22 @@ describe('ElectronClipboard', () => {
     };
     await expect(new ElectronClipboard(hostile, fakeItem).readText()).resolves.toBe('');
   });
+
+  it('writes an image as ONE item: the PNG as an image/png Blob, beside its HTML (054 Copy Diagram as Image)', async () => {
+    const written: unknown[][] = [];
+    const module: ElectronClipboardModule = {
+      writeText: async () => {},
+      readText: async () => '',
+      write: async (items) => {
+        written.push([...items]);
+      },
+    };
+    await new ElectronClipboard(module, fakeItem).writeImage({ png: new Uint8Array([1, 2, 3]), html: '<img src="x">' });
+    expect(written).toHaveLength(1);
+    const item = written[0]![0] as Record<string, unknown>;
+    expect(item['text/html']).toBe('<img src="x">');
+    const blob = item['image/png'] as Blob;
+    expect(blob.type).toBe('image/png');
+    expect(Array.from(new Uint8Array(await blob.arrayBuffer()))).toEqual([1, 2, 3]);
+  });
 });

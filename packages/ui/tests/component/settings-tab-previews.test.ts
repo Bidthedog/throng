@@ -78,26 +78,67 @@ afterEach(() => {
   patches = [];
 });
 
+/** The rows directly in `el`, not in a subsection nested inside it. */
+const ownRows = (el: HTMLElement): (string | null)[] =>
+  [...el.querySelectorAll(':scope > .settings-row')].map((r) => r.getAttribute('data-testid'));
+const MM = 'editor.previews.providers.mermaid';
+
 describe('the Previews subsection draws every preview setting (FR-060, FR-060a, FR-061, FR-065)', () => {
-  it('holds the update delay, maximum wait, copy format, and Markdown’s enabled, default open action and own setting', async () => {
+  /*
+   * 054 FR-050 – FR-052 (contracts/menus-commands-controls-054.md "Preferences layout") SUPERSEDES the
+   * flat list 044 and 047 asserted here: Previews now holds only what applies to every preview type,
+   * and each provider's settings sit in that provider's own subsection beneath it. `Open previews in`
+   * is per provider (FR-051), and `editor.markdownSectionsOpen` moves into Markdown with its key kept
+   * (FR-054).
+   */
+  it('holds the shared rows, then a Markdown and a Mermaid subsection, in contract order (054 FR-050, FR-051)', async () => {
     await mount({});
-    const rows = [...subsection().querySelectorAll('.settings-row')].map((el) => el.getAttribute('data-testid'));
-    expect(rows).toEqual([
+    expect(ownRows(subsection())).toEqual([
       'setting-editor.previews.updateDelayMs',
       'setting-editor.previews.maxWaitMs',
-      'setting-editor.previews.copyFormat',
-      // Iteration 2026-09-15 — FR-114, then FR-117 as Markdown's second own setting.
       'setting-editor.previews.syncScroll',
-      // 047 FR-010 — Open previews in, a static leaf beside the other shared ones.
-      'setting-editor.previews.openTarget',
+      'setting-editor.previews.copyFormat',
+    ]);
+    const subsections = [...subsection().querySelectorAll(':scope > .settings-subgroup')].map((el) =>
+      el.getAttribute('data-testid'),
+    );
+    expect(subsections).toEqual([
+      'settings-subsection-Editor-Previews-Markdown',
+      'settings-subsection-Editor-Previews-Mermaid',
+    ]);
+    expect(ownRows(screen.getByTestId('settings-subsection-Editor-Previews-Markdown'))).toEqual([
       `setting-${MD}.enabled`,
       `setting-${MD}.defaultOpenAction`,
+      `setting-${MD}.openTarget`,
+      `setting-${MD}.renderMermaid`,
       `setting-${MD}.loadRemoteImages`,
       `setting-${MD}.showFrontMatter`,
-      // 047 FR-032b and FR-042d — Markdown's preview gutter and heading jump duration.
       `setting-${MD}.gutter`,
       `setting-${MD}.headingJumpMs`,
+      'setting-editor.markdownSectionsOpen',
     ]);
+    expect(ownRows(screen.getByTestId('settings-subsection-Editor-Previews-Mermaid'))).toEqual([
+      `setting-${MM}.enabled`,
+      `setting-${MM}.defaultOpenAction`,
+      `setting-${MM}.openTarget`,
+    ]);
+  });
+
+  it('labels each provider’s Open previews in with its provider, and a search finds both (054 FR-052, FR-055)', async () => {
+    await mount({});
+    expect(within(screen.getByTestId(`setting-${MD}.openTarget`)).getByText('Markdown: Open previews in')).toBeInTheDocument();
+    expect(within(screen.getByTestId(`setting-${MM}.openTarget`)).getByText('Mermaid: Open previews in')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('settings-search'), { target: { value: 'open previews' } });
+    await waitFor(() => expect(screen.queryByTestId(`setting-${MD}.openTarget`)).not.toBeNull());
+    expect(screen.queryByTestId(`setting-${MM}.openTarget`)).not.toBeNull();
+  });
+
+  it('drops an all-filtered provider subsection with its heading, keeping the other (054 FR-050a)', async () => {
+    await mount({});
+    expect(screen.queryByTestId('settings-subsection-Editor-Previews-Markdown')).not.toBeNull();
+    fireEvent.change(screen.getByTestId('settings-search'), { target: { value: 'mermaid.openTarget' } });
+    await waitFor(() => expect(screen.queryByTestId('settings-subsection-Editor-Previews-Markdown')).toBeNull());
+    expect(screen.queryByTestId('settings-subsection-Editor-Previews-Mermaid')).not.toBeNull();
   });
 
   it('labels the provider rows with the provider’s display name, and none of them "Open files with" (019 FR-024)', async () => {

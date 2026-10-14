@@ -22,32 +22,35 @@ const preview = (over: Partial<Panel> = {}): Panel => ({
   ...over,
 });
 
-describe('panelDisplayTitle — preview branch (FR-031)', () => {
+describe('panelDisplayTitle — preview branch (054 FR-005a, superseding 044 FR-031)', () => {
   it('the suffix is " - Preview"', () => {
     expect(PREVIEW_TITLE_SUFFIX).toBe(' - Preview');
   });
 
-  it('parented: <parent display title> - Preview, whatever that title is', () => {
-    expect(panelDisplayTitle(preview(), { previewParentTitle: 'README' })).toBe('README - Preview');
-    // A custom editor name is just a title the caller passes in.
-    expect(panelDisplayTitle(preview(), { previewParentTitle: 'My Notes', previewFilePath: 'C:/p/README.md' })).toBe(
-      'My Notes - Preview',
-    );
-  });
-
-  it('standalone: the name an editor would derive for the file, - Preview', () => {
-    expect(panelDisplayTitle(preview(), { previewFilePath: 'C:\\p\\docs\\guide.md' })).toBe('guide - Preview');
+  it('names the file by its full file name, extension included', () => {
+    expect(panelDisplayTitle(preview(), { previewFilePath: 'C:\\p\\docs\\guide.md' })).toBe('guide.md - Preview');
+    expect(panelDisplayTitle(preview(), { previewFilePath: 'C:/p/flow.mmd' })).toBe('flow.mmd - Preview');
     expect(panelDisplayTitle(preview(), { previewParentTitle: null, previewFilePath: 'C:/p/.notes.md' })).toBe(
-      '.notes - Preview',
+      '.notes.md - Preview',
     );
   });
 
-  it('a blank parent title reads as standalone', () => {
-    expect(panelDisplayTitle(preview(), { previewParentTitle: '   ', previewFilePath: 'C:/p/a.md' })).toBe('a - Preview');
+  it('parented: the file name too, whatever the parent editor is called', () => {
+    expect(panelDisplayTitle(preview(), { previewParentTitle: 'My Notes', previewFilePath: 'C:/p/README.md' })).toBe(
+      'README.md - Preview',
+    );
+  });
+
+  it('parented to an editor with no file yet: the editor’s name', () => {
+    expect(panelDisplayTitle(preview(), { previewParentTitle: 'README' })).toBe('README - Preview');
+  });
+
+  it('a blank parent title is ignored', () => {
+    expect(panelDisplayTitle(preview(), { previewParentTitle: '   ', previewFilePath: 'C:/p/a.md' })).toBe('a.md - Preview');
   });
 
   it('with no live source, names itself from the persisted config — history’s current entry first', () => {
-    expect(panelDisplayTitle(preview({ config: { filePath: 'C:/p/a.md' } }))).toBe('a - Preview');
+    expect(panelDisplayTitle(preview({ config: { filePath: 'C:/p/a.md' } }))).toBe('a.md - Preview');
     expect(
       panelDisplayTitle(
         preview({
@@ -57,7 +60,7 @@ describe('panelDisplayTitle — preview branch (FR-031)', () => {
           },
         }),
       ),
-    ).toBe('b - Preview');
+    ).toBe('b.md - Preview');
   });
 
   it('falls back to the placeholder only when it has no file at all', () => {
@@ -130,7 +133,7 @@ describe('previewTitleParts — the name and suffix apart, for the marker (FR-03
       nameTruncated: false,
     });
     expect(previewTitleParts(preview(), { previewFilePath: 'C:/p/guide.md' })).toEqual({
-      name: 'guide',
+      name: 'guide.md',
       suffix: PREVIEW_TITLE_SUFFIX,
       nameTruncated: false,
     });

@@ -244,8 +244,9 @@ describe('previewAffordance — the six-row decision table (data-model §2)', ()
 });
 
 describe('the shipped registration (FR-065, FR-080)', () => {
-  it('registers exactly Markdown, for .md and .markdown, as a text provider', () => {
-    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown']);
+  it('registers exactly Markdown then Mermaid, Markdown for .md and .markdown, as a text provider', () => {
+    // 054 FR-005 — Mermaid is the second shipped provider, registered after Markdown.
+    expect(SHIPPED_PREVIEW_PROVIDER_DESCRIPTORS.map((p) => p.id)).toEqual(['markdown', 'mermaid']);
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown');
     expect(md?.kind).toBe('text');
     expect(md?.extensions).toEqual(['.md', '.markdown']);
@@ -261,9 +262,11 @@ describe('the shipped registration (FR-065, FR-080)', () => {
     expect(md.sourceMimeTypes).toBeUndefined();
   });
 
-  it('declares exactly its four own settings — Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — the first two toggles shipping on (FR-092, FR-117)', () => {
+  it('declares exactly its five own settings — 054’s Render Mermaid diagrams, Load remote images, Show front matter, then the 047 gutter and heading-jump leaves — Load remote images and Show front matter shipping on (FR-092, FR-117)', () => {
     const md = SHIPPED_PREVIEW_PROVIDERS.get('markdown')!;
     expect(md.settings?.map((s) => s.leaf)).toEqual([
+      // 054 FR-041 — Render Mermaid diagrams is Markdown's first own setting.
+      'renderMermaid',
       'loadRemoteImages',
       'showFrontMatter',
       'gutter',

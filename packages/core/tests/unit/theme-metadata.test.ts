@@ -20,7 +20,7 @@ describe('THEME_METADATA completeness (FR-038/047)', () => {
 
   it('describes every editable theme token and no unknown keys', () => {
     expect(() => assertEveryKeyDescribed(tokens, THEME_METADATA)).not.toThrow();
-    expect(auditRegistry(tokens, THEME_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [] });
+    expect(auditRegistry(tokens, THEME_METADATA)).toEqual({ missing: [], unknown: [], duplicated: [], invalidNesting: [] });
   });
 
   it('places every token in a valid area group (021, FR-009 — build-blocking)', () => {

@@ -45,7 +45,7 @@ import {
   PREVIEW_KIND,
   collectPanels,
   createDefaultLayout,
-  editorAutoTitle,
+  fileNameOf,
   leavesOfDeclared,
   previewSettingsDefaults,
   previewSettingsDescriptors,
@@ -590,7 +590,7 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
     expect(attach).toHaveBeenCalledWith({ panelId: id, projectId: PROJECT, filePath: BINARY_FILE });
 
     expect(screen.queryByTestId(`preview-status-bar-${id}`)).toBeNull();
-    await waitFor(() => expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${editorAutoTitle(BINARY_FILE)} - Preview`));
+    await waitFor(() => expect(screen.getByTestId(`panel-title-${id}`).textContent).toBe(`${fileNameOf(BINARY_FILE)} - Preview`));
     const labels = await headerMenuLabels(user, id);
     expect(labels).not.toContain('Go to Editor');
     expect(labels).not.toContain('Open in Editor');
@@ -644,13 +644,14 @@ describe('S4 / S6a — the settings tab draws each provider’s generated settin
     expect(rows).toEqual([
       'setting-editor.previews.updateDelayMs',
       'setting-editor.previews.maxWaitMs',
-      'setting-editor.previews.copyFormat',
       // 044 FR-114 (iteration 2026-09-15) — static, so a test registry draws it too.
       'setting-editor.previews.syncScroll',
-      // 047 US2 (T014) — the reuse-target setting, also static.
-      'setting-editor.previews.openTarget',
+      'setting-editor.previews.copyFormat',
+      // 054 FR-051 supersedes 047 US2's static `editor.previews.openTarget`: Open previews in is now each
+      // provider's own leaf, in that provider's subsection, after its default open action.
       `setting-${TEXT_KEY}.enabled`,
       `setting-${TEXT_KEY}.defaultOpenAction`,
+      `setting-${TEXT_KEY}.openTarget`,
       `setting-${TEXT_KEY}.shout`,
       `setting-${BINARY_KEY}.enabled`,
     ]);

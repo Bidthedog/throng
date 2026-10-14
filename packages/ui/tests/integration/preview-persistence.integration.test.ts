@@ -327,3 +327,42 @@ describe('a sub-workspace’s own preview survives a relaunch as its own (FR-012
     expect(viewEndsPreview(legacy, { inSubWorkspace: true, layoutProjectId: SUB_LAYOUT })).toBe(false);
   });
 });
+
+/** 054 T013 — a tab's preview recency and a preview's type survive the row (FR-002, FR-009). */
+describe('preview recency and panel type round-trip (054)', () => {
+  const preview = (id: string, filePath: string, providerId?: string): Panel => ({
+    type: 'panel',
+    id,
+    originProjectId: 'P',
+    title: id,
+    kind: 'preview',
+    config: providerId === undefined ? { filePath } : { filePath, providerId },
+  });
+
+  it('keeps Tab.previewRecency and PreviewPanelConfig.providerId as written', () => {
+    const projectId = seedProject();
+    const base = workspaces.load(OWNER, projectId).layout;
+    const root2: WorkspaceLayout['tabs'][number]['root'] = {
+      type: 'split',
+      orientation: 'row',
+      sizes: [0.5, 0.5],
+      children: [preview('pv1', readme, 'markdown'), preview('pv2', setup, 'markdown')],
+    };
+    workspaces.save(OWNER, projectId, {
+      ...base,
+      tabs: [{ id: base.tabs[0].id, title: 'Tab 1', root: root2, previewRecency: ['pv2', 'pv1'] }],
+    });
+
+    const tab = workspaces.load(OWNER, projectId).layout.tabs[0];
+    expect(tab.previewRecency).toEqual(['pv2', 'pv1']);
+    const restored = (tab.root as { children: Panel[] }).children.map((p) => (p.config as PreviewPanelConfig).providerId);
+    expect(restored).toEqual(['markdown', 'markdown']);
+  });
+
+  it('loads a layout written before 054 — no recency, no providerId — unchanged', () => {
+    const projectId = seedProject();
+    const restored = roundTrip(projectId, preview('pv1', readme));
+    expect((restored.config as PreviewPanelConfig).providerId).toBeUndefined();
+    expect(workspaces.load(OWNER, projectId).layout.tabs[0].previewRecency).toBeUndefined();
+  });
+});

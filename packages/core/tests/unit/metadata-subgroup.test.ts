@@ -5,6 +5,7 @@ import {
   KEYBINDINGS_METADATA,
   SETTINGS_METADATA,
   THEME_METADATA,
+  auditRegistry,
   type FieldDescriptor,
   type MetadataRegistry,
 } from '@throng/core';
@@ -125,15 +126,24 @@ describe('FieldDescriptor.subgroup (040 FR-035)', () => {
     expect(interfaceBody('FieldDescriptor')).toMatch(/^\s*subgroup\?: string;\s*$/mu);
   });
 
-  it('gives exactly ONE level of nesting — there is no subsubgroup and no recursion', () => {
-    // contracts/metadata.md: "One level only. There is no `subsubgroup` and no recursion." A general
-    // tree is a renderer nobody needs and three tabs' worth of code to maintain.
+  it('gives exactly TWO named levels — subgroup, then subsection — and no recursion (054 FR-050a)', () => {
+    // 040's contract allowed one level; 054 FR-050a narrows it to two, by NAME, never a tree: a
+    // general tree is a renderer nobody needs and three tabs' worth of code to maintain.
     // Matched as MEMBER DECLARATIONS — `/subsubgroup/` alone hits the JSDoc sentence that forbids
     // one, so the guard would fail on the very comment stating the rule it enforces.
     const body = interfaceBody('FieldDescriptor');
     expect(body).not.toMatch(/^\s*sub(?:sub)+group\??:/mu);
     expect(body.match(/^\s*subgroup\??:/gmu)).toHaveLength(1);
-    expect(body).not.toMatch(/^\s*subgroup\??:\s*(?:readonly\s+)?(?:string\[\]|FieldDescriptor)/mu);
+    expect(body.match(/^\s*subsection\??:/gmu)).toHaveLength(1);
+    expect(body).toMatch(/^\s*subsection\?: string;\s*$/mu);
+    expect(body).not.toMatch(/^\s*sub(?:group|section)\??:\s*(?:readonly\s+)?(?:string\[\]|FieldDescriptor)/mu);
+  });
+
+  it('flags a subsection with no subgroup as invalid nesting (054 FR-050a)', () => {
+    const orphan: FieldDescriptor = { ...FLAT, subsection: 'Markdown' };
+    const nested: FieldDescriptor = { ...FLAT, key: 'b', subgroup: 'Previews', subsection: 'Markdown' };
+    const audit = auditRegistry([orphan.key, 'b'], [orphan, nested]);
+    expect(audit.invalidNesting).toEqual([orphan.key]);
   });
 
   it('is only meaningful inside a group, and `group` stays required', () => {

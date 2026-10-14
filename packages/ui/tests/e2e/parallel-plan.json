@@ -50,6 +50,7 @@
     "icon-colour.e2e.ts": "FOCUS",
     "icon-packs.e2e.ts": "FOCUS",
     "keybindings.e2e.ts": "UNATTRIBUTED",
+    "maximise-terminal.e2e.ts": "FOCUS",
     "menu-keyboard.e2e.ts": "FOCUS",
     "menus.e2e.ts": "FOCUS",
     "navigation-history-keys.e2e.ts": "FOCUS",
