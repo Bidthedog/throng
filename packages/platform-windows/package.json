@@ -1,6 +1,6 @@
 {
   "name": "@throng/platform-windows",
-  "version": "1.0.0-alpha9",
+  "version": "1.0.0-alpha10",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@throng/core": "*",
-    "koffi": "^3.3.2",
+    "koffi": "^3.3.3",
     "node-pty": "^1.1.0"
   }
 }
