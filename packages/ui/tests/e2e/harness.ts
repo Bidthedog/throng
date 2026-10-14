@@ -1179,6 +1179,18 @@ export async function firstPanelId(win: Page): Promise<string> {
   return id;
 }
 
+/**
+ * Where to press to drag (or plainly click) a panel by its header: the centre of its TITLE.
+ *
+ * Not the header's centre. The header is a drag handle that refuses a press landing on one of its
+ * controls (#406, `drag-handle.ts`), and on a narrow panel the controls on the right reach the middle —
+ * 054 added Enter Focus Mode beside the +, and a quarter-width panel's centre then sat on it, so the drag
+ * never started. The title is never interactive, so a press there always reaches the handle.
+ */
+export function panelGrip(win: Page, panelId: string): Locator {
+  return win.getByTestId(`panel-handle-${panelId}`).locator('.panel-box__title').first();
+}
+
 export async function panelIds(win: Page): Promise<string[]> {
   /*
    * `evaluateAll` does NOT auto-wait — unlike `evaluate`, it resolves against whatever matches right

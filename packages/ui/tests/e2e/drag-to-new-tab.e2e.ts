@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, panelGrip, splitPanelViaMenu } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -97,7 +97,7 @@ test('drag a Panel onto "+" → new active Tab containing only that Panel', { ta
     const [a, b] = await panelIds(win);
 
     // Drag Panel B by its header onto the New-Tab (+) button.
-    const handle = win.getByTestId(`panel-handle-${b}`);
+    const handle = panelGrip(win, b);
     const box = await handle.boundingBox();
     if (!box) throw new Error('source handle has no box');
     const addBtn = win.getByTestId('tab-add');

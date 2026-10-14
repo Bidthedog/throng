@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { openApp, createProject, firstPanelId, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { openApp, createProject, firstPanelId, type OpenApp, panelGrip, splitPanelViaMenu } from './harness.js';
 
 // Batch 3 (2026-07-01):
 //  • FR-028 — a Panel created INSIDE a sub-workspace (owned; no project) can open a
@@ -146,7 +146,7 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
     ).find((id) => id !== a)!;
 
     // Drag the owned Panel by its header and move the pointer beyond the window.
-    const handle = child.getByTestId(`panel-handle-${owned}`);
+    const handle = panelGrip(child, owned);
     const box = await handle.boundingBox();
     if (!box) throw new Error('owned handle has no box');
     const size = await child.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));

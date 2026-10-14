@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, panelGrip, splitPanelViaMenu } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 
 registerTempCleanup();
@@ -178,7 +178,7 @@ test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-0
       .evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
     const [a, b] = ids;
 
-    const handle = win.getByTestId(`panel-handle-${b}`);
+    const handle = panelGrip(win, b);
     const box = await handle.boundingBox();
     if (!box) throw new Error('handle has no box');
     await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
