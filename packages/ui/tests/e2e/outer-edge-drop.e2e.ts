@@ -330,7 +330,7 @@ for (const target of ['a panel edge in its own tab', 'another tab'] as const) {
     const win = shared.win;
     const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-pv-'));
     cpSync(join(fileURLToPath(new URL('../fixtures/preview/', import.meta.url)), 'links'), root, { recursive: true });
-    await createProject(win, 'DropFindPreview', root);
+    await createProject(win, target === 'another tab' ? 'DropFindPreviewTab' : 'DropFindPreviewEdge', root);
     const tree = win.getByTestId('file-explorer-tree');
     await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
     await expect(win.locator('.panel-box')).toHaveCount(1);
