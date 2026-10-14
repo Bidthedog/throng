@@ -50,6 +50,34 @@ describe('findOrphans', () => {
     expect(findOrphans([self, other], 42)).toEqual([]);
   });
 
+  // An elevated daemon launches its agent through a de-elevation shim that exits at once, so the
+  // agent's parent is gone by design. The pipe it serves names the daemon that owns it; while that
+  // daemon is alive the agent is not an orphan. Reaping it killed the daemon's own agent at boot,
+  // and every first terminal then exited with code 1 (gate run 38357338931, terminal-clipboard).
+  const deElevatedAgent = (pid: number, daemonPid: number, createdMs: number): ProcInfo =>
+    proc({
+      pid,
+      ppid: 150 /* the shim, already exited */,
+      createdMs,
+      commandLine: `"C:\\node.exe" D:\\throng\\packages\\daemon\\dist\\pty-agent-entry.js \\\\.\\pipe\\throng.ptyagent.${daemonPid}.ab12cd34`,
+    });
+
+  it("keeps the sweeping daemon's own de-elevated agent, whose launcher shim has exited", () => {
+    const self = proc({ pid: 100, ppid: 1, createdMs: 500, commandLine: 'node daemon/dist/main.js' });
+    expect(findOrphans([self, deElevatedAgent(200, 100, 600)], 100)).toEqual([]);
+  });
+
+  it("keeps a concurrent live daemon's de-elevated agent", () => {
+    const other = proc({ pid: 300, ppid: 1, createdMs: 500, commandLine: 'node daemon/dist/main.js' });
+    expect(findOrphans([other, deElevatedAgent(200, 300, 600)], 999)).toEqual([]);
+  });
+
+  it('reaps a de-elevated agent whose daemon is gone, or whose daemon pid was reused', () => {
+    expect(findOrphans([deElevatedAgent(200, 300, 600)], 999)).toEqual([200]);
+    const impostor = proc({ pid: 300, ppid: 1, createdMs: 900, commandLine: 'node unrelated.js' });
+    expect(findOrphans([impostor, deElevatedAgent(200, 300, 600)], 999)).toEqual([200]);
+  });
+
   it('reaps multiple orphans in one pass', () => {
     const c = proc({ pid: 300, ppid: 999, createdMs: 700, name: 'conhost.exe', commandLine: 'conhost --headless' });
     const a = agent(200, 998, 600);
