@@ -38,21 +38,33 @@ export function isThrongOwned(p: ProcInfo): boolean {
   return false;
 }
 
+/** The owning daemon's pid, from the pipe an agent serves (`throng.ptyagent.<daemonPid>.<id>`). */
+const AGENT_PIPE_DAEMON = /throng\.ptyagent\.(\d+)\./;
+
 /**
  * Pure orphan selection: given a snapshot of processes, return the pids of
  * throng-owned processes whose parent is gone (missing, or a PID-reuse impostor that
  * started after the child). `selfPid` (the current daemon) is never returned even if
  * matched. Deterministic and side-effect-free for unit testing.
+ *
+ * A de-elevated agent's parent is the launcher shim, which exits as soon as the agent
+ * starts — so for an agent, the owner is the daemon its pipe names, not its parent.
+ * Judging it by its parent reaped a live daemon's agent, including the sweeping daemon's
+ * own, which `createDaemonContainer` has already launched by the time the sweep runs.
  */
 export function findOrphans(procs: ProcInfo[], selfPid = process.pid): number[] {
   const byId = new Map<number, ProcInfo>();
   for (const p of procs) byId.set(p.pid, p);
+  const alive = (ownerPid: number, child: ProcInfo): boolean => {
+    const owner = byId.get(ownerPid);
+    return owner !== undefined && owner.createdMs <= child.createdMs;
+  };
   const orphans: number[] = [];
   for (const p of procs) {
     if (p.pid === selfPid || !isThrongOwned(p)) continue;
-    const parent = byId.get(p.ppid);
-    const parentGone = !parent || parent.createdMs > p.createdMs;
-    if (parentGone) orphans.push(p.pid);
+    const daemonPid = AGENT_PIPE_DAEMON.exec(p.commandLine)?.[1];
+    if (daemonPid !== undefined && (Number(daemonPid) === selfPid || alive(Number(daemonPid), p))) continue;
+    if (!alive(p.ppid, p)) orphans.push(p.pid);
   }
   return orphans;
 }
