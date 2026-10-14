@@ -18,6 +18,7 @@ import {
   COMMAND_SCOPES,
   KEYBINDINGS_METADATA,
   WINDOW_HANDLED_ACTIONS as CORE_WINDOW_HANDLED_ACTIONS,
+  collectPanels,
   cycleOrder,
   effectiveActivePanelId,
   eventToToken,
@@ -60,6 +61,8 @@ import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
+import { getMaximiseStack, isPanelHidden, isPanelTabMaximised, toggleMaximisePanel } from '../workspace/maximise-store.js';
+import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
 
@@ -455,12 +458,15 @@ export function WindowDispatcher({
       const f = activeFocus();
       if (!f) return;
       const target = moveFocus(f.root, f.activeId, dir); // null at the edge → stay put
-      if (target && target !== f.activeId) goToPanel(f.tabId, target);
+      // 054 FR-074 — a panel a maximised target hides is not a destination: it cannot be seen, and
+      // `panel.destroy` would close it unseen.
+      if (target && target !== f.activeId && !isPanelHidden(f.tabId, target)) goToPanel(f.tabId, target);
     };
     const dispatchCycle = (step: 1 | -1): void => {
       const f = activeFocus();
       if (!f) return;
-      const target = nextInCycle(cycleOrder(f.root), f.activeId, step);
+      const visible = cycleOrder(f.root).filter((id) => id === f.activeId || !isPanelHidden(f.tabId, id));
+      const target = nextInCycle(visible, f.activeId, step);
       if (target !== f.activeId) goToPanel(f.tabId, target);
     };
 
@@ -567,7 +573,9 @@ export function WindowDispatcher({
           if (!action) return beginIfFirstStroke(e);
           const direction = SPLIT_DIRECTION[action];
           if (direction) {
-            wsRef.current.splitPanel(splitTarget.tabId, splitTarget.panelId, direction);
+            // 054 FR-074 — a maximised tab takes no panel: the chord is refused and says so.
+            if (getMaximiseStack(splitTarget.tabId).length > 0) deferredUnavailable = action;
+            else wsRef.current.splitPanel(splitTarget.tabId, splitTarget.panelId, direction);
           } else if (!capsRef.current.has(action)) {
             // Raised once the engine has finished with this key — its own completion would end a
             // notice raised from inside the match.
@@ -620,6 +628,9 @@ export function WindowDispatcher({
       // 048 FR-131 — with focus where no panel is the target (a side pane, a dialog), Destroy Panel is not
       // this window's to take: the key goes on to whatever holds focus, unconsumed.
       if (action === 'panel.destroy' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
+      // 054 FR-071 — Maximise / Restore Panel acts on the same panel Destroy Panel would, and the same way
+      // passes the key on when that is none.
+      if (action === 'panel.toggleMaximise' && destroyTarget(e.target as Element | null, activePanelId()) === null) return;
       // Capture phase: stop the focused terminal/editor from ALSO acting on the chord
       // (e.g. Git Bash turning Ctrl+Alt+Arrow into an escape sequence), then handle it.
       e.preventDefault();
@@ -648,18 +659,26 @@ export function WindowDispatcher({
           window.throng?.zoomReset?.();
           break;
         // Per-panel zoom (012, per-instance) — routed to the active panel by id.
+        // 054 MT-04 A5 — with keyboard focus inside a diagram, these zoom just that diagram; an active panel its
+        // diagram fills zooms the diagram, focused or not (MT-04 retest, 2026-10-13).
         case 'panel.zoomIn': {
+          if (zoomFocusedDiagram('in')) break;
           const id = activePanelId();
+          if (id && zoomPanelDiagram(id, 'in')) break;
           if (id) wsRef.current.bumpZoom(id, 1);
           break;
         }
         case 'panel.zoomOut': {
+          if (zoomFocusedDiagram('out')) break;
           const id = activePanelId();
+          if (id && zoomPanelDiagram(id, 'out')) break;
           if (id) wsRef.current.bumpZoom(id, -1);
           break;
         }
         case 'panel.zoomReset': {
+          if (zoomFocusedDiagram('reset')) break;
           const id = activePanelId();
+          if (id && zoomPanelDiagram(id, 'reset')) break;
           if (id) wsRef.current.resetZoom(id);
           break;
         }
@@ -814,7 +833,10 @@ export function WindowDispatcher({
         case 'panel.splitLeft': {
           const f = activeFocus();
           const direction = SPLIT_DIRECTION[action];
-          if (f && direction) wsRef.current.splitPanel(f.tabId, f.activeId, direction);
+          if (!f || !direction) break;
+          // 054 FR-074 — refused while the tab is maximised, and reported as unavailable.
+          if (getMaximiseStack(f.tabId).length > 0) return 'unavailable';
+          wsRef.current.splitPanel(f.tabId, f.activeId, direction);
           break;
         }
         /*
@@ -824,7 +846,22 @@ export function WindowDispatcher({
          */
         case 'panel.destroy': {
           const target = destroyTarget(document.activeElement, activePanelId());
+          // 054 FR-074 — a panel in a maximised tab is restored before it can be destroyed.
+          if (target && isPanelTabMaximised(target)) return 'unavailable';
           if (target) requestPanelDestroy(target);
+          break;
+        }
+        /*
+         * 054 FR-071, FR-071a — maximise or restore the panel that holds focus, in the tab that holds it.
+         * Window-handled, so it is taken here ahead of a focused terminal or editor; Shift+Enter and
+         * Ctrl+Enter resolve to nothing in this set and pass straight through.
+         */
+        case 'panel.toggleMaximise': {
+          const target = destroyTarget(document.activeElement, activePanelId());
+          const tab = target
+            ? wsRef.current.layout?.tabs.find((t) => collectPanels(t.root).some((p) => p.id === target))
+            : undefined;
+          if (target && tab) toggleMaximisePanel(tab.id, target);
           break;
         }
         case 'menu.open':

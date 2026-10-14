@@ -27,6 +27,7 @@ import { getEditorState } from './editor-state.js';
 import { setLastActiveEditor } from './last-active-editor.js';
 import { publishRefusedOpen } from './refusal-store.js';
 import { promptUnsavedOpen, type UnsavedOpenChoice } from './unsaved-open-store.js';
+import { ensurePanelVisible, isPanelHidden, restoreAll } from '../workspace/maximise-store.js';
 
 export type WorkspaceApi = ReturnType<typeof useWorkspace>;
 
@@ -139,6 +140,8 @@ export async function replaceInEditorPanel(
     }
   }
 
+  // 054 FR-074 — the file is about to land in this panel; if a maximised panel hides it, restore first.
+  ensurePanelVisible(panelId);
   deps.beforeLoad?.();
   if (intent.kind === 'history') {
     await actions.openFile(absPath, { navigation: { kind: 'history', index: intent.index, filePath: absPath } });
@@ -165,6 +168,9 @@ export function createDedicatedEditor(
   absPath: string,
   originProjectId?: string,
 ): string {
+  // 054 FR-074 — a new panel in a tab with something maximised would land hidden: restore the tab first,
+  // so the user sees where the file went.
+  restoreAll(tabId);
   const newId = ws.addPanel(tabId, originProjectId);
   ws.setPanelType(newId, 'editor', { filePath: absPath });
   window.throng?.panel?.notifyTyped?.(newId, 'editor', { filePath: absPath });
@@ -179,6 +185,8 @@ export function focusPanelIfLocal(ws: WorkspaceApi, panelId: string): boolean {
   if (!layout) return false;
   for (const tab of layout.tabs) {
     if (collectPanels(tab.root).some((p) => p.id === panelId)) {
+      // 054 FR-074 — focusing a panel a maximised one hides restores its tab first.
+      if (isPanelHidden(tab.id, panelId)) restoreAll(tab.id);
       ws.setActiveTab(tab.id);
       ws.setActivePanel(tab.id, panelId);
       setLastActiveEditor(tab.id, panelId);

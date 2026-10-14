@@ -38,6 +38,8 @@ export interface SearchableField {
    * than left to luck.
    */
   subgroup?: string;
+  /** 054 FR-050a — the third heading level, searched on the same terms for the same reason. */
+  subsection?: string;
 }
 
 /** Split a query into lowercase tokens, discarding whitespace runs. */
@@ -61,7 +63,7 @@ function renderValue(value: unknown): string {
  * value. Both heading levels are in it for the same reason — see {@link SearchableField.subgroup}.
  */
 export function fieldHaystack(field: SearchableField, value: unknown): string {
-  return `${field.key} ${field.label} ${field.description} ${field.group ?? ''} ${field.subgroup ?? ''} ${renderValue(value)}`.toLowerCase();
+  return `${field.key} ${field.label} ${field.description} ${field.group ?? ''} ${field.subgroup ?? ''} ${field.subsection ?? ''} ${renderValue(value)}`.toLowerCase();
 }
 
 /** True when any query token appears in the field's haystack (blank query → true). */

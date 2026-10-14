@@ -14,6 +14,16 @@ export const markdownProvider: PreviewProviderDescriptor = {
   extensions: ['.md', '.markdown'],
   kind: 'text',
   settings: [
+    // 054 FR-041. First of the own settings: the contract places it straight after Open previews in. The
+    // dotted key is not spelled out here, for the inertness guard's reason given on `showFrontMatter`.
+    {
+      leaf: 'renderMermaid',
+      label: 'Render Mermaid diagrams',
+      description:
+        'Draw a mermaid code block in a Markdown preview as its diagram. When off, the block shows as code.',
+      control: 'toggle',
+      default: true,
+    },
     {
       leaf: 'loadRemoteImages',
       label: 'Load remote images',

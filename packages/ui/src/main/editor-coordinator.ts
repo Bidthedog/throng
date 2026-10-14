@@ -1481,6 +1481,60 @@ export class EditorCoordinator {
   }
 
   /**
+   * Apply an edit computed from main to an OPEN document, as one undo entry (054 FR-024, FR-025).
+   *
+   * {@link bulkReplace}'s path, generalised: the edit is decided by `decide` against the authority's
+   * CURRENT text, in the same synchronous turn as the dispatch, so nothing can land between the check and
+   * the edit. `mergeClass: null` keeps it one entry that absorbs no neighbouring keystroke, and the
+   * canonical change is relayed to every window like any other edit. `wasClean` is sampled before the
+   * dispatch, the only moment it has a useful answer — see `bulkReplace`.
+   *
+   * `null` when no open document holds `absPath`. A document whose file moved out of its project is
+   * read-only (050 FR-035) and refuses as `movedOut`.
+   *
+   * `saveFollows` — the caller saves at once when the document was clean (a task toggle, FR-025). The edit
+   * is then never shown as unsaved: it is relayed with `dirty: false` and raises no `dirtyChanged`, so no
+   * tab, explorer row or project marker flashes between the edit and its save (054 MT-02). A caller whose
+   * save fails takes the edit back out, which leaves the document clean, so nothing reported was wrong.
+   */
+  applyExternalEdit<R extends string>(req: {
+    absPath: string;
+    decide: (text: string) => { changes: readonly { from: number; to: number; insert: string }[] } | { refuse: R };
+    saveFollows?: boolean;
+  }):
+    | { kind: 'applied'; documentId: string; wasClean: boolean }
+    | { kind: 'refused'; reason: R | 'movedOut' }
+    | null {
+    const at = openOrFocus(this.registry, req.absPath);
+    if (at.action !== 'focus') return null;
+    const doc = this.docs.get(at.panelId);
+    if (!doc) return null;
+    if (doc.movedOut) return { kind: 'refused', reason: 'movedOut' };
+
+    const wasClean = !doc.authority.dirty;
+    const decided = req.decide(doc.authority.text);
+    if ('refuse' in decided) return { kind: 'refused', reason: decided.refuse };
+
+    const canonical = doc.authority.dispatch({
+      documentId: doc.panelId,
+      viewId: BULK_EDIT_VIEW_ID,
+      changes: ChangeSet.of([...decided.changes], doc.authority.text.length).toJSON(),
+      baseVersion: doc.authority.version,
+      selectionBefore: null,
+      mergeClass: null,
+    });
+    if (!canonical) {
+      this.broadcastReset(doc);
+      return null;
+    }
+    this.scheduleRecovery(doc);
+    const quiet = req.saveFollows === true && wasClean;
+    this.relay({ panelId: doc.panelId, change: quiet ? { ...canonical, dirty: false } : canonical });
+    this.notifyAfterMutation(doc, true, quiet);
+    return { kind: 'applied', documentId: doc.panelId, wasClean };
+  }
+
+  /**
    * Undo (or redo) the last change to a document, whichever view made it (FR-026c).
    *
    * Invoked from a view, but performed HERE, because the stack belongs to the document.
@@ -2019,11 +2073,13 @@ export class EditorCoordinator {
    * path reading again can change no text at all — an empty file under the FR-106d stand-in — so without
    * this the preview kept the notice for a file the editor had just adopted.
    */
-  private notifyAfterMutation(doc: CoordDoc, textChanged: boolean): void {
+  private notifyAfterMutation(doc: CoordDoc, textChanged: boolean, dirtyWithheld = false): void {
     const contentless = isContentless(doc);
     const contentFlipped = contentless !== doc.reported.contentless;
     doc.reported.contentless = contentless;
     if (textChanged || contentFlipped) this.tell('changed', (l) => l.changed(doc.panelId));
+    // A save follows this edit at once (`applyExternalEdit`'s `saveFollows`): the dirty state is not news.
+    if (dirtyWithheld) return;
     const dirty = doc.authority.dirty;
     if (dirty === doc.reported.dirty) return;
     doc.reported.dirty = dirty;

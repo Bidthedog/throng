@@ -1,11 +1,12 @@
 import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
-import type { HeadingRecord, LineEndingId, PreviewAffordance } from '@throng/core';
+import { isFlowingDocument, type HeadingRecord, type LineEndingId, type PreviewAffordance } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { applyPaste, clipboardEntry, cutThrough, ENDINGS } from './commands.js';
 import { requestLanguagePicker } from './picker-request.js';
+import { outliningSubmenu, type OutliningArgs, type OutliningChords } from '../common/outlining-menu.js';
 
 /**
  * The editor's CONTENT context menu (016, FR-012) — right-click inside the document.
@@ -65,19 +66,9 @@ export interface ContentMenuArgs {
    * are ABSENT rather than disabled. Collapse All / Expand All are always present but DISABLED
    * when the document has no headings at all.
    */
-  markdownFold?: {
+  markdownFold?: OutliningArgs & {
     section: { slug: string; level: HeadingRecord['level']; collapsed: boolean } | null;
-    hasSections: boolean;
-    collapseSection: () => void;
-    expandSection: () => void;
-    collapseAll: () => void;
-    expandAll: () => void;
-    chords: {
-      collapseSection?: string;
-      expandSection?: string;
-      collapseAll?: string;
-      expandAll?: string;
-    };
+    chords: OutliningChords;
   };
   // 045 FR-169 — no link input. Every link action lives in the ONE Link menu, which opens INSTEAD of
   // this one over a link (FR-171, `links/file-link-menu.ts`); this menu never carries a link row.
@@ -251,7 +242,11 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
      * the setting applies whether or not a preview can be opened right now (FR-122a). Every panel action
      * has a menu item: this is the one for the status-bar toggle, so a hidden bar strands nothing.
      */
-    ...(args.syncScroll !== undefined && args.openPreview !== undefined && args.openPreview.affordance.state !== 'absent'
+    ...(args.syncScroll !== undefined &&
+    args.openPreview !== undefined &&
+    args.openPreview.affordance.state !== 'absent' &&
+    // 054 — none for a source whose preview is one picture (a Mermaid file).
+    isFlowingDocument(args.openPreview.affordance.provider)
       ? [
           {
             label: args.syncScroll.on ? 'Synchronise Scrolling ✓' : 'Synchronise Scrolling',
@@ -264,46 +259,11 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
         ]
       : []),
     /*
-     * 047 US3 (FR-036, contracts "Editor body menu") — the fold rows, Markdown documents only. Exactly
-     * one of Collapse/Expand This Section is drawn (never both — `isCollapsed` decides which), absent
-     * entirely before the first heading; Collapse All / Expand All are always drawn but disabled with
-     * no headings to act on.
+     * 054 FR-010 (superseding 047 FR-036's placement) — every fold row in ONE Outlining submenu,
+     * Markdown documents only (FR-014), built by the builder the preview's menu uses too, so the two
+     * cannot drift.
      */
-    ...(args.markdownFold
-      ? [
-          ...(args.markdownFold.section
-            ? [
-                args.markdownFold.section.collapsed
-                  ? {
-                      label: `Expand This H${args.markdownFold.section.level}`,
-                      section: 'viewState' as const,
-                      shortcut: args.markdownFold.chords.expandSection,
-                      onClick: () => args.markdownFold?.expandSection(),
-                    }
-                  : {
-                      label: `Collapse This H${args.markdownFold.section.level}`,
-                      section: 'viewState' as const,
-                      shortcut: args.markdownFold.chords.collapseSection,
-                      onClick: () => args.markdownFold?.collapseSection(),
-                    },
-              ]
-            : []),
-          {
-            label: 'Collapse All',
-            section: 'viewState' as const,
-            shortcut: args.markdownFold.chords.collapseAll,
-            disabled: !args.markdownFold.hasSections,
-            onClick: () => args.markdownFold?.collapseAll(),
-          },
-          {
-            label: 'Expand All',
-            section: 'viewState' as const,
-            shortcut: args.markdownFold.chords.expandAll,
-            disabled: !args.markdownFold.hasSections,
-            onClick: () => args.markdownFold?.expandAll(),
-          },
-        ]
-      : []),
+    ...(args.markdownFold ? [outliningSubmenu(args.markdownFold)] : []),
   ], args.split);
 }
 

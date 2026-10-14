@@ -97,6 +97,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
+import { diagramActionsAt } from './diagram/diagram-actions.js';
 import {
   collapseAll as foldCollapseAll,
   defaultOpenActionFor,
@@ -126,6 +127,12 @@ import {
   type PreviewNotice,
   type PreviewPanelConfig,
   type ProviderSettings,
+  type TaskToggleResponse,
+  canCollapseWithin,
+  canExpandWithin,
+  collapseWithin,
+  expandWithin,
+  isFlowingDocument,
 } from '@throng/core';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
@@ -134,6 +141,7 @@ import { openFileInTab } from '../editor/editor-open.js';
 import { positionRevealTarget } from '../editor/reveal-range.js';
 import { linkFailureReport, osLinkActions, type LinkActionDeps } from '../links/link-actions.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
+import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { findHeading, linkOf } from './link-dom.js';
 import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
 import { openPreviewLinkMenu } from './preview-link-menu.js';
@@ -172,7 +180,15 @@ import {
   type LinkNotice,
 } from './preview-link-notice.js';
 import { useNotify } from '../common/notification.js';
-import { registerPreviewPanelHandles } from './preview-panel-handles.js';
+import {
+  hasPendingReveal,
+  onPendingReveal,
+  peekPendingReveal,
+  registerPreviewPanelHandles,
+  takePendingReveal,
+} from './preview-panel-handles.js';
+import { locateRevealDiagram, locateRevealRange, revealAwaitsDiagram } from './reveal-match.js';
+import { DIAGRAM_REVEALED_CLASS, DIAGRAM_REVEALED_MS } from './diagram/diagram-host.js';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import { panelSubject, usePanelPlace } from '../common/panel-subject.js';
 import { isFileNotice, isMovedOutNotice, PreviewFileNotice, shownPreviewFailure } from './preview-notice.js';
@@ -212,6 +228,12 @@ import { usePreviewProviders } from './provider-registry-context.js';
 import { clearPreviewReservation, previewReservationFor } from './preview-reservations.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import type { PreviewBody, PreviewBodyProps } from './provider-view.js';
+import {
+  TASK_NOTICE_ACTION,
+  taskNoticeMessage,
+  taskNoticeTestId,
+  type TaskToggle,
+} from './task-toggle.js';
 import './preview.css';
 import './match-frames.css';
 
@@ -314,6 +336,9 @@ const MARKDOWN_FOLD_ACTIONS = [
   'markdown.expandSection',
   'markdown.collapseAll',
   'markdown.expandAll',
+  // 054 FR-011, FR-013 — the section and every section nested in it, each individually. Shipped unbound.
+  'markdown.collapseAllInside',
+  'markdown.expandAllInside',
 ] as const;
 type MarkdownFoldActionId = (typeof MARKDOWN_FOLD_ACTIONS)[number];
 
@@ -632,6 +657,8 @@ export function PreviewPanel({
    * registry. The body host is the focusable surface: it is what the keyboard reads and scrolls.
    */
   const bodyHostRef = useRef<HTMLDivElement | null>(null);
+  // 054 — whether this preview is a flowing document (`isFlowingDocument`); set each render, read by handlers.
+  const flowingRef = useRef(true);
   const panelRootRef = useRef<HTMLDivElement | null>(null);
   /** Whether the body is covered by a file notice right now — read by the focus callback below. */
   const bodyCoveredRef = useRef(false);
@@ -772,6 +799,62 @@ export function PreviewPanel({
     lastLinkNotice.current = null;
     clear(linkNoticeTestId);
   }, [clear, linkNoticeTestId]);
+  /* ── Task-list toggles (054 FR-022, FR-028, R4) ────────────────────────────────────────────────── */
+
+  /*
+   * The body reports a task; main changes the marker. A refusal is ONE notice on this preview — the same
+   * test id every time, so a second refusal flashes the card already up rather than stacking another — and
+   * the box keeps its state because the body never let it change. A toggle that lands clears it.
+   */
+  const taskNoticeId = taskNoticeTestId(panelId);
+  const filePathRef = useRef(state?.filePath);
+  filePathRef.current = state?.filePath;
+  /*
+   * One request per task line at a time: every click carries the state the reader SAW, so a second request
+   * before main's re-render lands would fail `changed` and raise a notice for a toggle that worked. A line is
+   * free again when main refuses (nothing will re-render) or when the re-render arrives after an applied one.
+   */
+  const taskInFlight = useRef(new Set<number>());
+  const taskApplied = useRef(new Set<number>());
+  const revision = state?.revision;
+  const revisionRef = useRef(revision);
+  revisionRef.current = revision;
+  useEffect(() => {
+    for (const line of taskApplied.current) taskInFlight.current.delete(line);
+    taskApplied.current.clear();
+  }, [revision]);
+  const onToggleTask = useCallback(
+    (task: TaskToggle): void => {
+      const filePath = filePathRef.current;
+      const preview = window.throng?.preview;
+      if (filePath === undefined || preview === undefined) return;
+      if (taskInFlight.current.has(task.line)) return;
+      taskInFlight.current.add(task.line);
+      const askedAt = revisionRef.current;
+      void preview
+        .toggleTask({ panelId, filePath, ...task })
+        .catch((): TaskToggleResponse => ({ ok: false, reason: 'io' }))
+        .then((answer) => {
+          if (answer.ok) {
+            // Held until the next render of the document; nothing to wait for if it already arrived.
+            if (revisionRef.current !== askedAt) taskInFlight.current.delete(task.line);
+            else taskApplied.current.add(task.line);
+            clear(taskNoticeId);
+            return;
+          }
+          taskInFlight.current.delete(task.line);
+          notify({
+            severity: 'warning',
+            subject: panelSubject(placeRef.current),
+            action: TASK_NOTICE_ACTION,
+            message: taskNoticeMessage(answer.reason),
+            testId: taskNoticeId,
+          });
+        });
+    },
+    [panelId, notify, clear, taskNoticeId],
+  );
+
   /** The body's own reports. Only the link notices are a body's to raise (FR-090e/f). */
   const onNotice = useCallback(
     (notice: PreviewNotice): void => {
@@ -956,6 +1039,8 @@ export function PreviewPanel({
   }, []);
 
   const openHeadingOutlineHandler = useCallback((): void => {
+    // A single picture (a Mermaid preview) has no headings to go to.
+    if (!flowingRef.current) return;
     setHeadingOutlineCurrentSlug(computeCurrentHeadingSlug());
     setHeadingOutlineOpen(true);
   }, [computeCurrentHeadingSlug]);
@@ -1109,6 +1194,8 @@ export function PreviewPanel({
     () => ({
       collapseSection: firstBinding(keybindings, 'markdown.collapseSection'),
       expandSection: firstBinding(keybindings, 'markdown.expandSection'),
+      collapseAllInside: firstBinding(keybindings, 'markdown.collapseAllInside'),
+      expandAllInside: firstBinding(keybindings, 'markdown.expandAllInside'),
       collapseAll: firstBinding(keybindings, 'markdown.collapseAll'),
       expandAll: firstBinding(keybindings, 'markdown.expandAll'),
     }),
@@ -1128,7 +1215,14 @@ export function PreviewPanel({
       const slug = host ? sectionAtPoint(host, target) : null;
       const flat = flattenHeadings(headingsRef.current);
       const found = slug !== null ? flat.find((f) => f.symbol.slug === slug) : undefined;
-      const section = found ? { level: found.symbol.level, collapsed: isCollapsed(foldState, found.symbol.slug) } : null;
+      const section = found
+        ? {
+            level: found.symbol.level,
+            collapsed: isCollapsed(foldState, found.symbol.slug),
+            canCollapseInside: canCollapseWithin(foldState, headingsRef.current, found.symbol.slug),
+            canExpandInside: canExpandWithin(foldState, headingsRef.current, found.symbol.slug),
+          }
+        : null;
       return {
         section,
         hasSections: flat.length > 0,
@@ -1138,6 +1232,13 @@ export function PreviewPanel({
         expandSection: () => {
           if (found) onFoldChange(setSection(foldState, found.symbol.slug, false));
         },
+        // 054 FR-011 — the section and everything nested in it, each set individually (core's 047 FR-037a rule).
+        collapseAllInside: () => {
+          if (found) onFoldChange(collapseWithin(foldState, headingsRef.current, found.symbol.slug));
+        },
+        expandAllInside: () => {
+          if (found) onFoldChange(expandWithin(foldState, headingsRef.current, found.symbol.slug));
+        },
         collapseAll: () => onFoldChange(foldCollapseAll(foldState)),
         expandAll: () => onFoldChange(foldExpandAll(foldState)),
         chords: foldMenuChords,
@@ -1145,17 +1246,6 @@ export function PreviewPanel({
     },
     [isFoldableProvider, foldState, onFoldChange, foldMenuChords],
   );
-
-  /** The status bar's own toggle (contracts "Status bar", FR-038) — `null` for a non-Markdown provider. */
-  const statusBarFold = useMemo(() => {
-    if (!isFoldableProvider) return null;
-    const anyExpanded = flattenHeadings(headings).some((f) => !isCollapsed(foldState, f.symbol.slug));
-    return {
-      anyExpanded,
-      chord: anyExpanded ? foldMenuChords.collapseAll : foldMenuChords.expandAll,
-      onToggleAll: () => onFoldChange(anyExpanded ? foldCollapseAll(foldState) : foldExpandAll(foldState)),
-    };
-  }, [isFoldableProvider, headings, foldState, onFoldChange, foldMenuChords]);
 
   /**
    * 047 US3 (T049, FR-037, contracts "Commands") — what each `markdown.*` chord DOES, resolved at the
@@ -1184,6 +1274,8 @@ export function PreviewPanel({
       if (slug === null) return;
       if (action === 'markdown.collapseSection') onFoldChange(setSection(foldState, slug, true));
       else if (action === 'markdown.expandSection') onFoldChange(setSection(foldState, slug, false));
+      else if (action === 'markdown.collapseAllInside') onFoldChange(collapseWithin(foldState, headingsRef.current, slug));
+      else if (action === 'markdown.expandAllInside') onFoldChange(expandWithin(foldState, headingsRef.current, slug));
       else onFoldChange(setSection(foldState, slug, !isCollapsed(foldState, slug)));
     },
     [isFoldableProvider, foldState, onFoldChange, computeCurrentHeadingSlug],
@@ -1292,9 +1384,61 @@ export function PreviewPanel({
         if (pending.jump) jumpToHeading(pending.filePath, pending.fragment);
         else scrollToHeading(pending.fragment);
       }
+      // 054 FR-031 — a Find in Files match this preview was opened for, now that its file is on screen.
+      revealPendingMatchRef.current();
     },
     [panelId, scrollToHeading, jumpToHeading, settleRedraw],
   );
+
+  /* ── 054 FR-031, FR-032 — reveal a Find in Files match (research R8) ─────────────────────────── */
+
+  /*
+   * An open from a result hands this panel a pending reveal (`preview-panel-handles.ts`). It is taken once
+   * the body has drawn THAT file — at once when it already shows it (a focused preview draws nothing new),
+   * else on the draw. The match is found in what was drawn (`reveal-match.ts`); its section is unfolded,
+   * it is scrolled into view and painted as find paints its current match. A match the preview does not
+   * show — hidden front matter, a diagram — opens the editor at it instead (FR-032).
+   */
+  const revealPendingMatchRef = useRef<() => void>(() => undefined);
+  revealPendingMatchRef.current = (): void => {
+    const drawn = drawnFile.current;
+    const host = bodyHostRef.current;
+    const content = stateRef.current?.content;
+    if (drawn === null || host === null || !hasPendingReveal(panelId)) return;
+    const reveal = peekPendingReveal(panelId);
+    if (reveal === null || !samePath(reveal.absPath, drawn)) return;
+    // A diagram on the line still to be drawn (an embed not read yet): its draw reports again, and is taken then.
+    if (content?.kind === 'text' && revealAwaitsDiagram(host, content.text, reveal)) return;
+    takePendingReveal(panelId);
+    const range = content?.kind === 'text' ? locateRevealRange(host, content.text, reveal) : null;
+    if (range === null) {
+      // A line drawn as a diagram reveals the diagram, not an editor (2026-10-13, superseding FR-032 there).
+      const diagram = content?.kind === 'text' ? locateRevealDiagram(host, content.text, reveal) : null;
+      if (diagram === null) {
+        reveal.fallback();
+        return;
+      }
+      const unfoldingDiagram = revealBeforeScrollRef.current(diagram) === true;
+      const scrollToDiagram = (): void => diagram.scrollIntoView({ block: 'center' });
+      if (unfoldingDiagram) requestAnimationFrame(scrollToDiagram);
+      else scrollToDiagram();
+      // Marked for a moment, as find marks its current match; restarted if it is revealed again meanwhile.
+      diagram.classList.remove(DIAGRAM_REVEALED_CLASS);
+      void diagram.offsetWidth;
+      diagram.classList.add(DIAGRAM_REVEALED_CLASS);
+      setTimeout(() => diagram.classList.remove(DIAGRAM_REVEALED_CLASS), DIAGRAM_REVEALED_MS);
+      return;
+    }
+    const painter = createCssHighlightPainter(panelId);
+    painter.paint([range], 0);
+    const target = range.startContainer.parentElement ?? host;
+    // A match in a collapsed section: unfold it first; the scroll follows the redraw the fold causes.
+    const unfolding = revealBeforeScrollRef.current(range.startContainer) === true;
+    const scroll = (): void => target.scrollIntoView({ block: 'center' });
+    if (unfolding) requestAnimationFrame(scroll);
+    else scroll();
+  };
+  useEffect(() => onPendingReveal(panelId, () => revealPendingMatchRef.current()), [panelId]);
 
   /* ── Following (FR-090, FR-091) ──────────────────────────────────────────────────────────────── */
 
@@ -1374,6 +1518,12 @@ export function PreviewPanel({
             case 'refused':
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
               return;
+            case 'reroute':
+              // 054 FR-008 — another provider's file never replaces this preview in place: it is opened as an
+              // ordinary preview of its own type (FR-007 Last Active, FR-004 focus), and this one stays.
+              clearLinkNotice();
+              void requestPreviewOpen({ absPath: link.absPath, projectId: panel.originProjectId });
+              return;
             default:
               // `focusedOther` — main focused the preview that already shows the file (FR-090c). This one
               // does not change, but the link WAS followed, so an earlier link's notice goes.
@@ -1394,7 +1544,7 @@ export function PreviewPanel({
           );
         });
     },
-    [panelId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
+    [panelId, panel.originProjectId, raiseLinkNotice, clearLinkNotice, revealFragmentIn, placeLeft],
   );
 
   /* ── Back and Forward (044 US7: FR-102, FR-106b–d, FR-107) ───────────────────────────────────── */
@@ -1518,6 +1668,11 @@ export function PreviewPanel({
               // `throng:editor:resolveDrop` produced (contract §2) — reuse the same link-notice path.
               if (isLinkNotice(res.notice)) raiseLinkNotice(res.notice);
               return;
+            case 'reroute':
+              // 054 FR-008 — a file of another provider dropped here opens as its own type's preview.
+              clearLinkNotice();
+              void requestPreviewOpen({ absPath, projectId: panel.originProjectId });
+              return;
             default:
               // `focusedOther` (FR-023, 044 FR-090c) — main focused the preview already showing it.
               clearLinkNotice();
@@ -1596,6 +1751,9 @@ export function PreviewPanel({
   const textSelection = view?.textSelection ?? false;
   const providerKind =
     (state ? registry.get(state.providerId) : undefined)?.kind ?? registry.forPath(mountFile.current)?.kind ?? 'text';
+  // 054 — a provider that draws one picture (Mermaid) has no Select All, Go to Heading or scroll sync.
+  const flowing = isFlowingDocument((state ? registry.get(state.providerId) : undefined) ?? registry.forPath(mountFile.current));
+  flowingRef.current = flowing;
   const parented = state?.parent != null;
 
   /*
@@ -1606,7 +1764,7 @@ export function PreviewPanel({
    * (`requestEditorTopLine`), never a write into the store; a sync scroll records no history (FR-101).
    */
   const parentId = state?.parent?.panelId ?? null;
-  const syncing = settings.editor.previews.syncScroll && providerKind === 'text' && parentId !== null;
+  const syncing = settings.editor.previews.syncScroll && flowing && parentId !== null;
   const parentTop = useEditorTopLine(syncing ? parentId : null);
   const parentDocLines = useEditorDocLines(syncing ? parentId : null);
   const syncingRef = useRef(syncing);
@@ -1860,7 +2018,7 @@ export function PreviewPanel({
         editorRoute,
         // FR-122a/b — every text-provider preview, whatever is under the pointer; never a binary one.
         syncScroll:
-          providerKind === 'text'
+          flowingRef.current
             ? {
                 on: syncScrollRef.current,
                 toggle: onToggleSyncScroll,
@@ -1875,6 +2033,20 @@ export function PreviewPanel({
         fold: buildFoldMenuArgs(target),
         // 048 — the Split submenu, splitting this panel.
         split: { panelId, keybindings },
+        // 054 FR-074 — this panel's inline diagram is maximised over the document.
+        focusLocked: isPanelSectionMaximised(panelId),
+        flowingDocument: flowingRef.current,
+        diagram: (() => {
+          const found = diagramActionsAt(target);
+          return found
+            ? {
+                inFocus: found.inFocus(),
+                copyImage: () => found.copyImage(),
+                toggleFocus: () => found.toggleFocus(),
+                ...(found.focusChord !== undefined ? { focusChord: found.focusChord } : {}),
+              }
+            : null;
+        })(),
       });
       if (items.length > 0) openMenu(point.x, point.y, items);
     },
@@ -1931,9 +2103,11 @@ export function PreviewPanel({
       const host = bodyHostRef.current;
       if (host === null || selectionRangeIn(host) === null) return;
       e.preventDefault();
+      // 054 FR-074 — the document is covered by its maximised diagram: nothing is copied from it.
+      if (isPanelSectionMaximised(panelId)) return;
       copySelection(captureSelection(host), copyFormatRef.current);
     },
-    [copySelection],
+    [copySelection, panelId],
   );
 
   /** Paste and cut change a document; a preview has none to change. */
@@ -1960,15 +2134,23 @@ export function PreviewPanel({
   /** Ctrl+A selects the body, not the window. */
   const onHostKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>): void => {
+      const selectAllKey = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a';
+      // 054 FR-074 — an inline diagram of this panel is maximised over the document: its Outlining chords
+      // and Select All act on nothing visible. Select All is consumed (the window's own would select the
+      // page); the fold chords are left unconsumed for nobody to act on.
+      if (isPanelSectionMaximised(panelId)) {
+        if (selectAllKey) e.preventDefault();
+        return;
+      }
       // 047 T049 — the markdown.* fold chords, consumed before anything else on this key.
       if (chordEngineRef.current?.keydown(e)) return;
-      if (!textSelection) return;
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
+      if (!textSelection || !flowingRef.current) return;
+      if (selectAllKey) {
         e.preventDefault();
         selectAll();
       }
     },
-    [textSelection, selectAll],
+    [textSelection, selectAll, panelId],
   );
 
   /** FR-124 — releasing a held chord modifier ends the prefix; FR-092 — losing focus ends it too. */
@@ -2153,6 +2335,10 @@ export function PreviewPanel({
             onBodyFailure={onBodyFailure}
             // 047 US6 (T063) — a pure passthrough to main's channel; no chrome-level decision (see
             // provider-view.ts's doc comment on why this one differs from onFollow/onFoldChange).
+            readEmbeds={(refs) =>
+              window.throng?.preview?.readEmbeds?.(panelId, [...refs]) ??
+              Promise.resolve({ results: refs.map((ref) => ({ ref, ok: false as const, reason: 'missing' as const })) })
+            }
             resolveWikiTargets={(targets) =>
               window.throng?.preview?.resolveWikiTargets(panelId, [...targets]) ?? Promise.resolve({ resolved: targets.map(() => null) })
             }
@@ -2166,6 +2352,8 @@ export function PreviewPanel({
             onRevealSection={(reveal) => {
               revealRef.current = reveal;
             }}
+            // 054 FR-022 — a task box clicked or Space-pressed; main changes the marker (R4).
+            onToggleTask={onToggleTask}
           />
         ) : null}
         {/* 047 US1 (FR-074, R16) — the match-frame layer: the outline every find match carries, drawn in a
@@ -2203,9 +2391,9 @@ export function PreviewPanel({
           onEditorRoute={onEditorRoute}
           editorRouteDisabled={movedOutTo !== null}
           syncScroll={settings.editor.previews.syncScroll}
+          showSyncScroll={flowing}
           onToggleSyncScroll={onToggleSyncScroll}
           readout={linkReadout}
-          fold={statusBarFold}
         />
       ) : null}
     </div>

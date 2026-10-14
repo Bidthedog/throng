@@ -23,6 +23,11 @@ function leaf(path: string): string {
   return i < 0 ? path : path.slice(i + 1);
 }
 
+/** A path's file name, extension included (`C:\p\notes.md` → `notes.md`), on either separator. Pure. */
+export function fileNameOf(filePath: string): string {
+  return leaf(filePath);
+}
+
 /**
  * Render a path with the host OS's native separators (006, FR-101): Windows uses
  * back-slashes, every other platform forward-slashes. Fixes mixed-separator paths

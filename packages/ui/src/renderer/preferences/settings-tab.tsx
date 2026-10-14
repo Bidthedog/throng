@@ -423,9 +423,22 @@ export function SettingsTab({
               `Subsection`, shared with the other two tabs: `contracts/metadata.md` pins six
               rendering rules on all three at once, and three copies of it meant three edits to
               change one rule, with nothing failing if a copy was missed. */}
-          {subgroups.map(({ subgroup, items: subItems }) => (
+          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
             <Subsection key={subgroup} testIdPrefix="settings-subgroup" group={group} subgroup={subgroup}>
               {subItems.map(row)}
+              {/* 054 FR-050a — the subgroup's own rows first, then its nested subsections. */}
+              {subsections.map(({ subsection, items: sectionItems }) => (
+                <Subsection
+                  key={subsection}
+                  testIdPrefix="settings-subsection"
+                  group={group}
+                  subgroup={subgroup}
+                  subsection={subsection}
+                  level={5}
+                >
+                  {sectionItems.map(row)}
+                </Subsection>
+              ))}
             </Subsection>
           ))}
         </section>

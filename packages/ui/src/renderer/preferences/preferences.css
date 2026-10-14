@@ -302,6 +302,19 @@
   opacity: 0.85;
 }
 
+/* 054 FR-050a — the third level (Editor → Previews → Markdown): one notch quieter again, and no
+   uppercase, so it cannot read as a sibling of the subgroup heading above it. Still folds nothing. */
+.settings-subgroup--nested {
+  margin-top: 10px;
+}
+
+.settings-subgroup--nested > .settings-subgroup__title {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+  font-style: italic;
+}
+
 /* Horizontal padding is not decoration (FR-019b): without it a row-hover highlight runs
    edge-to-edge to the panel border and reads as a rendering fault the moment the hover colour
    differs from the panel behind it. */

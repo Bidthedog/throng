@@ -694,6 +694,8 @@ contextBridge.exposeInMainWorld('throng', {
     /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
     writeRich: (entry: { text: string; html: string }) =>
       ipcRenderer.invoke('throng:clipboard:writeRich', entry),
+    /** 054 — Copy Diagram as Image: a PNG data URI; main validates it and writes the image. */
+    writeImage: (entry: { dataUri: string }) => ipcRenderer.invoke('throng:clipboard:writeImage', entry),
     /** What a paste should insert, and how — decided against the LIVE clipboard, never cached. */
     paste: () => ipcRenderer.invoke('throng:clipboard:paste'),
   },
@@ -732,6 +734,10 @@ contextBridge.exposeInMainWorld('throng', {
     /** 047 R12 (contracts/preview-ipc-047.md §3) — which `[[wikilink]]` targets name a real file. */
     resolveWikiTargets: (panelId: string, targets: { path: string; rooted: boolean }[]) =>
       ipcRenderer.invoke('throng:preview:resolveWikiTargets', { panelId, targets }),
+    // 054 — the text of the Mermaid files a preview embeds, confined to its project.
+    readEmbeds: (panelId: string, refs: string[]) => ipcRenderer.invoke('throng:preview:readEmbeds', { panelId, refs }),
+    /** 054 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source; main validates. */
+    toggleTask: (request: unknown) => ipcRenderer.invoke('throng:preview:toggleTask', request),
     publishEditorTitle: (panelId: string, title: string) =>
       ipcRenderer.send('throng:preview:publishEditorTitle', { panelId, title }),
     placeDeclined: (requestId: string) => ipcRenderer.send('throng:preview:placeDeclined', { requestId }),

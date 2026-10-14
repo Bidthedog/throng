@@ -152,7 +152,10 @@ export function chordCandidates(event: ChordEventLike): string[] {
     isBackquote(e) ||
     /^F\d{1,2}$/.test(e.key) ||
     /^[a-z]$/i.test(e.key) ||
-    /^Arrow(Left|Right|Up|Down)$/.test(e.key);
+    /^Arrow(Left|Right|Up|Down)$/.test(e.key) ||
+    // 054 FR-071a — Enter produces no character that could carry Shift: `Alt+Shift+Enter`
+    // (`panel.toggleMaximise`) must not arrive as `Alt+Enter`.
+    e.key === 'Enter';
   const parts: string[] = [];
   if (e.ctrlKey) parts.push('Ctrl');
   if (keepShift && e.shiftKey) parts.push('Shift');

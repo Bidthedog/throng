@@ -1,0 +1,235 @@
+/*
+ * A diagram's box, its view controls and its inline notice (054 FR-044, FR-046a – FR-046h, research R6).
+ * Colours come from theme variables only (Principle VI); the diagram's own colours are mermaid's, from the
+ * same tokens (`mermaid-renderer.ts`).
+ */
+
+/* The element the Markdown body puts where a claimed fence was: one block in the document flow. */
+.preview-diagram-host {
+  display: block;
+  margin: 0.75em 0;
+}
+
+/* A folded section hides its blocks with `hidden` (fold-gutter.ts); the `display` above would beat the
+   user-agent `[hidden]` rule and leave the diagram on screen (MT-04 B7). */
+.preview-diagram-host[hidden] {
+  display: none;
+}
+
+.preview-diagram-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: var(--throng-colour-editorBg);
+}
+
+.preview-diagram-frame--in-pane .preview-diagram-frame__viewport {
+  height: 100%;
+}
+
+/*
+ * FR-046a (manual test change request, 2026-10-13) — a standalone .mmd preview: its one diagram fills the
+ * panel's body, every box down to the viewport taking the height that is left, and the body never scrolls. A
+ * diagram larger than the panel is panned (FR-046e); the frame's Fit uses the viewport's own height.
+ */
+.preview-panel__body:has(.preview-mermaid) {
+  overflow: hidden;
+}
+
+.preview-mermaid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.preview-mermaid > .preview-diagram-host,
+.preview-mermaid .preview-diagram {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.preview-diagram-frame--fills {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  /* The panel's focus ring is an inset outline reaching 1px into the content box, and positioned content
+     paints over it: the drawing keeps 1px clear, and the frame's own ring (inset 0) lies against the panel's
+     as one band (2026-10-13). */
+  padding: 0 1px 1px;
+}
+
+.preview-diagram-frame--fills > .preview-diagram-frame__viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * A diagram a Find in Files match revealed (2026-10-13): marked in the find match colour, above the drawing as
+ * the focus ring is, fading out over DIAGRAM_REVEALED_MS, declared beside the diagram host class.
+ */
+.preview-diagram-host--revealed .preview-diagram-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 3px solid var(--throng-colour-searchMatchCurrent, #2c4a7a);
+  border-radius: inherit;
+  pointer-events: none;
+  animation: preview-diagram-revealed 1600ms ease-out forwards;
+}
+
+@keyframes preview-diagram-revealed {
+  0%,
+  60% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-diagram-host--revealed .preview-diagram-frame::before {
+    animation: none;
+  }
+}
+
+/* FR-046f — drawn in the maximise layer's host, over the tab's panels. */
+.preview-diagram-pane-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.preview-diagram-frame--in-pane {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+
+/* FR-044 — the last good render under a notice: still readable, visibly not current. */
+.preview-diagram-frame--dimmed .preview-diagram-frame__layer {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+/*
+ * The controls sit OUTSIDE the transformed layer, pinned top-left (FR-046b). Quiet until the reader is in
+ * the diagram, so a page of diagrams is not a page of toolbars; always shown to the keyboard.
+ */
+.preview-diagram-frame__toolbar {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: var(--throng-colour-surfaceActive);
+  opacity: 0.35;
+  transition: opacity 120ms ease-out;
+}
+
+.preview-diagram-frame:hover .preview-diagram-frame__toolbar,
+.preview-diagram-frame__toolbar:focus-within,
+.preview-diagram-frame--in-pane .preview-diagram-frame__toolbar {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-diagram-frame__toolbar {
+    transition: none;
+  }
+}
+
+.preview-diagram-frame__viewport {
+  position: relative;
+  overflow: hidden;
+  /* Fit has no floor (B1), so a very wide diagram in a narrow panel is only a few pixels tall: the box keeps
+     room for its toolbar, which the frame would otherwise clip out of reach. */
+  min-height: 36px;
+}
+
+/*
+ * A diagram holding focus — clicked, tabbed to, or one of its controls pressed — is the one the panel's zoom
+ * chords zoom, so its whole box is highlighted (manual test change request, 2026-10-12). The viewport's own
+ * outline is off: the box's is the one indicator.
+ */
+.preview-diagram-frame:focus-within::after {
+  /* An overlay, not an outline: the viewport and its transformed layer are positioned, and a positioned
+     descendant paints over its ancestor's outline, so a zoomed diagram covered the ring (2026-10-13). */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  /* The panel's own ring colour — its project's, where it has one (054 FR-078) — so the two rings read as one. */
+  border: 2px solid var(--panel-border-colour, var(--throng-colour-activePanelBorder));
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/*
+ * A diagram that fills its panel (a standalone .mmd preview) is selected with its panel, and the panel's own
+ * border says so: no ring of its own (MT-04 retest, 2026-10-13). After the ring above and more specific, so it
+ * wins — at equal specificity the ring, declared later, drew anyway.
+ */
+.preview-diagram-frame.preview-diagram-frame--fills:focus-within::after {
+  content: none;
+}
+
+.preview-diagram-frame__viewport:focus {
+  outline: none;
+}
+
+/* A diagram's first draw, until its SVG arrives. */
+.preview-diagram__loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--throng-colour-textMuted);
+}
+
+/* A middle-button pan in progress, in place, in a .mmd preview or in Focus Mode alike. */
+.preview-diagram-frame__viewport--panning,
+.preview-diagram-frame__viewport--panning * {
+  cursor: move;
+}
+
+/* A text glyph (Zoom 100%'s "1:1") is wider than an icon box: the box grows to it and never wraps. */
+.preview-diagram-frame__toolbar .icon {
+  width: auto;
+  min-width: var(--throng-size-icon, 16px);
+  white-space: nowrap;
+}
+
+.preview-diagram-frame__layer {
+  transform-origin: 0 0;
+}
+
+.preview-diagram-frame__layer > svg {
+  display: block;
+}
+
+/* FR-044 — one inline notice naming the parse error, above the diagram (or alone). */
+.preview-diagram__notice {
+  margin: 0 0 0.4em;
+  padding: 0.35em 0.6em;
+  border-left: 3px solid var(--throng-colour-danger);
+  background: var(--throng-colour-surfaceActive);
+  color: var(--throng-colour-text);
+}
+
+.preview-diagram__notice-detail {
+  color: var(--throng-colour-textMuted);
+}

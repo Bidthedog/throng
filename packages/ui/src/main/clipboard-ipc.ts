@@ -18,6 +18,12 @@ const MODES: readonly ClipboardMode[] = ['verbatim', 'full-line', 'rectangular']
 const asMode = (raw: unknown): ClipboardMode =>
   MODES.includes(raw as ClipboardMode) ? (raw as ClipboardMode) : 'verbatim';
 
+/** 054 — what Copy Diagram as Image may hand over: a base64 PNG data URI, and nothing else. */
+const PNG_DATA_URI = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/;
+
+/** The largest image accepted, as data-URI characters (~48 MB of PNG). A diagram is far smaller. */
+export const MAX_CLIPBOARD_IMAGE_URI_LENGTH = 64 * 1024 * 1024;
+
 export function registerClipboardIpc(clipboard: ClipboardService): void {
   ipcMain.handle('throng:clipboard:write', async (_event, raw: Record<string, unknown>) => {
     if (typeof raw?.text !== 'string') return;
@@ -28,6 +34,19 @@ export function registerClipboardIpc(clipboard: ClipboardService): void {
   ipcMain.handle('throng:clipboard:writeRich', async (_event, raw: Record<string, unknown>) => {
     if (typeof raw?.text !== 'string' || typeof raw?.html !== 'string') return;
     await clipboard.writeRich({ text: raw.text, html: raw.html });
+  });
+
+  /**
+   * 054 — Copy Diagram as Image: a PNG data URI from the renderer's rasteriser. Anything that is not a
+   * bounded base64 PNG URI is ignored; the HTML alternative is built HERE, from the validated URI, so the
+   * renderer never supplies markup for the clipboard.
+   */
+  ipcMain.handle('throng:clipboard:writeImage', async (_event, raw: Record<string, unknown>) => {
+    const uri = raw?.dataUri;
+    if (typeof uri !== 'string' || uri.length > MAX_CLIPBOARD_IMAGE_URI_LENGTH) return;
+    const match = PNG_DATA_URI.exec(uri);
+    if (match === null) return;
+    await clipboard.writeImage({ png: new Uint8Array(Buffer.from(match[1]!, 'base64')), html: `<img src="${uri}">` });
   });
 
   /**

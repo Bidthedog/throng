@@ -177,7 +177,7 @@ export function KeybindingsTab({
               tab out of three, with nothing to say so. FR-036b: the ungrouped bindings first. */}
           {items.map(row)}
           {/* Shared markup, this tab's OWN id prefix — matching `keybindings-group-${group}`. */}
-          {subgroups.map(({ subgroup, items: subItems }) => (
+          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
             <Subsection
               key={subgroup}
               testIdPrefix="keybindings-subgroup"
@@ -185,6 +185,19 @@ export function KeybindingsTab({
               subgroup={subgroup}
             >
               {subItems.map(row)}
+              {/* 054 FR-050a — every tab renders the third level, for the same reason as the second. */}
+              {subsections.map(({ subsection, items: sectionItems }) => (
+                <Subsection
+                  key={subsection}
+                  testIdPrefix="keybindings-subsection"
+                  group={group}
+                  subgroup={subgroup}
+                  subsection={subsection}
+                  level={5}
+                >
+                  {sectionItems.map(row)}
+                </Subsection>
+              ))}
             </Subsection>
           ))}
         </section>

@@ -52,6 +52,9 @@ import { useSubWorkspaceWindow } from './subworkspace-window-context.js';
 import { destroySubWorkspace } from './destroy-sub-workspace.js';
 import { SplitTree } from './split-tree.js';
 import { OuterEdgeZones } from './outer-edge-zones.js';
+import { setTabGroupDragLive } from './drag-live.js';
+import { MaximiseLayer } from './maximise-layer.js';
+import { useMaximisedPanel, useTabMaximise } from './maximise-store.js';
 import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuAction } from './context-menu.js';
 import { tabContextMenu } from './tab-menu.js';
@@ -134,7 +137,9 @@ function TabChip({
   // Any unsaved editor in this Tab lights the shared dot (006, US8).
   const tabDirty = useEditorDirty(collectPanels(tab.root).map((p) => p.id));
   const drag = useDraggable({ id: tabDragId(tab.id) });
-  const drop = useDroppable({ id: tabDropId(tab.id) });
+  // 054 FR-074 — a maximised tab is modal: a panel cannot be dropped into it (it would land hidden).
+  const dropRefused = useTabMaximise(tab.id).isMaximised;
+  const drop = useDroppable({ id: tabDropId(tab.id), disabled: dropRefused });
   // Highlight only when a Panel (not a Tab) is being dragged over — moving a
   // Panel into this Tab. Tab reordering shows an insertion indicator instead.
   const panelOver = drop.isOver && draggingPanelId !== null;
@@ -387,6 +392,7 @@ function TabChip({
       ref={mergeRefs(drag.setNodeRef, drop.setNodeRef, holdChip)}
       className={`tab-chip${active ? ' tab-chip--active' : ''}${panelOver || treeOver ? ' tab-chip--over' : ''}`}
       data-testid={`tab-${tab.id}`}
+      data-drop-disabled={dropRefused ? 'true' : undefined}
       data-active={active ? 'true' : 'false'}
       onDragOver={(e) => {
         const treeDrag = getTreeDrag();
@@ -1179,6 +1185,8 @@ export function TabGroup(): ReactElement {
    */
   const stepRef = useRef<(direction: 'left' | 'right') => boolean>(() => false);
   const hold = useHoldRepeat(chevronRepeatDelayMs, (direction) => stepRef.current(direction));
+  // 054 FR-072 — the shown tab's maximised panel, if any (read before the early return: it is a hook).
+  const maximisedPanelId = useMaximisedPanel(layout ? (layout.activeTabId ?? layout.tabs[0]?.id ?? null) : null);
 
   if (!layout) return <></>;
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0];
@@ -1230,6 +1238,7 @@ export function TabGroup(): ReactElement {
     closeMenu();
     endSplitMode();
     dragInfo.current = panelId ? { kind: 'panel', id: panelId } : { kind: 'tab', id: tabId! };
+    setTabGroupDragLive(true);
 
     // Drive the OS ghost from coalesced pointer moves (one tick per frame) so it
     // follows the cursor smoothly. dnd-kit's pointer capture keeps these firing
@@ -1314,6 +1323,7 @@ export function TabGroup(): ReactElement {
     closeMenu();
     endSplitMode();
     dragInfo.current = null;
+    setTabGroupDragLive(false);
     draggingOwned.current = false;
     setDraggingPanelId(null);
     setDraggingTabId(null);
@@ -1841,9 +1851,11 @@ export function TabGroup(): ReactElement {
             onDismiss={() => setPickerOpen(false)}
           />
         ) : null}
-        <div className="tab-body" data-testid="tab-body">
+        {/* 054 FR-072 — `data-maximised` names the panel lifted over the body; the CSS does the rest. */}
+        <div className="tab-body" data-testid="tab-body" data-maximised={maximisedPanelId ?? undefined}>
           {activeTab ? <SplitTree node={activeTab.root} tabId={activeTab.id} path={[]} /> : null}
           {activeTab ? <OuterEdgeZones tabId={activeTab.id} panelCount={countPanels(activeTab.root)} /> : null}
+          {activeTab ? <MaximiseLayer tabId={activeTab.id} /> : null}
         </div>
       </DragStateContext.Provider>
     </DndContext>

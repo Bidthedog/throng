@@ -22,9 +22,11 @@ import type { IClipboard } from '@throng/core';
 export class MemoryClipboard implements IClipboard {
   private text = '';
   private html = '';
+  private png: Uint8Array | null = null;
 
   async writeText(text: string): Promise<void> {
     this.text = text;
+    this.png = null;
     // A plain write is not half-rich: it replaces whatever writeRich() left behind, exactly as the
     // real OS clipboard replaces every format in one write (044 FR-035a / R12).
     this.html = '';
@@ -37,6 +39,14 @@ export class MemoryClipboard implements IClipboard {
   async writeRich(entry: { text: string; html: string }): Promise<void> {
     this.text = entry.text;
     this.html = entry.html;
+    this.png = null;
+  }
+
+  // An image write replaces every format, the text included, as the OS clipboard's one write does.
+  async writeImage(entry: { png: Uint8Array; html: string }): Promise<void> {
+    this.text = '';
+    this.html = entry.html;
+    this.png = entry.png;
   }
 
   async readText(): Promise<string> {
@@ -47,5 +57,10 @@ export class MemoryClipboard implements IClipboard {
    *  production code — see the class comment on why readText() must not expose it. */
   htmlForTesting(): string {
     return this.html;
+  }
+
+  /** Test/contract-only: the PNG most recently written by {@link writeImage}, or `null`. */
+  pngForTesting(): Uint8Array | null {
+    return this.png;
   }
 }

@@ -2,6 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import type { ReactElement } from 'react';
 import type { Edge } from '@throng/core';
 import { outerEdgeDropId, useDragState } from './drag-state.js';
+import { useTabMaximise } from './maximise-store.js';
 
 const EDGES: readonly Edge[] = ['top', 'bottom', 'left', 'right'];
 
@@ -36,7 +37,9 @@ function OuterEdgeZone({ tabId, edge }: { tabId: string; edge: Edge }): ReactEle
  */
 export function OuterEdgeZones({ tabId, panelCount }: { tabId: string; panelCount: number }): ReactElement | null {
   const { draggingPanelId } = useDragState();
-  if (draggingPanelId === null || panelCount < 2) return null;
+  // 054 FR-074 — a tab with something maximised takes no dropped panel.
+  const { isMaximised } = useTabMaximise(tabId);
+  if (isMaximised || draggingPanelId === null || panelCount < 2) return null;
   return (
     <div className="outer-edge-zones" data-testid="outer-edge-zones">
       {EDGES.map((edge) => (

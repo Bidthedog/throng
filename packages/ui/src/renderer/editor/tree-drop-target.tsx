@@ -6,6 +6,7 @@ import {
   TREE_DROP_EVENT,
   type TreeDropDetail,
 } from '../explorer/tree-drag-store.js';
+import { isPanelHiddenAnywhere } from '../workspace/maximise-store.js';
 
 /**
  * Dropping a file dragged from File Explorer onto a panel (024 US4, #114 and its follow-ups).
@@ -50,6 +51,9 @@ export function TreeDropTarget({
     const onTreeDrop = (e: Event): void => {
       const detail = (e as CustomEvent<TreeDropDetail>).detail;
       if (!detail || detail.panelId !== panelId) return;
+      // 054 FR-074 — a panel hidden by a maximised one takes no drop; `inert` already refuses the real
+      // gesture, and the seam must not reach past it.
+      if (isPanelHiddenAnywhere(panelId)) return;
       const single = detail.singleFile ?? false;
       if (!acceptsRef.current(detail.paths, single)) return;
       onDropRef.current(detail.paths, single);

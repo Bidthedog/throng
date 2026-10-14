@@ -29,6 +29,7 @@ import { useEffect, useRef } from 'react';
 import { eventToToken, normalizeToken, type ActionId, type Keybindings } from '@throng/core';
 import { useKeybindings } from '../config/config-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
+import { zoomFocusedDiagram, zoomPanelDiagram, type DiagramZoomPoint } from '../preview/diagram/diagram-zoom.js';
 
 type Gesture = 'WheelUp' | 'WheelDown' | 'MiddleClick';
 
@@ -80,15 +81,24 @@ export function MouseZoomHandler(): null {
      * `preventDefault`ed it away from Chromium — but dispatched nothing: worse than the pre-round
      * behaviour it replaced, not merely unchanged.
      */
-    const dispatch = (action: ActionId | null, panelId: string | null): void => {
+    const dispatch = (action: ActionId | null, panelId: string | null, at?: DiagramZoomPoint): void => {
       switch (action) {
+        // 054 MT-04 A5 — a diagram that has keyboard focus takes the panel-zoom gestures for itself; the
+        // wheel's step zooms it about the pointer (FR-046l). A panel its diagram fills zooms the diagram, focused
+        // or not (MT-04 retest, 2026-10-13).
         case 'panel.zoomIn':
+          if (zoomFocusedDiagram('in', undefined, at)) break;
+          if (panelId && zoomPanelDiagram(panelId, 'in', at)) break;
           if (panelId) wsRef.current.bumpZoom(panelId, 1);
           break;
         case 'panel.zoomOut':
+          if (zoomFocusedDiagram('out', undefined, at)) break;
+          if (panelId && zoomPanelDiagram(panelId, 'out', at)) break;
           if (panelId) wsRef.current.bumpZoom(panelId, -1);
           break;
         case 'panel.zoomReset':
+          if (zoomFocusedDiagram('reset')) break;
+          if (panelId && zoomPanelDiagram(panelId, 'reset')) break;
           if (panelId) wsRef.current.resetZoom(panelId);
           break;
         case 'zoom.in':
@@ -112,6 +122,7 @@ export function MouseZoomHandler(): null {
       dispatch(
         actionForGesture(kbRef.current, event.deltaY < 0 ? 'WheelUp' : 'WheelDown'),
         panelIdUnder(event.target),
+        { clientX: event.clientX, clientY: event.clientY },
       );
     };
     const onMouseDown = (event: MouseEvent): void => {

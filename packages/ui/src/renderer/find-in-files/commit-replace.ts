@@ -448,7 +448,8 @@ function noticeFor(outcome: CommitOutcome, display: SeverityNotificationSettings
   };
 }
 
-function failureWording(reason: string): string {
+/** Why a file could not be written, as a clause. Shared with the preview's task toggle (054 R4). */
+export function failureWording(reason: string): string {
   switch (reason) {
     case 'missing':
       return 'the file is no longer there';

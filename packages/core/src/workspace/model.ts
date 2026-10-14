@@ -134,6 +134,12 @@ export type PreviewPanelConfig = {
   placedInLayoutProjectId?: string;
   /** 050 FR-035 — as {@link EditorPanelConfig.movedOut}: the preview shows the moved notice and reads nothing. */
   movedOut?: true;
+  /**
+   * 054 FR-005, FR-009 — the preview panel TYPE: the id of the provider whose file it shows. Written when
+   * the preview is placed, and whenever it comes to show a file of another provider. Absent on a layout
+   * written before 054 — `previewProviderIdOf` derives it from the file, without writing it back.
+   */
+  providerId?: string;
 };
 
 /**
@@ -254,6 +260,12 @@ export interface Tab {
    * active panel falls back to the Tab's first Panel (see `effectiveActivePanelId`).
    */
   activePanelId?: string;
+  /**
+   * 054 FR-001, FR-002 — this tab's preview panel ids, most recently active first: which preview Last
+   * Active reuses after a restore. Optional; a layout saved before 054 carries none, and
+   * `initialPreviewRecency` supplies the fallback. Ids of panels no longer in the tab are ignored on read.
+   */
+  previewRecency?: string[];
 }
 
 /** The active project's Workspace Pane — a tab group with exactly one active Tab. */

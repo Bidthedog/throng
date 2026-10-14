@@ -22,6 +22,9 @@ import {
   inferIndent,
   initialFold,
   isCollapsed,
+  buildSymbolTree,
+  canCollapseWithin,
+  canExpandWithin,
   isDefaultPanelName,
   BLANK_PANEL_NAME,
   languageName,
@@ -328,6 +331,9 @@ function commandsFor(deps: {
           'markdown.collapseAll': markdownFoldCommand('collapseAll', deps.markdownFold),
           'markdown.expandAll': markdownFoldCommand('expandAll', deps.markdownFold),
           'markdown.toggleAll': markdownFoldCommand('toggleAll', deps.markdownFold),
+          // 054 FR-011, FR-013 — shipped unbound; reachable from the Outlining submenu and any rebind.
+          'markdown.collapseAllInside': markdownFoldCommand('collapseAllInside', deps.markdownFold),
+          'markdown.expandAllInside': markdownFoldCommand('expandAllInside', deps.markdownFold),
         }
       : {}),
   };
@@ -1812,22 +1818,30 @@ export function useEditor(params: UseEditorParams): void {
                           target.state.doc.lineAt(target.state.selection.main.head).number - 1;
                         const at = sectionAtLine(sections, cursorLine0);
                         const deps = markdownFoldDeps();
+                        const tree = buildSymbolTree(markdownHeadingRecords(target.state));
+                        const fold = foldStateValueRef.current;
                         return {
                           section: at
                             ? {
                                 slug: at.slug,
                                 level: at.level,
-                                collapsed: isCollapsed(foldStateValueRef.current, at.slug),
+                                collapsed: isCollapsed(fold, at.slug),
+                                canCollapseInside: canCollapseWithin(fold, tree, at.slug),
+                                canExpandInside: canExpandWithin(fold, tree, at.slug),
                               }
                             : null,
                           hasSections: sections.length > 0,
                           collapseSection: () => void markdownFoldCommand('collapseSection', deps)(target),
                           expandSection: () => void markdownFoldCommand('expandSection', deps)(target),
+                          collapseAllInside: () => void markdownFoldCommand('collapseAllInside', deps)(target),
+                          expandAllInside: () => void markdownFoldCommand('expandAllInside', deps)(target),
                           collapseAll: () => void markdownFoldCommand('collapseAll', deps)(target),
                           expandAll: () => void markdownFoldCommand('expandAll', deps)(target),
                           chords: {
                             collapseSection: firstBinding(keybindingsRef.current, 'markdown.collapseSection'),
                             expandSection: firstBinding(keybindingsRef.current, 'markdown.expandSection'),
+                            collapseAllInside: firstBinding(keybindingsRef.current, 'markdown.collapseAllInside'),
+                            expandAllInside: firstBinding(keybindingsRef.current, 'markdown.expandAllInside'),
                             collapseAll: firstBinding(keybindingsRef.current, 'markdown.collapseAll'),
                             expandAll: firstBinding(keybindingsRef.current, 'markdown.expandAll'),
                           },
