@@ -125,7 +125,7 @@ describe('Open In → Terminal (033 US3, FR-029/FR-030/FR-035, contract A1–A6)
     expect(terminal(build({ relPath: 'src', kind: 'folder' }, FLAVOURS)).disabled).toBeFalsy();
   });
 
-  it('A6 — every new item declares section "navigate", so neither level draws a divider', () => {
+  it('A6 — every new item declares section "navigate"; Open In divides only by its groups (#483), the flavours not at all', () => {
     const items = build({ relPath: 'src/app.ts', kind: 'file' }, FLAVOURS);
     const openInItems = openIn(items).submenu ?? [];
     const terminalItems = terminal(items).submenu ?? [];
@@ -134,7 +134,8 @@ describe('Open In → Terminal (033 US3, FR-029/FR-030/FR-035, contract A1–A6)
     }
     const separators = (rows: MenuAction[]): number =>
       withDividers(rows).filter((r) => 'separator' in r).length;
-    expect(separators(openInItems)).toBe(0);
+    // #483 — the OS reveal | the editor targets | Terminal | Search: one divider between each group.
+    expect(separators(openInItems)).toBe(3);
     expect(separators(terminalItems)).toBe(0);
   });
 });

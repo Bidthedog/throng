@@ -201,8 +201,10 @@ export function buildContextMenuItems(args: {
   // with the editor "Open In" targets (for files) beneath. Folders get just the OS reveal. The child
   // reads "OS File Explorer" — the parent already says "Open In", so "Open in OS File Explorer" doubled it.
   const openInItems: MenuAction[] = [
-    { label: 'OS File Explorer', icon: 'folderOpen', section: 'navigate', onClick: () => ops.reveal(node.relPath) },
-    ...(openIn ?? []),
+    { label: 'OS File Explorer', icon: 'folderOpen', section: 'navigate', group: 'os', onClick: () => ops.reveal(node.relPath) },
+    // #483 — five groups, divided: the OS reveal alone, the editor targets with Other Tab, the previews,
+    // Terminal, Search.
+    ...(openIn ?? []).map((item) => ({ ...item, group: 'editor' })),
   ];
   /*
    * 044 FR-003 — Preview, after the editor targets and before Terminal. Drawn DISABLED — never hidden —
@@ -223,6 +225,7 @@ export function buildContextMenuItems(args: {
       label: preview.lastPreviewTitle === null ? 'Last Preview Panel' : `Last Preview Panel (${preview.lastPreviewTitle})`,
       icon: 'preview',
       section: 'navigate',
+      group: 'preview',
       disabled: previewDisabled || preview.lastPreviewTitle === null,
       onClick: () => preview.openLastActive(),
     });
@@ -230,6 +233,7 @@ export function buildContextMenuItems(args: {
       label: 'New Preview Panel',
       icon: 'preview',
       section: 'navigate',
+      group: 'preview',
       disabled: previewDisabled,
       onClick: () => preview.openNew(),
     });
@@ -250,6 +254,7 @@ export function buildContextMenuItems(args: {
     label: 'Terminal',
     icon: 'terminal',
     section: 'navigate',
+    group: 'terminal',
     disabled: !canOpenTerminal,
     submenu: canOpenTerminal
       ? terminalFlavours.map((flavour) => ({
@@ -281,6 +286,7 @@ export function buildContextMenuItems(args: {
     label: 'Search',
     icon: 'search',
     section: 'navigate',
+    group: 'search',
     submenu: [
       {
         label: 'Find',

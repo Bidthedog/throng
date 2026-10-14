@@ -15,13 +15,19 @@
 import { groupBySection } from '@throng/core';
 import type { MenuAction, MenuItem } from './context-menu.js';
 
-/** Join a level's sections with one divider per boundary. */
+/**
+ * Join a level's sections with one divider per boundary — and, inside a section, one wherever an item's
+ * `group` differs from the item before it (#483).
+ */
 export function withDividers(actions: readonly MenuAction[]): MenuItem[] {
   const groups = groupBySection(actions, (action) => action.section);
   const rows: MenuItem[] = [];
   for (const group of groups) {
     if (rows.length > 0) rows.push({ separator: true });
-    rows.push(...group);
+    group.forEach((action, i) => {
+      if (i > 0 && action.group !== group[i - 1]!.group) rows.push({ separator: true });
+      rows.push(action);
+    });
   }
   return rows;
 }

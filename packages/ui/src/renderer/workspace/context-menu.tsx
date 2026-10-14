@@ -54,6 +54,12 @@ export interface MenuAction {
    */
   section: MenuSection;
   /**
+   * #483 — a finer grouping INSIDE a section: a divider is drawn wherever it changes between two adjacent
+   * items of one section. Absent on both sides is one group. For a submenu whose rows share a section but
+   * fall into kinds worth separating (the File Explorer's Open In).
+   */
+  group?: string;
+  /**
    * A nested submenu, shown as a flyout after a hover dwell. Nests to any depth.
    *
    * `MenuAction[]`, not `MenuItem[]`: a nested level derives its own dividers exactly as the root

@@ -230,17 +230,17 @@ describe('"Open in OS Explorer" leads the "Open In" flyout, and is nowhere else 
     // Three rows since 043 round five: Search was appended, and no editor target was — a folder
     // still cannot be opened in an editor, which is the half of this test that has not moved.
     expect(labels('submenu-Open In')).toEqual(['OS File Explorer', 'Terminal', 'Search']);
-    expect(rows('submenu-Open In')).toHaveLength(3);
+    expect(rows('submenu-Open In')).toHaveLength(5); // #483 — three rows, a rule between each
   });
 
-  it('the flyout draws no rule of its own — every row in it is Navigate', async () => {
-    // The nested level derives its dividers for ITSELF (FR-048 "per level"), and a level whose rows
-    // all share one section must come back with none. Asserted on the drawn flyout, not on the
-    // function that feeds it.
+  it('the flyout draws a rule between its groups — every row in it is Navigate (#483)', async () => {
+    // The nested level derives its dividers for ITSELF (FR-048 "per level"). Its rows share one section,
+    // so the rules come from their groups: after the OS reveal, after the editor targets, after Terminal.
+    // Asserted on the drawn flyout, not on the function that feeds it.
     const user = open(explorerFile());
 
     await user.click(screen.getByTestId('menu-item-Open In'));
 
-    expect(separatorIndices('submenu-Open In')).toEqual([]);
+    expect(separatorIndices('submenu-Open In')).toEqual([1, 4, 6]);
   });
 });
