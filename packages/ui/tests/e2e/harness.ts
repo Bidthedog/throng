@@ -1091,8 +1091,22 @@ export async function createProject(win: Page, name: string, root: string): Prom
   }).toPass({ timeout: 15_000 });
   await win.getByTestId('project-root-input').fill(root);
   await win.getByTestId('project-name-input').fill(name);
+  // The rows that exist BEFORE the save. On a shared app an earlier test may have created a project of
+  // the same name, and that project is usually still the active one when the save lands — so "the
+  // active row contains the name" matches the OLD row, its id is read, and the pane (which correctly
+  // moves to the new project) is then waited on for an id it will never show. Waiting for an active row
+  // that is not one of these is what makes the create unambiguous.
+  const before = new Set(
+    await win.locator('.project-item').evaluateAll((els) => els.map((el) => el.getAttribute('data-testid'))),
+  );
   await win.getByTestId('project-save').click();
-  await expect(win.locator('.project-item').filter({ hasText: name }).first()).toBeVisible();
+  const active = win.locator('.project-item[data-active="true"]');
+  await expect
+    .poll(async () => {
+      const ids = await active.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')));
+      return ids.length === 1 && !before.has(ids[0] ?? null);
+    }, { message: `the new project "${name}" never became the active row` })
+    .toBe(true);
   await settleOnActiveProject(win, name);
 }
 
