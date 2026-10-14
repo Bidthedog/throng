@@ -226,6 +226,9 @@ describe('hand-off ordering, receiving side (049 T012)', () => {
     render(tree(0));
     expect(screen.queryByTestId('child')).toBeNull();
     await waitFor(() => expect(screen.getByTestId('child')).toBeTruthy());
+    // The child is in the DOM once React commits it; its effect logs `mount` after that, in a later
+    // flush. Wait for the event the ordering is about, not the element (failed once on CI with -1).
+    await waitFor(() => expect(log).toContain('mount'));
     expect(log.indexOf('claim:p1,p2')).toBeGreaterThanOrEqual(0);
     expect(log.indexOf('claim:p1,p2')).toBeLessThan(log.indexOf('mount'));
     expect(peekEditorViewState('p1')).toEqual(EDITOR);
@@ -235,7 +238,8 @@ describe('hand-off ordering, receiving side (049 T012)', () => {
     const log: string[] = [];
     const { tree } = mountGate(subWith(['p1']), log, {});
     const { rerender } = render(tree(0));
-    await waitFor(() => expect(screen.getByTestId('child')).toBeTruthy());
+    // The first mount's effect, not just its element — a late `mount` would otherwise land after the reset.
+    await waitFor(() => expect(log).toContain('mount'));
     log.length = 0;
     rerender(tree(1));
     await waitFor(() => expect(log).toContain('mount'));
