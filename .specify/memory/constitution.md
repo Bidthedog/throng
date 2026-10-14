@@ -1,6 +1,26 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.9.0 → 5.10.0
+Bump rationale: MINOR — Principle IV's exhaustive recorded-exceptions lists gain one entry,
+                `panel.toggleMaximise` `Alt+Shift+Enter` (spec 054 FR-071a, issue #467), chosen by the
+                maintainer in 054's clarification of 2026-10-10. Same shape and grade as v5.8.0's
+                `panel.destroy`: additive, nothing withdrawn or redefined, the reserved tier untouched.
+Modified principles: IV — the terminal-tier recorded exceptions gain the entry and its
+                justification; the modifier-tier recorded exceptions list it beside `editor.columnSelect*`,
+                the other `Shift+Alt` chord outside the tiers.
+Added sections: none. Removed sections: none.
+Audit: no shipped binding holds `Alt+Shift+Enter` (`packages/core/src/config/keybindings.ts`); in a
+                terminal the chord is encoded by `encodeEnterKey` (`CSI 13;4 u` under kitty, LF otherwise)
+                and is not in `RESERVED_TERMINAL_CHORDS`.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+Noted, out of scope: the Development Workflow text says "eleven principles"; there are twelve since XII.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.8.0 → 5.9.0
 Bump rationale: MINOR — Principle XI gains one rule, "A loaded Panel keeps its state", in the
                 maintainer's words from spec 049's clarification of 2026-10-01 (049 FR-000).
@@ -2027,7 +2047,8 @@ not the flavour a given user happens to run.
   (`editor.save`) — all three shipped before this rule existed — and `Ctrl+F5`
   (`terminal.redraw`), added deliberately by feature 028 (issue #163).
   *(v5.8.0: and `Ctrl+Shift+Alt+F4` (`panel.destroy`), added deliberately by spec 048 —
-  see below.)*
+  see below.)* *(v5.10.0: and `Alt+Shift+Enter` (`panel.toggleMaximise`), added deliberately by
+  spec 054 — see below.)*
   This list is exhaustive; any addition to it MUST come with its own justification,
   and no chord in the reserved tier may join it. *(Unchanged at v5.6.0: a `Ctrl+Shift+-`
   entry drafted for 5.6.0 was withdrawn before publication, when panel zoom returned to
@@ -2042,6 +2063,16 @@ not the flavour a given user happens to run.
   hosted programs respectively, so the four-modifier form is the one that keeps that meaning
   without taking a chord anything else owns. The panel menu's Destroy item and the header ✕
   remain the canonical routes; the chord is an accelerator over them (Principle VI).
+- **`Alt+Shift+Enter` (`panel.toggleMaximise`), v5.10.0, spec 054 FR-071a (#467).** What it
+  displaces: in a terminal, a modified Enter the program would otherwise receive — `CSI 13;4 u`
+  under the kitty keyboard protocol, a line feed otherwise — whose end, a line break without
+  submitting, `Shift+Enter` still reaches; `Shift+Enter` and `Ctrl+Enter` are untouched and a test
+  asserts they still reach terminals and editors. What justifies it: the maintainer's decision
+  (054 clarification, 2026-10-10) that maximising works from every panel, a terminal included, on
+  the chord Visual Studio users already know as its full-screen toggle. Why no free chord serves:
+  the tier-2 forms are taken or worse — `Ctrl+Alt+Enter` is `search.replaceAll`, and
+  `Ctrl+Shift+Enter` is bound by terminal programs more often. The title-menu row and the header
+  control remain the canonical routes; the chord is an accelerator over them (Principle VI).
 - **`Ctrl+F5`, the first exception taken under this rule rather than inherited by it.**
   What it displaces: a full-screen program can receive `Ctrl+F5` as a function-key
   sequence, and terminal file managers bind the function keys heavily. What justifies
@@ -2150,8 +2181,8 @@ should be able to guess its modifiers:
     default are retired by 048, and `F2`'s recorded exception below now names `file.rename` alone.)*
 - **Recorded exceptions** (exhaustive; an addition MUST be justified in the spec that ships
   it and recorded here):
-  - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S`, `Ctrl+F5` and
-    `Ctrl+Shift+Alt+F4`;
+  - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S`, `Ctrl+F5`,
+    `Ctrl+Shift+Alt+F4` and `Alt+Shift+Enter`;
   - **`navigate.quickOpen` `Ctrl+Shift+T`, `search.findInFiles` `Ctrl+Shift+F` and
     `search.replaceInFiles` `Ctrl+Shift+H`**: the chords every editor a user arrives from
     carries;
@@ -2168,6 +2199,8 @@ should be able to guess its modifiers:
   - **`editor.columnSelect*` `Shift+Alt+Arrow`**, VS Code's column-select chord. *(Recorded
     by derivation at 5.6.0: the maintainer's list did not name it, and no tier admits
     `Shift+Alt`. Spec 046 carries it as a question for the maintainer.)*
+  - **`panel.toggleMaximise` `Alt+Shift+Enter`** (v5.10.0, spec 054), outside the tiers for the
+    same reason, by the maintainer's decision; its terminal-tier entry is above.
 - **What tier 1 costs a terminal.** On Windows, xterm.js treats `Ctrl+Alt` with any key whose
   key code is above 47 as a third-level (AltGr) shift and sends nothing for it on keydown
   (`@xterm/xterm` 6.0.0, `CoreBrowserTerminal._isThirdLevelShift`). So a tier-1 chord on a
@@ -3055,7 +3088,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.9.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-01
+**Version**: 5.10.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-10
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
