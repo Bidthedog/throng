@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { commitTabRename, createProject, firstPanelId, panelIds, runApp, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { commitTabRename, createProject, firstPanelId, panelGrip, panelIds, runApp, cleanupTemp, splitPanelViaMenu } from './harness.js';
 
 // US1 / SC-001: a translucent ghost follows the cursor during a drag. It is a
 // real frameless/transparent OS window (so it can paint at and beyond the app
@@ -72,7 +72,7 @@ test('the drag ghost and the New Tab (+) affordance follow the theme accent', { 
 
       // Begin a drag → the ghost window paints with the theme accent border.
       const pid = await firstPanelId(win);
-      const box = await win.getByTestId(`panel-handle-${pid}`).boundingBox();
+      const box = await panelGrip(win, pid).boundingBox();
       if (!box) throw new Error('no panel handle');
       await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await win.mouse.down();
@@ -91,7 +91,7 @@ test('shows a cursor-following ghost window during a drag, gone on drop', { tag:
 
     const pid = await firstPanelId(win);
     const title = (await win.getByTestId(`panel-${pid}`).locator('.panel-box__title').innerText()).trim();
-    const box = await win.getByTestId(`panel-handle-${pid}`).boundingBox();
+    const box = await panelGrip(win, pid).boundingBox();
     if (!box) throw new Error('no panel handle');
 
     // Begin a drag (past the 4px activation distance) — the ghost window appears.
@@ -126,7 +126,7 @@ test('Escape during a panel drag hides the ghost and leaves the layout alone', {
     const titleBefore = await win.getByTestId(`panel-title-${first}`).innerText();
 
     const drag = async (): Promise<void> => {
-      const box = await win.getByTestId(`panel-handle-${first}`).boundingBox();
+      const box = await panelGrip(win, first).boundingBox();
       if (!box) throw new Error('no panel handle');
       await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await win.mouse.down();
@@ -167,7 +167,7 @@ test('Escape cancels a drag that starts from a TERMINAL panel, whose textarea sw
 
       // Pressing the terminal's header focuses xterm's textarea, which stops Escape bubbling — the
       // cancel has to be taken before it gets there (FR-080).
-      const box = await win.getByTestId(`panel-handle-${pid}`).boundingBox();
+      const box = await panelGrip(win, pid).boundingBox();
       if (!box) throw new Error('no panel handle');
       await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await win.mouse.down();

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
+import { cleanupTemp, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS, panelGrip, splitPanelViaMenu } from './harness.js';
 
 registerTempCleanup();
 import type { ElectronApplication, Page } from '@playwright/test';
@@ -85,7 +85,7 @@ async function panelIds(win: Page): Promise<string[]> {
 
 /** Drag a Panel by its header onto an edge drop-zone of a target Panel. */
 async function dragPanelToEdge(win: Page, sourceId: string, targetId: string, edge: string): Promise<void> {
-  const handle = win.getByTestId(`panel-handle-${sourceId}`);
+  const handle = panelGrip(win, sourceId);
   const box = await handle.boundingBox();
   if (!box) throw new Error('source handle has no box');
   await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

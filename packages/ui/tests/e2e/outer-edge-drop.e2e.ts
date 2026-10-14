@@ -11,6 +11,7 @@ import {
   firstPanelId,
   focusEditor,
   openApp,
+  panelGrip,
   panelIds,
   runApp,
   splitPanelViaMenu,
@@ -84,8 +85,7 @@ async function buildGridPlusOne(win: Page): Promise<{ p1: string; p2: string; p3
 
 /** Drag a panel by its header to the centre of the target element, stopping short of the drop. */
 async function dragOnto(win: Page, sourceId: string, target: () => ReturnType<Page['getByTestId']>): Promise<void> {
-  const handle = win.getByTestId(`panel-handle-${sourceId}`);
-  const box = await handle.boundingBox();
+  const box = await panelGrip(win, sourceId).boundingBox();
   if (!box) throw new Error('source handle has no box');
   await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await win.mouse.down();
@@ -359,12 +359,12 @@ for (const target of ['a panel edge in its own tab', 'another tab'] as const) {
         await firstTab.click();
         await expect(firstTab).toHaveAttribute('data-active', 'true');
       }).toPass();
-      await win.getByTestId(`panel-handle-${preview}`).click();
+      await panelGrip(win, preview).click();
       await dragOnto(win, preview, () => win.locator('.tab-chip').nth(1));
       // Linger over the chip as a person does, until its dwell has switched to it mid-drag (600 ms by default).
       await expect(win.locator('.tab-chip').nth(1)).toHaveAttribute('data-active', 'true', { timeout: 5_000 });
     } else {
-      await win.getByTestId(`panel-handle-${preview}`).click();
+      await panelGrip(win, preview).click();
       await dragOnto(win, preview, () => win.getByTestId(`edge-bottom-${other}`));
     }
     await win.mouse.up();

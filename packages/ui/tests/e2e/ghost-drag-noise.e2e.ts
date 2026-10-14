@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createProject, firstPanelId, runApp } from './harness.js';
+import { createProject, firstPanelId, panelGrip, runApp } from './harness.js';
 
 // Probe: dragging a Panel/Tab must not spew Chromium widget-rejection errors from
 // the drag-ghost OS window (`Message N rejected by interface blink.mojom.Widget`).
@@ -16,7 +16,7 @@ test('dragging does not emit blink.mojom.Widget rejections', { tag: ['@extended'
 
     // Start + wiggle + end a Panel drag several times (each triggers ghost start/stop).
     for (let i = 0; i < 5; i += 1) {
-      const handle = win.getByTestId(`panel-handle-${pid}`);
+      const handle = panelGrip(win, pid);
       const box = await handle.boundingBox();
       if (!box) throw new Error('no handle box');
       await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

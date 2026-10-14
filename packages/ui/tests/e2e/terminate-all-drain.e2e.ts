@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu } from './harness.js';
 // The drain budget itself, so the validity-bound below tracks the production constant instead of
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
@@ -907,7 +907,7 @@ const ghostVisible = ({ BrowserWindow }: typeof import('electron')): boolean =>
 
 /** One complete drag gesture — press, move past the activation distance, drop. */
 async function dragPanelOnce(app: ElectronApplication, win: Page, pid: string): Promise<void> {
-  const box = await win.getByTestId(`panel-handle-${pid}`).boundingBox();
+  const box = await panelGrip(win, pid).boundingBox();
   if (!box) throw new Error('no panel handle');
   await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await win.mouse.down();
