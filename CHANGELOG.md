@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha10 — 2026-10-14
+
 ### Added
 - **Mermaid diagrams in previews** ([#392](https://github.com/Bidthedog/throng/issues/392)): a `mermaid` block in a Markdown preview draws as its diagram, a `.mmd` / `.mermaid` file has its own **Mermaid Preview** and opens as it by default, and each diagram has Fit, Zoom, Zoom 100% and Maximise controls; copying one gives its source as text and a picture as rich content. A Markdown document can embed a Mermaid file with `![[flow.mmd]]` or `![Flow](flow.mmd)`, and right-clicking a diagram offers **Copy Diagram as Image** and Focus Mode.
 - **Diagram zoom and height**: Ctrl+wheel zooms a diagram about the pointer, Ctrl+middle-click returns it to Fit, and an inline diagram keeps one height as you zoom — set it yourself with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`. A `.mmd` preview fills its panel, and its diagram zooms whenever the panel is active.
