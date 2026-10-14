@@ -30,7 +30,7 @@ const stopDrag = (e: ReactPointerEvent): void => {
 };
 
 /** `Back (Alt+ArrowLeft)`, or `Back` alone when the command is unbound. */
-function titled(label: string, chord: string | undefined): string {
+export function chordTitled(label: string, chord: string | undefined): string {
   return chord ? `${label} (${chord})` : label;
 }
 
@@ -43,7 +43,7 @@ export function BackForwardButtons({ panelId, onBack, onForward }: BackForwardBu
           class, and `.panel-box__history button` styles these by element. */}
       <IconButton
         token="navigateBack"
-        title={titled('Back', firstBinding(keybindings, 'navigate.back'))}
+        title={chordTitled('Back', firstBinding(keybindings, 'navigate.back'))}
         ariaLabel="Back"
         className=""
         testId={`panel-back-${panelId}`}
@@ -53,7 +53,7 @@ export function BackForwardButtons({ panelId, onBack, onForward }: BackForwardBu
       />
       <IconButton
         token="navigateForward"
-        title={titled('Forward', firstBinding(keybindings, 'navigate.forward'))}
+        title={chordTitled('Forward', firstBinding(keybindings, 'navigate.forward'))}
         ariaLabel="Forward"
         className=""
         testId={`panel-forward-${panelId}`}

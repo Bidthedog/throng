@@ -20,7 +20,7 @@
  * when it has registered and from the panel's own config before that (and if the live state ever
  * lacks one), so a restored editor names itself from what was persisted.
  */
-import { editorAutoTitle } from '../editor/path-display.js';
+import { editorAutoTitle, fileNameOf } from '../editor/path-display.js';
 import { FIND_IN_FILES_KIND, findInFilesPanelType } from '../find-in-files/panel-type.js';
 import { PREVIEW_KIND } from '../preview/panel-type.js';
 import { commandDisplay } from '../terminal/command-capture.js';
@@ -50,6 +50,12 @@ export interface PanelTitleSources {
   previewParentTitle?: string | null;
   /** The file a preview currently shows — live state first; the persisted config is the fallback. */
   previewFilePath?: string | null;
+  /**
+   * 054 FR-005 — the preview's panel type label ("Markdown Preview"), named when it has no file to be
+   * named after. An input rather than a lookup, as `previewParentTitle` is: the provider registry is the
+   * caller's, not this rule's.
+   */
+  previewTypeLabel?: string | null;
   /**
    * 053 FR-001 — what a terminal panel's name is rendered from: the live values, the template as
    * text (its parse is memoised here) and the two shortening limits (FR-012). Absent → the terminal
@@ -170,20 +176,20 @@ export function previewTitleParts(
 }
 
 /**
- * The NAME half of a preview's title (044 FR-031), or `null` when this is not a preview or it has no
- * file to be named after — which falls through to the placeholder like any other panel.
+ * The NAME half of a preview's title (054 FR-005a, superseding 044 FR-031's), or `null` when this is not
+ * a preview or it has no file to be named after — which falls through to the placeholder like any other
+ * panel.
  *
- * Parented: whatever the parent editor displays. Standalone: the name an editor would derive for the
- * file, from the live path first and the persisted config second — `previewPathOf`, so a restored
- * preview names itself after the same file it attaches to.
+ * The file's full name, extension included, parented or standalone alike: from the live path first and
+ * the persisted config second — `previewPathOf`, so a restored preview names itself after the same file
+ * it attaches to. Only a parented preview whose editor has no file yet takes the editor's name.
  */
 function previewName(panel: Panel, sources: PanelTitleSources): string | null {
   if (panel.kind !== PREVIEW_KIND) return null;
-  const parent = usable(sources.previewParentTitle);
-  if (parent) return parent;
   const path =
     usable(sources.previewFilePath) ?? previewPathOf(panel.config as PreviewPanelConfig | undefined);
-  return path ? editorAutoTitle(path) : null;
+  if (path) return fileNameOf(path);
+  return usable(sources.previewParentTitle);
 }
 
 /**
@@ -325,6 +331,9 @@ function resolveTitle(panel: Panel, sources: PanelTitleSources): string {
     const term = usable(panel.config?.term);
     return term === null ? label : `${label}: ${term}`;
   }
+
+  // 054 FR-005 — a preview with no file to be named after is still plainly a preview of its type.
+  if (panel.kind === PREVIEW_KIND) return usable(sources.previewTypeLabel) ?? fallbackTitle(panel);
 
   // Untyped: the placeholder is what the placeholder is FOR.
   return fallbackTitle(panel);

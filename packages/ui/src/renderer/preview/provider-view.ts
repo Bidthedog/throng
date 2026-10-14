@@ -13,8 +13,9 @@
  * a link or raise a notice rather than doing either itself.
  */
 import type { ComponentType } from 'react';
-import type { DocumentSymbol, FoldState, PreviewContent, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
+import type { DocumentSymbol, FoldState, PreviewContent, PreviewEmbedRead, PreviewLink, PreviewNotice, ProviderSettings } from '@throng/core';
 import type { PreviewLinkWording } from './link-dom.js';
+import type { TaskToggle } from './task-toggle.js';
 
 export interface PreviewBodyProps {
   panelId: string;
@@ -184,6 +185,21 @@ export interface PreviewBodyProps {
    * Optional: a provider that draws no wikilinks never calls it.
    */
   resolveWikiTargets?(targets: readonly { path: string; rooted: boolean }[]): Promise<{ resolved: (string | null)[] }>;
+
+  /**
+   * 054 — read the Mermaid files this document embeds (`![[x.mmd]]`, `![alt](x.mmd)`), resolved and confined
+   * by main against this run's document and project. A passthrough to `window.throng.preview.readEmbeds`.
+   * Optional: absent, every embed shows its not-found notice.
+   */
+  readEmbeds?(refs: readonly string[]): Promise<{ results: PreviewEmbedRead[] }>;
+
+  /**
+   * 054 FR-022 (R4) — the reader clicked, or pressed Space on, a task-list checkbox. The body prevents the
+   * native toggle and reports the task; the chrome asks main to change the marker in the source, and the
+   * box shows its new state only from the re-render that follows. Optional: a provider with no task
+   * lists never calls it.
+   */
+  onToggleTask?(task: TaskToggle): void;
 }
 
 export type PreviewBody = ComponentType<PreviewBodyProps>;

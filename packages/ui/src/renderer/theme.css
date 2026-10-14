@@ -975,6 +975,52 @@ textarea,
   padding: 3px;
 }
 
+/*
+ * 054 FR-070 – FR-074 (research R7) — maximise, IN PLACE. The maximised panel is never re-parented (that
+ * would remount xterm and CodeMirror): every split container between it and `.tab-body` stays static, so
+ * `position: absolute` resolves against the body and the panel covers it, its margin keeping the usual
+ * gap. The other panels keep their cells — their split sizes are untouched (FR-073) — and are hidden
+ * (`inert` is set on them by the component). A section target is drawn by `.maximise-layer` on top.
+ */
+.tab-body[data-maximised] .split,
+.tab-body[data-maximised] .split__cell {
+  position: static;
+}
+
+.tab-body[data-maximised] .panel-box--maximised {
+  position: absolute;
+  inset: 3px;
+  z-index: 2;
+}
+
+.panel-box--maximise-hidden,
+.tab-body[data-maximised] .split__divider {
+  visibility: hidden;
+}
+
+.maximise-layer {
+  position: absolute;
+  inset: 3px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+/* The maximised section fills the layer above its Focus Mode strip. */
+.maximise-layer__section {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* --- Split tree ------------------------------------------------------- */
 .split {
   display: flex;
@@ -1048,6 +1094,9 @@ textarea,
 
 /* --- Panel box -------------------------------------------------------- */
 .panel-box {
+  /* 054 FR-074 (MT-04 B3, B6) — each panel is its own stacking context, so the z-indexes inside it (find bar,
+     status strip, heading outline) order only its own content and never paint over the maximise layer. */
+  isolation: isolate;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1245,7 +1294,13 @@ textarea,
   line-height: 1;
 }
 
-:where(body:not([data-window-blurred])) .panel-box__actions button:hover {
+/* 054 FR-074 — a header control the maximise modal disables (✕, +) is greyed and takes no hover state. */
+.panel-box__actions button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+:where(body:not([data-window-blurred])) .panel-box__actions button:not(:disabled):hover {
   /* An icon-button hover, exactly like the explorer toolbar and the pane collapse control — so it
      takes `hoverSurface`, not the accent-coloured BUTTON hover. Pointing it at buttonHoverBg while
      keeping `color: var(--text)` painted #e6ebf2 on #6aa3ff: 2.1:1, down from 13:1. */
@@ -2215,12 +2270,68 @@ textarea,
   outline-offset: -2px;
 }
 
+/* The ring again, as an overlay above the panel's content: the outline is painted under positioned
+   descendants, and an editor's or a preview's body is positioned, so beside the body its inner pixel was
+   covered and the ring read 1px against the title's 2px (MT-04 retest, 2026-10-13). The overlay takes the
+   outline's own width, style, colour and offset — the project colour and the dimmed state included — and sits
+   above every overlay inside the panel. The panel's border box, so the offset lands where the outline's does. */
+.panel-box--active::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 7;
+  outline: inherit;
+  outline-offset: inherit;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
 .panel-box--active-dimmed {
   outline-color: var(--throng-colour-activePanelBorderInactive);
 }
 
 .panel-box--active .panel-box__header {
   background: var(--throng-colour-surfaceActive);
+}
+
+/* #486 — the zoom a step left, top-right of what zoomed (zoom-indicator.tsx). Fades in fast, out slowly; above
+   the content, never in the pointer's way. The panel's holder sits under the header at zero height, so it moves
+   nothing. */
+.panel-box__zoom-anchor {
+  position: relative;
+  flex: 0 0 0;
+  height: 0;
+}
+
+.zoom-indicator {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 6;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 900ms ease-in;
+}
+
+.zoom-indicator--shown {
+  opacity: 1;
+  transition: opacity 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-indicator,
+  .zoom-indicator--shown {
+    transition: none;
+  }
 }
 
 /* 047 FR-083 — the flash marking where a file opened from File Explorer landed: the border blinks twice

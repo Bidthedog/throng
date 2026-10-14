@@ -30,6 +30,12 @@ export type ActionId =
    * records `Ctrl+Shift+Alt+F4` as an exception. Window-handled, so it never reaches the program.
    */
   | 'panel.destroy'
+  /*
+   * 054 FR-071 (#467) — maximise the focused panel over its tab's middle section, or restore it. Live in
+   * every panel, a terminal included: Constitution v5.10.0 Principle IV records `Alt+Shift+Enter` as an
+   * exception. Window-handled, so it never reaches the program.
+   */
+  | 'panel.toggleMaximise'
   // Keyboard move-focus (012, FR-015). Directional moves + a stable-layout-order
   // cycle over the active tab's panels; tokens use the produced key names.
   | 'focus.left'
@@ -194,6 +200,9 @@ export type ActionId =
   | 'markdown.expandSection'
   | 'markdown.collapseAll'
   | 'markdown.expandAll'
+  // 054 FR-013 (#469) — the section at the point and every section nested under it.
+  | 'markdown.collapseAllInside'
+  | 'markdown.expandAllInside'
   /*
    * 047 (research R7) — opens the Go to Heading pop-down. `preview`-only: the editor's own outline is
    * #375's, not this spec's.
@@ -305,6 +314,9 @@ export const COMMAND_SCOPES: CommandScopes = {
   // panel-only set for that reason; the window dispatcher, not the scope, decides that focus in a side
   // pane (File Explorer, Projects) destroys nothing and leaves the key unconsumed.
   'panel.destroy': EVERYWHERE,
+  // 054 FR-071 — EVERYWHERE for `panel.destroy`'s reason: the dispatcher, not the scope, decides that
+  // focus in a side pane maximises nothing and leaves the key unconsumed.
+  'panel.toggleMaximise': EVERYWHERE,
   'focus.left': EVERYWHERE,
   'focus.right': EVERYWHERE,
   'focus.up': EVERYWHERE,
@@ -413,6 +425,8 @@ export const COMMAND_SCOPES: CommandScopes = {
   'markdown.expandSection': MARKDOWN_SURFACES,
   'markdown.collapseAll': MARKDOWN_SURFACES,
   'markdown.expandAll': MARKDOWN_SURFACES,
+  'markdown.collapseAllInside': MARKDOWN_SURFACES,
+  'markdown.expandAllInside': MARKDOWN_SURFACES,
   // 047 (research R7) — the Go to Heading pop-down, preview-only.
   'preview.goToHeading': GO_TO_HEADING_SURFACES,
 };
@@ -470,6 +484,9 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // and `Ctrl+F4` a hosted program's, so this is the form that takes nothing anything else owns.
     // A brand-new command on a chord no shipped row held: the per-read fill supplies it, no bump.
     'panel.destroy': ['Ctrl+Shift+Alt+F4'],
+    // 054 FR-071a — Visual Studio's full-screen toggle, by the maintainer's choice; a Principle IV
+    // recorded exception (v5.10.0). A brand-new command on a chord no shipped row held: no bump.
+    'panel.toggleMaximise': ['Shift+Alt+Enter'],
     // Keyboard move-focus (012) — TIER 1 (046, FR-102): Ctrl+Shift+Alt+Arrow*, freeing the plain
     // Ctrl+Alt+Arrow family back to the editor/shell. Arrow tokens use the produced key names
     // (`Arrow*`). The cycle chords are a RECORDED EXCEPTION (FR-103) and keep their pre-round
@@ -581,6 +598,9 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'markdown.expandSection': [],
     'markdown.collapseAll': ['Ctrl+M,A'],
     'markdown.expandAll': [],
+    // 054 FR-013 — unbound; the Outlining submenu carries both.
+    'markdown.collapseAllInside': [],
+    'markdown.expandAllInside': [],
     /*
      * 047 (research R7) — Go to Heading. `Ctrl+G` is readline's `abort`, same as `navigate.gotoLine`
      * above; the two share the literal chord on DISJOINT scopes ({editor} vs {preview}), which
@@ -1080,6 +1100,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'panel.splitRight',
   'panel.splitLeft',
   'panel.destroy',
+  'panel.toggleMaximise',
 ]);
 
 /**

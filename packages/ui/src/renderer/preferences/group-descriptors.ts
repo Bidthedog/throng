@@ -34,10 +34,19 @@ import type { FieldDescriptor } from '@throng/core';
  * the requirement forbids.
  */
 
+/** 054 FR-050a — a third level inside a subgroup: a subsection name and its descriptors, in order. */
+export interface DescriptorSubsection {
+  subsection: string;
+  items: FieldDescriptor[];
+}
+
 /** One subsection: a subgroup name and the descriptors that declared it, in declaration order. */
 export interface DescriptorSubgroup {
   subgroup: string;
+  /** Descriptors with NO `subsection`, in declaration order — rendered first, as a group's are. */
   items: FieldDescriptor[];
+  /** 054 FR-050a — nested subsections in first-appearance order, created lazily like every bucket. */
+  subsections: DescriptorSubsection[];
 }
 
 /** One section: its ungrouped fields first (FR-036b), then its subsections (FR-036a). */
@@ -77,10 +86,21 @@ export function groupDescriptors(items: readonly FieldDescriptor[]): DescriptorG
     }
     let sub = group.subgroups.find((s) => s.subgroup === d.subgroup);
     if (!sub) {
-      sub = { subgroup: d.subgroup, items: [] };
+      sub = { subgroup: d.subgroup, items: [], subsections: [] };
       group.subgroups.push(sub);
     }
-    sub.items.push(d);
+    // 054 FR-050a — the same rule one level down: falsy is no subsection, and a bucket exists only
+    // because a surviving descriptor asked for it.
+    if (!d.subsection) {
+      sub.items.push(d);
+      continue;
+    }
+    let section = sub.subsections.find((s) => s.subsection === d.subsection);
+    if (!section) {
+      section = { subsection: d.subsection, items: [] };
+      sub.subsections.push(section);
+    }
+    section.items.push(d);
   }
   return order.map((group) => byGroup.get(group)!);
 }

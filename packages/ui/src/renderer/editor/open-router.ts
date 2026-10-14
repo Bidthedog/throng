@@ -9,8 +9,9 @@
  * a REFINEMENT of 006 FR-011/FR-012/FR-013 and 033 FR-009 for those two (FR-052) — the file's preview
  * opens instead of an editor — and nothing else is routed here:
  *
- * - a **Find in Files** result always opens an editor at the match (FR-054; 043 FR-037/FR-087c): a preview
- *   cannot reveal a line and column;
+ * - a **Find in Files** result follows the file's default open action too, but through its OWN router in
+ *   `find-in-files/find-in-files-chrome.tsx` (054 FR-030, superseding 044 FR-054's "always an editor"): a
+ *   preview there reveals the match's block, and falls back to the editor when the rendered text cannot;
  * - **Open In**'s editor targets always open an editor (FR-055): choosing *New Editor* asks for one;
  * - a **drop** is a gesture at a place, and keeps `openFileInPanel`.
  *

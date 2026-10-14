@@ -77,6 +77,7 @@ import { PreviewService } from './preview-service.js';
 import { previewPurgePredicate, purgeUnloadedPreviews } from './preview-purge.js';
 import { heldRecords, walkMovedLayouts } from './moved-layout-walk.js';
 import { createPreviewPush, registerPreviewIpc } from './preview-ipc.js';
+import { TaskToggleService } from './task-toggle-service.js';
 import { NavigationHistoryService } from './navigation-history-service.js';
 import { createHistoryPush, registerNavigationHistoryIpc } from './navigation-history-ipc.js';
 import { PanelStateHandoff } from './panel-state-handoff.js';
@@ -1566,7 +1567,12 @@ if (isPrimaryInstance)
     },
   });
   previewService = previews;
-  registerPreviewIpc(ipcMain, previews);
+  // 054 US2 — a task checkbox in a preview edits its source through the editor authority (FR-024).
+  registerPreviewIpc(
+    ipcMain,
+    previews,
+    new TaskToggleService(fileSystem, editorCoordinator, (panelId) => previews.run(panelId)),
+  );
   // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
   app.on('web-contents-created', (_event, contents) => {
     contents.once('destroyed', () => previews.releaseWindow(contents.id));

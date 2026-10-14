@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
-import { firstBinding, formatGrouped, languageName } from '@throng/core';
+import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
+import { firstBinding, formatGrouped, isFlowingDocument, languageName } from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
 import { useEditorHoveredLink } from './editor-hovered-link-store.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
@@ -254,11 +255,14 @@ function PreviewButton({
     <>
       {/* 044 FR-122c — the scroll-sync toggle, immediately before this button and present exactly when it
           is; never disabled, whatever the preview button's state (FR-122a). */}
-      <SyncScrollButton
-        testId={`editor-sync-scroll-${panelId}`}
-        on={syncScroll}
-        onToggle={() => void toggleSyncScroll(syncScroll)}
-      />
+      {/* 054 — none for a source whose preview is one picture (`isFlowingDocument`): nothing to keep in step. */}
+      {isFlowingDocument(affordance.provider) ? (
+        <SyncScrollButton
+          testId={`editor-sync-scroll-${panelId}`}
+          on={syncScroll}
+          onToggle={() => void toggleSyncScroll(syncScroll)}
+        />
+      ) : null}
       <IconButton
         token="preview"
         className="editor-status-strip__preview"
@@ -527,18 +531,22 @@ export function StatusStrip({
     // `stripRef` is stable; re-observing per render would tear the observer down mid-measurement.
   }, [stripRef]);
 
+  // 054 FR-078 — Focus Mode is shown on the maximised panel's own strip.
+  const focusMode = usePanelInFocusMode(panelId);
+
   // The dimming is driven from 012's OWN panel classes in CSS (`.panel-box--active`,
   // `.panel-box--active-dimmed`) rather than re-derived here. Re-deriving it would be a second
   // copy of "is this panel active, and is its window in front?" — free to drift from the indicator
   // it is supposed to agree with.
   return (
     <div
-      className="editor-status-strip"
+      className={focusMode ? `editor-status-strip ${FOCUS_MODE_STRIP_CLASS}` : 'editor-status-strip'}
       data-testid={`editor-status-strip-${panelId}`}
       ref={stripRef}
       tabIndex={-1}
       onKeyDown={trap.onKeyDown}
     >
+      <FocusModeBadge panelId={panelId} active={focusMode} />
       {/* 040 FR-013 — the bar is split by ALIGNMENT: the readouts lead, the controls trail. The
           two groups are real elements rather than a `margin-left: auto` on one child, because
           FR-014 requires width pressure to be absorbed BETWEEN them, and a group is what a width

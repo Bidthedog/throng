@@ -33,6 +33,7 @@
 import type { PreviewCopyFormat, PreviewLink } from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
+import { outliningSubmenu, type OutliningArgs } from '../common/outlining-menu.js';
 
 /** The Content section: present when the provider draws selectable text (`PreviewProviderView.textSelection`). */
 export interface PreviewContentSection {
@@ -86,20 +87,22 @@ export interface PreviewContentMenuArgs {
    * ABSENT (FR-036), not disabled. Collapse All / Expand All are always present but DISABLED when
    * the document has no headings at all.
    */
-  fold?: {
-    section: { level: number; collapsed: boolean } | null;
-    hasSections: boolean;
-    collapseSection: () => void;
-    expandSection: () => void;
-    collapseAll: () => void;
-    expandAll: () => void;
-    chords?: {
-      collapseSection?: string;
-      expandSection?: string;
-      collapseAll?: string;
-      expandAll?: string;
-    };
-  } | null;
+  fold?: OutliningArgs | null;
+  /**
+   * 054 FR-074 — an inline diagram of this panel is maximised over it: the document is covered, so Find,
+   * Go to Heading, Copy, Select All, Synchronise Scrolling and Outlining are drawn disabled (Principle VI).
+   */
+  focusLocked?: boolean;
+  /**
+   * 054 — `false` for a provider that draws one picture (Mermaid): Go to Heading and Select All are absent,
+   * not disabled — there is never anything for them to act on. Absent reads `true`.
+   */
+  flowingDocument?: boolean;
+  /**
+   * 054 (manual test change request, 2026-10-12) — the diagram under the pointer, when there is one: Copy
+   * Diagram as Image and Enter / Exit Focus Mode lead the menu, in its Contextual section.
+   */
+  diagram?: { inFocus: boolean; copyImage: () => void; toggleFocus: () => void; focusChord?: string } | null;
 }
 
 /**
@@ -125,21 +128,43 @@ export function linkAddress(link: PreviewLink, docPath: string): string {
 
 export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
   const { selectionEmpty, content, editorRoute, syncScroll, find, goToHeading, fold } = args;
+  const locked = args.focusLocked === true;
+  const flowing = args.flowingDocument !== false;
+  const lockedOut = locked ? { disabled: true } : {};
   const items: MenuAction[] = [];
+
+  if (args.diagram) {
+    const diagram = args.diagram;
+    items.push({
+      label: 'Copy Diagram as Image',
+      icon: 'copy',
+      section: 'contextual',
+      onClick: () => diagram.copyImage(),
+    });
+    items.push({
+      label: diagram.inFocus ? 'Exit Focus Mode' : 'Enter Focus Mode',
+      icon: diagram.inFocus ? 'panelRestore' : 'diagramFullPane',
+      section: 'contextual',
+      ...(diagram.focusChord !== undefined ? { shortcut: diagram.focusChord } : {}),
+      onClick: () => diagram.toggleFocus(),
+    });
+  }
 
   items.push({
     label: 'Find…',
     icon: 'search',
     section: 'navigate',
     ...(find.chord !== undefined ? { shortcut: find.chord } : {}),
+    ...lockedOut,
     onClick: () => find.run(),
   });
-  items.push({
+  if (flowing) items.push({
     // No icon token, matching the editor's Go To Line… precedent (`editor/content-menu.ts`) — a
     // "move you somewhere in the document" row draws its shortcut, not a glyph, when it has none apt.
     label: 'Go to Heading…',
     section: 'navigate',
     ...(goToHeading.chord !== undefined ? { shortcut: goToHeading.chord } : {}),
+    ...lockedOut,
     onClick: () => goToHeading.run(),
   });
 
@@ -149,28 +174,29 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       icon: 'copy',
       section: 'content',
       shortcut: 'Ctrl+C',
-      disabled: selectionEmpty,
+      disabled: locked || selectionEmpty,
       onClick: () => content.copy(content.copyFormat),
     });
     items.push({
       label: 'Copy as Rich Text',
       icon: 'copy',
       section: 'content',
-      disabled: selectionEmpty,
+      disabled: locked || selectionEmpty,
       onClick: () => content.copy('rich'),
     });
     items.push({
       label: 'Copy as Plain Text',
       icon: 'copy',
       section: 'content',
-      disabled: selectionEmpty,
+      disabled: locked || selectionEmpty,
       onClick: () => content.copy('plain'),
     });
-    items.push({
+    if (flowing) items.push({
       label: 'Select All',
       icon: 'selectAll',
       section: 'content',
       shortcut: 'Ctrl+A',
+      ...lockedOut,
       onClick: () => content.selectAll(),
     });
   }
@@ -192,6 +218,7 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
       icon: 'syncScroll',
       section: 'viewState',
       ...(syncScroll.chord !== undefined ? { shortcut: syncScroll.chord } : {}),
+      ...lockedOut,
       onClick: () => syncScroll.toggle(),
     });
   }
@@ -202,39 +229,9 @@ export function previewContentMenu(args: PreviewContentMenuArgs): MenuAction[] {
    * absent entirely before the first heading; Collapse All / Expand All are always drawn but disabled
    * with no headings to act on. Mirrors the editor's own `editor/content-menu.ts` exactly.
    */
-  if (fold) {
-    if (fold.section) {
-      items.push(
-        fold.section.collapsed
-          ? {
-              label: `Expand This H${fold.section.level}`,
-              section: 'viewState',
-              ...(fold.chords?.expandSection !== undefined ? { shortcut: fold.chords.expandSection } : {}),
-              onClick: () => fold.expandSection(),
-            }
-          : {
-              label: `Collapse This H${fold.section.level}`,
-              section: 'viewState',
-              ...(fold.chords?.collapseSection !== undefined ? { shortcut: fold.chords.collapseSection } : {}),
-              onClick: () => fold.collapseSection(),
-            },
-      );
-    }
-    items.push({
-      label: 'Collapse All',
-      section: 'viewState',
-      disabled: !fold.hasSections,
-      ...(fold.chords?.collapseAll !== undefined ? { shortcut: fold.chords.collapseAll } : {}),
-      onClick: () => fold.collapseAll(),
-    });
-    items.push({
-      label: 'Expand All',
-      section: 'viewState',
-      disabled: !fold.hasSections,
-      ...(fold.chords?.expandAll !== undefined ? { shortcut: fold.chords.expandAll } : {}),
-      onClick: () => fold.expandAll(),
-    });
-  }
+  // 054 FR-010 supersedes the placement above: the rows are ONE Outlining submenu, built by the builder the
+  // editor's menu uses too, so the two menus cannot drift (R3).
+  if (fold) items.push({ ...outliningSubmenu(fold), ...lockedOut });
 
   return withSplit(items, args.split);
 }

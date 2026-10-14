@@ -5,20 +5,40 @@ import react from '@vitejs/plugin-react';
 /**
  * Vite's "Some chunks are larger than 500 kB" is only a WARNING, so it scrolled past on every build
  * while the app chunk grew through it (047 took it to 525 kB). This makes the same condition, at
- * Vite's own `chunkSizeWarningLimit`, fail the build — and so the gate's build stage and every PR.
- * The fix is a chunk rule in `chunkFor` below, never a raised limit.
+ * Vite's default 500 kB, fail the build — and so the gate's build stage and every PR. The fix is a
+ * chunk rule in `chunkFor` below, never a raised limit. The limit is this guard's own constant:
+ * Vite's `chunkSizeWarningLimit` is set above the largest UNSPLITTABLE_LAZY_MODULES chunk only so
+ * its reporter does not warn about the chunks this guard has already admitted.
  */
+/**
+ * 054 — the only chunks allowed over the limit: each is ONE pre-bundled third-party module, which no rule
+ * in `chunkFor` can split, and each is reached only through Mermaid's own lazy `import()` (so
+ * `failOnEagerPreview` holds it out of every eagerly loaded chunk). A chunk qualifies only when it holds
+ * exactly one module and that module matches an entry here; anything else over the limit still fails.
+ */
+const UNSPLITTABLE_LAZY_MODULES: readonly { pattern: RegExp; why: string }[] = [
+  {
+    pattern: /\/node_modules\/@mermaid-js\/parser\/dist\/chunks\/mermaid-parser\.core\/chunk-[A-Z0-9]+\.mjs$/,
+    why: "Mermaid's generated Langium grammar, shipped as one file and loaded with the first diagram",
+  },
+  { pattern: /\/node_modules\/elkjs\/lib\/elk\.bundled\.js$/, why: 'the ELK layout engine, one bundled file, loaded only for an elk-layout diagram' },
+];
+
+/** The chunk size limit, in kB. Vite's own default; see {@link failOnOversizedChunks}. */
+const CHUNK_LIMIT_KB = 500;
+
 function failOnOversizedChunks(): Plugin {
-  let limitKb = 500;
+  const limitKb = CHUNK_LIMIT_KB;
   return {
     name: 'throng:fail-on-oversized-chunks',
     apply: 'build',
-    configResolved(config) {
-      limitKb = config.build.chunkSizeWarningLimit;
-    },
     generateBundle(_options, bundle) {
       const oversized = Object.values(bundle)
         .filter((out) => out.type === 'chunk')
+        .filter((chunk) => {
+          const ids = chunk.moduleIds.map((m) => m.replace(/\\/g, '/'));
+          return !(ids.length === 1 && UNSPLITTABLE_LAZY_MODULES.some((u) => u.pattern.test(ids[0] as string)));
+        })
         .map((chunk) => ({ name: chunk.fileName, kb: Buffer.byteLength(chunk.code) / 1000 }))
         .filter((c) => c.kb > limitKb);
       if (oversized.length > 0) {
@@ -38,11 +58,26 @@ function failOnOversizedChunks(): Plugin {
 const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|punycode\.js|entities|dompurify|yaml)\//;
 
 /**
+ * The Mermaid diagram renderer and the packages it pulls in (054 R5, FR-047): imported only by
+ * `preview/diagram/mermaid-renderer.ts`'s dynamic `import('mermaid')`, so a preview without a diagram —
+ * and the app's startup — never loads it. `dompurify` is shared with the preview pipeline and stays in
+ * `preview`.
+ */
+const DIAGRAM_VENDOR =
+  /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
+
+/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+const LAZY_VENDOR = [
+  { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
+  { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+];
+
+/**
  * A chunk rule cannot make code lazy, only a dynamic import can — and one chunk rule that swept the
  * lazily-imported Markdown body into an eagerly-loaded chunk turned every such import into a no-op,
  * loading the whole pipeline with the app (Rolldown said so only as an INEFFECTIVE_DYNAMIC_IMPORT
- * warning). This fails the build when any entry reaches a `PREVIEW_VENDOR` module through static
- * imports alone.
+ * warning). This fails the build when any entry reaches a `PREVIEW_VENDOR` or `DIAGRAM_VENDOR` module
+ * through static imports alone.
  */
 function failOnEagerPreview(): Plugin {
   return {
@@ -62,14 +97,16 @@ function failOnEagerPreview(): Plugin {
         eager.add(name);
         pending.push(...(chunks.get(name)?.imports ?? []));
       }
-      const offenders = [...eager].filter((name) =>
-        chunks.get(name)!.moduleIds.some((id) => PREVIEW_VENDOR.test(id.replace(/\\/g, '/'))),
-      );
-      if (offenders.length > 0) {
-        this.error(
-          `the Markdown preview pipeline loads with the app (R21) — eager chunks holding it: ` +
-            `${offenders.join(', ')}. Keep the modules behind its dynamic imports out of eager chunks in chunkFor.`,
+      for (const { pattern, what } of LAZY_VENDOR) {
+        const offenders = [...eager].filter((name) =>
+          chunks.get(name)!.moduleIds.some((id) => pattern.test(id.replace(/\\/g, '/'))),
         );
+        if (offenders.length > 0) {
+          this.error(
+            `${what} — eager chunks holding it: ` +
+              `${offenders.join(', ')}. Keep the modules behind its dynamic imports out of eager chunks in chunkFor.`,
+          );
+        }
       }
     },
   };
@@ -102,6 +139,9 @@ export default defineConfig({
     outDir: fileURLToPath(new URL('./dist/renderer', import.meta.url)),
     emptyOutDir: true,
     sourcemap: true,
+    // Not the limit — `failOnOversizedChunks` enforces CHUNK_LIMIT_KB. This only quiets Vite's reporter
+    // for the admitted unsplittable chunks (ELK is ~1.43 MB).
+    chunkSizeWarningLimit: 2000,
     /*
      * Vite 8 bundles with Rolldown. Its `manualChunks` compatibility layer pulls every captured module's
      * dependencies into the same chunk, which put `@codemirror/view` in `core` and the shared lezer
@@ -142,6 +182,12 @@ function chunkFor(rawId: string): string | null {
   // The Markdown provider's body sits behind `view.ts`'s dynamic imports (R21), so it gets a chunk of
   // its own: in `app-preview`, which the app loads eagerly, those imports would load nothing new.
   if (/\/src\/renderer\/preview\/providers\/markdown\/(?!view\.ts$)/.test(id)) return 'app-preview-markdown';
+  // 054 FR-042 — the Mermaid provider's body, behind its view's dynamic import for the same reason.
+  if (/\/src\/renderer\/preview\/providers\/mermaid\/(?!view\.ts$)/.test(id)) return 'app-preview-mermaid';
+  // 054 FR-047 — the two diagram modules that import a lazy vendor (mermaid; DOMPurify for the SVG profile)
+  // are reached only by the block registry's `import()`, so they get a chunk of their own. The diagram's
+  // React components and the rasteriser import neither and ride with whatever imports them.
+  if (/\/src\/renderer\/preview\/diagram\/(mermaid-renderer|svg-sanitise)\.ts$/.test(id)) return 'app-preview-diagram';
   if (/\/src\/renderer\/preview\//.test(id)) return 'app-preview';
   // The terminal panel and its stores — the next largest self-contained area, split for the same
   // reason (053's title templates took the app chunk to 501 kB).
@@ -184,5 +230,16 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
+  // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`. NOT one
+  // named group: Mermaid loads each diagram type through its own `import()`, and grouping them all made one
+  // 5 MB chunk. Ungrouped, Rolldown splits them along those imports, and `failOnEagerPreview` still refuses
+  // the build if any of them lands in an eagerly loaded chunk.
+  if (DIAGRAM_VENDOR.test(id)) {
+    // The heavy libraries several diagram types share get a lazy chunk each, so the chunk Mermaid's
+    // types have in common stays under the limit.
+    const shared = /\/node_modules\/(katex|cytoscape[a-z-]*|lodash-es|roughjs|elkjs|d3-[a-z-]+|d3)\//.exec(id);
+    if (shared) return `diagram-${shared[1].startsWith('d3') ? 'd3' : shared[1]}`;
+    return null;
+  }
   return 'vendor'; // react-arborist (+ its react-dnd deps), inversify, …
 }

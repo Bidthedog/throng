@@ -80,6 +80,53 @@ function pathTo(tree: readonly DocumentSymbol[], slug: string): DocumentSymbol[]
   return [];
 }
 
+/** `slug`'s node and every node nested under it, or `[]` when `slug` is not in `tree`. */
+function subtreeOf(tree: readonly DocumentSymbol[], slug: string): DocumentSymbol[] {
+  const node = pathTo(tree, slug).at(-1);
+  if (node === undefined) return [];
+  const out: DocumentSymbol[] = [];
+  const walk = (n: DocumentSymbol): void => {
+    out.push(n);
+    n.children.forEach(walk);
+  };
+  walk(node);
+  return out;
+}
+
+/**
+ * 054 FR-013 — Collapse All Inside This Section: every section nested under `slug`, each set individually
+ * (047 FR-037a's rule, scoped) — but NOT `slug` itself, which stays as it is so its children's headings
+ * remain in view, folded. Every other section untouched; a leaf has nothing inside, so nothing changes.
+ */
+export function collapseWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
+  return subtreeOf(tree, slug)
+    .slice(1)
+    .reduce((acc, node) => setSection(acc, node.slug, true), state);
+}
+
+/**
+ * 054 FR-013 — Expand All Inside This Section: `slug` AND every section nested under it — a collapsed
+ * target opens too, or nothing it expanded would be seen.
+ */
+export function expandWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
+  return subtreeOf(tree, slug).reduce((acc, node) => setSection(acc, node.slug, false), state);
+}
+
+/**
+ * 054 (manual test change request, 2026-10-12) — whether Collapse All Inside `slug` would change anything:
+ * some section nested under it is still expanded. Its menu row is drawn disabled otherwise.
+ */
+export function canCollapseWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): boolean {
+  return subtreeOf(tree, slug)
+    .slice(1)
+    .some((node) => !isCollapsed(state, node.slug));
+}
+
+/** Whether Expand All Inside `slug` would change anything: `slug` or a section under it is collapsed. */
+export function canExpandWithin(state: FoldState, tree: readonly DocumentSymbol[], slug: string): boolean {
+  return subtreeOf(tree, slug).some((node) => isCollapsed(state, node.slug));
+}
+
 /** Expands `slug`'s section and every ancestor of it, leaving every other slug untouched (FR-040). */
 export function revealing(state: FoldState, tree: readonly DocumentSymbol[], slug: string): FoldState {
   const path = pathTo(tree, slug);

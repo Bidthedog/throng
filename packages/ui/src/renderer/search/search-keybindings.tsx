@@ -23,6 +23,7 @@ import { useKeybindings } from '../config/config-store.js';
 import { requestRedraw } from '../terminal/redraw.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { getActivePane } from '../workspace/active-pane.js';
+import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { getPanelSearch } from './search-controller.js';
 import {
   closeFind,
@@ -120,6 +121,12 @@ export function SearchKeybindings(): null {
 
       const controller = getPanelSearch(activePanelId);
       if (!controller) return;
+      // 054 FR-074 — a preview whose inline diagram is maximised over it has nothing visible to search:
+      // every search chord is consumed and does nothing until the diagram is minimised.
+      if (findKind === 'preview' && isPanelSectionMaximised(activePanelId)) {
+        e.preventDefault();
+        return;
+      }
 
       // Every command below resolves THIS panel — never "the current session" (043 FR-003).
       const findOpen = isFindShowingOn(activePanelId);

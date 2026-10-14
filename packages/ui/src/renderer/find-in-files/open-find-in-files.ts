@@ -44,6 +44,7 @@ import {
   type WorkspaceLayout,
 } from '@throng/core';
 import { getPanelSearch } from '../search/search-controller.js';
+import { ensurePanelVisible } from '../workspace/maximise-store.js';
 import {
   ensureFindInFilesPanel,
   invokeFindInFiles,
@@ -133,6 +134,8 @@ export function openFindInFiles(args: OpenFindInFilesArgs): string | null {
     route === 'chord' ? (getPanelSearch(effectiveActivePanelId(tab) ?? '')?.seedFromSelection() ?? '') : '';
 
   const targetId = existingPanel(tab, openTarget) ?? createPanel(ws, tabId, projectId);
+  // 054 FR-074 — a reused panel a maximised target hides is shown first (a created one restored the tab).
+  ensurePanelVisible(targetId);
 
   /*
    * The store state, before anything is asked of it — see the header. A panel created a moment ago

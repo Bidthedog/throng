@@ -17,6 +17,7 @@
  * Electron is not imported: `ipcMain` and the window lookups are handed in, so the contract test drives
  * the real handlers on a fake `ipcMain` (T060).
  */
+import { MAX_EMBED_REF_LENGTH, MAX_EMBEDS_PER_READ } from '@throng/core';
 import type {
   PersistedHistory,
   PreviewAttachRequest,
@@ -31,6 +32,8 @@ import type {
   PreviewPlaceMessage,
   PreviewRefreshResponse,
   PreviewUpdate,
+  TaskToggleRequest,
+  TaskToggleResponse,
 } from '@throng/core';
 import { broadcastToWindows, type BroadcastContents, type BroadcastTarget } from './broadcast.js';
 import type { PreviewPush, PreviewService } from './preview-service.js';
@@ -58,6 +61,7 @@ export type PreviewIpcService = Pick<
   | 'publishEditorTitle'
   | 'placeDeclined'
   | 'resolveWikiTargets'
+  | 'readEmbeds'
 >;
 
 const OPEN_FAILED: PreviewOpenResponse = { kind: 'refused', reason: 'no-file' };
@@ -172,7 +176,53 @@ function quietly(channel: string, call: () => void): void {
   }
 }
 
-export function registerPreviewIpc(ipc: PreviewIpcMain, service: PreviewIpcService): void {
+/** 054 — the task toggle behind `throng:preview:toggleTask`; `TaskToggleService` satisfies it. */
+export interface PreviewTaskToggle {
+  toggle(req: TaskToggleRequest): Promise<TaskToggleResponse>;
+}
+
+const TOGGLE_MAX_LINE = 1_000_000;
+const TOGGLE_MAX_ITEM_TEXT = 1024;
+const TOGGLE_MALFORMED: TaskToggleResponse = { ok: false, reason: 'io' };
+
+/** contracts/preview-ipc-054.md — anything outside the shape is refused before the service sees it. */
+function asTaskToggle(payload: unknown): TaskToggleRequest | null {
+  const p = record(payload);
+  const panelId = text(p.panelId);
+  const filePath = text(p.filePath);
+  const { line, expectChecked, itemText } = p;
+  if (panelId === null || filePath === null) return null;
+  if (typeof line !== 'number' || !Number.isInteger(line) || line < 0 || line > TOGGLE_MAX_LINE) return null;
+  if (typeof expectChecked !== 'boolean') return null;
+  if (typeof itemText !== 'string' || itemText.length > TOGGLE_MAX_ITEM_TEXT) return null;
+  const req: TaskToggleRequest = { panelId, filePath, line, expectChecked, itemText };
+  if (p.occurrence !== undefined) {
+    const o = record(p.occurrence);
+    const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= TOGGLE_MAX_LINE;
+    if (!count(o.index) || !count(o.of) || o.index >= o.of) return null;
+    req.occurrence = { index: o.index, of: o.of };
+  }
+  return req;
+}
+
+export function registerPreviewIpc(
+  ipc: PreviewIpcMain,
+  service: PreviewIpcService,
+  taskToggle?: PreviewTaskToggle,
+): void {
+  // 054 FR-022 – FR-029 — the one input in a preview that changes the source. A malformed request never
+  // reaches the service, and a throw is an answer rather than a rejection across the bridge.
+  ipc.handle('throng:preview:toggleTask', async (_event, payload) => {
+    const req = asTaskToggle(payload);
+    if (req === null || taskToggle === undefined) return TOGGLE_MALFORMED;
+    try {
+      return await taskToggle.toggle(req);
+    } catch (err) {
+      console.error('[preview-ipc] toggleTask failed:', err);
+      return TOGGLE_MALFORMED;
+    }
+  });
+
   ipc.handle('throng:preview:open', async (event, payload) => {
     const req = asOpen(payload);
     if (req === null) return OPEN_FAILED;
@@ -255,6 +305,22 @@ export function registerPreviewIpc(ipc: PreviewIpcMain, service: PreviewIpcServi
       return await service.resolveWikiTargets(panelId, targets);
     } catch {
       return { resolved: targets.map(() => null) };
+    }
+  });
+
+  // 054 — the text of the Mermaid files a preview embeds. A malformed payload reads nothing; each reference
+  // is a string of at most MAX_EMBED_REF_LENGTH, at most MAX_EMBEDS_PER_READ of them (the rest are dropped).
+  ipc.handle('throng:preview:readEmbeds', async (_event, payload) => {
+    const panelId = text(record(payload).panelId);
+    const raw = record(payload).refs;
+    if (panelId === null || !Array.isArray(raw)) return { results: [] };
+    const refs = raw
+      .slice(0, MAX_EMBEDS_PER_READ)
+      .filter((r): r is string => typeof r === 'string' && r.length > 0 && r.length <= MAX_EMBED_REF_LENGTH);
+    try {
+      return await service.readEmbeds(panelId, refs);
+    } catch {
+      return { results: [] };
     }
   });
 

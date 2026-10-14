@@ -56,9 +56,11 @@ import {
   type PreviewAffordance,
   type PreviewProviderKind,
   type SplitDirection,
+  isFlowingDocument,
 } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 import { splitSubmenu } from './split-menu.js';
+import { isPanelSectionMaximised, isPanelTabMaximised } from './maximise-store.js';
 
 /**
  * The panel kinds that actually RENDER their zoom level (043 FR-062a, plan D2).
@@ -171,6 +173,8 @@ export interface PanelHeaderPreviewState {
   providerKind: PreviewProviderKind;
   /** Parented → *Go to Editor*; standalone → *Open in Editor* (FR-015c, FR-015d). */
   parented: boolean;
+  /** 054 — `false` for a provider that draws one picture (Mermaid): no Synchronise Scrolling. Absent reads `true`. */
+  flowingDocument?: boolean;
 }
 
 /**
@@ -189,7 +193,7 @@ export interface PanelHeaderMenuArgs {
   /** The live chords, so a rebind moves what the menu SHOWS as well as what the key does. */
   keybindings: Keybindings;
   /** The other Tabs in this window, for Send to Tab. */
-  otherTabs: readonly { id: string; title: string }[];
+  otherTabs: readonly { id: string; title: string; disabled?: boolean }[];
   editor: PanelHeaderEditorState | null;
   /**
    * True while the panel's `PanelFailureBanner` is up — an editor's OR a preview's (044, renamed from
@@ -214,6 +218,11 @@ export interface PanelHeaderMenuArgs {
    * preview exactly when its provider is `text` (FR-122a). Omitted reads as off.
    */
   syncScroll?: boolean;
+  /**
+   * 054 FR-071 — whether THIS panel is the maximised one, and the toggle. Every real panel passes it; a
+   * builder called without it (the menu tables drive the builder directly) draws no row.
+   */
+  maximise?: { maximised: boolean; toggle: () => void } | null;
   actions: PanelHeaderMenuActions;
 }
 
@@ -308,6 +317,13 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
   const { panel, keybindings, otherTabs, editor, panelFailure, detach, actions } = args;
   const panelVerb = removalVerbFor(panel, args.panelVerb);
   const isPreview = panel.kind === PREVIEW_KIND;
+  // 054 FR-074 — while the tab is maximised the panel cannot leave it or be destroyed: Send to Tab, Sync to
+  // and Destroy are drawn disabled (Principle VI), as Split is by its own builder.
+  const modal = isPanelTabMaximised(panel.id);
+  const lockedOut = modal ? { disabled: true } : {};
+  // An inline diagram of this preview is maximised over its document: Find, Go to Heading and Synchronise
+  // Scrolling have nothing visible to act on.
+  const documentCovered = isPanelSectionMaximised(panel.id) ? { disabled: true } : {};
 
   const items: MenuAction[] = [];
 
@@ -355,12 +371,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       icon: 'search',
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'search.find'),
+      ...documentCovered,
       onClick: () => actions.find(),
     });
     items.push({
       label: 'Go to Heading…',
       section: 'navigate',
       shortcut: firstBinding(keybindings, 'preview.goToHeading'),
+      ...documentCovered,
       onClick: () => actions.goToHeading(),
     });
     items.push(...historyItems(args.history, keybindings, actions));
@@ -378,6 +396,22 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * (Rename and Reset Name are gone — a panel is named by what it holds, FR-030.)
    */
   items.push(splitSubmenu(panel.id, keybindings, (_id, direction) => actions.split(direction)));
+
+  /*
+   * 054 FR-071, FR-077 — Maximise Panel / Restore Panel, View & state, on every kind: the header control's
+   * and `panel.toggleMaximise`'s menu item. Emitted ahead of Zoom (and after a preview's Refresh).
+   */
+  if (args.maximise) {
+    const { maximised, toggle } = args.maximise;
+    items.push({
+      // Named for the feature (FR-078, manual test change request 2026-10-12).
+      label: maximised ? 'Exit Focus Mode' : 'Enter Focus Mode',
+      icon: maximised ? 'panelRestore' : 'panelMaximise',
+      section: 'viewState',
+      shortcut: firstBinding(keybindings, 'panel.toggleMaximise'),
+      onClick: () => toggle(),
+    });
+  }
 
   // Per-panel zoom (012) — zoom THIS panel's text independently of others. Offered only on the kinds
   // that render it (FR-062a): see KINDS_THAT_ZOOM above for why this is a gate and not a comment.
@@ -493,7 +527,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     items.push(...historyItems(args.history, keybindings, actions));
 
     // 044 FR-122a/b — Synchronise Scrolling, exactly where Open Preview is drawn, disabled or not.
-    if (openPreview !== undefined && openPreview.state !== 'absent') {
+    // 054 — none for a source whose preview is one picture (a Mermaid file).
+    if (openPreview !== undefined && openPreview.state !== 'absent' && isFlowingDocument(openPreview.provider)) {
       items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
     }
 
@@ -502,8 +537,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
 
   // 044 FR-122a/b — a text preview's Synchronise Scrolling, after its Zoom; a binary provider has no editor to
   // keep in step with, so none.
-  if (isPreview && args.preview?.providerKind === 'text') {
-    items.push(syncScrollItem(args.syncScroll ?? false, keybindings, actions));
+  if (isPreview && args.preview?.providerKind === 'text' && args.preview.flowingDocument !== false) {
+    items.push({ ...syncScrollItem(args.syncScroll ?? false, keybindings, actions), ...documentCovered });
   }
 
   // 044 FR-033 — a preview's banner commands, after its Zoom (View & state: Refresh · Zoom · Synchronise
@@ -598,6 +633,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     label: 'Send to Tab',
     icon: 'send',
     section: 'navigate',
+    ...lockedOut,
     submenu: [
       // New Tab == dragging the Panel onto the tab-strip `+` (005 FR-027).
       { label: 'New Tab', icon: 'add', section: 'navigate', onClick: () => actions.sendToNewTab() },
@@ -605,6 +641,8 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         label: t.title,
         icon: 'tab',
         section: 'navigate' as const,
+        // 054 FR-074 — a maximised tab takes no panel; drawn disabled, not absent (Constitution VI).
+        disabled: t.disabled ?? false,
         onClick: () => actions.sendToTab(t.id),
       })),
     ],
@@ -619,6 +657,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       label: 'Sync to',
       icon: 'send',
       section: 'navigate',
+      ...lockedOut,
       submenu: [
         {
           label: 'New Sub-workspace',
@@ -662,6 +701,7 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
     section: 'destroy',
     // 048 FR-131 — the chord that runs this same item from the keyboard, as bound now.
     shortcut: firstBinding(keybindings, 'panel.destroy'),
+    ...lockedOut,
     onClick: () => actions.destroy(),
   });
 

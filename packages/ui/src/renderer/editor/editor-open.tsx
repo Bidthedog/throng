@@ -28,6 +28,7 @@ import {
 import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
 import { openFromTree } from './open-router.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
+import { maximisedPanelOf } from '../workspace/maximise-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 
 /**
@@ -248,6 +249,26 @@ export async function openFileInTab(
   const tab = layout.tabs.find((t) => t.id === tabId);
   if (!tab) return false;
   if (layout.activeTabId !== tabId) ws.setActiveTab(tabId);
+
+  /*
+   * Focus Mode, option (a) (manual test decision, 2026-10-11) — with an editor maximised in this tab, the file
+   * opens IN it, so Focus Mode survives the open: any other target would be hidden behind it, and placing
+   * or revealing one restores the tab. Any other maximised kind leaves the routes below to restore it.
+   */
+  const focused = maximisedPanelOf(tabId);
+  const focusedEditor =
+    focused !== null &&
+    editorPanelsInTab(tab.root).includes(focused) &&
+    (owner === undefined || originOf(tab.root, focused) === owner) &&
+    getEditorActions(focused) !== undefined
+      ? focused
+      : null;
+  if (focusedEditor !== null) {
+    const { outcome, panelId: landed } = await replaceInEditorPanel(ws, focusedEditor, absPath, { kind: 'open' });
+    if (outcome === 'cancelled' || outcome === 'saveFailed') return false;
+    void revealRange(landedAt(landed), range);
+    return true;
+  }
 
   // US7 (#141): with "New Editor", a not-yet-open file lands in a NEW editor panel each time,
   // rather than reusing the tab's last active editor.

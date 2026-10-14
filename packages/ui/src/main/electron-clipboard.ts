@@ -16,8 +16,8 @@ export interface ElectronClipboardModule {
   write(items: readonly unknown[]): Promise<void>;
 }
 
-/** Electron's `ClipboardItem` constructor: MIME type → payload. */
-export type ClipboardItemFactory = (payload: Record<string, string>) => unknown;
+/** Electron's `ClipboardItem` constructor: MIME type → payload (a string, or a `Blob` for an image). */
+export type ClipboardItemFactory = (payload: Record<string, string | Blob>) => unknown;
 
 /**
  * {@link IClipboard} over Electron's clipboard (016, FR-013a).
@@ -45,6 +45,12 @@ export class ElectronClipboard implements IClipboard {
   async writeRich(entry: { text: string; html: string }): Promise<void> {
     await this.clipboard.write([
       this.makeItem({ 'text/plain': entry.text, 'text/html': entry.html }),
+    ]);
+  }
+
+  async writeImage(entry: { png: Uint8Array; html: string }): Promise<void> {
+    await this.clipboard.write([
+      this.makeItem({ 'image/png': new Blob([new Uint8Array(entry.png)], { type: 'image/png' }), 'text/html': entry.html }),
     ]);
   }
 

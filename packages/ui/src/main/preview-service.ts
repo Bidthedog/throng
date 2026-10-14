@@ -33,7 +33,7 @@
  * never appears dirty, and a later "open in editor" is unaffected (SC-006). The coordinator is reached
  * only through {@link PreviewDocuments}, which is read-only by construction.
  */
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   createSettleScheduler,
   editorAutoTitle,
@@ -44,6 +44,10 @@ import {
   previewPathOf,
   samePath,
   wikiCandidates,
+  isMermaidEmbedRef,
+  MAX_EMBEDS_PER_READ,
+  resolvePreviewImage,
+  type PreviewEmbedRead,
   type AppSettings,
   type Disposable,
   type FoldState,
@@ -373,6 +377,47 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     return null;
   }
 
+  /**
+   * 054 — the text of each Mermaid file a Markdown preview embeds (`![[x.mmd]]`, `![alt](x.mmd)`), read for
+   * the run's own document and confined to its project exactly as a local image is (Principle I): the
+   * reference resolves like an image's `src` (`resolvePreviewImage`), must name a Mermaid file, must stay in
+   * the project by its REAL path too, and is read through the same reader as the previewed file (size and
+   * text checks). Nothing is opened as a document. At most {@link MAX_EMBEDS_PER_READ} per call.
+   */
+  async readEmbeds(panelId: string, refs: readonly string[]): Promise<{ results: PreviewEmbedRead[] }> {
+    const run = this.runs.get(panelId);
+    const capped = refs.slice(0, MAX_EMBEDS_PER_READ);
+    if (!run) return { results: capped.map((ref) => ({ ref, ok: false, reason: 'missing' })) };
+    return { results: await Promise.all(capped.map((ref) => this.readOneEmbed(run, ref))) };
+  }
+
+  private async readOneEmbed(run: PreviewRun, ref: string): Promise<PreviewEmbedRead> {
+    if (!isMermaidEmbedRef(ref)) return { ref, ok: false, reason: 'unsupported' };
+    const resolved = resolvePreviewImage(ref, { docPath: run.filePath, projectRoot: run.projectRoot, remoteImages: false });
+    if (resolved.kind !== 'project') return { ref, ok: false, reason: 'outside' };
+    let relPath = resolved.relPath;
+    try {
+      relPath = decodeURIComponent(relPath);
+    } catch {
+      // A stray % is part of the name as written.
+    }
+    const absPath = join(run.projectRoot, relPath);
+    if (!(await this.isFile(absPath))) return { ref, ok: false, reason: 'missing' };
+    const real = await this.realContainment(absPath, run.projectRoot);
+    if (real === null) return { ref, ok: false, reason: 'missing' };
+    if (!real) return { ref, ok: false, reason: 'outside' };
+    const read = await this.readPath(run, absPath, run.providerId);
+    if (read.ok) return read.content.kind === 'text' ? { ref, ok: true, text: read.content.text } : { ref, ok: false, reason: 'unreadable' };
+    switch (read.notice.kind) {
+      case 'deleted':
+        return { ref, ok: false, reason: 'missing' };
+      case 'too-large':
+        return { ref, ok: false, reason: 'too-large' };
+      default:
+        return { ref, ok: false, reason: 'unreadable' };
+    }
+  }
+
   // ── open (§1) ─────────────────────────────────────────────────────────────────────────────────
 
   async open(fromWebContentsId: number, req: PreviewOpenRequest): Promise<PreviewOpenResponse> {
@@ -692,6 +737,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     // 4. One preview per file (FR-012): focus the one that exists.
     const other = this.runForPath(canon(target));
     if (other && other !== run) return this.focusOtherPreview(other, fragment);
+
+    // 054 FR-007, FR-008 — a preview never becomes another preview TYPE. A target of another provider is
+    // handed back for an ordinary open, which reuses or places a preview of its own type.
+    if (provider.id !== run.providerId) return { kind: 'reroute' };
 
     // 5. In place — but READ FIRST, and change nothing until the read has answered (fix round 1).
     //

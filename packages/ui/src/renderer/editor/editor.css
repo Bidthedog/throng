@@ -141,6 +141,37 @@
   opacity: 0.55;
 }
 
+/* 054 FR-078 — the maximised panel's strip, painted in the panel's border colour, names Focus Mode centred. */
+.editor-status-strip.editor-status-strip--focus-mode {
+  opacity: 1;
+  background: var(--panel-border-colour, var(--throng-colour-activePanelBorder));
+  color: var(--throng-colour-accentText);
+  border-top-color: var(--panel-border-colour, var(--throng-colour-activePanelBorder));
+}
+
+.editor-status-strip--focus-mode button,
+.editor-status-strip--focus-mode .editor-status-strip__preview .icon {
+  color: var(--throng-colour-accentText);
+}
+
+.editor-status-strip--focus-mode .editor-status-strip__preview:hover:not(:disabled),
+.editor-status-strip--focus-mode .editor-status-strip__preview[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--throng-colour-accentText) 22%, transparent);
+}
+
+.editor-status-strip__focus-mode {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: var(--throng-font-weight-bold);
+  pointer-events: none;
+}
+
+.editor-status-strip__focus-mode-hint {
+  font-weight: normal;
+}
+
 .panel-box--active .editor-status-strip {
   opacity: 1;
 }
@@ -256,6 +287,11 @@
 .editor-status-strip__preview:hover:not(:disabled),
 .editor-status-strip__preview[aria-pressed='true'] {
   background: var(--throng-colour-editorStatusStripHover);
+}
+
+/* Icons read at full strength: the strip's own colour is a muted one meant for its text readouts. */
+.editor-status-strip__preview .icon {
+  color: var(--throng-colour-iconColour, var(--throng-colour-text));
 }
 
 .editor-status-strip__preview:disabled {

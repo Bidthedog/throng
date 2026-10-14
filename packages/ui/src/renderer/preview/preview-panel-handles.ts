@@ -60,6 +60,62 @@ export function revealPreviewFragment(panelId: string, fragment: string): boolea
   return true;
 }
 
+/* ── 054 FR-031 — a match to reveal once the preview shows its file ─────────────────────────────── */
+
+/**
+ * A Find in Files match a preview was opened for (contracts/preview-ipc-054.md `reveal`). Renderer-local:
+ * it never crosses to main. The preview reveals it once it has drawn `absPath`, or calls `fallback` — the
+ * editor at the match — when what it drew cannot show it (FR-032).
+ */
+export interface PreviewReveal {
+  readonly absPath: string;
+  readonly from: number;
+  readonly to: number;
+  /** The matched text, as the search found it in the source. */
+  readonly text: string;
+  /** The match's 0-based source line, when the caller knows it. */
+  readonly line: number | null;
+  fallback(): void;
+}
+
+const pendingReveals = new Map<string, PreviewReveal>();
+const revealListeners = new Map<string, () => void>();
+
+/**
+ * Hand panel `panelId` a match to reveal — whichever panel main's answer named (placed, focused,
+ * navigated). A mounted panel is told at once (a FOCUSED preview draws nothing new); one that mounts later
+ * finds it waiting. A newer reveal for the same panel replaces an older one.
+ */
+export function setPendingReveal(panelId: string, reveal: PreviewReveal): void {
+  pendingReveals.set(panelId, reveal);
+  revealListeners.get(panelId)?.();
+}
+
+/** The reveal waiting for `panelId`, removed — or `null` when there is none. */
+export function takePendingReveal(panelId: string): PreviewReveal | null {
+  const reveal = pendingReveals.get(panelId) ?? null;
+  pendingReveals.delete(panelId);
+  return reveal;
+}
+
+/** Whether a reveal is waiting for `panelId`. */
+export function hasPendingReveal(panelId: string): boolean {
+  return pendingReveals.has(panelId);
+}
+
+/** The reveal waiting for `panelId`, left in place — for a panel to check it is for the file it shows. */
+export function peekPendingReveal(panelId: string): PreviewReveal | null {
+  return pendingReveals.get(panelId) ?? null;
+}
+
+/** A mounted panel listens for reveals handed to it. Returns the unregister. */
+export function onPendingReveal(panelId: string, listener: () => void): () => void {
+  revealListeners.set(panelId, listener);
+  return () => {
+    if (revealListeners.get(panelId) === listener) revealListeners.delete(panelId);
+  };
+}
+
 /** `preview.goToHeading` (047 US4). `false` when the panel is not mounted here. */
 export function openPreviewHeadingOutline(panelId: string): boolean {
   const handles = registry.get(panelId);

@@ -28,9 +28,11 @@ import {
   PREVIEW_KIND,
   collectPanels,
   effectiveActivePanelId,
+  previewOpenTargetFor,
   type Panel,
   type PreviewProviderRegistry,
   type PreviewSettings,
+  isFlowingDocument,
 } from '@throng/core';
 import { followFocusedPreviewLink, openPreviewHeadingOutline } from './preview-panel-handles.js';
 import { useAppSettings, useKeybindings } from '../config/config-store.js';
@@ -42,6 +44,7 @@ import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { resolveScoped } from '../keybindings/scope.js';
 import { getActivePane } from '../workspace/active-pane.js';
+import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { getEditorState } from '../editor/editor-state.js';
 import { listenForPreviewOpenChanged } from './preview-open-store.js';
 import {
@@ -69,13 +72,13 @@ function showsSyncToggle(panel: Panel, registry: PreviewProviderRegistry, settin
       filePath: editor.filePath,
       projectRoot: editor.ownerKind === 'subworkspace' ? null : editor.ownerRoot,
     });
-    return affordance.state !== 'absent';
+    return affordance.state !== 'absent' && isFlowingDocument(affordance.provider);
   }
   if (panel.kind === PREVIEW_KIND) {
     const state = getPreviewState(panel.id);
     const filePath = state?.filePath ?? (panel.config as { filePath?: string } | undefined)?.filePath;
     const provider = (state ? registry.get(state.providerId) : undefined) ?? (filePath ? registry.forPath(filePath) : undefined);
-    return provider?.kind === 'text';
+    return isFlowingDocument(provider);
   }
   return false;
 }
@@ -107,8 +110,15 @@ export function PreviewCommands(): null {
         bridge: window.throng?.preview,
         intent,
         // 047 US2 — the setting's live value, read at CALL time so a settings change while the window
-        // is open applies to the next open rather than the one already in flight.
-        defaultOpenTarget: settingsRef.current.editor.previews.openTarget,
+        // is open applies to the next open rather than the one already in flight. 054 FR-051 — the
+        // opened file's own provider's value.
+        defaultOpenTarget: previewOpenTargetFor(
+          registryRef.current,
+          settingsRef.current.editor.previews,
+          intent.absPath,
+        ),
+        // 054 FR-007 — Last Active per panel type, and the type recorded on a placed preview.
+        registry: registryRef.current,
       }).catch((error: unknown) => {
         // A bridge that threw is a broken bridge (failures are returned, never thrown, across it). The
         // affordance the user chose stays as it was; the cause goes to the console for diagnosis, and the
@@ -161,6 +171,16 @@ export function PreviewCommands(): null {
       const tab = layout.tabs.find((t) => t.id === layout.activeTabId);
       const panelId = tab ? effectiveActivePanelId(tab) : undefined;
       const panel = tab && panelId ? (collectPanels(tab.root) as Panel[]).find((p) => p.id === panelId) : undefined;
+      // 054 FR-074 — the preview's inline diagram is maximised over it: Synchronise Scrolling and Go to
+      // Heading act on a document nobody can see, so their chords are consumed and do nothing.
+      if (
+        panel?.kind === PREVIEW_KIND &&
+        (action === 'preview.toggleSyncScroll' || action === 'preview.goToHeading') &&
+        isPanelSectionMaximised(panel.id)
+      ) {
+        e.preventDefault();
+        return;
+      }
       if (action === 'preview.toggleSyncScroll') {
         // 6 — FR-122d: only where a toggle is shown (FR-122a); otherwise the key stays with whoever wants it.
         if (!panel || !showsSyncToggle(panel, registryRef.current, settingsRef.current.editor.previews)) return;

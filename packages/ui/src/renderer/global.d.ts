@@ -487,6 +487,8 @@ declare global {
         write: (entry: { text: string; mode: import('@throng/core').ClipboardMode }) => Promise<void>;
         /** A preview panel's rich copy (044 FR-035a) — plain text and sanitised HTML in one write. */
         writeRich: (entry: { text: string; html: string }) => Promise<void>;
+        /** 054 — Copy Diagram as Image: a PNG data URI (`rasteriseSvg`). Optional: absent, the row does nothing. */
+        writeImage?: (entry: { dataUri: string }) => Promise<void>;
         paste: () => Promise<{ text: string; mode: import('@throng/core').ClipboardMode }>;
       };
       // 045 — file links (#394). Every call carries the link TEXT and the panel it was seen in, and
@@ -555,6 +557,18 @@ declare global {
           panelId: string,
           targets: { path: string; rooted: boolean }[],
         ) => Promise<{ resolved: (string | null)[] }>;
+        /**
+         * 054 — the text of each Mermaid file THIS panel's document embeds (`![[x.mmd]]`, `![alt](x.mmd)`),
+         * resolved and confined by main against the panel's own document and project. At most 50 per call.
+         */
+        readEmbeds?: (panelId: string, refs: string[]) => Promise<{ results: import('@throng/core').PreviewEmbedRead[] }>;
+        /**
+         * 054 FR-022 – FR-029 (contracts/preview-ipc-054.md) — toggle a task-list checkbox in the source.
+         * Main locates the marker in the CURRENT text and edits one character; the preview never writes.
+         */
+        toggleTask: (
+          request: import('@throng/core').TaskToggleRequest,
+        ) => Promise<import('@throng/core').TaskToggleResponse>;
         /** FR-031 — an editor panel's display title, forwarded as its previews' `parent.title`. */
         publishEditorTitle: (panelId: string, title: string) => void;
         /** FR-010 — this window's layout does not hold the parent a `place` named. */

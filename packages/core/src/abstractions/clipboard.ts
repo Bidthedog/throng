@@ -34,6 +34,12 @@ export interface IClipboard {
    * exactly as `writeText` would have left it.
    */
   writeRich(entry: { text: string; html: string }): Promise<void>;
+  /**
+   * Replace the clipboard's contents with a PNG `image` and its `html` alternative (an `<img>` of the
+   * same picture), in one write — 054's Copy Diagram as Image. An image target reads the PNG; a rich-text
+   * target reads the HTML. The clipboard holds no text afterwards.
+   */
+  writeImage(entry: { png: Uint8Array; html: string }): Promise<void>;
   /** The clipboard's current text, or the empty string when it holds none (never rejects). */
   readText(): Promise<string>;
 }

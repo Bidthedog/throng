@@ -72,7 +72,7 @@ export {
 export { type InferredIndent, inferIndent } from './indent-infer.js';
 export { panelUnsaved, tabUnsaved, projectUnsaved } from './indicators.js';
 export { projectRootWouldContainOpenEditor } from './overlap.js';
-export { editorAutoTitle, editorPathParts, relativeToRoot, toDisplayPath, type EditorPathParts } from './path-display.js';
+export { editorAutoTitle, fileNameOf, editorPathParts, relativeToRoot, toDisplayPath, type EditorPathParts } from './path-display.js';
 // Rectangular (column) selection and column-wise paste (016, US6 · FR-025).
 export {
   columnAt,

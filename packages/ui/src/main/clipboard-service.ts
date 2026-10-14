@@ -46,6 +46,12 @@ export class ClipboardService {
     this.record = null;
   }
 
+  /** 054 — Copy Diagram as Image: a PNG and its `<img>` HTML in one write. Clears the record, as a rich write does. */
+  async writeImage(entry: { png: Uint8Array; html: string }): Promise<void> {
+    await this.clipboard.writeImage(entry);
+    this.record = null;
+  }
+
   /** The OS clipboard's current text — what a paste will actually insert. */
   async read(): Promise<string> {
     return this.clipboard.readText();

@@ -33,6 +33,7 @@
  * are the body and header menus' *Synchronise Scrolling*.
  */
 import type { ReactElement } from 'react';
+import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
 import type { PreviewProviderKind } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
@@ -53,14 +54,10 @@ export interface PreviewStatusBarProps {
   syncScroll: boolean;
   /** FR-122 — the toggle's click: the panel's `toggleSyncScroll` call, shared with its body menu row. */
   onToggleSyncScroll: () => void;
+  /** 054 — `false` for a provider that draws one picture (Mermaid): no scroll-sync toggle. Absent reads `true`. */
+  showSyncScroll?: boolean;
   /** FR-118 — the hovered or focused link's target; omitted, `null` or empty shows nothing. */
   readout?: string | null;
-  /**
-   * 047 US3 (FR-038, contracts/menus-commands-controls.md "Status bar") — the Collapse All / Expand
-   * All toggle, LEFT of the scroll-sync toggle. `null`/omitted: a non-Markdown provider, so the
-   * control is absent (never merely disabled — there is nothing here to fold at all).
-   */
-  fold?: { anyExpanded: boolean; chord?: string; onToggleAll: () => void } | null;
 }
 
 export function PreviewStatusBar({
@@ -71,13 +68,19 @@ export function PreviewStatusBar({
   editorRouteDisabled = false,
   syncScroll,
   onToggleSyncScroll,
+  showSyncScroll = true,
   readout,
-  fold,
 }: PreviewStatusBarProps): ReactElement | null {
+  // 054 FR-078 — Focus Mode is shown on the maximised panel's own strip. Read before the early return: a hook.
+  const focusMode = usePanelInFocusMode(panelId);
   if (providerKind !== 'text') return null;
   const title = parented ? 'Go to Editor' : 'Open in Editor';
   return (
-    <div className="editor-status-strip preview-status-bar" data-testid={`preview-status-bar-${panelId}`}>
+    <div
+      className={`editor-status-strip preview-status-bar${focusMode ? ` ${FOCUS_MODE_STRIP_CLASS}` : ''}`}
+      data-testid={`preview-status-bar-${panelId}`}
+    >
+      <FocusModeBadge panelId={panelId} active={focusMode} />
       {/* The leading group keeps the control trailing under the strip's `space-between`, where the editor's own
           bar draws its controls. Its one readout (FR-118) is clipped with an ellipsis (`preview.css`); the
           controls group is measured whole, so the button is never hidden by it. */}
@@ -88,20 +91,10 @@ export function PreviewStatusBar({
         className="editor-status-strip__group editor-status-strip__group--controls"
         data-testid={`preview-status-controls-${panelId}`}
       >
-        {/* 047 US3 (FR-038) — Collapse All / Expand All, left of the scroll-sync toggle; absent for a
-            non-Markdown provider. Never `aria-pressed`: it is an action, not a state to hold. */}
-        {fold ? (
-          <IconButton
-            token={fold.anyExpanded ? 'collapseAll' : 'expandAll'}
-            className="editor-status-strip__preview"
-            testId={`preview-fold-toggle-${panelId}`}
-            title={fold.chord ? `${fold.anyExpanded ? 'Collapse All' : 'Expand All'} (${fold.chord})` : fold.anyExpanded ? 'Collapse All' : 'Expand All'}
-            ariaPressed={false}
-            onClick={fold.onToggleAll}
-          />
-        ) : null}
         {/* FR-122c — the scroll-sync toggle, immediately before the route, on every text preview. */}
-        <SyncScrollButton testId={`preview-sync-scroll-${panelId}`} on={syncScroll} onToggle={onToggleSyncScroll} />
+        {showSyncScroll ? (
+          <SyncScrollButton testId={`preview-sync-scroll-${panelId}`} on={syncScroll} onToggle={onToggleSyncScroll} />
+        ) : null}
         <IconButton
           token="editorPanel"
           className="editor-status-strip__preview"
