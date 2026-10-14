@@ -62,6 +62,11 @@ The centre pane is a dock of **tabs**, each holding **panels**.
 - A new panel starts **untyped**: choose what it is from its **Panel Type** drop-down and press
   **Confirm**.
 - Panels name themselves after what they show; an empty one is a **Blank Panel** until you give it something.
+- **Focus Mode**: let a panel fill its tab with the **⤢** in its header, **Enter Focus Mode** in its menu,
+  or [Shift+Alt+Enter](key-bindings.md#focus--zoom); the same again (**Exit Focus Mode**), or **Esc**, puts it
+  back. While Focus Mode is on the panel's status bar says so, the tab's other panels are hidden, nothing can be added
+  to that tab, and the panel cannot be split, moved or destroyed. It lasts across tab and project
+  switches, but not a restart.
 
 Move between panels with **Ctrl+Shift+Alt+Arrows** — the caret goes with you, into whatever you land
 on. Your whole layout, splits, sizes and zoom included, is saved per project and restored next time.
@@ -118,9 +123,20 @@ can keep browsing or press **F2** to rename the file.
   can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
   way **Default open action** says. Right-click a note and choose **Open In › Last Preview Panel** to
   show it in the preview named beside the item, or **New Preview Panel** for a fresh one.
-- **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu,
-  or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor and its preview fold
-  together.
+- **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
+  **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
+  and its preview fold together. **Collapse All Inside This Section** folds just one branch.
+- **Tick a task** (`- [ ]`) by clicking its checkbox in a preview: the file changes, and an open editor
+  shows it at once and can undo it.
+- **Diagrams**: a `mermaid` code block in a preview draws as its diagram, and a `.mmd` or `.mermaid`
+  file previews as one, filling its panel. The buttons at a diagram's top left fit it, zoom it in or
+  out, show it at 100%, or **Maximise** it into Focus Mode over the whole middle section of the tab
+  (**Minimise**, or Esc, puts it back); drag with the middle mouse button to pan. With a diagram focused, the panel zoom
+  keys zoom just that diagram, and Ctrl+wheel zooms it about the pointer. Each zoom step, here or on an editor
+  or preview panel, briefly shows the new zoom percentage in that box's top-right corner. Right-click a diagram to **Copy Diagram as Image** or
+  enter Focus Mode with it. Embed a diagram file in a Markdown document with
+  `![[flow.mmd]]` or `![Flow](flow.mmd)`; a plain link to it stays a link. Give an inline diagram a
+  fixed height with ```` ```mermaid height=300 ```` or `![[flow.mmd|300]]`.
 - In a preview, **Ctrl+G** opens **Go to Heading** — type to filter, Enter to jump — and
   `[[wikilinks]]` follow like any other link.
 - **Back** and **Forward** (**Alt+Left** / **Alt+Right**) step through the files a panel has shown.
@@ -132,6 +148,7 @@ can keep browsing or press **F2** to rename the file.
   you are on is filled more strongly.
 - **Ctrl+Shift+F** searches every file in the project as you type; **Ctrl+Shift+H** adds replace,
   one match, one file or everything at once. Right-click a folder in the tree to search just there.
+  A Markdown result opens its preview, scrolled to the match, when **Default open action** is Preview.
 - **Ctrl+Shift+T** is **Quick Open**: type any part of a name or path to jump to a file.
 - **Ctrl+G** goes to a line in the active editor.
 - Right-click a folder in the tree to open a terminal there, or to expand or collapse its children.
