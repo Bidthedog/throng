@@ -41,6 +41,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/xterm": "^6.0.0",
+    "d3-hierarchy": "^3.1.2",
     "dompurify": "^3.4.17",
     "inversify": "^8.2.3",
     "markdown-it": "^15.0.2",
@@ -50,9 +51,11 @@
     "react-dom": "^19.3.0",
     "reflect-metadata": "^0.2.2",
     "style-mod": "^4.1.4",
+    "uplot": "^1.6.32",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@types/d3-hierarchy": "^3.1.7",
     "@vitejs/plugin-react": "^6.1.1",
     "vite": "^8.3.4"
   }

@@ -66,10 +66,18 @@ const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|
 const DIAGRAM_VENDOR =
   /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
 
-/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+/**
+ * 055 R10 — the resource monitor's chart libraries: uPlot (time-series) and d3-hierarchy (treemap layout).
+ * Imported only from the monitor's body, which `monitor-modal.tsx` loads with a dynamic `import()`, so
+ * nothing is added to startup (Principle XII). `chunkFor` routes them to the `resources` chunk.
+ */
+const RESOURCES_VENDOR = /\/node_modules\/(uplot|d3-hierarchy)\//;
+
+/** All lazily-loaded vendor sets, as the eager guard below checks them. */
 const LAZY_VENDOR = [
   { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },
+  { pattern: RESOURCES_VENDOR, what: "the resource monitor's chart libraries load with the app (055 R10)" },
 ];
 
 /**
@@ -230,6 +238,9 @@ function chunkFor(rawId: string): string | null {
   // stays in the shared `lezer` chunk above — the editor already pays for it eagerly.
   if (PREVIEW_VENDOR.test(id))
     return 'preview';
+  // 055 R10 — uPlot and d3-hierarchy, before the diagram rule below (Mermaid also depends on d3-hierarchy,
+  // and a shared module lands in exactly one chunk). Reached only through the monitor body's dynamic import.
+  if (RESOURCES_VENDOR.test(id)) return 'resources';
   // The Mermaid renderer (054 FR-047): behind `mermaid-renderer.ts`'s dynamic import, never `vendor`. NOT one
   // named group: Mermaid loads each diagram type through its own `import()`, and grouping them all made one
   // 5 MB chunk. Ungrouped, Rolldown splits them along those imports, and `failOnEagerPreview` still refuses
