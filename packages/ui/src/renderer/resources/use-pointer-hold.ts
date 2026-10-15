@@ -17,6 +17,8 @@ interface Frozen<T> {
   readonly epoch: number;
   /** Which capture `live` was when a catch-up was asked for; the snapshot is retaken once it changes. */
   readonly armedAt: unknown;
+  /** Which thing the region was showing when this snapshot was taken (see `scope` below). */
+  readonly scope: unknown;
 }
 
 export interface PointerHold<T> {
@@ -30,11 +32,17 @@ export interface PointerHold<T> {
 /**
  * `keyOf` names WHICH capture `live` is — by default `live` itself; a caller that builds `live` afresh
  * each render passes something stable, such as the session's version.
+ *
+ * `scope` names WHAT the region shows — a level of the list, the item the bars belong to. A snapshot is of
+ * one scope: when the scope changes while the pointer is still over the region (a drill, a Back, a click on a
+ * bar all do), the snapshot is retaken at once, because the region is replaced anyway and the old one is
+ * minutes behind. Nothing under the pointer moves after that, until the scope changes again.
  */
 export function usePointerHold<T>(
   live: T,
   snapshot: (live: T) => T = (v) => v,
   keyOf: (live: T) => unknown = (v) => v,
+  scope: unknown = undefined,
 ): PointerHold<T> {
   const [frozen, setFrozen] = useState<Frozen<T> | null>(null);
   /*
@@ -45,15 +53,16 @@ export function usePointerHold<T>(
    */
   const epoch = useCatchUpEpoch();
   const key = keyOf(live);
-  if (frozen !== null && frozen.epoch !== epoch) setFrozen({ ...frozen, epoch, armedAt: key });
+  if (frozen !== null && frozen.scope !== scope) setFrozen({ value: snapshot(live), epoch, armedAt: NOT_ARMED, scope });
+  else if (frozen !== null && frozen.epoch !== epoch) setFrozen({ ...frozen, epoch, armedAt: key });
   else if (frozen !== null && frozen.armedAt !== NOT_ARMED && frozen.armedAt !== key) {
-    setFrozen({ value: snapshot(live), epoch, armedAt: NOT_ARMED });
+    setFrozen({ value: snapshot(live), epoch, armedAt: NOT_ARMED, scope });
   }
   return {
     value: frozen === null ? live : frozen.value,
     held: frozen !== null,
     bind: {
-      onMouseEnter: () => setFrozen({ value: snapshot(live), epoch, armedAt: NOT_ARMED }),
+      onMouseEnter: () => setFrozen({ value: snapshot(live), epoch, armedAt: NOT_ARMED, scope }),
       onMouseLeave: () => setFrozen(null),
     },
   };

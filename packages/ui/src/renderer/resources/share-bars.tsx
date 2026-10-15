@@ -17,16 +17,26 @@
  * order and figures — so a bar never moves under a click. The rest of the right column stays live.
  */
 import { useMemo, type CSSProperties, type ReactElement } from 'react';
-import { formatGrouped, heatFor, type HeatMetric, type UsageThresholds } from '@throng/core';
+import { formatGrouped, heatFor, type HeatMetric, type ResourceNode, type UsageThresholds } from '@throng/core';
 import { FIGURE_LABEL, figureOf, type FigureId } from './figures.js';
 import { barsFor, type BarItem } from './monitor-model.js';
-import { getIoPeak, isEnded, setSelection, useView } from './monitor-session.js';
+import { focusOn, getIoPeak, isEnded, setSelection, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import { usePointerHold } from './use-pointer-hold.js';
 import type { Subject } from './use-subject.js';
 
 /** The metric the machine-share scale takes for a figure (the bar's own figure, so the colour agrees with the length). */
 const HEAT_METRIC: Readonly<Record<FigureId, HeatMetric>> = { cpu: 'cpu', memory: 'memory', gpu: 'gpu', io: 'io' };
+
+/** The ids from the root down to `id`, or `null` when it is not in the tree. */
+function pathTo(root: ResourceNode, id: string): string[] | null {
+  if (root.id === id) return [id];
+  for (const child of root.children) {
+    const below = pathTo(child, id);
+    if (below !== null) return [root.id, ...below];
+  }
+  return null;
+}
 
 /** A bar never vanishes for being small: a sliver says "something, but little". */
 const MIN_FILL_PERCENT = 0.5;
@@ -37,7 +47,9 @@ function Bar({
   thresholds,
   machine,
   ioPeak,
+  onPick,
 }: {
+  onPick: (child: ResourceNode, from: Element) => void;
   bar: BarItem;
   metric: FigureId;
   thresholds: UsageThresholds;
@@ -59,7 +71,7 @@ function Bar({
       data-band={figure.band}
       data-kind={node.kind}
       title={node.label}
-      onClick={() => setSelection(node.id)}
+      onClick={(e) => onPick(node, e.currentTarget)}
     >
       <span className="share-bar__name">{node.label}</span>
       <span className="share-bar__track" aria-hidden="true">
@@ -81,9 +93,21 @@ function Bar({
 export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   const { metric } = useView();
   const { thresholds } = useResourceMonitorSettings();
-  const hold = usePointerHold(subject.node);
-  // A hold belongs to the item it was taken on: choosing another item (a click on a bar does) ends it.
-  const node = hold.value.id === subject.node.id ? hold.value : subject.node;
+  // A hold belongs to the item it was taken on: choosing another item (a click on a bar does) takes a new one.
+  const hold = usePointerHold(subject.node, (live) => live, (live) => live, subject.node.id);
+  const node = hold.value;
+  const { tree } = subject;
+  const subjectId = subject.node.id;
+  const pick = (child: ResourceNode, from: Element): void => {
+    // A child with no row on the left (the left lists projects, the click was on a project's tab) is
+    // opened for first: the left shows the item the bars belong to, and the child is marked there (FR-089).
+    const listed = from.ownerDocument.querySelector(`[role="treeitem"][data-node-id="${child.id}"]`) !== null;
+    if (!listed) {
+      const path = pathTo(tree, subjectId);
+      if (path !== null) focusOn(path);
+    }
+    setSelection(child.id);
+  };
   const machine = subject.frame.machine;
   const model = useMemo(() => barsFor(node, metric, isEnded), [node, metric]);
   const ioPeak = getIoPeak();
@@ -101,7 +125,7 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
         <div className="share-bars__body">
           <ul className="share-bars__list">
             {model.bars.map((bar) => (
-              <Bar key={bar.node.id} bar={bar} metric={metric} thresholds={thresholds} machine={machine} ioPeak={ioPeak} />
+              <Bar key={bar.node.id} onPick={pick} bar={bar} metric={metric} thresholds={thresholds} machine={machine} ioPeak={ioPeak} />
             ))}
             {model.others !== null ? (
               <li className="share-bar share-bar--others" data-testid="share-bars-others" title="The smaller contributors, grouped">

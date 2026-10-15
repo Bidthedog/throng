@@ -8,13 +8,14 @@
  * `--heat` number the stylesheet mixes from; `heat.test.ts` reads the stylesheet for the mixing itself.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { createElement, type ReactElement } from 'react';
+import { Fragment, createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ResourceNode } from '@throng/core';
+import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { ShareBars } from '../../../src/renderer/resources/share-bars.js';
-import { __resetSession, focusOn, getSelection, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, focusOn, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { useSubject } from '../../../src/renderer/resources/use-subject.js';
-import { GIB, MIB, frame, metrics, node, proc } from '../helpers/resource-fixtures.js';
+import { GIB, MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
 const PANEL = ['root', 'c:projects', 'p:p1', 't:big', 'n:big'];
 
@@ -122,6 +123,31 @@ describe('a click on a bar selects that child (FR-097)', () => {
   });
 });
 
+describe('a click on a bar marks that item on the left (FR-089, FR-097)', () => {
+  it('opens the item the bar belongs to when the child has no row yet, then marks the child there', () => {
+    tick = 0;
+    feed(sampleHierarchy());
+    render(createElement(Fragment, null, createElement(Breakdown), createElement(Bars)));
+    // A project row, selected: the right column shows its tabs as bars, but the left lists projects.
+    fireEvent.click(screen.getByTestId('breakdown-row-p:p1'));
+    expect(screen.queryByTestId('breakdown-row-t:t1')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('share-bar-t:t1'));
+
+    expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1']);
+    expect(getSelection()).toBe('t:t1');
+    expect(screen.getByTestId('breakdown-row-t:t1')).toHaveClass('breakdown-row--selected');
+    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(1);
+  });
+
+  it('leaves the left where it is when the child already has a row there', () => {
+    mountOn(scene({ 11: 60, 12: 30 }));
+    fireEvent.click(screen.getByTestId('share-bar-x:12:1'));
+    expect(getView().focusPath).toEqual(PANEL);
+    expect(getSelection()).toBe('x:12:1');
+  });
+});
+
 describe('the colour is how much of the machine it takes (FR-094)', () => {
   it('draws about 1% CPU in the low colour and 90% in the high one, whatever the bar’s length', () => {
     mountOn(scene({ 11: 1, 12: 90 }));
@@ -170,6 +196,23 @@ describe('the bars hold still while the pointer is over them (FR-095)', () => {
     fireEvent.mouseEnter(screen.getByTestId('share-bars'));
     fireEvent.click(screen.getByTestId('share-bar-x:11:1'));
     expect(bars()).toEqual(['x:21:1', 'x:22:1']);
+  });
+
+  it('keeps holding after a click on a bar chooses another item: the new bars do not move under the pointer', () => {
+    const root = (a: number, b: number): ResourceNode =>
+      scene({ 11: 60, 12: 30 }, { 11: [proc(21, 'c21.exe', metrics({ cpu: a })), proc(22, 'c22.exe', metrics({ cpu: b }))] });
+    mountOn(root(40, 20));
+    fireEvent.mouseEnter(screen.getByTestId('share-bars'));
+    fireEvent.click(screen.getByTestId('share-bar-x:11:1'));
+    expect(bars()).toEqual(['x:21:1', 'x:22:1']);
+
+    // The two swap rank while the pointer rests where the click was.
+    feed(root(5, 50));
+    expect(bars()).toEqual(['x:21:1', 'x:22:1']);
+    expect(screen.getByTestId('share-bar-figure-x:21:1')).toHaveTextContent('40%');
+
+    fireEvent.mouseLeave(screen.getByTestId('share-bars'));
+    expect(bars()).toEqual(['x:22:1', 'x:21:1']);
   });
 
   it('is only the bars that hold: the rest of the column is not theirs to freeze', () => {

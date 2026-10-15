@@ -407,17 +407,24 @@ export function Breakdown(): ReactElement | null {
   const liveTree = useDeferredValue(session.tree);
   const liveFrame = useDeferredValue(session.frame);
   const liveVersion = useDeferredValue(session.version);
-  // The pointer over the list freezes what it draws at what it was when the pointer arrived (FR-095): the
-  // tree, the frame, the history the idle rule reads, and which processes had ended — the last is mutated in
-  // place by the session, so it is copied.
-  const pointer = usePointerHold<Seen>({ tree: liveTree, frame: liveFrame, version: liveVersion, ended: null }, (live) => ({
-    ...live,
-    ended: new Set(live.tree === null ? [] : descendants(live.tree).filter((n) => isEnded(n.id)).map((n) => n.id)),
-  }), (live) => live.version);
-  const { tree, frame, version, ended } = pointer.value;
   const liveView = useView();
   const filterText = useDeferredValue(liveView.filterText);
   const view = useMemo(() => (filterText === liveView.filterText ? liveView : { ...liveView, filterText }), [liveView, filterText]);
+  const heldKey = `${view.metric}|${view.focusPath.join('/')}`;
+  // The pointer over the list freezes what it draws at what it was when the pointer arrived (FR-095): the
+  // tree, the frame, the history the idle rule reads, and which processes had ended — the last is mutated in
+  // place by the session, so it is copied. A drill, a Back or a metric change is a new level: the list is
+  // replaced anyway, so it takes a fresh snapshot rather than showing minutes-old figures (`heldKey` is its scope).
+  const pointer = usePointerHold<Seen>(
+    { tree: liveTree, frame: liveFrame, version: liveVersion, ended: null },
+    (live) => ({
+      ...live,
+      ended: new Set(live.tree === null ? [] : descendants(live.tree).filter((n) => isEnded(n.id)).map((n) => n.id)),
+    }),
+    (live) => live.version,
+    heldKey,
+  );
+  const { tree, frame, version, ended } = pointer.value;
   const selectedId = useSelection();
   const { thresholds } = useResourceMonitorSettings();
   const machine = frame?.machine;
@@ -426,7 +433,6 @@ export function Breakdown(): ReactElement | null {
   const hold = pointer.held || selectedId !== null;
   const holdNow = useRef(hold);
   holdNow.current = hold;
-  const heldKey = `${view.metric}|${view.focusPath.join('/')}`;
   /** The order the rows were last drawn in while nothing held it. */
   const drawn = useRef<{ key: string; ids: readonly string[] } | null>(null);
   // Starting to hold needs nothing: what is on screen IS the order to keep. Ending it does — re-rank now.

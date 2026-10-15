@@ -34,12 +34,12 @@ Paths: `packages/ui/src/renderer/resources/status-resources.tsx`, `packages/ui/s
 ## MT-03: Drilling into the breakdown
 
 Covers: FR-020, FR-021, FR-022, FR-023, FR-024, FR-030, FR-032, FR-060, FR-068, FR-080
-Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/treemap.tsx`, `packages/ui/src/renderer/resources/breadcrumb.tsx`, `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/use-breakdown-keys.ts`, `packages/core/src/resources/**`
+Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/share-bars.tsx`, `packages/ui/src/renderer/resources/breadcrumb.tsx`, `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/use-breakdown-keys.ts`, `packages/core/src/resources/**`
 
 ### Steps
 1. With two projects loaded and one unloaded, open the monitor. The top level shows UI, Daemon, Helpers and Projects, each with its rolled-up figure.
 2. Open Projects. Every project is listed, active and loaded first; the unloaded one is grey and italic.
-3. Click into a project, a tab, then a terminal panel. Its shell appears with a friendly name (PowerShell, Git Bash…), and anything running in it — e.g. `node`, `git`, `claude` — beneath it. The breadcrumb names each level.
+3. Double-click a project, a tab, then a terminal panel on the left. Its shell appears with a friendly name (PowerShell, Git Bash…), and anything running in it — e.g. `node`, `git`, `claude` — beneath it. The breadcrumb names each level.
 4. Each level's figure equals the sum of its children plus its own (check one level by eye).
 5. Open an editor panel with a large file. It shows memory marked as estimated; CPU reads "not measured".
 6. With focus in the breakdown, Up/Down move the selection; Right or Enter drills in; Left or Backspace goes back up.
@@ -49,18 +49,18 @@ Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/rend
 - Nothing outside throng (your browser, Explorer) appears anywhere in the hierarchy.
 - Numbers are digit-grouped with readable units (KB, MB, GB).
 
-## MT-04: Charts, filter and idle hiding
+## MT-04: Graphs, filter and idle hiding
 
 Covers: FR-031, FR-033, FR-061, FR-065
-Paths: `packages/ui/src/renderer/resources/charts/**`, `packages/ui/src/renderer/resources/sparkline.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/monitor-model.ts`, `packages/core/src/resources/**`
+Paths: `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/renderer/resources/sparkline.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/monitor-model.ts`, `packages/core/src/resources/**`
 
 ### Steps
-1. Open the monitor and wait a minute. Each node's chart fills in from empty; the time series grows over the history window.
-2. Switch the metric between CPU, memory, GPU and I/O. The treemap and charts redraw for that metric.
+1. Open the monitor, select a row and wait a minute. Its line graphs on the right fill in from empty and grow over the history window.
+2. Switch Sort by between CPU, memory, GPU and I/O. The left list and the right column's bars re-rank for that figure.
 3. Type a process name into the filter. Only matching nodes and their parents remain; clearing the filter restores everything. Filter by a pid and by part of a command line — both match.
 4. Toggle **Hide idle**. Processes using under 0.1% CPU with no I/O disappear.
-5. Change the capture interval in the toolbar. The charts update at the new rate.
-6. Start `node -e "setTimeout(()=>{},20000)"` in a terminal, find it in the monitor, and wait for it to exit. It stays in place, greyed and struck through, with its history. Close and reopen the monitor: it is gone, and the charts start empty.
+5. Change the capture interval in the toolbar. The graphs and figures update at the new rate.
+6. Start `node -e "setTimeout(()=>{},20000)"` in a terminal, find it in the monitor, and wait for it to exit. It stays in place, greyed and struck through, with its history. Close and reopen the monitor: it is gone, and the graphs start empty.
 
 ### Negative cases
 - A process at or above the memory warning level is never hidden by **Hide idle**.

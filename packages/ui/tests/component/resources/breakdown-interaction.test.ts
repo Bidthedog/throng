@@ -248,6 +248,34 @@ describe('the hold survives moving about (FR-090)', () => {
     expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
   });
 
+  it('after a drill with the pointer over it: the new level shows the latest figures, not those from when the pointer arrived', () => {
+    mountOn(family(mutable(base)));
+    fireEvent.mouseEnter(breakdown());
+
+    // Minutes pass under the resting pointer: the children's figures change.
+    feed(family({ ...mutable(base), p21: [9, 9], p22: [5, 5] }));
+    expect(row('x:11:1')).toBeInTheDocument();
+
+    fireEvent.doubleClick(row('x:11:1'));
+
+    expect(rowOrder()).toEqual(['x:21:1', 'x:22:1']);
+    expect(within(row('x:21:1')).getByTestId('breakdown-row-x:21:1-cpu')).toHaveTextContent('9');
+    // …and holds from there.
+    feed(family({ ...mutable(base), p21: [1, 1], p22: [8, 8] }));
+    expect(rowOrder()).toEqual(['x:21:1', 'x:22:1']);
+    expect(within(row('x:21:1')).getByTestId('breakdown-row-x:21:1-cpu')).toHaveTextContent('9');
+  });
+
+  it('after Back with the pointer over it: the level above shows the latest figures too', () => {
+    mountOn(family(mutable(base)), [...PANEL, 'x:11:1']);
+    fireEvent.mouseEnter(breakdown());
+    feed(family({ ...mutable(base), p12: [20, 1] }));
+
+    fireEvent.click(screen.getByTestId('breakdown-back'));
+
+    expect(topOrder()).toEqual(['x:12:1', 'x:11:1']);
+  });
+
   it('after Back by the keyboard with a node selected: the level ranks once, then holds', () => {
     mountOn(family(mutable(base)), [...PANEL, 'x:11:1']);
     fireEvent.click(row('x:21:1'));
