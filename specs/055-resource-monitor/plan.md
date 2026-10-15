@@ -17,7 +17,9 @@ A throng-specific task manager in four parts:
 - **Estimates** for editors, previews and terminal buffers, calibrated against measured process memory and
   moved — not copied — out of the processes that hold them (R9).
 - **The UI**: an always-present status-bar item, a monitor window built like Preferences (R14; it was an
-  exclusive maximisable modal until Session 2026-10-15) with time-series charts
+  exclusive maximisable modal until Session 2026-10-15; where this plan says "modal" below, read the
+  monitor window — new files `main/floating-window-layering.ts`, `main/resource-monitor-window.ts` and
+  `renderer/resources/monitor-app.tsx`) with time-series charts
   (uPlot), a treemap (d3-hierarchy layout, React SVG), sparklines, filters and keyboard navigation, the
   standard Unload/Destroy actions and Kill Process / Kill All Below (R10, R12); seven settings with a
   cross-field resolution (R11); one command, one cog-menu item, eight icon tokens.

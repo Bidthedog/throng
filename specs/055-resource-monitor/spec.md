@@ -531,6 +531,7 @@ reopens from it.
 - **FR-042**: Hovering the item MUST show a breakdown of each total by component — UI, Daemon, Helpers
   and Projects.
 - **FR-043**: Clicking the item MUST open the monitor modal (FR-050).
+  *Amended by FR-086 (Session 2026-10-15) — it opens the monitor window, or brings it forward.*
 - **FR-044**: A total whose source is unavailable or stale MUST be shown as such, never as zero.
 - **FR-045**: When the status bar is too narrow to show every figure, figures MUST be dropped one at a
   time in this order: **GPU, then I/O, then memory, then CPU**, and restored in reverse as width
@@ -590,13 +591,16 @@ reopens from it.
 - **FR-084**: Maximise MUST fill the screen and Restore MUST return the window to its previous size and
   place. FR-052's Esc and X still close it.
 - **FR-085**: Minimise MUST close the monitor window with an animation that shrinks it into the main
-  window's status-bar figures, so the user sees where it went; with reduced motion requested, it closes
-  without animation.
+  window's status-bar figures, so the user sees where it went; with reduced motion requested, or when the
+  figures are not on screen (the main window minimised), it closes without animation.
 - **FR-086**: The Resource Monitor command, the status-bar figures and the cog item MUST open the
   monitor window from any throng window, or bring it forward if it is open. Its actions run where they
   belong: Unload Project in the main window, Destroy Tab and Destroy Panel in the window holding that tab
   or panel — each with its own confirmation, that window brought forward — and Kill's confirmation in
-  the monitor window. A tab or panel no window holds offers Destroy disabled, with its reason.
+  the monitor window. A tab or panel no window holds offers Destroy disabled, with its reason — those of a
+  project that is not the active one ("Switch to <project> to destroy this tab"); a route that still
+  finds no window reports "It is not open in any window" in the monitor's notice. The Resource Monitor
+  command, used while the monitor window is open, brings it forward rather than closing it.
 - **FR-087**: Reopening MUST place the monitor window where the user left it, at the same size and
   maximised state, kept on a visible screen, along with FR-057's view. This lasts until throng restarts.
 
@@ -709,6 +713,10 @@ reopens from it.
 - **SC-001**: The status-bar totals reflect a change in throng's load within two capture intervals.
 - **SC-002**: The modal appears within 100 ms of the click, and its first complete hierarchy is shown
   within 2 seconds, with 10 terminals each running a process tree of 20 processes.
+  *Amended (Session 2026-10-15): for the monitor window, "appears" is the window shown with its loading state, within
+  1 second of the click on a window not yet open (a new window must paint before it is revealed), and
+  within 100 ms when it is already open and only comes forward; the 2-second bound is unchanged.
+  (derived from Preferences' reveal-when-painted window; not confirmed by the user)*
 - **SC-003**: With the modal open on that load, keystroke-to-echo latency in a terminal and frame timing
   in the editor are no more than 5% worse than with the monitor closed, and no input is delayed by more
   than 50 ms.
