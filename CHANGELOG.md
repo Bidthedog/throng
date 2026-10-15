@@ -29,6 +29,19 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- **Languages recognised by filename** ([#70](https://github.com/Bidthedog/throng/issues/70)): a file is matched by its whole name as well as its extension, and `tsconfig.json`, `.vscode` settings files, `devcontainer.json` and their kin open as JSON with Comments, so their comments are no longer marked as errors.
+- **`.env` highlighting** ([#404](https://github.com/Bidthedog/throng/issues/404)): `.env` and `.env.local`-style files show keys, values and comments in their own colours.
+- **Dockerfile highlighting** ([#490](https://github.com/Bidthedog/throng/issues/490)): `Dockerfile`, `Containerfile`, `Dockerfile.dev`, `api.Dockerfile` and `.dockerfile` files.
+- **More file types highlighted** ([#491](https://github.com/Bidthedog/throng/issues/491)): .NET project files, `.webmanifest`, `.mdx`, Razor, Svelte and Astro open in the language they are written in, and Diff, Protocol Buffers, CMake, Groovy, F#, Visual Basic, VBScript, Scala, Perl, R, Haskell, Elm, Erlang, Clojure, Julia, HTTP requests, Gherkin, Jinja, NSIS, nginx and ignore files are new languages.
+- **Windows batch highlighting** ([#492](https://github.com/Bidthedog/throng/issues/492)): `.bat` and `.cmd` files.
+- **Reset a language you picked** ([#70](https://github.com/Bidthedog/throng/issues/70)): a ✕ beside the status-bar language, and *Reset Language* in the editor's right-click menu, return the file to its detected language; a choice made in one panel now reaches every panel showing the file.
+
+### Fixed
+
+- **The language picker no longer dims the window**: opening it from the status bar left everything, the picker included, behind a dark overlay.
+
 ## 1.0.0-alpha10 — 2026-10-14
 
 ### Added
