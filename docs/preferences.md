@@ -26,6 +26,26 @@ block the app**, so you can keep working while you edit a theme and watch each c
   last valid document in effect.
 - A number slider moves in steps; the field beside it accepts any whole number within the range.
 
+### Folding sections
+
+Every section and subsection heading on the **Settings**, **Key Bindings** and **Themes** tabs folds.
+**Sections start folded**, so each tab opens as a list of section headings; open a section and its
+subsections are already open. Click anywhere on a heading, or Tab to it and press Enter or Space, to
+fold or unfold it. Folding a section leaves its subsections as you left them, so unfolding it brings
+back the same layout.
+
+- **The count** beside each heading is how many rows it holds, its subsections included. While you
+  search it reads as matches out of total, for example `3 of 34`.
+- **A warning marker** on a folded heading means a row inside it holds an invalid entry. Your entry is
+  still there when you unfold it.
+- **Expand All** and **Collapse All** beside the search box unfold or fold every heading on that tab.
+  They are disabled while the search box has text.
+- **Searching** unfolds every section that holds a match. Clearing the search folds them back the way
+  they were, and any folding you did while searching is not kept.
+- **Your choices are remembered** per tab, across closing the window and restarting throng — a section
+  you opened stays open, and a subsection you folded stays folded. They are not a setting, so they do
+  not appear in `settings.json`.
+
 ### Resetting
 
 Four scopes, all reading the same shipped-defaults record:

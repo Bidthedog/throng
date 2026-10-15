@@ -108,6 +108,7 @@ launches.
 | `THRONG_E2E_CLIPBOARD` | `memory` gives each app an in-memory clipboard; the harness sets it, and it also marks a run as a test run. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
 | `THRONG_E2E_FOREGROUND_HANDOFF` | `1` re-enables the terminal foreground hand-off, which a test run otherwise turns off; set by the one spec that covers it. | unset |
 | `THRONG_TEST_SHELL_HISTORY` | `off` makes every shell a test run opens keep no history; the harness sets it. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
+| `THRONG_PREFS_SECTIONS_OPEN` | `1` makes Preferences sections start unfolded, as before 056 FR-016; the harness sets it. | unset |
 | `THRONG_TEST_RUN_DIR` | The one scratch folder a test run and all its workers write into. See [temp files](../.claude/skills/throng-testing/references/temp-files.md). | created per run |
 | `THRONG_TEST_RUN_OWNED_DIR` | Set by Playwright's global setup when it created the run folder, so teardown removes it. | set internally |
 | `THRONG_NON_REFERENCE_HARDWARE` | Marks a machine whose timings are not representative, so wall-clock SLA ceilings are recorded rather than asserted. See [performance SLAs](../.claude/skills/throng-testing/references/performance-sla.md). | unset |
