@@ -33,7 +33,10 @@ Electron 44.
 
 **Primary Dependencies**: React 18, InversifyJS, koffi (existing), node-pty (existing), Vitest, Playwright.
 **New runtime dependencies: `uplot` 1.6.x and `d3-hierarchy` 3.x (MIT)** in `packages/ui`, loaded in the
-modal's lazy chunk (R10).
+modal's lazy chunk (R10). *Superseded by R16 (Session 2026-10-15, third feedback): the stacked charts and the
+treemap are gone, the line graphs and share bars are canvas and HTML, and both dependencies are removed —
+this feature adds no runtime dependency. The monitor is two columns (FR-096, FR-097), and a list holds its
+order and figures while pointed at (FR-095).*
 
 **Storage**: none new. Settings — six `resourceMonitor.*` leaves and `confirmations.killProcesses`.
 `SHIPPED_DEFAULTS_VERSION` 22 → 23 for eight icon tokens. Modal view state is module state until restart

@@ -312,11 +312,13 @@ process; at every level the figure shown equals the sum of its children plus its
    place; **When** the pointer leaves with nothing selected, **Then** they move to their new ranks with a
    short animation (none under reduced motion); **When** a node is selected, **Then** the order holds until
    the selection is cleared. (FR-088, FR-090, FR-091)
+   *Amended (Session 2026-10-15, third feedback): "tile" now reads "row or bar"; scenario 18 states the hold (FR-095).*
 13. **Given** the monitor, **When** the user looks at it for the first time, **Then** a header names where
    they are, with a Back button and "Tile size: <metric>"; the rows have column headers with the chosen
    metric's column marked; each chart has a legend naming its bands and names the node it plots; and the
    "?" button explains the mouse, the keys, the colours and what Components and Projects are.
    (FR-092, FR-093)
+   *Amended (Session 2026-10-15, third feedback): "Tile size" reads "Sorted by", and the chart legends are gone with the charts (FR-097).*
 14. **Given** about 450 processes, **When** the user types in the filter, **Then** each keystroke shows
    in the field at once and the matches follow within 100 ms, each process listed once. (SC-010)
 15. **Given** tiles sized by CPU, **When** one process takes about 1% of the machine and another about 80%,
@@ -704,7 +706,8 @@ reopens from it.
   drilling in or going Back with the pointer; going Back from the keyboard (Left, Backspace) selects the
   node the user came from, so the keyboard keeps its place *(derived — the spec had no way back to
   "nothing selected"; not confirmed by the user)*.
-- **FR-089**: Exactly the selected node MUST be marked — on its tile and on its row, with an accent edge
+- **FR-089** *(Session 2026-10-15, third feedback: tiles and charts are gone — the mark is on the row, and the right column describes the
+  node, FR-096/FR-097)*: Exactly the selected node MUST be marked — on its tile and on its row, with an accent edge
   as throng marks its active tab and active file — and the detail pane and charts MUST describe that node;
   with nothing selected, nothing is marked and they describe the node in focus. Every interactive element
   MUST show a pointer cursor and a hover state on hover (tiles in the warning and critical bands
@@ -714,11 +717,13 @@ reopens from it.
   is over the breakdown or a node is selected; the selected node's figures keep updating in place. When
   the order changes, tiles and rows MUST move to their new place with a short animation, and without one
   under reduced motion.
-  *Amended by FR-095 (Session 2026-10-15, third feedback): the list's figures and titles hold too, not only its order.*
+  *Amended by FR-095 (Session 2026-10-15, third feedback): while the pointer is over a list, its figures hold too, not only its order;
+  a selection on its own holds the order only, and the figures keep updating.*
 - **FR-091**: The monitor MUST show when its figures were captured and how often — "Updated <time> ·
   every <n> s" — with a brief pulse each time a capture arrives; "Collecting the first reading…" before
   the first, and FR-044's stale wording when the collector is failing. Charts and sparklines with fewer
   than two points MUST say they are building their history rather than show nothing.
+  *(Session 2026-10-15, third feedback: this now applies to FR-097's line graphs and the sparklines.)*
 - **FR-092**: The monitor MUST explain itself in place: a header naming where the user is (the breadcrumb),
   with a Back button (disabled at the top) and "Tile size: <metric>"; column headers over the rows
   (Trend, CPU, Memory, GPU, I/O) with the chosen metric's column marked; a legend on each chart naming
@@ -745,7 +750,10 @@ reopens from it.
 #### Two columns (Session 2026-10-15, third feedback)
 
 - **FR-095**: While the pointer is over the left column's list, that list MUST hold still — its order, its
-  figures and its sparklines — and catch up to the latest capture when the pointer leaves it. Hover titles
+  figures and its sparklines — and catch up to the latest capture when the pointer leaves it. The right
+  column's share bars hold the same way while the pointer is over them, so a bar never moves under a click
+  *(derived from "I thought we were pausing areas as we mouse over them"; not confirmed by the user)*. A
+  selection with the pointer elsewhere holds only the order (FR-090). Hover titles
   anywhere in the monitor MUST NOT contain a live figure, so no title changes, flickers or closes under a
   resting pointer. The right column keeps updating while the pointer is over the left.
 - **FR-096**: The monitor MUST be laid out in two columns. The **left** column holds the lists: Components
