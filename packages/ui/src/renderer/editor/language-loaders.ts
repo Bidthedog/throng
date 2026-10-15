@@ -68,6 +68,35 @@ export const LANGUAGE_LOADERS: Readonly<Record<string, Loader>> = {
   shell: stream(() => import('@codemirror/legacy-modes/mode/shell'), 'shell'),
   toml: stream(() => import('@codemirror/legacy-modes/mode/toml'), 'toml'),
   ini: stream(() => import('@codemirror/legacy-modes/mode/properties'), 'properties'),
+
+  // 055 — grammars that already shipped in legacy-modes but were never wired up.
+  groovy: stream(() => import('@codemirror/legacy-modes/mode/groovy'), 'groovy'),
+  dockerfile: stream(() => import('@codemirror/legacy-modes/mode/dockerfile'), 'dockerFile'),
+  cmake: stream(() => import('@codemirror/legacy-modes/mode/cmake'), 'cmake'),
+  nginx: stream(() => import('@codemirror/legacy-modes/mode/nginx'), 'nginx'),
+  diff: stream(() => import('@codemirror/legacy-modes/mode/diff'), 'diff'),
+  protobuf: stream(() => import('@codemirror/legacy-modes/mode/protobuf'), 'protobuf'),
+  fsharp: stream(() => import('@codemirror/legacy-modes/mode/mllike'), 'fSharp'),
+  vb: stream(() => import('@codemirror/legacy-modes/mode/vb'), 'vb'),
+  vbscript: stream(() => import('@codemirror/legacy-modes/mode/vbscript'), 'vbScript'),
+  scala: stream(() => import('@codemirror/legacy-modes/mode/clike'), 'scala'),
+  perl: stream(() => import('@codemirror/legacy-modes/mode/perl'), 'perl'),
+  r: stream(() => import('@codemirror/legacy-modes/mode/r'), 'r'),
+  haskell: stream(() => import('@codemirror/legacy-modes/mode/haskell'), 'haskell'),
+  elm: stream(() => import('@codemirror/legacy-modes/mode/elm'), 'elm'),
+  erlang: stream(() => import('@codemirror/legacy-modes/mode/erlang'), 'erlang'),
+  clojure: stream(() => import('@codemirror/legacy-modes/mode/clojure'), 'clojure'),
+  julia: stream(() => import('@codemirror/legacy-modes/mode/julia'), 'julia'),
+  http: stream(() => import('@codemirror/legacy-modes/mode/http'), 'http'),
+  gherkin: stream(() => import('@codemirror/legacy-modes/mode/gherkin'), 'gherkin'),
+  jinja: stream(() => import('@codemirror/legacy-modes/mode/jinja2'), 'jinja2'),
+  nsis: stream(() => import('@codemirror/legacy-modes/mode/nsis'), 'nsis'),
+
+  // 055 — hand-written, because nothing shipped meets the requirement (FR-016). Each is still a
+  // dynamic import, so it gets its own chunk like every grammar above (FR-019).
+  dotenv: stream(() => import('./grammars/dotenv.js'), 'dotenv'),
+  ignore: stream(() => import('./grammars/ignore.js'), 'ignore'),
+  batch: stream(() => import('./grammars/batch.js'), 'batch'),
 };
 
 /**

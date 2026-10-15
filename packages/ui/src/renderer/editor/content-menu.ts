@@ -58,6 +58,8 @@ export interface ContentMenuArgs {
   /** The document's effective language NAME, shown on the Set Language item so the menu states the
    *  current value as well as offering to change it (024 US1 follow-up). */
   languageName?: string;
+  /** 055 FR-024b — Reset Language; `enabled` while the document has a manual override. Absent draws none. */
+  resetLanguage?: { enabled: boolean; reset: () => void };
   /**
    * 047 US3 (FR-036, contracts "Editor body menu") — the four fold rows, present only for a
    * Markdown document; `undefined` draws none of them. `section` is the innermost section
@@ -227,6 +229,23 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       section: 'viewState',
       onClick: () => requestLanguagePicker(panelId),
     },
+    /*
+     * 055 FR-024b — the menu route to the status strip's reset control, so it survives a hidden status bar.
+     * Present whenever the caller supplies it, DISABLED while the document has no override (the Open Preview
+     * precedent): an item that appears and vanishes would move everything below it.
+     */
+    ...(args.resetLanguage !== undefined
+      ? [
+          {
+            label: 'Reset Language',
+            testId: 'menu-item-Reset Language',
+            icon: 'destroy',
+            section: 'viewState' as const,
+            disabled: !args.resetLanguage.enabled,
+            onClick: () => args.resetLanguage?.reset(),
+          },
+        ]
+      : []),
     {
       // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
       // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.

@@ -680,7 +680,9 @@ export {
   languageById,
   languageName,
   isKnownLanguage,
+  createFilenameMatcher,
   detectLanguage,
+  matchFilename,
   resolveLanguage,
   inferIndent,
   // Rectangular (column) selection (016, US6).
