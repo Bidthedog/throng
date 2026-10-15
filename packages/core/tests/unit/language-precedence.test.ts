@@ -1,5 +1,6 @@
 /**
- * The precedence chain (016, FR-005a) — document override → user mapping → registry → plain text.
+ * The precedence chain (016 FR-005a, extended by 055 FR-007) — document override → built-in
+ * filename match → user extension mapping → built-in extension match → plain text.
  *
  * The two rules this file exists to keep apart (FR-004c vs FR-005b):
  *
@@ -80,6 +81,51 @@ describe('resolveLanguage precedence (FR-005a)', () => {
     expect(
       resolveLanguage({ fileName: 'a.zzz', override: 'elvish', userMapping: { '.zzz': 'gnomish' } }),
     ).toEqual({ languageId: PLAIN_TEXT_ID, source: 'plaintext' });
+  });
+
+  describe('the filename rung (055 FR-007) — against the shipped registry', () => {
+    it('outranks the user extension mapping', () => {
+      // `.json → json` is the user's choice for .json files; a whole name is more specific.
+      expect(resolveLanguage({ fileName: 'C:\\p\\tsconfig.json', userMapping: { '.json': 'json' } })).toEqual({
+        languageId: 'jsonc',
+        source: 'registry',
+      });
+    });
+
+    it('leaves the mapping in charge of every name no descriptor claims', () => {
+      expect(resolveLanguage({ fileName: 'package.json', userMapping: { '.json': 'jsonc' } })).toEqual({
+        languageId: 'jsonc',
+        source: 'user-mapping',
+      });
+    });
+
+    it('is itself outranked by the document override', () => {
+      expect(resolveLanguage({ fileName: 'tsconfig.json', override: 'json' })).toEqual({
+        languageId: 'json',
+        source: 'override',
+      });
+    });
+
+    it('decides before a Plain Text mapping is reached — the mapping is the rung below', () => {
+      expect(resolveLanguage({ fileName: 'tsconfig.json', userMapping: { '.json': PLAIN_TEXT_ID } })).toEqual({
+        languageId: 'jsonc',
+        source: 'registry',
+      });
+    });
+
+    it('still yields to an explicit Plain Text override (FR-004c)', () => {
+      expect(resolveLanguage({ fileName: 'tsconfig.json', override: PLAIN_TEXT_ID })).toEqual({
+        languageId: PLAIN_TEXT_ID,
+        source: 'override',
+      });
+    });
+
+    it('catches an unresolvable override as it falls through (FR-005b)', () => {
+      expect(resolveLanguage({ fileName: 'tsconfig.json', override: 'elvish' })).toEqual({
+        languageId: 'jsonc',
+        source: 'registry',
+      });
+    });
   });
 
   it('does not conflate the two: an unresolvable id is NOT an explicit plain text', () => {
