@@ -19,8 +19,10 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { CaptureModal } from './capture-modal.js';
-import { groupDescriptors } from './group-descriptors.js';
+import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
+import { FoldAllButtons, FoldHeading } from './fold-heading.js';
+import { useTabFolding } from './use-preference-folds.js';
 
 /**
  * The Key Bindings tab (feature 007, US3 + H2 — FR-030/031/033b). A grouped list
@@ -97,7 +99,14 @@ export function KeybindingsTab({
     () => filterFields(applied, KEYBINDINGS_METADATA, (d) => keybindings.bindings[d.key] ?? []),
     [applied, keybindings],
   );
-  const groups = useMemo(() => groupDescriptors(matches), [matches]);
+  // 056 — the same fold wiring the Settings tab uses (FR-013), in this tab's own namespace (FR-010). The
+  // unfiltered grouping is reused as the shown one while no query is applied.
+  const allGroups = useMemo(() => groupDescriptors(KEYBINDINGS_METADATA), []);
+  const groups = useMemo(
+    () => (applied.trim() === '' ? allGroups : groupDescriptors(matches)),
+    [applied, allGroups, matches],
+  );
+  const { folds, countOf } = useTabFolding('keybindings', query, applied, allGroups, groups);
 
   const writeBindings = (next: Record<string, string[]>): void => {
     void writeConfig(
@@ -142,24 +151,33 @@ export function KeybindingsTab({
   return (
     <div className="keybindings-tab" data-testid="keybindings-tab">
       <div className="settings-search">
-        <input
-          type="text"
-          className="settings-search__input"
-          data-testid="keybindings-search"
-          placeholder="Search key bindings…"
-          aria-label="Search key bindings"
-          value={query}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-        {query ? (
-          <IconButton
-            token="dismiss"
-            className="settings-search__clear"
-            testId="keybindings-search-clear"
-            title="Clear search"
-            onClick={clearSearch}
+        <div className="settings-search__field">
+          <input
+            type="text"
+            className="settings-search__input"
+            data-testid="keybindings-search"
+            placeholder="Search key bindings…"
+            aria-label="Search key bindings"
+            value={query}
+            onChange={(e) => onSearchChange(e.target.value)}
           />
-        ) : null}
+          {query ? (
+            <IconButton
+              token="dismiss"
+              className="settings-search__clear"
+              testId="keybindings-search-clear"
+              title="Clear search"
+              onClick={clearSearch}
+            />
+          ) : null}
+        </div>
+        {/* 056 FR-011b — beside the search box, disabled while it has text. */}
+        <FoldAllButtons
+          tab="keybindings"
+          onExpandAll={folds.expandAll}
+          onCollapseAll={folds.collapseAll}
+          disabled={folds.searching}
+        />
       </div>
 
       {groups.length === 0 ? (
@@ -170,36 +188,52 @@ export function KeybindingsTab({
 
       {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`keybindings-group-${group}`}>
-          <h3 className="settings-group__title">{group}</h3>
-          {/* 040 FR-036 — this registry declares NO subgroups today, and the rendering is here
-              anyway. `subgroup` is a field on the one `FieldDescriptor` all three tabs read; a tab
-              that ignored it would render the first descriptor to carry one silently flat, in one
-              tab out of three, with nothing to say so. FR-036b: the ungrouped bindings first. */}
-          {items.map(row)}
-          {/* Shared markup, this tab's OWN id prefix — matching `keybindings-group-${group}`. */}
-          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
-            <Subsection
-              key={subgroup}
-              testIdPrefix="keybindings-subgroup"
-              group={group}
-              subgroup={subgroup}
-            >
-              {subItems.map(row)}
-              {/* 054 FR-050a — every tab renders the third level, for the same reason as the second. */}
-              {subsections.map(({ subsection, items: sectionItems }) => (
-                <Subsection
-                  key={subsection}
-                  testIdPrefix="keybindings-subsection"
-                  group={group}
-                  subgroup={subgroup}
-                  subsection={subsection}
-                  level={5}
-                >
-                  {sectionItems.map(row)}
-                </Subsection>
-              ))}
-            </Subsection>
-          ))}
+          {/* 056 FR-001 — the group heading folds, through the one shared `FoldHeading` (FR-013). */}
+          <FoldHeading
+            level={3}
+            testId={`keybindings-group-${group}`}
+            name={group}
+            titleClassName="settings-group__title"
+            folded={folds.isFolded(foldKey(group))}
+            onToggle={() => folds.toggle(foldKey(group))}
+            {...countOf(foldKey(group))}
+          >
+            {/* 040 FR-036 — this registry declares NO subgroups today, and the rendering is here
+                anyway. `subgroup` is a field on the one `FieldDescriptor` all three tabs read; a tab
+                that ignored it would render the first descriptor to carry one silently flat, in one
+                tab out of three, with nothing to say so. FR-036b: the ungrouped bindings first. */}
+            {items.map(row)}
+            {/* Shared markup, this tab's OWN id prefix — matching `keybindings-group-${group}`. */}
+            {subgroups.map(({ subgroup, items: subItems, subsections }) => (
+              <Subsection
+                key={subgroup}
+                testIdPrefix="keybindings-subgroup"
+                group={group}
+                subgroup={subgroup}
+                folded={folds.isFolded(foldKey(group, subgroup))}
+                onToggle={() => folds.toggle(foldKey(group, subgroup))}
+                count={countOf(foldKey(group, subgroup))}
+              >
+                {subItems.map(row)}
+                {/* 054 FR-050a — every tab renders the third level, for the same reason as the second. */}
+                {subsections.map(({ subsection, items: sectionItems }) => (
+                  <Subsection
+                    key={subsection}
+                    testIdPrefix="keybindings-subsection"
+                    group={group}
+                    subgroup={subgroup}
+                    subsection={subsection}
+                    level={5}
+                    folded={folds.isFolded(foldKey(group, subgroup, subsection))}
+                    onToggle={() => folds.toggle(foldKey(group, subgroup, subsection))}
+                    count={countOf(foldKey(group, subgroup, subsection))}
+                  >
+                    {sectionItems.map(row)}
+                  </Subsection>
+                ))}
+              </Subsection>
+            ))}
+          </FoldHeading>
         </section>
       ))}
 

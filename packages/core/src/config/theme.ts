@@ -614,6 +614,9 @@ export const THRONG_THEME: Theme = {
     diagramFit: '⊡',
     diagramZoomReset: '1:1',
     diagramFullPane: '⇱',
+    /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
+       an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
+    warning: '⚠',
   },
 };
 

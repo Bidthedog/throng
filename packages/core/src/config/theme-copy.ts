@@ -626,11 +626,13 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
   },
   'icons.expandAll': {
     label: 'Expand all icon',
-    description: 'The glyph on the toolbar control that opens every folder in the tree.',
+    description:
+      'The glyph on the toolbar control that opens every folder in the tree, and on the Preferences control that unfolds every section.',
   },
   'icons.collapseAll': {
     label: 'Collapse all icon',
-    description: 'The glyph on the toolbar control that folds every folder in the tree closed.',
+    description:
+      'The glyph on the toolbar control that folds every folder in the tree closed, and on the Preferences control that folds every section.',
   },
   'icons.newFolder': {
     label: 'New folder icon',
@@ -877,6 +879,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Diagram maximise icon',
     description:
       "The glyph on a diagram's Maximise control, which puts the diagram in Focus Mode over the whole middle section until it is minimised.",
+  },
+  'icons.warning': {
+    label: 'Warning icon',
+    description:
+      'The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.',
   },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {

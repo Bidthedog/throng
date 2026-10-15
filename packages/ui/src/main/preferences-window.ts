@@ -89,6 +89,8 @@ export function isPreferencesTab(value: unknown): value is PreferencesTab {
 export interface PreferencesWindowDeps {
   /** Absolute path to the renderer index.html (loaded with `?prefs=<tab>`). */
   indexHtml: string;
+  /** Extra query values for the renderer (056 FR-016: the `foldDefault` test seam), merged beside `prefs`. */
+  query?: Record<string, string>;
   /** Absolute path to the sandboxed preload script. */
   preloadPath: string;
   /** The platform seam this window's `setWindowOpenHandler` routes a safe target through (044 R10). */
@@ -187,7 +189,8 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
     deps.onClose?.();
   });
 
-  void win.loadFile(deps.indexHtml, { query: { prefs: tab } });
+  // `deps.query` first, so it can add a seam (`foldDefault`) but never replace the tab.
+  void win.loadFile(deps.indexHtml, { query: { ...deps.query, prefs: tab } });
   return win;
 }
 

@@ -286,8 +286,8 @@
 /* 040 FR-036a — a SUBSECTION inside a section, and the second level has to LOOK like a second
    level or the heading reads as a sibling of the one above it. The top margin is what separates it
    from the ungrouped rows that render above it (FR-036b); the heading below is the group title one
-   notch quieter, because it is the same kind of label at a lower rank. Nothing folds: no border,
-   no chevron, no affordance — the `<section>` containing this does not collapse either. */
+   notch quieter, because it is the same kind of label at a lower rank. It folds since 056 (FR-002,
+   which supersedes 040 FR-036a's "not collapsible"): see `.fold-heading__button` below. */
 .settings-subgroup {
   margin-top: 14px;
 }
@@ -303,7 +303,7 @@
 }
 
 /* 054 FR-050a — the third level (Editor → Previews → Markdown): one notch quieter again, and no
-   uppercase, so it cannot read as a sibling of the subgroup heading above it. Still folds nothing. */
+   uppercase, so it cannot read as a sibling of the subgroup heading above it. */
 .settings-subgroup--nested {
   margin-top: 10px;
 }
@@ -313,6 +313,89 @@
   letter-spacing: 0.02em;
   font-size: 11px;
   font-style: italic;
+}
+
+/* 056 — the foldable heading. The button IS the heading row (FR-004: a click anywhere on it toggles),
+   and it inherits the heading's typography wholesale so the three heading levels keep the look 040 and
+   054 gave them: `font: inherit` and the text rules below reach through the button the heading now
+   holds. Theme tokens only (FR-014, the themeable-icon-control rule). */
+.fold-heading__button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px 2px 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font-style: inherit;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .fold-heading__button:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.fold-heading__button:focus-visible {
+  outline: 1px solid var(--throng-colour-accent, var(--accent));
+  outline-offset: 1px;
+}
+
+/* The chevron points right when folded and rotates open, as the 046 category header's does. */
+.fold-heading__chevron {
+  flex: 0 0 auto;
+  transition: transform 0.1s ease;
+}
+
+.fold-heading__chevron--open {
+  transform: rotate(90deg);
+}
+
+.fold-heading__name {
+  min-width: 0;
+}
+
+/* The count is quieter than the name, and is not uppercased with it. */
+.fold-heading__count {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: normal;
+  text-transform: none;
+  font-style: normal;
+  opacity: 0.75;
+}
+
+/* AMBER, not red — `--throng-colour-warning` is the theme's token for "needs attention, nothing broke". */
+.fold-heading__invalid {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--throng-colour-warning);
+}
+
+/* The content container sets no `display` of its own, and `[hidden]` is backed here so that no class
+   on a descendant wrapper — or a future rule on this one — can override a fold (056 FR-003). */
+.fold-content[hidden] {
+  display: none;
+}
+
+/* Expand All / Collapse All sit beside the search box, outside the field the clear control floats in. */
+.settings-search__field {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.fold-all__button {
+  flex: 0 0 auto;
+  margin-left: 4px;
 }
 
 /* Horizontal padding is not decoration (FR-019b): without it a row-hover highlight runs

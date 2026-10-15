@@ -303,7 +303,10 @@ import { setAtPath } from './metadata.js';
 // control), the additive case again — the maintainer's hand-testing install already holds a 21 marker, so
 // 21 is not edited to carry it. `diagramFullSize` is retired in the same round: `migrateTheme` drops the
 // stray key the 21 seed wrote (theme-ops.ts), so no bump is needed for the removal itself.
-export const SHIPPED_DEFAULTS_VERSION = 22;
+//
+// Bumped by 056 (22 → 23): one icon token, `warning`, the marker on a folded Preferences heading that
+// hides an invalid entry (FR-007). The additive case again: the payload arrives, no existing value moves.
+export const SHIPPED_DEFAULTS_VERSION = 23;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved

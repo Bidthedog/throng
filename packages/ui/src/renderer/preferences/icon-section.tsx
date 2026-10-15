@@ -5,6 +5,7 @@ import { IconButton } from '../common/icon-button.js';
 import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { Icon } from '../common/icon.js';
 import { useIconPacks } from '../config/config-store.js';
+import { FoldHeading } from './fold-heading.js';
 
 /**
  * Icon section of the Themes tab (007, US4 — FR-039/040; reworked by 017 / #54).
@@ -20,6 +21,9 @@ import { useIconPacks } from '../config/config-store.js';
  * differently from the thing it is previewing is not a preview.
  */
 const ICON_TOKENS = Object.keys(THRONG_THEME.icons);
+
+/** The two settings rows above the grid: the icon pack and the icon colour (056 FR-006). */
+const SETTING_ROWS = 2;
 
 export interface IconSectionProps {
   theme: Theme;
@@ -45,6 +49,9 @@ export interface IconSectionProps {
    * like a result.
    */
   filter?: { tokens: readonly string[]; packRowMatches: boolean } | null;
+  /** Is the section folded? The Themes tab's `usePreferenceFolds` answers (056 FR-001, FR-013). */
+  folded: boolean;
+  onToggleFold: () => void;
 }
 
 export function IconSection({
@@ -53,6 +60,8 @@ export function IconSection({
   onOverride,
   onSetIconColour,
   filter = null,
+  folded,
+  onToggleFold,
 }: IconSectionProps): ReactElement | null {
   // Packs arrive on the same hot-reloaded payload as the theme that selects them, so this grid
   // needs no fetch of its own and cannot show a pack that disagrees with the live theme.
@@ -67,7 +76,22 @@ export function IconSection({
 
   return (
     <section className="settings-group" data-testid="settings-group-Icons">
-      <h3 className="settings-group__title">Icons</h3>
+      {/*
+        056 FR-001 — the section folds through the same `FoldHeading` the generated sections use (FR-013).
+        Its rows are the pack row, the colour row and one cell per token, so the total is
+        `ICON_TOKENS.length + 2`; under a search the matches are the rows that survived the filter, the
+        two settings rows counting together because they show and hide together.
+      */}
+      <FoldHeading
+        level={3}
+        testId="settings-group-Icons"
+        name="Icons"
+        titleClassName="settings-group__title"
+        total={ICON_TOKENS.length + SETTING_ROWS}
+        matches={filter ? visibleTokens.length + (showPackRow ? SETTING_ROWS : 0) : undefined}
+        folded={folded}
+        onToggle={onToggleFold}
+      >
       {showPackRow ? (
         <div className="settings-row">
           <div className="settings-row__meta">
@@ -177,6 +201,7 @@ export function IconSection({
           </div>
         ))}
       </div>
+      </FoldHeading>
     </section>
   );
 }

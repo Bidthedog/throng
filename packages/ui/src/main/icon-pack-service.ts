@@ -87,6 +87,8 @@ ${Object.keys(THRONG_THEME.icons)
 const SVG_SHAPES: Record<string, string> = {
   destroy: '<path d="M6 6l12 12M18 6L6 18"/>',
   cancel: '<circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/>',
+  // 056 (FR-007): a triangle with an exclamation mark — the folded-heading invalid-entry marker.
+  warning: '<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.5"/>',
   collapse: '<path d="M15 6l-6 6 6 6"/>',
   expand: '<path d="M9 6l6 6-6 6"/>',
   rename: '<path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 5l4 4"/>',

@@ -207,6 +207,7 @@ function KeyedMapControl({
             }}
             data-testid={`map-new-key-${descriptor.key}`}
             aria-label="Language to add"
+            aria-invalid={error !== null}
           >
             <option value="">Choose a language…</option>
             {unmapped.map((language) => (
@@ -230,6 +231,8 @@ function KeyedMapControl({
             }}
             data-testid={`map-new-key-${descriptor.key}`}
             aria-label="New key"
+            // 056 FR-007 — the signal a FOLDED heading reads to show its warning marker (research R3).
+            aria-invalid={error !== null}
           />
         )}
         <IconButton
@@ -293,6 +296,13 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
   const [newId, setNewId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  /**
+   * Was the id typed into the new-id box REFUSED? `error` alone cannot say: after a successful add it
+   * still holds guidance about the DRAFT row ("needs an executable"), which is not a fault in the box,
+   * and marking the box `aria-invalid` for it would flag a field the user has just emptied and been
+   * right to. Only a refused id marks the box (056 FR-007); a draft's problem marks its own row.
+   */
+  const [idRefused, setIdRefused] = useState(false);
 
   const committedIds = records.map((r) => String(r[idKey] ?? ''));
   // A draft whose id has arrived in the settings document is no longer a draft — it is the row.
@@ -341,8 +351,10 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
     // WITH — the message says what it still needs, which is guidance rather than a refusal.
     if (problem?.field === 'id') {
       setError(problem.message);
+      setIdRefused(true);
       return;
     }
+    setIdRefused(false);
     setDrafts([...pending, draft]);
     setNewId('');
     setError(problem?.message ?? null);
@@ -440,7 +452,9 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
                   // A row that arrived BROKEN FROM THE FILE says so in its own cell (C17). The
                   // control-level error region below is transient add/commit state and structurally
                   // cannot speak for a row that was never committed through this editor.
-                  <tr className="map-control-row-error">
+                  // `data-pref-invalid`, not `aria-invalid`: ARIA has no such state on a table row, so the
+                  // row carries its own scan hook for a folded heading's warning marker (056 FR-007).
+                  <tr className="map-control-row-error" data-pref-invalid="true">
                     <td colSpan={columns.length + 2} role="alert" data-testid={`${noun}-row-error-${rowKey}`}>
                       {problem}
                     </td>
@@ -468,12 +482,14 @@ function RecordsControl({ descriptor, value, onCommit }: MapControlProps): React
           onChange={(e) => {
             setNewId(e.target.value);
             setError(null);
+            setIdRefused(false);
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') addRow();
           }}
           data-testid={`${noun}-new-id`}
           aria-label={`New ${noun} id`}
+          aria-invalid={idRefused}
         />
         <IconButton token="add" title={`Add ${noun}`} onClick={addRow} testId={`${noun}-add`} />
       </div>
