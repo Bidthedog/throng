@@ -87,6 +87,7 @@ when it writes the file; a retired key it once used is dropped.
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
 | Destroy a panel | `confirmations.destroyPanel` | `double` | `none` · `single` · `double` | Confirmations before a panel is destroyed. |
 | Destroy a sub-workspace | `confirmations.destroySubWorkspace` | `double` | `none` · `single` · `double` | Confirmations before a sub-workspace is destroyed. |
+| Kill processes | `confirmations.killProcesses` | `double` | `none` · `single` · `double` | Confirmations before the [Resource Monitor](quick-start.md#8-see-what-throng-is-using) force-ends a process (**Kill Process**) or everything running beneath a project, tab, panel or process (**Kill All Below**). The dialog names what will end. |
 
 ## Panes
 
@@ -334,6 +335,21 @@ Logs never leave the machine.
 | Log detail | `diagnostics.logLevel` | `info` | `error` · `warn` · `info` · `debug` | How much throng records. Raise it to `debug` before reproducing a problem, then send the logs with your report. At `debug`, terminals also write `[renderer-terminal]` lines to `main.log` — what each view was handed when it attached, screen and mouse mode changes, wheel routing, selections, menu copies and redraws. |
 | Log file size (KB) | `diagnostics.maxFileSizeKb` | 1,024 | 64 – 4,096 KB, step 64; up to 65,536 by hand | How large one log file grows before throng starts a new one. |
 | Log files kept | `diagnostics.keepFiles` | 5 | 1 – 20 | How many files to keep for each part of throng, including the one being written. Older files are deleted. |
+
+## Resource Monitor
+
+What the status bar's usage figures and the [Resource Monitor](quick-start.md#8-see-what-throng-is-using)
+measure, how often, and when a figure turns to the warning or critical colour. CPU is a share of the
+whole machine; memory is a share of installed RAM.
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Capture interval (seconds) | `resourceMonitor.captureIntervalSeconds` | 2 | 2 – 60 | How often throng measures itself. A longer history needs a slower capture: up to 5 minutes allows 2 s, up to 10 minutes 5 s, up to 20 minutes 15 s, up to 30 minutes 30 s. A faster value than the history allows is raised, and Preferences says so beside the field. Also changeable from the monitor's toolbar. |
+| History window (minutes) | `resourceMonitor.historyMinutes` | 5 | 1 – 30 | How much history the monitor keeps per process while it is open. Nothing is kept once it closes. |
+| CPU warning (%) | `resourceMonitor.cpuWarningPercent` | 50 | 1 – 100 | The CPU share at which a figure shows the warning colour. Kept below the critical level. |
+| CPU critical (%) | `resourceMonitor.cpuCriticalPercent` | 80 | 1 – 100 | The CPU share at which a figure shows the critical colour. |
+| Memory warning (%) | `resourceMonitor.memoryWarningPercent` | 50 | 1 – 100 | The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle. |
+| Memory critical (%) | `resourceMonitor.memoryCriticalPercent` | 80 | 1 – 100 | The share of installed memory at which a figure shows the critical colour. |
 
 ## Settings with no control
 
