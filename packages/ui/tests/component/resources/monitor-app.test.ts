@@ -134,6 +134,22 @@ describe('closing (FR-052)', () => {
     }
   });
 
+  it('leaves Escape to an open confirmation — cancelling a Kill does not close the window', async () => {
+    await mountWindow();
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    const cancel = document.createElement('button');
+    dialog.appendChild(cancel);
+    document.body.appendChild(dialog);
+    try {
+      cancel.focus();
+      fireEvent.keyDown(cancel, { key: 'Escape', code: 'Escape' });
+      expect(windowBridge.close).not.toHaveBeenCalled();
+    } finally {
+      dialog.remove();
+    }
+  });
+
   it('closes the window on the X', async () => {
     await mountWindow();
     fireEvent.click(screen.getByTestId('window-close'));

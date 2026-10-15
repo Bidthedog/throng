@@ -139,11 +139,16 @@ function MonitorShell(): ReactElement {
     reconfigureSession({ intervalSeconds: settings.intervalSeconds, historyMinutes: settings.historyMinutes });
   }, [settings.intervalSeconds, settings.historyMinutes]);
 
-  // Esc closes the window (FR-052) — unless a context menu is open over it, which closes first.
+  /*
+   * Esc closes the window (FR-052) — unless a context menu or a confirmation is open over it, whose own
+   * Esc comes first. The confirmation dismisses without stopping the event, and is still in the DOM when
+   * it reaches here, so a Kill cancelled with Esc must not take the window with it.
+   */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (document.querySelector('[role="menu"]') !== null) return;
+      if (e.target instanceof Element && e.target.closest('[role="dialog"]') !== null) return;
       window.throng?.window?.close?.();
     };
     window.addEventListener('keydown', onKeyDown);
