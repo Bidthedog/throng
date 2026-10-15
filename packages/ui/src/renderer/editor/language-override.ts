@@ -8,6 +8,7 @@
 import type { DocumentClient } from '../state/document-client.js';
 import { applyLanguage, claimLanguage, effectiveLanguage, setPanelLanguage } from './editor-language.js';
 import { getEditorView } from './editor-views.js';
+import { publishDocumentLanguageChange } from './document-language-events.js';
 
 /** Normalise a path for comparison: forward slashes, lower-cased (Windows is case-insensitive). */
 function normalise(path: string): string {
@@ -65,7 +66,43 @@ export async function setDocumentOverride(args: SetOverrideArgs): Promise<void> 
     await documents.setState(projectId, relPath, languageId);
   } catch (err) {
     console.error('[throng] could not persist the language override', err);
+    return; // the other panels would re-read the old value — nothing to tell them
   }
+  // 055 FR-024a / 016 FR-028b — every other panel showing this file adopts the choice. Published AFTER the
+  // write, because each of them re-reads the stored value.
+  publishDocumentLanguageChange({ projectId, relPath, originPanelId: panelId, includeOrigin: false });
+}
+
+export interface ClearOverrideArgs {
+  panelId: string;
+  projectId: string | null;
+  relPath: string | null;
+  /** Null where the app's services are not mounted; nothing is then stored to clear. */
+  documents: DocumentClient | null;
+}
+
+/**
+ * Remove the document's override and hand the language back to detection (055 FR-024a).
+ *
+ * The stored value is CLEARED (`null`), never replaced by the detected language — a stored detected
+ * language would be an override by another name, and would stop FR-007's chain from ever moving the file
+ * again. Every panel showing the document, this one included, then re-resolves from the store, which also
+ * returns the indentation to the detected language's (016 FR-010b). An untitled document has nothing
+ * stored; its panel simply re-resolves.
+ */
+export async function clearDocumentOverride(args: ClearOverrideArgs): Promise<void> {
+  const { panelId, projectId, relPath, documents } = args;
+  if (documents && projectId && relPath) {
+    try {
+      await documents.setState(projectId, relPath, null);
+    } catch (err) {
+      // Re-resolving would read the override straight back, so the reset visibly did nothing — which is
+      // the truth. Logged, as a failed set is.
+      console.error('[throng] could not clear the language override', err);
+      return;
+    }
+  }
+  publishDocumentLanguageChange({ projectId, relPath, originPanelId: panelId, includeOrigin: true });
 }
 
 export interface LoadOverrideArgs {

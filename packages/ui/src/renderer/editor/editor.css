@@ -150,7 +150,8 @@
 }
 
 .editor-status-strip--focus-mode button,
-.editor-status-strip--focus-mode .editor-status-strip__preview .icon {
+.editor-status-strip--focus-mode .editor-status-strip__preview .icon,
+.editor-status-strip--focus-mode .editor-status-strip__language-reset .icon {
   color: var(--throng-colour-accentText);
 }
 
@@ -286,6 +287,26 @@
 
 .editor-status-strip__preview:hover:not(:disabled),
 .editor-status-strip__preview[aria-pressed='true'] {
+  background: var(--throng-colour-editorStatusStripHover);
+}
+
+/* 055 FR-024 — the reset beside an overridden language. Drawn like the preview button, and pulled in
+   against the language name (the group's 6px gap, less 4px) so the two read as one control and its undo. */
+.editor-status-strip__language-reset {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: -4px;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-status-strip__language-reset:hover {
   background: var(--throng-colour-editorStatusStripHover);
 }
 

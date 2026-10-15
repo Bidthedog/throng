@@ -58,6 +58,18 @@ export const throngHighlightStyle = HighlightStyle.define([
   { tag: [tags.quote], color: v('syntaxComment'), fontStyle: 'italic' },
   // The bullets, the `#`s, the backticks — the marks that make the structure, not the content.
   { tag: [tags.list, tags.contentSeparator, tags.processingInstruction], color: v('syntaxPunctuation') },
+
+  /**
+   * CHANGES (055, research R6) — the diff grammar's `inserted` / `deleted` lines and its `meta` hunk
+   * headers. Unmapped, a patch rendered in one flat colour although its grammar loaded: the prose-tag
+   * failure above, again. Same answer: existing tokens, not new ones. An addition reads as content
+   * (string), a removal as something gone wrong (invalid), a hunk header as structure (keyword).
+   * `meta` is also what preprocessor lines and annotations emit in the older grammars, which were
+   * likewise unstyled until now.
+   */
+  { tag: [tags.inserted], color: v('syntaxString') },
+  { tag: [tags.deleted], color: v('syntaxInvalid') },
+  { tag: [tags.meta], color: v('syntaxKeyword') },
 ]);
 
 /**

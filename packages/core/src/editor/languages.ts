@@ -1,5 +1,5 @@
 /**
- * The language registry (016, FR-004) — 31 descriptors, pure data.
+ * The language registry (016 FR-004, extended by 055) — 55 descriptors, pure data.
  *
  * This is the feature's open/closed extension point (Principle VIII): a new language is a new
  * descriptor here, and no editor code changes. The registry declares WHAT a language is — its id,
@@ -31,9 +31,11 @@ export interface LanguageDescriptor {
    */
   extensions: readonly string[];
   /**
-   * RESERVED (FR-002b). Exact-filename matching (`Dockerfile`, `.gitignore`) is a planned later
-   * extension (#70). The shape is declared now so adding it is not a breaking change; it MUST be
-   * empty in Part 1, which the registry test asserts.
+   * Whole-name matches (055 FR-002–FR-004), reserved by 016 FR-002b and filled by 055. Lower-case,
+   * one of three forms: `dockerfile` (exact), `tsconfig.*.json` (one `*`, never across a separator),
+   * `.vscode/settings.json` (the name inside that immediate folder). A filename match outranks the
+   * user's extension mapping (055 FR-007). No two languages may claim entries one name could match
+   * (FR-006), which the registry test proves.
    */
   filenames?: readonly string[];
   /** Set only where the community convention differs from the 2-space global default (FR-018a). */
@@ -54,19 +56,20 @@ const FOUR_SPACES: IndentProfile = { style: 'spaces', indentWidth: 4, tabWidth: 
 const TABS: IndentProfile = { style: 'tabs', indentWidth: 4, tabWidth: 4 };
 
 /**
- * The 31 targets of FR-001 — 17 programming languages, 6 markup/styling, 8 data/config/docs.
+ * 55 languages: 016 FR-001's 31 targets and the 24 that 055 adds — 30 programming languages,
+ * 6 markup/styling, 8 data/config/docs, 11 build, tooling and environment files.
  *
  * `indent` appears ONLY where the language's established convention differs from the global
  * 2-space default (FR-018a): gofmt's tabs are non-negotiable, PEP 8 is 4 spaces, and so on. The
  * majority — JavaScript, TypeScript, JSON, YAML, HTML, CSS, Markdown… — inherit the default,
  * which is why 2 spaces IS the default.
  *
- * Makefile is deliberately absent: its tabs-are-mandatory convention is well known, but a Makefile
- * has no extension and exact-filename descriptors are out of scope in Part 1 (#70). Shipping an
- * override keyed to a language id nothing can resolve would be a default that never fires.
+ * Makefile is deliberately absent: its tabs-are-mandatory convention is well known, and since 055 a
+ * Makefile could be matched by name — but no grammar ships for it, so a Makefile language would be
+ * plain text under another name.
  */
 export const LANGUAGES: readonly LanguageDescriptor[] = [
-  // ---- Programming languages (17) ----
+  // ---- Programming languages (30: 17 from 016, 13 from 055) ----
   { id: 'csharp', name: 'C#', extensions: ['.cs', '.csx'], indent: FOUR_SPACES },
   { id: 'c', name: 'C', extensions: ['.c'], indent: FOUR_SPACES },
   {
@@ -87,31 +90,103 @@ export const LANGUAGES: readonly LanguageDescriptor[] = [
   { id: 'swift', name: 'Swift', extensions: ['.swift'], indent: FOUR_SPACES },
   { id: 'dart', name: 'Dart', extensions: ['.dart'] },
   { id: 'php', name: 'PHP', extensions: ['.php', '.phtml'], indent: FOUR_SPACES },
-  { id: 'ruby', name: 'Ruby', extensions: ['.rb', '.rake', '.gemspec'] },
+  { id: 'ruby', name: 'Ruby', extensions: ['.rb', '.rake', '.gemspec'], filenames: ['gemfile', 'rakefile', 'vagrantfile'] },
   { id: 'lua', name: 'Lua', extensions: ['.lua'] },
   { id: 'powershell', name: 'PowerShell', extensions: ['.ps1', '.psm1', '.psd1'], indent: FOUR_SPACES },
   { id: 'shell', name: 'Shell', extensions: ['.sh', '.bash', '.zsh'], indent: FOUR_SPACES },
+  { id: 'batch', name: 'Batch', extensions: ['.bat', '.cmd'], indent: FOUR_SPACES },
+  { id: 'groovy', name: 'Groovy', extensions: ['.groovy', '.gradle'], filenames: ['jenkinsfile'], indent: FOUR_SPACES },
+  { id: 'fsharp', name: 'F#', extensions: ['.fs', '.fsx', '.fsi'], indent: FOUR_SPACES },
+  { id: 'vb', name: 'Visual Basic', extensions: ['.vb'], indent: FOUR_SPACES },
+  { id: 'vbscript', name: 'VBScript', extensions: ['.vbs'], indent: FOUR_SPACES },
+  { id: 'scala', name: 'Scala', extensions: ['.scala', '.sc'], indent: FOUR_SPACES },
+  { id: 'perl', name: 'Perl', extensions: ['.pl', '.pm'], indent: FOUR_SPACES },
+  { id: 'r', name: 'R', extensions: ['.r'] },
+  { id: 'haskell', name: 'Haskell', extensions: ['.hs'], indent: FOUR_SPACES },
+  { id: 'elm', name: 'Elm', extensions: ['.elm'], indent: FOUR_SPACES },
+  { id: 'erlang', name: 'Erlang', extensions: ['.erl', '.hrl'], indent: FOUR_SPACES },
+  { id: 'clojure', name: 'Clojure', extensions: ['.clj', '.cljs', '.cljc', '.edn'] },
+  { id: 'julia', name: 'Julia', extensions: ['.jl'], indent: FOUR_SPACES },
 
   // ---- Markup & styling (6) ----
-  { id: 'html', name: 'HTML', extensions: ['.html', '.htm'] },
+  {
+    id: 'html',
+    name: 'HTML',
+    // Razor, Svelte and Astro are HTML with embedded code. The markup highlights; the embedded parts
+    // read as plain text rather than errors — approximate, and better than none (055 FR-010).
+    extensions: ['.html', '.htm', '.cshtml', '.razor', '.svelte', '.astro'],
+  },
   { id: 'css', name: 'CSS', extensions: ['.css'] },
   { id: 'sass', name: 'SASS/SCSS', extensions: ['.scss', '.sass'] },
   { id: 'less', name: 'Less', extensions: ['.less'] },
   { id: 'vue', name: 'Vue', extensions: ['.vue'] },
-  { id: 'xml', name: 'XML', extensions: ['.xml', '.xsd', '.xsl', '.xslt', '.svg'] },
+  {
+    id: 'xml',
+    name: 'XML',
+    extensions: [
+      '.xml', '.xsd', '.xsl', '.xslt', '.svg',
+      // .NET project, build, resource and UI files are XML under another name (055 FR-010).
+      '.csproj', '.fsproj', '.vbproj', '.props', '.targets', '.nuspec', '.resx', '.config', '.xaml', '.slnx',
+      '.ps1xml',
+    ],
+  },
 
   // ---- Data, config & documentation (8) ----
-  { id: 'json', name: 'JSON', extensions: ['.json'] },
-  { id: 'jsonc', name: 'JSON with Comments', extensions: ['.jsonc'] },
+  { id: 'json', name: 'JSON', extensions: ['.json', '.webmanifest'] },
+  {
+    id: 'jsonc',
+    name: 'JSON with Comments',
+    extensions: ['.jsonc', '.json5', '.code-workspace'],
+    // Files whose tools accept comments although the name ends `.json` (055 FR-009). Matched by NAME,
+    // so they outrank `.json` → JSON, which would mark every comment in them as an error.
+    filenames: [
+      'tsconfig.json', 'tsconfig.*.json', 'jsconfig.json', '.eslintrc.json', '.babelrc', '.swcrc',
+      'devcontainer.json', '.devcontainer.json',
+      '.vscode/settings.json', '.vscode/launch.json', '.vscode/tasks.json', '.vscode/extensions.json',
+    ],
+  },
   { id: 'yaml', name: 'YAML', extensions: ['.yaml', '.yml'] },
   { id: 'toml', name: 'TOML', extensions: ['.toml'] },
-  { id: 'ini', name: 'INI', extensions: ['.ini', '.cfg'] },
-  { id: 'markdown', name: 'Markdown', extensions: ['.md', '.markdown'] },
+  { id: 'ini', name: 'INI', extensions: ['.ini', '.cfg', '.properties'], filenames: ['.editorconfig', '.npmrc', '.gitconfig'] },
+  // `.mdx` is Markdown with JSX: the prose highlights, the JSX does not (055 FR-010, approximate).
+  { id: 'markdown', name: 'Markdown', extensions: ['.md', '.markdown', '.mdx'] },
   { id: 'sql', name: 'SQL', extensions: ['.sql'], indent: FOUR_SPACES },
   // Jupyter is its own descriptor, not an extension hung off JSON: it is one of FR-001's 31
   // targets and a user-selectable language. It is HIGHLIGHTED as JSON (FR-009) — that is a
   // property of the grammar loader, not of the registry.
   { id: 'jupyter', name: 'Jupyter Notebook', extensions: ['.ipynb'] },
+
+  // ---- Build, tooling & environment files (11, 055) ----
+  // Most of these are known by NAME rather than extension, which is what 055's filename rung is for.
+  // A trailing `*` names a variant (`Dockerfile.dev`, `.env.local`) and yields to a known extension
+  // (`Dockerfile.md` is Markdown, FR-003a).
+  {
+    id: 'dockerfile',
+    name: 'Dockerfile',
+    extensions: ['.dockerfile'],
+    filenames: ['dockerfile', 'containerfile', 'dockerfile.*'],
+  },
+  { id: 'cmake', name: 'CMake', extensions: ['.cmake'], filenames: ['cmakelists.txt'] },
+  { id: 'diff', name: 'Diff', extensions: ['.diff', '.patch'] },
+  { id: 'protobuf', name: 'Protocol Buffers', extensions: ['.proto'] },
+  { id: 'http', name: 'HTTP requests', extensions: ['.http', '.rest'] },
+  { id: 'gherkin', name: 'Gherkin', extensions: ['.feature'] },
+  { id: 'jinja', name: 'Jinja', extensions: ['.j2', '.jinja', '.jinja2'] },
+  { id: 'nsis', name: 'NSIS', extensions: ['.nsi', '.nsh'] },
+  { id: 'nginx', name: 'nginx', extensions: [], filenames: ['nginx.conf'] },
+  // `.envrc` is direnv's shell script, not an environment file: neither entry matches it.
+  { id: 'dotenv', name: 'Dotenv', extensions: [], filenames: ['.env', '.env.*'] },
+  {
+    id: 'ignore',
+    name: 'Ignore file',
+    extensions: [],
+    // A fixed list, not `.*ignore`: these all use gitignore syntax, and a catch-all would claim
+    // files in other formats that merely end in "ignore" (055, clarified 2026-10-14).
+    filenames: [
+      '.gitignore', '.dockerignore', '.gitattributes', '.npmignore', '.prettierignore', '.eslintignore',
+      '.stylelintignore', '.vscodeignore',
+    ],
+  },
 ];
 
 const BY_ID = new Map(LANGUAGES.map((l) => [l.id, l]));

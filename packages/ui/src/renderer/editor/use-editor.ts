@@ -101,7 +101,8 @@ import {
 import { hidingSections, revealOffset, revealSections } from './editor-fold-reveal.js';
 import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { occurrenceCompartment, occurrenceExtensionFor } from './occurrence-highlight.js';
-import { loadDocumentOverride, toRelPath } from './language-override.js';
+import { clearDocumentOverride, loadDocumentOverride, toRelPath } from './language-override.js';
+import { isSameDocument, subscribeDocumentLanguageChange } from './document-language-events.js';
 import { registerEditorView, unregisterEditorView } from './editor-views.js';
 import {
   clampSelection,
@@ -1305,6 +1306,30 @@ export function useEditor(params: UseEditorParams): void {
     });
   };
 
+  /*
+   * 055 FR-024a / 016 FR-028b — another panel set or reset THIS document's override, or this panel reset
+   * its own: re-resolve from the store. Through a ref, so the subscription lives as long as the panel and
+   * always calls the closure over the current file.
+   */
+  const refreshLanguageRef = useRef(refreshLanguage);
+  refreshLanguageRef.current = refreshLanguage;
+  useEffect(
+    () =>
+      subscribeDocumentLanguageChange((change) => {
+        if (change.originPanelId === panelId) {
+          if (change.includeOrigin) refreshLanguageRef.current();
+          return;
+        }
+        const m = metaRef.current;
+        const mine = {
+          projectId: m.ownerProjectId ?? null,
+          relPath: toRelPath(m.projectRoot, configRef.current.filePath ?? null),
+        };
+        if (isSameDocument(change, mine)) refreshLanguageRef.current();
+      }),
+    [panelId],
+  );
+
   /**
    * Read what the document ALREADY does, from its own lines (FR-018a).
    *
@@ -1801,6 +1826,17 @@ export function useEditor(params: UseEditorParams): void {
                   // (detection settling, an override chosen), and a captured copy would name a
                   // language the document has since stopped being.
                   languageName: languageName(getPanelLanguage(panelId)?.languageId ?? 'plaintext'),
+                  // 055 FR-024b — read at menu-open time for the same reason.
+                  resetLanguage: {
+                    enabled: getPanelLanguage(panelId)?.source === 'override',
+                    reset: () =>
+                      void clearDocumentOverride({
+                        panelId,
+                        projectId: metaRef.current.ownerProjectId ?? null,
+                        relPath: toRelPath(metaRef.current.projectRoot, configRef.current.filePath ?? null),
+                        documents: metaRef.current.documents,
+                      }),
+                  },
                   /*
                    * 047 US3 (FR-036, contracts "Editor body menu") — the fold rows, Markdown
                    * documents only. `at` is the innermost section containing the CLICKED position:

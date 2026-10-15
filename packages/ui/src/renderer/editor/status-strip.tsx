@@ -16,6 +16,8 @@ import {
 } from './status-strip-fit.js';
 import { usePanelLanguage } from './editor-language.js';
 import { LanguagePicker } from './language-picker.js';
+import { clearDocumentOverride } from './language-override.js';
+import { useServicesOptional } from '../composition-root.js';
 import { registerPickerOpener, unregisterPickerOpener } from './picker-request.js';
 import { useFocusTrap } from '../common/focus-trap.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
@@ -291,6 +293,8 @@ export function StatusStrip({
   projectRoot = null,
 }: StatusStripProps): ReactElement {
   const resolution = usePanelLanguage(panelId);
+  // Optional: the strip renders without the app's services in isolation; the reset then re-resolves only.
+  const documents = useServicesOptional()?.documents ?? null;
   const [pickerOpen, setPickerOpen] = useState(autoOpenPicker);
   const name = languageName(resolution?.languageId ?? 'plaintext');
 
@@ -300,8 +304,12 @@ export function StatusStrip({
    * Registered NOW rather than when it becomes the next `Ctrl+Alt+T` / `Ctrl+Shift+T`: it is the
    * third surface of this exact shape already in the codebase, it traps focus over the window, and
    * every reason FR-071 exists applies to it unchanged. One line, and nothing about it moves.
+   *
+   * WITHOUT the scrim, though: the picker is anchored to its strip inside the panel, and the shared
+   * scrim paints above the panel — so it dimmed the editor, the window and the picker itself
+   * (reported 2026-10-14). It stays one-at-a-time; it just does not dim anything.
    */
-  useTransientOverlay(pickerOpen, () => setPickerOpen(false));
+  useTransientOverlay(pickerOpen, () => setPickerOpen(false), { scrim: false });
 
   // Tell the panel when the picker closes, so a strip that is only on screen FOR the picker can go
   // away again (024 US1 follow-up). Edge-triggered: the panel must not be told on every render, and
@@ -607,6 +615,17 @@ export function StatusStrip({
         >
           {name}
         </button>
+        {/* 055 FR-024 — only while the language is the user's own choice; inside the MEASURED group, so its
+            width is subtracted before the readouts are fitted. */}
+        {resolution?.source === 'override' ? (
+          <IconButton
+            token="destroy"
+            className="editor-status-strip__language-reset"
+            testId={`editor-language-reset-${panelId}`}
+            title="Reset language to detected"
+            onClick={() => void clearDocumentOverride({ panelId, projectId, relPath, documents })}
+          />
+        ) : null}
         <button
           type="button"
           className="editor-status-strip__wrap"

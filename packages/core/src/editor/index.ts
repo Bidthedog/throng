@@ -66,7 +66,9 @@ export {
   type LanguageResolution,
   type LanguageSource,
   type ResolveLanguageArgs,
+  createFilenameMatcher,
   detectLanguage,
+  matchFilename,
   resolveLanguage,
 } from './language-detect.js';
 export { type InferredIndent, inferIndent } from './indent-infer.js';
