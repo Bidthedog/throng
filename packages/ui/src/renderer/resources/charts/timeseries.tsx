@@ -29,6 +29,9 @@ import { stackData, stackKey } from './stack.js';
 /** Series colours, in order, as theme tokens: distinguishable in the light and dark themes alike. */
 const SERIES_TOKENS = ['accent', 'success', 'syntaxNumber', 'syntaxType', 'syntaxFunction', 'syntaxKeyword', 'syntaxString', 'warning'] as const;
 
+/** The theme token band `i` is drawn in — the chart's stroke and the legend's swatch read the same one. */
+const seriesToken = (i: number): string => SERIES_TOKENS[i % SERIES_TOKENS.length]!;
+
 const FALLBACK = { width: 480, height: 140 } as const;
 
 function formatAxis(metric: FigureId, value: number): string {
@@ -49,7 +52,7 @@ function readToken(token: string): string {
 }
 
 function options(chart: StackedChart, metric: FigureId, colour: (token: string) => string, size: { width: number; height: number }): uPlot.Options {
-  const token = (i: number): string => SERIES_TOKENS[i % SERIES_TOKENS.length]!;
+  const token = seriesToken;
   const series: uPlot.Series[] = [
     {},
     ...chart.series.map(
@@ -162,10 +165,37 @@ function Timeseries({ focusId, metric, version }: { focusId: string; metric: Fig
     [watch],
   );
 
+  const title = stack.focusLabel === '' ? FIGURE_LABEL[metric] : `${FIGURE_LABEL[metric]} — ${stack.focusLabel}`;
   return (
-    <figure className="timeseries" data-testid={`timeseries-${metric}`} role="img" aria-label={`${FIGURE_LABEL[metric]} over time`}>
-      <figcaption className="timeseries__title">{FIGURE_LABEL[metric]}</figcaption>
-      <div ref={attach} className="timeseries__plot" />
+    <figure className="timeseries" data-testid={`timeseries-${metric}`} aria-label={`${FIGURE_LABEL[metric]} over time`}>
+      {/* Each chart names the node it plots (FR-092), so four charts under one heading never leave "of what?". */}
+      <figcaption className="timeseries__title" data-testid={`timeseries-${metric}-title`}>
+        {title}
+      </figcaption>
+      <div className="timeseries__body">
+        <div ref={attach} className="timeseries__plot" role="img" aria-label={`${title} over time`} />
+        {/* One point is not a history: say so, rather than a plot that is quietly empty (FR-091). */}
+        {stack.ticks.length < 2 ? (
+          <p className="timeseries__building" data-testid={`timeseries-${metric}-building`}>
+            Building history…
+          </p>
+        ) : null}
+      </div>
+      {stack.series.length > 0 ? (
+        <ul className="timeseries__legend" data-testid={`timeseries-${metric}-legend`} aria-label={`${FIGURE_LABEL[metric]} bands`}>
+          {stack.series.map((s, i) => (
+            <li key={s.id} className="timeseries__legend-item" data-ended={s.ended ? 'true' : undefined}>
+              <span
+                className="timeseries__swatch"
+                aria-hidden="true"
+                // The band's own colour, by the same index the chart strokes it with — a variable, never a literal.
+                style={{ ['--swatch' as string]: `var(--throng-colour-${seriesToken(i)})` }}
+              />
+              {s.label}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </figure>
   );
 }

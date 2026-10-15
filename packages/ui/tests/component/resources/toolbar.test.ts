@@ -109,7 +109,7 @@ describe('narrowing (FR-061)', () => {
 describe('the metric (FR-061)', () => {
   it('is a group of four icon toggles, one pressed, and choosing one sets the view', async () => {
     await mount();
-    const group = screen.getByRole('group', { name: /show by/i });
+    const group = screen.getByRole('group', { name: /size by/i });
     const buttons = within(group).getAllByRole('button');
     expect(buttons.map((b) => b.getAttribute('data-testid'))).toEqual([
       'monitor-metric-cpu',
@@ -183,7 +183,8 @@ describe('the capture interval (FR-004a)', () => {
   it('is titled for what it sets', async () => {
     await mount();
     expect(screen.getByTestId('monitor-interval')).toHaveAttribute('title', 'Capture every … seconds');
-    expect(screen.getByTestId('monitor-interval').getAttribute('aria-label')).toMatch(/capture/i);
+    // Named by its visible label (FR-092), which is what a screen reader reads.
+    expect(screen.getByRole('combobox', { name: 'Capture every' })).toBe(screen.getByTestId('monitor-interval'));
   });
 });
 

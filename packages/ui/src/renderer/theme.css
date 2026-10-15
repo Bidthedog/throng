@@ -3368,8 +3368,8 @@ textarea,
 }
 
 .status-resources:focus-visible {
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
 }
 
 .status-resources__figure,
@@ -3455,17 +3455,49 @@ textarea,
   box-sizing: border-box;
 }
 
-/* "Figures from N s ago" (FR-044): a status line above the body, not a second notice. */
-.resource-monitor__stale {
+/*
+ * The one liveness line (FR-091, FR-044, FR-051): collecting, "Updated <time> · every <n> s", or "Figures
+ * from N s ago" — a status line above the body, not a second notice. The pulse is a dot that fades once
+ * per capture; under reduced motion it is not played at all.
+ */
+.monitor-liveness {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 6px;
   align-self: flex-end;
-  color: var(--throng-colour-warning);
+  color: var(--throng-colour-textMuted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-.resource-monitor__loading {
-  margin: auto;
-  color: var(--throng-colour-textMuted);
+.monitor-liveness--stale {
+  color: var(--throng-colour-warning);
+}
+
+.monitor-liveness__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--throng-colour-success);
+  animation: monitor-liveness-pulse 900ms ease-out 1;
+}
+
+@keyframes monitor-liveness-pulse {
+  from {
+    opacity: 1;
+    transform: scale(1.6);
+  }
+  to {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitor-liveness__pulse {
+    animation: none;
+  }
 }
 
 /* The breakdown: breadcrumb, treemap, rows (FR-060). */
@@ -3476,6 +3508,91 @@ textarea,
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
+/* The header: Back, where the user is, and what sizes the tiles (FR-092). */
+.breakdown__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.breakdown__header .breadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.breakdown__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breakdown__back:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.breakdown__back:disabled {
+  color: var(--throng-colour-textMuted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.breakdown__tile-size {
+  flex: none;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+/* What the filter matched and what Hide idle left out. */
+.breakdown__status {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+/* Column names over the rows, in the rows' own grid; they stay in view while the list scrolls. */
+.breakdown__columns {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 90px repeat(4, minmax(64px, auto)) 24px;
+  gap: 8px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+}
+
+.breakdown__column:not(:first-child):not(:last-child) {
+  text-align: right;
+}
+
+.breakdown__column[data-column='trend'] {
+  text-align: left;
+}
+
+.breakdown__column[data-chosen='true'] {
+  color: var(--throng-colour-text);
+  font-weight: var(--throng-font-weight-bold);
+  box-shadow: inset 0 -2px 0 var(--throng-colour-accent);
+}
+
+.monitor-controls__label {
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
 }
 
 .breadcrumb__list {
@@ -3557,33 +3674,142 @@ textarea,
   color: var(--throng-colour-textMuted);
 }
 
+/*
+ * A tile's fill is how much of the machine its node takes (FR-094). The component hands over one number,
+ * `--heat` — 0 at nothing, 0.5 at the warning threshold, 1 at the critical one — and the colour is mixed
+ * here from the theme's own success, warning and danger: green to amber over the first half, amber to red
+ * over the second. It is laid over the surface at 45% so the label stays legible in light and dark themes.
+ * Banding no longer needs a border of its own: the fill says it, and the border is left to hover and
+ * selection.
+ */
 .treemap__tile {
+  --heat: 0;
+  --heat-to-warning: clamp(0, var(--heat) * 2, 1);
+  --heat-to-danger: clamp(0, (var(--heat) - 0.5) * 2, 1);
   position: absolute;
   box-sizing: border-box;
   overflow: hidden;
   padding: 3px 6px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 3px;
-  background: var(--throng-colour-surfaceActive);
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, var(--throng-colour-warning) calc(var(--heat-to-warning) * 100%), var(--throng-colour-success))
+        calc((1 - var(--heat-to-danger)) * 100%),
+      var(--throng-colour-danger)
+    )
+      45%,
+    var(--throng-colour-surface)
+  );
   cursor: pointer;
 }
 
-:where(body:not([data-window-blurred])) .treemap__tile:hover,
-.treemap__tile[data-active='true'] {
+/* Nothing measured to colour it by: neutral, and not the selected row's fill. */
+.treemap__tile[data-heat='none'] {
+  background: var(--throng-colour-inputSurface);
+}
+
+:where(body:not([data-window-blurred])) .treemap__tile:hover {
   border-color: var(--throng-colour-accent);
-}
-
-.treemap__tile[data-band='warning'] {
-  border-color: var(--throng-colour-warning);
-}
-
-.treemap__tile[data-band='critical'] {
-  border-color: var(--throng-colour-danger);
 }
 
 .treemap__tile--others {
   background: var(--throng-colour-sidebarBg);
   cursor: default;
+}
+
+/* The selected tile keeps its fill; the accent edge goes on top of it (FR-089). Last, so nothing overrides it. */
+.treemap__tile[data-selected='true'] {
+  border-color: var(--throng-colour-accent);
+  box-shadow: inset 0 0 0 2px var(--throng-colour-accent);
+}
+
+/* A tile's drill-down button: a sibling of the tile, over its top-right corner. */
+.treemap__open {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+}
+
+.treemap__open-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--throng-colour-surface) 55%, transparent);
+  color: var(--throng-colour-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .treemap__open-button:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* The treemap and the key to its colours, side by side. */
+.breakdown__map {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.breakdown__map .treemap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.treemap-key {
+  position: relative;
+  flex: none;
+  width: 92px;
+  height: 220px;
+  color: var(--throng-colour-textMuted);
+  font-size: 10px;
+  line-height: 12px;
+}
+
+/* The same mix as a tile at heat 0, 0.5 and 1, so the bar IS the scale. */
+.treemap-key__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--throng-colour-success) 45%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-warning) 45%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-danger) 45%, var(--throng-colour-surface))
+  );
+}
+
+.treemap-key__label {
+  position: absolute;
+  left: 16px;
+  right: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.treemap-key__label--high {
+  top: 0;
+}
+
+.treemap-key__label--mid {
+  top: calc(50% - 6px);
+}
+
+.treemap-key__label--low {
+  bottom: 0;
 }
 
 .treemap__label,
@@ -3614,26 +3840,48 @@ textarea,
   /* Set per row by the component (inline); this is the top level's. */
   --breakdown-depth: 0;
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 90px repeat(4, minmax(64px, auto));
+  grid-template-columns: minmax(120px, 1fr) 90px repeat(4, minmax(64px, auto)) 24px;
   align-items: center;
   gap: 8px;
   padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
-  cursor: default;
+  cursor: pointer;
 }
 
 :where(body:not([data-window-blurred])) .breakdown-row:hover {
   background: var(--throng-colour-hoverSurface);
 }
 
-.breakdown-row:focus-visible {
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
-}
-
+/* The selected row: the explorer's active-file convention — surface plus an accent stripe (FR-089). */
 .breakdown-row--selected {
   background: var(--throng-colour-surfaceActive);
+  box-shadow: inset 2px 0 0 var(--throng-colour-accent);
+}
+
+/* The drill-down button, at the row's end; a node with no children leaves the cell empty. */
+.breakdown-row__open {
+  display: flex;
+  justify-content: center;
+}
+
+.breakdown-row__open-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--throng-colour-textMuted);
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breakdown-row__open-button:hover {
+  background: var(--throng-colour-hoverSurface);
+  color: var(--throng-colour-text);
 }
 
 /* An unloaded project is greyed and italic, as in the project list (FR-020c). */
@@ -3765,9 +4013,14 @@ textarea,
   font: inherit;
 }
 
-.monitor-filter__input:focus-visible {
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
+/*
+ * Every control in the window shows a 2px ring in the active-panel colour when it is reached from the
+ * keyboard — throng's convention (the project list, the panels). One rule for every kind of control, so a
+ * control added later is covered without anyone remembering to (FR-089, D7).
+ */
+.resource-monitor :is(button, input, select, textarea, a[href], [tabindex]):focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
 }
 
 .monitor-filter__clear,
@@ -3785,15 +4038,15 @@ textarea,
   cursor: pointer;
 }
 
-.monitor-filter__clear:hover,
+:where(body:not([data-window-blurred])) .monitor-filter__clear:hover,
 :where(body:not([data-window-blurred])) .monitor-controls__button:hover {
   background: var(--throng-colour-hoverSurface);
 }
 
+/* A pressed toggle: the chosen metric, Hide idle. A mark, not a focus ring — that one is 2px, below. */
 .monitor-controls__button[aria-pressed='true'] {
   background: var(--throng-colour-surfaceActive);
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px var(--throng-colour-accent);
 }
 
 .monitor-controls {
@@ -3815,14 +4068,49 @@ textarea,
   background: var(--throng-colour-inputSurface);
   color: var(--throng-colour-text);
   font: inherit;
+  cursor: pointer;
 }
 
-/* Charts (FR-060) and the detail pane. */
-.chart-pane:focus-visible,
-.detail-pane:focus-visible {
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
+/* The help panel (FR-093): hangs under its button; placed by clampToViewport, so it is fixed to the window. */
+.monitor-help {
+  position: fixed;
+  z-index: 30;
+  box-sizing: border-box;
+  width: 380px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 8px 14px 12px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 6px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--throng-colour-text) 25%, transparent);
+  font-size: 12px;
+  line-height: 17px;
 }
+
+.monitor-help__heading {
+  margin: 10px 0 3px;
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.monitor-help p,
+.monitor-help ul {
+  margin: 0 0 4px;
+}
+
+.monitor-help ul {
+  padding-left: 18px;
+}
+
+.monitor-help .icon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Charts (FR-060) and the detail pane: their focus ring is the window-wide one above. */
 
 .timeseries-group {
   display: grid;
@@ -3844,6 +4132,60 @@ textarea,
   width: 100%;
   height: 110px;
   overflow: hidden;
+}
+
+.timeseries__body {
+  position: relative;
+}
+
+/* A chart with fewer than two points says so, over where the plot will be (FR-091). */
+.timeseries__building {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* The legend: every band's colour and child (FR-092). */
+.timeseries__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--throng-colour-textMuted);
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.timeseries__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.timeseries__legend-item[data-ended='true'] {
+  text-decoration: line-through;
+}
+
+.timeseries__swatch {
+  /* Set per band by the component (inline) to the theme token that band is drawn in; this is the fallback. */
+  --swatch: currentColor;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--swatch);
 }
 
 .detail-pane {

@@ -44,6 +44,28 @@ export interface BreakdownModel {
   readonly focusPath: readonly string[];
   readonly focus: ResourceNode;
   readonly sections: readonly BreakdownSection[];
+  /** The live processes the text filter shows (a match keeps its subtree); 0 with no filter text. */
+  readonly matches: number;
+  /** The live processes Hide idle left out of what else is shown; 0 when it is off. */
+  readonly hiddenIdle: number;
+}
+
+function countProcesses(node: ResourceNode, isEnded: (id: string) => boolean): number {
+  let n = node.kind === 'process' && !isEnded(node.id) ? 1 : 0;
+  for (const child of node.children) n += countProcesses(child, isEnded);
+  return n;
+}
+
+/**
+ * The live processes that match `text` THEMSELVES — not the ancestors kept to show them, nor the subtree a
+ * match keeps. Core's `filterHierarchy` is asked about each process alone (children stripped), so the rule
+ * for "matches" is core's (FR-061) and cannot drift from what the filter shows.
+ */
+function countMatches(node: ResourceNode, text: string, isEnded: (id: string) => boolean): number {
+  let n = 0;
+  if (node.kind === 'process' && !isEnded(node.id) && filterHierarchy({ ...node, children: [] }, { text }) !== null) n += 1;
+  for (const child of node.children) n += countMatches(child, text, isEnded);
+  return n;
 }
 
 export interface ModelContext {
@@ -52,7 +74,16 @@ export interface ModelContext {
   readonly ownHistory: (nodeId: string) => readonly Metrics[];
   readonly thresholds: UsageThresholds;
   readonly machine: Pick<MachineInfo, 'installedRamBytes'>;
+  /**
+   * The order the nodes were last drawn in (every node id, in display order). Given, siblings keep the
+   * place it gives them — new nodes follow, in ranked order, and gone ones fall away — instead of being
+   * re-ranked by the chosen metric, so nothing moves under the pointer (FR-090).
+   */
+  readonly heldOrder?: readonly string[];
 }
+
+const NONE: ReadonlySet<string> = new Set();
+const PROJECTS_LISTED_BELOW: ReadonlySet<string> = new Set(['c:projects']);
 
 /** The node `path` names in `tree`, or `undefined` when any step of it is missing. */
 export function nodeAt(tree: ResourceNode, path: readonly string[]): ResourceNode | undefined {
@@ -77,6 +108,9 @@ function rowsFor(
   expandAll: boolean,
   metric: FigureId,
   ctx: ModelContext,
+  held: ReadonlyMap<string, number> | undefined,
+  /** Nodes listed as rows but not opened: another section lists their children (a filter lists each node once). */
+  stop: ReadonlySet<string>,
   depth = 0,
 ): BreakdownRow[] {
   const out: BreakdownRow[] = [];
@@ -86,8 +120,8 @@ function rowsFor(
     // A process's descendants are processes: the whole chain is the answer to "what is this running?".
     // Everything else lists its children only as far as the user drills — except while searching, when
     // a match is only useful with its ancestors showing.
-    if (expandAll || node.kind === 'process') {
-      out.push(...rowsFor(orderBy(node.children, metric), path, expandAll, metric, ctx, depth + 1));
+    if ((expandAll || node.kind === 'process') && !stop.has(node.id)) {
+      out.push(...rowsFor(orderBy(node.children, metric, held), path, expandAll, metric, ctx, held, stop, depth + 1));
     }
   }
   return out;
@@ -98,7 +132,22 @@ function rowsFor(
  * which core's `orderChildren` (one metric name) cannot say, so it orders shadows whose read carries the
  * sum and hands back the real nodes.
  */
-function orderBy(nodes: readonly ResourceNode[], metric: FigureId): ResourceNode[] {
+function orderBy(nodes: readonly ResourceNode[], metric: FigureId, held?: ReadonlyMap<string, number>): ResourceNode[] {
+  const ranked = rank(nodes, metric);
+  if (held === undefined) return ranked;
+  // Held nodes first, in the place they held; the rest follow in their ranked order.
+  const place = (n: ResourceNode): number => held.get(n.id) ?? Number.POSITIVE_INFINITY;
+  return ranked
+    .map((n, rankIndex) => ({ n, rankIndex }))
+    .sort((a, b) => {
+      const pa = place(a.n);
+      const pb = place(b.n);
+      return pa === pb ? a.rankIndex - b.rankIndex : pa < pb ? -1 : 1;
+    })
+    .map((e) => e.n);
+}
+
+function rank(nodes: readonly ResourceNode[], metric: FigureId): ResourceNode[] {
   if (metric !== 'io') return orderChildren(nodes, metric);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   // A figure that is not a number stays one, so it still sorts last.
@@ -121,25 +170,40 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
         ? (n) => !ctx.isEnded(n.id) && isIdle(ctx.ownHistory(n.id), ctx.thresholds, ctx.machine)
         : undefined,
     }) ?? { ...tree, children: [] };
+  const searching = view.filterText.trim() !== '';
+  const matches = searching ? countMatches(filtered, view.filterText, ctx.isEnded) : 0;
+  // What Hide idle took out is what is shown without it, less what is shown with it.
+  const hiddenIdle = view.hideIdle
+    ? countProcesses(filterHierarchy(tree, { text: view.filterText, narrowTo: view.narrowTo }) ?? filtered, ctx.isEnded) - countProcesses(filtered, ctx.isEnded)
+    : 0;
   const focusPath = resolveFocusPath(view.focusPath, filtered);
   const focus = nodeAt(filtered, focusPath) ?? filtered;
   const expandAll = view.filterText.trim() !== '';
 
-  const ordered = (nodes: readonly ResourceNode[]): ResourceNode[] => orderBy(nodes, view.metric);
-  const section = (id: SectionId, title: string, basePath: readonly string[], nodes: readonly ResourceNode[]): BreakdownSection => {
+  const held = ctx.heldOrder === undefined ? undefined : new Map(ctx.heldOrder.map((id, i) => [id, i] as const));
+
+  const ordered = (nodes: readonly ResourceNode[]): ResourceNode[] => orderBy(nodes, view.metric, held);
+  const section = (
+    id: SectionId,
+    title: string,
+    basePath: readonly string[],
+    nodes: readonly ResourceNode[],
+    stop: ReadonlySet<string> = NONE,
+  ): BreakdownSection => {
     const top = ordered(nodes);
-    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx) };
+    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held, stop) };
   };
 
   const sections: BreakdownSection[] = [];
   if (focus.kind === 'root') {
-    sections.push(section('components', 'Components', focusPath, focus.children));
+    // The Projects section lists what is under Projects, so the Components section does not open it again.
+    sections.push(section('components', 'Components', focusPath, focus.children, PROJECTS_LISTED_BELOW));
     const projects = focus.children.find((c) => c.id === 'c:projects');
     if (projects) sections.push(section('projects', 'Projects', [...focusPath, projects.id], projects.children));
   } else {
     sections.push(section('children', focus.label, focusPath, focus.children));
   }
-  return { focusPath, focus, sections };
+  return { focusPath, focus, sections, matches, hiddenIdle };
 }
 
 /** Every row of every section, in the order the eye reads them — the keyboard's order. */
@@ -182,20 +246,20 @@ export function tilesFor(
     .filter((e) => e.value > 0);
   const total = sized.reduce((sum, e) => sum + e.value, 0);
   if (total <= 0) return [];
+  // WHICH nodes get a tile is the biggest by value; the ORDER they come in is the section's, so a held
+  // order (FR-090) holds for the tiles as it does for the rows.
   const sorted = [...sized].sort((a, b) => b.value - a.value);
   const keep = sorted.filter((e, i) => i < MAX_TILES - 1 && e.value / total >= MIN_TILE_SHARE);
   const rest = sorted.filter((e) => !keep.includes(e));
-  const tiles: (TileItem | OthersItem)[] = keep.map((e) => ({
-    kind: 'node',
-    node: e.node,
-    path: [...section.basePath, e.node.id],
-    value: e.value,
-  }));
   // One leftover would be "1 others" — a tile for a single node is just that node's tile.
-  if (rest.length === 1 && keep.length < MAX_TILES) {
-    const only = rest[0]!;
-    tiles.push({ kind: 'node', node: only.node, path: [...section.basePath, only.node.id], value: only.value });
-  } else if (rest.length > 0) {
+  const single = rest.length === 1 && keep.length < MAX_TILES;
+  const shown = new Map((single ? [...keep, rest[0]!] : keep).map((e) => [e.node.id, e] as const));
+  const tiles: (TileItem | OthersItem)[] = [];
+  for (const n of section.nodes) {
+    const e = shown.get(n.id);
+    if (e !== undefined) tiles.push({ kind: 'node', node: e.node, path: [...section.basePath, e.node.id], value: e.value });
+  }
+  if (!single && rest.length > 0) {
     tiles.push({ kind: 'others', count: rest.length, value: rest.reduce((s, e) => s + e.value, 0) });
   }
   return tiles;
@@ -208,9 +272,25 @@ export interface FigureContext {
   readonly machine: Pick<MachineInfo, 'installedRamBytes'>;
 }
 
+interface CachedFigures {
+  readonly thresholds: UsageThresholds;
+  readonly installedRamBytes: number;
+  readonly figures: Figure[];
+}
+/**
+ * A node's figures are worked out once per capture, not once per asker. Nodes are never changed once the
+ * session holds them, and a figure depends on the node, the thresholds and the installed RAM alone — so a
+ * row asking whether it must be redrawn, the row being redrawn, the summary and the readout all share one answer.
+ */
+const figuresCache = new WeakMap<ResourceNode, CachedFigures>();
+
 /** The four figures of a node's rolled-up metrics, in display order. */
 export function figuresOf(node: ResourceNode, ctx: FigureContext): Figure[] {
-  return FIGURE_ORDER.map((id) => figureOf(id, node.rolled, ctx.thresholds, ctx.machine));
+  const hit = figuresCache.get(node);
+  if (hit !== undefined && hit.thresholds === ctx.thresholds && hit.installedRamBytes === ctx.machine.installedRamBytes) return hit.figures;
+  const figures = FIGURE_ORDER.map((id) => figureOf(id, node.rolled, ctx.thresholds, ctx.machine));
+  figuresCache.set(node, { thresholds: ctx.thresholds, installedRamBytes: ctx.machine.installedRamBytes, figures });
+  return figures;
 }
 
 /**

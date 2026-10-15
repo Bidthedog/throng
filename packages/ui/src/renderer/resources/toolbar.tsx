@@ -6,11 +6,12 @@
  * clear-filter are `IconButton`s; narrowing and the capture interval are selects, which are choices and
  * not actions, and carry titles all the same.
  */
-import { useRef, type ReactElement } from 'react';
+import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { allowedIntervals, type ResourceNode } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
 import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
+import { HelpButton, HelpPanel } from './help-panel.js';
 import { focusOn, setSelection, setView, useSession, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
@@ -70,6 +71,17 @@ export function ToolbarControls(): ReactElement {
   const { tree } = useSession();
   const settings = useResourceMonitorSettings();
 
+  // The help panel (FR-093). Closing it from the keyboard, or by pressing its button again, hands focus back.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpButton = useRef<HTMLButtonElement | null>(null);
+  const setHelpButton = useCallback((el: HTMLButtonElement | null): void => {
+    helpButton.current = el;
+  }, []);
+  const closeHelp = useCallback((returnFocus: boolean): void => {
+    setHelpOpen(false);
+    if (returnFocus) helpButton.current?.focus();
+  }, []);
+
   const intervals = allowedIntervals(settings.historyMinutes);
   // A stored value between the offered ones is still the value in force: show it rather than a lie.
   const offered = intervals.includes(settings.intervalSeconds)
@@ -77,6 +89,7 @@ export function ToolbarControls(): ReactElement {
     : [...intervals, settings.intervalSeconds].sort((a, b) => a - b);
 
   return (
+    <>
     <div className="monitor-controls" role="toolbar" aria-label="Monitor controls" data-testid="monitor-controls">
       <select
         className="monitor-controls__select"
@@ -104,7 +117,10 @@ export function ToolbarControls(): ReactElement {
         ))}
       </select>
 
-      <div className="monitor-controls__group" role="group" aria-label="Show by">
+      <span id="monitor-size-by" className="monitor-controls__label" data-testid="monitor-size-by-label">
+        Size by
+      </span>
+      <div className="monitor-controls__group" role="group" aria-labelledby="monitor-size-by">
         {FIGURE_ORDER.map((id: FigureId) => (
           <IconButton
             key={id}
@@ -127,11 +143,14 @@ export function ToolbarControls(): ReactElement {
         onClick={() => setView({ hideIdle: !view.hideIdle })}
       />
 
+      <label htmlFor="monitor-interval" className="monitor-controls__label" data-testid="monitor-interval-label">
+        Capture every
+      </label>
       <select
+        id="monitor-interval"
         className="monitor-controls__select"
         data-testid="monitor-interval"
         title="Capture every … seconds"
-        aria-label="Capture interval in seconds"
         value={String(settings.intervalSeconds)}
         onChange={(e) =>
           void writeConfigPatch({ kind: 'settings' }, [
@@ -145,6 +164,11 @@ export function ToolbarControls(): ReactElement {
           </option>
         ))}
       </select>
+
+      <HelpButton open={helpOpen} onToggle={() => (helpOpen ? closeHelp(true) : setHelpOpen(true))} nodeRef={setHelpButton} />
     </div>
+      {/* Outside the toolbar: a dialog is not a control of it. */}
+      {helpOpen ? <HelpPanel anchor={helpButton} onClose={closeHelp} /> : null}
+    </>
   );
 }

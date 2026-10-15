@@ -90,6 +90,8 @@ let version = 0;
 let view: ViewState = DEFAULT_VIEW;
 /** The node the detail pane describes (the keyboard- or click-selected row); `null` means the node in focus. */
 let selectedId: string | null = null;
+/** The highest total read-plus-write rate seen since the window opened: what I/O tiles are coloured against (FR-094). */
+let ioPeak = 0;
 const history = new Map<string, HistoryPoint[]>();
 const endedIds = new Set<string>();
 const listeners = new Set<() => void>();
@@ -117,6 +119,7 @@ export function startSession(settings: SessionSettings): void {
   history.clear();
   endedIds.clear();
   selectedId = null;
+  ioPeak = 0;
   notice = null;
   capacity = Math.min(DEFAULT_CAPACITY, historyLength(settings));
   version += 1;
@@ -129,6 +132,7 @@ export function endSession(): void {
   history.clear();
   endedIds.clear();
   selectedId = null;
+  ioPeak = 0;
   notice = null;
   capacity = DEFAULT_CAPACITY;
   version += 1;
@@ -183,6 +187,7 @@ export function ingestFrame(f: DetailFrame): void {
 }
 
 function recordPoints(f: DetailFrame): void {
+  ioPeak = Math.max(ioPeak, metricNumber(f.hierarchy.rolled, 'io'));
   walk(f.hierarchy, (n) => {
     let points = history.get(n.id);
     if (points === undefined) {
@@ -219,6 +224,11 @@ export function getSessionSnapshot(): SessionSnapshot {
   return snapshot;
 }
 
+/** The highest total I/O rate (read plus write) reached since the window opened; 0 before any. */
+export function getIoPeak(): number {
+  return ioPeak;
+}
+
 export function isEnded(nodeId: string): boolean {
   return endedIds.has(nodeId);
 }
@@ -236,6 +246,8 @@ export interface StackedSeries {
 }
 
 export interface StackedChart {
+  /** The node the chart plots (empty before the first frame): each chart names it (FR-092). */
+  readonly focusLabel: string;
   readonly ticks: readonly number[];
   readonly at: readonly number[];
   readonly series: readonly StackedSeries[];
@@ -261,18 +273,20 @@ export function stackedSeries(focusId: string, metric: FigureId): StackedChart {
   const points = getHistory(focusId);
   const ticks = points.map((p) => p.tick);
   const at = points.map((p) => p.at);
-  if (focus === undefined) return { ticks, at, series: [] };
+  if (focus === undefined) return { focusLabel: '', ticks, at, series: [] };
 
   const series: StackedSeries[] = [];
   const own = points.map((p) => metricNumber(p.own, metric));
   if (focus.kind === 'process' || own.some((v) => v > 0)) {
     series.push({ id: focus.id, label: focus.label, values: own, ended: endedIds.has(focus.id) });
   }
-  const bands: StackedSeries[] = focus.children.map((child) => {
+  // By id, never by size: a ranking by area reorders the bands as the figures move, and with them the
+  // colours of the bands (D4). The chart's bands keep their places from capture to capture.
+  const bands: StackedSeries[] = [...focus.children].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((child) => {
     const byTick = new Map(getHistory(child.id).map((p) => [p.tick, metricNumber(p.rolled, metric)]));
     return { id: child.id, label: child.label, values: ticks.map((t) => byTick.get(t) ?? 0), ended: endedIds.has(child.id) };
   });
-  return { ticks, at, series: [...series, ...groupSmallBands(bands, MAX_STACK_SERIES - series.length)] };
+  return { focusLabel: focus.label, ticks, at, series: [...series, ...groupSmallBands(bands, MAX_STACK_SERIES - series.length)] };
 }
 
 /** The most bands a stacked chart draws (own use included) before the smallest are grouped. */
@@ -369,6 +383,11 @@ export function setSelection(id: string | null): void {
   notify();
 }
 
+/** A click on a node: select it, or — when it already is the selection — clear it (FR-088). */
+export function toggleSelection(id: string): void {
+  setSelection(selectedId === id ? null : id);
+}
+
 export function useSelection(): string | null {
   return useSyncExternalStore(subscribeSession, getSelection, getSelection);
 }
@@ -401,6 +420,16 @@ export function useSession(): SessionSnapshot {
   return useSyncExternalStore(subscribeSession, getSessionSnapshot, getSessionSnapshot);
 }
 
+const hasFrame = (): boolean => snapshot.frame !== null;
+
+/**
+ * Whether the first frame has arrived — and nothing else. A reader that only needs to know that (the
+ * window's shell) subscribes to this, not to {@link useSession}, so a capture does not re-render it (D3).
+ */
+export function useHasFrame(): boolean {
+  return useSyncExternalStore(subscribeSession, hasFrame, hasFrame);
+}
+
 export function useView(): ViewState {
   return useSyncExternalStore(subscribeSession, getView, getView);
 }
@@ -414,6 +443,7 @@ export function __resetSession(): void {
   snapshot = EMPTY_SNAPSHOT;
   view = DEFAULT_VIEW;
   selectedId = null;
+  ioPeak = 0;
   notice = null;
   listeners.clear();
 }

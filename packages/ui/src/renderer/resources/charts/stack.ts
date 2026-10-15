@@ -16,7 +16,11 @@ export function stackData(chart: StackedChart): number[][] {
   return [x, ...columns];
 }
 
-/** Two charts are the same chart, only longer, when they stack the same bands in the same order. */
+/**
+ * Two charts are the same chart, only longer or about another node, when they stack as many bands: the
+ * options hold nothing else that differs (a band's colour is its place, its name is the legend's — not
+ * uPlot's). So only a change in the number of bands rebuilds a chart; anything else is fed with `setData`.
+ */
 export function stackKey(chart: StackedChart): string {
-  return chart.series.map((s) => s.id).join('|');
+  return String(chart.series.length);
 }

@@ -11,6 +11,7 @@ import {
   __resetSession,
   endSession,
   getHistory,
+  getIoPeak,
   getSessionSnapshot,
   getView,
   ingestFrame,
@@ -301,9 +302,44 @@ describe('view state (FR-057)', () => {
   });
 });
 
+describe('the I/O peak the tiles are coloured against (FR-094)', () => {
+  const withIo = (read: number, write: number): ResourceNode => {
+    const busy = proc(7, 'busy.exe', metrics({ ioRead: read, ioWrite: write }));
+    return node({ id: 'root', kind: 'root', label: 'throng', children: [busy], owner: { component: 'ui' } });
+  };
+
+  it('is the highest read-plus-write rate throng has reached since the window opened', () => {
+    startSession(settings());
+    expect(getIoPeak()).toBe(0);
+    ingestFrame(frame(1, withIo(100, 50)));
+    ingestFrame(frame(2, withIo(10, 5)));
+    expect(getIoPeak()).toBe(150);
+    ingestFrame(frame(3, withIo(400, 100)));
+    expect(getIoPeak()).toBe(500);
+  });
+
+  it('does not count a stale frame, which only repeats an old reading', () => {
+    startSession(settings());
+    ingestFrame(frame(1, withIo(100, 0)));
+    ingestFrame(frame(2, withIo(9000, 0), { stale: true }));
+    expect(getIoPeak()).toBe(100);
+  });
+
+  it('starts again with each window and is dropped on close', () => {
+    startSession(settings());
+    ingestFrame(frame(1, withIo(100, 0)));
+    startSession(settings());
+    expect(getIoPeak()).toBe(0);
+    ingestFrame(frame(1, withIo(100, 0)));
+    endSession();
+    expect(getIoPeak()).toBe(0);
+  });
+});
+
 describe('a stacked chart over many contributors (Edge Cases, Very large trees; T103)', () => {
-  const panelWith = (count: number): ResourceNode => {
-    const kids = Array.from({ length: count }, (_, i) => proc(100 + i, `p${i}.exe`, metrics({ memory: (i + 1) * MIB })));
+  const panelWith = (count: number, size: (i: number) => number = (i) => i + 1, reverse = false): ResourceNode => {
+    const made = Array.from({ length: count }, (_, i) => proc(100 + i, `p${i}.exe`, metrics({ memory: size(i) * MIB })));
+    const kids = reverse ? made.reverse() : made;
     const panel = node({ id: 'n:big', kind: 'panel', label: 'Busy', panelKind: 'terminal', children: kids, owner: { projectId: 'p1', tabId: 't', panelId: 'big' } });
     const tab = node({ id: 't:big', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'p1', tabId: 'big' } });
     const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
@@ -327,6 +363,24 @@ describe('a stacked chart over many contributors (Edge Cases, Very large trees; 
     // Nothing is lost: the stack still sums to the node's rolled figure at every tick.
     const total = (20 * 21) / 2 * MIB;
     chart.ticks.forEach((_, i) => expect(chart.series.reduce((sum, s) => sum + s.values[i]!, 0)).toBe(total));
+  });
+
+  it('keeps the bands in a stable order by id, whatever their sizes (D4)', () => {
+    startSession(settings());
+    // The collector hands children over in no particular order.
+    ingestFrame(frame(1, panelWith(20, undefined, true)));
+    const ids = (): string[] => stackedSeries('n:big', 'memory').series.map((s) => s.id);
+    const first = ids();
+
+    // The sizes reverse: a ranking by area would reorder the bands; an order by id does not.
+    ingestFrame(frame(2, panelWith(20, (i) => 20 - i)));
+    const second = ids();
+
+    const bands = (all: string[]): string[] => all.filter((id) => id !== 'others');
+    expect(bands(first)).toEqual([...bands(first)].sort());
+    expect(bands(second)).toEqual([...bands(second)].sort());
+    expect(first.at(-1)).toBe('others');
+    expect(second).toHaveLength(first.length);
   });
 
   it('does not group a single leftover — one band is just that band', () => {

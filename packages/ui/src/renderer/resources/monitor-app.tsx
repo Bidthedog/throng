@@ -30,8 +30,6 @@
  * maximised is main's to remember with its bounds, so it is not part of the view.
  */
 import { lazy, Suspense, useEffect, useRef, useState, type ReactElement } from 'react';
-import { formatGrouped } from '@throng/core';
-import type { DetailFrame } from '@throng/ipc-contract';
 import { ConfigProvider, useActiveTheme } from '../config/config-store.js';
 import { ContextMenuProvider } from '../context-menu-provider.js';
 import { useNoDropNavigation } from '../composition-root.js';
@@ -41,51 +39,68 @@ import { ThemeProvider } from '../theme/theme-provider.js';
 import { windowTitle } from '../common/window-title.js';
 import { HoverSuppression } from '../common/use-hover-suppression.js';
 import { TitleBar } from '../title-bar/title-bar.js';
-import { endSession, ingestFrame, reconfigureSession, restoreView, startSession, useSession, useView } from './monitor-session.js';
+import {
+  endSession,
+  getView,
+  ingestFrame,
+  reconfigureSession,
+  restoreView,
+  startSession,
+  subscribeSession,
+  useHasFrame,
+  type ViewState,
+} from './monitor-session.js';
+import { Liveness } from './liveness.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
-const MonitorBody = lazy(() => import('./monitor-body.js'));
+const loadBody = (): Promise<typeof import('./monitor-body.js')> => import('./monitor-body.js');
+const MonitorBody = lazy(loadBody);
 
-/** What stands in for any data not yet collected (FR-051). */
-function Loading(): ReactElement {
-  return (
-    <p className="resource-monitor__loading" role="status" data-testid="monitor-loading">
-      Collecting the first reading…
-    </p>
-  );
-}
+/** The most often the view is sent to main while it is being typed or clicked into (SC-010). */
+export const VIEW_SAVE_INTERVAL_MS = 250;
 
 /**
- * "Figures from 14 s ago" while the collector is failing (FR-044): a status line that states the age of
- * what is on screen and clears itself on the next good frame. It is not the monitor's notice — it
- * carries no action, so nothing needs the inline notice's Dismiss, and a kill failure keeps that slot.
- * The age is the time of the last GOOD reading (a stale frame keeps it), re-read each second.
+ * Sends the view to main when it changes — the first change at once, then at most one send per interval,
+ * the last send always carrying the latest view. It listens to the store directly rather than rendering
+ * on every change: a keystroke in the filter changes the view, and the shell has nothing to redraw for it.
  */
-function StaleAge({ frame }: { frame: DetailFrame | null }): ReactElement | null {
-  const [now, setNow] = useState(() => Date.now());
-  const stale = frame?.stale === true;
+function useSaveView(enabled: boolean): void {
   useEffect(() => {
-    if (!stale) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [stale]);
-  if (frame === null || !stale) return null;
-  const seconds = Math.max(0, Math.round((now - (frame.staleSince ?? frame.at)) / 1000));
-  return (
-    <p className="resource-monitor__stale" role="status" data-testid="monitor-stale">
-      Figures from {formatGrouped(seconds)} s ago
-    </p>
-  );
+    if (!enabled) return;
+    const send = (view: ViewState): void => window.throng?.resources?.saveViewState?.(view);
+    // What was restored is saved back as it stands; it does not start the interval.
+    let sent: ViewState = getView();
+    send(sent);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const flush = (): void => {
+      timer = null;
+      const view = getView();
+      if (view === sent) return;
+      sent = view;
+      send(view);
+      timer = setTimeout(flush, VIEW_SAVE_INTERVAL_MS);
+    };
+    const off = subscribeSession(() => {
+      if (timer === null && getView() !== sent) flush();
+    });
+    return () => {
+      off();
+      if (timer !== null) clearTimeout(timer);
+      // A change still waiting out the interval is not lost with the window.
+      if (getView() !== sent) send(getView());
+    };
+  }, [enabled]);
 }
 
 function MonitorShell(): ReactElement {
   const theme = useActiveTheme();
   const settings = useResourceMonitorSettings();
-  const { frame } = useSession();
-  const view = useView();
+  // Only whether there is a first frame: the shell is not redrawn for the captures after it (D3).
+  const hasFrame = useHasFrame();
 
   useEffect(() => {
+    // Ask for the body's chunk now, so it loads while the first frame is on its way (D5).
+    void loadBody();
     document.title = windowTitle('Resource Monitor');
   }, []);
 
@@ -109,10 +124,8 @@ function MonitorShell(): ReactElement {
       live = false;
     };
   }, []);
-  // Saved on every change once restored — never before, which would overwrite it with the defaults.
-  useEffect(() => {
-    if (restored) window.throng?.resources?.saveViewState?.(view);
-  }, [view, restored]);
+  // Saved as it changes once restored — never before, which would overwrite it with the defaults.
+  useSaveView(restored);
 
   // The session, and the detail subscription that feeds it.
   const initial = useRef(settings);
@@ -169,16 +182,15 @@ function MonitorShell(): ReactElement {
       <div
         className="resource-monitor"
         data-testid="monitor-window"
-        data-state={frame === null ? 'loading' : 'ready'}
+        data-state={hasFrame ? 'ready' : 'loading'}
       >
         <HoverSuppression />
         <TitleBar identity={windowTitle('Resource Monitor')} showCog={false} onMinimise={minimise} />
         <div className="resource-monitor__content" data-testid="monitor-content">
-          <StaleAge frame={frame} />
-          {!restored || frame === null ? (
-            <Loading />
-          ) : (
-            <Suspense fallback={<Loading />}>
+          {/* "Collecting the first reading…", "Updated <time> · every <n> s" or "Figures from N s ago": one line (FR-091). */}
+          <Liveness />
+          {!restored || !hasFrame ? null : (
+            <Suspense fallback={null}>
               <MonitorBody />
             </Suspense>
           )}

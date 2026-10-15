@@ -117,6 +117,58 @@ describe('one chart per metric, stacked by the focused node’s children (FR-060
   });
 });
 
+describe('each chart names its node and carries a legend (FR-092)', () => {
+  it('names the node it plots in its title', () => {
+    feed(1);
+    const { getByTestId } = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    for (const m of metrics) expect(getByTestId(`timeseries-${m}-title`).textContent).toMatch(/pwsh\.exe$/);
+    expect(getByTestId('timeseries-cpu-title').textContent).toBe('CPU — pwsh.exe');
+    expect(getByTestId('timeseries-io-title').textContent).toBe('I/O — pwsh.exe');
+  });
+
+  it('lists every band with the colour it is drawn in, in the order the bands are stacked', () => {
+    feed(1);
+    const { getByTestId } = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    const items = [...getByTestId('timeseries-cpu-legend').querySelectorAll('li')];
+    // The shell's own use, then its one child — and the swatches are the theme tokens the chart strokes with.
+    expect(items.map((li) => li.textContent)).toEqual(['pwsh.exe', 'node.exe']);
+    const swatch = (li: Element): string => (li.querySelector('.timeseries__swatch') as HTMLElement).style.getPropertyValue('--swatch');
+    expect(items.map(swatch)).toEqual(['var(--throng-colour-accent)', 'var(--throng-colour-success)']);
+  });
+
+  it('keeps the legend in step when the bands change', () => {
+    feed(1);
+    const view = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    view.rerender(createElement(TimeseriesCharts, { focusId: 'root' }));
+    const items = [...view.getByTestId('timeseries-memory-legend').querySelectorAll('li')];
+    expect(items.map((li) => li.textContent)).toEqual(['Daemon', 'Helpers', 'Projects', 'UI']);
+  });
+
+  it('gives each chart one legend, so a screen reader meets the bands where the chart is', () => {
+    feed(1);
+    const { getAllByRole } = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    expect(getAllByRole('list')).toHaveLength(4);
+  });
+});
+
+describe('a chart with fewer than two points says it is building its history (FR-091)', () => {
+  it('shows the message for one capture, and takes it away at the second', () => {
+    feed(1);
+    const { queryAllByText, getByTestId } = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    expect(queryAllByText('Building history…')).toHaveLength(4);
+    expect(getByTestId('timeseries-cpu-building')).toBeInTheDocument();
+
+    feed(2);
+
+    expect(queryAllByText('Building history…')).toHaveLength(0);
+  });
+
+  it('shows it before the first capture too', () => {
+    const { queryAllByText } = render(createElement(TimeseriesCharts, { focusId: 'root' }));
+    expect(queryAllByText('Building history…')).toHaveLength(4);
+  });
+});
+
 describe('a frame appends; it never re-creates the chart', () => {
   it('feeds each new frame with setData and constructs nothing', () => {
     feed(1);
@@ -145,17 +197,32 @@ describe('a frame appends; it never re-creates the chart', () => {
     expect(cpu.data[2]).toEqual([21, 1, 1]);
   });
 
-  it('rebuilds the charts when the focus moves to a node with different children', () => {
+  it('rebuilds the charts when the focus moves to a node with a different NUMBER of bands', () => {
     feed(1);
     const view = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
     const before = [...fake.instances];
 
-    view.rerender(createElement(TimeseriesCharts, { focusId: 'n:n1' }));
+    // The root has four components beneath it where the shell has its own use and one child.
+    view.rerender(createElement(TimeseriesCharts, { focusId: 'root' }));
 
     expect(before.every((i) => i.destroyed)).toBe(true);
     expect(live()).toHaveLength(4);
-    // Terminal panel: the shell and the terminal buffers.
-    expect(live()[0]!.opts.series.map((s) => s.label).slice(1)).toEqual(['pwsh.exe', 'Terminal buffers']);
+    // Bands keep a stable order — by id, never by size (D4).
+    expect(live()[0]!.opts.series.map((s) => s.label).slice(1)).toEqual(['Daemon', 'Helpers', 'Projects', 'UI']);
+  });
+
+  it('feeds the same chart when the focus moves to a node with as many bands (D4, SC-010)', () => {
+    feed(1);
+    const view = render(createElement(TimeseriesCharts, { focusId: 'x:200:1' }));
+    expect(fake.instances).toHaveLength(4);
+    const calls = live()[0]!.setDataCalls.length;
+
+    // Terminal panel: the shell and the terminal buffers — two bands, as before.
+    view.rerender(createElement(TimeseriesCharts, { focusId: 'n:n1' }));
+
+    expect(fake.instances).toHaveLength(4);
+    expect(live()).toHaveLength(4);
+    expect(live()[0]!.setDataCalls.length).toBeGreaterThan(calls);
   });
 });
 

@@ -664,8 +664,9 @@ reopens from it.
   and a double-click on a row, MUST also open it. A node with no children MUST have no drill-down button
   and MUST NOT open to an empty view. Right-clicking a tile MUST open the same menu as its row. A click on
   the selected tile or row again, or on empty space in the breakdown, MUST clear the selection, as MUST
-  drilling in or going Back *(derived — the spec had no way back to "nothing selected"; not confirmed by
-  the user)*.
+  drilling in or going Back with the pointer; going Back from the keyboard (Left, Backspace) selects the
+  node the user came from, so the keyboard keeps its place *(derived — the spec had no way back to
+  "nothing selected"; not confirmed by the user)*.
 - **FR-089**: Exactly the selected node MUST be marked — on its tile and on its row, with an accent edge
   as throng marks its active tab and active file — and the detail pane and charts MUST describe that node;
   with nothing selected, nothing is marked and they describe the node in focus. Every interactive element

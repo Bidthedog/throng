@@ -41,6 +41,98 @@ function tree() {
   return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
 }
 
+describe('a held order (FR-090)', () => {
+  const ctxFor = (heldOrder?: readonly string[]) => ({ ...ctx, ...(heldOrder ? { heldOrder } : {}) });
+  const idsOf = (t: ReturnType<typeof tree>, held?: readonly string[]) =>
+    buildBreakdown(t, view({ metric: 'cpu' }), ctxFor(held)).sections[0]!.nodes.map((n) => n.process?.pid);
+
+  function withCpu(cpus: Record<number, number>, extra: ReturnType<typeof proc>[] = []) {
+    const kids = Object.entries(cpus).map(([pid, cpu]) => proc(Number(pid), `p${pid}.exe`, metrics({ cpu })));
+    const panel = node({ id: 'n:a', kind: 'panel', label: 'Shell', panelKind: 'terminal', children: [...kids, ...extra], owner: { projectId: 'a', tabId: 'a', panelId: 'a' } });
+    const tab = node({ id: 't:a', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'a', tabId: 'a' } });
+    const project = node({ id: 'p:a', kind: 'project', label: 'A', projectState: 'active', children: [tab], owner: { projectId: 'a' } });
+    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
+    return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
+  }
+  const orderOf = (t: ReturnType<typeof tree>) => buildBreakdown(t, view({ metric: 'cpu' }), ctx).sections[0]!.nodes.map((n) => n.id);
+
+  it('ranks by the chosen metric when no order is held', () => {
+    expect(idsOf(withCpu({ 1: 5, 2: 9 }))).toEqual([2, 1]);
+  });
+
+  it('keeps the held order even though the figures re-ranked', () => {
+    const before = withCpu({ 1: 9, 2: 5 });
+    const held = orderOf(before);
+    expect(idsOf(withCpu({ 1: 5, 2: 9 }), held)).toEqual([1, 2]);
+  });
+
+  it('appends a new node after the held ones, and drops a gone one', () => {
+    const held = orderOf(withCpu({ 1: 9, 2: 5, 3: 1 }));
+    // 3 is gone; 4 is new and larger than both, yet comes last; 2 and 1 keep their places.
+    expect(idsOf(withCpu({ 1: 1, 2: 2, 4: 99 }), held)).toEqual([1, 2, 4]);
+  });
+
+  it('appends several new nodes in their ranked order', () => {
+    const held = orderOf(withCpu({ 1: 9 }));
+    expect(idsOf(withCpu({ 1: 1, 5: 3, 6: 8 }), held)).toEqual([1, 6, 5]);
+  });
+});
+
+describe('a filter lists each node once (FR-061, SC-010)', () => {
+  it('does not repeat the Projects subtree under Components', () => {
+    const model = buildBreakdown(tree(), view({ filterText: 'exe', focusPath: ['root'] }), ctx);
+    const ids = model.sections.flatMap((s) => s.rows.map((r) => r.node.id));
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+    // …and the matches are still there, under their ancestors, in the Projects section.
+    const projects = model.sections.find((s) => s.id === 'projects')!;
+    const kept = projects.rows.map((r) => r.node.process?.pid ?? r.node.id);
+    expect(kept).toEqual(expect.arrayContaining([101, 102, 'n:a', 't:a']));
+  });
+
+  it('keeps a match under its ancestors when the focus is below the root', () => {
+    const model = buildBreakdown(tree(), view({ filterText: 'reader', focusPath: ['root', 'c:projects', 'p:a'] }), ctx);
+    const rows = model.sections[0]!.rows;
+    expect(rows.map((r) => r.node.id)).toEqual(['t:a', 'n:a', expect.stringMatching(/^x:101/)]);
+    expect(rows.map((r) => r.depth)).toEqual([0, 1, 2]);
+  });
+});
+
+describe('what the filter and Hide idle left out, in numbers (FR-092)', () => {
+  const idle = metrics({});
+  const busy = metrics({ cpu: 5 });
+  const scene = () => {
+    const kids = [proc(1, 'alpha.exe', idle), proc(2, 'beta.exe', busy), proc(3, 'gamma.exe', idle), proc(4, 'alpha-helper.exe', busy)];
+    const panel = node({ id: 'n:a', kind: 'panel', label: 'Shell', panelKind: 'terminal', children: kids, owner: { projectId: 'a', tabId: 'a', panelId: 'a' } });
+    const tab = node({ id: 't:a', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'a', tabId: 'a' } });
+    const project = node({ id: 'p:a', kind: 'project', label: 'A', projectState: 'active', children: [tab], owner: { projectId: 'a' } });
+    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
+    return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
+  };
+  const history = (id: string) => (id === 'x:1:1' || id === 'x:3:1' ? [idle, idle, idle] : [busy, busy, busy]);
+  const build = (over: Partial<ViewState>) =>
+    buildBreakdown(scene(), view({ metric: 'cpu', focusPath: ['root', 'c:projects', 'p:a', 't:a', 'n:a'], ...over }), { ...ctx, ownHistory: history });
+
+  it('counts the processes the filter shows, and none when it is empty', () => {
+    expect(build({ filterText: 'alpha' }).matches).toBe(2);
+    expect(build({ filterText: '' }).matches).toBe(0);
+  });
+
+  it('counts zero for a filter nothing matches', () => {
+    const model = build({ filterText: 'nothing-is-called-this' });
+    expect(model.matches).toBe(0);
+    expect(model.sections.flatMap((s) => s.rows)).toHaveLength(0);
+  });
+
+  it('counts the idle processes Hide idle left out', () => {
+    expect(build({ hideIdle: true }).hiddenIdle).toBe(2);
+    expect(build({ hideIdle: false }).hiddenIdle).toBe(0);
+  });
+
+  it('counts only the idle ones inside what the filter matched', () => {
+    expect(build({ hideIdle: true, filterText: 'alpha' }).hiddenIdle).toBe(1);
+  });
+});
+
 describe('ordering by I/O', () => {
   it('puts the larger read PLUS write first, as the row’s own figure reads', () => {
     const model = buildBreakdown(tree(), view(), ctx);

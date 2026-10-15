@@ -129,9 +129,9 @@ test('Ctrl+Shift+Alt+R opens the monitor window; Projects to the busy process is
   await expect(projects).toBeVisible();
 
   // Clicks 2, 3 and 4: the project, its tab, its panel.
-  await projects.locator('[data-testid^="treemap-tile-p:"]').first().click();
-  await mon.locator('[data-testid^="treemap-tile-t:"]').first().click();
-  await mon.locator('[data-testid^="treemap-tile-n:"]').first().click();
+  await projects.locator('[data-testid^="treemap-tile-open-p:"]').first().click();
+  await mon.locator('[data-testid^="treemap-tile-open-t:"]').first().click();
+  await mon.locator('[data-testid^="treemap-tile-open-n:"]').first().click();
 
   // Four clicks in, the panel's processes are listed: the shell and the node under it.
   const nodeRow = mon.locator('[data-testid^="breakdown-row-x:"]', { hasText: 'node.exe' }).first();

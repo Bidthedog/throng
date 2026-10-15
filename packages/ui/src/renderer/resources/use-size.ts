@@ -27,16 +27,24 @@ function observer(): ResizeObserver | null {
   return shared;
 }
 
-/** `[ref, size]`: attach `ref` to the element; `size` follows it, starting at `fallback`. */
+/**
+ * `[ref, size]`: attach `ref` to the element; `size` follows it, starting at `fallback`.
+ *
+ * The element is MEASURED when it is attached — in the commit, before the first paint — so a first layout
+ * is done in the box the element really has. Left to the observer alone, the first layout is done for
+ * `fallback` and again, a frame later, for the truth (D5).
+ */
 export function useElementSize<T extends Element>(fallback: Size): [(el: T | null) => (() => void) | void, Size] {
   const [size, setSize] = useState<Size>(fallback);
   const ref = useCallback((el: T | null) => {
     if (el === null) return;
+    const update = (next: Size): void =>
+      setSize((prev) => (prev.width === next.width && prev.height === next.height || next.width === 0 || next.height === 0 ? prev : next));
+    const box = el.getBoundingClientRect();
+    update({ width: Math.round(box.width), height: Math.round(box.height) });
     const watch = observer();
     if (watch === null) return;
-    watchers.set(el, (next) =>
-      setSize((prev) => (prev.width === next.width && prev.height === next.height || next.width === 0 || next.height === 0 ? prev : next)),
-    );
+    watchers.set(el, update);
     watch.observe(el);
     return () => {
       watch.unobserve(el);

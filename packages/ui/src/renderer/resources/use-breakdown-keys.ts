@@ -2,7 +2,7 @@
  * Keyboard handling for the breakdown (055 FR-068).
  *
  *   Up / Down        the previous / next node, in the order the rows are drawn
- *   Right / Enter    drill into the focused node
+ *   Right / Enter    drill into the focused node — when it has children (FR-088)
  *   Left / Backspace go up one level, and land on the node left
  *
  * Focus is ROVING: the breakdown is one Tab stop, on the focused row (`tabIndex` 0, the rest -1), and a
@@ -74,7 +74,8 @@ export function useBreakdownKeys({ rows, activeId, focusPath }: BreakdownKeysInp
         case 'ArrowRight':
         case 'Enter': {
           const row = rows[index];
-          if (row === undefined) return;
+          // A node with nothing under it has nothing to open: never an empty view (FR-088).
+          if (row === undefined || row.node.children.length === 0) return;
           pending.current = 'first';
           focusOn(row.path);
           break;

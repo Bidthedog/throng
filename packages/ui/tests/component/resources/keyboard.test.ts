@@ -8,7 +8,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
 import { __resetSession, getSelection, getView, setView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
@@ -19,6 +19,12 @@ vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({
 }));
 
 let bridge: ResourcesBridge;
+
+// The body is `lazy()` (R10): its first import compiles uPlot and d3, ~0.5 s alone and more under a full
+// run — module loading, not behaviour, so it is paid once here and not inside any test's wait.
+beforeAll(async () => {
+  await import('../../../src/renderer/resources/monitor-body.js');
+});
 
 // jsdom has no layout, so `offsetParent` is always null — which the focus trap reads as "hidden" and so
 // finds nothing to Tab between. Every connected element is laid out for the purposes of this file.

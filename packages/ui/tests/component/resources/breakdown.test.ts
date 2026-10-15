@@ -111,8 +111,11 @@ describe('the treemap (FR-060)', () => {
     expect(Number(tile('n:n1').getAttribute('data-value'))).toBe(13);
   });
 
-  it('drills into a tile that is clicked, and the breadcrumb follows', () => {
+  it('opens a tile from its drill-down button, and the breadcrumb follows (a click only selects: FR-088)', () => {
     fireEvent.click(tile('n:n1'));
+    expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1', 't:t1']);
+
+    fireEvent.click(screen.getByTestId('treemap-tile-open-n:n1'));
 
     expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1', 't:t1', 'n:n1']);
     const crumbs = screen.getByTestId('breadcrumb');
@@ -120,7 +123,7 @@ describe('the treemap (FR-060)', () => {
   });
 
   it('returns to a level when its breadcrumb segment is clicked', () => {
-    fireEvent.click(tile('n:n1'));
+    fireEvent.click(screen.getByTestId('treemap-tile-open-n:n1'));
     fireEvent.click(screen.getByTestId('breadcrumb-segment-p:p1'));
 
     expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1']);
@@ -359,12 +362,13 @@ describe('colour (FR-067)', () => {
     const el = tile('n:n1');
     expect(el.tagName.toLowerCase()).toBe('div');
     expect(document.querySelector('.treemap svg')).toBeNull();
-    // Placed by the layout alone; that the cell is positioned is the stylesheet's (`.treemap__tile`).
-    expect(el.getAttribute('style')).toMatch(/^left: [\d.]+(px)?; top: [\d.]+(px)?; width: [\d.]+px; height: [\d.]+px;?$/);
+    // Placed by the layout alone, and its fill handed to the stylesheet as a number (`--heat`, FR-094);
+    // that the cell is positioned is the stylesheet's (`.treemap__tile`).
+    expect(el.getAttribute('style')).toMatch(/^left: [\d.]+(px)?; top: [\d.]+(px)?; width: [\d.]+px; height: [\d.]+px;( --heat: [\d.]+;)?$/);
     expect(parseFloat(el.style.width)).toBe(Number(el.getAttribute('data-width')));
     expect(parseFloat(el.style.height)).toBe(Number(el.getAttribute('data-height')));
     expect(el).toHaveAttribute('role', 'button');
-    expect(el.getAttribute('aria-label')).toMatch(/^Shell, .*\. Open$/);
+    expect(el.getAttribute('aria-label')).toMatch(/^Shell, /);
     expect(el.getAttribute('title')).toBeTruthy();
   });
 
