@@ -138,7 +138,7 @@ Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/re
 
 ## MT-09: Finding your way around the monitor
 
-Covers: FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, SC-010, FR-060
+Covers: FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060
 Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`
 
 ### Steps
@@ -152,6 +152,7 @@ Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.
 8. Click "?". It explains Components and Projects, tile size, click / drill-down button / right-click, the keys, and amber and red with your Preferences thresholds. Esc closes it.
 9. Type a process name in the filter quickly. The text keeps up with your typing, the list follows at once, each process appears once, and a count of matches shows. Type nonsense: "No process matches '…'".
 10. Tab through the window. Every control shows a clear focus ring.
+11. Run a busy loop (`node -e "for(;;){}"`) in one terminal and leave another idle. Sized by CPU, the busy process's tile is drawn in the high colour and the idle one in the low colour; a key beside the tiles shows the scale. Switch to Size by Memory: the colours change to follow each node's share of RAM.
 
 ### Negative cases
 - No tile looks selected unless you selected it.

@@ -189,6 +189,15 @@ SC-003 and Principle XII and change nothing here; what the spec never said is an
 - Q: What does "responsive" mean, measurably? → A: **Typing in the filter, a click, a drill and a capture
   each finish their work within 100 ms with ~450 processes** *(derived from SC-003 and Principle XII, which the slowness breached; not confirmed by the user)*.
   (SC-010)
+- Q: How are the breakdown's tiles coloured? → A: **"It should be colour coded by amount of resources it
+  is taking - relative to the total system resources available to throng. So, something that takes 1% CPU
+  would be a 'low' colour, something that takes 80% would be a 'high' colour."** Each tile's fill runs on
+  a continuous scale from a low colour to a high colour by its share of the whole machine, for the metric
+  sizing the tiles. The scale runs from the theme's `success` colour through `warning` at the warning
+  threshold to `danger` at the critical threshold, so the tiles agree with FR-046's bands; GPU uses the CPU
+  thresholds; I/O, which has no machine total, is scaled against the highest rate throng has reached since
+  the window opened *(the scale's stops and the I/O basis are derived from FR-046 and the theme's existing
+  colours; not confirmed by the user)*. (FR-094)
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -285,6 +294,10 @@ process; at every level the figure shown equals the sum of its children plus its
    (FR-092, FR-093)
 14. **Given** about 450 processes, **When** the user types in the filter, **Then** each keystroke shows
    in the field at once and the matches follow within 100 ms, each process listed once. (SC-010)
+15. **Given** tiles sized by CPU, **When** one process takes about 1% of the machine and another about 80%,
+   **Then** the first tile is drawn in the low colour and the second in the high colour, with a key beside
+   the tiles showing the scale; **When** the user sizes by memory, **Then** the colours follow each node's
+   share of installed RAM. (FR-094)
 
 ---
 
@@ -673,6 +686,15 @@ reopens from it.
   Projects are, what a tile's size means, the mouse (click selects, the drill-down button opens,
   right-click or Shift+F10 for actions), the keys, and what amber and red mean with the thresholds
   currently set in Preferences. Esc or the button closes it.
+- **FR-094**: Each tile's fill MUST show how much of the machine its node takes, for the metric sizing the
+  tiles, on a continuous scale from a low colour to a high colour: CPU as a share of every logical
+  processor, memory as a share of installed RAM, GPU as a share of the GPU; I/O, which has no machine
+  total, against the highest rate throng has reached since the window opened. The scale MUST pass
+  through the theme's `success`, `warning` and `danger` colours, reaching `warning` at the warning
+  threshold and `danger` at the critical threshold (FR-046; GPU takes the CPU thresholds), and use theme
+  colours only. A key to the scale MUST sit beside the tiles, and the help panel (FR-093) MUST explain it.
+  A node whose figure is not measured is drawn neutral. The selected tile keeps FR-089's accent edge on
+  top of its fill.
 
 #### Visualisation and navigation
 

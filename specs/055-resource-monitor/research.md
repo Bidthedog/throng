@@ -310,3 +310,43 @@ area, cannot be moved beside throng or onto another screen, and cannot stay abov
 of what was asked. *Hide the window on close instead of destroying it*: keeps the view and bounds for
 free and reopens instantly, but holds a whole renderer's memory for the rest of the session after one
 glance, in a feature whose point is showing throng's memory; rejected.
+
+
+## R15 — Responsiveness, selection and guidance (Session 2026-10-15, second feedback)
+
+**Measured** (a 536-node synthetic tree, ~450 processes, 150 history points per node; JavaScript work only):
+`formatGrouped` costs 28 µs a call against 0.9 µs with a cached `Intl.NumberFormat`; a filter expands the
+Projects subtree under Components *and* under Projects, giving 1,040 rows for 536 nodes and ~150 ms of
+formatting per render; the row and tile memos never hold, because the drill callback is recreated every
+render; every capture renders the breakdown twice (urgent + deferred); a new subject destroys and rebuilds
+all four uPlot charts inside the click; sparklines read `getComputedStyle` and remap 150 points per row
+per capture; Hide idle copies every node's full history per build though the rule reads three points.
+
+**Decisions.**
+- **Cost first**: cache one `Intl.NumberFormat` per locale in core's `formatGrouped` (the constitution's
+  rule is unchanged — same output, same parser); emit each node once in the filtered model; defer the
+  filter's model build (`useDeferredValue` on the filter text) so the field keeps up with typing; stable
+  callbacks so `Row` and `Treemap` memos hold; the shell subscribes to `frame === null` and staleness only;
+  update uPlot in place (`setData`) and rebuild only when the band count changes, with bands kept in a
+  stable order by id; sparklines read their colour once per capture and draw only rows in view; idle reads
+  the last three points; the body chunk is imported on mount; the treemap and charts measure their box
+  before their first layout; the view is saved at most every 250 ms.
+- **Click model (FR-088)**: `onClick` selects (tile and row alike); a drill-down `IconButton` on the
+  existing `chevron` (▸) token, Back on the existing `navigateBack`, on every tile and row with children; Enter/Right and row double-click open.
+- **Order hold (FR-090)**: the model keeps the last rendered order while `pointerover` is inside the
+  breakdown or a node is selected, and re-ranks on leave; tiles and rows move with a FLIP transform
+  (`Element.animate`, 200 ms), skipped under `prefers-reduced-motion`.
+- **Heat scale (FR-094)**: a pure core function `heatFor(metric, value, thresholds, machine, ioPeak)` →
+  `0..1` plus the stop it falls between; the renderer mixes the theme's `success`, `warning` and `danger`
+  with `color-mix()` in CSS from a `--heat` custom property per tile, so no literal colour exists and no
+  new token is added. I/O's peak is session state in `monitor-session.ts`.
+- **Guidance (FR-091 – FR-093)**: a header row (breadcrumb, Back, "Tile size: <metric>"), sticky column
+  headers, a `?` icon button — one new icon token, `help`, in every default theme, with its descriptor, and
+  a shipped-defaults bump (24 → 25), the additive case — opening a popover built on the shared
+  floating-surface rules; the "Updated"
+  line pulses with a CSS animation keyed on the tick, off under reduced motion.
+
+**Alternatives.** Virtualising the rows list was set aside: with each node emitted once and the formatter
+cached, a filtered 536-node list renders well inside SC-010, and virtualisation would break the
+keyboard's roving focus and the FLIP moves. A new theme token per heat stop was set aside for
+`color-mix()` over existing tokens, which keeps every theme correct without a shipped-defaults bump.
