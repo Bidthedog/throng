@@ -251,7 +251,7 @@ next indent inserts.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Language by file extension | `editor.languageByExtension` | empty | A table: extension → language | Map an extension to a language (for example `.foo` → Python), overriding the built-in detection. |
+| Language by file extension | `editor.languageByExtension` | empty | A table: extension → language | Map an extension to a language (for example `.foo` → Python), overriding detection by extension. A file throng recognises by name, such as `tsconfig.json`, keeps that language; only the picker changes it ([how the language is chosen](quick-start.md#4-edit-files)). |
 
 ## New Project
 

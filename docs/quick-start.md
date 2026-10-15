@@ -110,7 +110,13 @@ can keep browsing or press **F2** to rename the file.
   landed or roll the whole paste back. **Ctrl+Z** undoes a move between projects from either one.
 
 - **Save** with **Ctrl+S**, **Save All** with **Ctrl+Shift+S**, **Save As** with **Ctrl+Alt+S**.
-- **31 languages** are highlighted; the language picker in the status bar corrects a wrong guess.
+- **55 languages** are highlighted; the language picker in the status bar corrects a wrong guess.
+  A file is recognised by its name as well as its extension — `Dockerfile`, `.env`, `.gitignore`,
+  and `tsconfig.json` as JSON with comments. The language comes from, first to last: the picker's
+  choice for that file, a name throng recognises, your
+  [Language by file extension](preferences.md#editor--languages) table, then the extension. The **✕**
+  beside a language you picked, or **Reset Language** in the editor's right-click menu, hands the file
+  back to detection.
 - The status bar shows the caret's position, the selection and the document's size.
 - **Column select** with **Alt+drag** or **Shift+Alt+Arrow**; **Ctrl+X** with nothing selected cuts
   the whole line.
