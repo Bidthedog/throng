@@ -12,6 +12,7 @@ Spec: `specs/055-resource-monitor/spec.md`
 | MT-06 | Held folders | untested | | | |
 | MT-07 | Resource Monitor preferences | untested | | | |
 | MT-08 | The monitor window | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
+| MT-09 | Finding your way around the monitor | untested | | | |
 
 ## MT-01: Status bar usage figures
 
@@ -134,3 +135,24 @@ Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/re
 - Typing in a terminal does not stall or stutter while the monitor is open or after it closes.
 - Minimising throng's main window takes the monitor with it; closing the main window closes it.
 - Reopening after the node you were on has ended lands on its nearest surviving parent, not an empty view.
+
+## MT-09: Finding your way around the monitor
+
+Covers: FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, SC-010, FR-060
+Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`
+
+### Steps
+1. Open the monitor with a few terminals running. Without reading anything else, the header says where you are, has a Back button (greyed at the top) and says "Tile size: CPU"; the rows have column headers (Trend, CPU, Memory, GPU, I/O) with CPU marked.
+2. Point at tiles and rows, amber and red ones too. Each shows a pointer and a hover highlight.
+3. Click a tile. It and its row get an accent edge; the detail pane and charts name that node. Click a different row: the mark moves to it, and only it is marked.
+4. Click a tile's drill-down button. The breakdown opens at it and the header updates. Click Back: you return. Select a row and press Enter: it opens. A process with no children has no drill-down button.
+5. Right-click a tile. The same menu as its row opens.
+6. Watch "Updated <time> · every 2 s": it changes and pulses at each capture. Keep the pointer over the tiles for several captures: nothing changes place. Move the pointer away: tiles and rows slide to their new ranks.
+7. Each chart has a legend naming its bands and says which node it plots; a just-opened chart says it is building its history.
+8. Click "?". It explains Components and Projects, tile size, click / drill-down button / right-click, the keys, and amber and red with your Preferences thresholds. Esc closes it.
+9. Type a process name in the filter quickly. The text keeps up with your typing, the list follows at once, each process appears once, and a count of matches shows. Type nonsense: "No process matches '…'".
+10. Tab through the window. Every control shows a clear focus ring.
+
+### Negative cases
+- No tile looks selected unless you selected it.
+- The monitor does not stutter at each capture, with or without a filter typed.
