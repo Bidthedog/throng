@@ -38,6 +38,8 @@ import {
 } from './config/config-store.js';
 import { Spinner, useDelayedFlag } from './common/loading.js';
 import { StatusBar } from './statusbar/status-bar.js';
+import { ResourceMonitorHost } from './resources/monitor-modal.js';
+import { EstimatesReporterMount } from './resources/use-estimates-reporter.js';
 import { Chevron } from './panes/chevron.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
@@ -571,6 +573,10 @@ export function App(): ReactElement {
             </section>
           </div>
           <StatusBar />
+          {/* 055 — the Resource Monitor modal; the main window only (a sub-workspace window asks main to open it here). */}
+          <ResourceMonitorHost />
+          {/* 055 — reports this window's panel estimates while any window's monitor is open. */}
+          <EstimatesReporterMount />
           <AppClosePrompt />
           {/* 050 — the window-level halves of a paste: they must outlive any one project's tree, so
               they are mounted here and not in the explorer. */}

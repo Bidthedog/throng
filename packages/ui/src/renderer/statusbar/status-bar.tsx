@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react';
 import { useProjects } from '../state/projects-store.js';
+import { StatusResources } from '../resources/status-resources.js';
 import { DaemonIndicator } from './daemon-indicator.js';
 import './status-bar.css';
 
@@ -35,6 +36,9 @@ export function StatusBar(): ReactElement {
       </span>
       {/* 029 / #182 — daemon liveness, and the only route to a restart. Renders nothing while healthy. */}
       <span className="throng-status-bar__right">
+        {/* 055 FR-040/FR-041 — throng's own CPU, memory, GPU and I/O, BEFORE the daemon indicator and
+            beside it: the indicator is neither replaced, moved nor duplicated. */}
+        <StatusResources />
         <DaemonIndicator />
       </span>
     </footer>
