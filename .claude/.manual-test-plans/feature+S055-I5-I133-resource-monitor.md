@@ -5,12 +5,13 @@ Spec: `specs/055-resource-monitor/spec.md`
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
 | MT-01 | Status bar usage figures | untested | | | |
-| MT-02 | Opening, closing and resizing the monitor | untested | | | |
+| MT-02 | Opening, closing and resizing the monitor | retired → MT-08 | | | |
 | MT-03 | Drilling into the breakdown | untested | | | |
 | MT-04 | Charts, filter and idle hiding | untested | | | |
 | MT-05 | Unload, destroy and kill from the monitor | untested | | | |
 | MT-06 | Held folders | untested | | | |
 | MT-07 | Resource Monitor preferences | untested | | | |
+| MT-08 | The monitor window | untested | | | |
 
 ## MT-01: Status bar usage figures
 
@@ -27,24 +28,6 @@ Paths: `packages/ui/src/renderer/resources/status-resources.tsx`, `packages/ui/s
 ### Negative cases
 - No figure ever reads 0 while it is loading or unavailable; it shows a loading or unavailable state instead.
 - A sub-workspace window has no usage figures in its own status bar.
-
-## MT-02: Opening, closing and resizing the monitor
-
-Covers: FR-043, FR-050, FR-051, FR-052, FR-053, FR-054, FR-055, FR-056, FR-057
-Paths: `packages/ui/src/renderer/resources/monitor-modal.tsx`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/title-bar/cog-menu-items.ts`, `packages/ui/src/renderer/keybindings/window-dispatcher.tsx`, `packages/ui/src/main/resources-ipc.ts`
-
-### Steps
-1. Click the status-bar figures. The monitor opens at once over the main window, with a loading state where data is not yet in; nothing behind it can be clicked or typed into.
-2. Press Esc. It closes. Reopen it from the cog menu's **Resource Monitor** item, then close it with the X at the top right.
-3. Press `Ctrl+Shift+Alt+R`. It opens. Click **Maximise**: it fills the window. Click **Restore**: it returns to its previous size.
-4. Click **Minimise**. It shrinks into the status-bar figures with an animation and closes.
-5. Drill two levels into a project, change the metric, then close and reopen. It reopens maximised or not as you left it, on the same metric and the same node.
-6. From a sub-workspace window press `Ctrl+Shift+Alt+R`. The monitor opens in the main window, which comes to the front.
-7. Tab through the modal. Every control can be reached and shows a focus ring; focus never escapes to the app behind.
-
-### Negative cases
-- Typing in a terminal does not stall or stutter while the monitor is open or after it closes.
-- Reopening after the node you were on has ended lands on its nearest surviving parent, not an empty view.
 
 ## MT-03: Drilling into the breakdown
 
@@ -124,3 +107,27 @@ Paths: `packages/ui/src/renderer/preferences/form-controls.tsx`, `packages/ui/sr
 
 ### Negative cases
 - History cannot be set above 30 minutes or below 1; the interval cannot go below 2 s.
+
+## MT-08: The monitor window
+
+Covers: FR-043, FR-051, FR-052, FR-055, FR-056, FR-057, FR-081, FR-082, FR-083, FR-084, FR-085, FR-086, FR-087, FR-050, FR-053, FR-054
+Paths: `packages/ui/src/renderer/resources/monitor-modal.tsx`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/title-bar/cog-menu-items.ts`, `packages/ui/src/renderer/keybindings/window-dispatcher.tsx`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/main/main.ts`
+
+### Steps
+1. Click the status-bar figures. The Resource Monitor opens at once as its own window over throng, looking like the Preferences window — same title bar, chrome and theme — with a Minimise control as well; a loading state shows where data is not yet in.
+2. Drag the monitor's title bar. The window moves.
+3. With the monitor open, click into a terminal behind it and run `node -e "setInterval(()=>{},1e3)"`. Throng responds normally, the monitor stays above it, and the new `node` process appears under that panel in the monitor at its next capture.
+4. Open a new tab, then unload a project, from throng's own window. Both changes appear in the monitor without reopening it: the tab under its project, the project greyed and italic.
+5. Switch to another application. The monitor goes behind it with the rest of throng; click back into throng and the monitor is above throng's windows again.
+6. Click **Maximise**: it fills the screen. Click **Restore**: it returns to its previous size and place.
+7. Click **Minimise**. It shrinks down into the main window's status-bar figures with an animation and closes.
+8. Move and resize the monitor, drill two levels into a project, change the metric, then close it with **Esc**. Reopen it with `Ctrl+Shift+Alt+R`: it opens where you left it, at that size, on the same metric and node.
+9. From a sub-workspace window, choose **Resource Monitor** from the cog. The same monitor window comes forward; no second one opens.
+10. Close it with the X at the top right. Tab through it when open: every control is reachable and shows a focus ring.
+11. With a tab in a sub-workspace, use **Destroy Tab** on it from the monitor. The sub-workspace window comes forward and asks its usual confirmation there.
+
+### Negative cases
+- The monitor never stays above another application's window.
+- Typing in a terminal does not stall or stutter while the monitor is open or after it closes.
+- Minimising throng's main window takes the monitor with it; closing the main window closes it.
+- Reopening after the node you were on has ended lands on its nearest surviving parent, not an empty view.
