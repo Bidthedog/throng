@@ -52,14 +52,24 @@ declare global {
           estimates: readonly import('@throng/ipc-contract').PanelEstimate[],
         ) => void;
         kill: (req: import('@throng/ipc-contract').KillRequest) => Promise<import('@throng/ipc-contract').KillResult>;
-        /** Run Destroy Tab / Destroy Panel in the window holding it (R12); false when no window does. */
-        routeAction: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => Promise<boolean>;
-        /** This window is asked to run a Destroy for the monitor. */
-        onAction: (cb: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => void) => () => void;
-        /** From any window: open the monitor in the main window and focus it (R12). */
+        /**
+         * Run an action in the window that owns it (R12, R14): Destroy Tab / Destroy Panel in the window
+         * holding it, Unload Project in the main window. False when no window can.
+         */
+        routeAction: (req: import('./resources/route-action.js').RoutedAction) => Promise<boolean>;
+        /** This window is asked to run an action for the monitor. */
+        onAction: (cb: (req: import('./resources/route-action.js').RoutedAction) => void) => () => void;
+        /** From any window: open the monitor window, or bring it forward (R14, FR-086). */
         open: () => void;
-        /** Main window: another window asked for the monitor. */
-        onOpenRequest: (cb: () => void) => () => void;
+        /** Monitor window: shrink into the status-bar figures and close, or just close (FR-085). */
+        minimise: (opts: { reducedMotion: boolean }) => void;
+        /** Monitor window: the view it left, held by main until restart (FR-087); `null` the first time. */
+        viewState: () => Promise<unknown>;
+        saveViewState: (view: unknown) => void;
+        /** Main window: answer main's request for the status-bar figures' rectangle, in CSS px (FR-085). */
+        onStatusRectRequest: (
+          cb: () => { x: number; y: number; width: number; height: number } | null,
+        ) => () => void;
       };
       /** 029 / #182 — daemon liveness, pushed rather than pulled. */
       daemon?: {

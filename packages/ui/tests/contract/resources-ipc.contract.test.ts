@@ -47,19 +47,30 @@ function recordingHost() {
   return { host, calls };
 }
 
-function wire() {
+function wire(opts: { mainWindowId?: number | null; statusRectTimeoutMs?: number } = {}) {
   const ipc = fakeIpc();
   const { host, calls } = recordingHost();
   let opened = 0;
+  const minimised: unknown[] = [];
+  let view: unknown = null;
   const sent: Array<{ windowId: number; channel: string; payload: unknown }> = [];
-  registerResourcesIpc(ipc, {
+  const toMain: Array<{ channel: string; payload: unknown }> = [];
+  const surface = registerResourcesIpc(ipc, {
     host,
     windowIdOf: (sender) => (sender as unknown as { id: number }).id,
     osPidOf: (sender) => 9_000 + (sender as unknown as { id: number }).id,
     sendTo: (windowId, channel, payload) => (sent.push({ windowId, channel, payload }), true),
-    openInMainWindow: () => void opened++,
+    mainWindowId: () => (opts.mainWindowId === undefined ? 1 : opts.mainWindowId),
+    postToMainWindow: (channel, payload) => (toMain.push({ channel, payload }), true),
+    monitor: {
+      open: () => void opened++,
+      minimise: (o) => void minimised.push(o),
+      viewState: () => view,
+      saveViewState: (v) => void (view = v),
+    },
+    ...(opts.statusRectTimeoutMs !== undefined ? { statusRectTimeoutMs: opts.statusRectTimeoutMs } : {}),
   });
-  return { ipc, calls, sent, opened: () => opened };
+  return { ipc, calls, sent, toMain, minimised, surface, opened: () => opened };
 }
 
 const from = (id: number) => ({ sender: { id } });
@@ -74,8 +85,15 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
       'throng:resources:detail:unsubscribe',
       'throng:resources:kill',
       'throng:resources:summary:get',
+      'throng:resources:view:get',
     ]);
-    expect([...ipc.ons.keys()].sort()).toEqual(['throng:resources:open', 'throng:resources:panels']);
+    expect([...ipc.ons.keys()].sort()).toEqual([
+      'throng:resources:minimise',
+      'throng:resources:open',
+      'throng:resources:panels',
+      'throng:resources:status-rect:reply',
+      'throng:resources:view:set',
+    ]);
   });
 
   it('answers summary() with the cached summary', async () => {
@@ -121,10 +139,57 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
     expect(await route(from(1), { action: 'deleteEverything', id: 'x' })).toBe(false);
   });
 
-  it('asks the main window to open the monitor', () => {
+  it('routes Unload Project to the main window, which comes forward to confirm it (R14, FR-086)', async () => {
+    const w = wire({ mainWindowId: 2 });
+    const route = w.ipc.handles.get('throng:resources:action:route')!;
+    const req = { action: 'unloadProject', id: 'p1', name: 'Alpha', variant: 'endTerminals' };
+    expect(await route(from(9), req)).toBe(true);
+    expect(w.sent).toEqual([{ windowId: 2, channel: 'throng:resources:action', payload: req }]);
+    expect(await route(from(9), { action: 'unloadProject', id: 'p1', name: 'Alpha', variant: 'everything' })).toBe(false);
+    expect(await route(from(9), { action: 'unloadProject', id: 'p1' })).toBe(false);
+    expect(await wire({ mainWindowId: null }).ipc.handles.get('throng:resources:action:route')!(from(9), req)).toBe(false);
+  });
+
+  it('opens the monitor window from any window (R14, FR-086)', () => {
     const w = wire();
     w.ipc.ons.get('throng:resources:open')!(from(5));
     expect(w.opened()).toBe(1);
+  });
+
+  it('minimises with the renderer’s reduced-motion answer, and ignores a malformed request (FR-085)', () => {
+    const w = wire();
+    w.ipc.ons.get('throng:resources:minimise')!(from(9), { reducedMotion: true });
+    w.ipc.ons.get('throng:resources:minimise')!(from(9), 'nonsense');
+    expect(w.minimised).toEqual([{ reducedMotion: true }, { reducedMotion: false }]);
+  });
+
+  it('holds the view between openings (FR-087)', async () => {
+    const w = wire();
+    expect(await w.ipc.handles.get('throng:resources:view:get')!(from(9))).toBeNull();
+    w.ipc.ons.get('throng:resources:view:set')!(from(9), { metric: 'memory' });
+    expect(await w.ipc.handles.get('throng:resources:view:get')!(from(9))).toEqual({ metric: 'memory' });
+  });
+
+  it('asks the main window for the status-bar rectangle and takes its matching reply (FR-085)', async () => {
+    const w = wire();
+    const pending = w.surface.requestStatusRect();
+    expect(w.toMain).toHaveLength(1);
+    const { channel, payload: requestId } = w.toMain[0]!;
+    expect(channel).toBe('throng:resources:status-rect:request');
+    const reply = w.ipc.ons.get('throng:resources:status-rect:reply')!;
+    reply(from(1), { requestId: (requestId as number) + 100, rect: { x: 9, y: 9, width: 9, height: 9 } });
+    reply(from(1), { requestId, rect: { x: 1, y: 2, width: 3, height: 4 } });
+    expect(await pending).toEqual({ x: 1, y: 2, width: 3, height: 4 });
+  });
+
+  it('answers null for no reply, a malformed reply, or no main window', async () => {
+    const silent = wire({ statusRectTimeoutMs: 5 });
+    expect(await silent.surface.requestStatusRect()).toBeNull();
+
+    const malformed = wire();
+    const pending = malformed.surface.requestStatusRect();
+    malformed.ipc.ons.get('throng:resources:status-rect:reply')!(from(1), { requestId: malformed.toMain[0]!.payload, rect: { x: 'a' } });
+    expect(await pending).toBeNull();
   });
 
   it('is what the preload exposes, member for channel', () => {
@@ -138,7 +203,11 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
       'throng:resources:panels',
       'throng:resources:kill',
       'throng:resources:open',
-      'throng:resources:open-request',
+      'throng:resources:minimise',
+      'throng:resources:view:get',
+      'throng:resources:view:set',
+      'throng:resources:status-rect:request',
+      'throng:resources:status-rect:reply',
       'throng:resources:detail-demand:get',
       'throng:resources:detail-demand',
       'throng:resources:action:route',
@@ -146,5 +215,6 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
     ]) {
       expect(preload, channel).toContain(`'${channel}'`);
     }
+    expect(preload, 'open-request is retired with the modal (R14)').not.toContain('throng:resources:open-request');
   });
 });

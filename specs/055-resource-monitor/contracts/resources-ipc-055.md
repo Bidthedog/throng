@@ -21,7 +21,7 @@ Exposed on `window.throng.resources` by `packages/ui/src/preload/preload.cts`, t
 | `minimise(opts)` | `throng:resources:minimise` | send, monitor window | `{ reducedMotion: boolean }`: shrink the monitor window into the status-bar figures and close it, or just close it (FR-085) |
 | — | `throng:resources:status-rect` | invoke main → main window renderer | → the status-bar figures' `{ x, y, width, height }` in CSS px, or `null` when not shown (FR-085) |
 | `viewState()` / `saveViewState(v)` | `throng:resources:view:get` / `throng:resources:view:set` | invoke / send, monitor window | the monitor's FR-057 view, an opaque JSON value held by UI main until restart (FR-087) |
-| `routeAction(req)` (extended) | `throng:resources:action:route` | invoke | adds `{ action: 'unloadProject', id, variant: UnloadVariant }`, always sent to the main window (FR-086) |
+| `routeAction(req)` (extended) | `throng:resources:action:route` | invoke | adds `{ action: 'unloadProject', id, name, variant?: UnloadVariant }`, always sent to the main window (FR-086) |
 
 - Every invoke resolves; none rejects to the renderer — failures come back as causes from the
   failure-cause model (FR-064).

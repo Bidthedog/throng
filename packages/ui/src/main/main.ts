@@ -104,7 +104,9 @@ import { fork } from 'node:child_process';
 import type { DaemonRoster, RosterUiProcess } from '@throng/ipc-contract';
 import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
 import { ResourceMonitorHost } from './resource-monitor-host.js';
-import { registerResourcesIpc } from './resources-ipc.js';
+import { registerResourcesIpc, type ResourcesIpcSurface } from './resources-ipc.js';
+import { MONITOR_MIN_SIZE, ResourceMonitorWindow } from './resource-monitor-window.js';
+import { wireFloatingLayering } from './floating-window-layering.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -1957,7 +1959,52 @@ if (isPrimaryInstance)
       for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
     },
   });
-  registerResourcesIpc(ipcMain, {
+  /*
+   * 055 R14 — the monitor window: built like Preferences (frameless, movable, parented to the main
+   * window, its layering shared), loaded from the same renderer entry with `?monitor`.
+   */
+  let resourcesIpc: ResourcesIpcSurface | null = null;
+  const monitorWindow = new ResourceMonitorWindow({
+    createWindow: ({ bounds, parent }) => {
+      const win = new BrowserWindow({
+        ...bounds,
+        minWidth: MONITOR_MIN_SIZE.width,
+        minHeight: MONITOR_MIN_SIZE.height,
+        frame: false,
+        ...(parent ? { parent: parent as BrowserWindow } : {}),
+        movable: true,
+        resizable: true,
+        // The title bar's Minimise is the monitor's own (FR-085): it closes into the status bar.
+        minimizable: false,
+        title: 'Resource Monitor — throng',
+        icon: appIcon(),
+        backgroundColor: themeBackground(),
+        show: false,
+        webPreferences: {
+          preload: resolveFromHere('../preload/preload.cjs'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      });
+      wireWindowMaximizeEvents(win);
+      denyRendererWindows(win.webContents, shellIntegration);
+      revealWhenPainted(win);
+      const unwireLayering = wireFloatingLayering(win);
+      win.on('closed', () => {
+        unwireLayering();
+        const main = currentMainWindow();
+        if (main && !main.isDestroyed()) main.focus();
+      });
+      void win.loadFile(resolveFromHere('../renderer/index.html'), { query: { monitor: '1' } });
+      return win;
+    },
+    mainWindow: () => currentMainWindow() ?? null,
+    workAreas: () => screen.getAllDisplays().map((d) => d.workArea),
+    statusRect: () => resourcesIpc?.requestStatusRect() ?? Promise.resolve(null),
+    schedule: (fn, ms) => void setTimeout(fn, ms),
+  });
+  resourcesIpc = registerResourcesIpc(ipcMain, {
     host: resourceMonitor,
     windowIdOf: (sender) => BrowserWindow.fromWebContents(sender)?.id ?? null,
     osPidOf: (sender) => sender.getOSProcessId(),
@@ -1970,13 +2017,14 @@ if (isPrimaryInstance)
       win.webContents.send(channel, payload);
       return true;
     },
-    openInMainWindow: () => {
+    mainWindowId: () => currentMainWindow()?.id ?? null,
+    postToMainWindow: (channel, payload) => {
       const main = currentMainWindow();
-      if (!main) return;
-      if (main.isMinimized()) main.restore();
-      main.focus();
-      main.webContents.send('throng:resources:open-request');
+      if (!main || main.isDestroyed()) return false;
+      main.webContents.send(channel, payload);
+      return true;
     },
+    monitor: monitorWindow,
   });
   onSettingsChanged.push((previous, next) => {
     if (JSON.stringify(previous.resourceMonitor) !== JSON.stringify(next.resourceMonitor)) resourceMonitor.settingsChanged();
