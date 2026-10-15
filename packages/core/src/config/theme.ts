@@ -629,6 +629,9 @@ export const THRONG_THEME: Theme = {
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
     warning: '⚠',
+    /* 055 (FR-093, research R15). The Resource Monitor's help button, which explains what the monitor
+       shows and how to use it. No question glyph existed. */
+    help: '?',
   },
 };
 

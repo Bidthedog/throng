@@ -67,7 +67,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // an invalid entry — no warning glyph existed, only the `warning` colour.
 // 90 since 055: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
 // `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`).
-const EXPECTED_ICON_TOKEN_COUNT = 90;
+// 91 since 055's second feedback round (FR-093): `help`, the Resource Monitor's "?" button.
+const EXPECTED_ICON_TOKEN_COUNT = 91;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -209,6 +210,13 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     expect(THRONG_THEME.icons.warning, 'THRONG_THEME.icons.warning').toBeTruthy();
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
       expect(theme.icons.warning, `${name}.icons.warning`).toBeTruthy();
+    }
+  });
+
+  it('every bundled theme carries the help icon token (055 FR-093)', () => {
+    expect(THRONG_THEME.icons.help, 'THRONG_THEME.icons.help').toBeTruthy();
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.icons.help, `${name}.icons.help`).toBeTruthy();
     }
   });
 

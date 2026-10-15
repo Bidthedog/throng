@@ -310,7 +310,10 @@ import { setAtPath } from './metadata.js';
 // Bumped by 055 (23 → 24): eight icon tokens for the resource monitor — `resourceMonitor`,
 // `resourceCpu`, `resourceMemory`, `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`,
 // `resourceKillBelow`. The additive case: every payload arrives, no existing value moves.
-export const SHIPPED_DEFAULTS_VERSION = 24;
+//
+// Bumped by 055's second feedback round (24 → 25): one icon token, `help`, the Resource Monitor's "?"
+// button (FR-093). The additive case again.
+export const SHIPPED_DEFAULTS_VERSION = 25;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
