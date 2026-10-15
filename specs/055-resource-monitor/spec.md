@@ -199,6 +199,30 @@ SC-003 and Principle XII and change nothing here; what the spec never said is an
   the window opened *(the scale's stops and the I/O basis are derived from FR-046 and the theme's existing
   colours; not confirmed by the user)*. (FR-094)
 
+Third feedback the same day, verbatim: *"I get a lot of titles poping up as I move around the UI - they
+flash up then dissapear because it keeps reloading. I thought we were pausing areas as we mouse over
+them? I'm also not sure I like the large area chart things - they take up a lot of room and aren't that
+intuitive. Make this into a two column modal - first column are the lists of things - components and
+projects. Right column is the breakdown of the process and stats for the selected. Double clicking a row
+on the left will drill-down in to it. Single clicking will show that row's stats on the right. Any
+selection detail must me on the right."*
+
+- Q: What pauses while the pointer is over part of the monitor? → A: **The whole list under the pointer —
+  its order, its figures and its hover titles — not only its order**; it catches up when the pointer
+  leaves. Hover titles name a thing and never carry a live figure, so a title cannot change under the
+  pointer *(the second half derived from the complaint; not confirmed by the user)*. (FR-095; amends FR-090)
+- Q: How is the monitor laid out? → A: **Two columns.** The left column holds the lists — Components and
+  Projects at the top, the children of whatever the user has drilled into below that — with the
+  breadcrumb and Back. The right column holds everything about the selected item. A single click on a row
+  shows that row's detail on the right; a double-click drills into it. No selection detail appears
+  anywhere but the right column. (FR-096, FR-097; supersede the treemap of FR-060 and amend FR-088)
+- Q: What replaces the large stacked area charts? → A: **No stacked charts.** The right column shows the
+  selected item's children as ranked, heat-coloured share bars, then its stats, then a small line graph
+  per metric of the item's own usage over time — *"children as bars AND line graphs"*. (FR-097; supersedes
+  the time-series charts of FR-060 and FR-092's chart legends)
+- Q: Do rows keep the ▸ drill-down button? → A: **No — double-click only** (with Enter and Right from the
+  keyboard). (FR-096; supersedes FR-088's drill-down button)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See throng's total load at a glance (Priority: P1)
@@ -299,6 +323,18 @@ process; at every level the figure shown equals the sum of its children plus its
    **Then** the first tile is drawn in the low colour and the second in the high colour, with a key beside
    the tiles showing the scale; **When** the user sizes by memory, **Then** the colours follow each node's
    share of installed RAM. (FR-094)
+   *Amended (Session 2026-10-15, third feedback): the tiles are gone; the same colours fill the share bars on the right (FR-097).*
+16. **Given** the monitor, **When** it opens, **Then** it has two columns: the lists on the left
+   (Components, then Projects) and, on the right, the detail of the selected item — or of the level shown
+   on the left when nothing is selected. (FR-096)
+17. **Given** a row on the left, **When** the user single-clicks it, **Then** the right column shows its
+   children as ranked, coloured share bars, its stats and a small line graph per metric, and the row is
+   marked; **When** they double-click it, **Then** the left column drills into it and the breadcrumb
+   updates. No row carries a drill-down button. (FR-096, FR-097)
+18. **Given** the pointer resting on a row on the left, **When** captures arrive, **Then** the left list's
+   order and figures stay still and a hover title stays up until the pointer moves; **When** the pointer
+   leaves the list, **Then** it catches up to the latest figures. The right column keeps updating
+   throughout. (FR-095)
 
 ---
 
@@ -660,7 +696,8 @@ reopens from it.
 #### Feedback, orientation and responsiveness (Session 2026-10-15)
 
 - **FR-088**: A click on a tile or a row MUST select that node, and only select it. Each tile and row whose
-  node has children MUST carry a drill-down icon button that opens it; Enter and Right on a selected node,
+  node has children MUST carry a drill-down icon button that opens it;
+  *(Session 2026-10-15, third feedback: the drill-down button is superseded by FR-096 — double-click, Enter and Right open; tiles are gone.)* Enter and Right on a selected node,
   and a double-click on a row, MUST also open it. A node with no children MUST have no drill-down button
   and MUST NOT open to an empty view. Right-clicking a tile MUST open the same menu as its row. A click on
   the selected tile or row again, or on empty space in the breakdown, MUST clear the selection, as MUST
@@ -677,6 +714,7 @@ reopens from it.
   is over the breakdown or a node is selected; the selected node's figures keep updating in place. When
   the order changes, tiles and rows MUST move to their new place with a short animation, and without one
   under reduced motion.
+  *Amended by FR-095 (Session 2026-10-15, third feedback): the list's figures and titles hold too, not only its order.*
 - **FR-091**: The monitor MUST show when its figures were captured and how often — "Updated <time> ·
   every <n> s" — with a brief pulse each time a capture arrives; "Collecting the first reading…" before
   the first, and FR-044's stale wording when the collector is failing. Charts and sparklines with fewer
@@ -684,7 +722,9 @@ reopens from it.
 - **FR-092**: The monitor MUST explain itself in place: a header naming where the user is (the breadcrumb),
   with a Back button (disabled at the top) and "Tile size: <metric>"; column headers over the rows
   (Trend, CPU, Memory, GPU, I/O) with the chosen metric's column marked; a legend on each chart naming
-  every band's colour and child; each chart naming the node it plots; visible labels on the metric choice
+  every band's colour and child; each chart naming the node it plots;
+  *(Session 2026-10-15, third feedback: the chart legends and "Tile size" are superseded with the charts and tiles — FR-097's bars are
+  labelled by their own rows, and the header reads "Sorted by <metric>".)* visible labels on the metric choice
   ("Size by") and the capture interval ("Capture every"); a count of what the filter matched and of the
   idle processes hidden, and "No process matches '<text>'" when the filter matches nothing.
 - **FR-093**: A help button ("?", a themeable icon control) MUST open a panel explaining what Components and
@@ -700,6 +740,28 @@ reopens from it.
   colours only. A key to the scale MUST sit beside the tiles, and the help panel (FR-093) MUST explain it.
   A node whose figure is not measured is drawn neutral. The selected tile keeps FR-089's accent edge on
   top of its fill.
+  *Amended (Session 2026-10-15, third feedback): the tiles are gone; the scale now fills FR-097's share bars, with its key beside them.*
+
+#### Two columns (Session 2026-10-15, third feedback)
+
+- **FR-095**: While the pointer is over the left column's list, that list MUST hold still — its order, its
+  figures and its sparklines — and catch up to the latest capture when the pointer leaves it. Hover titles
+  anywhere in the monitor MUST NOT contain a live figure, so no title changes, flickers or closes under a
+  resting pointer. The right column keeps updating while the pointer is over the left.
+- **FR-096**: The monitor MUST be laid out in two columns. The **left** column holds the lists: Components
+  and Projects at the top level, and the children of the node drilled into below it, with the breadcrumb,
+  Back, the filter and the list controls; each row keeps its name, sparkline and figures. A single click on
+  a row MUST select it and show its detail in the right column; a double-click, Enter or Right MUST drill
+  into it; a row with no children does not drill. Rows carry no drill-down button. Right-click and
+  Shift+F10 keep the row's menu.
+- **FR-097**: The **right** column MUST hold all detail about the selected item — or, with nothing selected,
+  about the level the left column shows — and no selection detail may appear anywhere else. Top to
+  bottom: the item's name and kind; its children as a ranked list of share bars (each bar's length its
+  share of the item for the chosen metric, its colour FR-094's heat scale, with the figure beside it;
+  clicking a child selects it on the left); the item's stats (FR-012's process facts, its figures with
+  their bands); a small line graph per metric (CPU, Memory, GPU, I/O) of the item's own usage over the
+  time the window has been open, with its current value; and its actions. There are no stacked area
+  charts and no treemap.
 
 #### Visualisation and navigation
 
@@ -711,6 +773,9 @@ reopens from it.
   - a breadcrumb of the path from throng to the node in focus, any segment of which returns to that
     level;
   - per-row sparklines wherever processes are listed.
+  *The stacked time-series charts and the treemap are superseded by FR-096 and FR-097 (Session 2026-10-15,
+  third feedback): the breakdown is a ranked list of heat-coloured share bars and each item has small
+  line graphs of its own usage; the breadcrumb and sparklines stand.*
 - **FR-061**: The user MUST be able to:
   - filter by text matching name, command line or process id, with matches shown under their
     ancestors;

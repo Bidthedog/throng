@@ -12,7 +12,8 @@ Spec: `specs/055-resource-monitor/spec.md`
 | MT-06 | Held folders | untested | | | |
 | MT-07 | Resource Monitor preferences | untested | | | |
 | MT-08 | The monitor window | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
-| MT-09 | Finding your way around the monitor | untested | | | |
+| MT-09 | Finding your way around the monitor | retired → MT-10 | | | |
+| MT-10 | Finding your way around the two-column monitor | untested | | | |
 
 ## MT-01: Status bar usage figures
 
@@ -136,24 +137,24 @@ Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/re
 - Minimising throng's main window takes the monitor with it; closing the main window closes it.
 - Reopening after the node you were on has ended lands on its nearest surviving parent, not an empty view.
 
-## MT-09: Finding your way around the monitor
+## MT-10: Finding your way around the two-column monitor
 
-Covers: FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060
+Covers: FR-095, FR-096, FR-097, FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060
 Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`, `packages/core/src/resources/bands.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-copy.ts`
 
 ### Steps
-1. Open the monitor with a few terminals running. Without reading anything else, the header says where you are, has a Back button (greyed at the top) and says "Tile size: CPU"; the rows have column headers (Trend, CPU, Memory, GPU, I/O) with CPU marked.
-2. Point at tiles and rows, amber and red ones too. Each shows a pointer and a hover highlight.
-3. Click a tile. It and its row get an accent edge; the detail pane and charts name that node. Click a different row: the mark moves to it, and only it is marked.
-4. Click a tile's drill-down button. The breakdown opens at it and the header updates. Click Back: you return. Select a row and press Enter: it opens. A process with no children has no drill-down button.
-5. Right-click a tile. The same menu as its row opens.
-6. Watch "Updated <time> · every 2 s": it changes and pulses at each capture. Keep the pointer over the tiles for several captures: nothing changes place. Move the pointer away: tiles and rows slide to their new ranks.
-7. Each chart has a legend naming its bands and says which node it plots; a just-opened chart says it is building its history.
-8. Click "?". It explains Components and Projects, tile size, click / drill-down button / right-click, the keys, and amber and red with your Preferences thresholds. Esc closes it.
-9. Type a process name in the filter quickly. The text keeps up with your typing, the list follows at once, each process appears once, and a count of matches shows. Type nonsense: "No process matches '…'".
-10. Tab through the window. Every control shows a clear focus ring.
-11. Run a busy loop (`node -e "for(;;){}"`) in one terminal and leave another idle. Sized by CPU, the busy process's tile is drawn in the high colour and the idle one in the low colour; a key beside the tiles shows the scale. Switch to Size by Memory: the colours change to follow each node's share of RAM.
+1. Open the monitor with a few terminals running. It has two columns: Components then Projects listed on the left, with the breadcrumb, Back (greyed at the top), the filter and column headers; the right column describes the level shown. There are no stacked area charts and no treemap.
+2. Single-click a project row. It is marked with an accent edge, and the right column shows that project: its name, its tabs as ranked share bars with their figures, its stats, and a small line graph each for CPU, Memory, GPU and I/O.
+3. Click a bar on the right. That child becomes selected and its row on the left is marked.
+4. Double-click a row on the left. The left column drills into it and the breadcrumb updates; Back returns. No row has a ▸ button. A process with no children does not drill.
+5. Rest the pointer on a row for several captures. The left list's order and figures stay still, and the row's hover title stays up without flickering. The right column keeps updating. Move the pointer off the list: it catches up.
+6. Run `node -e "for(;;){}"` in a terminal and select its panel. On the right, the busy process's bar is drawn in the high colour and idle ones in the low colour, with a key showing the scale. Switch Size by to Memory: the bars re-rank and recolour.
+7. Watch "Updated <time> · every 2 s": it pulses at each capture. A just-opened line graph says it is building its history.
+8. Click "?". It explains the two columns, click and double-click, the keys and the colours. Esc closes it.
+9. Type a process name in the filter quickly. The text keeps up, a match count shows, and each process appears once; nonsense shows "No process matches '…'".
+10. Tab through the window. Every control shows a clear focus ring. Right-click a row (or Shift+F10): its actions menu opens.
 
 ### Negative cases
-- No tile looks selected unless you selected it.
+- No selection detail appears anywhere but the right column.
+- No hover title anywhere changes while the pointer rests on it.
 - The monitor does not stutter at each capture, with or without a filter typed.
