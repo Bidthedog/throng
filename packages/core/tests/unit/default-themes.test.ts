@@ -63,7 +63,9 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // 76 since 050 (FR-039, R24): `cancel`, the paste notice's own Cancel — not the `dismiss` glyph.
 // 81 since 054 (FR-071, FR-046b): `panelMaximise`, `panelRestore`, `diagramFit`, `diagramZoomReset`,
 // `diagramFullPane`.
-const EXPECTED_ICON_TOKEN_COUNT = 81;
+// 82 since 056 (FR-007, research R7): `warning`, the marker on a folded Preferences heading that hides
+// an invalid entry — no warning glyph existed, only the `warning` colour.
+const EXPECTED_ICON_TOKEN_COUNT = 82;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -198,6 +200,13 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
       for (const token of FOLD_ICON_TOKENS) {
         expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
       }
+    }
+  });
+
+  it('every bundled theme carries the warning icon token (056 FR-007)', () => {
+    expect(THRONG_THEME.icons.warning, 'THRONG_THEME.icons.warning').toBeTruthy();
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.icons.warning, `${name}.icons.warning`).toBeTruthy();
     }
   });
 

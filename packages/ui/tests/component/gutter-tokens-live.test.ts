@@ -29,7 +29,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONTRAST_PAIRINGS, THEME_METADATA, THRONG_THEME } from '@throng/core';
 import { ThemesTab } from '../../src/renderer/preferences/themes-tab.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
@@ -68,6 +68,11 @@ function mountWithGutterHidden(): void {
     ),
   );
 }
+
+beforeEach(() => {
+  // 056 FR-016 folds sections by default; these cases read rows, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

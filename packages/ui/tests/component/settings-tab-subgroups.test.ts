@@ -83,6 +83,8 @@ function search(text: string): void {
 }
 
 beforeEach(() => {
+  // 056 FR-016 folds sections by default; this file is about subgroups, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
   vi.useFakeTimers();
 });
 
@@ -111,20 +113,26 @@ describe('a subgroup is a subsection of its group (FR-036a)', () => {
     expect(rows).toEqual(IN_SUBGROUP.map((k) => `setting-${k}`));
   });
 
-  it('is not collapsible — no disclosure element and nothing to expand (FR-036a)', () => {
+  it('folds — the heading is a disclosure button, superseding "not collapsible" (056 FR-002)', () => {
     /*
-     * The sections CONTAINING it are plain `<section>` + `<h3>`, so a subsection that folded would
-     * be the one foldable thing in a form full of things that do not. Minimisable grouping is
-     * #292's, on a different surface.
+     * 040 FR-036a said a subsection MUST NOT be collapsible and contract rule 3 pinned it. 056 FR-002
+     * supersedes both: every section, subgroup and nested subsection folds, through one shared heading.
+     * What 040 still owns is that the subsection is a labelled group in a fixed place (the test below).
      */
     mount();
     const el = subsection();
-    expect(el.tagName).not.toBe('DETAILS');
+    const button = within(el).getByTestId(`${SUBGROUP_ID}-toggle`);
+    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(el.querySelector('details')).toBeNull();
-    expect(el.querySelector('summary')).toBeNull();
-    expect(el.querySelector('[aria-expanded]')).toBeNull();
-    // No control of any kind in the heading — the heading is a label, not an affordance.
-    expect(within(el).queryByRole('button', { name: SUBGROUP })).toBeNull();
+
+    fireEvent.click(button);
+
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    const row = screen.getByTestId(`setting-${IN_SUBGROUP[0]}`);
+    expect(row.closest('[hidden]'), 'the subgroup’s rows are hidden').not.toBeNull();
+    // The rest of the Editor section is untouched.
+    expect(screen.getByTestId(`setting-${NOT_IN_SUBGROUP}`).closest('[hidden]')).toBeNull();
   });
 
   it('is a labelled group to assistive technology, not an anonymous div', () => {

@@ -115,6 +115,8 @@ const UNMATCHED = 'behaviour.tabHoverActivateMs';
 const MATCHED = 'appearance.theme';
 
 beforeEach(() => {
+  // 056 FR-016 folds sections by default; these cases read rows, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
   vi.useFakeTimers();
 });
 

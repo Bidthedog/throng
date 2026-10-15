@@ -78,9 +78,13 @@ afterEach(() => {
   patches = [];
 });
 
-/** The rows directly in `el`, not in a subsection nested inside it. */
+/**
+ * The rows directly in `el`, not in a subsection nested inside it. Since 056 every heading's contents sit
+ * in one `.fold-content` container (so a fold can hide them), which is the element they are direct
+ * children of.
+ */
 const ownRows = (el: HTMLElement): (string | null)[] =>
-  [...el.querySelectorAll(':scope > .settings-row')].map((r) => r.getAttribute('data-testid'));
+  [...el.querySelectorAll(':scope > .fold-content > .settings-row')].map((r) => r.getAttribute('data-testid'));
 const MM = 'editor.previews.providers.mermaid';
 
 describe('the Previews subsection draws every preview setting (FR-060, FR-060a, FR-061, FR-065)', () => {
@@ -99,7 +103,7 @@ describe('the Previews subsection draws every preview setting (FR-060, FR-060a, 
       'setting-editor.previews.syncScroll',
       'setting-editor.previews.copyFormat',
     ]);
-    const subsections = [...subsection().querySelectorAll(':scope > .settings-subgroup')].map((el) =>
+    const subsections = [...subsection().querySelectorAll(':scope > .fold-content > .settings-subgroup')].map((el) =>
       el.getAttribute('data-testid'),
     );
     expect(subsections).toEqual([

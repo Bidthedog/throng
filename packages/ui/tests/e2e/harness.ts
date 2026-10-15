@@ -616,6 +616,12 @@ async function launchApp(opts: AppOptions): Promise<{
         // OS resource is not the suite's to write. The shipped path is untouched — a real terminal
         // still records history, which is what recall and Ctrl+R are for.
         THRONG_TEST_SHELL_HISTORY: 'off',
+        // 056 FR-016 — Preferences sections start FOLDED for a real user, but about 20 specs open
+        // Preferences on a fresh profile and drive rows inside sections. This seam makes main add
+        // `foldDefault=open` to the Preferences window's URL, so they see every section open, as they
+        // did before FR-016, with no per-spec Expand All. The shipped default is proven at the
+        // component layer instead (research R10).
+        THRONG_PREFS_SECTIONS_OPEN: '1',
         // When the app spawns its own daemon, point that daemon at this run's DB
         // (the daemon inherits the app's env) so we never touch the real store.
         ...(opts.skipDaemon ? { THRONG_DATABASE_PATH: join(dataDir, 'throng.db') } : {}),
