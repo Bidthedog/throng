@@ -186,10 +186,13 @@ critical level. Click it, choose **Resource Monitor** from the cog, or press
 
 The monitor opens in its own window, like Preferences: move it beside your work and keep using throng
 behind it — it stays above throng's windows and updates as you go. It shows usage by part of throng
-(UI, daemon, helpers) and by project, as a treemap you
-click into: project → tab → panel → process → subprocess, each level rolled up from the one below,
-with charts of the last few minutes. Filter by name, command line or pid, hide idle processes, and
-press **Right**/**Enter** to drill in, **Left**/**Backspace** to go back up. Right-click a node to
+(UI, daemon, helpers) and by project, as a treemap of project → tab → panel → process → subprocess,
+each level rolled up from the one below, with charts of the last few minutes. A tile's size is the
+figure you choose to **Size by**; its colour is how much of the whole machine it takes, from low to high.
+Click a tile or row to select it — the details and charts follow it — and its **▸** button (or
+**Enter**/**Right**) to open it; **Back** (or **Left**/**Backspace**) goes up a level. The order holds
+while you point at it, and **Updated** shows when the figures were last captured. Filter by name, command
+line or pid, or hide idle processes. **?** explains all of this in the window. Right-click a node to
 unload its project, destroy its tab or panel, or **Kill** a process or everything below it. **Esc**
 closes it; it can be maximised, and minimising tucks it back into the status bar. It reopens where you
 left it. How it measures is
