@@ -64,31 +64,33 @@ describe('the button (FR-093)', () => {
 });
 
 describe('the panel (FR-093)', () => {
-  it('explains Components and Projects, tile size and colour, the mouse and the keys', async () => {
+  it('explains Components and Projects, the two columns, sorting and bar colour, the mouse and the keys', async () => {
     await mount();
     fireEvent.click(button());
 
     const text = panel().textContent ?? '';
     expect(panel()).toHaveAttribute('role', 'dialog');
     expect(button()).toHaveAttribute('aria-pressed', 'true');
-    for (const heading of ['Components and Projects', 'Tile size', 'Tile colour', 'The mouse', 'The keys', 'Amber and red']) {
+    for (const heading of ['Components and Projects', 'Two columns', 'Sorted by', 'Bar colour', 'The mouse', 'The keys', 'Amber and red']) {
       expect(within(panel()).getByRole('heading', { name: heading }), heading).toBeInTheDocument();
     }
     expect(text).toMatch(/Components.*throng itself/s);
     expect(text).toMatch(/Projects.*what each project is running/s);
-    expect(text).toMatch(/Click selects/);
+    expect(text).toMatch(/Click a row to select it/);
+    expect(text).toMatch(/Double-click a row to open it/);
+    expect(text).not.toMatch(/tile|chart|drill-down button/i);
     expect(text).toMatch(/right-click or Shift\+F10/i);
     expect(text).toMatch(/Enter or Right/);
     expect(text).toMatch(/Left or Backspace/);
     expect(text).toMatch(/Esc/);
   });
 
-  it('names the metric that sizes the tiles now, and what the colour is a share of', async () => {
+  it('names the metric the rows are sorted by now, and what the bar colour is a share of', async () => {
     await mount();
     act(() => setView({ metric: 'memory' }));
     fireEvent.click(button());
-    expect(within(panel()).getByTestId('monitor-help-tile-size')).toHaveTextContent('Memory');
-    expect(within(panel()).getByTestId('monitor-help-tile-colour')).toHaveTextContent(/installed memory/i);
+    expect(within(panel()).getByTestId('monitor-help-sorted-by')).toHaveTextContent('Memory');
+    expect(within(panel()).getByTestId('monitor-help-bar-colour')).toHaveTextContent(/installed memory/i);
   });
 
   it('shows the thresholds currently set in Preferences', async () => {
@@ -101,7 +103,7 @@ describe('the panel (FR-093)', () => {
     expect(amberRed).toHaveTextContent('85%');
   });
 
-  it('draws the drill-down glyph from the theme, not as a literal', async () => {
+  it('draws the Back glyph from the theme, not as a literal', async () => {
     await mount();
     fireEvent.click(button());
     expect(panel().querySelector('.icon')).not.toBeNull();

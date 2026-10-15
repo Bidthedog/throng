@@ -22,10 +22,9 @@ import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
+import { DetailPane } from '../../../src/renderer/resources/detail-pane.js';
 import { __resetSession, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { MIB, frame, metrics, node, proc } from '../helpers/resource-fixtures.js';
-
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({ Timeseries: () => null, default: () => null }));
 
 const BUDGET_MS = 100;
 const RUNS = 5;
@@ -227,7 +226,7 @@ describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes 
     // Drilling down from a project to its first tab and back is the user’s everyday move.
     const path = ['root', 'c:projects', 'p:0'];
     const ms = medianMs(() => {
-      fireEvent.click(screen.getByTestId('breakdown-row-open-t:0-0'));
+      fireEvent.doubleClick(screen.getByTestId('breakdown-row-t:0-0'));
     }, () => {
       act(() => setView({ focusPath: path }));
     });
@@ -250,6 +249,42 @@ describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes 
       },
     );
     report.capture = Math.round(ms);
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
+  // The window is two columns (FR-096): a click on the left also draws the right — the bars, the facts and
+  // the four graphs of what was clicked — and a capture draws both. Neither may cost the budget.
+  it('a click that selects a row, with the right column describing it', () => {
+    mountFiltered();
+    render(createElement(DetailPane));
+    const rows = screen.getAllByRole('treeitem').filter((r) => r.getAttribute('data-kind') === 'process');
+    let i = 0;
+    const ms = medianMs(() => {
+      fireEvent.click(rows[i]!);
+    }, () => {
+      i += 7;
+      act(() => setSelection(null));
+    });
+    report.selectionClickWithDetail = Math.round(ms);
+    expect(screen.getByTestId('share-bars')).toBeInTheDocument();
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('a capture arriving with every row on screen and the right column drawn', () => {
+    mountFiltered();
+    render(createElement(DetailPane));
+    act(() => setSelection('x:1001:1'));
+    let arriving = frame(0, hierarchy(0));
+    const ms = medianMs(
+      () => {
+        act(() => ingestFrame(arriving));
+      },
+      () => {
+        tick += 1;
+        arriving = frame(tick, hierarchy(tick));
+      },
+    );
+    report.captureWithDetail = Math.round(ms);
     expect(ms).toBeLessThan(BUDGET_MS);
   });
 });

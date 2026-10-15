@@ -165,9 +165,9 @@ describe('the surface token split (FR-001 / SC-001)', () => {
       /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root|resource-monitor|monitor-help)$|^\.app-close-table th$/;
     // 055 R15 (FR-092, FR-094) — the Resource Monitor window's body IS a pane (`.resource-monitor`), and
     // these read its token only to sit ON it: the sticky column header must hide the rows scrolling under
-    // it, and the heat scale's tiles, key and drill button blend their colour into the pane behind them.
+    // it, and the heat scale's bars and key blend their colour into the pane behind them.
     // None of them is a surface of its own that an author would want a separate dial for.
-    const MONITOR_PANE_TINTS = /^\.(breakdown__columns|treemap__tile|treemap-key__bar|treemap__open-button)$/;
+    const MONITOR_PANE_TINTS = /^\.(breakdown__columns|share-bar__fill|share-key__bar)$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
       // 054 FR-070 — `.maximise-layer` is a panel body too: the box a maximised section is drawn in, the
       // same frame as `.panel-box` over the same tab body.

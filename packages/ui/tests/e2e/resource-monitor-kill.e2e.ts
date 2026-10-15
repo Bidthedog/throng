@@ -66,9 +66,9 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       // Into the monitor, down to the panel.
       // The monitor is a window of its own (FR-081); everything it shows and asks happens in IT.
       let mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
-      await mon.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-open-p:"]').first().click();
-      await mon.locator('[data-testid^="treemap-tile-open-t:"]').first().click();
-      await mon.locator('[data-testid^="treemap-tile-open-n:"]').first().click();
+      await mon.getByTestId('breakdown-section-projects').locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
+      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-n:"]').first().dblclick();
 
       const nodes = rowOf(mon, 'x:', 'node.exe');
       await expect(nodes).toHaveCount(3, { timeout: 20_000 });
@@ -83,6 +83,8 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await parent.click({ button: 'right' });
       await mon.getByTestId('menu-item-Kill All Below').click();
       await acceptKill(mon);
+      // The list holds still while the pointer is over it (FR-095): move away so it catches up to the kill.
+      await mon.mouse.move(1, 1);
 
       await expect.poll(alive, { timeout: 30_000, message: 'a marked node.exe survived Kill All Below' }).toBe(0);
       // They stay where they were, ended (FR-065a), and the shell is not.
@@ -98,8 +100,8 @@ test('Kill All Below ends a parent and its two children, which show ended while 
 
       // Kill All Below on the PANEL ends the shell as well, and the panel keeps its place (FR-066).
       mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
-      await mon.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-open-p:"]').first().click();
-      await mon.locator('[data-testid^="treemap-tile-open-t:"]').first().click();
+      await mon.getByTestId('breakdown-section-projects').locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+      await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
       await rowOf(mon, 'n:').first().click({ button: 'right' });
       await mon.getByTestId('menu-item-Kill All Below').click();
       await acceptKill(mon);

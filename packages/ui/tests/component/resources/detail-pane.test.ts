@@ -1,22 +1,17 @@
 /**
- * The detail pane (055 US2 scenario 8, FR-024, FR-032, FR-046) and the chart that goes with it.
+ * The right column (055 US2 scenario 8, FR-024, FR-032, FR-046, FR-097): the selected node — or the level
+ * the left column shows — its facts and figures, what it is made of, and its line graphs.
  *
- * Layer: component — the real pane over the real session. The time-series chart is stubbed at its
- * module seam (`timeseries.test.ts` owns how it is driven); here it is asked only which node it is
- * pointed at.
+ * Layer: component — the real pane over the real session. `share-bars.test.ts` and `line-graph.test.ts`
+ * own how the bars and the graphs behave; here they are asked only to be there for the right node.
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { formatGrouped, type ResourceNode } from '@throng/core';
-import { ChartPane } from '../../../src/renderer/resources/chart-pane.js';
 import { DetailPane } from '../../../src/renderer/resources/detail-pane.js';
 import { __resetSession, focusOn, ingestFrame, setSelection, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { GIB, MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
-
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({
-  TimeseriesCharts: ({ focusId }: { focusId: string }) => createElement('div', { 'data-testid': 'timeseries-stub', 'data-focus-id': focusId }),
-}));
 
 beforeEach(() => {
   __resetSession();
@@ -65,10 +60,17 @@ describe('a process (US2 scenario 8)', () => {
     expect(field('figure-cpu')).toHaveAttribute('data-band', 'normal');
   });
 
-  it('marks a hot process by band, with the band in the title as well as the colour', () => {
+  it('marks a hot process by band, with the band in words as well as the colour', () => {
     feed(sampleHierarchy({ nodeCpu: 95 }), 2);
     expect(field('figure-cpu')).toHaveAttribute('data-band', 'critical');
-    expect(field('figure-cpu').getAttribute('title')).toContain('critical');
+    expect(field('figure-cpu')).toHaveTextContent('critical');
+  });
+
+  it('puts no figure in any title: what a figure is, never what it reads (FR-095)', () => {
+    const title = field('figure-cpu').getAttribute('title') ?? '';
+    expect(title).toMatch(/CPU/);
+    expect(title).not.toContain(`${formatGrouped(12)}%`);
+    for (const el of pane().querySelectorAll('[title]')) expect(el.getAttribute('title')).not.toMatch(/\d+(\.\d+)? ?(%|MB|GB|B\/s|KB)/);
   });
 });
 
@@ -175,24 +177,32 @@ describe('what it describes', () => {
   });
 });
 
-describe('its chart since the modal opened', () => {
-  it('points the charts at the same node the detail describes, and follows the selection', () => {
+describe('the column (FR-097)', () => {
+  it('names the kind of what it describes beside its name', () => {
     feed(sampleHierarchy());
-    render(createElement(ChartPane));
+    render(createElement(DetailPane));
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
-    expect(screen.getByTestId('timeseries-stub')).toHaveAttribute('data-focus-id', 't:t1');
-
-    act(() => setSelection('n:n1'));
-    expect(screen.getByTestId('timeseries-stub')).toHaveAttribute('data-focus-id', 'n:n1');
+    expect(within(pane()).getByTestId('detail-kind')).toHaveTextContent('Tab');
+    act(() => setSelection('x:300:1'));
+    expect(within(pane()).getByTestId('detail-kind')).toHaveTextContent('Process');
   });
 
-  it('is a single tab stop that names the node it charts', () => {
+  it('holds what the item is made of and a graph per metric, for the same node as the facts', () => {
     feed(sampleHierarchy());
-    render(createElement(ChartPane));
-    const region = screen.getByTestId('chart-pane');
-    expect(region).toHaveAttribute('tabindex', '0');
-    expect(region.getAttribute('aria-label')).toMatch(/throng/);
-    expect(fireEvent.keyDown(region, { key: 'a' })).toBe(true);
+    render(createElement(DetailPane));
+    act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
+    expect(within(pane()).getByTestId('share-bars')).toBeInTheDocument();
+    expect(within(pane()).getByTestId('line-graphs')).toHaveAttribute('aria-label', 'Usage over time: Build');
+
+    act(() => setSelection('n:n1'));
+    expect(within(pane()).getByTestId('line-graphs')).toHaveAttribute('aria-label', 'Usage over time: Shell');
+    expect(within(pane()).getAllByTestId(/^line-graph-(cpu|memory|gpu|io)$/)).toHaveLength(4);
+  });
+
+  it('has no stacked chart and no chart region of its own', () => {
+    feed(sampleHierarchy());
+    render(createElement(DetailPane));
+    expect(document.querySelectorAll('[data-testid="chart-pane"], [data-testid^="timeseries"], .uplot')).toHaveLength(0);
   });
 });
 

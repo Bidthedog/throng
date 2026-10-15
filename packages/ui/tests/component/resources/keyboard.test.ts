@@ -3,25 +3,21 @@
  * out, Tab between regions, and the arrows left alone in the filter field.
  *
  * Layer: component — the real modal, real body, real focus trap and real `userEvent` Tab navigation;
- * only the chart library's wrapper is stubbed. Whether a real window delivers these keys is not claimed.
+ * nothing is stubbed. Whether a real window delivers these keys is not claimed.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
 import { __resetSession, getSelection, getView, setView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({
-  TimeseriesCharts: () => createElement('div', { 'data-testid': 'timeseries-stub' }),
-}));
-
 let bridge: ResourcesBridge;
 
-// The body is `lazy()` (R10): its first import compiles uPlot and d3, ~0.5 s alone and more under a full
-// run — module loading, not behaviour, so it is paid once here and not inside any test's wait.
+// The body is `lazy()` (R10): its first import is module loading, not behaviour, so it is paid once here and
+// not inside any test's wait.
 beforeAll(async () => {
   await import('../../../src/renderer/resources/monitor-body.js');
 });
@@ -100,12 +96,14 @@ describe('moving between nodes (FR-068)', () => {
     expect(key(document.activeElement!, 'ArrowDown')).toBe(false);
   });
 
-  it('shows a focused node’s values exactly as hovering it would', () => {
+  it('reads out a focused node’s name and values — the values its row shows, which a hover title no longer carries (FR-095)', () => {
     row('c:projects').focus();
     key(document.activeElement!, 'ArrowDown');
     const readout = screen.getByTestId('breakdown-readout');
-    expect(readout.textContent).toBe(row('c:ui').getAttribute('title'));
-    expect(readout.textContent).toMatch(/CPU/);
+    // The hover title names the node; the readout starts with that name and adds what the row's cells say.
+    expect(readout.textContent?.startsWith(row('c:ui').getAttribute('title') ?? '?')).toBe(true);
+    const cpu = screen.getByTestId('breakdown-row-c:ui-cpu').textContent ?? '?';
+    expect(readout.textContent).toContain(`CPU ${cpu}`);
   });
 
   it('selects what it focuses, so the detail pane follows the keyboard', () => {
@@ -209,7 +207,7 @@ describe('in the filter field the arrows edit text (FR-068)', () => {
 });
 
 describe('Tab moves between the window’s regions (FR-068)', () => {
-  it('goes filter → breakdown → chart → detail → controls', async () => {
+  it('goes filter → breakdown → detail → controls (the two columns, left then right)', async () => {
     await openModal();
     const user = userEvent.setup();
     const regionOf = (el: Element | null): string | null => el?.closest('[data-region]')?.getAttribute('data-region') ?? null;
@@ -223,7 +221,7 @@ describe('Tab moves between the window’s regions (FR-068)', () => {
     }
 
     // The window's own controls are the Preferences title bar's, ahead of the body in the Tab order.
-    expect(order).toEqual(['filter', 'breakdown', 'chart', 'detail', 'controls']);
+    expect(order).toEqual(['filter', 'breakdown', 'detail', 'controls']);
   });
 
   it('puts a single stop in the breakdown, whatever its size', async () => {

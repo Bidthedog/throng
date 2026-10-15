@@ -1,19 +1,35 @@
 /**
- * The detail pane (055 US2 scenario 8): what the selected node — or, with nothing selected, the node in
- * focus — is. For a process: its name, id, full command line, executable path, start time, how long it
- * has run, and what owns it; for any node, its figures, banded and digit-grouped. Estimated and
- * not-measured figures say so (FR-024, FR-012).
+ * The right column (055 FR-097): everything about the selected node — or, with nothing selected, about the
+ * level the left column shows — and nothing about a selection appears anywhere else. Top to bottom: its
+ * name and kind and the actions on it; what it is made of (`share-bars.tsx`); its facts and figures,
+ * banded and digit-grouped, estimated and not-measured ones saying so (FR-024, FR-012); and a line graph
+ * per metric of its own usage (`line-graph.tsx`).
  *
- * The time-series charts that go with it are `chart-pane.tsx`'s: a separate Tab region (FR-068).
+ * Unlike the left list this column does not hold still under the pointer — it is the one that keeps
+ * updating (FR-095) — except for the bars, which hold their own order so a click on one lands on it.
  */
 import { type ReactElement } from 'react';
+import type { ResourceNodeKind } from '@throng/core';
 import { FIGURE_HINT, FIGURE_LABEL, type Figure } from './figures.js';
 import { formatDuration } from './format.js';
+import { LineGraphs } from './line-graph.js';
 import { figuresOf, type FigureContext } from './monitor-model.js';
 import { NodeActionBar } from './node-actions.js';
 import { ownerNames } from './owner-names.js';
+import { ShareBars } from './share-bars.js';
 import { useSubject, type Subject } from './use-subject.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
+
+const KIND_LABEL: Readonly<Record<ResourceNodeKind, string>> = {
+  root: 'Everything throng runs',
+  component: 'Component',
+  project: 'Project',
+  tab: 'Tab',
+  panel: 'Panel',
+  buffers: 'Documents in memory',
+  process: 'Process',
+  limitation: 'Not measured',
+};
 
 function Fact({ name, label, children }: { name: string; label: string; children: ReactElement | string }): ReactElement {
   return (
@@ -27,9 +43,9 @@ function Fact({ name, label, children }: { name: string; label: string; children
 }
 
 function FigureFact({ figure, estimated }: { figure: Figure; estimated: boolean }): ReactElement {
-  let title = `${FIGURE_LABEL[figure.id]}: ${figure.text}`;
-  if (figure.band) title += ` (${figure.band})`;
-  title += ` — ${FIGURE_HINT[figure.id]}`;
+  // What the figure IS and why it may be partial — never its value, which is the text beside it: a title
+  // that moved with every capture would be closed by the browser under a resting pointer (FR-095).
+  let title = `${FIGURE_LABEL[figure.id]} — ${FIGURE_HINT[figure.id]}`;
   if (figure.partial !== undefined) title += `; partial: ${figure.partial}`;
   return (
     <>
@@ -42,6 +58,7 @@ function FigureFact({ figure, estimated }: { figure: Figure; estimated: boolean 
         title={title}
       >
         {figure.text}
+        {figure.band ? <span className="detail-pane__tag"> ({figure.band})</span> : null}
         {estimated && figure.id === 'memory' ? <span className="detail-pane__tag"> estimated</span> : null}
       </dd>
     </>
@@ -57,7 +74,11 @@ function Details({ subject, ctx }: { subject: Subject; ctx: FigureContext }): Re
       <h3 className="detail-pane__name" data-testid="detail-name">
         {node.label}
       </h3>
+      <p className="detail-pane__kind" data-testid="detail-kind">
+        {KIND_LABEL[node.kind]}
+      </p>
       <NodeActionBar node={node} />
+      <ShareBars subject={subject} />
       <dl className="detail-pane__facts">
         {p ? (
           <>
@@ -99,6 +120,7 @@ function Details({ subject, ctx }: { subject: Subject; ctx: FigureContext }): Re
           <FigureFact key={f.id} figure={f} estimated={node.estimated === true} />
         ))}
       </dl>
+      <LineGraphs subject={subject} />
     </>
   );
 }

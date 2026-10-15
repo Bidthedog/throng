@@ -1,8 +1,8 @@
 /**
  * The monitor's interaction states live in the stylesheet (055 FR-089, FR-091, defect D7), so they are
  * guarded where they are written: hover on every interactive element and gated on window blur, a visible
- * 2px focus ring in throng's convention on every control, a pointer cursor, banded tiles that still show
- * hover and selection, and no animation under reduced motion.
+ * 2px focus ring in throng's convention on every control, a pointer cursor, a two-column body with no chart
+ * region, and no animation under reduced motion.
  *
  * Layer: unit — the stylesheet read as text, the seam `hover-suppression-coverage.test.ts` and the literal
  * colour guard in `breakdown.test.ts` already use. jsdom resolves no cascade, so a rule's EFFECT is not
@@ -59,24 +59,15 @@ describe('hover (FR-089)', () => {
     expect(ungated).toEqual([]);
   });
 
-  it('is drawn for tiles, rows, breadcrumb segments, the toolbar’s buttons and the filter’s clear button', () => {
-    for (const el of ['.treemap__tile', '.breakdown-row', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear', '.breakdown-row__open-button', '.treemap__open-button']) {
+  it('is drawn for rows, bars, breadcrumb segments, the toolbar’s buttons and the filter’s clear button', () => {
+    for (const el of ['.breakdown-row', '.share-bar', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear']) {
       expect(all.some((r) => r.selectors.some((s) => s.startsWith(GATE) && s.endsWith(`${el}:hover`))), `${el} has no hover rule`).toBe(true);
     }
   });
 });
 
 describe('the pointer cursor (FR-089)', () => {
-  it.each([
-    '.treemap__tile',
-    '.breakdown-row',
-    '.breadcrumb__segment',
-    '.monitor-controls__button',
-    '.monitor-filter__clear',
-    '.monitor-controls__select',
-    '.breakdown-row__open-button',
-    '.treemap__open-button',
-  ])('%s shows it', (selector) => {
+  it.each(['.breakdown-row', '.share-bar', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear', '.monitor-controls__select'])('%s shows it', (selector) => {
     expect(bodyOf(selector)).toMatch(/cursor:\s*pointer/);
   });
 });
@@ -98,17 +89,33 @@ describe('the focus ring (FR-089: throng’s 2px convention, from the keyboard)'
   });
 });
 
-describe('a banded tile is still a tile (D7)', () => {
-  it('has no band rule that paints over the hover or the selected edge', () => {
-    const banded = all.filter((r) => r.selectors.some((s) => s.includes('.treemap__tile[data-band')));
-    for (const r of banded) expect(r.body, r.selectors.join(', ')).not.toMatch(/border-color|box-shadow|outline/);
+describe('the body is two columns (FR-096, FR-097)', () => {
+  const body = bodyOf('.monitor-body');
+
+  it('is a grid of a left column and a right one', () => {
+    expect(body).toMatch(/display:\s*grid/);
+    expect(body).toMatch(/grid-template-columns:[^;]*minmax\([^;]*\)[^;]*minmax\([^;]*\)/);
   });
 
-  it('shows the selected edge after every other tile rule, so nothing can override it', () => {
-    const selected = section.indexOf(".treemap__tile[data-selected='true']");
-    expect(selected).toBeGreaterThan(0);
-    const lastTileRule = section.lastIndexOf('.treemap__tile:hover');
-    expect(selected).toBeGreaterThan(lastTileRule);
+  it('puts the detail down the whole right column, and the lists and their controls on the left', () => {
+    const areas = /grid-template-areas:([^;]*);/.exec(body)?.[1] ?? '';
+    const rowsOfAreas = [...areas.matchAll(/'([^']+)'/g)].map((m) => m[1]!.trim().split(/\s+/));
+    expect(rowsOfAreas.length).toBeGreaterThan(0);
+    for (const row of rowsOfAreas) {
+      expect(row, areas).toHaveLength(2);
+      expect(row[1], areas).toBe('detail');
+    }
+    const left = new Set(rowsOfAreas.map((r) => r[0]));
+    for (const area of ['filter', 'controls', 'notice', 'breakdown']) expect(left.has(area), area).toBe(true);
+  });
+
+  it('lets each column scroll on its own', () => {
+    expect(bodyOf('.monitor-body__detail')).toMatch(/overflow(-y)?:\s*auto/);
+    expect(bodyOf('.breakdown')).toMatch(/overflow(-y)?:\s*auto/);
+  });
+
+  it('has no chart area or treemap left', () => {
+    expect(section).not.toMatch(/monitor-body__chart|\.treemap|\.timeseries|\.breakdown__map|uplot/i);
   });
 });
 
@@ -117,8 +124,20 @@ describe('selection is marked with an accent edge, as throng marks its active it
     expect(bodyOf('.breakdown-row--selected')).toMatch(/box-shadow:[^;]*inset[^;]*var\(--throng-colour-accent\)/);
   });
 
-  it('does not give a tile at rest the fill the selected row has', () => {
-    expect(bodyOf('.treemap__tile')).not.toMatch(/background:\s*var\(--throng-colour-surfaceActive\)/);
+  it('has no drill-down button on a row to style: a double-click opens (FR-096)', () => {
+    expect(section).not.toMatch(/breakdown-row__open/);
+  });
+});
+
+describe('the line graphs (FR-097)', () => {
+  it('are drawn in the theme’s accent, which the canvas reads back as its CSS colour', () => {
+    expect(bodyOf('.line-graph__plot')).toMatch(/color:\s*var\(--throng-colour-accent\)/);
+    expect(bodyOf('.sparkline')).toMatch(/color:\s*var\(--throng-colour-accent\)/);
+  });
+
+  it('keep the box the canvas is drawn in, so a line is never stretched', () => {
+    expect(bodyOf('.line-graph__plot')).toMatch(/width:\s*220px/);
+    expect(bodyOf('.line-graph__plot')).toMatch(/height:\s*44px/);
   });
 });
 

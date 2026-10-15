@@ -1,8 +1,8 @@
 /**
- * How the breakdown answers the pointer and the clock (055 FR-088 – FR-090, SC-010; defects D3, D6):
- * a click selects and only selects, a drill-down button opens, exactly the selected node is marked, the
- * order holds while the pointer is over it or something is selected, and a re-sort moves with a short
- * animation.
+ * How the left list answers the pointer and the clock (055 FR-088 – FR-090, FR-095, FR-096, SC-010; defects
+ * D3, D6): a click selects and only selects, a double-click (or Enter, or Right) opens, exactly the selected
+ * node is marked, the list holds still while the pointer is over it, the order holds while something is
+ * selected, and a re-sort moves with a short animation.
  *
  * Layer: component — the real `Breakdown` over the real session store, fed frames the way the shell feeds
  * them. jsdom has no layout and no Web Animations, so `animate` is a recorded stub: what is claimed is
@@ -13,7 +13,7 @@ import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceNode } from '@throng/core';
 import { Breakdown, __onRowDrawn } from '../../../src/renderer/resources/breakdown.js';
-import { __resetSession, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, getSelection, getView, ingestFrame, requestCatchUp, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
 const counted = vi.hoisted(() => ({ figureOf: 0, rowRenders: [] as string[] }));
@@ -27,7 +27,6 @@ vi.mock('../../../src/renderer/resources/figures.js', async (importOriginal) => 
     },
   };
 });
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({ Timeseries: () => null, default: () => null }));
 beforeEach(() => {
   counted.rowRenders = [];
   __onRowDrawn((id) => counted.rowRenders.push(id));
@@ -69,13 +68,11 @@ function mountOn(root: ResourceNode, path: readonly string[] = PANEL): void {
 }
 
 const row = (id: string): HTMLElement => screen.getByTestId(`breakdown-row-${id}`);
-const tile = (id: string): HTMLElement => screen.getByTestId(`treemap-tile-${id}`);
 const rowOrder = (): (string | null)[] => screen.getAllByRole('treeitem').map((r) => r.getAttribute('data-node-id'));
 const topOrder = (): (string | null)[] => screen.getAllByRole('treeitem').filter((r) => r.getAttribute('aria-level') === '1').map((r) => r.getAttribute('data-node-id'));
-const tileOrder = (): (string | null)[] => screen.getAllByTestId(/^treemap-tile-x:/).map((t) => t.getAttribute('data-testid')?.replace('treemap-tile-', '') ?? null);
 const breakdown = (): HTMLElement => screen.getByTestId('breakdown');
 
-describe('a click selects, and only selects (FR-088)', () => {
+describe('a click selects, and only selects (FR-088, FR-096)', () => {
   beforeEach(() => mountOn(scene({ 11: 9, 12: 5, 13: 2 }, [11])));
 
   it('selects a row without moving the view', () => {
@@ -84,26 +81,15 @@ describe('a click selects, and only selects (FR-088)', () => {
     expect(getView().focusPath).toEqual(PANEL);
   });
 
-  it('selects a tile without opening it', () => {
-    fireEvent.click(tile('x:12:1'));
-    expect(getSelection()).toBe('x:12:1');
-    expect(getView().focusPath).toEqual(PANEL);
-  });
-
-  it('clears the selection on a second click on the same row, or the same tile', () => {
+  it('clears the selection on a second click on the same row', () => {
     fireEvent.click(row('x:12:1'));
     fireEvent.click(row('x:12:1'));
     expect(getSelection()).toBeNull();
-
-    fireEvent.click(tile('x:13:1'));
-    expect(getSelection()).toBe('x:13:1');
-    fireEvent.click(tile('x:13:1'));
-    expect(getSelection()).toBeNull();
   });
 
-  it('clears the selection on a click on empty space in the breakdown', () => {
+  it('clears the selection on a click on empty space in the list', () => {
     fireEvent.click(row('x:12:1'));
-    fireEvent.click(screen.getByTestId('breakdown-focus-summary'));
+    fireEvent.click(screen.getByTestId('breakdown-header'));
     expect(getSelection()).toBeNull();
   });
 
@@ -112,45 +98,30 @@ describe('a click selects, and only selects (FR-088)', () => {
     fireEvent.click(row('x:13:1'));
     expect(getSelection()).toBe('x:13:1');
   });
+
+  it('does not take the second click of a double-click for a deselection', () => {
+    fireEvent.click(row('x:11:1'), { detail: 1 });
+    fireEvent.click(row('x:11:1'), { detail: 2 });
+    expect(getSelection()).toBe('x:11:1');
+  });
 });
 
-describe('a drill-down button opens; nothing else does (FR-088)', () => {
+describe('a double-click opens; nothing else does, and no row has a button for it (FR-096)', () => {
   beforeEach(() => mountOn(scene({ 11: 9, 12: 5 }, [11])));
 
-  it('is on a row and a tile whose node has children, named for what it opens', () => {
-    const rowButton = screen.getByTestId('breakdown-row-open-x:11:1');
-    const tileButton = screen.getByTestId('treemap-tile-open-x:11:1');
-    for (const b of [rowButton, tileButton]) {
-      expect(b.tagName.toLowerCase()).toBe('button');
-      expect(b).toHaveAttribute('title', 'Open p11.exe');
-      // The breakdown is ONE Tab stop (FR-068): these are reached with the mouse, or with Enter / Right on the row.
-      expect(b).toHaveAttribute('tabindex', '-1');
-    }
+  it('has no drill-down button on any row, and no treemap tile', () => {
+    expect(document.querySelectorAll('[data-testid^="breakdown-row-open-"], .breakdown-row__open')).toHaveLength(0);
+    expect(document.querySelectorAll('.treemap, [data-testid^="treemap-"]')).toHaveLength(0);
   });
 
-  it('is on neither the row nor the tile of a node with no children', () => {
-    expect(screen.queryByTestId('breakdown-row-open-x:12:1')).toBeNull();
-    expect(screen.queryByTestId('treemap-tile-open-x:12:1')).toBeNull();
-  });
-
-  it('opens the node from the row’s button, and clears the selection', () => {
+  it('opens a row on a double-click, clearing the selection, and does nothing on a double-click of a leaf', () => {
     fireEvent.click(row('x:12:1'));
-    fireEvent.click(screen.getByTestId('breakdown-row-open-x:11:1'));
-    expect(getView().focusPath).toEqual([...PANEL, 'x:11:1']);
-    expect(getSelection()).toBeNull();
-  });
-
-  it('opens the node from the tile’s button, without also selecting it', () => {
-    fireEvent.click(screen.getByTestId('treemap-tile-open-x:11:1'));
-    expect(getView().focusPath).toEqual([...PANEL, 'x:11:1']);
-    expect(getSelection()).toBeNull();
-  });
-
-  it('opens a row on a double-click, and does nothing on a double-click of a leaf', () => {
     fireEvent.doubleClick(row('x:12:1'));
     expect(getView().focusPath).toEqual(PANEL);
+    fireEvent.click(row('x:11:1'));
     fireEvent.doubleClick(row('x:11:1'));
     expect(getView().focusPath).toEqual([...PANEL, 'x:11:1']);
+    expect(getSelection()).toBeNull();
   });
 
   it('opens on Enter or Right for a node with children; for a leaf it never opens to an empty view', () => {
@@ -160,10 +131,8 @@ describe('a drill-down button opens; nothing else does (FR-088)', () => {
     fireEvent.keyDown(row('x:12:1'), { key: 'ArrowRight' });
     expect(getView().focusPath).toEqual(PANEL);
 
-    fireEvent.keyDown(tile('x:12:1'), { key: 'Enter' });
-    expect(getView().focusPath).toEqual(PANEL);
-
-    fireEvent.keyDown(tile('x:11:1'), { key: 'Enter' });
+    fireEvent.click(row('x:11:1'));
+    fireEvent.keyDown(row('x:11:1'), { key: 'Enter' });
     expect(getView().focusPath).toEqual([...PANEL, 'x:11:1']);
   });
 });
@@ -171,25 +140,21 @@ describe('a drill-down button opens; nothing else does (FR-088)', () => {
 describe('exactly the selected node is marked (FR-089, D6)', () => {
   beforeEach(() => mountOn(scene({ 11: 9, 12: 5, 13: 2 })));
 
-  it('marks no tile and no row while nothing is selected, though the first row has the keyboard', () => {
+  it('marks no row while nothing is selected, though the first row has the keyboard', () => {
     expect(row('x:11:1')).toHaveAttribute('tabindex', '0');
-    expect(document.querySelectorAll('.treemap__tile[data-selected="true"]')).toHaveLength(0);
     expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(0);
     expect(document.querySelectorAll('[aria-selected="true"]')).toHaveLength(0);
   });
 
-  it('marks the one selected node on its tile and on its row, and nothing else', () => {
+  it('marks the one selected row, and nothing else', () => {
     fireEvent.click(row('x:12:1'));
-    expect([...document.querySelectorAll('.treemap__tile[data-selected="true"]')].map((e) => e.getAttribute('data-testid'))).toEqual(['treemap-tile-x:12:1']);
     expect([...document.querySelectorAll('.breakdown-row--selected')].map((e) => e.getAttribute('data-node-id'))).toEqual(['x:12:1']);
-    expect(tile('x:12:1')).toHaveAttribute('aria-pressed', 'true');
-    expect(tile('x:11:1')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('unmarks it when the selection is cleared', () => {
-    fireEvent.click(tile('x:12:1'));
+    fireEvent.click(row('x:12:1'));
     act(() => setSelection(null));
-    expect(document.querySelectorAll('[data-selected="true"], .breakdown-row--selected')).toHaveLength(0);
+    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(0);
   });
 });
 
@@ -203,33 +168,50 @@ describe('the order holds while the pointer is over it, or something is selected
     expect(rowOrder()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
   });
 
-  it('keeps rows and tiles where they were while the pointer is over the breakdown, then re-ranks on leaving', () => {
+  it('holds the order AND the figures while the pointer is over the list, then catches up on leaving (FR-095)', () => {
     mountOn(calm());
     fireEvent.mouseEnter(breakdown());
     feed(swapped());
     expect(rowOrder()).toEqual(['x:11:1', 'x:12:1', 'x:13:1']);
-    expect(tileOrder()).toEqual(['x:11:1', 'x:12:1', 'x:13:1']);
-    // …but the figures keep moving in place.
-    expect(within13().textContent).toContain('9');
+    // Nothing under the pointer changes — not even a number.
+    expect(within13().textContent).not.toContain('9');
+    expect(within(row('x:11:1')).getByTestId('breakdown-row-x:11:1-cpu')).toHaveTextContent('9');
 
     fireEvent.mouseLeave(breakdown());
     expect(rowOrder()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
-    expect(tileOrder()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
+    expect(within13().textContent).toContain('9');
   });
 
-  it('keeps the order while a node is selected, and re-ranks once the selection is cleared', () => {
+  it('shows what the user just did while the pointer stays on the list: the next captures catch its figures up, in place (FR-095)', () => {
+    mountOn(calm());
+    fireEvent.mouseEnter(breakdown());
+    act(() => requestCatchUp());
+    feed(swapped());
+    // The figures are the new capture's — a killed process would show as ended — but nothing moves.
+    expect(within13().textContent).toContain('9');
+    expect(rowOrder()).toEqual(['x:11:1', 'x:12:1', 'x:13:1']);
+    // Two captures catch up, then the list holds again.
+    feed(calm());
+    feed(swapped());
+    expect(within13().textContent).not.toContain('9');
+  });
+
+  it('keeps the order while a node is selected with the pointer elsewhere — the figures keep moving — and re-ranks once the selection is cleared', () => {
     mountOn(calm());
     fireEvent.click(row('x:12:1'));
+    fireEvent.mouseLeave(breakdown());
     feed(swapped());
     expect(rowOrder()).toEqual(['x:11:1', 'x:12:1', 'x:13:1']);
+    expect(within13().textContent).toContain('9');
 
     fireEvent.click(row('x:12:1'));
     expect(rowOrder()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
   });
 
-  it('appends a process that appears while it holds, and drops one that is gone from the held order', () => {
+  it('appends a process that appears while the order is held, and drops one that is gone from the held order', () => {
     mountOn(calm());
-    fireEvent.mouseEnter(breakdown());
+    fireEvent.click(row('x:12:1'));
+    fireEvent.mouseLeave(breakdown());
     feed(scene({ 11: 1, 12: 5, 14: 99 }));
     // 13 ended (kept, as ended, by the session); 14 is new and biggest, yet comes after the held ones.
     expect(rowOrder().filter((id) => id !== 'x:13:1')).toEqual(['x:11:1', 'x:12:1', 'x:14:1']);
@@ -258,10 +240,10 @@ describe('the hold survives moving about (FR-090)', () => {
     mountOn(family(mutable(base)));
     fireEvent.mouseEnter(breakdown());
 
-    fireEvent.click(screen.getByTestId('breakdown-row-open-x:11:1'));
+    fireEvent.doubleClick(row('x:11:1'));
     expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
 
-    // The two children swap rank; the pointer is still over the breakdown.
+    // The two children swap rank; the pointer is still over the list, so nothing moves.
     feed(family({ ...mutable(base), p21: [9, 9], p22: [5, 5] }));
     expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
   });
@@ -344,17 +326,10 @@ describe('a re-sort moves with a short animation (FR-090)', () => {
     expect(rowOrder()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
   });
 
-  it('animates the tiles that changed place, too', () => {
-    mountOn(scene({ 11: 9, 12: 5, 13: 2 }));
-    animate.mockClear();
-    feed(scene({ 11: 1, 12: 5, 13: 9 }));
-    const tiles = animate.mock.contexts.filter((el) => (el as HTMLElement).classList.contains('treemap__tile'));
-    expect(tiles.length).toBeGreaterThan(0);
-  });
 });
 
 describe('a selection or a capture re-renders only what changed (D3, SC-010)', () => {
-  it('re-renders two rows and two tiles for a click, not all of them', () => {
+  it('re-renders the two rows whose mark changed for a click, not all of them', () => {
     const cpus: Record<number, number> = {};
     for (let i = 0; i < 40; i += 1) cpus[100 + i] = 40 - i;
     mountOn(scene(cpus));
@@ -362,7 +337,7 @@ describe('a selection or a capture re-renders only what changed (D3, SC-010)', (
 
     fireEvent.click(row('x:105:1'));
 
-    // A row is four figures; the summary and the readout are four each, a tile one. All 40 rows would be 160+.
+    // A row is four figures; the readout is four more. All 40 rows would be 160+.
     expect(counted.figureOf).toBeLessThan(40);
   });
 });

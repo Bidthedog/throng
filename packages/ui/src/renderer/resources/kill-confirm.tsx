@@ -22,7 +22,7 @@ import { useConfirm } from '../confirm-dialog.js';
 import { formatGrouped } from '@throng/core';
 import { ownerNames } from './owner-names.js';
 import { killCauseText } from './kill-cause.js';
-import { getSessionSnapshot, isEnded, setNotice } from './monitor-session.js';
+import { getSessionSnapshot, isEnded, requestCatchUp, setNotice } from './monitor-session.js';
 
 /** How many processes the confirmation names before it counts the rest. */
 export const MAX_LISTED = 8;
@@ -124,6 +124,7 @@ export function useKillProcesses(): (node: ResourceNode, mode: KillMode) => Prom
     // Kill Process ends that process only; Kill All Below ends the subtree, leaves first (R8).
     const targets = mode === 'process' && node.process ? [node.process.key] : killOrder(node, { isEnded: (n) => isEnded(n.id) });
     const result: KillResult = await api.kill({ mode, nodeId: node.id, targets });
+    requestCatchUp();
     reportKillFailures(result, tree, listed, node);
   };
 }

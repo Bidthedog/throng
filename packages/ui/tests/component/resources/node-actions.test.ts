@@ -112,20 +112,6 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
     expect(menuLabels()).toEqual(['menu-item-Destroy Panel']);
   });
 
-  it('a tile opens the same menu as its row (FR-088)', async () => {
-    feed(sampleHierarchy());
-    await mount();
-    act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
-
-    fireEvent.contextMenu(screen.getByTestId('treemap-tile-n:n1'));
-
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Kill All Below']);
-    // …and the menu is the row's: closing it and asking the row gives the same rows.
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
-    rightClick('n:n1');
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Kill All Below']);
-  });
-
   it('a project: both Unload rows, and Kill All Below when it holds a live process', async () => {
     feed(sampleHierarchy());
     await mount();

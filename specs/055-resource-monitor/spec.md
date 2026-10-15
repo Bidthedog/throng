@@ -753,7 +753,10 @@ reopens from it.
   figures and its sparklines — and catch up to the latest capture when the pointer leaves it. The right
   column's share bars hold the same way while the pointer is over them, so a bar never moves under a click
   *(derived from "I thought we were pausing areas as we mouse over them"; not confirmed by the user)*. A
-  selection with the pointer elsewhere holds only the order (FR-090). Hover titles
+  selection with the pointer elsewhere holds only the order (FR-090). A Kill, Unload or Destroy chosen from
+  the monitor catches a held list's figures up over the next two captures, in place, so the result shows
+  under the pointer *(derived — a held list would otherwise hide what the user just did; not confirmed by
+  the user)*. Hover titles
   anywhere in the monitor MUST NOT contain a live figure, so no title changes, flickers or closes under a
   resting pointer. The right column keeps updating while the pointer is over the left.
 - **FR-096**: The monitor MUST be laid out in two columns. The **left** column holds the lists: Components

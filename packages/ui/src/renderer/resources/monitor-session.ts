@@ -17,14 +17,14 @@
  *
  * The collector sends the live hierarchy only. A process present in the previous frame and absent from
  * the next — killed here or ended on its own — is re-inserted at its last place with its figures
- * cleared, so it reads "ended" and can neither size a tile nor feed a roll-up. Roll-ups need no
+ * cleared, so it reads "ended" and can neither take a share nor feed a roll-up. Roll-ups need no
  * correction: they arrive already summed over the live nodes only. A process that is merely somewhere
  * ELSE in the new frame (lineage re-attributed it) is live, not ended. A process never seen live is
  * never shown, because it is only ever re-inserted from a frame we held. A UI element that vanishes
  * (a destroyed panel) takes its ended processes with it: there is no place left to show them in.
  */
 import { useSyncExternalStore } from 'react';
-import { NOT_MEASURED, formatGrouped, historyLength, type Metrics, type ResourceNode } from '@throng/core';
+import { NOT_MEASURED, historyLength, type Metrics, type ResourceNode } from '@throng/core';
 import type { DetailFrame } from '@throng/ipc-contract';
 import { metricNumber, type FigureId } from './figures.js';
 
@@ -90,7 +90,7 @@ let version = 0;
 let view: ViewState = DEFAULT_VIEW;
 /** The node the detail pane describes (the keyboard- or click-selected row); `null` means the node in focus. */
 let selectedId: string | null = null;
-/** The highest total read-plus-write rate seen since the window opened: what I/O tiles are coloured against (FR-094). */
+/** The highest total read-plus-write rate seen since the window opened: what I/O bars are coloured against (FR-094). */
 let ioPeak = 0;
 const history = new Map<string, HistoryPoint[]>();
 const endedIds = new Set<string>();
@@ -183,7 +183,34 @@ export function ingestFrame(f: DetailFrame): void {
   // A stale frame repeats the last good reading (and its time) at a later tick: shown as the latest, but
   // recording it would draw a flat run of identical points across the charts for as long as it lasts.
   if (!f.stale) recordPoints(f);
+  if (pendingCatchUps > 0) {
+    pendingCatchUps -= 1;
+    catchUpEpoch += 1;
+  }
   mergeFrame(f);
+}
+
+// ── catching a held list up with what the user just did (FR-095) ──────────────────────────────────
+
+/**
+ * A list the pointer rests on holds still (FR-095) — but a Kill, Unload or Destroy chosen from it must
+ * show its result there, or the user is left looking at a process that has already ended. An action asks
+ * for the next two captures to be taken into held lists too: the first may be read before the process has
+ * gone, the second will not be. The order still holds; only what the rows say catches up.
+ */
+const CATCH_UP_CAPTURES = 2;
+let pendingCatchUps = 0;
+let catchUpEpoch = 0;
+
+export function requestCatchUp(): void {
+  pendingCatchUps = CATCH_UP_CAPTURES;
+}
+
+const getCatchUpEpoch = (): number => catchUpEpoch;
+
+/** Changes each time a held list should take the latest capture. */
+export function useCatchUpEpoch(): number {
+  return useSyncExternalStore(subscribeSession, getCatchUpEpoch, getCatchUpEpoch);
 }
 
 function recordPoints(f: DetailFrame): void {
@@ -236,81 +263,6 @@ export function isEnded(nodeId: string): boolean {
 /** A node's points, oldest first. Empty for a node the session never saw. */
 export function getHistory(nodeId: string): readonly HistoryPoint[] {
   return history.get(nodeId) ?? EMPTY;
-}
-
-export interface StackedSeries {
-  readonly id: string;
-  readonly label: string;
-  readonly values: readonly number[];
-  readonly ended: boolean;
-}
-
-export interface StackedChart {
-  /** The node the chart plots (empty before the first frame): each chart names it (FR-092). */
-  readonly focusLabel: string;
-  readonly ticks: readonly number[];
-  readonly at: readonly number[];
-  readonly series: readonly StackedSeries[];
-}
-
-function findNode(root: ResourceNode | null, id: string): ResourceNode | undefined {
-  if (root === null) return undefined;
-  let found: ResourceNode | undefined;
-  walk(root, (n) => {
-    if (found === undefined && n.id === id) found = n;
-  });
-  return found;
-}
-
-/**
- * The series behind the focused node's stacked chart (FR-060): one band per child, aligned to the
- * focused node's own ticks (a child with no point at a tick contributes zero there), plus a band for
- * the node's own use when it has any — so the stack sums to the node's rolled figure. An ended child
- * keeps its band, falling to zero from the tick it ended.
- */
-export function stackedSeries(focusId: string, metric: FigureId): StackedChart {
-  const focus = findNode(snapshot.tree, focusId);
-  const points = getHistory(focusId);
-  const ticks = points.map((p) => p.tick);
-  const at = points.map((p) => p.at);
-  if (focus === undefined) return { focusLabel: '', ticks, at, series: [] };
-
-  const series: StackedSeries[] = [];
-  const own = points.map((p) => metricNumber(p.own, metric));
-  if (focus.kind === 'process' || own.some((v) => v > 0)) {
-    series.push({ id: focus.id, label: focus.label, values: own, ended: endedIds.has(focus.id) });
-  }
-  // By id, never by size: a ranking by area reorders the bands as the figures move, and with them the
-  // colours of the bands (D4). The chart's bands keep their places from capture to capture.
-  const bands: StackedSeries[] = [...focus.children].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map((child) => {
-    const byTick = new Map(getHistory(child.id).map((p) => [p.tick, metricNumber(p.rolled, metric)]));
-    return { id: child.id, label: child.label, values: ticks.map((t) => byTick.get(t) ?? 0), ended: endedIds.has(child.id) };
-  });
-  return { focusLabel: focus.label, ticks, at, series: [...series, ...groupSmallBands(bands, MAX_STACK_SERIES - series.length)] };
-}
-
-/** The most bands a stacked chart draws (own use included) before the smallest are grouped. */
-export const MAX_STACK_SERIES = 12;
-
-/**
- * At most `room` bands: the largest by area stay, in their given order, and the rest become one
- * "N others" band whose values are their sum — so the stack still adds up to the node's figure. A single
- * leftover is not grouped (it would be "1 others"): it keeps its own band.
- */
-function groupSmallBands(bands: readonly StackedSeries[], room: number): StackedSeries[] {
-  if (bands.length <= room + 1) return [...bands];
-  const area = (s: StackedSeries): number => s.values.reduce((sum, v) => sum + v, 0);
-  const keepIds = new Set(
-    [...bands]
-      .map((s, index) => ({ s, index }))
-      .sort((a, b) => area(b.s) - area(a.s) || a.index - b.index)
-      .slice(0, room - 1)
-      .map((e) => e.s.id),
-  );
-  const kept = bands.filter((s) => keepIds.has(s.id));
-  const rest = bands.filter((s) => !keepIds.has(s.id));
-  const values = rest[0]!.values.map((_, i) => rest.reduce((sum, s) => sum + (s.values[i] ?? 0), 0));
-  return [...kept, { id: 'others', label: `${formatGrouped(rest.length)} others`, values, ended: false }];
 }
 
 // ── view state ───────────────────────────────────────────────────────────────────────────────────
@@ -436,6 +388,8 @@ export function useView(): ViewState {
 
 /** Tests only: no session, no view memory, no listeners. */
 export function __resetSession(): void {
+  pendingCatchUps = 0;
+  catchUpEpoch = 0;
   history.clear();
   endedIds.clear();
   capacity = DEFAULT_CAPACITY;

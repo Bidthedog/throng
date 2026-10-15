@@ -56,17 +56,17 @@ function strokeColour(canvas: HTMLCanvasElement): string {
   return stroke.colour;
 }
 
-function draw(canvas: HTMLCanvasElement, points: readonly SparklinePoint[]): void {
+function draw(canvas: HTMLCanvasElement, points: readonly SparklinePoint[], width: number, height: number): void {
   const ctx = canvas.getContext('2d');
   if (ctx === null) return;
   const ratio = window.devicePixelRatio || 1;
-  const pixelW = Math.round(W * ratio);
-  const pixelH = Math.round(H * ratio);
+  const pixelW = Math.round(width * ratio);
+  const pixelH = Math.round(height * ratio);
   // Assigning a size clears the canvas and reallocates it: only when it actually changed.
   if (canvas.width !== pixelW) canvas.width = pixelW;
   if (canvas.height !== pixelH) canvas.height = pixelH;
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0, 0, width, height);
   ctx.beginPath();
   points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.strokeStyle = strokeColour(canvas);
@@ -80,6 +80,9 @@ function draw(canvas: HTMLCanvasElement, points: readonly SparklinePoint[]): voi
 interface Painted {
   readonly nodeId: string;
   readonly metric: FigureId;
+  /** The CSS box it is drawn in: a row's sparkline is small, the right column's line graph larger. */
+  readonly width: number;
+  readonly height: number;
   /** Whether the canvas is in view. Without an observer (a platform that has none) every one is. */
   visible: boolean;
 }
@@ -90,13 +93,36 @@ let unsubscribe: (() => void) | null = null;
 
 function paint(canvas: HTMLCanvasElement, p: Painted): void {
   if (!p.visible) return;
-  const points = sparklinePoints(getHistory(p.nodeId).map((h) => metricNumber(h.rolled, p.metric)), W, H);
-  if (points !== null) draw(canvas, points);
+  const points = sparklinePoints(getHistory(p.nodeId).map((h) => metricNumber(h.rolled, p.metric)), p.width, p.height);
+  if (points !== null) draw(canvas, points, p.width, p.height);
+}
+
+/** Regions whose sparklines are held still: the list the pointer is over (FR-095). */
+const heldRoots = new Set<Element>();
+
+const isHeld = (canvas: HTMLCanvasElement): boolean => {
+  for (const root of heldRoots) if (root.contains(canvas)) return true;
+  return false;
+};
+
+/**
+ * Stop redrawing the sparklines inside `root` for each capture, as the figures beside them are held; the
+ * returned function lets them go and catches them up at once.
+ */
+export function holdSparklines(root: Element): () => void {
+  heldRoots.add(root);
+  return () => {
+    heldRoots.delete(root);
+    paintAll();
+  };
 }
 
 /** After each ingest: redraw every sparkline that is on screen. The one subscription all of them share. */
 function paintAll(): void {
-  for (const [canvas, p] of canvases) paint(canvas, p);
+  for (const [canvas, p] of canvases) {
+    if (heldRoots.size > 0 && isHeld(canvas)) continue;
+    paint(canvas, p);
+  }
 }
 
 function onIntersect(entries: readonly { target: Element; isIntersecting: boolean }[]): void {
@@ -109,9 +135,9 @@ function onIntersect(entries: readonly { target: Element; isIntersecting: boolea
   }
 }
 
-function attach(canvas: HTMLCanvasElement, nodeId: string, metric: FigureId): () => void {
+function attach(canvas: HTMLCanvasElement, nodeId: string, metric: FigureId, width: number, height: number): () => void {
   const watching = typeof IntersectionObserver !== 'undefined';
-  const painted: Painted = { nodeId, metric, visible: !watching };
+  const painted: Painted = { nodeId, metric, width, height, visible: !watching };
   canvases.set(canvas, painted);
   unsubscribe ??= subscribeSession(paintAll);
   if (watching) {
@@ -132,16 +158,42 @@ function attach(canvas: HTMLCanvasElement, nodeId: string, metric: FigureId): ()
 }
 
 /** Whether `nodeId` has the two points a line needs; the one thing a sparkline re-renders for. */
-function useHasLine(nodeId: string): boolean {
+export function useHasLine(nodeId: string): boolean {
   const snapshot = useCallback((): boolean => getHistory(nodeId).length >= 2, [nodeId]);
   return useSyncExternalStore(subscribeSession, snapshot, snapshot);
 }
 
+/**
+ * A node's recent history for one metric as a canvas polyline, redrawn by the session's one listener. The
+ * row's sparkline and the right column's line graph (`line-graph.tsx`) are this at two sizes; a caller
+ * decides what to show before there are two points to draw (`useHasLine`).
+ */
+export function PlotCanvas({
+  nodeId,
+  metric,
+  width,
+  height,
+  className,
+  testId,
+}: {
+  nodeId: string;
+  metric: FigureId;
+  width: number;
+  height: number;
+  className: string;
+  testId: string;
+}): ReactElement {
+  // A ref callback with a cleanup (React 19): attached when the canvas mounts, released when it goes — or
+  // when the node, the metric or the size behind it changes, which re-attaches it under the new ones.
+  const ref = useCallback(
+    (canvas: HTMLCanvasElement | null) => (canvas === null ? undefined : attach(canvas, nodeId, metric, width, height)),
+    [nodeId, metric, width, height],
+  );
+  return <canvas ref={ref} className={className} data-testid={testId} width={width} height={height} aria-hidden="true" />;
+}
+
 function SparklineView({ nodeId, metric }: { nodeId: string; metric: FigureId }): ReactElement {
   const hasLine = useHasLine(nodeId);
-  // A ref callback with a cleanup (React 19): attached when the canvas mounts, released when it goes — or
-  // when the node or the metric behind it changes, which re-attaches it under the new ones.
-  const ref = useCallback((canvas: HTMLCanvasElement | null) => (canvas === null ? undefined : attach(canvas, nodeId, metric)), [nodeId, metric]);
   if (!hasLine) {
     return (
       <span className="sparkline sparkline--building" data-testid={`sparkline-building-${nodeId}`} title="Building history…">
@@ -149,7 +201,7 @@ function SparklineView({ nodeId, metric }: { nodeId: string; metric: FigureId })
       </span>
     );
   }
-  return <canvas ref={ref} className="sparkline" data-testid={`sparkline-${nodeId}`} width={W} height={H} aria-hidden="true" />;
+  return <PlotCanvas nodeId={nodeId} metric={metric} width={W} height={H} className="sparkline" testId={`sparkline-${nodeId}`} />;
 }
 
 export const Sparkline = memo(SparklineView);

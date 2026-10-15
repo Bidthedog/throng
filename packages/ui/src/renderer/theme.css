@@ -3500,7 +3500,7 @@ textarea,
   }
 }
 
-/* The breakdown: breadcrumb, treemap, rows (FR-060). */
+/* The left column: breadcrumb, rows (FR-060, FR-096). */
 .breakdown {
   display: flex;
   flex-direction: column;
@@ -3510,7 +3510,7 @@ textarea,
   overflow: auto;
 }
 
-/* The header: Back, where the user is, and what sizes the tiles (FR-092). */
+/* The header: Back, where the user is, and what the rows are sorted by (FR-092). */
 .breakdown__header {
   display: flex;
   align-items: center;
@@ -3548,7 +3548,7 @@ textarea,
   opacity: 0.5;
 }
 
-.breakdown__tile-size {
+.breakdown__sorted-by {
   flex: none;
   color: var(--throng-colour-textMuted);
   font-size: 12px;
@@ -3567,7 +3567,7 @@ textarea,
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 90px repeat(4, minmax(64px, auto)) 24px;
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
   gap: 8px;
   padding: 2px 6px;
   border-bottom: 1px solid var(--throng-colour-border);
@@ -3630,24 +3630,6 @@ textarea,
   cursor: default;
 }
 
-.breakdown__summary {
-  margin: 0;
-  color: var(--throng-colour-textMuted);
-  font-variant-numeric: tabular-nums;
-}
-
-.breakdown__summary strong {
-  color: var(--throng-colour-text);
-}
-
-.breakdown__summary-figure[data-band='warning'] {
-  color: var(--throng-colour-warning);
-}
-
-.breakdown__summary-figure[data-band='critical'] {
-  color: var(--throng-colour-danger);
-}
-
 .breakdown__heading {
   margin: 4px 0;
   font-size: 12px;
@@ -3655,42 +3637,89 @@ textarea,
   color: var(--throng-colour-textMuted);
 }
 
-.treemap {
-  position: relative;
-  width: 100%;
-  height: 220px;
+/*
+ * The right column's share bars (FR-097). A bar's LENGTH is the child's share of the item; its COLOUR is how
+ * much of the machine it takes (FR-094). The component hands over one number, `--heat` — 0 at nothing, 0.5
+ * at the warning threshold, 1 at the critical one — and the colour is mixed here from the theme's own
+ * success, warning and danger: green to amber over the first half, amber to red over the second. It is laid
+ * over the surface at 70% so the track stays legible in light and dark themes.
+ */
+.share-bars {
+  margin: 8px 0;
 }
 
-/* The cells' own box: they are positioned against it by the layout's left/top/width/height. */
-.treemap__cells {
-  position: relative;
-  width: 100%;
-  height: 100%;
+.share-bars__heading {
+  margin: 0 0 4px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
 }
 
-.treemap__empty {
+.share-bars__metric {
+  font-weight: var(--throng-font-weight-normal);
+}
+
+.share-bars__empty {
   margin: 0;
-  padding: 12px;
   color: var(--throng-colour-textMuted);
 }
 
-/*
- * A tile's fill is how much of the machine its node takes (FR-094). The component hands over one number,
- * `--heat` — 0 at nothing, 0.5 at the warning threshold, 1 at the critical one — and the colour is mixed
- * here from the theme's own success, warning and danger: green to amber over the first half, amber to red
- * over the second. It is laid over the surface at 45% so the label stays legible in light and dark themes.
- * Banding no longer needs a border of its own: the fill says it, and the border is left to hover and
- * selection.
- */
-.treemap__tile {
+.share-bars__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-bars__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-bar {
+  display: grid;
+  grid-template-columns: minmax(80px, 30%) minmax(0, 1fr) minmax(56px, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .share-bar:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.share-bar--others {
+  color: var(--throng-colour-textMuted);
+  cursor: default;
+}
+
+.share-bar__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-bar__track {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--throng-colour-inputSurface);
+}
+
+.share-bar__fill {
   --heat: 0;
   --heat-to-warning: clamp(0, var(--heat) * 2, 1);
   --heat-to-danger: clamp(0, (var(--heat) - 0.5) * 2, 1);
-  position: absolute;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 3px 6px;
-  border: 1px solid var(--throng-colour-border);
+  display: block;
+  height: 100%;
   border-radius: 3px;
   background: color-mix(
     in srgb,
@@ -3700,132 +3729,70 @@ textarea,
         calc((1 - var(--heat-to-danger)) * 100%),
       var(--throng-colour-danger)
     )
-      45%,
+      70%,
     var(--throng-colour-surface)
   );
-  cursor: pointer;
 }
 
-/* Nothing measured to colour it by: neutral, and not the selected row's fill. */
-.treemap__tile[data-heat='none'] {
-  background: var(--throng-colour-inputSurface);
+/* Nothing measured to colour it by: neutral. */
+.share-bar__fill[data-heat='none'] {
+  background: var(--throng-colour-border);
 }
 
-:where(body:not([data-window-blurred])) .treemap__tile:hover {
-  border-color: var(--throng-colour-accent);
+.share-bar__figure {
+  text-align: right;
+  white-space: nowrap;
 }
 
-.treemap__tile--others {
-  background: var(--throng-colour-sidebarBg);
-  cursor: default;
+.share-bar[data-band='warning'] .share-bar__figure {
+  color: var(--throng-colour-warning);
 }
 
-/* The selected tile keeps its fill; the accent edge goes on top of it (FR-089). Last, so nothing overrides it. */
-.treemap__tile[data-selected='true'] {
-  border-color: var(--throng-colour-accent);
-  box-shadow: inset 0 0 0 2px var(--throng-colour-accent);
+.share-bar[data-band='critical'] .share-bar__figure {
+  color: var(--throng-colour-danger);
 }
 
-/* A tile's drill-down button: a sibling of the tile, over its top-right corner. */
-.treemap__open {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-}
-
-.treemap__open-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--throng-colour-surface) 55%, transparent);
-  color: var(--throng-colour-text);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .treemap__open-button:hover {
-  background: var(--throng-colour-hoverSurface);
-}
-
-/* The treemap and the key to its colours, side by side. */
-.breakdown__map {
+/* The key to the colours, under the bars: Low … Amber … Red along the same three-colour scale. */
+.share-key {
   display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.breakdown__map .treemap {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.treemap-key {
-  position: relative;
-  flex: none;
-  width: 92px;
-  height: 220px;
+  align-items: center;
+  gap: 6px;
   color: var(--throng-colour-textMuted);
   font-size: 10px;
   line-height: 12px;
 }
 
-/* The same mix as a tile at heat 0, 0.5 and 1, so the bar IS the scale. */
-.treemap-key__bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 10px;
+.share-key__label {
+  flex: none;
+  white-space: nowrap;
+}
+
+.share-key__label--low {
+  order: 0;
+}
+
+.share-key__bar {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 8px;
   border: 1px solid var(--throng-colour-border);
   border-radius: 3px;
+  /* The same mix as a bar at heat 0, 0.5 and 1, so the bar IS the scale. */
   background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--throng-colour-success) 45%, var(--throng-colour-surface)),
-    color-mix(in srgb, var(--throng-colour-warning) 45%, var(--throng-colour-surface)),
-    color-mix(in srgb, var(--throng-colour-danger) 45%, var(--throng-colour-surface))
+    to right,
+    color-mix(in srgb, var(--throng-colour-success) 70%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-warning) 70%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-danger) 70%, var(--throng-colour-surface))
   );
 }
 
-.treemap-key__label {
-  position: absolute;
-  left: 16px;
-  right: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.share-key__label--mid {
+  order: 2;
 }
 
-.treemap-key__label--high {
-  top: 0;
-}
-
-.treemap-key__label--mid {
-  top: calc(50% - 6px);
-}
-
-.treemap-key__label--low {
-  bottom: 0;
-}
-
-.treemap__label,
-.treemap__value {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: clip;
-  color: var(--throng-colour-text);
-  font-size: 11px;
-  line-height: 13px;
-  pointer-events: none;
-}
-
-.treemap__value {
-  color: var(--throng-colour-textMuted);
+.share-key__label--high {
+  order: 3;
 }
 
 .breakdown__rows {
@@ -3840,7 +3807,7 @@ textarea,
   /* Set per row by the component (inline); this is the top level's. */
   --breakdown-depth: 0;
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 90px repeat(4, minmax(64px, auto)) 24px;
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
   align-items: center;
   gap: 8px;
   padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
@@ -3857,31 +3824,6 @@ textarea,
 .breakdown-row--selected {
   background: var(--throng-colour-surfaceActive);
   box-shadow: inset 2px 0 0 var(--throng-colour-accent);
-}
-
-/* The drill-down button, at the row's end; a node with no children leaves the cell empty. */
-.breakdown-row__open {
-  display: flex;
-  justify-content: center;
-}
-
-.breakdown-row__open-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--throng-colour-textMuted);
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .breakdown-row__open-button:hover {
-  background: var(--throng-colour-hoverSurface);
-  color: var(--throng-colour-text);
 }
 
 /* An unloaded project is greyed and italic, as in the project list (FR-020c). */
@@ -3952,17 +3894,17 @@ textarea,
   white-space: pre-wrap;
 }
 
-/* The body's layout. DOM order is the Tab order (filter, breakdown, chart, detail, controls); the grid
-   areas put the controls along the top (FR-068). */
+/* The body's layout: two columns (FR-096, FR-097). DOM order is the Tab order (filter, breakdown, detail,
+   controls — FR-068); the grid areas put the filter, the list controls, the notice and the rows down the LEFT
+   column and the detail down the whole of the RIGHT. Each column scrolls on its own. */
 .monitor-body {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 9fr) minmax(300px, 11fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   grid-template-areas:
-    'controls controls'
-    'filter   filter'
-    'notice   notice'
-    'breakdown chart'
+    'filter    detail'
+    'controls  detail'
+    'notice    detail'
     'breakdown detail';
   gap: 8px 12px;
   flex: 1;
@@ -3982,15 +3924,13 @@ textarea,
   min-height: 0;
   min-width: 0;
 }
-.monitor-body__chart {
-  grid-area: chart;
-  min-height: 0;
-  overflow: auto;
-}
 .monitor-body__detail {
   grid-area: detail;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--throng-colour-border);
 }
 .monitor-body__controls {
   grid-area: controls;
@@ -4110,82 +4050,66 @@ textarea,
   vertical-align: middle;
 }
 
-/* Charts (FR-060) and the detail pane: their focus ring is the window-wide one above. */
+/* The right column: the item's name and kind, its bars, its facts and its line graphs (FR-097). Its focus ring is the window-wide one above. */
 
-.timeseries-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+/* The small line graphs: one per metric, drawn on a canvas in the theme's accent (line-graph.tsx). */
+.line-graphs {
+  margin: 12px 0 4px;
 }
 
-.timeseries {
+.line-graphs__heading {
+  margin: 0 0 4px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.line-graphs__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 12px;
+}
+
+.line-graph {
   margin: 0;
   min-width: 0;
 }
 
-.timeseries__title {
+.line-graph__caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--throng-colour-textMuted);
   font-size: 11px;
 }
 
-.timeseries__plot {
-  width: 100%;
-  height: 110px;
-  overflow: hidden;
+.line-graph__value {
+  color: var(--throng-colour-text);
+  font-variant-numeric: tabular-nums;
 }
 
-.timeseries__body {
-  position: relative;
+/* The canvas is drawn in this colour: sparkline.tsx reads it back with getComputedStyle. */
+.line-graph__plot {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: 44px;
+  color: var(--throng-colour-accent);
 }
 
-/* A chart with fewer than two points says so, over where the plot will be (FR-091). */
-.timeseries__building {
-  position: absolute;
-  inset: 0;
+/* A graph with fewer than two points says so, in the place the line will be (FR-091). */
+.line-graph__building {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
+  width: 220px;
+  max-width: 100%;
+  height: 44px;
   margin: 0;
+  border: 1px dashed var(--throng-colour-border);
+  border-radius: 3px;
   color: var(--throng-colour-textMuted);
   font-size: 11px;
-  pointer-events: none;
-}
-
-/* The legend: every band's colour and child (FR-092). */
-.timeseries__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  margin: 2px 0 0;
-  padding: 0;
-  list-style: none;
-  color: var(--throng-colour-textMuted);
-  font-size: 10px;
-  line-height: 13px;
-}
-
-.timeseries__legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.timeseries__legend-item[data-ended='true'] {
-  text-decoration: line-through;
-}
-
-.timeseries__swatch {
-  /* Set per band by the component (inline) to the theme token that band is drawn in; this is the fallback. */
-  --swatch: currentColor;
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--swatch);
 }
 
 .detail-pane {
@@ -4193,8 +4117,14 @@ textarea,
 }
 
 .detail-pane__name {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 14px;
+}
+
+.detail-pane__kind {
+  margin: 0 0 6px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
 }
 
 .detail-pane__facts {

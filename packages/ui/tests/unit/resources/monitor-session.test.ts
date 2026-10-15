@@ -16,14 +16,12 @@ import {
   getView,
   ingestFrame,
   isEnded,
-  MAX_STACK_SERIES,
   reconfigureSession,
   resolveFocusPath,
   setView,
-  stackedSeries,
   startSession,
 } from '../../../src/renderer/resources/monitor-session.js';
-import { MIB, flatten, frame, metrics, node, proc, sampleHierarchy } from '../../component/helpers/resource-fixtures.js';
+import { flatten, frame, metrics, node, proc, sampleHierarchy } from '../../component/helpers/resource-fixtures.js';
 import type { ResourceNode } from '@throng/core';
 
 beforeEach(() => {
@@ -302,7 +300,7 @@ describe('view state (FR-057)', () => {
   });
 });
 
-describe('the I/O peak the tiles are coloured against (FR-094)', () => {
+describe('the I/O peak the bars are coloured against (FR-094)', () => {
   const withIo = (read: number, write: number): ResourceNode => {
     const busy = proc(7, 'busy.exe', metrics({ ioRead: read, ioWrite: write }));
     return node({ id: 'root', kind: 'root', label: 'throng', children: [busy], owner: { component: 'ui' } });
@@ -336,84 +334,3 @@ describe('the I/O peak the tiles are coloured against (FR-094)', () => {
   });
 });
 
-describe('a stacked chart over many contributors (Edge Cases, Very large trees; T103)', () => {
-  const panelWith = (count: number, size: (i: number) => number = (i) => i + 1, reverse = false): ResourceNode => {
-    const made = Array.from({ length: count }, (_, i) => proc(100 + i, `p${i}.exe`, metrics({ memory: size(i) * MIB })));
-    const kids = reverse ? made.reverse() : made;
-    const panel = node({ id: 'n:big', kind: 'panel', label: 'Busy', panelKind: 'terminal', children: kids, owner: { projectId: 'p1', tabId: 't', panelId: 'big' } });
-    const tab = node({ id: 't:big', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'p1', tabId: 'big' } });
-    const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
-    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
-    return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
-  };
-
-  it('keeps the largest as bands and groups the rest into one “N others” band that keeps the total', () => {
-    startSession(settings());
-    ingestFrame(frame(1, panelWith(20)));
-    ingestFrame(frame(2, panelWith(20)));
-
-    const chart = stackedSeries('n:big', 'memory');
-
-    expect(chart.series).toHaveLength(MAX_STACK_SERIES);
-    const others = chart.series.at(-1)!;
-    expect(others.label).toBe(`${20 - (MAX_STACK_SERIES - 1)} others`);
-    // The biggest contributor is a band of its own; the smallest are inside “others”.
-    expect(chart.series.map((s) => s.id)).toContain('x:119:1');
-    expect(chart.series.map((s) => s.id)).not.toContain('x:100:1');
-    // Nothing is lost: the stack still sums to the node's rolled figure at every tick.
-    const total = (20 * 21) / 2 * MIB;
-    chart.ticks.forEach((_, i) => expect(chart.series.reduce((sum, s) => sum + s.values[i]!, 0)).toBe(total));
-  });
-
-  it('keeps the bands in a stable order by id, whatever their sizes (D4)', () => {
-    startSession(settings());
-    // The collector hands children over in no particular order.
-    ingestFrame(frame(1, panelWith(20, undefined, true)));
-    const ids = (): string[] => stackedSeries('n:big', 'memory').series.map((s) => s.id);
-    const first = ids();
-
-    // The sizes reverse: a ranking by area would reorder the bands; an order by id does not.
-    ingestFrame(frame(2, panelWith(20, (i) => 20 - i)));
-    const second = ids();
-
-    const bands = (all: string[]): string[] => all.filter((id) => id !== 'others');
-    expect(bands(first)).toEqual([...bands(first)].sort());
-    expect(bands(second)).toEqual([...bands(second)].sort());
-    expect(first.at(-1)).toBe('others');
-    expect(second).toHaveLength(first.length);
-  });
-
-  it('does not group a single leftover — one band is just that band', () => {
-    startSession(settings());
-    ingestFrame(frame(1, panelWith(MAX_STACK_SERIES + 1)));
-
-    const chart = stackedSeries('n:big', 'memory');
-
-    expect(chart.series).toHaveLength(MAX_STACK_SERIES + 1);
-    expect(chart.series.some((s) => /others/.test(s.label))).toBe(false);
-  });
-
-  it('leaves a small fan-out exactly as it was', () => {
-    startSession(settings());
-    ingestFrame(frame(1, panelWith(5)));
-    expect(stackedSeries('n:big', 'memory').series).toHaveLength(5);
-  });
-});
-
-describe('the series behind a stacked chart (FR-060)', () => {
-  it('stacks the focused node’s children, aligned to its own ticks, an ended child included as zero', () => {
-    startSession(settings());
-    ingestFrame(frame(1, sampleHierarchy({ nodeCpu: 20 })));
-    ingestFrame(frame(2, sampleHierarchy({ nodeCpu: 30 })));
-    ingestFrame(frame(3, sampleHierarchy({ withNode: false })));
-
-    const stack = stackedSeries('x:200:1', 'cpu');
-    expect(stack.ticks).toEqual([1, 2, 3]);
-    const child = stack.series.find((s) => s.id === 'x:300:1');
-    expect(child?.values).toEqual([20, 30, 0]);
-    expect(child?.ended).toBe(true);
-    // The shell's own use is a band of its own, so the stack sums to the shell's rolled figure.
-    const own = stack.series.find((s) => s.id === 'x:200:1');
-    expect(own?.values).toEqual([1, 1, 1]);
-  });
-});

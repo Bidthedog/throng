@@ -1,13 +1,13 @@
 /**
  * What drawing the rows costs per capture (055 SC-010, defect D5): a sparkline reads its colour once per
  * capture rather than once per row, is drawn only while it is on screen, says when it has too little
- * history, and Hide idle hands the idle rule only the samples it reads. The treemap measures its box
- * before its first layout rather than laying out for a guess and again for the truth.
+ * history, Hide idle hands the idle rule only the samples it reads, and none of them is redrawn while the
+ * pointer is over the list (FR-095).
  *
- * Layer: component — the real `Breakdown` over the real session; the canvas, `getComputedStyle`,
- * `IntersectionObserver` and `getBoundingClientRect` are the platform seams jsdom lacks, stubbed and counted.
+ * Layer: component — the real `Breakdown` over the real session; the canvas, `getComputedStyle` and
+ * `IntersectionObserver` are the platform seams jsdom lacks, stubbed and counted.
  */
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceNode } from '@throng/core';
@@ -26,7 +26,7 @@ vi.mock('@throng/core', async (importOriginal) => {
     },
   };
 });
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({ Timeseries: () => null, default: () => null }));
+
 
 const PANEL = ['root', 'c:projects', 'p:p1', 't:big', 'n:big'];
 
@@ -170,21 +170,23 @@ describe('Hide idle hands the idle rule only the samples it reads (D5)', () => {
   });
 });
 
-describe('the treemap measures its box before its first layout (D5)', () => {
-  it('lays the tiles out in the box it measured, not in a guess', () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const box = this.classList.contains('treemap') ? { width: 400, height: 100 } : { width: 0, height: 0 };
-      return { ...box, x: 0, y: 0, top: 0, left: 0, right: box.width, bottom: box.height, toJSON: () => ({}) } as DOMRect;
-    });
-    const only = proc(100, 'only.exe', metrics({ cpu: 3 }));
-    const panel = node({ id: 'n:big', kind: 'panel', label: 'Busy', panelKind: 'terminal', children: [only], owner: { projectId: 'p1', tabId: 'big', panelId: 'big' } });
-    const tab = node({ id: 't:big', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'p1', tabId: 'big' } });
-    const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
-    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
-    mount(node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } }), 1);
+describe('sparklines hold still while the pointer is over the list (FR-095)', () => {
+  it('draws nothing for a capture that arrives under the pointer, and catches up when it leaves', () => {
+    mount(scene(5));
+    const list = screen.getByTestId('breakdown');
 
-    const only1 = screen.getByTestId('treemap-tile-x:100:1');
-    expect(only1.getAttribute('data-width')).toBe('400');
-    expect(only1.getAttribute('data-height')).toBe('100');
+    fireEvent.mouseEnter(list);
+    platform.strokes = 0;
+    feed(scene(5));
+    feed(scene(5));
+    expect(platform.strokes).toBe(0);
+
+    fireEvent.mouseLeave(list);
+    expect(platform.strokes).toBeGreaterThanOrEqual(5);
+
+    // …and they are live again afterwards.
+    platform.strokes = 0;
+    feed(scene(5));
+    expect(platform.strokes).toBeGreaterThanOrEqual(5);
   });
 });

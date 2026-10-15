@@ -6,25 +6,22 @@
  * instead of choosing the menu item the user had arrowed to. The monitor is a window now and traps
  * nothing (FR-086), but the claim stays: the menu keeps focus, and Enter chooses its item.
  *
- * Layer: component — the window's real root, real body and real ContextMenuProvider; only the chart
- * wrapper is stubbed. Whether a real window delivers the key is not claimed.
+ * Layer: component — the window's real root, real body and real ContextMenuProvider; nothing is stubbed.
+ * Whether a real window delivers the key is not claimed.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
 import { __resetSession, getView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({
-  TimeseriesCharts: () => createElement('div', { 'data-testid': 'timeseries-stub' }),
-}));
 
 let bridge: ResourcesBridge;
 
-// The body is `lazy()` (R10): its first import compiles uPlot and d3, ~0.5 s alone and more under a full
-// run — module loading, not behaviour, so it is paid once here and not inside any test's wait.
+// The body is `lazy()` (R10): its first import is module loading, not behaviour, so it is paid once here
+// and not inside any test's wait.
 beforeAll(async () => {
   await import('../../../src/renderer/resources/monitor-body.js');
 });

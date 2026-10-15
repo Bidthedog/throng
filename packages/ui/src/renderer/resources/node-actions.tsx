@@ -28,7 +28,7 @@ import { useContextMenu } from '../context-menu-provider.js';
 import type { UnloadVariant } from '../sidebar/use-unload-project.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { useKillProcesses } from './kill-confirm.js';
-import { getSessionSnapshot, isEnded, setNotice } from './monitor-session.js';
+import { getSessionSnapshot, isEnded, requestCatchUp, setNotice } from './monitor-session.js';
 import type { RoutedAction } from './route-action.js';
 
 export interface ActionRow {
@@ -118,7 +118,8 @@ export function useNodeActions(): {
   /** Run an action in the window that owns it; a route no window answers raises the monitor's one notice. */
   const route = async (req: RoutedAction, failure: { heading: string; lines: string[] }): Promise<void> => {
     const ok = (await window.throng?.resources?.routeAction?.(req)) ?? false;
-    if (!ok) setNotice(failure);
+    if (ok) requestCatchUp();
+    else setNotice(failure);
   };
 
   const run = (id: ResourceActionId, node: ResourceNode): void => {

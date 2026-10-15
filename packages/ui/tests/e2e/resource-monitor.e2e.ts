@@ -128,15 +128,23 @@ test('Ctrl+Shift+Alt+R opens the monitor window; Projects to the busy process is
   const projects = mon.getByTestId('breakdown-section-projects');
   await expect(projects).toBeVisible();
 
-  // Clicks 2, 3 and 4: the project, its tab, its panel.
-  await projects.locator('[data-testid^="treemap-tile-open-p:"]').first().click();
-  await mon.locator('[data-testid^="treemap-tile-open-t:"]').first().click();
-  await mon.locator('[data-testid^="treemap-tile-open-n:"]').first().click();
+  // Clicks 2, 3 and 4 (double-clicks, FR-096 — a row has no drill-down button): the project, its tab, its panel.
+  await projects.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
+  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-n:"]').first().dblclick();
 
   // Four clicks in, the panel's processes are listed: the shell and the node under it.
   const nodeRow = mon.locator('[data-testid^="breakdown-row-x:"]', { hasText: 'node.exe' }).first();
   await expect(nodeRow).toBeVisible({ timeout: 15_000 });
   await expect(mon.getByTestId('breadcrumb')).toContainText('Monitor');
+
+  // The right column describes what a single click selects (FR-096, FR-097): its bars and its line graphs,
+  // and there is no treemap or stacked chart anywhere in the window.
+  await nodeRow.click();
+  await expect(mon.getByTestId('detail-name')).toHaveText('node.exe');
+  await expect(mon.getByTestId('share-bars')).toBeVisible();
+  await expect(mon.getByTestId('line-graphs')).toBeVisible();
+  await expect(mon.locator('.treemap, [data-testid^="treemap-"], [data-testid="chart-pane"]')).toHaveCount(0);
 
   // SC-006, on a real hierarchy: a second subscription takes one frame as the app produced it.
   const frame = await mon.evaluate(

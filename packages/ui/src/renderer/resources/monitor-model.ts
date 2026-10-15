@@ -211,58 +211,53 @@ export function allRows(model: BreakdownModel): BreakdownRow[] {
   return model.sections.flatMap((s) => s.rows);
 }
 
-// ── tiles ────────────────────────────────────────────────────────────────────────────────────────
+// ── share bars ───────────────────────────────────────────────────────────────────────────────────
 
-export interface TileItem {
-  readonly kind: 'node';
+export interface BarItem {
   readonly node: ResourceNode;
-  readonly path: readonly string[];
+  /** The node's rolled-up figure for the chosen metric, as a number. */
   readonly value: number;
-}
-export interface OthersItem {
-  readonly kind: 'others';
-  readonly count: number;
-  readonly value: number;
+  /** `value` as a fraction (0 – 1) of the item the bars belong to. */
+  readonly share: number;
 }
 
-/** The most tiles a treemap draws before the rest are grouped. */
-export const MAX_TILES = 24;
-/** A contributor under this share of the total is grouped, however few tiles there are. */
-export const MIN_TILE_SHARE = 0.015;
+export interface BarsModel {
+  readonly bars: readonly BarItem[];
+  /** The contributors too small to have a bar of their own, grouped; `null` when there are none. */
+  readonly others: { readonly count: number; readonly value: number; readonly share: number } | null;
+}
+
+/** The most bars the right column draws before the rest are grouped. */
+export const MAX_BARS = 12;
+/** A contributor under this share is grouped, however few bars there are. */
+export const MIN_BAR_SHARE = 0.015;
 
 /**
- * The tiles for a section's nodes by `metric`: every contributor with a share, the small ones grouped
- * into one "N others" tile (Edge Cases, *Very large trees*). A node with nothing to size — ended, not
- * measured, unavailable, zero — takes no share (FR-020c) and no tile; it keeps its row.
+ * The right column's bars for `subject` (FR-097): its children ranked by `metric`, biggest first, each with
+ * its share of the subject — the subject's own figure, or what its children add up to when that is less
+ * (the bars of a process do not sum to 100% while the process itself is doing some of the work). The small
+ * ones are grouped into one "N others" line (Edge Cases, *Very large trees*). A node with nothing to size —
+ * ended, not measured, unavailable, zero — takes no share (FR-020c) and no bar; it keeps its row on the left.
  */
-export function tilesFor(
-  section: Pick<BreakdownSection, 'nodes' | 'basePath'>,
-  metric: FigureId,
-  isEnded: (id: string) => boolean,
-): (TileItem | OthersItem)[] {
-  const sized = section.nodes
+export function barsFor(subject: ResourceNode, metric: FigureId, isEnded: (id: string) => boolean): BarsModel {
+  const sized = subject.children
     .filter((n) => n.kind !== 'limitation' && !isEnded(n.id))
     .map((node) => ({ node, value: metricNumber(node.rolled, metric) }))
-    .filter((e) => e.value > 0);
-  const total = sized.reduce((sum, e) => sum + e.value, 0);
-  if (total <= 0) return [];
-  // WHICH nodes get a tile is the biggest by value; the ORDER they come in is the section's, so a held
-  // order (FR-090) holds for the tiles as it does for the rows.
-  const sorted = [...sized].sort((a, b) => b.value - a.value);
-  const keep = sorted.filter((e, i) => i < MAX_TILES - 1 && e.value / total >= MIN_TILE_SHARE);
-  const rest = sorted.filter((e) => !keep.includes(e));
-  // One leftover would be "1 others" — a tile for a single node is just that node's tile.
-  const single = rest.length === 1 && keep.length < MAX_TILES;
-  const shown = new Map((single ? [...keep, rest[0]!] : keep).map((e) => [e.node.id, e] as const));
-  const tiles: (TileItem | OthersItem)[] = [];
-  for (const n of section.nodes) {
-    const e = shown.get(n.id);
-    if (e !== undefined) tiles.push({ kind: 'node', node: e.node, path: [...section.basePath, e.node.id], value: e.value });
-  }
-  if (!single && rest.length > 0) {
-    tiles.push({ kind: 'others', count: rest.length, value: rest.reduce((s, e) => s + e.value, 0) });
-  }
-  return tiles;
+    .filter((e) => e.value > 0)
+    .sort((a, b) => b.value - a.value || (a.node.label < b.node.label ? -1 : a.node.label > b.node.label ? 1 : 0));
+  const sum = sized.reduce((total, e) => total + e.value, 0);
+  const whole = Math.max(metricNumber(subject.rolled, metric), sum);
+  if (whole <= 0) return { bars: [], others: null };
+  const keep = sized.filter((e, i) => i < MAX_BARS - 1 && e.value / whole >= MIN_BAR_SHARE);
+  const rest = sized.filter((e) => !keep.includes(e));
+  // One leftover would be "1 others" — a line for a single node is just that node's bar.
+  const single = rest.length === 1 && keep.length < MAX_BARS;
+  const shown = single ? [...keep, rest[0]!] : keep;
+  const others = !single && rest.length > 0 ? rest.reduce((total, e) => total + e.value, 0) : 0;
+  return {
+    bars: shown.map((e) => ({ node: e.node, value: e.value, share: e.value / whole })),
+    others: !single && rest.length > 0 ? { count: rest.length, value: others, share: others / whole } : null,
+  };
 }
 
 // ── words ────────────────────────────────────────────────────────────────────────────────────────

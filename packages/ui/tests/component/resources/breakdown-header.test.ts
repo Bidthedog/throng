@@ -1,6 +1,6 @@
 /**
  * The monitor explains itself in place (055 FR-092): a header naming where the user is, with a Back
- * button and what sizes the tiles; column headers over the rows with the chosen metric's marked; visible
+ * button and what the rows are sorted by; column headers over the rows with the chosen metric's marked; visible
  * labels on the metric choice and the capture interval; and a count of what the filter matched and of the
  * idle processes hidden.
  *
@@ -10,13 +10,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { __resetSession, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
-vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({ Timeseries: () => null, default: () => null }));
 
 beforeEach(() => {
   __resetSession();
@@ -28,20 +27,20 @@ afterEach(() => __resetSession());
 const mount = (): void => void render(createElement(Fragment, null, createElement(Breakdown), createElement(ToolbarControls)));
 
 describe('the header (FR-092)', () => {
-  it('has a Back button, disabled at the top, and says what sizes the tiles', () => {
+  it('has a Back button, disabled at the top, and says what the rows are sorted by', () => {
     mount();
     const back = screen.getByTestId('breakdown-back');
     expect(back).toBeDisabled();
     expect(back).toHaveAttribute('title', 'Back');
-    expect(screen.getByTestId('breakdown-tile-size')).toHaveTextContent('Tile size: CPU');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by CPU');
   });
 
-  it('names the metric that sizes the tiles as it changes', () => {
+  it('names the metric the rows are sorted by as it changes', () => {
     mount();
     act(() => setView({ metric: 'memory' }));
-    expect(screen.getByTestId('breakdown-tile-size')).toHaveTextContent('Tile size: Memory');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by Memory');
     act(() => setView({ metric: 'io' }));
-    expect(screen.getByTestId('breakdown-tile-size')).toHaveTextContent('Tile size: I/O');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by I/O');
   });
 
   it('goes up one level on Back, and clears the selection', () => {

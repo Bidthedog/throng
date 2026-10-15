@@ -12,10 +12,10 @@
  *
  * ══ WHY THE SHELL IS EAGER AND THE BODY IS NOT ══
  *
- * The window must paint at once and never block input (FR-051, SC-002). The body — breakdown, charts,
- * detail — carries uPlot and d3-hierarchy (research R10), which must add nothing to startup (Principle
- * XII), so it is `lazy()`: this shell appears with its loading state, and the body fills in when its
- * chunk has loaded AND the first frame has arrived.
+ * The window must paint at once and never block input (FR-051, SC-002). The body — the two columns, the
+ * list and the detail — is code the main window never needs (research R10, R16), which must add nothing to
+ * startup (Principle XII), so it is `lazy()`: this shell appears with its loading state, and the body fills
+ * in when its chunk has loaded AND the first frame has arrived.
  *
  * ══ THE DETAIL SUBSCRIPTION (FR-003) ══
  *

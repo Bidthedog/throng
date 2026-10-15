@@ -1,6 +1,7 @@
 /**
- * The breakdown (055 US2, FR-020 – FR-024, FR-060, FR-088 – FR-094): the node in focus split among its
- * children, as a treemap and as rows, under a header that says where the user is.
+ * The left column (055 US2, FR-020 – FR-024, FR-088 – FR-096): the lists — Components and Projects at the
+ * top, the children of whatever has been drilled into below — as rows, under a header that says where the
+ * user is. Everything about the SELECTED item is the right column's (`detail-pane.tsx`, FR-097).
  *
  * At the root it carries both halves of the intent from its first view (FR-020b) — throng's usage per
  * component and the user's usage per project — and everywhere else a single section for the focused
@@ -8,29 +9,30 @@
  *
  * ══ ONE ROVING TAB STOP ══
  *
- * Tab enters the breakdown once, on the row with the keyboard (`use-breakdown-keys.ts`), not once per
- * row or per tile: two hundred processes are not two hundred stops (FR-068). The drill-down buttons are
- * outside the Tab order for the same reason; Enter or Right on the row does what they do.
+ * Tab enters the list once, on the row with the keyboard (`use-breakdown-keys.ts`), not once per row: two
+ * hundred processes are not two hundred stops (FR-068).
  *
- * ══ A CLICK SELECTS, A BUTTON OPENS (FR-088) ══
+ * ══ A CLICK SELECTS, A DOUBLE-CLICK OPENS (FR-088, FR-096) ══
  *
- * "Use buttons to drill down, use clicks to select items." A click on a row or a tile selects its node, a
- * second click on it — or a click on empty space — clears the selection, and the node's drill-down
- * button opens it. Exactly the selected node is marked (FR-089); which row has the KEYBOARD is a
- * separate thing and is not drawn as a selection.
+ * A click on a row selects its node and shows it on the right; a second click on it — or a click on empty
+ * space — clears the selection; a double-click, Enter or Right opens it (a node with nothing under it does
+ * not). No row carries a button for that. Exactly the selected node is marked (FR-089); which row has the
+ * KEYBOARD is a separate thing and is not drawn as a selection.
  *
- * ══ THE ORDER HOLDS (FR-090) ══
+ * ══ THE LIST HOLDS STILL (FR-090, FR-095) ══
  *
- * Figures change every capture, and a list that re-sorts every capture cannot be clicked. While the
- * pointer is over the breakdown, or a node is selected, rows and tiles keep the order they had (new ones
- * after them, gone ones dropped) and only their figures update. When that ends they re-rank, and the ones
- * that moved slide to their new place (`flip.ts`).
+ * Figures change every capture, and a list that moves every capture cannot be clicked — nor can a tooltip
+ * stay up on a row whose text changes. While the pointer is over the list it is drawn from the capture it
+ * had when the pointer arrived — order, figures, sparklines — and catches up when the pointer leaves. With
+ * a node selected and the pointer elsewhere the ORDER alone holds (new rows after, gone ones dropped) and the
+ * figures move; when that ends the rows re-rank, and the ones that moved slide to their new place
+ * (`flip.ts`).
  *
  * ══ WHAT ONE KEYSTROKE OR CLICK COSTS (SC-010) ══
  *
- * Every callback and prop handed to a row or a tile is stable, so a selection re-renders the two rows
- * whose mark changed rather than all of them. The model is built from the DEFERRED view, so a keystroke in
- * the filter shows in the field at once and the matches follow in a render React may interrupt.
+ * Every callback and prop handed to a row is stable, so a selection re-renders the two rows whose mark
+ * changed rather than all of them. The model is built from the DEFERRED view, so a keystroke in the filter
+ * shows in the field at once and the matches follow in a render React may interrupt.
  *
  * ══ WORDS, NEVER BARE NUMBERS ══
  *
@@ -56,8 +58,8 @@ import { moveFrom } from './flip.js';
 import {
   allRows,
   buildBreakdown,
+  descendants,
   figuresOf,
-  tilesFor,
   valueText,
   type BreakdownModel,
   type BreakdownRow,
@@ -67,7 +69,6 @@ import {
 import {
   focusOn,
   getHistory,
-  getIoPeak,
   isEnded,
   setSelection,
   toggleSelection,
@@ -76,19 +77,26 @@ import {
   useView,
 } from './monitor-session.js';
 import { useNodeActionsContext } from './node-actions.js';
-import { Sparkline } from './sparkline.js';
-import { HeatKey, Treemap } from './treemap.js';
+import { Sparkline, holdSparklines } from './sparkline.js';
 import { useBreakdownKeys } from './use-breakdown-keys.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
+import { usePointerHold } from './use-pointer-hold.js';
 
 /** What a row is when it cannot be measured (jsdom has no layout; a real one never reads 0). */
 const ROW_HEIGHT_FALLBACK_PX = 24;
 
-function cellTitle(rowLabel: string, f: Figure): string {
-  let title = `${rowLabel}: ${f.text}`;
-  if (f.band) title += ` (${f.band})`;
-  if (f.partial !== undefined) title += ` — partial: ${f.partial}`;
-  return title;
+/**
+ * What a row's hover title says: what it is, never how much (FR-095). A native tooltip whose text changes
+ * is closed by the browser, so a title that moved with the figures would flash up and vanish every capture.
+ */
+function rowTitle(node: ResourceNode, ended: boolean): string {
+  if (node.kind === 'limitation') return `${node.label}: ${node.reason ?? 'not measured'}`;
+  return `${node.label}${node.estimated ? ' (estimated)' : ''}${ended ? ' — ended' : ''}`;
+}
+
+/** A cell's title names its column, and says why a total is partial; the figure itself is already the cell's text. */
+function columnTitle(id: FigureId, f: Figure | undefined): string {
+  return f?.partial !== undefined ? `${FIGURE_LABEL[id]} — partial: ${f.partial}` : FIGURE_LABEL[id];
 }
 
 interface RowProps {
@@ -136,7 +144,7 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
         data-band={f?.band}
         data-partial={f?.partial !== undefined ? 'true' : undefined}
         data-unavailable={f && typeof f.value === 'object' && f.value.kind === 'unavailable' ? 'true' : undefined}
-        title={f ? cellTitle(node.label, f) : undefined}
+        title={ended ? undefined : columnTitle(id, f)}
       >
         {ended ? (i === 0 ? 'ended' : '') : f?.text}
         {!ended && id === 'memory' && node.estimated ? <span className="breakdown-row__tag"> estimated</span> : null}
@@ -158,9 +166,10 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
       data-estimated={node.estimated ? 'true' : undefined}
       data-ended={ended ? 'true' : undefined}
       data-partial={hasPartial ? 'true' : undefined}
-      title={valueText(node, ended, ctx, figures)}
+      title={rowTitle(node, ended)}
       style={{ ['--breakdown-depth' as string]: row.depth }}
-      onClick={() => onSelect(node.id)}
+      // The second click of a double-click is the open's, not a deselection.
+      onClick={(e) => (e.detail > 1 ? undefined : onSelect(node.id))}
       onDoubleClick={opens ? () => onOpen(row.path) : undefined}
       onContextMenu={onMenu ? (e) => onMenu(e, node) : undefined}
     >
@@ -184,35 +193,9 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
           {cell('io', 3)}
         </>
       )}
-      <span className="breakdown-row__open">{opens ? <OpenButton nodeId={node.id} label={node.label} path={row.path} onOpen={onOpen} /> : null}</span>
     </li>
   );
 }
-
-/**
- * The drill-down button (FR-088). Its own memoised piece, because it says the same thing on every capture
- * while the row around it re-renders for a figure: three of the elements a row costs to draw (the button,
- * its icon, its glyph) are not redrawn for a number moving.
- */
-const OpenButton = memo(
-  function OpenButton({ nodeId, label, path, onOpen }: { nodeId: string; label: string; path: readonly string[]; onOpen: (path: readonly string[]) => void }): ReactElement {
-    return (
-      <IconButton
-        token="chevron"
-        title={`Open ${label}`}
-        testId={`breakdown-row-open-${nodeId}`}
-        className="icon-button breakdown-row__open-button"
-        tabIndex={-1}
-        onClick={(e) => {
-          // The row's own click is a selection; this is not.
-          e.stopPropagation();
-          onOpen(path);
-        }}
-      />
-    );
-  },
-  (a, b) => a.nodeId === b.nodeId && a.label === b.label && a.onOpen === b.onOpen && a.path.length === b.path.length && a.path.every((id, i) => id === b.path[i]),
-);
 
 function sameFigures(a: readonly Figure[], b: readonly Figure[]): boolean {
   return a.length === b.length && a.every((f, i) => {
@@ -252,8 +235,6 @@ function Section({
   section,
   ctx,
   metric,
-  ioPeak,
-  hold,
   activeId,
   selectedId,
   onSelect,
@@ -263,33 +244,15 @@ function Section({
   section: BreakdownSection;
   ctx: FigureContext;
   metric: FigureId;
-  ioPeak: number;
-  hold: boolean;
   activeId: string | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onOpen: (path: readonly string[]) => void;
   onMenu: ((event: ReactMouseEvent, node: ResourceNode) => void) | undefined;
 }): ReactElement {
-  const tiles = useMemo(() => tilesFor(section, metric, isEnded), [section, metric]);
   return (
     <section className="breakdown__section" data-testid={`breakdown-section-${section.id}`} aria-label={section.title}>
       <h3 className="breakdown__heading">{section.title}</h3>
-      <div className="breakdown__map">
-        <Treemap
-          sectionId={section.id}
-          tiles={tiles}
-          metric={metric}
-          ctx={ctx}
-          ioPeak={ioPeak}
-          selectedId={selectedId}
-          hold={hold}
-          onSelect={onSelect}
-          onOpen={onOpen}
-          onMenu={onMenu}
-        />
-        <HeatKey metric={metric} thresholds={ctx.thresholds} />
-      </div>
       {section.rows.length === 0 ? (
         <p className="breakdown__empty" data-testid="breakdown-empty">
           Nothing to show here
@@ -341,7 +304,6 @@ function Columns({ sectionId, chosen }: { sectionId: string; chosen: FigureId })
           {FIGURE_LABEL[id]}
         </span>
       ))}
-      <span />
     </div>
   );
 }
@@ -367,7 +329,7 @@ function Status({ model, filterText, hideIdle }: { model: BreakdownModel; filter
   );
 }
 
-/** Where the user is, how to go back, and what sizes the tiles (FR-092). */
+/** Where the user is, how to go back, and what the rows are sorted by (FR-092). */
 function Header({ tree, model, metric }: { tree: ResourceNode; model: BreakdownModel; metric: FigureId }): ReactElement {
   return (
     <header className="breakdown__header" data-testid="breakdown-header">
@@ -382,27 +344,10 @@ function Header({ tree, model, metric }: { tree: ResourceNode; model: BreakdownM
         onClick={() => focusOn(model.focusPath.slice(0, -1))}
       />
       <Breadcrumb tree={tree} path={model.focusPath} onGo={focusOn} />
-      <span className="breakdown__tile-size" data-testid="breakdown-tile-size">
-        Tile size: {FIGURE_LABEL[metric]}
+      <span className="breakdown__sorted-by" data-testid="breakdown-sorted-by">
+        Sorted by {FIGURE_LABEL[metric]}
       </span>
     </header>
-  );
-}
-
-/** The focused node's own line: its totals, with any partial reason in plain sight (FR-044). */
-function FocusSummary({ node, ctx }: { node: ResourceNode; ctx: FigureContext }): ReactElement {
-  const figures = figuresOf(node, ctx);
-  return (
-    <p className="breakdown__summary" data-testid="breakdown-focus-summary">
-      <strong>{node.label}</strong>
-      {figures.map((f) => (
-        <span key={f.id} className="breakdown__summary-figure" data-band={f.band}>
-          {' '}
-          {FIGURE_LABEL[f.id]} {f.text}
-          {f.partial !== undefined ? ` (partial: ${f.partial})` : ''}
-        </span>
-      ))}
-    </p>
   );
 }
 
@@ -440,6 +385,15 @@ function useRowMoves(model: BreakdownModel | null, container: { readonly current
   }, [model, container]);
 }
 
+/** What the list draws from: the latest capture, or the one the pointer arrived at. */
+interface Seen {
+  readonly tree: ResourceNode | null;
+  readonly frame: ReturnType<typeof useSession>['frame'];
+  readonly version: number;
+  /** Which processes had ended at that capture; `null` means ask the session as it stands. */
+  readonly ended: ReadonlySet<string> | null;
+}
+
 export function Breakdown(): ReactElement | null {
   const actions = useNodeActionsContext();
   const session = useSession();
@@ -450,9 +404,17 @@ export function Breakdown(): ReactElement | null {
   // filter text is deferred for the same reason: typing must show in the field before the matches do. The
   // rest of the view (the focus, the metric) is not — a drill or a metric choice is a click, and the
   // keyboard's focus follows the rows it asked for.
-  const tree = useDeferredValue(session.tree);
-  const frame = useDeferredValue(session.frame);
-  const version = useDeferredValue(session.version);
+  const liveTree = useDeferredValue(session.tree);
+  const liveFrame = useDeferredValue(session.frame);
+  const liveVersion = useDeferredValue(session.version);
+  // The pointer over the list freezes what it draws at what it was when the pointer arrived (FR-095): the
+  // tree, the frame, the history the idle rule reads, and which processes had ended — the last is mutated in
+  // place by the session, so it is copied.
+  const pointer = usePointerHold<Seen>({ tree: liveTree, frame: liveFrame, version: liveVersion, ended: null }, (live) => ({
+    ...live,
+    ended: new Set(live.tree === null ? [] : descendants(live.tree).filter((n) => isEnded(n.id)).map((n) => n.id)),
+  }), (live) => live.version);
+  const { tree, frame, version, ended } = pointer.value;
   const liveView = useView();
   const filterText = useDeferredValue(liveView.filterText);
   const view = useMemo(() => (filterText === liveView.filterText ? liveView : { ...liveView, filterText }), [liveView, filterText]);
@@ -461,8 +423,7 @@ export function Breakdown(): ReactElement | null {
   const machine = frame?.machine;
 
   // ── holding the order (FR-090) ──
-  const [pointerOver, setPointerOver] = useState(false);
-  const hold = pointerOver || selectedId !== null;
+  const hold = pointer.held || selectedId !== null;
   const holdNow = useRef(hold);
   holdNow.current = hold;
   const heldKey = `${view.metric}|${view.focusPath.join('/')}`;
@@ -481,9 +442,13 @@ export function Breakdown(): ReactElement | null {
     () =>
       tree && ctx
         ? buildBreakdown(tree, view, {
-            isEnded,
-            // The idle rule reads the last three samples (FR-061a): hand it those, not the whole history.
-            ownHistory: (id) => getHistory(id).slice(-IDLE_SAMPLES).map((p) => p.own),
+            isEnded: ended === null ? isEnded : (id) => ended.has(id),
+            // The idle rule reads the last three samples (FR-061a): hand it those, not the whole history —
+            // and, under the pointer, not any sample newer than the capture being drawn.
+            ownHistory: (id) => {
+              const upTo = ended === null || frame === null ? Infinity : frame.at;
+              return getHistory(id).filter((p) => p.at <= upTo).slice(-IDLE_SAMPLES).map((p) => p.own);
+            },
             thresholds: ctx.thresholds,
             machine: ctx.machine,
             ...(holdNow.current && drawn.current?.key === heldKey ? { heldOrder: drawn.current.ids } : {}),
@@ -507,12 +472,16 @@ export function Breakdown(): ReactElement | null {
   }, [rows, selectedId]);
   const keys = useBreakdownKeys({ rows, activeId, focusPath: model?.focusPath ?? ['root'] });
   useRowMoves(model, keys.ref);
+  // The sparklines hold with the figures beside them (FR-095).
+  useEffect(() => {
+    const list = keys.ref.current;
+    return pointer.held && list !== null ? holdSparklines(list) : undefined;
+  }, [pointer.held, keys.ref]);
 
   if (!tree || !model || !ctx) return null;
 
   const activeRow = rows.find((r) => r.node.id === activeId);
   const onMenu = actions?.openMenu;
-  const ioPeak = getIoPeak();
 
   return (
     <div
@@ -520,15 +489,13 @@ export function Breakdown(): ReactElement | null {
       data-testid="breakdown"
       onKeyDown={keys.onKeyDown}
       ref={keys.ref}
-      onMouseEnter={() => setPointerOver(true)}
-      onMouseLeave={() => setPointerOver(false)}
+      {...pointer.bind}
       // Empty space is not a node: a click on it clears the selection (FR-088).
       onClick={(e) => {
         if (!(e.target as Element).closest(CLICKABLE)) setSelection(null);
       }}
     >
       <Header tree={tree} model={model} metric={view.metric} />
-      <FocusSummary node={model.focus} ctx={ctx} />
       <Status model={model} filterText={view.filterText} hideIdle={view.hideIdle} />
       {model.sections.map((section) => (
         <Section
@@ -536,8 +503,6 @@ export function Breakdown(): ReactElement | null {
           section={section}
           ctx={ctx}
           metric={view.metric}
-          ioPeak={ioPeak}
-          hold={hold}
           activeId={activeId}
           selectedId={selectedId}
           onSelect={toggleSelection}
