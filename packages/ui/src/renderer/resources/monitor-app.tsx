@@ -59,6 +59,9 @@ const MonitorBody = lazy(loadBody);
 /** The most often the view is sent to main while it is being typed or clicked into (SC-010). */
 export const VIEW_SAVE_INTERVAL_MS = 250;
 
+/** Sends a view change still waiting out the interval, at once; a no-op when nothing is waiting. */
+let flushViewNow: () => void = () => undefined;
+
 /**
  * Sends the view to main when it changes — the first change at once, then at most one send per interval,
  * the last send always carrying the latest view. It listens to the store directly rather than rendering
@@ -83,11 +86,22 @@ function useSaveView(enabled: boolean): void {
     const off = subscribeSession(() => {
       if (timer === null && getView() !== sent) flush();
     });
+    const now = (): void => {
+      if (getView() === sent) return;
+      sent = getView();
+      send(sent);
+    };
+    flushViewNow = now;
+    // A window that is destroyed never runs React's cleanup, but its page does go away: whatever is still
+    // waiting out the interval is sent then (FR-087).
+    window.addEventListener('pagehide', now);
     return () => {
       off();
+      window.removeEventListener('pagehide', now);
+      if (flushViewNow === now) flushViewNow = () => undefined;
       if (timer !== null) clearTimeout(timer);
       // A change still waiting out the interval is not lost with the window.
-      if (getView() !== sent) send(getView());
+      now();
     };
   }, [enabled]);
 }
@@ -162,6 +176,7 @@ function MonitorShell(): ReactElement {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (document.querySelector('[role="menu"]') !== null) return;
       if (e.target instanceof Element && e.target.closest('[role="dialog"]') !== null) return;
+      flushViewNow();
       window.throng?.window?.close?.();
     };
     window.addEventListener('keydown', onKeyDown);
@@ -174,6 +189,7 @@ function MonitorShell(): ReactElement {
    */
   const minimise = (): void => {
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    flushViewNow();
     window.throng?.resources?.minimise?.({ reducedMotion });
   };
 

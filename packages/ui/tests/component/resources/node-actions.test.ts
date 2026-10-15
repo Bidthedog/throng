@@ -375,6 +375,26 @@ describe('Kill Process and Kill All Below ask confirmations.killProcesses (FR-06
     expect(dialog.textContent).not.toContain('Build › Shell');
   });
 
+  it('acts on what is under the node NOW, not on what its row last drew (FR-063)', async () => {
+    feed(sampleHierarchy());
+    await mount({ killProcesses: 'single' });
+    act(() => focusOn(PROCESS_PATH));
+    // A child that has just started and is doing nothing yet: the shell's printed figures do not change, so
+    // its row is not redrawn — and its menu must still know about the child.
+    const late = proc(301, 'late.exe', metrics());
+    const graft = (n: ResourceNode): ResourceNode => (n.id === 'x:200:1' ? { ...n, children: [...n.children, late] } : { ...n, children: n.children.map(graft) });
+    feed(graft(sampleHierarchy()), 2);
+
+    rightClick('x:200:1');
+    fireEvent.click(screen.getByTestId('menu-item-Kill All Below'));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(within(dialog).getAllByTestId('kill-details-item')).toHaveLength(3);
+    fireEvent.click(screen.getByTestId('confirm-accept'));
+
+    await waitFor(() => expect(bridge.kills).toHaveLength(1));
+    expect(bridge.kills[0]!.targets).toContain(late.process!.key);
+  });
+
   it('Kill Process asks the same, for that process alone', async () => {
     feed(sampleHierarchy());
     await mount({ killProcesses: 'single' });

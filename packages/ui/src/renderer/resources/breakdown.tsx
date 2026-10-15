@@ -495,7 +495,9 @@ export function Breakdown(): ReactElement | null {
     [tree, ctx, view, version, released],
   );
   useLayoutEffect(() => {
-    if (model !== null && !holdNow.current) drawn.current = { key: heldKey, ids: allRows(model).map((r) => r.node.id) };
+    // Recorded while nothing holds — and at a NEW level or metric even when something does: the first model
+    // there was ranked (the old order is not this level's), and that is the order to hold from then on.
+    if (model !== null && (!holdNow.current || drawn.current?.key !== heldKey)) drawn.current = { key: heldKey, ids: allRows(model).map((r) => r.node.id) };
   }, [model, heldKey]);
 
   const rows = useMemo(() => (model ? allRows(model) : []), [model]);

@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceNode } from '@throng/core';
 import { Breakdown, __onRowDrawn } from '../../../src/renderer/resources/breakdown.js';
 import { __resetSession, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
-import { frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
 const counted = vi.hoisted(() => ({ figureOf: 0, rowRenders: [] as string[] }));
 vi.mock('../../../src/renderer/resources/figures.js', async (importOriginal) => {
@@ -71,6 +71,7 @@ function mountOn(root: ResourceNode, path: readonly string[] = PANEL): void {
 const row = (id: string): HTMLElement => screen.getByTestId(`breakdown-row-${id}`);
 const tile = (id: string): HTMLElement => screen.getByTestId(`treemap-tile-${id}`);
 const rowOrder = (): (string | null)[] => screen.getAllByRole('treeitem').map((r) => r.getAttribute('data-node-id'));
+const topOrder = (): (string | null)[] => screen.getAllByRole('treeitem').filter((r) => r.getAttribute('aria-level') === '1').map((r) => r.getAttribute('data-node-id'));
 const tileOrder = (): (string | null)[] => screen.getAllByTestId(/^treemap-tile-x:/).map((t) => t.getAttribute('data-testid')?.replace('treemap-tile-', '') ?? null);
 const breakdown = (): HTMLElement => screen.getByTestId('breakdown');
 
@@ -237,6 +238,70 @@ describe('the order holds while the pointer is over it, or something is selected
   function within13(): HTMLElement {
     return row('x:13:1');
   }
+});
+
+describe('the hold survives moving about (FR-090)', () => {
+  /** Process 11 with two children (21, 22), and a sibling 12. Each is `[cpu, memory in MiB]`. */
+  const family = (f: { p11: [number, number]; p21: [number, number]; p22: [number, number]; p12: [number, number] }): ResourceNode => {
+    const m = ([cpu, mem]: [number, number]) => metrics({ cpu, memory: mem * MIB });
+    const kids = [proc(11, 'p11.exe', m(f.p11), [proc(21, 'c21.exe', m(f.p21)), proc(22, 'c22.exe', m(f.p22))]), proc(12, 'p12.exe', m(f.p12))];
+    const panel = node({ id: 'n:big', kind: 'panel', label: 'Busy', panelKind: 'terminal', children: kids, owner: { projectId: 'p1', tabId: 'big', panelId: 'big' } });
+    const tab = node({ id: 't:big', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'p1', tabId: 'big' } });
+    const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
+    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
+    return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
+  };
+  const base = { p11: [1, 1], p21: [5, 5], p22: [9, 9], p12: [8, 8] } as const;
+  const mutable = (f: typeof base) => ({ p11: [...f.p11], p21: [...f.p21], p22: [...f.p22], p12: [...f.p12] }) as Parameters<typeof family>[0];
+
+  it('after a drill with the pointer over it: the new level ranks once, then holds', () => {
+    mountOn(family(mutable(base)));
+    fireEvent.mouseEnter(breakdown());
+
+    fireEvent.click(screen.getByTestId('breakdown-row-open-x:11:1'));
+    expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
+
+    // The two children swap rank; the pointer is still over the breakdown.
+    feed(family({ ...mutable(base), p21: [9, 9], p22: [5, 5] }));
+    expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
+  });
+
+  it('after Back by the keyboard with a node selected: the level ranks once, then holds', () => {
+    mountOn(family(mutable(base)), [...PANEL, 'x:11:1']);
+    fireEvent.click(row('x:21:1'));
+
+    fireEvent.keyDown(row('x:21:1'), { key: 'ArrowLeft' });
+    expect(getView().focusPath).toEqual(PANEL);
+    // 11 rolls up 1 + 5 + 9 = 15; 12 is 8.
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+
+    feed(family({ ...mutable(base), p11: [0, 1], p21: [1, 1], p22: [1, 1] }));
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+  });
+
+  it('after Back by the pointer (the button) with the pointer over it', () => {
+    mountOn(family(mutable(base)), [...PANEL, 'x:11:1']);
+    fireEvent.mouseEnter(breakdown());
+
+    fireEvent.click(screen.getByTestId('breakdown-back'));
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+
+    feed(family({ ...mutable(base), p11: [0, 1], p21: [1, 1], p22: [1, 1] }));
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+  });
+
+  it('after the metric changes with a node selected: ranks by the new metric once, then holds', () => {
+    mountOn(family({ ...mutable(base), p11: [9, 1], p12: [5, 5] }));
+    fireEvent.click(row('x:12:1'));
+
+    act(() => setView({ metric: 'memory' }));
+    // 11 rolls up 1 + 5 + 9 MiB = 15, 12 is 5: by memory 11 leads.
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+
+    // 12 now outweighs 11 by memory — held, so nothing moves.
+    feed(family({ ...mutable(base), p11: [9, 0], p21: [5, 0], p22: [9, 0], p12: [5, 50] }));
+    expect(topOrder()).toEqual(['x:11:1', 'x:12:1']);
+  });
 });
 
 describe('a re-sort moves with a short animation (FR-090)', () => {

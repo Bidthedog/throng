@@ -139,7 +139,7 @@ Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/re
 ## MT-09: Finding your way around the monitor
 
 Covers: FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060
-Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`
+Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`, `packages/core/src/resources/bands.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-copy.ts`
 
 ### Steps
 1. Open the monitor with a few terminals running. Without reading anything else, the header says where you are, has a Back button (greyed at the top) and says "Tile size: CPU"; the rows have column headers (Trend, CPU, Memory, GPU, I/O) with CPU marked.

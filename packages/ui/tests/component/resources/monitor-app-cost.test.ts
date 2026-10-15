@@ -72,6 +72,36 @@ describe('the shell stays out of the way (D3)', () => {
   });
 });
 
+describe('a view change is not lost with the window (FR-087)', () => {
+  it('sends the change still waiting out the interval when the page goes away, though nothing unmounted', async () => {
+    await mountWindow();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    act(() => setView({ filterText: 'a' }));
+    act(() => setView({ filterText: 'ab' }));
+    expect(bridge.savedViews.at(-1)).toMatchObject({ filterText: 'a' });
+
+    // A destroyed window never runs React's cleanup; it does fire pagehide.
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(bridge.savedViews.at(-1)).toMatchObject({ filterText: 'ab' });
+  });
+
+  it('sends it before the window is closed or minimised from inside', async () => {
+    await mountWindow();
+    Object.assign((window as unknown as { throng: Record<string, unknown> }).throng, {
+      window: { close: vi.fn(() => bridge.savedViews.length), minimize: vi.fn(), maximize: vi.fn(), isMaximized: () => Promise.resolve(false), onMaximizeChange: () => () => {} },
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    act(() => setView({ filterText: 'x' }));
+    act(() => setView({ filterText: 'xy' }));
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(bridge.savedViews.at(-1)).toMatchObject({ filterText: 'xy' });
+  });
+});
+
 describe('saving the view (D1, SC-010)', () => {
   it('saves at once, then at most every 250 ms, and always ends on the latest view', async () => {
     await mountWindow();

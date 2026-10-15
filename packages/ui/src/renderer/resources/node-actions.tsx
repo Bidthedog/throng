@@ -162,16 +162,28 @@ export function useNodeActions(): {
       : 'Unload Project and Keep Terminals Running';
   };
 
-  const rowsFor = (node: ResourceNode): ActionRow[] =>
-    actionsFor(node, { isEnded: (n) => isEnded(n.id), isMounted }).map((a) => ({
+  /*
+   * A row is not redrawn for a capture that prints the same figures (SC-010), so the node its handlers
+   * closed over can be a capture or more old: a process started since is not under it. Every action is
+   * decided, and run, on the node as the session holds it NOW.
+   */
+  const liveNode = (node: ResourceNode): ResourceNode => {
+    const tree = getSessionSnapshot().tree;
+    return (tree === null ? undefined : find(tree, node.id)) ?? node;
+  };
+
+  const rowsFor = (stale: ResourceNode): ActionRow[] => {
+    const node = liveNode(stale);
+    return actionsFor(node, { isEnded: (n) => isEnded(n.id), isMounted }).map((a) => ({
       id: a.id,
       label: labelOf(a),
       icon: ICON[a.id],
       section: SECTION[a.id],
       enabled: a.enabled,
       ...(reasonFor(a, node) !== undefined ? { reason: reasonFor(a, node) as string } : {}),
-      run: () => run(a.id, node),
+      run: () => run(a.id, liveNode(node)),
     }));
+  };
 
   const openMenu = (event: ReactMouseEvent, node: ResourceNode): void => {
     const rows = rowsFor(node);
