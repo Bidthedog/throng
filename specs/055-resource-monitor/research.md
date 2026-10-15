@@ -269,3 +269,44 @@ library's worth of code; VIII).
 
 SC-003 and SC-004 are measured: an integration benchmark of the collector's CPU over 60 s of summary mode
 (SC-004) and a component-level long-task measurement of the modal updating a 200-process hierarchy (XII).
+
+## R14 — The monitor window (Session 2026-10-15; supersedes R12's exclusive modal and its FLIP minimise)
+
+**Decision.** The monitor moves out of the main window into its own `BrowserWindow`, built the way the
+Preferences window is (`preferences-window.ts`) and loaded from the same renderer entry with `?monitor`:
+
+- **Shape.** Frameless, movable, resizable, **parented to the main window** — so it minimises, restores and
+  closes with it — and not modal: every throng window stays interactive (FR-081, FR-082). One instance:
+  opening it again focuses it. `minimizable: false` at the OS level, as Preferences: the title bar's
+  Minimise is the monitor's own (FR-085), not the OS's.
+- **Layering.** Preferences' focus-scoped `alwaysOnTop` — held only while a throng window has focus —
+  is extracted from `preferences-window.ts` into one shared helper both windows use, rather than copied
+  (FR-083). The helper's reasoning comment moves with it.
+- **Chrome.** The renderer mounts the same `TitleBar` Preferences uses, titled "Resource Monitor", with
+  `showMinimise` on and its minimise click routed to the monitor's own minimise (FR-081). Maximise and
+  Restore are the title bar's existing window controls — the screen, not the main window (FR-084).
+- **Minimise animation.** In UI main: it asks the main window's renderer for the status-bar figures'
+  rectangle, converts it to screen coordinates with the main window's content bounds and zoom factor, and
+  shrinks the monitor window's bounds toward it over ~200 ms (`setBounds` steps, with `setOpacity`),
+  then closes it. Under reduced motion the renderer asks for a plain close (FR-085). The renderer-side
+  FLIP of R12 is retired with the modal.
+- **Live data.** Unchanged in substance: detail demand is already broadcast to every window, each
+  reports its own workspace, and the monitor window subscribes to detail frames as the modal did (R7).
+  Changes made in throng reach it at the next capture (FR-082).
+- **Remembered place and view.** The window's bounds and maximised state, and FR-057's view state, are
+  held in UI main for the life of the process — the renderer is destroyed on close, so it cannot hold
+  them. The view is an opaque JSON value the renderer reads on mount and writes on change; bounds are
+  read on close and clamped back onto a visible display on open (FR-087).
+- **Actions.** The monitor window holds no workspace, so every Destroy goes through `routeAction` to the
+  window holding the tab or panel (which comes forward, R12), and **Unload Project** gains a route to the
+  main window, whose renderer runs the shared `useUnloadProject` flow (FR-086). Kill is unchanged —
+  confirmed in the monitor window, carried out by the collector.
+- **Entry points.** The status bar, the cog item and `view.resourceMonitor` in any window call
+  `resources.open()`, which opens or focuses the monitor window; the main window no longer mounts a
+  modal, and `throng:resources:open-request` is retired.
+
+**Alternatives considered.** *Keep the modal, make it non-exclusive*: still bound to the main window's
+area, cannot be moved beside throng or onto another screen, and cannot stay above a sub-workspace — none
+of what was asked. *Hide the window on close instead of destroying it*: keeps the view and bounds for
+free and reopens instantly, but holds a whole renderer's memory for the rest of the session after one
+glance, in a feature whose point is showing throng's memory; rejected.
