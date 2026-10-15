@@ -168,6 +168,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Toggle File Explorer',
     'Show or hide the File Explorer pane.',
   ),
+  chord(
+    'view.resourceMonitor',
+    'View',
+    'Resource Monitor',
+    'Open the Resource Monitor: what throng and everything it started is using, by component, project, tab, panel and process.',
+  ),
   // 046 US2 (FR-015/019/020/022) — step the active project, or jump focus straight to a side pane,
   // from anywhere in the window.
   chord(

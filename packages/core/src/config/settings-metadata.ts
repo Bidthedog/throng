@@ -23,6 +23,7 @@ import { leavesOfDeclared, type FieldDescriptor, type MetadataRegistry } from '.
 // 044 — imports neither this module nor `app-settings.ts`, so no cycle (see its header).
 import { previewSettingsDescriptors } from './preview-settings.js';
 import { validateTitleTemplate } from '../terminal/title-template.js';
+import { minimumIntervalFor, resolveResourceMonitorSettings } from '../resources/settings-resolution.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
 
 /** Leaves that are internal bookkeeping, not user-configurable settings. */
@@ -170,6 +171,85 @@ const MARKDOWN_SECTIONS_OPEN: FieldDescriptor = {
   allowedValues: ['expanded', 'collapsed'],
 };
 
+/**
+ * The Resource Monitor (055, research R11). Ranges are the hard block (FR-004, FR-033a): the slider
+ * offers nothing outside them and the bounds guard clamps a hand-edited value to them. Each step is 1,
+ * at least 1% of every range.
+ */
+const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
+  {
+    key: 'resourceMonitor.captureIntervalSeconds',
+    label: 'Capture interval (seconds)',
+    description:
+      'How often throng measures its own CPU, memory, GPU and I/O, for the status bar and the Resource Monitor alike. A longer history needs a slower capture: up to 5 minutes allows 2 seconds, up to 10 minutes 5, up to 20 minutes 15, and up to 30 minutes 30.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 2,
+    max: 60,
+    step: 1,
+    minFor: (settings) => minimumIntervalFor(settings.resourceMonitor.historyMinutes),
+    note: (settings) => {
+      const r = resolveResourceMonitorSettings(settings.resourceMonitor);
+      return r.intervalRaised
+        ? `Raised to ${r.intervalSeconds} s: the minimum for a ${r.historyMinutes}-minute history`
+        : undefined;
+    },
+  },
+  {
+    key: 'resourceMonitor.historyMinutes',
+    label: 'History window (minutes)',
+    description:
+      'How many minutes of history the Resource Monitor keeps for each process while it is open. Nothing is kept once it closes.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 1,
+    max: 30,
+    step: 1,
+  },
+  {
+    key: 'resourceMonitor.cpuWarningPercent',
+    label: 'CPU warning (%)',
+    description:
+      'The share of the whole machine\'s CPU at which a figure is shown in the warning colour. Kept below the critical level.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 1,
+    max: 100,
+    step: 1,
+  },
+  {
+    key: 'resourceMonitor.cpuCriticalPercent',
+    label: 'CPU critical (%)',
+    description: 'The share of the whole machine\'s CPU at which a figure is shown in the critical colour.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 1,
+    max: 100,
+    step: 1,
+  },
+  {
+    key: 'resourceMonitor.memoryWarningPercent',
+    label: 'Memory warning (%)',
+    description:
+      'The share of installed memory at which a figure is shown in the warning colour. Kept below the critical level.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 1,
+    max: 100,
+    step: 1,
+  },
+  {
+    key: 'resourceMonitor.memoryCriticalPercent',
+    label: 'Memory critical (%)',
+    description: 'The share of installed memory at which a figure is shown in the critical colour.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 1,
+    max: 100,
+    step: 1,
+  },
+];
+
 export const SETTINGS_METADATA: MetadataRegistry = [
   // Appearance
   {
@@ -216,6 +296,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'confirmations.destroySubWorkspace',
     'Destroy a sub-workspace',
     'How many confirmations before a sub-workspace is destroyed.',
+  ),
+  // 055 FR-063 — the one confirmation the Resource Monitor adds; its other actions reuse the rows above.
+  confirmDescriptor(
+    'confirmations.killProcesses',
+    'Kill processes',
+    'How many confirmations before the Resource Monitor force-ends a process (Kill Process) or everything running beneath a project, tab, panel or process (Kill All Below).',
   ),
 
   // Panes
@@ -1282,6 +1368,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     max: 20,
     step: 1,
   },
+  ...RESOURCE_MONITOR_DESCRIPTORS,
 ];
 
 /**

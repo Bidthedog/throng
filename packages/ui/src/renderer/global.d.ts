@@ -33,6 +33,34 @@ declare global {
           list: Array<{ panelId: string; panelTitle: string; windowTitle?: string }>,
         ) => void;
       };
+      /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
+      resources?: {
+        /** The latest cached summary; `null` before the first tick (FR-002, FR-051). */
+        summary: () => Promise<import('@throng/ipc-contract').ResourceSummary | null>;
+        /** Main window only: one summary per tick. */
+        onSummary: (cb: (s: import('@throng/ipc-contract').ResourceSummary) => void) => () => void;
+        /** Whether any window has the monitor open; every window reports its panels while it does. */
+        detailDemand: () => Promise<boolean>;
+        onDetailDemand: (cb: (on: boolean) => void) => () => void;
+        /** Turns detail collection on for this window until unsubscribed or the window closes. */
+        subscribeDetail: () => Promise<{ subscriptionId: number }>;
+        unsubscribeDetail: (subscriptionId: number) => Promise<void>;
+        onDetail: (cb: (f: import('@throng/ipc-contract').DetailFrame) => void) => () => void;
+        /** Context on change, estimates each tick — only while detail is in demand (R7). Main stamps the renderer's pid. */
+        reportPanels: (
+          context: import('@throng/ipc-contract').WorkspaceContext | null,
+          estimates: readonly import('@throng/ipc-contract').PanelEstimate[],
+        ) => void;
+        kill: (req: import('@throng/ipc-contract').KillRequest) => Promise<import('@throng/ipc-contract').KillResult>;
+        /** Run Destroy Tab / Destroy Panel in the window holding it (R12); false when no window does. */
+        routeAction: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => Promise<boolean>;
+        /** This window is asked to run a Destroy for the monitor. */
+        onAction: (cb: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => void) => () => void;
+        /** From any window: open the monitor in the main window and focus it (R12). */
+        open: () => void;
+        /** Main window: another window asked for the monitor. */
+        onOpenRequest: (cb: () => void) => () => void;
+      };
       /** 029 / #182 — daemon liveness, pushed rather than pulled. */
       daemon?: {
         state: () => Promise<import('@throng/core').DaemonState>;

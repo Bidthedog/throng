@@ -68,6 +68,10 @@ export class WindowsDirectoryLock implements IDirectoryLock {
     return handle;
   }
 
+  heldPids(): { path: string; pid: number }[] {
+    return [...this.held].flatMap(([h, child]) => (typeof child.pid === 'number' ? [{ path: h.path, pid: child.pid }] : []));
+  }
+
   async release(handle: LockHandle): Promise<void> {
     const child = this.held.get(handle);
     if (!child) return; // idempotent / unknown handle → no-op

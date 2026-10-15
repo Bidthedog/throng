@@ -99,7 +99,12 @@ import {
   instanceDatabasePath,
   instanceUserDataDir,
 } from './instance-paths.js';
-import { ensureDaemon, pingDaemon } from './daemon-lifecycle.js';
+import { ensureDaemon, pingDaemon, resolveDaemonNodeExe } from './daemon-lifecycle.js';
+import { fork } from 'node:child_process';
+import type { DaemonRoster, RosterUiProcess } from '@throng/ipc-contract';
+import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
+import { ResourceMonitorHost } from './resource-monitor-host.js';
+import { registerResourcesIpc } from './resources-ipc.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -1908,6 +1913,86 @@ if (isPrimaryInstance)
     shellIntegration,
   );
   windowManager.registerMain(mainWindow);
+
+  /*
+   * 055 — the resource monitor. The collector is a separate Node process (R1), so measuring throng
+   * costs none of throng's own event loops; this host only forks it, answers its roster requests and
+   * relays. UI roles are re-read when a window or an Electron child comes or goes, never per tick.
+   */
+  const uiProcesses = (): RosterUiProcess[] => {
+    const out: RosterUiProcess[] = [{ pid: process.pid, role: 'main', label: 'Application' }];
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      const pid = win.webContents.getOSProcessId();
+      const label = win === mainWindow ? 'Main window' : win.getTitle() || 'Window';
+      if (pid > 0) out.push({ pid, role: 'window', label });
+    }
+    for (const m of app.getAppMetrics()) {
+      if (m.type === 'GPU') out.push({ pid: m.pid, role: 'gpu', label: 'GPU' });
+      else if (m.type === 'Utility') out.push({ pid: m.pid, role: 'utility', label: m.serviceName ?? m.name ?? 'Utility' });
+    }
+    return out;
+  };
+  const { ELECTRON_RUN_AS_NODE: _dropRunAsNode, ...collectorEnv } = process.env;
+  const resourceMonitor = new ResourceMonitorHost({
+    collectorEntry: resolveFromHere('../collector/resource-collector-entry.js'),
+    nodeExe: resolveDaemonNodeExe(
+      undefined,
+      (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+      existsSync,
+      collectorEnv,
+    ),
+    fork: (entry, execPath) =>
+      fork(entry, [], { execPath, env: collectorEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'ignore', 'ipc'], windowsHide: true }),
+    daemonRoster: () => daemonClient.call<DaemonRoster>(RESOURCES_ROSTER_METHOD, {}),
+    uiProcesses,
+    documentEstimates: () => editorCoordinator.documentEstimates(),
+    settings: () => currentSettings,
+    send: (windowId, channel, payload) => {
+      const win = BrowserWindow.fromId(windowId);
+      if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+    mainWindowId: () => currentMainWindow()?.id ?? null,
+    broadcast: (channel, payload) => {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+  });
+  registerResourcesIpc(ipcMain, {
+    host: resourceMonitor,
+    windowIdOf: (sender) => BrowserWindow.fromWebContents(sender)?.id ?? null,
+    osPidOf: (sender) => sender.getOSProcessId(),
+    sendTo: (windowId, channel, payload) => {
+      const win = BrowserWindow.fromId(windowId);
+      if (!win || win.isDestroyed()) return false;
+      // R12: the routed Destroy may confirm in that window, so it comes forward to show it.
+      if (win.isMinimized()) win.restore();
+      win.focus();
+      win.webContents.send(channel, payload);
+      return true;
+    },
+    openInMainWindow: () => {
+      const main = currentMainWindow();
+      if (!main) return;
+      if (main.isMinimized()) main.restore();
+      main.focus();
+      main.webContents.send('throng:resources:open-request');
+    },
+  });
+  onSettingsChanged.push((previous, next) => {
+    if (JSON.stringify(previous.resourceMonitor) !== JSON.stringify(next.resourceMonitor)) resourceMonitor.settingsChanged();
+  });
+  const watchWindowForResources = (win: BrowserWindow): void => {
+    const id = win.id;
+    win.on('closed', () => resourceMonitor.windowClosed(id));
+  };
+  watchWindowForResources(mainWindow);
+  app.on('browser-window-created', (_event, win) => {
+    resourceMonitor.uiChanged();
+    watchWindowForResources(win);
+  });
+  app.on('child-process-gone', () => resourceMonitor.uiChanged());
+  app.on('will-quit', () => resourceMonitor.stop());
+  resourceMonitor.start();
   /*
    * 044 FR-063 — a preview provider turned off, MAIN's half (contracts/preview-ipc.md §5).
    *

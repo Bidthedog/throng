@@ -107,6 +107,19 @@ export interface FieldDescriptor {
    * subgroup's.
    */
   subsection?: string;
+  /**
+   * 055 (research R11) — a line shown beside the control explaining what the stored value RESOLVES to,
+   * where a rule between fields changes it: the capture interval raised to the history window's
+   * minimum. `undefined` shows nothing. Display only; the stored value is never rewritten by it.
+   */
+  note?: (settings: import('./app-settings.js').AppSettings) => string | undefined;
+  /**
+   * 055 FR-004 — a minimum that depends on ANOTHER setting: the capture interval's follows the history
+   * window. Where present it takes the place of the static {@link min} for the slider and the field, so
+   * a value the rule would only raise cannot be chosen in the first place. `min` stays the floor of the
+   * whole range (what the bounds guard clamps a hand-edited value to).
+   */
+  minFor?: (settings: import('./app-settings.js').AppSettings) => number;
   /** the control matched to the value type (FR-028/029/038). */
   control: ControlKind;
   /** allowed set for select/multiselect/enum (FR-029). */

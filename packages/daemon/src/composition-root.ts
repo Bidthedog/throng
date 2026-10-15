@@ -46,6 +46,7 @@ import {
 import { DAEMON_TYPES } from './tokens.js';
 import { IpcServer } from './ipc-server.js';
 import { RpcRouter } from './rpc-router.js';
+import { ResourceRosterService } from './resource-roster-service.js';
 import { HealthService } from './health-service.js';
 import { ProjectIpcService } from './project-service.js';
 import { WorkspaceIpcService } from './workspace-service.js';
@@ -308,6 +309,8 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // sub-workspace, and therefore the only one that can keep their names unique.
   new PanelNameIpcService({ projectStore, workspaceStore, userContext }).register(router);
   terminalService.register(router);
+  // 055 R5 — the resource monitor's roster: a read of what the terminal layer already holds.
+  new ResourceRosterService(terminalService, lockManager, () => deElevatedPty.agentPid()).register(router);
   container.bind<RpcRouter>(DAEMON_TYPES.RpcRouter).toConstantValue(router);
 
   container.bind<IpcServer>(DAEMON_TYPES.IpcServer).to(IpcServer);
