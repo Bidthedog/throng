@@ -6,12 +6,12 @@ Spec: `specs/055-resource-monitor/spec.md`
 |---|---|---|---|---|---|
 | MT-01 | Status bar usage figures | untested | | | |
 | MT-02 | Opening, closing and resizing the monitor | retired → MT-08 | | | |
-| MT-03 | Drilling into the breakdown | untested | | | |
-| MT-04 | Charts, filter and idle hiding | untested | | | |
+| MT-03 | Drilling into the breakdown | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
+| MT-04 | Charts, filter and idle hiding | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
 | MT-05 | Unload, destroy and kill from the monitor | untested | | | |
 | MT-06 | Held folders | untested | | | |
 | MT-07 | Resource Monitor preferences | untested | | | |
-| MT-08 | The monitor window | untested | | | |
+| MT-08 | The monitor window | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
 
 ## MT-01: Status bar usage figures
 

@@ -169,6 +169,27 @@ should look the same as the preferences one, except minimise should be available
   monitor window. *(derived from FR-063 and the existing cross-window routing; not confirmed by the user)*
   (FR-086)
 
+Second feedback the same day, verbatim: *"The UI in the monitor seems really slow, and the feedback is
+really lacking. I don't know what I can click on, what is active, and what is refreshing. We need to do
+better. … I am not sure how to use it."* The slowness and two display faults are defects against
+SC-003 and Principle XII and change nothing here; what the spec never said is answered below.
+
+- Q: How does a click on a tile or row behave? → A: **"Use buttons to drill down, use clicks to select
+  items."** A click selects — the detail pane and charts follow it, and its tile and row show it — and a
+  drill-down button on each tile and row with children opens it. The keyboard keeps Enter and Right to
+  drill (2026-10-14). Double-clicking a row also opens it *(derived from the explorer tree and the existing rows; not confirmed by the user)*.
+  (FR-088; amends FR-060's "click into to drill down")
+- Q: How do tiles and rows behave as their figures change on every capture? → A: **Ranked by the chosen
+  metric, but the order holds while the pointer is over the breakdown or a node is selected, and moves
+  animate when it re-sorts** — nothing jumps under the mouse. (FR-090)
+- Q: How much on-screen guidance does the monitor carry? → A: **Labels and a help button**: a header with
+  the breadcrumb, Back and what sizes the tiles; column headers; a chart legend; "Updated <time> · every
+  <n> s" with a pulse on each capture; and a "?" button explaining the keys, the colours and what
+  Components and Projects are. (FR-091 – FR-093)
+- Q: What does "responsive" mean, measurably? → A: **Typing in the filter, a click, a drill and a capture
+  each finish their work within 100 ms with ~450 processes** *(derived from SC-003 and Principle XII, which the slowness breached; not confirmed by the user)*.
+  (SC-010)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See throng's total load at a glance (Priority: P1)
@@ -246,6 +267,24 @@ process; at every level the figure shown equals the sum of its children plus its
 9. **Given** a Claude Code session is running in a terminal, **When** the user drills into that panel,
    **Then** the session and every process it started (tools, scripts, monitors — including those its subagents launch)
    appear beneath it.
+10. **Given** the monitor, **When** the user points at a tile or row, **Then** the cursor and the tile or
+   row show it can be clicked, amber and red ones included; **When** they click it, **Then** it is selected —
+   marked with an accent edge on both its tile and its row — and the detail pane and charts describe it;
+   nothing else is marked. (FR-088, FR-089)
+11. **Given** a tile or row with children, **When** the user clicks its drill-down button (or presses Enter
+   or Right on it, or double-clicks the row), **Then** the breakdown opens at it; a process with no
+   children has no drill-down button. Right-clicking a tile opens the same menu as its row. (FR-088)
+12. **Given** the monitor is open, **When** a capture arrives, **Then** "Updated <time> · every <n> s"
+   changes and pulses once; **While** the pointer is over the breakdown, **Then** no tile or row changes
+   place; **When** the pointer leaves, **Then** they move to their new ranks with a short animation (none
+   under reduced motion). (FR-090, FR-091)
+13. **Given** the monitor, **When** the user looks at it for the first time, **Then** a header names where
+   they are, with a Back button and "Tile size: <metric>"; the rows have column headers with the chosen
+   metric's column marked; each chart has a legend naming its bands and names the node it plots; and the
+   "?" button explains the mouse, the keys, the colours and what Components and Projects are.
+   (FR-092, FR-093)
+14. **Given** about 450 processes, **When** the user types in the filter, **Then** each keystroke shows
+   in the field at once and the matches follow within 100 ms, each process listed once. (SC-010)
 
 ---
 
@@ -604,12 +643,44 @@ reopens from it.
 - **FR-087**: Reopening MUST place the monitor window where the user left it, at the same size and
   maximised state, kept on a visible screen, along with FR-057's view. This lasts until throng restarts.
 
+#### Feedback, orientation and responsiveness (Session 2026-10-15)
+
+- **FR-088**: A click on a tile or a row MUST select that node, and only select it. Each tile and row whose
+  node has children MUST carry a drill-down icon button that opens it; Enter and Right on a selected node,
+  and a double-click on a row, MUST also open it. A node with no children MUST have no drill-down button
+  and MUST NOT open to an empty view. Right-clicking a tile MUST open the same menu as its row.
+- **FR-089**: Exactly the selected node MUST be marked — on its tile and on its row, with an accent edge
+  as throng marks its active tab and active file — and the detail pane and charts MUST describe that node;
+  with nothing selected, nothing is marked and they describe the node in focus. Every interactive element
+  MUST show a pointer cursor and a hover state on hover (tiles in the warning and critical bands
+  included), and a visible focus ring in throng's convention when focused from the keyboard. A tile's
+  resting fill MUST NOT be the selected fill.
+- **FR-090**: Tiles and rows MUST be ranked by the chosen metric, and that order MUST hold while the pointer
+  is over the breakdown or a node is selected; the selected node's figures keep updating in place. When
+  the order changes, tiles and rows MUST move to their new place with a short animation, and without one
+  under reduced motion.
+- **FR-091**: The monitor MUST show when its figures were captured and how often — "Updated <time> ·
+  every <n> s" — with a brief pulse each time a capture arrives; "Collecting the first reading…" before
+  the first, and FR-044's stale wording when the collector is failing. Charts and sparklines with fewer
+  than two points MUST say they are building their history rather than show nothing.
+- **FR-092**: The monitor MUST explain itself in place: a header naming where the user is (the breadcrumb),
+  with a Back button (disabled at the top) and "Tile size: <metric>"; column headers over the rows
+  (Trend, CPU, Memory, GPU, I/O) with the chosen metric's column marked; a legend on each chart naming
+  every band's colour and child; each chart naming the node it plots; visible labels on the metric choice
+  ("Size by") and the capture interval ("Capture every"); a count of what the filter matched and of the
+  idle processes hidden, and "No process matches '<text>'" when the filter matches nothing.
+- **FR-093**: A help button ("?", a themeable icon control) MUST open a panel explaining what Components and
+  Projects are, what a tile's size means, the mouse (click selects, the drill-down button opens,
+  right-click or Shift+F10 for actions), the keys, and what amber and red mean with the thresholds
+  currently set in Preferences. Esc or the button closes it.
+
 #### Visualisation and navigation
 
 - **FR-060**: The modal MUST be predominantly visual:
   - a time-series chart of each metric for the node in focus, stacked by its children;
   - a proportional breakdown (for example a treemap or sunburst) of the node in focus by the metric the
     user chooses, which the user can click into to drill down;
+    *Amended by FR-088 (Session 2026-10-15): a click selects; a drill-down button opens.*
   - a breadcrumb of the path from throng to the node in focus, any segment of which returns to that
     level;
   - per-row sparklines wherever processes are listed.
@@ -735,6 +806,9 @@ reopens from it.
   opened and then closed, for files from 1 MB to 50 MB. A terminal's Terminal buffers estimate is within
   10% of the change in its renderer's and the daemon's measured memory when its scrollback is filled from
   empty to its retained limit and then cleared.
+- **SC-010** *(Session 2026-10-15)*: With about 450 processes under throng, a keystroke in the filter, a
+  click that selects, a drill-down and the arrival of a capture each complete their rendering work within
+  100 ms, and a filtered breakdown lists each process once.
 
 ## Assumptions
 
