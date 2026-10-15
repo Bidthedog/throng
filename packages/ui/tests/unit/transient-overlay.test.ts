@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   claimTransientOverlay,
+  transientOverlayOpen,
+  transientScrimWanted,
   __resetTransientOverlayForTests,
 } from '../../src/renderer/common/transient-overlay.js';
 
@@ -109,5 +111,32 @@ describe('claimTransientOverlay — the one-slot claim registry (FR-071)', () =>
 
     claimTransientOverlay(() => calls.push('c'));
     expect(calls).toEqual(['b']);
+  });
+});
+
+describe('the scrim is per claim, not per slot (reported 2026-10-14)', () => {
+  beforeEach(() => {
+    __resetTransientOverlayForTests();
+  });
+
+  it('a claim without a scrim holds the slot but asks for no dimming', () => {
+    claimTransientOverlay(() => {}, { scrim: false });
+    expect(transientOverlayOpen()).toBe(true);
+    expect(transientScrimWanted()).toBe(false);
+  });
+
+  it('a claim with no options raises the scrim, as every overlay did before', () => {
+    claimTransientOverlay(() => {});
+    expect(transientScrimWanted()).toBe(true);
+  });
+
+  it('handing the slot from a scrimless popover to a modal raises the scrim, and back again lowers it', () => {
+    claimTransientOverlay(() => {}, { scrim: false });
+    const releaseModal = claimTransientOverlay(() => {});
+    expect(transientScrimWanted()).toBe(true);
+    claimTransientOverlay(() => {}, { scrim: false });
+    expect(transientScrimWanted()).toBe(false);
+    releaseModal(); // superseded — a no-op
+    expect(transientOverlayOpen()).toBe(true);
   });
 });

@@ -48,7 +48,21 @@
  */
 import { useEffect, useRef } from 'react';
 
-let current: { token: object; dismiss: () => void } | null = null;
+let current: { token: object; dismiss: () => void; scrim: boolean } | null = null;
+
+/**
+ * How an overlay takes part in the slot.
+ *
+ * `scrim: false` is for an ANCHORED popover — the editor status strip's language picker — which joins
+ * the one-at-a-time rule (opening Quick Open still closes it) but must not dim the window. The scrim
+ * paints above every panel's stacking context, so a popover drawn inside a panel would be dimmed along
+ * with the editor it is attached to (reported 2026-10-14). FR-071 asks for one overlay at a time; the
+ * scrim is a property of the centred modals, not of the rule.
+ */
+export interface TransientOverlayOptions {
+  /** Raise the window's shared scrim while this overlay holds the slot. Defaults to true. */
+  scrim?: boolean;
+}
 
 /**
  * The class that paints the scrim, on `<body>` rather than on each overlay's own element.
@@ -106,10 +120,10 @@ export function subscribeTransientOverlay(listener: () => void): () => void {
  * Returns the release to call when this overlay closes or unmounts. Calling it more than once, or
  * after another overlay has taken the slot, is a no-op.
  */
-export function claimTransientOverlay(dismiss: () => void): () => void {
+export function claimTransientOverlay(dismiss: () => void, options: TransientOverlayOptions = {}): () => void {
   const token = {};
   const incumbent = current;
-  current = { token, dismiss };
+  current = { token, dismiss, scrim: options.scrim ?? true };
   syncScrim();
   if (incumbent) {
     try {
@@ -139,15 +153,24 @@ export function claimTransientOverlay(dismiss: () => void): () => void {
  * keeps the claim stable for as long as the overlay is open while still calling the LATEST closure,
  * which matters because the dismissal usually closes over current props.
  */
-export function useTransientOverlay(open: boolean, dismiss: () => void): void {
+export function useTransientOverlay(open: boolean, dismiss: () => void, options: TransientOverlayOptions = {}): void {
   const latest = useRef(dismiss);
   latest.current = dismiss;
+  const scrim = options.scrim ?? true;
   useEffect(() => {
     if (!open) return undefined;
     // Unmount is handled by this cleanup: an overlay whose component goes away — window closed, tab
     // group unmounted, panel destroyed — leaves no callback behind for the next open to call into.
-    return claimTransientOverlay(() => latest.current());
-  }, [open]);
+    return claimTransientOverlay(() => latest.current(), { scrim });
+  }, [open, scrim]);
+}
+
+/**
+ * Should the shared scrim be painted right now — an overlay holds the slot AND asked for one?
+ * Read by `transient-scrim.tsx` alone; everything else asks {@link transientOverlayOpen}.
+ */
+export function transientScrimWanted(): boolean {
+  return current !== null && current.scrim;
 }
 
 /**
