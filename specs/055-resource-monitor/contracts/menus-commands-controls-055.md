@@ -7,7 +7,8 @@
 | `view.resourceMonitor` | `EVERYWHERE` | `Ctrl+Shift+Alt+R` (Tier 1, physical key) | Resource Monitor | Key Bindings editor; cog menu; `WINDOW_HANDLED_ACTIONS` |
 
 From a sub-workspace window it sends `throng:resources:open`; the main window opens the modal and is
-focused.
+focused. *Superseded (Session 2026-10-15, R14): from every window it sends `throng:resources:open`, which
+opens the monitor window or brings it forward.*
 
 ## Cog menu (main window)
 
@@ -19,9 +20,13 @@ focused.
 `StatusBar` right side, before `<DaemonIndicator/>`: one button, testId `status-resources`, holding up
 to four figures in the order CPU, memory, GPU, I/O, each `icon + value`. Overflow drops GPU, then I/O,
 then memory, then CPU (FR-045); with none left, the `resourceMonitor` icon alone. Hover: per-component
-breakdown of all four. Click: open the modal.
+breakdown of all four. Click: open the monitor window (R14).
 
-## Modal controls (all themeable icon controls with hover titles — FR-055)
+## Monitor controls (all themeable icon controls with hover titles — FR-055)
+
+*Session 2026-10-15 (R14): Close, Maximise / Restore and Minimise are the monitor window's title-bar
+controls — the Preferences title bar's, with Minimise added (`windowMinimise`, `windowMaximise` /
+`windowRestore`, close). The rows below for those three describe the retired modal.*
 
 | Control | Icon token | Title |
 |---|---|---|

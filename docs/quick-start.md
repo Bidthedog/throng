@@ -184,12 +184,15 @@ throng itself and everything its terminals run — coloured when a figure passes
 critical level. Click it, choose **Resource Monitor** from the cog, or press
 [`Ctrl+Shift+Alt+R`](key-bindings.md#view).
 
-The monitor shows usage by part of throng (UI, daemon, helpers) and by project, as a treemap you
+The monitor opens in its own window, like Preferences: move it beside your work and keep using throng
+behind it — it stays above throng's windows and updates as you go. It shows usage by part of throng
+(UI, daemon, helpers) and by project, as a treemap you
 click into: project → tab → panel → process → subprocess, each level rolled up from the one below,
 with charts of the last few minutes. Filter by name, command line or pid, hide idle processes, and
 press **Right**/**Enter** to drill in, **Left**/**Backspace** to go back up. Right-click a node to
 unload its project, destroy its tab or panel, or **Kill** a process or everything below it. **Esc**
-closes it; it can be maximised, and minimising tucks it back into the status bar. How it measures is
+closes it; it can be maximised, and minimising tucks it back into the status bar. It reopens where you
+left it. How it measures is
 in [preferences](preferences.md#resource-monitor).
 
 ## Getting help
