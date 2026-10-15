@@ -111,7 +111,7 @@ Paths: `packages/ui/src/renderer/preferences/form-controls.tsx`, `packages/ui/sr
 ## MT-08: The monitor window
 
 Covers: FR-043, FR-051, FR-052, FR-055, FR-056, FR-057, FR-081, FR-082, FR-083, FR-084, FR-085, FR-086, FR-087, FR-050, FR-053, FR-054
-Paths: `packages/ui/src/renderer/resources/monitor-modal.tsx`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/title-bar/cog-menu-items.ts`, `packages/ui/src/renderer/keybindings/window-dispatcher.tsx`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/main/main.ts`
+Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/resources/monitor-store.ts`, `packages/ui/src/renderer/resources/node-actions.tsx`, `packages/ui/src/renderer/resources/use-estimates-reporter.ts`, `packages/ui/src/renderer/title-bar/**`, `packages/ui/src/renderer/title-bar/cog-menu-items.ts`, `packages/ui/src/renderer/keybindings/window-dispatcher.tsx`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/main/resource-monitor-window.ts`, `packages/ui/src/main/floating-window-layering.ts`, `packages/ui/src/main/preferences-window.ts`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/main/main.ts`, `packages/ui/src/preload/preload.cts`
 
 ### Steps
 1. Click the status-bar figures. The Resource Monitor opens at once as its own window over throng, looking like the Preferences window — same title bar, chrome and theme — with a Minimise control as well; a loading state shows where data is not yet in.
@@ -125,6 +125,9 @@ Paths: `packages/ui/src/renderer/resources/monitor-modal.tsx`, `packages/ui/src/
 9. From a sub-workspace window, choose **Resource Monitor** from the cog. The same monitor window comes forward; no second one opens.
 10. Close it with the X at the top right. Tab through it when open: every control is reachable and shows a focus ring.
 11. With a tab in a sub-workspace, use **Destroy Tab** on it from the monitor. The sub-workspace window comes forward and asks its usual confirmation there.
+12. Use **Unload Project** on a project from the monitor. The main window comes forward and the project unloads exactly as from the project list; the monitor shows it greyed at its next capture.
+13. Tab to a node in the breakdown and press `Shift+F10`. Its menu opens. Choose **Kill Process**, then press **Esc** at the confirmation: the confirmation closes and the monitor stays open.
+14. Open Preferences while the monitor is open. Both float above throng; clicking either brings it in front of the other.
 
 ### Negative cases
 - The monitor never stays above another application's window.
