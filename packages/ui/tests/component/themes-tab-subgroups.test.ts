@@ -55,6 +55,11 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 
 const GROUP = 'Synthetic';
 
+beforeEach(() => {
+  // 056 FR-016 folds sections by default; this file is about subsections, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
+});
+
 /**
  * Everything the mock factory touches lives INSIDE `vi.hoisted`.
  *

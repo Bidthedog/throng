@@ -42,12 +42,17 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ThemesTab } from '../../src/renderer/preferences/themes-tab.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { DEFAULT_APP_SETTINGS, THRONG_THEME } from '@throng/core';
+
+beforeEach(() => {
+  // 056 FR-016 folds sections by default; these cases drive rows, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
+});
 
 afterEach(() => {
   // `window` is shared by every test in the file; a bridge left standing would let one test's write

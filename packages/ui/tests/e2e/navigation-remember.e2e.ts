@@ -484,7 +484,8 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
         const group = prefs.getByTestId('settings-group-Editor · Navigation');
         await expect(group, 'there is no Editor · Navigation group in the Settings tab').toBeVisible();
         /*
-         * `:scope >` — the group's DIRECT children, which is what a row is.
+         * `:scope > .fold-content >` — the group's contents container's DIRECT children, which is what a
+         * row is. (056: every heading's contents sit in one `.fold-content` so a fold can hide them.)
          *
          * A bare `[data-testid^="setting-"]` is not selective enough: each row nests a `RowActions`
          * whose four controls are `setting-actions-`, `setting-revert-`, `setting-reset-` and
@@ -496,7 +497,7 @@ test('both toggles live in Editor · Navigation, ship off, and turning them off 
          * the substring could not be mangled.
          */
         const keys = await group
-          .locator(':scope > [data-testid^="setting-"]')
+          .locator(':scope > .fold-content > [data-testid^="setting-"]')
           .evaluateAll((rows) =>
             rows.map((row) => (row.getAttribute('data-testid') ?? '').slice('setting-'.length)),
           );

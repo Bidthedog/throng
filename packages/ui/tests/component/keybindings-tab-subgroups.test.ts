@@ -113,6 +113,8 @@ const subsection = (subgroup: string): HTMLElement =>
   screen.getByTestId(`keybindings-subgroup-${GROUP}-${subgroup}`);
 
 beforeEach(() => {
+  // 056 FR-016 folds sections by default; this file is about subgroups, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
   setRegistry(held.real);
 });
 

@@ -51,7 +51,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
@@ -66,6 +66,11 @@ import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
+
+beforeEach(() => {
+  // 056 FR-016 folds sections by default; these cases drive rows, so open the sections (research R10).
+  window.history.replaceState(null, '', '/?foldDefault=open');
+});
 
 /**
  * The tab, inside the three providers the preferences window mounts around it.

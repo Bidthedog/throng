@@ -24,7 +24,8 @@ describe('054 icon tokens', () => {
 
   it('bumps the shipped-defaults version so existing installs receive them', () => {
     // 21 for the first five; 22 for `diagramZoomReset` (MT-04), which an install holding a 21 marker lacks.
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(22);
+    // At least that: 056 moved it to 23 for `warning`.
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(23);
   });
 
   it('retires diagramFullSize: no glyph, no editor copy, and a stray key is dropped on load', () => {
