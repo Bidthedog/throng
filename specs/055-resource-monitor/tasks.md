@@ -239,3 +239,7 @@ T112 before T113, T114 and T116; T117 last. The status-rect protocol spans T108 
 - [x] T116 Update the E2E specs that open the monitor (`resource-monitor.e2e.ts`, `resource-monitor-kill.e2e.ts`, `resource-estimates-calibration.e2e.ts`) to find it as its own window; add one `@extended @window` test proving that throng's terminal accepts typing while the monitor is open, that the monitor is above the main window, that Minimise closes it, and that it reopens at its last bounds; re-seed `e2e-budget.json` and place it in `parallel-plan.json`, per FR-081 – FR-087
 - [x] T117 Documentation: `docs/quick-start.md` (the monitor is a window beside throng), `docs/architecture.md` (the monitor window), `CHANGELOG.md` entry wording, `specs/055-resource-monitor/contracts/menus-commands-controls-055.md` (window, not modal); `docs-currency.test.ts` green, per the documentation rule
 - [x] T118 Component test, then implement: `TitleBar` and `WindowControls` take an optional `onMinimise` that replaces the OS minimise for that window, in `packages/ui/src/renderer/title-bar/title-bar.tsx` and `window-controls.tsx`, with every existing caller unchanged, per FR-081, FR-085
+
+## Phase 11: Convergence
+
+- [x] T119 Measure the monitor window's cold open — shown, with its loading state, within 1 s of the status-bar click — in `packages/ui/tests/e2e/resource-monitor.e2e.ts`'s monitor-window test per SC-002 (partial)

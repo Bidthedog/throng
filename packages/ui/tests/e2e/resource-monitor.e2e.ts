@@ -321,8 +321,13 @@ test('the monitor is a window beside throng: the terminal takes typing while it 
   await monitor.getByTestId('window-min').click();
   await expect.poll(() => monitorWindowPage(app), { timeout: 15_000, message: 'Minimise did not close the monitor' }).toBeNull();
 
-  // Reopened at the bounds it was left at (FR-087).
-  await openMonitorWindow(app, () => win.getByTestId('status-resources').click());
+  // Reopened at the bounds it was left at (FR-087) — and shown, loading state and all, within a second
+  // of the click (SC-002 as amended for the window). Bringing an open one forward is a synchronous
+  // `focus()` in main (`resource-monitor-window.test.ts`), so only the cold open is timed here.
+  const clickedAt = Date.now();
+  const reopenedPage = await openMonitorWindow(app, () => win.getByTestId('status-resources').click(), { ready: false });
+  expect(Date.now() - clickedAt, 'SC-002: the monitor window was not shown within 1 s of the click').toBeLessThanOrEqual(1_000);
+  await expect(reopenedPage.getByTestId('monitor-window')).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
   const reopened = await monitorOsState(app);
   expect(reopened?.bounds).toEqual(moved);
 
