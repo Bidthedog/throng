@@ -356,3 +356,27 @@ lose hover and selection, and controls have no visible focus ring.
 cached, a filtered 536-node list renders well inside SC-010, and virtualisation would break the
 keyboard's roving focus and the FLIP moves. A new theme token per heat stop was set aside for
 `color-mix()` over existing tokens, which keeps every theme correct without a shipped-defaults bump.
+
+
+## R16 — Two columns (Session 2026-10-15, third feedback; supersedes R10's charts and treemap)
+
+**Cause of the flashing titles.** Every row and tile carried a native `title` holding its live figures
+(`valueText`, `cellTitle`); a capture changed the attribute every couple of seconds, and Chromium closes a
+native tooltip whose text changes. FR-090's hold froze only the order.
+
+**Decisions.**
+- **Hold the list, not just its order (FR-095)**: on `pointerenter` the left list renders from the frame it
+  had then, and adopts the latest on `pointerleave`; titles name things and never hold figures (a unit
+  guard keeps it so). The right column renders from the live frame.
+- **Layout (FR-096, FR-097)**: a CSS grid of two columns — the left about 45% (min 360 px), the right the
+  rest — each scrolling on its own. The left column owns the breadcrumb, Back, filter, list controls and
+  rows; the right column is the detail pane, extended.
+- **Share bars**: plain HTML rows with a bar whose width is the child's share of the selected item for the
+  chosen metric and whose fill is FR-094's `--heat` mix (the same CSS the tiles used); ranked, and held
+  while pointed at like the left list.
+- **Line graphs**: one per metric, the item's own series only, drawn on a small canvas the way the
+  sparklines are (no axes but the current value); uPlot is no longer needed, and the treemap took
+  d3-hierarchy with it — both leave the dependency list if nothing else uses them.
+
+**Alternatives.** Keeping the treemap in the right column for the selected item's children was offered and
+the user chose bars; keeping smaller stacked charts was offered and the user chose none.
