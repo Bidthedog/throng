@@ -20,8 +20,10 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { SettingControl } from './form-controls.js';
-import { groupDescriptors } from './group-descriptors.js';
+import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
+import { FoldAllButtons, FoldHeading } from './fold-heading.js';
+import { useTabFolding } from './use-preference-folds.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
 
@@ -164,7 +166,15 @@ export function SettingsTab({
     () => filterFields(applied, metadata, (d) => getAtPath(settings, d.key)),
     [applied, settings, metadata],
   );
-  const groups = useMemo(() => groupDescriptors(matches), [matches]);
+  // 056 — the UNFILTERED grouping gives the fold totals (and the keys that exist); with no query applied
+  // it IS what is shown, so it is reused rather than grouped a second time. The fold wiring is shared
+  // with the other two tabs (FR-013); see `useTabFolding`.
+  const allGroups = useMemo(() => groupDescriptors(metadata), [metadata]);
+  const groups = useMemo(
+    () => (applied.trim() === '' ? allGroups : groupDescriptors(matches)),
+    [applied, allGroups, matches],
+  );
+  const { folds, countOf } = useTabFolding('settings', query, applied, allGroups, groups);
 
   // Dynamic options for the theme selector (the themes present on disk).
   const [themes, setThemes] = useState<string[]>([]);
@@ -387,24 +397,33 @@ export function SettingsTab({
   return (
     <div className="settings-form" data-testid="settings-tab">
       <div className="settings-search">
-        <input
-          type="text"
-          className="settings-search__input"
-          data-testid="settings-search"
-          placeholder="Search settings…"
-          aria-label="Search settings"
-          value={query}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-        {query ? (
-          <IconButton
-            token="dismiss"
-            className="settings-search__clear"
-            testId="settings-search-clear"
-            title="Clear search"
-            onClick={clearSearch}
+        <div className="settings-search__field">
+          <input
+            type="text"
+            className="settings-search__input"
+            data-testid="settings-search"
+            placeholder="Search settings…"
+            aria-label="Search settings"
+            value={query}
+            onChange={(e) => onSearchChange(e.target.value)}
           />
-        ) : null}
+          {query ? (
+            <IconButton
+              token="dismiss"
+              className="settings-search__clear"
+              testId="settings-search-clear"
+              title="Clear search"
+              onClick={clearSearch}
+            />
+          ) : null}
+        </div>
+        {/* 056 FR-011b — beside the search box, disabled while a search is active (it owns the folds). */}
+        <FoldAllButtons
+          tab="settings"
+          onExpandAll={folds.expandAll}
+          onCollapseAll={folds.collapseAll}
+          disabled={folds.searching}
+        />
       </div>
 
       {groups.length === 0 ? (
@@ -415,32 +434,55 @@ export function SettingsTab({
 
       {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`settings-group-${group}`}>
-          <h3 className="settings-group__title">{group}</h3>
-          {/* FR-036b — the fields with no subgroup FIRST. A field must never appear below a
-              subsection heading it does not belong to. */}
-          {items.map(row)}
-          {/* FR-036a — then each subsection, in declaration order. The markup itself lives in
-              `Subsection`, shared with the other two tabs: `contracts/metadata.md` pins six
-              rendering rules on all three at once, and three copies of it meant three edits to
-              change one rule, with nothing failing if a copy was missed. */}
-          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
-            <Subsection key={subgroup} testIdPrefix="settings-subgroup" group={group} subgroup={subgroup}>
-              {subItems.map(row)}
-              {/* 054 FR-050a — the subgroup's own rows first, then its nested subsections. */}
-              {subsections.map(({ subsection, items: sectionItems }) => (
-                <Subsection
-                  key={subsection}
-                  testIdPrefix="settings-subsection"
-                  group={group}
-                  subgroup={subgroup}
-                  subsection={subsection}
-                  level={5}
-                >
-                  {sectionItems.map(row)}
-                </Subsection>
-              ))}
-            </Subsection>
-          ))}
+          {/* 056 FR-001 — the section heading folds. The heading and its content container come from
+              `FoldHeading`, shared by all three tabs (FR-013); the keys are built from the names, never
+              from the test ids (research R4). */}
+          <FoldHeading
+            level={3}
+            testId={`settings-group-${group}`}
+            name={group}
+            titleClassName="settings-group__title"
+            folded={folds.isFolded(foldKey(group))}
+            onToggle={() => folds.toggle(foldKey(group))}
+            {...countOf(foldKey(group))}
+          >
+            {/* FR-036b — the fields with no subgroup FIRST. A field must never appear below a
+                subsection heading it does not belong to. */}
+            {items.map(row)}
+            {/* FR-036a — then each subsection, in declaration order. The markup itself lives in
+                `Subsection`, shared with the other two tabs: `contracts/metadata.md` pins six
+                rendering rules on all three at once, and three copies of it meant three edits to
+                change one rule, with nothing failing if a copy was missed. */}
+            {subgroups.map(({ subgroup, items: subItems, subsections }) => (
+              <Subsection
+                key={subgroup}
+                testIdPrefix="settings-subgroup"
+                group={group}
+                subgroup={subgroup}
+                folded={folds.isFolded(foldKey(group, subgroup))}
+                onToggle={() => folds.toggle(foldKey(group, subgroup))}
+                count={countOf(foldKey(group, subgroup))}
+              >
+                {subItems.map(row)}
+                {/* 054 FR-050a — the subgroup's own rows first, then its nested subsections. */}
+                {subsections.map(({ subsection, items: sectionItems }) => (
+                  <Subsection
+                    key={subsection}
+                    testIdPrefix="settings-subsection"
+                    group={group}
+                    subgroup={subgroup}
+                    subsection={subsection}
+                    level={5}
+                    folded={folds.isFolded(foldKey(group, subgroup, subsection))}
+                    onToggle={() => folds.toggle(foldKey(group, subgroup, subsection))}
+                    count={countOf(foldKey(group, subgroup, subsection))}
+                  >
+                    {sectionItems.map(row)}
+                  </Subsection>
+                ))}
+              </Subsection>
+            ))}
+          </FoldHeading>
         </section>
       ))}
     </div>

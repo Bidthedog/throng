@@ -104,3 +104,42 @@ export function groupDescriptors(items: readonly FieldDescriptor[]): DescriptorG
   }
   return order.map((group) => byGroup.get(group)!);
 }
+
+/**
+ * The identity of one foldable heading within one tab (056 data-model "FoldKey").
+ *
+ * A JSON array of the descriptor's OWN `group` / `subgroup` / `subsection` strings, never a
+ * `data-testid`: the Themes tab borrows the Settings tab's `settings-group-` test-id prefix, and
+ * names carry spaces, `·`, `/` and `-`, so a joined string could collide or be ambiguous where a JSON
+ * array cannot (research R4). The per-tab namespace lives in the store, not in the key.
+ */
+export function foldKey(group: string, subgroup?: string, subsection?: string): string {
+  if (subgroup === undefined) return JSON.stringify([group]);
+  if (subsection === undefined) return JSON.stringify([group, subgroup]);
+  return JSON.stringify([group, subgroup, subsection]);
+}
+
+/**
+ * Rows beneath every heading, by {@link foldKey} (056 FR-006, research R5). A heading counts every
+ * row beneath it, descendants included, so a folded heading says what it is hiding.
+ *
+ * Pure and keyed from the grouping the tab already builds: totals come from the unfiltered registry's
+ * groups, matches from the filtered ones, and neither costs anything per keystroke.
+ */
+export function groupCounts(groups: readonly DescriptorGroup[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const g of groups) {
+    let groupTotal = g.items.length;
+    for (const sg of g.subgroups) {
+      let subTotal = sg.items.length;
+      for (const ss of sg.subsections) {
+        counts.set(foldKey(g.group, sg.subgroup, ss.subsection), ss.items.length);
+        subTotal += ss.items.length;
+      }
+      counts.set(foldKey(g.group, sg.subgroup), subTotal);
+      groupTotal += subTotal;
+    }
+    counts.set(foldKey(g.group), groupTotal);
+  }
+  return counts;
+}

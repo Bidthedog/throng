@@ -1,4 +1,6 @@
 import { useId, type ReactElement, type ReactNode } from 'react';
+import { FoldHeading } from './fold-heading.js';
+import type { FoldCount } from './use-preference-folds.js';
 
 /**
  * One subsection of a preferences section (040 FR-036a/b). Beside {@link groupDescriptors}, because
@@ -36,6 +38,14 @@ import { useId, type ReactElement, type ReactNode } from 'react';
  * and `·`, an `id` must be unique across the whole document, and the Themes tab shares its GROUP id
  * prefix with the Settings tab. A generated id cannot collide and cannot be malformed; the
  * human-readable string stays where it is useful, in `data-testid`.
+ *
+ * ══ IT FOLDS (056 FR-002, WHICH SUPERSEDES 040 FR-036a) ══
+ *
+ * 040 pinned "not collapsible" on this component; 056 reverses it. The heading is rendered by
+ * {@link FoldHeading} — the same element the sections use — and the fold state, the toggle and the counts
+ * come from the tab, which owns them. `role="group"`, `aria-labelledby`, the test ids and the h4/h5
+ * levels are exactly as before (FR-005): the id lands on the heading's NAME, so the group is still called
+ * "Status Bar" and not "Status Bar 3".
  */
 export function Subsection({
   testIdPrefix,
@@ -43,6 +53,9 @@ export function Subsection({
   subgroup,
   subsection,
   level = subsection === undefined ? 4 : 5,
+  folded,
+  onToggle,
+  count,
   children,
 }: {
   /**
@@ -62,29 +75,41 @@ export function Subsection({
   subsection?: string;
   /** The heading level: `h4` for a subgroup, `h5` for a subsection nested in one (054 R9). */
   level?: 4 | 5;
+  /** Is this subsection folded? The tab's `usePreferenceFolds` answers; this component holds no state. */
+  folded: boolean;
+  onToggle: () => void;
+  /** Rows beneath it (FR-006): the unfiltered total, and the match count while a search is active. */
+  count: FoldCount;
   /** The already-rendered rows. The tabs each render their own row shape. */
   children: ReactNode;
 }): ReactElement {
   const headingId = useId();
-  const Heading = level === 5 ? 'h5' : 'h4';
   const name = subsection ?? subgroup;
+  // Unslugified, space and all — every shipped id is the raw group string
+  // (`settings-group-Editor · Navigation`), and slugifying only these would make them the one
+  // set of ids in the registry that does not match the strings they name.
+  const testId = `${testIdPrefix}-${group}-${subgroup}${subsection === undefined ? '' : `-${subsection}`}`;
   return (
     <div
       className={`settings-subgroup${level === 5 ? ' settings-subgroup--nested' : ''}`}
       role="group"
       aria-labelledby={headingId}
-      // Unslugified, space and all — every shipped id is the raw group string
-      // (`settings-group-Editor · Navigation`), and slugifying only these would make them the one
-      // set of ids in the registry that does not match the strings they name.
-      data-testid={`${testIdPrefix}-${group}-${subgroup}${subsection === undefined ? '' : `-${subsection}`}`}
+      data-testid={testId}
     >
-      {/* Not collapsible (FR-036a, contract rule 3). The `<section>` containing it does not fold
-          either, and a subsection that did would be the one foldable thing in a form full of
-          things that are not. */}
-      <Heading className="settings-subgroup__title" id={headingId}>
-        {name}
-      </Heading>
-      {children}
+      {/* Folds since 056 (FR-002), superseding 040 FR-036a's "not collapsible" and contract rule 3. */}
+      <FoldHeading
+        level={level}
+        testId={testId}
+        name={name}
+        total={count.total}
+        matches={count.matches}
+        folded={folded}
+        onToggle={onToggle}
+        headingId={headingId}
+        titleClassName="settings-subgroup__title"
+      >
+        {children}
+      </FoldHeading>
     </div>
   );
 }

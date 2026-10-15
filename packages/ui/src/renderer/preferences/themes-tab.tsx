@@ -20,8 +20,10 @@ import { useActiveTheme, useAppSettings } from '../config/config-store.js';
 import { writeConfig, scheduleWrite, debounce } from '../config/write-config.js';
 import { createApplyClient } from './apply-client.js';
 import { ThemeTokenControl } from './pickers.js';
-import { groupDescriptors, type DescriptorGroup } from './group-descriptors.js';
+import { foldKey, groupDescriptors, type DescriptorGroup } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
+import { FoldAllButtons, FoldHeading } from './fold-heading.js';
+import { useTabFolding } from './use-preference-folds.js';
 import { RowActions } from './row-actions.js';
 import { IconSection } from './icon-section.js';
 import { IconButton } from '../common/icon-button.js';
@@ -101,6 +103,15 @@ function groupTokenDescriptors(items: readonly FieldDescriptor[]): DescriptorGro
   return groupDescriptors(items.filter((d) => !RENDERED_ELSEWHERE.has(d.key)));
 }
 
+/**
+ * The fold key of the hand-built Icons section (056 data-model "FoldKey").
+ *
+ * The section is not generated from the registry, so nothing derives a key for it; it is `["Icons"]` in
+ * the `themes` namespace, and is named here so Expand/Collapse All and the write-time prune cover it.
+ */
+const ICONS_FOLD_KEY = foldKey('Icons');
+const EXTRA_FOLD_KEYS: readonly string[] = [ICONS_FOLD_KEY];
+
 /* The `Pending` modal state is gone: the three confirmations are `await`ed on the shared model now,
    so there is no local "which dialog is open" to track. */
 
@@ -143,7 +154,15 @@ export function ThemesTab(): ReactElement {
     () => filterFields(applied, THEME_TOKEN_FIELDS, (d) => getAtPath(activeTheme, d.key)),
     [applied, activeTheme],
   );
-  const groups = useMemo(() => groupTokenDescriptors(matches), [matches]);
+  // 056 — fold state in the `themes` namespace (FR-010): FR-013's shared wiring, with the Icons key added
+  // because that section is hand-built and owns no registry group. The unfiltered grouping is reused as
+  // the shown one while no query is applied.
+  const allGroups = useMemo(() => groupTokenDescriptors(THEME_TOKEN_FIELDS), []);
+  const groups = useMemo(
+    () => (applied.trim() === '' ? allGroups : groupTokenDescriptors(matches)),
+    [applied, allGroups, matches],
+  );
+  const { folds, countOf } = useTabFolding('themes', query, applied, allGroups, groups, EXTRA_FOLD_KEYS);
 
   /**
    * The icon section is part of the theme, so it is part of the search (FR-021). It used to sit
@@ -152,7 +171,7 @@ export function ThemesTab(): ReactElement {
    * the filter is worse than one with no filter, because it looks like a result.
    */
   const iconFilter = useMemo(() => {
-    if (!applied) return null; // no search → show the whole section
+    if (!applied.trim()) return null; // no search (a blank query is none: `searchTokens`) → show it all
     const fields = filterFields(applied, THEME_ICON_FIELDS, (d) => getAtPath(activeTheme, d.key));
     return {
       tokens: fields.map((d) => d.key.replace(/^icons\./, '')),
@@ -617,24 +636,34 @@ export function ThemesTab(): ReactElement {
       ) : null}
 
       <div className="settings-search">
-        <input
-          type="text"
-          className="settings-search__input"
-          data-testid="themes-search"
-          placeholder="Search theme values…"
-          aria-label="Search theme values"
-          value={query}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-        {query ? (
-          <IconButton
-            token="dismiss"
-            className="settings-search__clear"
-            testId="themes-search-clear"
-            title="Clear search"
-            onClick={clearSearch}
+        <div className="settings-search__field">
+          <input
+            type="text"
+            className="settings-search__input"
+            data-testid="themes-search"
+            placeholder="Search theme values…"
+            aria-label="Search theme values"
+            value={query}
+            onChange={(e) => onSearchChange(e.target.value)}
           />
-        ) : null}
+          {query ? (
+            <IconButton
+              token="dismiss"
+              className="settings-search__clear"
+              testId="themes-search-clear"
+              title="Clear search"
+              onClick={clearSearch}
+            />
+          ) : null}
+        </div>
+        {/* 056 FR-011b — beside the search box, disabled while it has text. Collapse All and Expand All
+            cover the Icons key too (it is in `EXTRA_FOLD_KEYS`). */}
+        <FoldAllButtons
+          tab="themes"
+          onExpandAll={folds.expandAll}
+          onCollapseAll={folds.collapseAll}
+          disabled={folds.searching}
+        />
       </div>
 
       {groups.length === 0 && !iconSectionMatches ? (
@@ -645,39 +674,64 @@ export function ThemesTab(): ReactElement {
 
       {groups.map(({ group, items, subgroups }) => (
         <section className="settings-group" key={group} data-testid={`settings-group-${group}`}>
-          <h3 className="settings-group__title">{group}</h3>
-          {/* 040 FR-036 — this registry declares no `subgroup` either; it groups by SIBLING STRING
-              (`Editor · Syntax`, `General · Buttons · Confirm`), derived by `areaForToken` rather
-              than declared per descriptor. FR-037a leaves those five exactly where they are, so
-              what follows is capability, not migration: one registry, one rendering rule, ready for
-              the first theme descriptor to carry a subgroup. FR-036b: the ungrouped tokens first. */}
-          {items.map(row)}
-          {/* Shared markup; `themes-subgroup-`, NOT `settings-subgroup-`. This tab already borrows
-              the Settings tab's `settings-group-` prefix for its sections (a collision inherited,
-              not chosen); reusing the settings prefix here would extend it into ids this feature is
-              adding. */}
-          {subgroups.map(({ subgroup, items: subItems, subsections }) => (
-            <Subsection key={subgroup} testIdPrefix="themes-subgroup" group={group} subgroup={subgroup}>
-              {subItems.map(row)}
-              {/* 054 FR-050a — the third level, as in the other two tabs. */}
-              {subsections.map(({ subsection, items: sectionItems }) => (
-                <Subsection
-                  key={subsection}
-                  testIdPrefix="themes-subsection"
-                  group={group}
-                  subgroup={subgroup}
-                  subsection={subsection}
-                  level={5}
-                >
-                  {sectionItems.map(row)}
-                </Subsection>
-              ))}
-            </Subsection>
-          ))}
+          {/* 056 FR-001 — folds through the shared `FoldHeading` (FR-013). The test id keeps the
+              inherited `settings-group-` prefix; the fold KEY is built from the name, never from it
+              (research R4), and lives in the `themes` namespace. */}
+          <FoldHeading
+            level={3}
+            testId={`settings-group-${group}`}
+            name={group}
+            titleClassName="settings-group__title"
+            folded={folds.isFolded(foldKey(group))}
+            onToggle={() => folds.toggle(foldKey(group))}
+            {...countOf(foldKey(group))}
+          >
+            {/* 040 FR-036 — this registry declares no `subgroup` either; it groups by SIBLING STRING
+                (`Editor · Syntax`, `General · Buttons · Confirm`), derived by `areaForToken` rather
+                than declared per descriptor. FR-037a leaves those five exactly where they are, so
+                what follows is capability, not migration: one registry, one rendering rule, ready for
+                the first theme descriptor to carry a subgroup. FR-036b: the ungrouped tokens first. */}
+            {items.map(row)}
+            {/* Shared markup; `themes-subgroup-`, NOT `settings-subgroup-`. This tab already borrows
+                the Settings tab's `settings-group-` prefix for its sections (a collision inherited,
+                not chosen); reusing the settings prefix here would extend it into ids this feature is
+                adding. */}
+            {subgroups.map(({ subgroup, items: subItems, subsections }) => (
+              <Subsection
+                key={subgroup}
+                testIdPrefix="themes-subgroup"
+                group={group}
+                subgroup={subgroup}
+                folded={folds.isFolded(foldKey(group, subgroup))}
+                onToggle={() => folds.toggle(foldKey(group, subgroup))}
+                count={countOf(foldKey(group, subgroup))}
+              >
+                {subItems.map(row)}
+                {/* 054 FR-050a — the third level, as in the other two tabs. */}
+                {subsections.map(({ subsection, items: sectionItems }) => (
+                  <Subsection
+                    key={subsection}
+                    testIdPrefix="themes-subsection"
+                    group={group}
+                    subgroup={subgroup}
+                    subsection={subsection}
+                    level={5}
+                    folded={folds.isFolded(foldKey(group, subgroup, subsection))}
+                    onToggle={() => folds.toggle(foldKey(group, subgroup, subsection))}
+                    count={countOf(foldKey(group, subgroup, subsection))}
+                  >
+                    {sectionItems.map(row)}
+                  </Subsection>
+                ))}
+              </Subsection>
+            ))}
+          </FoldHeading>
         </section>
       ))}
 
       <IconSection
+        folded={folds.isFolded(ICONS_FOLD_KEY)}
+        onToggleFold={() => folds.toggle(ICONS_FOLD_KEY)}
         theme={activeTheme}
         onSetPack={setIconPack}
         onOverride={overrideIcon}

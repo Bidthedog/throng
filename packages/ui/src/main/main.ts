@@ -464,6 +464,19 @@ function rendererQuery(): Record<string, string> {
 }
 
 /**
+ * The query only the Preferences window receives (056 FR-016, research R10).
+ *
+ * Preferences sections start folded for a real user. `THRONG_PREFS_SECTIONS_OPEN=1` opens them, as before
+ * FR-016, so the ~20 E2E specs that drive rows inside sections need no edit apiece; the harness sets it and
+ * nothing else does, so a real run gets `{}`. It is a separate function from {@link rendererQuery} on
+ * purpose: that one feeds EVERY window, and the main window and sub-workspaces have no fold state to seed.
+ * Main reads the environment here and nowhere else (Principle X); the renderer sees only `foldDefault`.
+ */
+function prefsQuery(): Record<string, string> {
+  return process.env.THRONG_PREFS_SECTIONS_OPEN === '1' ? { foldDefault: 'open' } : {};
+}
+
+/**
  * Create a detached sub-workspace window (US7 / FR-013, Constitution XI). The
  * sub-workspace id is carried in the loaded URL's query (`?sw=<id>`); the renderer
  * reads it and mounts the sub-workspace variant (reusing the workspace renderer).
@@ -965,6 +978,8 @@ if (isPrimaryInstance)
     backgroundColor: themeBackground,
     // Resolved lazily at open time, so this yields the current main window (FR-013/013a).
     getMainWindow: currentMainWindow,
+    // The `foldDefault` test seam (056 FR-016); empty in every real run.
+    query: prefsQuery(),
   };
   ipcMain.on('throng:preferences:open', (_event, tab: unknown) => {
     openPreferences(isPreferencesTab(tab) ? tab : 'settings', preferencesDeps);
