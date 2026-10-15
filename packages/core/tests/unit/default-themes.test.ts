@@ -65,7 +65,9 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // `diagramFullPane`.
 // 82 since 056 (FR-007, research R7): `warning`, the marker on a folded Preferences heading that hides
 // an invalid entry — no warning glyph existed, only the `warning` colour.
-const EXPECTED_ICON_TOKEN_COUNT = 82;
+// 90 since 055: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
+// `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`).
+const EXPECTED_ICON_TOKEN_COUNT = 90;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */

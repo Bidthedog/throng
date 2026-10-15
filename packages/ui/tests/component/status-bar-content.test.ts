@@ -175,8 +175,10 @@ describe('status bar content (FR-003/004, narrowed by 026 / #166)', () => {
     const bar = screen.getByTestId('status-bar');
     expect(bar).not.toHaveTextContent('Tab');
     expect(bar).not.toHaveTextContent('·');
-    // The path is the whole of the bar's text.
-    expect(bar.textContent?.trim()).toBe(`(${ROOT})`);
+    // The path is the whole of the bar's text — apart from the Resource Monitor item (055 FR-040), which
+    // is its own control with its own tests (`resources/status-resources.test.ts`).
+    const resources = screen.getByTestId('status-resources').textContent ?? '';
+    expect(bar.textContent?.replace(resources, '').trim()).toBe(`(${ROOT})`);
   });
 });
 

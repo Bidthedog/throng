@@ -178,6 +178,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     cogMenuItems({
       openPreferences: vi.fn(),
       openLogs: vi.fn(),
+      openResourceMonitor: vi.fn(),
       openAbout: vi.fn(),
       keybindings: DEFAULT_KEYBINDINGS,
     });
@@ -238,6 +239,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
         items: cogMenuItems({
           openPreferences,
           openLogs: vi.fn(),
+          openResourceMonitor: vi.fn(),
           openAbout: vi.fn(),
           keybindings: DEFAULT_KEYBINDINGS,
         }),
@@ -261,7 +263,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / About throng', () => {
+  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / Resource Monitor / About throng', () => {
     /*
      * MIGRATED FROM `packages/ui/tests/e2e/titlebar-chrome.e2e.ts:107` (035 FR-001).
      *
@@ -278,12 +280,14 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
       .getAllByRole('menuitem')
       .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
-    expect(labels).toHaveLength(5);
+    expect(labels).toHaveLength(6);
     expect(labels[0]).toMatch(/Settings/);
     expect(labels[1]).toMatch(/Key Bindings/);
     expect(labels[2]).toMatch(/Themes/);
     expect(labels[3]).toMatch(/Open Logs Folder/);
-    expect(labels[4]).toMatch(/About throng/);
+    // 055 FR-056 — after Open Logs Folder, before About.
+    expect(labels[4]).toMatch(/Resource Monitor/);
+    expect(labels[5]).toMatch(/About throng/);
   });
 });
 

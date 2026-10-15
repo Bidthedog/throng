@@ -16,6 +16,12 @@ describe('isThrongOwned', () => {
     expect(isThrongOwned(proc({ pid: 4, commandLine: 'node -e "process.chdir(process.env.THRONG_LOCK_DIR)..."' }))).toBe(true);
   });
 
+  it('055 T029 — matches the resource collector UI main forks, orphaned when UI main dies', () => {
+    expect(
+      isThrongOwned(proc({ pid: 8, commandLine: '"C:\\node.exe" D:\\throng\\packages\\ui\\dist\\collector\\resource-collector-entry.js' })),
+    ).toBe(true);
+  });
+
   it('ignores a plain conhost and unrelated processes', () => {
     expect(isThrongOwned(proc({ pid: 5, name: 'conhost.exe', commandLine: 'conhost.exe 0x4' }))).toBe(false);
     expect(isThrongOwned(proc({ pid: 6, commandLine: 'node some-other-script.js' }))).toBe(false);

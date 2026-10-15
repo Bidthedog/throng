@@ -168,6 +168,12 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
    */
   ['zoom.reset', 'Ctrl+Shift+Alt+Numpad0 from a focused real terminal (046 T049, re-pointed T164)'],
   ['focus.explorer', 'Ctrl+Shift+Alt+M from a focused real terminal (046 T049, re-pointed T181)'],
+  /*
+   * 055 FR-056 (T046, T069) — `view.resourceMonitor` is `Ctrl+Shift+Alt+R`, the letter branch, and it is
+   * the one chord the exclusive monitor modal keeps live while every other window chord is suppressed.
+   * Pressed by `resource-monitor.e2e.ts` from the main window, where a real engine proves it opens.
+   */
+  ['view.resourceMonitor', 'Ctrl+Shift+Alt+R opens the Resource Monitor (055 T069, resource-monitor.e2e.ts)'],
 ]);
 
 /**

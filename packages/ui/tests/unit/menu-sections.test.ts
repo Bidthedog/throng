@@ -397,6 +397,7 @@ const cogMenu = (): MenuAction[] =>
   cogMenuItems({
     openPreferences: noop,
     openLogs: noop,
+    openResourceMonitor: noop,
     openAbout: noop,
     keybindings: DEFAULT_KEYBINDINGS,
   });
@@ -1612,10 +1613,12 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
 describe('the cog menu’s Application section is one group, therefore no divider WITHIN it (FR-052 as corrected, AS-5)', () => {
   const cog = (): MenuAction[] => cogMenu();
 
-  it('draws five Application items and nothing between them', () => {
+  it('draws six Application items and nothing between them — Resource Monitor joined in 055 (FR-056)', () => {
     const application = cog().filter((i) => i.section === 'application');
-    expect(application.map((i) => i.section)).toEqual(['application', 'application', 'application', 'application', 'application']);
+    expect(application.map((i) => i.section)).toEqual(Array(6).fill('application'));
     expect(separatorIndices(application)).toEqual([]);
+    // Still ONE section for the whole menu: the new row adds no boundary.
+    expect(separatorIndices(cog())).toEqual([]);
   });
 
   it('keeps the test identifiers roughly ten preferences suites depend on (FR-053)', () => {
@@ -1624,6 +1627,8 @@ describe('the cog menu’s Application section is one group, therefore no divide
       'cog-menu-keybindings',
       'cog-menu-themes',
       'cog-menu-logs',
+      // 055 FR-056 — after Open Logs Folder and before About.
+      'cog-resource-monitor',
       'cog-menu-about',
     ]);
   });

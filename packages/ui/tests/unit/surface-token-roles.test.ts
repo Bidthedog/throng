@@ -159,8 +159,9 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     // NEW, un-audited surface reaching for the pane token still fails, exactly as before.
     // `.picker` (031 US3) is the general list-and-choose card: a modal surface on `.modal-overlay`,
     // audited here as a dialog card for the same reason `.modal` and `.colour-picker` are.
+    // `.resource-monitor` (055 FR-050) is the Resource Monitor's dialog card, on the same `.modal-overlay`.
     const DIALOG_CARDS =
-      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
+      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root|resource-monitor)$|^\.app-close-table th$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
       // 054 FR-070 — `.maximise-layer` is a panel body too: the box a maximised section is drawn in, the
       // same frame as `.panel-box` over the same tab body.
