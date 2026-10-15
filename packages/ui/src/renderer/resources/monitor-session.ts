@@ -1,17 +1,17 @@
 /**
- * The Resource Monitor's modal session (055 FR-033, FR-033a, FR-057, FR-065a, data-model *Ended
+ * The Resource Monitor window's session (055 FR-033, FR-033a, FR-057, FR-065a, data-model *Ended
  * entries* and *Modal view state*): the one place that remembers anything between two frames.
  *
  * Module-level state read through `useSyncExternalStore` — `workspace/maximise-store.ts`'s pattern —
- * because the writers (the modal shell feeding frames, the toolbar, the breakdown) and the readers
- * (every pane of the body) share no component, and the view state must outlive the modal's mount.
+ * because the writers (the window shell feeding frames, the toolbar, the breakdown) and the readers
+ * (every pane of the body) share no component, and the view state must outlive the window's mount.
  *
  * ══ TWO LIFETIMES ══
  *
  *  - The SESSION (history, ended entries, the displayed tree) lives from `startSession` to
  *    `endSession`: charts start empty on every open and are discarded on close (FR-033).
- *  - The VIEW (maximised, metric, filter, narrowing, hide idle, focus path) lives until throng
- *    restarts and is never persisted (FR-057).
+ *  - The VIEW (metric, filter, narrowing, hide idle, focus path) is held by UI main until throng
+ *    restarts and never persisted (FR-057, FR-087): each open is a fresh renderer, so `restoreView` reapplies it.
  *
  * ══ ENDED ENTRIES ══
  *
@@ -43,7 +43,7 @@ export interface HistoryPoint {
 }
 
 export interface SessionSnapshot {
-  /** The latest frame, or `null` before the first one arrives (the modal's loading state, FR-051). */
+  /** The latest frame, or `null` before the first one arrives (the window's loading state, FR-051). */
   readonly frame: DetailFrame | null;
   /** The latest hierarchy with ended processes re-inserted, or `null` before the first frame. */
   readonly tree: ResourceNode | null;
@@ -52,7 +52,6 @@ export interface SessionSnapshot {
 }
 
 export interface ViewState {
-  readonly maximised: boolean;
   readonly metric: FigureId;
   readonly filterText: string;
   /** A component (`c:…`) or project (`p:…`) id, or `null` for everything. */
@@ -63,7 +62,6 @@ export interface ViewState {
 }
 
 const DEFAULT_VIEW: ViewState = Object.freeze({
-  maximised: false,
   metric: 'cpu',
   filterText: '',
   narrowTo: null,
@@ -126,7 +124,7 @@ export function startSession(settings: SessionSettings): void {
   notify();
 }
 
-/** The modal closed: history, ended entries and the displayed tree are discarded (FR-033, FR-065a). */
+/** The window closed: history, ended entries and the displayed tree are discarded (FR-033, FR-065a). */
 export function endSession(): void {
   history.clear();
   endedIds.clear();
@@ -312,6 +310,24 @@ export function setView(patch: Partial<ViewState>): void {
   if ((Object.keys(next) as (keyof ViewState)[]).every((k) => next[k] === view[k])) return;
   view = next;
   notify();
+}
+
+/**
+ * Apply the view UI main held for the last monitor window (FR-087). It crosses IPC as opaque JSON, so
+ * every field is checked and an unusable one is left at its default rather than trusted.
+ */
+export function restoreView(raw: unknown): void {
+  if (typeof raw !== 'object' || raw === null) return;
+  const r = raw as Record<string, unknown>;
+  const patch: { -readonly [K in keyof ViewState]?: ViewState[K] } = {};
+  if (r.metric === 'cpu' || r.metric === 'memory' || r.metric === 'gpu' || r.metric === 'io') patch.metric = r.metric;
+  if (typeof r.filterText === 'string') patch.filterText = r.filterText;
+  if (typeof r.narrowTo === 'string' || r.narrowTo === null) patch.narrowTo = r.narrowTo;
+  if (typeof r.hideIdle === 'boolean') patch.hideIdle = r.hideIdle;
+  if (Array.isArray(r.focusPath) && r.focusPath.length > 0 && r.focusPath.every((s) => typeof s === 'string')) {
+    patch.focusPath = r.focusPath as string[];
+  }
+  setView(patch);
 }
 
 /** Drill to a node (or go back up to one): the breakdown re-roots there and the detail pane follows it. */

@@ -1,14 +1,16 @@
 /**
  * A stand-in for `window.throng.resources` (055, contracts/resources-ipc-055.md): records every call
- * and lets a test push summaries, detail frames and open requests the way UI main would.
+ * and lets a test push summaries, detail frames and routed actions the way UI main would.
  */
 import type { DetailFrame, KillRequest, KillResult, PanelEstimate, ResourceSummary, WorkspaceContext } from '@throng/ipc-contract';
+import type { RoutedAction } from '../../../src/renderer/resources/route-action.js';
+
+type Rect = { x: number; y: number; width: number; height: number };
 
 export interface ResourcesBridge {
   /** Resolve the pending `summary()` read (default: resolves immediately with `initial`). */
   pushSummary(s: ResourceSummary): void;
   pushDetail(f: DetailFrame): void;
-  fireOpenRequest(): void;
   readonly subscribed: number[];
   readonly unsubscribed: number[];
   readonly detailListeners: () => number;
@@ -17,27 +19,38 @@ export interface ResourcesBridge {
   readonly reports: { context: WorkspaceContext | null; estimates: readonly PanelEstimate[] }[];
   setKillResult(r: KillResult): void;
   /** What `routeAction` is told, newest last; its answer is `routed` (default false: no other window). */
-  readonly routed: { action: 'destroyTab' | 'destroyPanel'; id: string }[];
+  readonly routed: RoutedAction[];
   setRouteAnswer(answer: boolean): void;
   /** Deliver an action another window routed to this one. */
-  fireAction(req: { action: 'destroyTab' | 'destroyPanel'; id: string }): void;
+  fireAction(req: RoutedAction): void;
   /** Deliver a change of detail demand. */
   fireDemand(on: boolean): void;
   setDemand(on: boolean): void;
+  /** Every Minimise the monitor window sent main, with its reduced-motion flag. */
+  readonly minimised: { reducedMotion: boolean }[];
+  /** Every view the monitor window saved. */
+  readonly savedViews: unknown[];
+  /** The view main holds for the monitor window (default `null`: the first open). */
+  setStoredView(v: unknown): void;
+  /** Ask the registered status-rect answerer as main would; `undefined` when none is registered. */
+  askStatusRect(): Rect | null | undefined;
 }
 
 export function installResourcesBridge(initial: ResourceSummary | null = null): ResourcesBridge {
   const summaryListeners = new Set<(s: ResourceSummary) => void>();
   const detailListeners = new Set<(f: DetailFrame) => void>();
-  const openListeners = new Set<() => void>();
+  const rectAnswerers = new Set<() => Rect | null>();
   const subscribed: number[] = [];
   const unsubscribed: number[] = [];
   const kills: KillRequest[] = [];
   const reports: ResourcesBridge['reports'] = [];
+  const minimised: ResourcesBridge['minimised'] = [];
+  const savedViews: unknown[] = [];
+  let storedView: unknown = null;
   let opens = 0;
   let nextId = 1;
   let killResult: KillResult = { results: [] };
-  const actionListeners = new Set<(req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => void>();
+  const actionListeners = new Set<(req: RoutedAction) => void>();
   const demandListeners = new Set<(on: boolean) => void>();
   const routed: ResourcesBridge['routed'] = [];
   let routeAnswer = false;
@@ -70,11 +83,11 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
       kills.push(req);
       return Promise.resolve(killResult);
     },
-    routeAction: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => {
+    routeAction: (req: RoutedAction) => {
       routed.push(req);
       return Promise.resolve(routeAnswer);
     },
-    onAction: (cb: (req: { action: 'destroyTab' | 'destroyPanel'; id: string }) => void) => {
+    onAction: (cb: (req: RoutedAction) => void) => {
       actionListeners.add(cb);
       return () => actionListeners.delete(cb);
     },
@@ -86,9 +99,16 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
     open: () => {
       opens += 1;
     },
-    onOpenRequest: (cb: () => void) => {
-      openListeners.add(cb);
-      return () => openListeners.delete(cb);
+    minimise: (opts: { reducedMotion: boolean }) => {
+      minimised.push(opts);
+    },
+    viewState: () => Promise.resolve(storedView),
+    saveViewState: (v: unknown) => {
+      savedViews.push(v);
+    },
+    onStatusRectRequest: (cb: () => Rect | null) => {
+      rectAnswerers.add(cb);
+      return () => rectAnswerers.delete(cb);
     },
   };
   Reflect.set(window, 'throng', throng);
@@ -96,7 +116,6 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
   return {
     pushSummary: (s) => summaryListeners.forEach((l) => l(s)),
     pushDetail: (f) => detailListeners.forEach((l) => l(f)),
-    fireOpenRequest: () => openListeners.forEach((l) => l()),
     subscribed,
     unsubscribed,
     detailListeners: () => detailListeners.size,
@@ -114,6 +133,15 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
     fireDemand: (on) => demandListeners.forEach((l) => l(on)),
     setDemand: (on) => {
       demand = on;
+    },
+    minimised,
+    savedViews,
+    setStoredView: (v) => {
+      storedView = v;
+    },
+    askStatusRect: () => {
+      const first = [...rectAnswerers][0];
+      return first === undefined ? undefined : first();
     },
   };
 }

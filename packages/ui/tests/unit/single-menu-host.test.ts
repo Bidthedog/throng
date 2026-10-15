@@ -80,9 +80,10 @@ describe('one menu host', () => {
   it('every window mounts that provider, so no surface is left without a menu host', () => {
     // Three renderer entry points draw menus: the main window and the sub-workspace window (both from
     // the composition root) and the preferences window, whose Key Bindings editor grew a bespoke menu
-    // of its own precisely because it had no provider above it.
+    // of its own precisely because it had no provider above it. The Resource Monitor window (055 R14)
+    // is the fourth: its nodes' menus are the shared ones.
     const mounts = files.filter((f) => RENDERS_THE_PROVIDER.test(readFileSync(f, 'utf8'))).map(rel);
-    expect(mounts.sort()).toEqual(['composition-root.tsx', 'preferences/preferences-app.tsx']);
+    expect(mounts.sort()).toEqual(['composition-root.tsx', 'preferences/preferences-app.tsx', 'resources/monitor-app.tsx']);
   });
 
   it('finds the source it claims to walk (guards against a vacuous pass)', () => {

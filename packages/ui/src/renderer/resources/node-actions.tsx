@@ -10,13 +10,14 @@
  * (`kill-confirm`). The monitor adds no variant of any of them (FR-063). Throng's own components have no
  * rows at all: absent, not disabled.
  *
- * ══ WHERE A TAB OR PANEL LIVES ══
+ * ══ WHERE A PROJECT, TAB OR PANEL LIVES ══
  *
- * A tab or panel mounted in THIS window runs its flow here. One held by another window — a
- * sub-workspace — is routed there through main (`routeAction`), where that window's own confirmations
- * apply; it is enabled whenever its project is the ACTIVE one, because only the active project's layout
- * is open and reported. Any other project, loaded or not, has nothing open, and the row says to switch
- * to it.
+ * The monitor is its own window and holds none of them (FR-086), so every one of these is ROUTED through
+ * main (`routeAction`) to the window that owns it, where that window's own confirmations apply: Unload
+ * Project to the main window, Destroy Tab and Destroy Panel to whichever window holds the tab or panel.
+ * A tab or panel is enabled whenever its project is the ACTIVE one, because only the active project's
+ * layout is open and reported. Any other project, loaded or not, has nothing open, and the row says to
+ * switch to it.
  */
 import { createContext, useContext, useMemo, useRef, type MouseEvent as ReactMouseEvent, type ReactElement, type ReactNode } from 'react';
 import { actionsFor, type ResourceAction, type ResourceActionId, type ResourceNode } from '@throng/core';
@@ -24,12 +25,11 @@ import type { MenuSection } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { useAppSettings } from '../config/config-store.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useUnloadProject } from '../sidebar/use-unload-project.js';
-import { isPanelMounted, requestPanelDestroy } from '../workspace/panel-destroy.js';
-import { isTabMounted, requestTabDestroy } from '../workspace/tab-destroy.js';
+import type { UnloadVariant } from '../sidebar/use-unload-project.js';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { useKillProcesses } from './kill-confirm.js';
 import { getSessionSnapshot, isEnded, setNotice } from './monitor-session.js';
+import type { RoutedAction } from './route-action.js';
 
 export interface ActionRow {
   readonly id: ResourceActionId;
@@ -85,7 +85,6 @@ export function useNodeActions(): {
   openMenu: (event: ReactMouseEvent, node: ResourceNode) => void;
 } {
   const settings = useAppSettings();
-  const unload = useUnloadProject();
   const kill = useKillProcesses();
   const { openMenu: openContextMenu } = useContextMenu();
 
@@ -97,14 +96,12 @@ export function useNodeActions(): {
 
   /*
    * Only the ACTIVE project's layout is open in a window and reported to main (the main window holds one
-   * layout; research R12), so a tab or panel is destroyable when this window has it registered, or when
-   * its project is the active one — in which case it is open here or in a sub-workspace window that
-   * reports it, and the request can be routed. A project that is merely loaded has nothing open, and
-   * routing there could only fail.
+   * layout; research R12), so a tab or panel is destroyable when its project is the active one — it is
+   * then open in the main window or in a sub-workspace window that reports it, and the request can be
+   * routed. The monitor is its own window and holds no tab or panel itself (R14). A project that is
+   * merely loaded has nothing open, and routing there could only fail.
    */
   const isMounted = (node: ResourceNode): boolean => {
-    if (node.kind === 'tab' && isTabMounted(node.owner.tabId ?? bare(node.id))) return true;
-    if (node.kind === 'panel' && isPanelMounted(node.owner.panelId ?? bare(node.id))) return true;
     if (node.kind !== 'tab' && node.kind !== 'panel') return true;
     return projectOf(node)?.projectState === 'active';
   };
@@ -118,32 +115,37 @@ export function useNodeActions(): {
     return project === undefined ? a.reason : `Switch to ${project} to destroy this ${what}`;
   };
 
-  const route = async (action: 'destroyTab' | 'destroyPanel', id: string, label: string): Promise<void> => {
-    const ok = (await window.throng?.resources?.routeAction?.({ action, id })) ?? false;
-    if (!ok) setNotice({ heading: `Couldn't destroy ${label}`, lines: ['It is not open in any window.'] });
+  /** Run an action in the window that owns it; a route no window answers raises the monitor's one notice. */
+  const route = async (req: RoutedAction, failure: { heading: string; lines: string[] }): Promise<void> => {
+    const ok = (await window.throng?.resources?.routeAction?.(req)) ?? false;
+    if (!ok) setNotice(failure);
   };
 
   const run = (id: ResourceActionId, node: ResourceNode): void => {
     switch (id) {
       case 'unloadProject':
-        unload({ id: node.owner.projectId ?? bare(node.id), name: node.label });
-        return;
-      case 'unloadProjectOther':
-        unload(
-          { id: node.owner.projectId ?? bare(node.id), name: node.label },
-          settings.projects.unloadTerminalAction === 'keepRunning' ? 'endTerminals' : 'keepRunning',
+      case 'unloadProjectOther': {
+        const project = { id: node.owner.projectId ?? bare(node.id), name: node.label };
+        const variant: UnloadVariant | undefined =
+          id === 'unloadProject' ? undefined : settings.projects.unloadTerminalAction === 'keepRunning' ? 'endTerminals' : 'keepRunning';
+        void route(
+          { action: 'unloadProject', ...project, ...(variant !== undefined ? { variant } : {}) },
+          { heading: `Couldn't unload ${node.label}`, lines: ['The main window did not take the request.'] },
         );
         return;
-      case 'destroyTab': {
-        const tabId = node.owner.tabId ?? bare(node.id);
-        if (!requestTabDestroy(tabId)) void route('destroyTab', tabId, node.label);
-        return;
       }
-      case 'destroyPanel': {
-        const panelId = node.owner.panelId ?? bare(node.id);
-        if (!requestPanelDestroy(panelId)) void route('destroyPanel', panelId, node.label);
+      case 'destroyTab':
+        void route(
+          { action: 'destroyTab', id: node.owner.tabId ?? bare(node.id) },
+          { heading: `Couldn't destroy ${node.label}`, lines: ['It is not open in any window.'] },
+        );
         return;
-      }
+      case 'destroyPanel':
+        void route(
+          { action: 'destroyPanel', id: node.owner.panelId ?? bare(node.id) },
+          { heading: `Couldn't destroy ${node.label}`, lines: ['It is not open in any window.'] },
+        );
+        return;
       case 'killProcess':
         void kill(node, 'process');
         return;

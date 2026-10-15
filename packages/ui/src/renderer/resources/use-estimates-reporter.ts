@@ -12,10 +12,12 @@ import type { WorkspaceLayout } from '@throng/core';
 import { useServicesOptional } from '../composition-root.js';
 import { useProjectsOptional } from '../state/projects-store.js';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
+import { useUnloadProject } from '../sidebar/use-unload-project.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { requestTabDestroy } from '../workspace/tab-destroy.js';
 import { createEstimatesReporter, type EstimatesReporter } from './estimates-reporter.js';
 import { buildWorkspaceContext, collectRendererEstimates, loadOtherLayouts, type WorkspaceFacts } from './estimates-sources.js';
+import { getStatusItemRect } from './monitor-store.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
 export function useEstimatesReporter(subWorkspaceName: string | null): void {
@@ -121,15 +123,44 @@ export function useEstimatesReporter(subWorkspaceName: string | null): void {
 export function useResourceActionRoute(): void {
   useEffect(() => {
     return window.throng?.resources?.onAction?.((req) => {
+      // Unload Project is the main window's alone (`UnloadRouteMount`); it is not a panel.
       if (req.action === 'destroyTab') requestTabDestroy(req.id);
-      else requestPanelDestroy(req.id);
+      else if (req.action === 'destroyPanel') requestPanelDestroy(req.id);
     });
   }, []);
 }
 
-/** Renders nothing; mounts the reporter, and the action route, for this window. */
+/**
+ * Where the monitor window should shrink to when it is minimised (055 FR-085): main asks every window
+ * for the status-bar figures' rectangle. The main window has them; a window without a status bar item
+ * (a sub-workspace) answers `null`, and main closes the monitor at once.
+ */
+export function useStatusRectAnswer(): void {
+  useEffect(() => window.throng?.resources?.onStatusRectRequest?.(getStatusItemRect), []);
+}
+
+/**
+ * An Unload Project the monitor window asked for (055 FR-086): main always delivers it to the main
+ * window, which runs the shared unload command with the same variant and the same no-dialog behaviour as
+ * the project list's own row. Mounted by the main window only — a sub-workspace holds no projects.
+ */
+export function UnloadRouteMount(): ReactElement | null {
+  const unload = useUnloadProject();
+  // The latest closure behind one subscription: the command reads dirty editors and sub-workspaces.
+  const latest = useRef(unload);
+  latest.current = unload;
+  useEffect(() => {
+    return window.throng?.resources?.onAction?.((req) => {
+      if (req.action === 'unloadProject') latest.current({ id: req.id, name: req.name }, req.variant);
+    });
+  }, []);
+  return null;
+}
+
+/** Renders nothing; mounts the reporter, the action route and the status-rect answer for this window. */
 export function EstimatesReporterMount({ subWorkspaceName = null }: { subWorkspaceName?: string | null }): ReactElement | null {
   useEstimatesReporter(subWorkspaceName);
   useResourceActionRoute();
+  useStatusRectAnswer();
   return null;
 }

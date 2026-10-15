@@ -68,7 +68,7 @@ const DIAGRAM_VENDOR =
 
 /**
  * 055 R10 — the resource monitor's chart libraries: uPlot (time-series) and d3-hierarchy (treemap layout).
- * Imported only from the monitor's body, which `monitor-modal.tsx` loads with a dynamic `import()`, so
+ * Imported only from the monitor's body, which `monitor-app.tsx` loads with a dynamic `import()`, so
  * nothing is added to startup (Principle XII). `chunkFor` routes them to the `resources` chunk.
  */
 const RESOURCES_VENDOR = /\/node_modules\/(uplot|d3-hierarchy)\//;

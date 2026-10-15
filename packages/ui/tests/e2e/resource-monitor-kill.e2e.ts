@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, runApp, runTypedCommand } from './harness.js';
+import { closeMonitorWindow, openMonitorWindow } from './helpers/monitor-window.js';
 import { processesMatching, processTable } from './helpers/processes.js';
 
 /**
@@ -46,7 +47,7 @@ test('Kill All Below ends a parent and its two children, which show ended while 
   test.setTimeout(180_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-resmon-kill-'));
   try {
-    await runApp(async (_app, win) => {
+    await runApp(async (app, win) => {
       await createProject(win, 'KillTree', root);
       const panelId = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
@@ -63,51 +64,47 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await expect.poll(alive, { timeout: 30_000, message: 'the parent and its two children never all started' }).toBe(3);
 
       // Into the monitor, down to the panel.
-      await win.keyboard.press('Control+Shift+Alt+R');
-      const dialog = win.getByTestId('monitor-dialog');
-      await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-      await win.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-p:"]').first().click();
-      await win.locator('[data-testid^="treemap-tile-t:"]').first().click();
-      await win.locator('[data-testid^="treemap-tile-n:"]').first().click();
+      // The monitor is a window of its own (FR-081); everything it shows and asks happens in IT.
+      let mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+      await mon.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-p:"]').first().click();
+      await mon.locator('[data-testid^="treemap-tile-t:"]').first().click();
+      await mon.locator('[data-testid^="treemap-tile-n:"]').first().click();
 
-      const nodes = rowOf(win, 'x:', 'node.exe');
+      const nodes = rowOf(mon, 'x:', 'node.exe');
       await expect(nodes).toHaveCount(3, { timeout: 20_000 });
       // The parent is the shallowest of the three.
       const levels = await nodes.evaluateAll((els) => els.map((e) => Number(e.getAttribute('aria-level'))));
       const parentIndex = levels.indexOf(Math.min(...levels));
       const parent = nodes.nth(parentIndex);
-      const shell = rowOf(win, 'x:', 'cmd.exe').first();
+      const shell = rowOf(mon, 'x:', 'cmd.exe').first();
       await expect(shell).toBeVisible();
 
       // Kill All Below on the parent: all three end, the shell does not.
       await parent.click({ button: 'right' });
-      await win.getByTestId('menu-item-Kill All Below').click();
-      await acceptKill(win);
+      await mon.getByTestId('menu-item-Kill All Below').click();
+      await acceptKill(mon);
 
       await expect.poll(alive, { timeout: 30_000, message: 'a marked node.exe survived Kill All Below' }).toBe(0);
       // They stay where they were, ended (FR-065a), and the shell is not.
-      await expect(rowOf(win, 'x:', 'node.exe')).toHaveCount(3);
+      await expect(rowOf(mon, 'x:', 'node.exe')).toHaveCount(3);
       for (let i = 0; i < 3; i += 1) await expect(nodes.nth(i)).toHaveAttribute('data-ended', 'true', { timeout: 15_000 });
       await expect(shell).not.toHaveAttribute('data-ended', 'true');
       expect(processesMatching('cmd.exe', '', processTable()).length, 'the shell is still running').toBeGreaterThan(0);
-      await expect(win.getByTestId('monitor-notice')).toHaveCount(0);
+      await expect(mon.getByTestId('monitor-notice')).toHaveCount(0);
 
       // The shell keeps working: close the monitor and ask it something.
-      await win.keyboard.press('Escape');
-      await expect(dialog).toHaveCount(0);
+      await closeMonitorWindow(app);
       await runTypedCommand(win, term, 'set /a 6*7', { echoed: 'set /a 6*7', output: '42' });
 
       // Kill All Below on the PANEL ends the shell as well, and the panel keeps its place (FR-066).
-      await win.keyboard.press('Control+Shift+Alt+R');
-      await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-      await win.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-p:"]').first().click();
-      await win.locator('[data-testid^="treemap-tile-t:"]').first().click();
-      await rowOf(win, 'n:').first().click({ button: 'right' });
-      await win.getByTestId('menu-item-Kill All Below').click();
-      await acceptKill(win);
+      mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+      await mon.getByTestId('breakdown-section-projects').locator('[data-testid^="treemap-tile-p:"]').first().click();
+      await mon.locator('[data-testid^="treemap-tile-t:"]').first().click();
+      await rowOf(mon, 'n:').first().click({ button: 'right' });
+      await mon.getByTestId('menu-item-Kill All Below').click();
+      await acceptKill(mon);
 
-      await win.keyboard.press('Escape');
-      await expect(dialog).toHaveCount(0);
+      await closeMonitorWindow(app);
       // Same state as any other shell exit: the panel is still there, and offers its type form again.
       await expect(win.getByTestId(`panel-type-select-${panelId}`)).toBeVisible({ timeout: 30_000 });
     });

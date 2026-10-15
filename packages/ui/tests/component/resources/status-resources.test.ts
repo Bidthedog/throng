@@ -21,7 +21,7 @@ import { ProjectsProvider } from '../../../src/renderer/state/projects-store.js'
 import { NotificationProvider } from '../../../src/renderer/common/notification.js';
 import { StatusBar } from '../../../src/renderer/statusbar/status-bar.js';
 import { StatusResources } from '../../../src/renderer/resources/status-resources.js';
-import { __resetMonitorStore, isMonitorOpen } from '../../../src/renderer/resources/monitor-store.js';
+import { __resetMonitorStore } from '../../../src/renderer/resources/monitor-store.js';
 import type { ThrongBridge } from '../../../src/renderer/state/bridge.js';
 import { installResourcesBridge } from '../helpers/resource-bridge.js';
 import { GIB, MACHINE, MIB, metrics, summary } from '../helpers/resource-fixtures.js';
@@ -260,15 +260,17 @@ describe('status-bar resource item (055 US1)', () => {
     expect(observers).toHaveLength(1);
   });
 
-  it('opens the monitor on a click, even with every figure dropped (FR-043, FR-045)', async () => {
-    installResourcesBridge(summary(TOTAL));
+  it('opens the monitor window on a click, even with every figure dropped (FR-043, FR-045, FR-086)', async () => {
+    const bridge = installResourcesBridge(summary(TOTAL));
     mountItem();
     await waitFor(() => expect(ids()).toHaveLength(4));
     resize(260);
 
-    expect(isMonitorOpen()).toBe(false);
+    expect(bridge.opens()).toBe(0);
     fireEvent.click(screen.getByTestId('status-resources'));
-    expect(isMonitorOpen()).toBe(true);
+    expect(bridge.opens()).toBe(1);
+    // A window, not a dialog: nothing opens inside this one.
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('follows the stream: a later summary replaces the figures, and an older tick is ignored', async () => {

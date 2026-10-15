@@ -225,17 +225,16 @@ describe('ended entries (FR-065a)', () => {
 
 describe('view state (FR-057)', () => {
   it('survives a close and a reopen, until the module is reloaded', () => {
-    setView({ maximised: true, metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
+    setView({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
     startSession(settings());
     endSession();
     startSession(settings());
 
-    expect(getView()).toMatchObject({ maximised: true, metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
+    expect(getView()).toMatchObject({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
   });
 
   it('has sensible first-open defaults: CPU, no filter, nothing hidden, at the root', () => {
     expect(getView()).toEqual({
-      maximised: false,
       metric: 'cpu',
       filterText: '',
       narrowTo: null,

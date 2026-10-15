@@ -1,79 +1,37 @@
 /**
- * Whether the Resource Monitor modal is open (055 FR-050 – FR-056), and where the status-bar item is.
+ * What every window needs of the Resource Monitor that is not the monitor itself (055 FR-081, FR-085,
+ * FR-086): the one route that opens it, and where the status-bar figures are.
  *
- * Module-level rather than React state, like `maximise-store.ts`: the writers are the status-bar item,
- * the cog menu, the window dispatcher's chord and the main-process open request, none of which share a
- * component; the readers are the modal host, the dispatcher's exclusive gate and the status bar. It is
- * never persisted — the modal's view state lives in `monitor-session.ts` and lasts until throng
- * restarts (FR-057).
+ * Whether the monitor is open is no longer a renderer fact: it is its own window (research R14), and
+ * UI main owns that window — one instance, focused when asked for again. So there is no open state here,
+ * and no exclusive gate behind it: the rest of throng stays usable while the monitor is up.
  */
-import { useSyncExternalStore } from 'react';
-import { parseWindowIdentity } from '../window-identity.js';
 
-let open = false;
-const listeners = new Set<() => void>();
 let statusItem: HTMLElement | null = null;
 
-function notify(): void {
-  for (const listener of [...listeners]) listener();
-}
-
-export function isMonitorOpen(): boolean {
-  return open;
-}
-
-export function openMonitor(): void {
-  if (open) return;
-  open = true;
-  notify();
-}
-
-export function closeMonitor(): void {
-  if (!open) return;
-  open = false;
-  notify();
-}
-
-/** The monitor's own chord: opens it, and closes it again while it is the thing in front (FR-050). */
-export function toggleMonitor(): void {
-  if (open) closeMonitor();
-  else openMonitor();
-}
-
-export function subscribeMonitor(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export function useMonitorOpen(): boolean {
-  return useSyncExternalStore(subscribeMonitor, isMonitorOpen, isMonitorOpen);
-}
-
 /**
- * The route every "Resource Monitor" command takes (FR-056): the main window opens its own modal, a
- * sub-workspace window asks main to open it in the main window and bring that forward.
+ * The route every "Resource Monitor" command takes, from any window (FR-086): the main window, a
+ * sub-workspace and the cog menu alike ask UI main, which opens the monitor window or brings it forward.
  */
 export function openResourceMonitor(): void {
-  if (parseWindowIdentity(window.location.search).kind === 'subworkspace') {
-    window.throng?.resources?.open();
-    return;
-  }
-  openMonitor();
+  window.throng?.resources?.open?.();
 }
 
-/** The status-bar item registers its element so the minimise animation has somewhere to shrink to. */
+/** The status-bar item registers its element so main can ask where the monitor should shrink to. */
 export function setStatusItemElement(element: HTMLElement | null): void {
   statusItem = element;
 }
 
-/** The item's rectangle, or `null` when the bar has none (no item mounted). One read, on demand. */
-export function getStatusItemRect(): DOMRect | null {
-  return statusItem?.getBoundingClientRect() ?? null;
+/**
+ * The item's rectangle in CSS px relative to the viewport (FR-085), or `null` when the bar has none (no
+ * item mounted). One read, on demand — main asks, and converts to screen coordinates itself.
+ */
+export function getStatusItemRect(): { x: number; y: number; width: number; height: number } | null {
+  const r = statusItem?.getBoundingClientRect();
+  return r === undefined ? null : { x: r.x, y: r.y, width: r.width, height: r.height };
 }
 
-/** Tests only: closed, no item, no listeners carried between tests. */
+/** Tests only: no item carried between tests. */
 export function __resetMonitorStore(): void {
-  open = false;
   statusItem = null;
-  listeners.clear();
 }

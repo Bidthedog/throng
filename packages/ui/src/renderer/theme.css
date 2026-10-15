@@ -3405,85 +3405,62 @@ textarea,
   opacity: 0.6;
 }
 
-/* The modal shell (FR-050 – FR-054). The overlay is the shared `.modal-overlay` scrim. */
+/*
+ * The monitor window (FR-081 – FR-087). Laid out like `.prefs-root`: fixed, the title bar on top, the body
+ * below it, on the base application font. It is a window of its own, so there is no scrim, no dialog
+ * chrome and no maximised variant — Maximise is the window's, and main remembers it with the bounds.
+ */
 .resource-monitor {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas:
-    'title controls'
-    'content content';
-  gap: 8px 12px;
-  width: min(1120px, 94vw);
-  height: min(780px, 90vh);
-  padding: 12px 16px;
+  position: fixed;
+  inset: 0;
+  --title-bar-height: var(--pane-header-height, 34px);
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   background: var(--throng-colour-surface);
   color: var(--throng-colour-text);
-  border: 1px solid var(--throng-colour-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  font-weight: var(--throng-font-weight-normal);
 }
 
-/* Maximise (FR-053): fills the window. Restore returns to the size above. */
-.resource-monitor[data-maximised='true'] {
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
+/* Inputs and buttons take the OS widget font unless told otherwise. */
+.resource-monitor input,
+.resource-monitor select,
+.resource-monitor textarea,
+.resource-monitor button {
+  font-family: inherit;
+  font-size: inherit;
 }
 
-.resource-monitor__title {
-  grid-area: title;
-  margin: 0;
-  font-size: 15px;
-}
-
-/* "Figures from N s ago" (FR-044): in the title's cell, at its far end, beside the window controls. */
-.resource-monitor__stale {
-  grid-area: title;
-  justify-self: end;
-  align-self: center;
-  margin: 0;
-  color: var(--throng-colour-warning);
-  font-size: 12px;
+/* The title bar pins to the top (position:absolute vs the fixed root); the content fills what is left. */
+.resource-monitor .title-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
 }
 
 .resource-monitor__content {
-  grid-area: content;
-  min-height: 0;
-  min-width: 0;
+  position: absolute;
+  top: var(--title-bar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 16px 12px;
+  box-sizing: border-box;
 }
 
-.resource-monitor__window-controls {
-  grid-area: controls;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.resource-monitor__control {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .resource-monitor__control:hover {
-  background: var(--throng-colour-hoverSurface);
-}
-
-.resource-monitor__control:focus-visible {
-  outline: 1px solid var(--throng-colour-accent);
-  outline-offset: -1px;
+/* "Figures from N s ago" (FR-044): a status line above the body, not a second notice. */
+.resource-monitor__stale {
+  margin: 0 0 6px;
+  align-self: flex-end;
+  color: var(--throng-colour-warning);
+  font-size: 12px;
 }
 
 .resource-monitor__loading {

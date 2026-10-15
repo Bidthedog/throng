@@ -9,17 +9,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
-import { ContextMenuProvider } from '../../../src/renderer/context-menu-provider.js';
-import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
-import { ResourceMonitorHost } from '../../../src/renderer/resources/monitor-modal.js';
-import { __resetMonitorStore, openMonitor } from '../../../src/renderer/resources/monitor-store.js';
+import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
 import { __resetSession, getSelection, getView, setView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
-// Unload Project is the project list's command; this file is about the keyboard.
-vi.mock('../../../src/renderer/sidebar/use-unload-project.js', () => ({ useUnloadProject: () => vi.fn() }));
 vi.mock('../../../src/renderer/resources/charts/timeseries.js', () => ({
   TimeseriesCharts: () => createElement('div', { 'data-testid': 'timeseries-stub' }),
 }));
@@ -42,20 +36,12 @@ beforeEach(() => {
 afterEach(() => {
   if (realOffsetParent) Object.defineProperty(HTMLElement.prototype, 'offsetParent', realOffsetParent);
   Reflect.deleteProperty(window, 'throng');
-  __resetMonitorStore();
   __resetSession();
 });
 
 async function openModal(): Promise<void> {
-  // The body's actions need the confirmation dialog, the context menu and the settings, as in the app.
-  render(
-    createElement(
-      ConfigProvider,
-      null,
-      createElement(ConfirmProvider, null, createElement(ContextMenuProvider, null, createElement(ResourceMonitorHost))),
-    ),
-  );
-  act(() => openMonitor());
+  // The window's own root mounts the confirmation dialog, the context menu and the settings.
+  render(createElement(MonitorApp));
   await act(async () => bridge.pushDetail(frame(1, sampleHierarchy())));
   await screen.findByTestId('breakdown');
 }
@@ -216,25 +202,22 @@ describe('in the filter field the arrows edit text (FR-068)', () => {
   });
 });
 
-describe('Tab moves between the modal’s regions (FR-068)', () => {
-  it('goes filter → breakdown → chart → detail → controls, and round again', async () => {
+describe('Tab moves between the window’s regions (FR-068)', () => {
+  it('goes filter → breakdown → chart → detail → controls', async () => {
     await openModal();
     const user = userEvent.setup();
     const regionOf = (el: Element | null): string | null => el?.closest('[data-region]')?.getAttribute('data-region') ?? null;
 
     screen.getByTestId('monitor-filter').focus();
     const order: string[] = [regionOf(document.activeElement) ?? '?'];
-    for (let i = 0; i < 40 && order.at(-1) !== 'window'; i += 1) {
+    for (let i = 0; i < 40 && order.at(-1) !== 'controls'; i += 1) {
       await user.tab();
       const region = regionOf(document.activeElement) ?? '?';
       if (region !== order.at(-1)) order.push(region);
     }
 
-    // The window controls (minimise, maximise, close) close the cycle; then Tab wraps to the filter.
-    expect(order.slice(0, 6)).toEqual(['filter', 'breakdown', 'chart', 'detail', 'controls', 'window']);
-    // The window region holds several controls, so leaving it takes more than one Tab.
-    for (let i = 0; i < 6 && regionOf(document.activeElement) === 'window'; i += 1) await user.tab();
-    expect(regionOf(document.activeElement)).toBe('filter');
+    // The window's own controls are the Preferences title bar's, ahead of the body in the Tab order.
+    expect(order).toEqual(['filter', 'breakdown', 'chart', 'detail', 'controls']);
   });
 
   it('puts a single stop in the breakdown, whatever its size', async () => {

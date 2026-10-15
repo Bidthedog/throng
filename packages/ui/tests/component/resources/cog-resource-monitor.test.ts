@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { THRONG_THEME } from '@throng/core';
 import { TitleBar } from '../../../src/renderer/title-bar/title-bar.js';
 import { ContextMenuProvider } from '../../../src/renderer/context-menu-provider.js';
-import { __resetMonitorStore, isMonitorOpen, openResourceMonitor } from '../../../src/renderer/resources/monitor-store.js';
+import { __resetMonitorStore, openResourceMonitor } from '../../../src/renderer/resources/monitor-store.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 
 let bridge: ResourcesBridge;
@@ -57,32 +57,32 @@ describe('the cog menu lists Resource Monitor (FR-056)', () => {
     expect(row).toHaveTextContent(THRONG_THEME.icons.resourceMonitor as string);
   });
 
-  it('opens the monitor when chosen, and closes the menu', async () => {
+  it('opens the monitor window when chosen, and closes the menu', async () => {
     const user = userEvent.setup();
     await openCog();
-    expect(isMonitorOpen()).toBe(false);
+    expect(bridge.opens()).toBe(0);
 
     await user.click(screen.getByTestId('cog-resource-monitor'));
 
-    expect(isMonitorOpen()).toBe(true);
+    expect(bridge.opens()).toBe(1);
     expect(screen.queryByTestId('cog-menu')).toBeNull();
+    // A window, not a dialog: nothing opens inside this one.
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 
-describe('where the open goes (FR-056, research R12)', () => {
-  it('the main window opens its own modal and asks nobody', () => {
+describe('where the open goes (FR-056, FR-086, research R14)', () => {
+  it('the main window asks main, which opens the monitor window or brings it forward', () => {
     openResourceMonitor();
 
-    expect(isMonitorOpen()).toBe(true);
-    expect(bridge.opens()).toBe(0);
+    expect(bridge.opens()).toBe(1);
   });
 
-  it('a sub-workspace window asks main to open it in the main window, and opens nothing itself', () => {
+  it('a sub-workspace window asks main the same way', () => {
     window.history.replaceState(null, '', '/?sw=sub-1');
 
     openResourceMonitor();
 
     expect(bridge.opens()).toBe(1);
-    expect(isMonitorOpen()).toBe(false);
   });
 });

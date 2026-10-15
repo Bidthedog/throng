@@ -31,11 +31,17 @@ export interface WindowControlsProps {
   closeOnly?: boolean;
   /** Render the minimise control (US9/FR-034). Preferences passes `false` — it is non-minimisable. */
   showMinimise?: boolean;
+  /**
+   * Replaces the OS minimise for this window (055 FR-085): the Resource Monitor's Minimise shrinks it
+   * into the status bar and closes it rather than sending it to the taskbar.
+   */
+  onMinimise?: () => void;
 }
 
 export function WindowControls({
   closeOnly = false,
   showMinimise = true,
+  onMinimise,
 }: WindowControlsProps): ReactElement {
   const [maximized, setMaximized] = useState(false);
   const controls = window.throng?.window;
@@ -66,7 +72,7 @@ export function WindowControls({
               data-testid="window-min"
               title="Minimise"
               aria-label="Minimise"
-              onClick={() => controls?.minimize?.()}
+              onClick={() => (onMinimise ? onMinimise() : controls?.minimize?.())}
             >
               <Icon token="windowMinimise" />
             </button>

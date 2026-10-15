@@ -45,7 +45,6 @@ import {
 } from '../../src/renderer/navigate/navigation-store.js';
 import { registerFindInFilesOpener } from '../../src/renderer/find-in-files/open-find-in-files.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
-import { __resetMonitorStore } from '../../src/renderer/resources/monitor-store.js';
 import { chordEvent } from '../shared/chord-event.js';
 import { mountWorkspace, type MountedWorkspace } from './helpers/mount-workspace.js';
 
@@ -130,9 +129,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  // 055 — the loops above press every window chord, `view.resourceMonitor` among them, which OPENS the
-  // exclusive monitor; left open it would swallow every chord the next test presses.
-  __resetMonitorStore();
   unregisterEditorActions('p1');
   registerQuickOpen(null);
   registerFindInFilesOpener(null);

@@ -62,7 +62,7 @@ import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { getMaximiseStack, isPanelHidden, isPanelTabMaximised, toggleMaximisePanel } from '../workspace/maximise-store.js';
-import { isMonitorOpen, toggleMonitor } from '../resources/monitor-store.js';
+import { openResourceMonitor } from '../resources/monitor-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
@@ -603,25 +603,8 @@ export function WindowDispatcher({
     const onBlur = (): void => engine.blur();
 
     const onKeyDown = (e: KeyboardEvent): void => {
-      /*
-       * 055 FR-050 — the Resource Monitor is an EXCLUSIVE modal. While it is open every window chord is
-       * suppressed but its own toggle: consumed, so it reaches nothing behind the dialog, and run by
-       * nobody. Ahead of the chord engine, so a split-mode prefix cannot begin either. An ordinary key
-       * (no window action behind it) passes through untouched — the filter field and the breakdown
-       * need theirs.
-       */
-      if (isMonitorOpen()) {
-        const gated = resolveKeydown(e, (ev) => resolveScoped(keybindings, ev, scopeInput()), windowProducedEvent(e));
-        if (gated !== null && WINDOW_HANDLED_ACTIONS.has(gated)) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (gated === 'view.resourceMonitor') runAction(gated);
-          // The menu key opens the menu of the focused node — a keyboard route to every action the
-          // pointer has (FR-068) — but only when that node is inside the monitor.
-          else if (gated === 'menu.open' && document.activeElement?.closest('[data-testid="monitor-dialog"]')) runAction(gated);
-        }
-        return;
-      }
+      // (055 FR-050's exclusive gate lived here while the Resource Monitor was a modal over this window.
+      // It is its own window now, so nothing here is suppressed while it is open — FR-086.)
       // The window chord engine first: while split mode is pending it takes every key (FR-022, FR-023),
       // and its first stroke outranks single-stroke resolution.
       if (engine.keydown(e)) {
@@ -748,13 +731,11 @@ export function WindowDispatcher({
           window.throng?.fullscreenToggle?.();
           break;
         /*
-         * 055 FR-056 — the Resource Monitor. The main window opens its own modal (and closes it again on
-         * the same chord: it is the one chord the exclusive modal keeps live, FR-050); a sub-workspace
-         * window asks main to open it in the main window and bring that forward (research R12).
+         * 055 FR-056, FR-086 — the Resource Monitor, from any window: main opens its window, or brings an
+         * open one forward. The chord never closes it — the monitor is a window with its own X.
          */
         case 'view.resourceMonitor':
-          if (capsRef.current.kind === 'sub-workspace') window.throng?.resources?.open();
-          else toggleMonitor();
+          openResourceMonitor();
           break;
         /*
          * 031 T5/T7 (FR-032a, FR-032d) — the tab picker, from anywhere.

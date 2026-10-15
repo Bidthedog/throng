@@ -5,11 +5,12 @@ import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
 import type { OpenApp } from './harness.js';
+import { closeMonitorWindow, monitorWindowPage, openMonitorWindow } from './helpers/monitor-window.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
 
 /**
- * The Resource Monitor in a real window (055): the status-bar totals (US1), the modal and its drill-down
- * (US2), and the cost of having it open (SC-003).
+ * The Resource Monitor in real windows (055): the status-bar totals (US1), the monitor window and its
+ * drill-down (US2, FR-081), and the cost of having it open (SC-003).
  *
  * Layer: E2E, because each claim is about a real process tree and a real window — the figures come from
  * the OS, the busy loop is a real `node.exe` under a real shell under a real ConPTY, and "no input waits"
@@ -107,42 +108,38 @@ function rollUpMismatches(node: Node, out: string[] = []): string[] {
   return out;
 }
 
-test('Ctrl+Shift+Alt+R opens the monitor; Projects to the busy process is four clicks from the status bar, every level adds up, and Esc closes', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  const { win } = h;
-  const dialog = win.getByTestId('monitor-dialog');
+test('Ctrl+Shift+Alt+R opens the monitor window; Projects to the busy process is four clicks from the status bar, every level adds up, and Esc closes it', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  const { app, win } = h;
 
   // A process to find: an idle node under the terminal's shell.
   await runTypedCommand(win, term(win), 'node -e "setInterval(function(){},1000)"', { echoed: 'setInterval', output: 'setInterval' });
 
-  // The chord opens it, with the first reading in (FR-051).
-  await win.keyboard.press('Control+Shift+Alt+R');
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-  // Esc closes it, and the keyboard goes back to where it was.
-  await win.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
+  // The chord opens it as a window of its own, with the first reading in (FR-051, FR-081).
+  const monitor = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  // Esc closes it (FR-052).
+  await monitor.keyboard.press('Escape');
+  await expect.poll(() => monitorWindowPage(app), { timeout: 15_000 }).toBeNull();
 
   // SC-005: click 1 — the status-bar item.
-  await win.getByTestId('status-resources').click();
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
+  const mon = await openMonitorWindow(app, () => win.getByTestId('status-resources').click());
 
   // First view carries both halves (FR-020b): throng's own components and the user's projects.
-  await expect(win.getByTestId('breakdown-section-components')).toBeVisible();
-  const projects = win.getByTestId('breakdown-section-projects');
+  await expect(mon.getByTestId('breakdown-section-components')).toBeVisible();
+  const projects = mon.getByTestId('breakdown-section-projects');
   await expect(projects).toBeVisible();
 
   // Clicks 2, 3 and 4: the project, its tab, its panel.
   await projects.locator('[data-testid^="treemap-tile-p:"]').first().click();
-  await win.locator('[data-testid^="treemap-tile-t:"]').first().click();
-  await win.locator('[data-testid^="treemap-tile-n:"]').first().click();
+  await mon.locator('[data-testid^="treemap-tile-t:"]').first().click();
+  await mon.locator('[data-testid^="treemap-tile-n:"]').first().click();
 
   // Four clicks in, the panel's processes are listed: the shell and the node under it.
-  const nodeRow = win.locator('[data-testid^="breakdown-row-x:"]', { hasText: 'node.exe' }).first();
+  const nodeRow = mon.locator('[data-testid^="breakdown-row-x:"]', { hasText: 'node.exe' }).first();
   await expect(nodeRow).toBeVisible({ timeout: 15_000 });
-  await expect(win.getByTestId('breadcrumb')).toContainText('Monitor');
+  await expect(mon.getByTestId('breadcrumb')).toContainText('Monitor');
 
   // SC-006, on a real hierarchy: a second subscription takes one frame as the app produced it.
-  const frame = await win.evaluate(
+  const frame = await mon.evaluate(
     () =>
       new Promise<{ hierarchy: unknown }>((resolve) => {
         const api = (window as unknown as { throng: { resources: { subscribeDetail: () => Promise<{ subscriptionId: number }>; unsubscribeDetail: (id: number) => Promise<void>; onDetail: (cb: (f: { hierarchy: unknown }) => void) => () => void } } }).throng.resources;
@@ -160,9 +157,9 @@ test('Ctrl+Shift+Alt+R opens the monitor; Projects to the busy process is four c
   );
   expect(rollUpMismatches(frame.hierarchy as Node)).toEqual([]);
 
-  // Esc closes the dialog again.
-  await win.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
+  // Esc closes the window again.
+  await mon.keyboard.press('Escape');
+  await expect.poll(() => monitorWindowPage(app), { timeout: 15_000 }).toBeNull();
 
   await term(win).click();
   await win.keyboard.press('Control+C');
@@ -244,11 +241,10 @@ test('having the monitor open does not slow typing: terminal echo is within 5% o
     budgetMs: Math.round(baseline * 1.05 * 100) / 100 + 0.01,
   });
 
-  // With the dialog itself open and frames arriving, typing in it must never wait over 50 ms: Chromium's
-  // own event timing for the keydowns, which covers input delay, handlers and the next paint.
-  await win.keyboard.press('Control+Shift+Alt+R');
-  await expect(win.getByTestId('monitor-dialog')).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
-  await win.evaluate(() => {
+  // With the monitor window itself open and frames arriving, typing in it must never wait over 50 ms:
+  // Chromium's own event timing for the keydowns, which covers input delay, handlers and the next paint.
+  const mon = await openMonitorWindow(h.app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  await mon.evaluate(() => {
     const w = window as unknown as { __events: number[]; __eventObserver: PerformanceObserver };
     w.__events = [];
     w.__eventObserver = new PerformanceObserver((list) => {
@@ -259,18 +255,18 @@ test('having the monitor open does not slow typing: terminal echo is within 5% o
     f.__frames = 0;
     f.__framesOff = f.throng.resources.onDetail(() => void (f.__frames += 1));
   });
-  const frames = () => win.evaluate(() => (window as unknown as { __frames: number }).__frames);
-  await win.getByTestId('monitor-filter').click();
+  const frames = () => mon.evaluate(() => (window as unknown as { __frames: number }).__frames);
+  await mon.getByTestId('monitor-filter').click();
   // Typing interleaved with real frame renders: every fourth keystroke waits for the next detail frame.
   for (let i = 0; i < 24; i += 1) {
-    await win.keyboard.type(i % 2 === 0 ? 'n' : 'o', { delay: 0 });
+    await mon.keyboard.type(i % 2 === 0 ? 'n' : 'o', { delay: 0 });
     if (i % 4 === 3) {
       const before = await frames();
-      await win.waitForFunction((n) => (window as unknown as { __frames: number }).__frames > n, before, { timeout: 10_000 });
+      await mon.waitForFunction((n) => (window as unknown as { __frames: number }).__frames > n, before, { timeout: 10_000 });
     }
   }
-  await win.evaluate(() => (window as unknown as { __framesOff: () => void }).__framesOff());
-  const longest = await win.evaluate(() => {
+  await mon.evaluate(() => (window as unknown as { __framesOff: () => void }).__framesOff());
+  const longest = await mon.evaluate(() => {
     const w = window as unknown as { __events: number[]; __eventObserver: PerformanceObserver };
     w.__eventObserver.disconnect();
     return Math.max(0, ...w.__events);
@@ -280,6 +276,55 @@ test('having the monitor open does not slow typing: terminal echo is within 5% o
   } else {
     noteSlaNotMeasured(testInfo, { what: 'the longest keydown in the open monitor', requirement: '055 SC-003', observed: `${longest} ms` });
   }
-  await win.keyboard.press('Escape');
-  await expect(win.getByTestId('monitor-dialog')).toHaveCount(0);
+  await mon.keyboard.press('Escape');
+  await expect.poll(() => monitorWindowPage(h.app), { timeout: 15_000 }).toBeNull();
+});
+
+/** The OS-level facts about the monitor window, read in UI main — the only place that knows them. */
+async function monitorOsState(app: OpenApp['app']): Promise<{ onTop: boolean; bounds: { x: number; y: number; width: number; height: number }; mainBounds: { x: number; y: number; width: number; height: number } } | null> {
+  return app.evaluate(({ BrowserWindow }) => {
+    const all = BrowserWindow.getAllWindows();
+    const monitor = all.find((w) => w.webContents.getURL().includes('monitor'));
+    const main = all.find((w) => !w.webContents.getURL().includes('monitor') && !w.webContents.getURL().includes('prefs') && !w.webContents.getURL().includes('about') && !w.webContents.getURL().includes('sw='));
+    if (!monitor || !main) return null;
+    return { onTop: monitor.isAlwaysOnTop(), bounds: monitor.getBounds(), mainBounds: main.getBounds() };
+  });
+}
+
+test('the monitor is a window beside throng: the terminal takes typing while it is open, it is above throng, Minimise closes it, and it reopens where it was left', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  const { app, win } = h;
+  test.setTimeout(120_000);
+
+  const monitor = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+
+  // Throng is not blocked behind it (FR-082): a click lands in the main window and the terminal echoes
+  // what is typed, with the monitor still up.
+  await term(win).click();
+  await runTypedCommand(win, term(win), 'set /a 6*7', { echoed: 'set /a 6*7', output: '42' });
+  expect(await monitorWindowPage(app), 'the monitor is still open').not.toBeNull();
+
+  // Above throng's own window, while throng has focus (FR-083).
+  await win.bringToFront();
+  await expect.poll(async () => (await monitorOsState(app))?.onTop, { timeout: 10_000, message: 'the monitor was not held above throng' }).toBe(true);
+
+  // Move it somewhere recognisable, so "where it was left" is not simply "where it opens by default".
+  const moved = await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes('monitor'));
+    if (!w) return null;
+    const b = w.getBounds();
+    w.setBounds({ x: b.x + 17, y: b.y + 13, width: b.width - 41, height: b.height - 29 });
+    return w.getBounds();
+  });
+  expect(moved).not.toBeNull();
+
+  // Minimise is Close with a destination (FR-085): it shrinks into the status bar and the window goes.
+  await monitor.getByTestId('window-min').click();
+  await expect.poll(() => monitorWindowPage(app), { timeout: 15_000, message: 'Minimise did not close the monitor' }).toBeNull();
+
+  // Reopened at the bounds it was left at (FR-087).
+  await openMonitorWindow(app, () => win.getByTestId('status-resources').click());
+  const reopened = await monitorOsState(app);
+  expect(reopened?.bounds).toEqual(moved);
+
+  await closeMonitorWindow(app);
 });

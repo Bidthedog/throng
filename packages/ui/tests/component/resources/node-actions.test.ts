@@ -4,14 +4,15 @@
  *
  * Layer: component — the real breakdown, detail pane, confirmation dialog, context menu and settings
  * store over the real session; the bridge is faked. Unload Project, Destroy Tab and Destroy Panel are the
- * SHARED commands (`use-unload-project`, `tab-destroy`, `panel-destroy`), which are replaced or
- * registered here as spies: that each does what it does is their own tests'. What is claimed here is that
+ * SHARED commands (Unload Project, Destroy Tab, Destroy Panel), which run in the window that owns the
+ * project, tab or panel — the monitor is its own window and ROUTES them (`routeAction`, FR-086); that each
+ * does what it does is their own tests'. What is claimed here is that
  * the monitor reaches them, offers exactly `actionsFor`'s rows, asks `confirmations.killProcesses` the
  * way every other confirmation is asked, and says so plainly when a kill fails.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { THRONG_THEME, type ResourceNode } from '@throng/core';
 import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
 import { ContextMenuProvider } from '../../../src/renderer/context-menu-provider.js';
@@ -21,13 +22,9 @@ import { DetailPane } from '../../../src/renderer/resources/detail-pane.js';
 import { MonitorNotice } from '../../../src/renderer/resources/monitor-notice.js';
 import { NodeActionsProvider } from '../../../src/renderer/resources/node-actions.js';
 import { __resetSession, focusOn, ingestFrame, setSelection, startSession } from '../../../src/renderer/resources/monitor-session.js';
-import { __resetPanelDestroy, registerPanelDestroy } from '../../../src/renderer/workspace/panel-destroy.js';
-import { __resetTabDestroy, registerTabDestroy } from '../../../src/renderer/workspace/tab-destroy.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
-const unload = vi.hoisted(() => vi.fn());
-vi.mock('../../../src/renderer/sidebar/use-unload-project.js', () => ({ useUnloadProject: () => unload }));
 
 let bridge: ResourcesBridge;
 
@@ -63,16 +60,11 @@ function renderTree(): void {
 beforeEach(() => {
   bridge = installResourcesBridge(null);
   __resetSession();
-  __resetTabDestroy();
-  __resetPanelDestroy();
-  unload.mockClear();
   startSession({ intervalSeconds: 2, historyMinutes: 5 });
 });
 afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
   __resetSession();
-  __resetTabDestroy();
-  __resetPanelDestroy();
 });
 
 const feed = (root: ResourceNode, tick = 1): void => {
@@ -109,8 +101,6 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
   it('a terminal panel: Destroy Panel and Kill All Below; an editor panel: Destroy Panel only', async () => {
     feed(sampleHierarchy());
-    registerPanelDestroy('n1', vi.fn());
-    registerPanelDestroy('n2', vi.fn());
     await mount();
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
 
@@ -162,36 +152,50 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 });
 
 describe('the shared commands (FR-063)', () => {
-  it('Unload Project runs the configured default; the other row runs its opposite', async () => {
+  // The monitor is its own window and holds no project, tab or panel (FR-086): every one of these runs
+  // in the window that owns it, with that window's own confirmation, so each is ROUTED.
+  it('Unload Project routes the configured default to the main window; the other row routes its opposite', async () => {
     feed(sampleHierarchy());
+    bridge.setRouteAnswer(true);
     await mount();
 
     rightClick('p:p1');
     fireEvent.click(screen.getByTestId('menu-item-Unload Project'));
-    expect(unload).toHaveBeenLastCalledWith({ id: 'p1', name: 'Alpha' });
+    await waitFor(() => expect(bridge.routed).toEqual([{ action: 'unloadProject', id: 'p1', name: 'Alpha' }]));
 
     rightClick('p:p1');
     fireEvent.click(screen.getByTestId('menu-item-Unload Project and End Terminals'));
-    expect(unload).toHaveBeenLastCalledWith({ id: 'p1', name: 'Alpha' }, 'endTerminals');
+    await waitFor(() => expect(bridge.routed).toHaveLength(2));
+    expect(bridge.routed[1]).toEqual({ action: 'unloadProject', id: 'p1', name: 'Alpha', variant: 'endTerminals' });
+    expect(screen.queryByTestId('monitor-notice')).toBeNull();
   });
 
-  it('Destroy Tab and Destroy Panel run the tab’s and the panel’s own flows', async () => {
+  it('a failed Unload route keeps the monitor’s notice', async () => {
     feed(sampleHierarchy());
-    const destroyTab = vi.fn();
-    const destroyPanel = vi.fn();
-    registerTabDestroy('t1', destroyTab);
-    registerPanelDestroy('n1', destroyPanel);
+    bridge.setRouteAnswer(false);
+    await mount();
+
+    rightClick('p:p1');
+    fireEvent.click(screen.getByTestId('menu-item-Unload Project'));
+
+    expect(await screen.findByTestId('monitor-notice')).toHaveTextContent('Alpha');
+  });
+
+  it('Destroy Tab and Destroy Panel are routed, never run here', async () => {
+    feed(sampleHierarchy());
+    bridge.setRouteAnswer(true);
     await mount();
 
     act(() => focusOn(['root', 'c:projects', 'p:p1']));
     rightClick('t:t1');
     fireEvent.click(screen.getByTestId('menu-item-Destroy Tab'));
-    expect(destroyTab).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(bridge.routed).toEqual([{ action: 'destroyTab', id: 't1' }]));
 
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
     rightClick('n:n1');
     fireEvent.click(screen.getByTestId('menu-item-Destroy Panel'));
-    expect(destroyPanel).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(bridge.routed).toHaveLength(2));
+    expect(bridge.routed[1]).toEqual({ action: 'destroyPanel', id: 'n1' });
   });
 
   it('a tab in a project that is not loaded is disabled, and says why', async () => {
@@ -239,16 +243,12 @@ describe('the shared commands (FR-063)', () => {
     expect(bridge.routed).toEqual([]);
   });
 
-  it('a registered tab is destroyable whatever its project’s state', async () => {
-    const tab = node({ id: 't:t8', kind: 'tab', label: 'Docs', owner: { component: 'projects', projectId: 'p3', tabId: 't8' } });
-    const loaded = node({ id: 'p:p3', kind: 'project', label: 'Gamma', projectState: 'loaded', owner: { component: 'projects', projectId: 'p3' }, children: [tab] });
-    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', owner: { component: 'projects' }, children: [loaded] });
-    feed(node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } }));
-    registerTabDestroy('t8', vi.fn());
+  it('a tab of the active project is enabled: the monitor holds no tab, so the project decides', async () => {
+    feed(sampleHierarchy());
     await mount();
-    act(() => focusOn(['root', 'c:projects', 'p:p3']));
+    act(() => focusOn(['root', 'c:projects', 'p:p1']));
 
-    rightClick('t:t8');
+    rightClick('t:t1');
 
     expect(screen.getByTestId('menu-item-Destroy Tab')).toHaveAttribute('aria-disabled', 'false');
   });

@@ -8,7 +8,6 @@ import type { ViewState } from '../../../src/renderer/resources/monitor-session.
 import { MIB, metrics, node, proc } from '../../component/helpers/resource-fixtures.js';
 
 const view = (over: Partial<ViewState> = {}): ViewState => ({
-  maximised: false,
   metric: 'io',
   filterText: '',
   narrowTo: null,
