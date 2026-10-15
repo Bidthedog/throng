@@ -62,6 +62,7 @@ import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js
 import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
 import { StatusStrip } from '../../src/renderer/editor/status-strip.js';
+import { TransientScrim } from '../../src/renderer/common/transient-scrim.js';
 import {
   claimTransientOverlay,
   transientOverlayOpen,
@@ -251,6 +252,39 @@ describe('dismissing it', () => {
  * codebase does not mark that distinction anywhere, so the guard would encode a guess about which
  * kind each new overlay is.
  */
+/**
+ * ══ REPORTED 2026-10-14, hand-testing 055 MT-06 ══
+ *
+ * "The picker dims the entire screen — the picker should not dim the screen, or itself." The picker is
+ * an ANCHORED popover (opens upward from its strip, inside its panel), but holding the slot used to
+ * raise the window's one shared scrim as well, and the scrim sits above the panel's stacking context —
+ * so it dimmed the editor, the rest of the window and the picker itself. FR-071 asks for one overlay
+ * at a time; it never asked for a scrim, and a popover that dims its own anchor has nothing to point at.
+ */
+describe('opening the picker does not dim the window', () => {
+  it('draws no scrim while the picker is open', async () => {
+    setPanelLanguage(PANEL, resolveLanguage({ fileName: 'main.rs' }));
+    const user = userEvent.setup();
+    render(
+      createElement(
+        ServicesProvider,
+        { services: fakeServices() },
+        createElement(
+          'div',
+          null,
+          createElement(TransientScrim, { key: 'scrim' }),
+          createElement(StatusStrip, { key: 'strip', panelId: PANEL, projectId: PROJECT, relPath: 'main.rs' }),
+        ),
+      ),
+    );
+
+    await openPicker(user);
+
+    expect(picker(), 'the picker must be open for this to be about its scrim').not.toBeNull();
+    expect(screen.queryByTestId('transient-scrim')).toBeNull();
+  });
+});
+
 describe('the language picker holds the shared overlay slot (FR-071)', () => {
   it('closes when ANOTHER overlay claims the slot', async () => {
     const { user } = mount();

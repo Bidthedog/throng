@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { subscribeTransientOverlay, transientOverlayOpen } from './transient-overlay.js';
+import { subscribeTransientOverlay, transientScrimWanted } from './transient-overlay.js';
 
 /**
  * The ONE scrim behind every transient overlay (033 FR-071).
@@ -29,9 +29,11 @@ import { subscribeTransientOverlay, transientOverlayOpen } from './transient-ove
  * Mount it once per window shell. It renders nothing at all when no overlay holds the slot.
  */
 export function TransientScrim(): ReactElement | null {
-  const [open, setOpen] = useState(transientOverlayOpen);
+  // `transientScrimWanted`, not "is the slot held": an anchored popover (the language picker) holds
+  // the slot without asking to dim the window.
+  const [open, setOpen] = useState(transientScrimWanted);
 
-  useEffect(() => subscribeTransientOverlay(() => setOpen(transientOverlayOpen())), []);
+  useEffect(() => subscribeTransientOverlay(() => setOpen(transientScrimWanted())), []);
 
   if (!open) return null;
   // `pointer-events: none` in the CSS: dismiss-on-click belongs to the overlay's own full-viewport
