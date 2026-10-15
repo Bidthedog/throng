@@ -322,6 +322,12 @@ render; every capture renders the breakdown twice (urgent + deferred); a new sub
 all four uPlot charts inside the click; sparklines read `getComputedStyle` and remap 150 points per row
 per capture; Hide idle copies every node's full history per build though the rule reads three points.
 
+**Defects** (labels used in tasks.md Phase 12): **D1** the filter repeats subtrees and renders
+synchronously per keystroke; **D2** `formatGrouped` builds a formatter per call; **D3** memos never hold
+and each capture renders twice; **D4** charts are rebuilt inside a click; **D5** sparkline, Hide idle,
+chunk-loading and first-layout costs; **D6** the marked tile is not the selected node; **D7** banded tiles
+lose hover and selection, and controls have no visible focus ring.
+
 **Decisions.**
 - **Cost first**: cache one `Intl.NumberFormat` per locale in core's `formatGrouped` (the constitution's
   rule is unchanged — same output, same parser); emit each node once in the filtered model; defer the

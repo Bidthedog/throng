@@ -285,8 +285,9 @@ process; at every level the figure shown equals the sum of its children plus its
    children has no drill-down button. Right-clicking a tile opens the same menu as its row. (FR-088)
 12. **Given** the monitor is open, **When** a capture arrives, **Then** "Updated <time> · every <n> s"
    changes and pulses once; **While** the pointer is over the breakdown, **Then** no tile or row changes
-   place; **When** the pointer leaves, **Then** they move to their new ranks with a short animation (none
-   under reduced motion). (FR-090, FR-091)
+   place; **When** the pointer leaves with nothing selected, **Then** they move to their new ranks with a
+   short animation (none under reduced motion); **When** a node is selected, **Then** the order holds until
+   the selection is cleared. (FR-088, FR-090, FR-091)
 13. **Given** the monitor, **When** the user looks at it for the first time, **Then** a header names where
    they are, with a Back button and "Tile size: <metric>"; the rows have column headers with the chosen
    metric's column marked; each chart has a legend naming its bands and names the node it plots; and the
@@ -661,7 +662,10 @@ reopens from it.
 - **FR-088**: A click on a tile or a row MUST select that node, and only select it. Each tile and row whose
   node has children MUST carry a drill-down icon button that opens it; Enter and Right on a selected node,
   and a double-click on a row, MUST also open it. A node with no children MUST have no drill-down button
-  and MUST NOT open to an empty view. Right-clicking a tile MUST open the same menu as its row.
+  and MUST NOT open to an empty view. Right-clicking a tile MUST open the same menu as its row. A click on
+  the selected tile or row again, or on empty space in the breakdown, MUST clear the selection, as MUST
+  drilling in or going Back *(derived — the spec had no way back to "nothing selected"; not confirmed by
+  the user)*.
 - **FR-089**: Exactly the selected node MUST be marked — on its tile and on its row, with an accent edge
   as throng marks its active tab and active file — and the detail pane and charts MUST describe that node;
   with nothing selected, nothing is marked and they describe the node in focus. Every interactive element
