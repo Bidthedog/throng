@@ -142,6 +142,33 @@ This feature is additive. It changes no shipped requirement, and must satisfy th
   panel, moved out of the UI and Daemon figures and held to the same 10% bar as editors. (FR-024b,
   SC-009)
 
+### Session 2026-10-15
+
+Feedback after hand-testing the built feature, verbatim: *"Make the modal the same as the preferences
+window - it should be moveable, I should be able to interact with throng in the background, and I should
+be able to see changes reflected there as I make changes in throng. It should stay on top. The modal
+should look the same as the preferences one, except minimise should be available."*
+
+- Q: Is the monitor still an exclusive modal inside the main window? → A: **No — this reverses the
+  2026-10-14 answer behind FR-050.** The monitor is its own window, built like the Preferences window:
+  movable, looking the same as Preferences, with throng fully usable behind it, and every change made in
+  throng reflected in it as it happens. It stays on top. In this spec, "the modal" in text written before
+  this session means this window — the **monitor window**. (FR-081 – FR-086; supersedes FR-050, FR-053,
+  FR-054; amends FR-056, FR-057)
+- Q: "Stays on top" of what? → A: **As Preferences does: above throng's own windows while throng has
+  focus, never above other applications**, and it minimises and restores with the main window. *(derived from the Preferences window, `packages/ui/src/main/preferences-window.ts`; not confirmed by the user)* (FR-083)
+- Q: What do the window controls do? → A: **Preferences' controls — X closes, Maximise fills the screen,
+  Restore returns — plus Minimise**, which keeps the meaning given when the feature was specified: the
+  window closes with an animation that shrinks it into the status-bar figures, and under reduced motion
+  closes without it. Esc still closes it. *(Minimise derived from the original request — "Minimising
+  closes it with a neat animation to the bottom right status bar element that is always present" — not
+  re-confirmed.)* (FR-084, FR-085)
+- Q: Where do the monitor's actions run now that it is not inside a workspace window? → A: **Where they
+  belong**: Unload Project in the main window, Destroy Tab and Destroy Panel in the window holding that
+  tab or panel, each with its own confirmation, that window brought forward to show it; Kill asks in the
+  monitor window. *(derived from FR-063 and the existing cross-window routing; not confirmed by the user)*
+  (FR-086)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See throng's total load at a glance (Priority: P1)
@@ -306,10 +333,31 @@ reopens from it.
    it closes.
 2. **Given** the modal is open, **When** the user clicks Maximise, **Then** it fills the window; **When**
    they click Restore, **Then** it returns to its previous size.
+   *Superseded by scenario 6 (Session 2026-10-15) — the monitor is its own window.*
 3. **Given** the modal is open, **When** the user clicks Minimise, **Then** it animates down into the
    status-bar item and closes; under reduced motion it closes without the animation.
+   *Superseded by scenario 7 (Session 2026-10-15) — the same behaviour, from the monitor window.*
 4. **Given** the modal is open, **When** the user tries to interact with the workspace behind it,
    **Then** nothing behind it responds until it closes.
+   *Superseded by scenario 5 (Session 2026-10-15) — throng stays usable behind the monitor window.*
+5. **Given** the monitor window is open, **When** the user clicks into a terminal behind it and types,
+   opens a tab, or unloads a project, **Then** throng responds normally, the monitor window stays above
+   it, and the change appears in the monitor at its next capture — a new process, a new tab, a project
+   greyed. (FR-082, FR-083)
+6. **Given** the monitor window is open, **When** the user drags its title bar, **Then** it moves;
+   **When** they click Maximise, **Then** it fills the screen; **When** they click Restore, **Then** it
+   returns to its previous size and place. It looks like the Preferences window, with a Minimise control
+   besides. (FR-081, FR-084)
+7. **Given** the monitor window is open, **When** the user clicks Minimise, **Then** it animates down into
+   the main window's status-bar figures and closes; under reduced motion it closes without the
+   animation. (FR-085)
+8. **Given** the monitor window is open, **When** the user switches to another application, **Then** the
+   monitor goes behind that application with the rest of throng; **When** they return to throng, **Then**
+   it is above throng's windows again. (FR-083)
+9. **Given** the monitor window was moved and closed, **When** the user opens it again — from the status
+   bar, the cog or `Ctrl+Shift+Alt+R`, in any window — **Then** the one monitor window opens where it was
+   left, at the same size, on the same view; opened while already open, it comes forward instead.
+   (FR-086, FR-087)
 
 ---
 
@@ -503,12 +551,15 @@ reopens from it.
 
 - **FR-050**: The monitor MUST open as an **exclusive** modal in the main window: nothing behind it
   responds while it is open.
+  *Superseded by FR-081 and FR-082 (Session 2026-10-15) — the monitor is its own non-blocking window.*
 - **FR-051**: It MUST open immediately, showing a loading state for any data not yet collected, and
   fill in asynchronously. Opening it MUST never block input.
 - **FR-052**: It MUST close on Esc and on an X control at its top right.
 - **FR-053**: It MUST offer Maximise (fill the window) and Restore (return to its previous size).
+  *Superseded by FR-084 (Session 2026-10-15) — Maximise now fills the screen, as Preferences' does.*
 - **FR-054**: It MUST offer Minimise, which closes it with an animation that shrinks it into the
   status-bar item; with reduced motion requested, it closes without animation.
+  *Superseded by FR-085 (Session 2026-10-15) — the same behaviour, from the monitor window.*
 - **FR-055**: The modal's own controls (close, maximise, restore, minimise, kill, filter clear) MUST be
   themeable icon controls with hover titles; confirmation buttons keep text labels.
 - **FR-056**: A command **Resource Monitor** MUST open the modal from any window. It MUST appear as an
@@ -517,10 +568,37 @@ reopens from it.
   item*: the status bar is an accelerator, never the only route). It MUST appear in the Key Bindings
   editor with the default Tier 1 chord **`Ctrl+Shift+Alt+R`**, matched on the physical key. Opened from a sub-workspace window, the modal opens in the main window and brings
   it forward.
+  *Its last sentence is superseded by FR-086 (Session 2026-10-15) — from any window, the command opens
+  the one monitor window; the rest stands.*
 - **FR-057**: Reopening the modal MUST restore the view the user left: its size (maximised or not), the
   chosen metric, the filter text and narrowing, and the drill-down position. If the node it was on no
   longer exists, it MUST open at that node's nearest surviving ancestor. This state lasts until throng
   restarts and is not persisted; chart history is still discarded on close (FR-033).
+  *Amended by FR-087 (Session 2026-10-15) — the size it restores is the monitor window's place and size.*
+
+#### The monitor window (Session 2026-10-15)
+
+- **FR-081**: The monitor MUST be its own window, like the Preferences window: frameless, movable by its
+  title bar, and looking the same — the same title bar, chrome, controls and theme — with one addition,
+  a Minimise control (FR-085). There is only ever one; opening it again brings it forward.
+- **FR-082**: Every throng window MUST stay fully usable while the monitor window is open, and the
+  monitor MUST reflect what the user does in throng as they do it: processes, tabs, panels and projects
+  appear, change and leave at the next capture, without reopening.
+- **FR-083**: The monitor window MUST stay above throng's own windows while throng has focus, and never
+  above other applications' windows — the Preferences rule. It minimises and restores with the main
+  window, and closes when the main window closes.
+- **FR-084**: Maximise MUST fill the screen and Restore MUST return the window to its previous size and
+  place. FR-052's Esc and X still close it.
+- **FR-085**: Minimise MUST close the monitor window with an animation that shrinks it into the main
+  window's status-bar figures, so the user sees where it went; with reduced motion requested, it closes
+  without animation.
+- **FR-086**: The Resource Monitor command, the status-bar figures and the cog item MUST open the
+  monitor window from any throng window, or bring it forward if it is open. Its actions run where they
+  belong: Unload Project in the main window, Destroy Tab and Destroy Panel in the window holding that tab
+  or panel — each with its own confirmation, that window brought forward — and Kill's confirmation in
+  the monitor window. A tab or panel no window holds offers Destroy disabled, with its reason.
+- **FR-087**: Reopening MUST place the monitor window where the user left it, at the same size and
+  maximised state, kept on a visible screen, along with FR-057's view. This lasts until throng restarts.
 
 #### Visualisation and navigation
 
