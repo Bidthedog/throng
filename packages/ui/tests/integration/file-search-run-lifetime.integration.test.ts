@@ -206,6 +206,22 @@ describe('a closed panel releases its run (043 data-model §7)', () => {
     expect(rig.fs.stats, 'a live run re-stats the files behind its rows').toBe(2);
   });
 
+  it('re-stats only the results a named change can affect (#482)', async () => {
+    // A churning log at the root used to re-stat EVERY held result on every tick, because the only
+    // thing the signal carried was its directory — the root. Naming the path narrows it to the
+    // results that path can have changed: itself, or anything beneath it.
+    const rig = new Rig();
+    const root = await makeRoot(FILES);
+    await rig.scan(PARENT, root);
+
+    rig.fs.stats = 0;
+    await rig.service.notePathsChanged(root, ['churn.log']);
+    expect(rig.fs.stats, 'a change to an unrelated root file re-stated results').toBe(0);
+
+    await rig.service.notePathsChanged(root, ['a.txt']);
+    expect(rig.fs.stats, 'the changed result file itself must be re-stated').toBe(1);
+  });
+
   it('stats nothing, and pushes nothing, once the panel has been dropped', async () => {
     /*
      * The user's sequence: run a search, read the results, close the panel. The scan has already

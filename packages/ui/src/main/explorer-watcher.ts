@@ -5,7 +5,23 @@
  * The renderer is sandboxed, so the watch + push live in UI main.
  */
 import { dirname, relative, sep } from 'node:path';
-import type { Disposable, IFileWatcher } from '@throng/core';
+import type { Disposable, IFileWatcher, WatchBatch } from '@throng/core';
+
+/**
+ * What `throng:files:changed` carries.
+ *
+ * `relDir` is the directory of the report's last path, exactly as it always was. `relDirs` is every
+ * directory the report touched (#482) — present only when the watcher could name them all, and only
+ * when there are few enough to be worth sending. Its absence means "re-read whatever you hold",
+ * which is what every signal used to mean.
+ */
+export interface FilesChangedEvent {
+  relDir: string;
+  relDirs?: string[];
+}
+
+/** Past this many directories a report goes out without `relDirs`, and readers re-read everything. */
+const MAX_WIRE_DIRS = 1000;
 
 export class ExplorerWatcher {
   private current: Disposable | null = null;
@@ -20,8 +36,15 @@ export class ExplorerWatcher {
      * results per project, so a root-relative directory with no root is unattributable. Keeping it
      * out of the payload keeps `throng:files:changed` on the wire exactly as it was — the broadcast
      * site passes `evt` on unchanged and uses the root for itself.
+     *
+     * `relPaths` is every root-relative path the report named, or null when the watcher could not
+     * name them all (#482). It stays off the wire too: only the Find in Files scan needs it.
      */
-    private readonly emit: (evt: { relDir: string }, absRoot: string) => void,
+    private readonly emit: (
+      evt: FilesChangedEvent,
+      absRoot: string,
+      relPaths: readonly string[] | null,
+    ) => void,
     /**
      * The watch on the active root failed and could not be re-established (026 / #186, FR-010a).
      *
@@ -39,8 +62,15 @@ export class ExplorerWatcher {
     if (!absRoot) return;
     this.current = this.watcher.watch(
       absRoot,
-      (changedPath) => {
-        this.emit({ relDir: toRelDir(absRoot, changedPath) }, absRoot);
+      (changedPath, batch) => {
+        const relDir = toRelDir(absRoot, changedPath);
+        const relPaths = batch?.complete ? toRelPaths(absRoot, batch) : null;
+        if (relPaths === null) {
+          this.emit({ relDir }, absRoot, null);
+          return;
+        }
+        const relDirs = [...new Set(batch!.paths.map((p) => toRelDir(absRoot, p)))];
+        this.emit(relDirs.length <= MAX_WIRE_DIRS ? { relDir, relDirs } : { relDir }, absRoot, relPaths);
       },
       // Bound to THIS root by the closure. A failure arriving after `setRoot` moved on is
       // impossible: disposing the old handle latches it, so a stale root can never raise a notice
@@ -53,6 +83,17 @@ export class ExplorerWatcher {
     this.current?.dispose();
     this.current = null;
   }
+}
+
+/** Every path a complete batch named, root-relative POSIX, or null if any lies outside the root. */
+function toRelPaths(root: string, batch: WatchBatch): string[] | null {
+  const out: string[] = [];
+  for (const p of batch.paths) {
+    const rel = relative(root, p).split(sep).join('/');
+    if (rel === '' || rel.startsWith('..')) return null; // the root itself: everything is news
+    out.push(rel);
+  }
+  return out;
 }
 
 /** Root-relative POSIX path of the directory containing the changed entry. */

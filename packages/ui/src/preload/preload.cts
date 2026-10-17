@@ -502,8 +502,8 @@ contextBridge.exposeInMainWorld('throng', {
     // 024 US3 (#85): undo of a delete — restore a trashed item to its original path.
     restore: (relPath: string, deletedAt: number) =>
       ipcRenderer.invoke('throng:files:restore', relPath, deletedAt),
-    onChange: (cb: (evt: { relDir: string }) => void) => {
-      const handler = (_event: unknown, evt: { relDir: string }): void => cb(evt);
+    onChange: (cb: (evt: { relDir: string; relDirs?: string[] }) => void) => {
+      const handler = (_event: unknown, evt: { relDir: string; relDirs?: string[] }): void => cb(evt);
       ipcRenderer.on('throng:files:changed', handler);
       return () => ipcRenderer.removeListener('throng:files:changed', handler);
     },

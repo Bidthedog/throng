@@ -509,7 +509,44 @@ export class FileSearchService {
     // case-sensitive `startsWith` then found nothing under it, so an edited file was never marked
     // stale. The held key itself is untouched: it is what the rows are keyed on, and what goes back.
     const prefix = relDir.length === 0 ? '' : normaliseForCompare(`${relDir.replace(/\/+$/, '')}/`);
+    await this.restatSuspects(
+      root,
+      [relDir],
+      (relPath) => prefix === '' || normaliseForCompare(relPath).startsWith(prefix),
+    );
+  }
 
+  /**
+   * The paths a watcher report named changed under `absRoot` (#482) — re-stat only the held result
+   * files those paths can have affected.
+   *
+   * {@link noteDirectoryChanged} has only a directory, so it must suspect everything under it — at
+   * the root that is every result held, re-stated sequentially on every tick. With the paths named,
+   * a result is suspect only when it IS one of them or lies under one (a folder renamed or deleted
+   * arrives as the folder's own path, and every result inside it is then invalidated). The scope
+   * check still runs per changed directory, so US3 scenario 30 holds exactly as before.
+   */
+  async notePathsChanged(absRoot: string, relPaths: readonly string[]): Promise<void> {
+    if (this.disposed || relPaths.length === 0) return;
+    const root = normaliseForCompare(absRoot);
+    const changed = new Set(relPaths.map((p) => normaliseForCompare(p.replace(/\/+$/, ''))));
+    const dirs = [...new Set(relPaths.map((p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')))];
+    await this.restatSuspects(root, dirs, (relPath) => {
+      const key = normaliseForCompare(relPath);
+      if (changed.has(key)) return true;
+      for (let i = key.indexOf('/'); i !== -1; i = key.indexOf('/', i + 1)) {
+        if (changed.has(key.slice(0, i))) return true;
+      }
+      return false;
+    });
+  }
+
+  /** Re-stat the held results `suspect` picks, in every run of the project rooted at `root`. */
+  private async restatSuspects(
+    root: string,
+    changedDirs: readonly string[],
+    suspectOf: (relPath: string) => boolean,
+  ): Promise<void> {
     for (const run of [...this.runs.values()]) {
       // A run belongs to ONE project (FR-018). Another project's directory says nothing about it,
       // and two projects can hold the same relative path.
@@ -518,10 +555,8 @@ export class FileSearchService {
       // FR-030a / US3 scenario 30, on the same signal and before the per-file work: the scoped
       // directory going is a statement about the SCOPE, and it is true whether or not this run
       // holds any results under the directory that changed.
-      await this.noteScopeMissingIfGone(run, generation, relDir);
-      const suspect = [...run.held.keys()].filter(
-        (relPath) => prefix === '' || normaliseForCompare(relPath).startsWith(prefix),
-      );
+      for (const relDir of changedDirs) await this.noteScopeMissingIfGone(run, generation, relDir);
+      const suspect = [...run.held.keys()].filter(suspectOf);
       if (suspect.length === 0) continue;
 
       let marked = false;

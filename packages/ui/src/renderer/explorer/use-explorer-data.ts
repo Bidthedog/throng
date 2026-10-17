@@ -702,7 +702,14 @@ export function useExplorerData(
   // fs-watch re-read is missed or coalesced. Folders that vanished are dropped; new
   // entries appear. react-arborist keeps open + selected state by id, so
   // expansion/selection are preserved for survivors.
-  const reloadDirs = useCallback(async (dirs?: readonly string[]): Promise<Set<string>> => {
+  //
+  // `speculative` marks a re-read nobody asked for — the watcher's. It defaults to "no dirs given",
+  // and the watcher's TARGETED re-read (#482) passes it explicitly, so a folder it names that the
+  // user cannot see stays as quiet as it is in a full re-read.
+  const reloadDirs = useCallback(async (
+    dirs?: readonly string[],
+    speculative = dirs === undefined,
+  ): Promise<Set<string>> => {
     const loaded = childrenMapRef.current;
     const keys = (dirs ?? [...loaded.keys()]).filter((k) => k === '' || loaded.has(k));
     if (keys.length === 0) return new Set();
@@ -716,7 +723,7 @@ export function useExplorerData(
      * silent read still drops the folder from the cache below. Explicit `dirs` come from an operation
      * the user just made, and keep reporting.
      */
-    const visible = dirs ? null : visibleOpenRef.current();
+    const visible = speculative ? visibleOpenRef.current() : null;
     const results = await Promise.all(
       keys.map(async (k) => [k, await fetchRef.current(k, visible !== null && k !== '' && !visible.has(k))] as const),
     );
@@ -747,6 +754,33 @@ export function useExplorerData(
     return present;
   }, []);
 
+  /**
+   * The watcher's re-read (#482): the loaded folders among `dirs`, or every loaded folder when the
+   * report could not name its directories.
+   *
+   * A folder that has LEFT its parent's listing is then re-read too, with whatever was loaded beneath
+   * it. That is what the full re-read used to do for it by accident — and it is what keeps 041
+   * FR-003a's one notice for an EXPANDED folder deleted outside throng, while a collapsed one is
+   * dropped quietly (#386), and nothing stale survives in the cache to reappear if the name returns.
+   */
+  const reloadChanged = useCallback(async (dirs?: readonly string[]): Promise<void> => {
+    if (!dirs) {
+      await reloadDirs();
+      return;
+    }
+    const loaded = childrenMapRef.current;
+    const targets = dirs.filter((d) => d === '' || loaded.has(d));
+    if (targets.length === 0) return;
+    const before = targets.flatMap((d) =>
+      (loaded.get(d) ?? []).filter((kid) => kid.kind === 'folder').map((kid) => kid.relPath),
+    );
+    const present = await reloadDirs(targets, true);
+    const gone = before.filter((p) => !present.has(p));
+    if (gone.length === 0) return;
+    const beneath = [...loaded.keys()].filter((k) => gone.some((g) => k === g || k.startsWith(`${g}/`)));
+    if (beneath.length > 0) await reloadDirs(beneath, true);
+  }, [reloadDirs]);
+
   // 026 / #186 (FR-010a) — live sync has stopped for good. Until now the tree just froze, which is
   // indistinguishable from a project in which nothing is happening; the user keeps acting on a
   // listing that has quietly stopped being true. Reported as an ordinary dismissable error notice.
@@ -770,19 +804,36 @@ export function useExplorerData(
     });
   }, [rootFolder]);
 
-  // Live sync (US2): re-read every loaded directory when the watcher reports a change.
+  /*
+   * Live sync (US2): re-read the loaded directories a watcher report touched.
+   *
+   * #482 — every report used to re-read EVERY folder loaded this session, one `files:list` round
+   * trip each, so steady churn anywhere under the root cost the whole tree once a second. A report
+   * that names its directories (`relDirs`) now costs those of them that are loaded — none at all for
+   * churn under a folder nobody opened. A report that cannot name them still re-reads everything.
+   */
   useEffect(() => {
     if (!rootFolder) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const off = window.throng?.files?.onChange?.(() => {
+    /** The directories the reports in this coalescing window named, or null once one named none. */
+    let named: Set<string> | null = new Set();
+    const off = window.throng?.files?.onChange?.((evt) => {
+      if (named) {
+        if (evt?.relDirs) for (const d of evt.relDirs) named.add(d);
+        else named = null;
+      }
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void reloadDirs(), 80); // coalesce bursts
+      timer = setTimeout(() => {
+        const dirs = named;
+        named = new Set();
+        void reloadChanged(dirs ? [...dirs] : undefined);
+      }, 80); // coalesce bursts
     });
     return () => {
       if (timer) clearTimeout(timer);
       off?.();
     };
-  }, [rootFolder, reloadDirs]);
+  }, [rootFolder, reloadChanged]);
 
   /**
    * Ensure a folder's children are loaded (lazy, on first open).
