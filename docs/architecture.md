@@ -379,7 +379,9 @@ leaves an ordinary running terminal that reattaches on the next load. Daemon shu
 Terminate all, project deletion and a superseded end do not leave it running: they escalate with
 `forceEnd`, which ends the shell's whole tree and its console host by individual pid and logs
 anything that survives. `terminal.killAll` resolves with `{killed, failed}` once every end has
-settled. The root lock, the cwd read and every process-table read are asynchronous too, and every
+settled. The host kills shells **one at a time**, each once node-pty has seen the previous one exit:
+node-pty 1.1.0 keeps its terminals in one unlocked native list, and two shells dying together crash
+the process hosting it (#465). The root lock, the cwd read and every process-table read are asynchronous too, and every
 process the host starts (`taskkill`, the attached-process helper, PowerShell) is started on a worker
 thread (`off-loop-exec.ts`): starting a process is synchronous on Windows, and on the daemon's loop
 each start held every terminal's input and output. An ESLint rule fails the build on
