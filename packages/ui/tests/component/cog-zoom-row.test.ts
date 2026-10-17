@@ -64,7 +64,7 @@ describe('046 iterate round 2 (T154, FR-113) — the Zoom row is gone from the c
     expect(bridge.zoomReset).not.toHaveBeenCalled();
   });
 
-  it('offers exactly the five Application rows, nothing ahead of them', async () => {
+  it('offers exactly the six Application rows, nothing ahead of them (Resource Monitor joined in 055)', async () => {
     await openCog();
     const ids = screen.getAllByRole('menuitem').map((el) => el.getAttribute('data-testid'));
     expect(ids).toEqual([
@@ -72,6 +72,7 @@ describe('046 iterate round 2 (T154, FR-113) — the Zoom row is gone from the c
       'cog-menu-keybindings',
       'cog-menu-themes',
       'cog-menu-logs',
+      'cog-resource-monitor',
       'cog-menu-about',
     ]);
   });

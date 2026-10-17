@@ -534,6 +534,18 @@ export const THRONG_THEME: Theme = {
        names rather than as a second vocabulary for it. An eye, because "these are visible to me"
        is what the flipped state means — and deliberately not `search` 🔍, which is the find bar's. */
     showHidden: '👁',
+    /* 055. The resource monitor: its status-bar item and cog-menu row, one glyph per metric (the
+       status bar's figures and the modal's "show by" choice), the hide-idle filter, and the two
+       kill rows. A gauge for the monitor itself; a chip, a stack of memory, a screen and arrows for
+       the four metrics; a sleeping face for idle; a cross and a cross over a branch for the kills. */
+    resourceMonitor: '📊',
+    resourceCpu: '🖥',
+    resourceMemory: '🧠',
+    resourceGpu: '🎮',
+    resourceIo: '⇅',
+    resourceHideIdle: '💤',
+    resourceKill: '✖',
+    resourceKillBelow: '⨯',
     /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
        the strip is a themeable icon carrying a hover title — never a text label, never an inline
        vector (SC-002).
@@ -617,6 +629,9 @@ export const THRONG_THEME: Theme = {
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
     warning: '⚠',
+    /* 055 (FR-093, research R15). The Resource Monitor's help button, which explains what the monitor
+       shows and how to use it. No question glyph existed. */
+    help: '?',
   },
 };
 

@@ -34,12 +34,22 @@ function separatorsFor(locale?: string): string[] {
   return group ? [group, ' ', ' '] : [' ', ' '];
 }
 
+/**
+ * One formatter per locale. Building an `Intl.NumberFormat` costs ~30× a format call, and the Resource
+ * Monitor formats thousands of figures a capture (055 SC-010); the output is identical either way.
+ */
+const formatters = new Map<string, Intl.NumberFormat>();
+
 /** Render a number for DISPLAY, grouped at every magnitude (constitution 4.5.0). */
 export function formatGrouped(value: number, locale?: string): string {
   if (!Number.isFinite(value)) return '';
-  return new Intl.NumberFormat(locale, { useGrouping: true, maximumFractionDigits: 20 }).format(
-    value,
-  );
+  const key = locale ?? '';
+  let formatter = formatters.get(key);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { useGrouping: true, maximumFractionDigits: 20 });
+    formatters.set(key, formatter);
+  }
+  return formatter.format(value);
 }
 
 /**

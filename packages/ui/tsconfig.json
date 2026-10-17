@@ -7,7 +7,8 @@
   },
   // The renderer (src/renderer, React + .tsx) is built by Vite, not tsc — see
   // vite.config.ts. tsc compiles only the main and preload processes here.
-  "include": ["src/main/**/*", "src/preload/**/*"],
+  // 055: the resource collector is a plain Node process UI main forks; it compiles alongside main.
+  "include": ["src/main/**/*", "src/preload/**/*", "src/collector/**/*"],
   "references": [
     { "path": "../core" },
     { "path": "../ipc-contract" },

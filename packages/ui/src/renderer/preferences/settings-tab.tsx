@@ -19,7 +19,7 @@ import { useConfirm, type ConfirmOptions } from '../confirm-dialog.js';
 import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
-import { SettingControl } from './form-controls.js';
+import { FieldNote, SettingControl } from './form-controls.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
@@ -504,7 +504,8 @@ export function SettingsTab({
         title={inertReason(d) ?? undefined}
       >
         <SettingControl
-          descriptor={d}
+          // 055 FR-004 — a minimum that follows another setting replaces the static one in the control.
+          descriptor={d.minFor ? { ...d, min: d.minFor(settings) } : d}
           value={shownValue(d)}
           options={dynamicOptions(d, themes, detected)}
           optionLabels={dynamicOptionLabels(d, detected)}
@@ -518,6 +519,8 @@ export function SettingsTab({
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
                 <p className="settings-row__desc">{d.description}</p>
+                {/* 055 R11 — a rule between fields that changes what is in force says so beside the field. */}
+                <FieldNote descriptor={d} settings={settings} />
                 {/* 039 FR-008a — DISABLED WITH A REASON, never hidden. A control that vanishes
                     takes its explanation with it; a grey one with nothing beside it is a control
                     the user is entitled to think is broken. It sits with the description rather

@@ -66,7 +66,7 @@ const PREVIEW_VENDOR = /\/node_modules\/(markdown-it|linkify-it|mdurl|uc\.micro|
 const DIAGRAM_VENDOR =
   /\/node_modules\/(mermaid|@mermaid-js\/[^/]+|@braintree\/sanitize-url|@iconify\/[^/]+|@upsetjs\/venn\.js|chevrotain|@chevrotain\/[^/]+|langium|vscode-[a-z-]+|cose-base|cytoscape[a-z-]*|d3|d3-[a-z-]+|dagre-d3-es|dayjs|delaunator|elkjs|es-toolkit|hachure-fill|internmap|katex|khroma|layout-base|lodash-es|marked|path-data-parser|points-on-curve|points-on-path|robust-predicates|roughjs|rw|stylis|ts-dedent|uuid)\//;
 
-/** Both lazily-loaded vendor sets, as the eager guard below checks them. */
+/** All lazily-loaded vendor sets, as the eager guard below checks them. */
 const LAZY_VENDOR = [
   { pattern: PREVIEW_VENDOR, what: 'the Markdown preview pipeline loads with the app (R21)' },
   { pattern: DIAGRAM_VENDOR, what: 'the Mermaid diagram renderer loads with the app (054 FR-047)' },

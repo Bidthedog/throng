@@ -177,6 +177,27 @@ preferences window that applies changes as you make them and can reset anything 
 - Everything is also a human-editable file that reloads live; where each lives is in
   [preferences](preferences.md#where-the-files-live).
 
+## 8. See what throng is using
+
+The right of the status bar always shows throng's total **CPU**, **memory**, **GPU** and **I/O** —
+throng itself and everything its terminals run — coloured when a figure passes its warning or
+critical level. Click it, choose **Resource Monitor** from the cog, or press
+[`Ctrl+Shift+Alt+R`](key-bindings.md#view).
+
+The monitor opens in its own window, like Preferences: move it beside your work and keep using throng
+behind it — it stays above throng's windows and updates as you go. It has two columns. The left
+lists usage by part of throng (UI, daemon, helpers) and by project — project → tab → panel → process →
+subprocess, each level rolled up from the one below — sorted by the figure you choose. Click a row to see
+it on the right: its children as bars coloured by how much of the whole machine each takes, from low to
+high, its details, and a small graph of each figure over the last few minutes. Double-click a row (or
+press **Enter**/**Right**) to open it; **Back** (or **Left**/**Backspace**) goes up a level. A list holds
+still while you point at it, and **Updated** shows when the figures were last captured. Filter by name, command
+line or pid, or hide idle processes. **?** explains all of this in the window. Right-click a node to
+unload its project, destroy its tab or panel, or **Kill** a process or everything below it. **Esc**
+closes it; it can be maximised, and minimising tucks it back into the status bar. It reopens where you
+left it. How it measures is
+in [preferences](preferences.md#resource-monitor).
+
 ## Getting help
 
 - Something broken, missing or unclear? [Open an issue](https://github.com/Bidthedog/throng/issues);

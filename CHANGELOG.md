@@ -31,6 +31,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Added
 
+- **Resource Monitor** ([#5](https://github.com/Bidthedog/throng/issues/5), [#133](https://github.com/Bidthedog/throng/issues/133)): the status bar shows the CPU, memory, GPU and I/O that throng and everything it started are using. Clicking it, or `Ctrl+Shift+Alt+R`, opens a monitor window — movable, above throng's windows, with throng usable behind it, in two columns — the lists on the left, the selected item's bars, details and graphs on the right — with a **?** guide to using it, that breaks usage down by part of throng and by project, tab, panel, process and subprocess, with graphs, a filter, idle hiding and the folders throng holds. From it you can unload a project, destroy a tab or panel, or force-end a process or everything below a node, confirmed by the new **Kill processes** setting.
 - **Languages recognised by filename** ([#70](https://github.com/Bidthedog/throng/issues/70)): a file is matched by its whole name as well as its extension, and `tsconfig.json`, `.vscode` settings files, `devcontainer.json` and their kin open as JSON with Comments, so their comments are no longer marked as errors.
 - **`.env` highlighting** ([#404](https://github.com/Bidthedog/throng/issues/404)): `.env` and `.env.local`-style files show keys, values and comments in their own colours.
 - **Dockerfile highlighting** ([#490](https://github.com/Bidthedog/throng/issues/490)): `Dockerfile`, `Containerfile`, `Dockerfile.dev`, `api.Dockerfile` and `.dockerfile` files.

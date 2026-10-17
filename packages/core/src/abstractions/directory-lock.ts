@@ -20,4 +20,6 @@ export interface IDirectoryLock {
   acquire(absPath: string): Promise<LockHandle>;
   /** Release a held lock, settling once the folder is free; idempotent, and a no-op for an unknown handle. */
   release(handle: LockHandle): Promise<void>;
+  /** 055 R5 — each held folder and the OS pid of the process holding it. A read of memory. */
+  heldPids?(): readonly { readonly path: string; readonly pid: number }[];
 }

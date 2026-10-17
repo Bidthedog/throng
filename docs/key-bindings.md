@@ -108,6 +108,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Toggle fullscreen | `view.fullscreen` | `F11` | Everywhere | Enter or leave fullscreen mode. |
 | Toggle Projects sidebar | `view.toggleProjects` | `Ctrl+Shift+Alt+J` | Everywhere | Show or hide the Projects & Sub-workspaces pane. |
 | Toggle File Explorer | `view.toggleExplorer` | `Ctrl+Shift+Alt+K` | Everywhere | Show or hide the File Explorer pane. |
+| Resource Monitor | `view.resourceMonitor` | `Ctrl+Shift+Alt+R` | Everywhere | Open the [Resource Monitor](quick-start.md#8-see-what-throng-is-using): what throng and everything it started is using, in its own window; brings it forward when it is already open. |
 | Next Project | `project.next` | `Ctrl+Shift+Alt+PageDown` | Everywhere | Switch to the next project in the Projects pane, skipping any minimised category and stopping at the end. |
 | Previous Project | `project.previous` | `Ctrl+Shift+Alt+PageUp` | Everywhere | Switch to the previous project, skipping any minimised category and stopping at the start. |
 | Open context menu | `menu.open` | `Shift+F10`, `ContextMenu` | Everywhere | Open the focused item's context menu from the keyboard. `ContextMenu` is the Menu key. |

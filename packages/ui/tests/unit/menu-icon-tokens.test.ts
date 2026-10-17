@@ -106,6 +106,7 @@ const cogMenu = (): MenuAction[] =>
   cogMenuItems({
     openPreferences: noop,
     openLogs: noop,
+    openResourceMonitor: noop,
     openAbout: noop,
     keybindings: DEFAULT_KEYBINDINGS,
   });
@@ -215,13 +216,15 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
     expect(glyphFor(row(items, 'Paste').icon ?? '')?.trim()).toBeTruthy();
   });
 
-  it('all five cog rows, which read as one gear beside four blank lines before 023', () => {
+  it('all six cog rows, which read as one gear beside four blank lines before 023', () => {
     const items = cogMenu();
     for (const testId of [
       'cog-menu-settings',
       'cog-menu-keybindings',
       'cog-menu-themes',
       'cog-menu-logs',
+      // 055 FR-056 — the Resource Monitor row wears the `resourceMonitor` token, not a borrowed one.
+      'cog-resource-monitor',
       'cog-menu-about',
     ]) {
       const item = flatten(items).find((i) => i.testId === testId);

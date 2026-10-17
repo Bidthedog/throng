@@ -31,6 +31,11 @@ export function requestPanelDestroy(panelId: string): boolean {
   return true;
 }
 
+/** Whether panel `panelId` is mounted in this window, i.e. whether {@link requestPanelDestroy} would act. */
+export function isPanelMounted(panelId: string): boolean {
+  return registry.has(panelId);
+}
+
 /** Tests only: every registration gone. */
 export function __resetPanelDestroy(): void {
   registry.clear();

@@ -159,12 +159,22 @@ describe('the surface token split (FR-001 / SC-001)', () => {
     // NEW, un-audited surface reaching for the pane token still fails, exactly as before.
     // `.picker` (031 US3) is the general list-and-choose card: a modal surface on `.modal-overlay`,
     // audited here as a dialog card for the same reason `.modal` and `.colour-picker` are.
+    // `.resource-monitor` (055 FR-050) is the Resource Monitor's dialog card, on the same `.modal-overlay`.
+    // `.monitor-help` (055 FR-093) is the monitor's help popover, a `role="dialog"` card like `.find-bar`.
     const DIALOG_CARDS =
-      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root)$|^\.app-close-table th$/;
+      /^\.(modal|notice|capture-modal|colour-picker|picker|find-bar|app-closing__card|terminal-panel__starting|about-root|resource-monitor|monitor-help)$|^\.app-close-table th$/;
+    // 055 R15 (FR-092, FR-094) — the Resource Monitor window's body IS a pane (`.resource-monitor`), and
+    // these read its token only to sit ON it: the sticky column header must hide the rows scrolling under
+    // it, and the heat scale's bars and key blend their colour into the pane behind them.
+    // None of them is a surface of its own that an author would want a separate dial for.
+    const MONITOR_PANE_TINTS = /^\.(breakdown__columns|share-bar__fill|share-key__bar)$/;
     const offenders = readsOf(aliasesOf('surface')).filter(
       // 054 FR-070 — `.maximise-layer` is a panel body too: the box a maximised section is drawn in, the
       // same frame as `.panel-box` over the same tab body.
-      (h) => !/^\.pane--\w+$|^\.panel-box$|^\.maximise-layer$/.test(h.selector) && !DIALOG_CARDS.test(h.selector),
+      (h) =>
+        !/^\.pane--\w+$|^\.panel-box$|^\.maximise-layer$/.test(h.selector) &&
+        !DIALOG_CARDS.test(h.selector) &&
+        !MONITOR_PANE_TINTS.test(h.selector),
     );
     const report = offenders.map((h) => `${h.selector} (${h.where})`).sort();
     expect(

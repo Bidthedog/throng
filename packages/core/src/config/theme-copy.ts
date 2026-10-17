@@ -754,6 +754,42 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Hide entry icon',
     description: 'The glyph on the tree menu row that drops a file or folder out of view for this project only.',
   },
+  'icons.resourceMonitor': {
+    label: 'Resource monitor icon',
+    description: 'The glyph on the status-bar item that shows throng\'s CPU, memory, GPU and I/O, and on the title-bar menu row that opens the Resource Monitor.',
+  },
+  'icons.resourceCpu': {
+    label: 'CPU icon',
+    description: 'The glyph beside the CPU figure in the status bar, and on the Resource Monitor\'s "show by CPU" choice.',
+  },
+  'icons.resourceMemory': {
+    label: 'Memory icon',
+    description: 'The glyph beside the memory figure in the status bar, and on the Resource Monitor\'s "show by memory" choice.',
+  },
+  'icons.resourceGpu': {
+    label: 'GPU icon',
+    description: 'The glyph beside the GPU figure in the status bar, and on the Resource Monitor\'s "show by GPU" choice.',
+  },
+  'icons.resourceIo': {
+    label: 'I/O icon',
+    description: 'The glyph beside the I/O figure in the status bar, and on the Resource Monitor\'s "show by I/O" choice.',
+  },
+  'icons.resourceHideIdle': {
+    label: 'Hide idle processes icon',
+    description: 'The glyph on the Resource Monitor control that hides processes doing nothing.',
+  },
+  'icons.resourceKill': {
+    label: 'Kill process icon',
+    description: 'The glyph on the Resource Monitor row that ends one process.',
+  },
+  'icons.resourceKillBelow': {
+    label: 'Kill all below icon',
+    description: 'The glyph on the Resource Monitor row that ends every process beneath a project, tab, panel or process.',
+  },
+  'icons.help': {
+    label: 'Help icon',
+    description: 'The glyph on the Resource Monitor control that explains what it shows and how to use it.',
+  },
   'icons.showHidden': {
     label: 'Show hidden entries icon',
     description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',

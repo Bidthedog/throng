@@ -6,6 +6,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, probeConhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { skipIfElevated } from './admin.js';
+import { processTable } from './helpers/processes.js';
 
 // Every test here asserts the terminal's conhost is a child of the DAEMON — true
 // only for a non-elevated (normal-integrity) daemon that runs terminals directly.
@@ -291,8 +292,24 @@ test('Unload Project and End Terminals reaps a busy terminal, and Unload Project
 
 test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-closeall-'));
+  // 055 (Principle III): the Resource Monitor's collector is a process throng starts, so it is one this
+  // test must see gone once the app is — found by its entry point and parentage, never by image name,
+  // since other throng instances (and the user's own) run collectors too.
+  let collectors: number[] = [];
   try {
-    await runApp(async (_app, win, { pipeName }) => {
+    await runApp(async (app, win, { pipeName }) => {
+      const mainPid = app.process().pid;
+      await expect
+        .poll(
+          () => {
+            collectors = processTable()
+              .filter((p) => p.parent === mainPid && p.cmd.includes('resource-collector-entry'))
+              .map((p) => p.pid);
+            return collectors.length;
+          },
+          { timeout: 30_000, message: 'the app never started a resource collector to check for' },
+        )
+        .toBeGreaterThan(0);
       await createProject(win, 'CloseAll', root);
       const dpid = await daemonPid(pipeName);
       const baseline = conhostChildren(dpid);
@@ -311,6 +328,13 @@ test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['
       await daemonRpc(pipeName, 'terminal.killAll', {});
       await expectNoOrphanConhosts(dpid, baseline);
     });
+    // The app has closed: nothing it started may be left running.
+    await expect
+      .poll(() => processTable().filter((p) => collectors.includes(p.pid) && p.cmd.includes('resource-collector-entry')).length, {
+        timeout: 20_000,
+        message: 'a resource-collector-entry process survived the app closing',
+      })
+      .toBe(0);
   } finally {
     cleanupTemp(root);
   }

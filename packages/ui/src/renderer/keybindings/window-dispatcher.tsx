@@ -62,6 +62,7 @@ import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { getMaximiseStack, isPanelHidden, isPanelTabMaximised, toggleMaximisePanel } from '../workspace/maximise-store.js';
+import { openResourceMonitor } from '../resources/monitor-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
@@ -602,6 +603,8 @@ export function WindowDispatcher({
     const onBlur = (): void => engine.blur();
 
     const onKeyDown = (e: KeyboardEvent): void => {
+      // (055 FR-050's exclusive gate lived here while the Resource Monitor was a modal over this window.
+      // It is its own window now, so nothing here is suppressed while it is open — FR-086.)
       // The window chord engine first: while split mode is pending it takes every key (FR-022, FR-023),
       // and its first stroke outranks single-stroke resolution.
       if (engine.keydown(e)) {
@@ -726,6 +729,13 @@ export function WindowDispatcher({
           break;
         case 'view.fullscreen':
           window.throng?.fullscreenToggle?.();
+          break;
+        /*
+         * 055 FR-056, FR-086 — the Resource Monitor, from any window: main opens its window, or brings an
+         * open one forward. The chord never closes it — the monitor is a window with its own X.
+         */
+        case 'view.resourceMonitor':
+          openResourceMonitor();
           break;
         /*
          * 031 T5/T7 (FR-032a, FR-032d) — the tab picker, from anywhere.
