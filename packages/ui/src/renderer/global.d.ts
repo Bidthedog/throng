@@ -288,7 +288,11 @@ declare global {
         exists?: (relPath: string) => Promise<boolean>;
         /** 024 US3 (#85): restore a trashed item to its original path. */
         restore?: (relPath: string, deletedAt: number) => Promise<FilesOkOrError>;
-        onChange: (cb: (evt: { relDir: string }) => void) => () => void;
+        /**
+         * Something changed under the root. `relDirs` names every directory it touched (#482); when
+         * it is absent the report could not name them, and whatever the reader holds is suspect.
+         */
+        onChange: (cb: (evt: { relDir: string; relDirs?: string[] }) => void) => () => void;
         /** 026 / #186 — live sync stopped and could not be restarted (FR-010a). */
         onWatchFailed?: (cb: (evt: { root: string; reason: string }) => void) => () => void;
         /**
