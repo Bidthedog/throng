@@ -42,6 +42,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 - **The language picker no longer dims the window**: opening it from the status bar left everything, the picker included, behind a dark overlay.
 - **A busy project no longer slows throng down** ([#482](https://github.com/Bidthedog/throng/issues/482)): steady file activity under a project's root, such as an agent appending to a log or a build writing output, kept the main process at up to a full core and made typing and project switching lag. A changed file now costs work proportional to the change, and each folder is watched once however many panels need it ([#272](https://github.com/Bidthedog/throng/issues/272)).
+- **Closing several terminals at once no longer risks losing every terminal** ([#465](https://github.com/Bidthedog/throng/issues/465)): closing throng, unloading a project or ending a group of terminals could crash the process that hosts them, taking every running terminal down with it. Terminals are now ended one after another, which costs a fraction of a second each.
 
 ## 1.0.0-alpha10 — 2026-10-14
 
