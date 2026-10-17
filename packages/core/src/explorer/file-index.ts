@@ -25,6 +25,14 @@ export interface WalkOptions {
    * resulting predicate — never a closure that recompiles per path.
    */
   excluded: (relPath: string) => boolean;
+  /**
+   * Called once for every FOLDER the walk descends into, root-relative, the root itself excluded.
+   *
+   * The result holds files only, so a caller that keeps the set current from change signals has no
+   * other way to learn which folders it already knows about — and therefore which one a signal is
+   * reporting as new (#482).
+   */
+  onDir?: (relDir: string) => void;
 }
 
 /**
@@ -62,7 +70,10 @@ export async function walkFiles(
       if (options.excluded(relPath)) continue;
       if (entry.kind === 'folder') {
         // W4 — a symlinked directory may point anywhere, including outside the root.
-        if (!entry.isSymlink) pending.push(relPath);
+        if (!entry.isSymlink) {
+          pending.push(relPath);
+          options.onDir?.(relPath);
+        }
       } else {
         found.push(relPath);
       }

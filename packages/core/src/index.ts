@@ -103,7 +103,7 @@ export type {
   ValidatedConfig,
   ConfigValidator,
 } from './abstractions/config-store.js';
-export type { IFileWatcher, Disposable, WatchOptions } from './abstractions/file-watcher.js';
+export type { IFileWatcher, Disposable, WatchBatch, WatchOptions } from './abstractions/file-watcher.js';
 
 // File Explorer tree (004): OS seams + pure domain.
 export type { IFileSystem, DirEntry } from './abstractions/file-system.js';

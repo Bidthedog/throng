@@ -134,5 +134,37 @@ export function runFileWatcherContract(
         }
       }, 20_000);
     });
+
+    /**
+     * #482 — coalescing must not LOSE paths. A report that names only the last path of its burst
+     * forces every reader to re-read everything it holds, which under steady churn is once a second.
+     * An implementation may pass no batch at all (its readers then re-read everything); one that
+     * passes a COMPLETE batch must name every file the burst touched.
+     */
+    it('a complete batch names every file a burst touched (#482)', async () => {
+      const h = await makeHarness();
+      const named = new Set<string>();
+      let batched = false;
+      const sub = h.watcher.watch(h.dir, (p, batch) => {
+        if (batch?.complete) {
+          batched = true;
+          for (const x of batch.paths) named.add(x.replace(/\\/g, '/').split('/').pop() ?? x);
+        } else {
+          named.add(p.replace(/\\/g, '/').split('/').pop() ?? p);
+        }
+      });
+      try {
+        await new Promise((r) => setTimeout(r, 150));
+        const files = ['one.json', 'two.json', 'three.json'];
+        for (const f of files) await h.touch(f);
+        // An unbatched implementation may never name all three, so the wait is allowed to lapse;
+        // the assertion only binds an implementation that claimed its batch was complete.
+        await waitFor(() => files.every((f) => named.has(f)), 2000).catch(() => {});
+        if (batched) expect([...named]).toEqual(expect.arrayContaining(files));
+      } finally {
+        sub.dispose();
+        await h.cleanup();
+      }
+    });
   });
 }
