@@ -107,6 +107,37 @@ function within(promise: Promise<unknown>, ms: number): Promise<boolean> {
   });
 }
 
+/**
+ * Resolves once node-pty has been through its native exit path for this session's shell (#465).
+ *
+ * node-pty 1.1.0's exit thread removes the terminal from its native list and only THEN queues the exit to
+ * this thread, where the agent records the exit code — so a recorded code means the list is settled. The
+ * public `onExit` is too late to wait on: it fires when the output socket closes, a further second on.
+ * `_agent` is node-pty's own field; without it (another version) this falls back to that public exit.
+ */
+function nativeExitSeen(session: Session, limitMs: number): Promise<void> {
+  const agent = (session.proc as { _agent?: { exitCode?: number } })._agent;
+  if (!agent || !('exitCode' in agent)) return session.exited;
+  const giveUpAt = Date.now() + limitMs;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (): void => {
+      done = true;
+      resolve();
+    };
+    const check = (): void => {
+      if (done) return;
+      if (agent.exitCode !== undefined || Date.now() >= giveUpAt) finish();
+      else setTimeout(check, NATIVE_EXIT_POLL_MS);
+    };
+    void session.exited.then(finish);
+    check();
+  });
+}
+
+/** How often {@link nativeExitSeen} looks; a shell's exit reaches this thread within a few ms of its death. */
+const NATIVE_EXIT_POLL_MS = 5;
+
 // PROBE #465 — TEMPORARY. Synchronous step log for the CI crash probe; reverted before merge.
 const probeLog = process.env.PROBE465_LOG;
 const probe = (msg: string): void => {
@@ -127,6 +158,8 @@ export class NodePtyHost implements IPtyHost {
   private readonly reaping = new Set<number>();
   /** Attribution passes run one at a time, each on a fresh snapshot (051 R5). */
   private attribution: Promise<void> = Promise.resolve();
+  /** Shell kills run one at a time, each until node-pty has seen its shell exit (#465). */
+  private shellKills: Promise<void> = Promise.resolve();
   private readonly archReader = createExecutableArchReader();
 
   /**
@@ -314,6 +347,28 @@ export class NodePtyHost implements IPtyHost {
   }
 
   /**
+   * Run `kill` — which ends `session`'s shell — after every earlier one, and hold the next until node-pty
+   * has seen this shell exit (#465).
+   *
+   * node-pty 1.1.0 keeps every terminal in ONE native list with no lock, and each terminal's exit thread
+   * removes itself from it the moment its shell dies. Two shells dying together corrupt the list and
+   * crash this process — an access violation in `conpty.node`, the daemon in production, taking every
+   * terminal with it. Measured on `windows-2022`: 4-5 runs in 10 of ending several terminals at once.
+   * Fixed upstream in 1.2.0 (microsoft/node-pty#922); until throng is on it, shells die one at a time.
+   *
+   * A kill that fails releases the next at once: its shell did not die, so it has no exit to wait for.
+   */
+  private killShell(session: Session, kill: () => Promise<void>, deadline: number): Promise<void> {
+    const run = this.shellKills.then(async () => {
+      await kill();
+      const left = Math.max(0, deadline - Date.now());
+      await within(nativeExitSeen(session, left), left);
+    });
+    this.shellKills = run.catch(() => {});
+    return run;
+  }
+
+  /**
    * `taskkill /F` one pid — with its tree by default. Resolves when the OS has carried it out or the
    * process was already gone (exit 128); rejects with the OS's own words otherwise (051 FR-013).
    */
@@ -377,9 +432,11 @@ export class NodePtyHost implements IPtyHost {
     const attached = await attachedPids(pid, Math.min(ATTACHED_READ_LIMIT_MS, timeoutMs / 2));
     probe(`end shell=${pid} host=${session.conhostPid} attached=[${attached.join(',')}]`);
     // Not awaited on its own: a taskkill that never returns must not outlast the limit.
-    void this.taskkill(pid, true, Math.max(1, deadline - Date.now())).catch((error: Error) => {
-      refusal = error;
-    });
+    void this.killShell(session, () => this.taskkill(pid, true, Math.max(1, deadline - Date.now())), deadline).catch(
+      (error: Error) => {
+        refusal = error;
+      },
+    );
     for (const other of attached) {
       if (other === pid || other === session.conhostPid || other === process.pid) continue;
       void this.taskkill(other, true, Math.max(1, deadline - Date.now())).catch(() => {});
@@ -411,7 +468,14 @@ export class NodePtyHost implements IPtyHost {
       console.warn(`[terminal] forced end of ${handle.pid}: the process table could not be read (${String(error)})`);
     }
     const targets = escalationTargets(rows, handle.pid, session.conhostPid, process.pid, session.spawnedAt);
-    await Promise.all(targets.map((pid) => this.taskkill(pid, false, timeoutMs).catch(() => {})));
+    // The targets include the shell, so this waits its turn among the shell kills (#465).
+    await this.killShell(
+      session,
+      async () => {
+        await Promise.all(targets.map((pid) => this.taskkill(pid, false, timeoutMs).catch(() => {})));
+      },
+      Date.now() + timeoutMs,
+    ).catch(() => {});
     return { survivors: await aliveAmong(targets, timeoutMs) };
   }
 
