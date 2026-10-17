@@ -15,10 +15,14 @@
  *     SC-005's two seconds for the ordinary create/rename/delete; and
  *  2. a TRAILING FULL RECONCILE, debounced by `quietMs` and FORCED after `reconcileMaxWaitMs`.
  *
- * The first exists because `IFileWatcher` reports ONE COALESCED PATH PER BURST, which is enough to
- * repair one directory and nowhere near enough to repair a `git checkout` that touched fifty. The
- * second exists because of that same limit — and its ceiling exists because a debounce with only a
- * quiet period NEVER FIRES under sustained churn. That is not a hypothetical: it is #186, measured
+ * A watcher report that names every path it covers (a complete `WatchBatch`, #482) is repaired by
+ * the first alone: each named directory is rescanned, a folder that appeared is walked, a folder
+ * that went is forgotten — work proportional to the change. The second runs only for a report that
+ * CANNOT name everything (no batch, a re-armed watch, an overflowing burst), because then one
+ * directory's repair is nowhere near enough for a `git checkout` that touched fifty. Running it
+ * after every report was #482: under a once-a-second append its quiet period elapsed every time, and
+ * every append paid for a walk of the whole project. Its ceiling exists because a debounce with only
+ * a quiet period NEVER FIRES under sustained churn. That is not a hypothetical: it is #186, measured
  * at 180 events over 3 s producing zero reports, and it is written into `NodeFileWatcher`'s own
  * comments. The tree survived that bug because a stale row is visible; a stale search index is not.
  *
@@ -37,6 +41,7 @@ import {
   type Disposable,
   type IFileSystem,
   type IFileWatcher,
+  type WatchBatch,
 } from '@throng/core';
 
 /** What a subscriber is told, on the wire (contracts/file-index.md §3). */
@@ -101,6 +106,15 @@ interface RootIndex {
   status: 'building' | 'ready';
   /** The snapshot last BUILT. Replaced wholesale, never mutated, so subscribers may share it. */
   paths: string[];
+  /**
+   * Every folder the index has descended into, root-relative (#482).
+   *
+   * `paths` holds files only, so without this a rescan cannot tell a folder that has just appeared
+   * — whose files nobody has listed — from one it already knows, and the only safe answer was a
+   * full walk after every change. Knowing them, a new folder costs a walk of THAT folder and a
+   * vanished one costs nothing but forgetting it.
+   */
+  dirs: Set<string>;
   watch: Disposable | null;
   /** Bumped whenever work in flight must be abandoned; a stale result discards itself. */
   generation: number;
@@ -179,6 +193,7 @@ export class ProjectFileIndexService {
         subscribers: new Map(),
         status: 'building',
         paths: [],
+        dirs: new Set(),
         watch: null,
         generation: 0,
         walking: false,
@@ -279,7 +294,7 @@ export class ProjectFileIndexService {
   private arm(index: RootIndex): void {
     index.watch = this.watcher.watch(
       index.root,
-      (changedPath) => this.onSignal(index, changedPath),
+      (changedPath, batch) => this.onSignal(index, changedPath, batch),
       { onFailed: (reason) => this.onWatchFailed(index, reason) },
     );
   }
@@ -323,14 +338,17 @@ export class ProjectFileIndexService {
     this.enqueue(index, async () => {
       if (this.stale(index, generation)) return;
       const excluded = this.excluderFor(index); // S10 — both inputs read at walk time
+      const dirs = new Set<string>();
       const paths = await walkFiles(this.fs, index.root, {
         cancelled: () => this.stale(index, generation),
         excluded,
+        onDir: (d) => dirs.add(d),
       });
       if (this.stale(index, generation)) return;
       index.walking = false;
       index.status = 'ready';
       index.paths = paths;
+      index.dirs = dirs;
       this.publish(index); // S4 — every subscriber of this root, not only the one that asked
     });
   }
@@ -367,11 +385,25 @@ export class ProjectFileIndexService {
     }
   }
 
-  private onSignal(index: RootIndex, changedPath: string): void {
+  private onSignal(index: RootIndex, changedPath: string, batch?: WatchBatch): void {
     if (index.disposed || this.disposed) return;
+    /*
+     * #482 — a COMPLETE batch names every path the burst touched, so the targeted rescans below
+     * repair everything it changed and there is nothing left for a reconcile to find.
+     *
+     * Scheduling the reconcile anyway was the whole of the reported cost: its quiet period is 750 ms,
+     * a hook appending to a log once a second leaves a quiet gap after every append, and so every
+     * append paid for a walk of the entire project. Only a report that cannot name everything — no
+     * batch, a re-armed watch, an overflowing burst — still earns one (R5).
+     */
+    if (batch?.complete) {
+      for (const p of batch.paths) index.pending.add(toRelDir(index.root, p));
+      this.enqueue(index, () => this.drainRescans(index));
+      return;
+    }
     index.pending.add(toRelDir(index.root, changedPath));
-    // Both mechanisms, on every signal: the rescan repairs the directory that was named, and the
-    // reconcile eventually repairs everything the coalescing hid (R5).
+    // Both mechanisms: the rescan repairs the directory that was named, and the reconcile
+    // eventually repairs everything the incomplete report could not name (R5).
     this.enqueue(index, () => this.drainRescans(index));
     this.scheduleReconcile(index);
   }
@@ -382,7 +414,9 @@ export class ProjectFileIndexService {
       index.pending.clear();
       return;
     }
-    const dirs = [...index.pending];
+    // Shallowest first, so a parent that discovers a new folder has walked it before the folder's
+    // own signal is reached — which then finds a folder it already knows, and lists it once.
+    const dirs = [...index.pending].sort((a, b) => depth(a) - depth(b));
     index.pending.clear();
     if (dirs.length === 0) return;
     const excluded = this.excluderFor(index); // S10 — re-read at EVERY rescan
@@ -398,11 +432,14 @@ export class ProjectFileIndexService {
   }
 
   /**
-   * The set as it would be with `relDir` re-read: its direct file children replaced, everything
-   * else left alone.
+   * The set as it would be with `relDir` re-read: its direct file children replaced, a folder that
+   * has appeared in it walked, a folder that has gone from it forgotten, everything else left alone.
    *
-   * Only the named directory is listed — that is what makes this the FAST path. A change deeper in
-   * a subtree the signal did not name is the full reconcile's job, which is why there is one.
+   * Only the named directory is listed, plus any folder in it the index has never seen — that is
+   * what makes this the FAST path, and what makes a change cost work proportional to the change
+   * (#482). A folder the index does not know is skipped rather than listed: its parent's signal is
+   * what introduces it, and listing it from its own signal would also let a change under an
+   * excluded or symlinked folder in.
    */
   private async rescanDir(
     index: RootIndex,
@@ -410,25 +447,47 @@ export class ProjectFileIndexService {
     current: string[],
     excluded: (relPath: string) => boolean,
   ): Promise<string[]> {
-    if (relDir !== '' && excluded(relDir)) return current;
+    // #482 cause 5 — `**/node_modules` does not match `node_modules/foo`, so the folder's own path
+    // is not enough: a change anywhere inside an excluded folder must cost nothing.
+    if (relDir !== '' && (excludedOrUnder(relDir, excluded) || !index.dirs.has(relDir))) return current;
     let entries;
     try {
       entries = await this.fs.list(toAbsPath(index.root, relDir));
     } catch {
-      return current; // it has gone since the signal — the reconcile settles what that means
+      return current; // it has gone since the signal — its parent's rescan forgets it
     }
     const prefix = relDir === '' ? '' : `${relDir}/`;
     const inDir: string[] = [];
+    const present = new Set<string>();
     for (const entry of entries) {
       const relPath = `${prefix}${entry.name}`;
       if (excluded(relPath)) continue;
       if (entry.kind === 'file') inDir.push(relPath);
+      else if (!entry.isSymlink) present.add(relPath); // W4 — never descended into, so never known
     }
     const isDirectChild = (p: string): boolean =>
-      p.startsWith(prefix) && !p.slice(prefix.length).includes('/');
+      p.startsWith(prefix) && p.length > prefix.length && !p.slice(prefix.length).includes('/');
+
+    const gone = [...index.dirs].filter((d) => isDirectChild(d) && !present.has(d));
+    const isGone = (p: string): boolean => gone.some((d) => p.startsWith(`${d}/`));
+    for (const d of [...index.dirs]) if (gone.includes(d) || isGone(d)) index.dirs.delete(d);
+
+    const added: string[] = [];
+    for (const d of present) {
+      if (index.dirs.has(d)) continue;
+      index.dirs.add(d);
+      const walked = await walkFiles(this.fs, toAbsPath(index.root, d), {
+        cancelled: () => this.disposed || index.disposed,
+        excluded: (p) => excluded(`${d}/${p}`),
+        onDir: (sub) => index.dirs.add(`${d}/${sub}`),
+      });
+      for (const f of walked) added.push(`${d}/${f}`);
+    }
+
+    const kept = current.filter((p) => !isDirectChild(p) && !isGone(p));
     // `.sort()` — UTF-16 code-unit order, the SAME order `walkFiles` produces and `diffPaths`
     // merges with. Two orders that disagree corrupt every delta while every test still passes.
-    const next = [...current.filter((p) => !isDirectChild(p)), ...inDir].sort();
+    const next = [...new Set([...kept, ...inDir, ...added])].sort();
     return same(current, next) ? current : next;
   }
 
@@ -463,9 +522,11 @@ export class ProjectFileIndexService {
     this.enqueue(index, async () => {
       if (this.stale(index, generation) || index.status !== 'ready') return;
       const excluded = this.excluderFor(index); // S10
+      const dirs = new Set<string>();
       const next = await walkFiles(this.fs, index.root, {
         cancelled: () => this.stale(index, generation),
         excluded,
+        onDir: (d) => dirs.add(d),
       });
       if (this.stale(index, generation)) return;
       /*
@@ -479,6 +540,7 @@ export class ProjectFileIndexService {
        */
       if (next.length === 0 && index.paths.length > 0 && !(await this.fs.exists(index.root))) return;
       index.paths = next;
+      index.dirs = dirs;
       this.publish(index);
     });
   }
@@ -497,6 +559,7 @@ export class ProjectFileIndexService {
     index.walking = false;
     index.status = 'building';
     index.paths = [];
+    index.dirs = new Set();
     index.pending.clear();
     if (index.quietTimer) clearTimeout(index.quietTimer);
     index.quietTimer = null;
@@ -528,6 +591,20 @@ function toRelDir(root: string, changedPath: string): string {
   const rel = relative(root, dirname(changedPath)).split(sep).join('/');
   // A signal naming the root itself resolves ABOVE it; the root's own directory is `''`.
   return rel === '' || rel.startsWith('..') ? '' : rel;
+}
+
+/** How many segments deep a root-relative directory is — `''` (the root) is 0. */
+function depth(relDir: string): number {
+  return relDir === '' ? 0 : relDir.split('/').length;
+}
+
+/** True when `relDir` or any folder above it is excluded (#482 cause 5). */
+function excludedOrUnder(relDir: string, excluded: (relPath: string) => boolean): boolean {
+  const segments = relDir.split('/');
+  for (let i = 1; i <= segments.length; i += 1) {
+    if (excluded(segments.slice(0, i).join('/'))) return true;
+  }
+  return false;
 }
 
 function same(a: readonly string[], b: readonly string[]): boolean {

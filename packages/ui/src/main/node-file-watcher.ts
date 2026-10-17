@@ -8,7 +8,7 @@
  */
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Disposable, IFileWatcher, WatchOptions } from '@throng/core';
+import type { Disposable, IFileWatcher, WatchBatch, WatchOptions } from '@throng/core';
 
 /** Tuning, all overridable per instance (Principle X). */
 export interface NodeFileWatcherOptions {
@@ -33,6 +33,15 @@ export interface NodeFileWatcherOptions {
  */
 const STORM_CHECK_EVERY = 64;
 
+/**
+ * The most distinct paths one report names before it gives up and says it is incomplete (#482).
+ *
+ * A burst is at most `maxWaitMs` long, so this bounds a set that lives for about a second. An
+ * install or a checkout can pass it; the report then says so and its readers fall back to
+ * re-reading everything, which is what every report used to cost.
+ */
+const MAX_BATCH_PATHS = 4096;
+
 export class NodeFileWatcher implements IFileWatcher {
   private readonly maxWaitMs: number;
 
@@ -49,7 +58,11 @@ export class NodeFileWatcher implements IFileWatcher {
     this.retryBaseMs = options.retryBaseMs ?? 250;
   }
 
-  watch(dir: string, onChange: (path: string) => void, options?: WatchOptions): Disposable {
+  watch(
+    dir: string,
+    onChange: (path: string, batch?: WatchBatch) => void,
+    options?: WatchOptions,
+  ): Disposable {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let lastPath = dir;
@@ -72,18 +85,36 @@ export class NodeFileWatcher implements IFileWatcher {
     let burstStartedAt: number | null = null;
     /** Events delivered in the current burst — the only cheap signal a storm gives (027 / #201). */
     let burstEvents = 0;
+    /** Every distinct path the current burst has touched (#482) — the report's {@link WatchBatch}. */
+    let burstPaths = new Set<string>();
+    /** False once the burst holds an event it cannot name, or more paths than a report carries. */
+    let burstComplete = true;
+
+    const resetBurst = (): void => {
+      burstStartedAt = null;
+      burstEvents = 0;
+      burstPaths = new Set();
+      burstComplete = true;
+    };
 
     const fire = (): void => {
       timer = null;
-      burstStartedAt = null;
-      burstEvents = 0;
+      const paths = burstPaths.size > 0 ? [...burstPaths] : [lastPath];
+      const complete = burstComplete;
+      resetBurst();
       if (disposed) return;
-      onChange(lastPath);
+      onChange(lastPath, { paths, complete });
     };
 
     const onEvent = (_event: string, filename: string | Buffer | null): void => {
       if (disposed) return;
-      if (filename) lastPath = join(dir, filename.toString());
+      if (filename) {
+        lastPath = join(dir, filename.toString());
+        if (burstPaths.size < MAX_BATCH_PATHS) burstPaths.add(lastPath);
+        else if (!burstPaths.has(lastPath)) burstComplete = false;
+      } else {
+        burstComplete = false; // something changed, and the platform did not say what
+      }
       /**
        * Is this a real change, or has the directory gone? (027 / #201.)
        *
@@ -107,8 +138,7 @@ export class NodeFileWatcher implements IFileWatcher {
         watcher = null;
         if (timer) clearTimeout(timer);
         timer = null;
-        burstStartedAt = null;
-        burstEvents = 0;
+        resetBurst();
         waitForPath();
         return;
       }
@@ -258,7 +288,8 @@ export class NodeFileWatcher implements IFileWatcher {
           // without that, the watch is live again and every reader stays stale until something
           // else happens to touch the folder.
           attempts = 0;
-          onChange(join(dir, '.'));
+          const whole = join(dir, '.');
+          onChange(whole, { paths: [whole], complete: false });
         }
       } catch (error) {
         const code = (error as NodeJS.ErrnoException)?.code;
