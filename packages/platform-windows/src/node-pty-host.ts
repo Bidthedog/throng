@@ -1,4 +1,3 @@
-import { appendFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { execFileOffLoop } from './off-loop-exec.js';
 import process from 'node:process';
@@ -137,12 +136,6 @@ function nativeExitSeen(session: Session, limitMs: number): Promise<void> {
 
 /** How often {@link nativeExitSeen} looks; a shell's exit reaches this thread within a few ms of its death. */
 const NATIVE_EXIT_POLL_MS = 5;
-
-// PROBE #465 — TEMPORARY. Synchronous step log for the CI crash probe; reverted before merge.
-const probeLog = process.env.PROBE465_LOG;
-const probe = (msg: string): void => {
-  if (probeLog) appendFileSync(probeLog, `${Date.now()} ${process.pid} ${msg}\n`);
-};
 
 const inSeconds = (ms: number): string => {
   const s = Math.round(ms / 1000);
@@ -283,9 +276,7 @@ export class NodePtyHost implements IPtyHost {
       ending: null,
     };
     this.sessions.set(proc.pid, session);
-    probe(`spawn shell=${proc.pid} seq=${session.seq}`);
-    proc.onExit((e) => {
-      probe(`exit shell=${proc.pid} code=${e.exitCode} host=${session.conhostPid}`);
+    proc.onExit(() => {
       observeExit();
       // The shell exited — on its own, or because `end` asked. node-pty 1.1.0 never closes the
       // pseudoconsole for an exited shell, so its conhost.exe host would leak: reap it by the pid
@@ -307,10 +298,8 @@ export class NodePtyHost implements IPtyHost {
     const host = session.conhostPid;
     if (host !== null) this.reaping.add(host);
     if (this.sessions.get(pid) === session) this.sessions.delete(pid);
-    probe(`reap shell=${pid} host=${host}`);
     if (host === null) return;
-    await this.taskkill(host, true, this.limitMs).catch((e: Error) => probe(`reap-refused host=${host} ${e.message}`));
-    probe(`reaped shell=${pid} host=${host}`);
+    await this.taskkill(host, true, this.limitMs).catch(() => {});
     this.reaping.delete(host);
   }
 
@@ -340,10 +329,6 @@ export class NodePtyHost implements IPtyHost {
       const pid = assigned.get(session.seq);
       if (pid !== undefined) session.conhostPid = pid;
     }
-    probe(
-      `attribute hosts=[${hosts.map((h) => `${h.pid}@${h.createdAt}`).join(',')}] claimed=[${[...claimed].join(',')}] ` +
-        `pending=[${pending.map((s) => `${s.proc.pid}#${s.seq}@${s.spawnedAt}->${s.conhostPid}`).join(',')}]`,
-    );
   }
 
   /**
@@ -430,7 +415,6 @@ export class NodePtyHost implements IPtyHost {
     // shell never reaches it — and it outlived every end (found by command-memory-attached). Asked
     // BEFORE the shell goes, because the console can only be named through a living process.
     const attached = await attachedPids(pid, Math.min(ATTACHED_READ_LIMIT_MS, timeoutMs / 2));
-    probe(`end shell=${pid} host=${session.conhostPid} attached=[${attached.join(',')}]`);
     // Not awaited on its own: a taskkill that never returns must not outlast the limit.
     void this.killShell(session, () => this.taskkill(pid, true, Math.max(1, deadline - Date.now())), deadline).catch(
       (error: Error) => {
