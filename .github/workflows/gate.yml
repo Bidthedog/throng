@@ -236,6 +236,23 @@ jobs:
         shell: pwsh
         run: |
           $env:PROBE465_LOG = Join-Path $env:RUNNER_TEMP 'probe465.log'
+          # libuv sets SEM_NOGPFAULTERRORBOX, which stops WER and AeDebug for node.exe, so attach procdump
+          # to every vitest node process as it appears and dump on its unhandled exception.
+          $watcher = Start-Job -ArgumentList $env:RUNNER_TEMP -ScriptBlock {
+            param($temp)
+            $pd = Join-Path $temp 'procdump\procdump64.exe'
+            $dumps = Join-Path $temp 'dumps'
+            $seen = @{}
+            while ($true) {
+              Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+                Where-Object { $_.CommandLine -match 'vitest' -and -not $seen.ContainsKey($_.ProcessId) } |
+                ForEach-Object {
+                  $seen[$_.ProcessId] = $true
+                  Start-Process -WindowStyle Hidden -FilePath $pd -ArgumentList '-accepteula','-ma','-e',"$($_.ProcessId)",$dumps
+                }
+              Start-Sleep -Milliseconds 250
+            }
+          }
           $failed = 0
           foreach ($i in 1..10) {
             "$(Get-Date -Format o) ===== iteration $i" | Add-Content $env:PROBE465_LOG
@@ -243,6 +260,7 @@ jobs:
             Write-Host "[probe] iteration $i exit $LASTEXITCODE"
             if ($LASTEXITCODE -ne 0) { $failed++ }
           }
+          Stop-Job $watcher
           Write-Host "[probe] $failed of 10 iterations failed"
           if ($failed -gt 0) { exit 1 }
 
