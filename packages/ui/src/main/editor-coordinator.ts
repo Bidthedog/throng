@@ -57,6 +57,7 @@ import {
 } from '@throng/core';
 import { ChangeSet, type Text } from '@codemirror/state';
 import { DocumentAuthority } from './document-authority.js';
+import { namesPath } from './shared-file-watcher.js';
 import type { DropDecision } from '@throng/core';
 import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
@@ -2526,7 +2527,11 @@ export class EditorCoordinator {
     this.disposeWatch(doc);
     if (!doc.absPath || !this.deps.fileWatcher) return;
     const target = doc.absPath;
-    doc.watch = this.deps.fileWatcher.watch(dirname(target), () => {
+    doc.watch = this.deps.fileWatcher.watch(dirname(target), (_path, batch) => {
+      // #482 — the watch is recursive on the file's FOLDER, which for a file at a project's root is
+      // the whole project. A report that names its paths and does not name this file is about
+      // something else, and re-reading the document for it was a load per tick of unrelated churn.
+      if (batch?.complete && !namesPath(batch.paths, target)) return;
       void this.onDiskChange(doc.panelId, target);
     });
   }

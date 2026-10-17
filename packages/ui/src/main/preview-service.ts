@@ -78,6 +78,7 @@ import { fileKey, movedPathOf, type DocumentLifecycleListener } from './editor-c
 import type { EditorService, LoadResult } from './editor-service.js';
 import type { MovePair } from './files-service.js';
 import type { PreviewLookup, PreviewRunRef } from './preview-protocol.js';
+import { namesPath } from './shared-file-watcher.js';
 
 /**
  * How long an `open` holds a path for the panel it asked a window to place (contracts/preview-ipc.md
@@ -1676,8 +1677,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private watchDisk(run: PreviewRun): void {
     if (run.source.kind === 'disk') run.source.watch.dispose();
     const watchedPath = run.filePath;
-    const watch = this.deps.fileWatcher.watch(dirname(watchedPath), () => {
+    const watch = this.deps.fileWatcher.watch(dirname(watchedPath), (_path, batch) => {
       if (this.runs.get(run.panelId) !== run || run.filePath !== watchedPath) return; // a stale watch
+      // #482 — a report that names its paths and not this file is about something else in the folder.
+      if (batch?.complete && !namesPath(batch.paths, watchedPath)) return;
       void this.readAndApply(run, { force: false, repeat: false });
     });
     run.source = { kind: 'disk', watch };

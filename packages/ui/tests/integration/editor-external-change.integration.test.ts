@@ -169,3 +169,47 @@ describe('the "changed on disk" notice is about the DISK, not the buffer', () =>
     expect(coord.getContent('p1')?.text).toBe('my unsaved edit\n');
   });
 });
+
+/**
+ * #482 — the watch is on the document's FOLDER, recursively, which for a file at a project's root
+ * is the whole project. Every report used to re-read the document, so a log appended to beside it
+ * once a second cost a load of the open file once a second.
+ */
+describe('an open document is not re-read for changes to other files (#482)', () => {
+  it('appending to a sibling file reads the document zero times', async () => {
+    let reads = 0;
+    const counted = new Proxy(fs, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver) as unknown;
+        if (prop !== 'readBytes' || typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          reads += 1;
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+    const own = new EditorCoordinator(
+      new EditorService(counted, () => DEFAULT_APP_SETTINGS),
+      new EditorRecovery(recoveryDir),
+      { recoveryDebounceMs: 10, relaySync: () => {}, persistUndoHistory: () => true, fileWatcher: new NodeFileWatcher(20) },
+    );
+    const file = join(root, 'doc.txt');
+    await writeFile(file, 'v1\n');
+    await own.load({ ...meta('p9', file) });
+    await new Promise((r) => setTimeout(r, 150)); // let the watch arm
+    reads = 0;
+
+    for (let i = 0; i < 3; i += 1) {
+      await writeFile(join(root, 'churn.log'), `line ${i}\n`);
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    expect(reads, 'a sibling file changing re-read the open document').toBe(0);
+
+    // (control) the document's own change is still picked up.
+    await writeFile(file, 'v2\n');
+    await until(() => (own.getContent('p9')?.text === 'v2\n' ? true : undefined));
+    expect(own.getContent('p9')?.text).toBe('v2\n');
+    expect(reads, 'the counter never saw a read, so the zero above proves nothing').toBeGreaterThan(0);
+  });
+});
