@@ -2,10 +2,10 @@
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | A busy project stays responsive | untested | | | |
-| MT-02 | File Explorer follows changes made outside throng | untested | | | |
-| MT-03 | Quick Open follows changes made outside throng | untested | | | |
-| MT-04 | Open editors, previews and Find in Files follow their own files | untested | | | |
+| MT-01 | A busy project stays responsive | signed off | b8ac23368249 | 2026-10-17 | |
+| MT-02 | File Explorer follows changes made outside throng | signed off | b8ac23368249 | 2026-10-17 | |
+| MT-03 | Quick Open follows changes made outside throng | signed off | b8ac23368249 | 2026-10-17 | |
+| MT-04 | Open editors, previews and Find in Files follow their own files | signed off | b8ac23368249 | 2026-10-17 | |
 
 ## MT-01: A busy project stays responsive
 
