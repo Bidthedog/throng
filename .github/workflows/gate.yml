@@ -46,6 +46,7 @@ on:
           - 'test:integration'
           - 'test:contract'
           - 'test:e2e'
+          - 'probe-465' # PROBE #465 — TEMPORARY, reverted before merge.
 
   schedule:
     # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
@@ -205,7 +206,63 @@ jobs:
       # The value comes through the ENVIRONMENT rather than being interpolated into the script.
       # `choice` already constrains it to this list, so this is belt-and-braces — but a workflow
       # input pasted straight into a shell line is a habit worth not having.
+      # PROBE #465 — TEMPORARY, reverted before merge. Full dumps of a crashing node.exe, the burst
+      # file six times with a reap-step log, then cdb's stack for every dump.
+      - name: 'Probe #465: enable crash dumps'
+        if: ${{ inputs.only == 'probe-465' }}
+        shell: pwsh
+        run: |
+          $dumps = Join-Path $env:RUNNER_TEMP 'dumps'
+          New-Item -ItemType Directory -Force -Path $dumps | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\node.exe'
+          New-Item -Force -Path $key | Out-Null
+          New-ItemProperty -Force -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumps | Out-Null
+          New-ItemProperty -Force -Path $key -Name DumpType -PropertyType DWord -Value 2 | Out-Null
+          New-ItemProperty -Force -Path $key -Name DumpCount -PropertyType DWord -Value 10 | Out-Null
+          Get-Service WerSvc | Format-List Name,Status,StartType
+          Get-ItemProperty $key
+
+      - name: 'Probe #465: run the burst file six times'
+        if: ${{ inputs.only == 'probe-465' }}
+        shell: pwsh
+        run: |
+          $env:PROBE465_LOG = Join-Path $env:RUNNER_TEMP 'probe465.log'
+          $failed = 0
+          foreach ($i in 1..6) {
+            "$(Get-Date -Format o) ===== iteration $i" | Add-Content $env:PROBE465_LOG
+            npx vitest run --project integration packages/daemon/tests/integration/terminal-end-burst.integration.test.ts
+            Write-Host "[probe] iteration $i exit $LASTEXITCODE"
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          Write-Host "[probe] $failed of 6 iterations failed"
+          if ($failed -gt 0) { exit 1 }
+
+      - name: 'Probe #465: stack of every dump'
+        if: ${{ always() && inputs.only == 'probe-465' }}
+        shell: pwsh
+        run: |
+          $dumps = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'dumps') -Filter *.dmp -ErrorAction SilentlyContinue
+          Write-Host "[probe] $(@($dumps).Count) dump(s)"
+          $cdb = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe' -ErrorAction SilentlyContinue
+          if (-not $cdb) { Write-Host '[probe] cdb not found'; exit 0 }
+          foreach ($d in $dumps) {
+            Write-Host "===== $($d.Name)"
+            & $cdb.FullName -z $d.FullName -c '.symfix; .reload; .ecxr; kn 60; !analyze -v; ~*kn 30; lm; q' 2>&1 | Out-String -Width 400 | Write-Host
+          }
+
+      - name: 'Probe #465: upload dumps and log'
+        if: ${{ always() && inputs.only == 'probe-465' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: probe-465
+          path: |
+            ${{ runner.temp }}/dumps/
+            ${{ runner.temp }}/probe465.log
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Run the gate
+        if: ${{ inputs.only != 'probe-465' }}
         shell: pwsh
         env:
           ONLY: ${{ inputs.only || 'full gate' }}
