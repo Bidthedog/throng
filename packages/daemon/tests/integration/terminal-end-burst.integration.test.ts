@@ -28,9 +28,15 @@ import {
  * One round of that shape fails rarely, so this repeats it. Each round is what app close does:
  * attach, `killAll {}` straight away, and every session must report its exit. A crash takes the
  * worker with it, which vitest reports as an unhandled error against this file.
+ *
+ * The cause was node-pty 1.1.0's unlocked native terminal list (`NodePtyHost.killShell`). Measured on
+ * `windows-2022`, before the fix this file and its two neighbours above crashed or hung 9 runs in 20;
+ * after it, 0 in 10. The ORDER is proven deterministically by `node-pty-host-end.test.ts`; this file
+ * is the end-to-end net, which is why it is over the per-file budget: the crash needs repetition to
+ * show. Six rounds each is half what reproduced it, and costs ~35 s on the runner.
  */
 
-const ROUNDS = 12;
+const ROUNDS = 6;
 const PER_ROUND = 4;
 
 let daemon: TerminalDaemon;
