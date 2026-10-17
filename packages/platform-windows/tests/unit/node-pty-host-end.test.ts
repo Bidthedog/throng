@@ -188,6 +188,42 @@ describe('051 R2 — end()', () => {
   });
 });
 
+describe('#465 — shells are ended one at a time', () => {
+  // node-pty 1.1.0's native terminal list has no lock, and two shells dying together crash the process.
+  it("a second end's kill waits until the first shell has been seen to exit", async () => {
+    scriptOs({});
+    const { host, pty, start } = await newHost();
+    const a = start();
+    const b = start();
+    const endA = host.end(a, 2000);
+    const endB = host.end(b, 2000);
+    const shellKills = () => taskkillCalls().filter((c) => c === `/PID ${a.pid} /T /F` || c === `/PID ${b.pid} /T /F`);
+    await vi.waitFor(() => expect(shellKills()).toEqual([`/PID ${a.pid} /T /F`]));
+    await flush();
+    expect(shellKills()).toEqual([`/PID ${a.pid} /T /F`]);
+    pty.procs.get(a.pid)!.exit();
+    await vi.waitFor(() => expect(shellKills()).toEqual([`/PID ${a.pid} /T /F`, `/PID ${b.pid} /T /F`]));
+    pty.procs.get(b.pid)!.exit();
+    await Promise.all([endA, endB]);
+  });
+
+  it('a refused kill does not hold the next one', async () => {
+    const { host, pty, start } = await newHost();
+    const a = start();
+    const b = start();
+    scriptOs({
+      taskkill: (args, cb) =>
+        args.includes(String(a.pid)) ? cb(Object.assign(new Error('failed'), { code: 1 }), '', 'ERROR: Access is denied.') : cb(null),
+    });
+    const endA = host.end(a, 300);
+    const endB = host.end(b, 2000);
+    await vi.waitFor(() => expect(taskkillCalls()).toContain(`/PID ${b.pid} /T /F`));
+    pty.procs.get(b.pid)!.exit();
+    await expect(endB).resolves.toBeUndefined();
+    await expect(endA).rejects.toThrow(/Access is denied/);
+  });
+});
+
 describe('051 — review findings 2, 4, 5', () => {
   it('a failed end is not cached: the next end runs a fresh taskkill (finding 2)', async () => {
     let refuse = true;
