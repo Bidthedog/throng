@@ -219,22 +219,31 @@ jobs:
           New-ItemProperty -Force -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumps | Out-Null
           New-ItemProperty -Force -Path $key -Name DumpType -PropertyType DWord -Value 2 | Out-Null
           New-ItemProperty -Force -Path $key -Name DumpCount -PropertyType DWord -Value 10 | Out-Null
+          Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting' -Name Disabled -Value 0 -ErrorAction SilentlyContinue
+          Set-Service WerSvc -StartupType Manual
+          Start-Service WerSvc
           Get-Service WerSvc | Format-List Name,Status,StartType
           Get-ItemProperty $key
+          # WER may still decline; procdump as the AeDebug post-mortem debugger catches it regardless.
+          $pd = Join-Path $env:RUNNER_TEMP 'procdump'
+          Invoke-WebRequest https://download.sysinternals.com/files/Procdump.zip -OutFile "$pd.zip"
+          Expand-Archive "$pd.zip" -DestinationPath $pd -Force
+          & (Join-Path $pd 'procdump64.exe') -accepteula -ma -i $dumps
+          Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug'
 
-      - name: 'Probe #465: run the burst file six times'
+      - name: 'Probe #465: run the ending files ten times'
         if: ${{ inputs.only == 'probe-465' }}
         shell: pwsh
         run: |
           $env:PROBE465_LOG = Join-Path $env:RUNNER_TEMP 'probe465.log'
           $failed = 0
-          foreach ($i in 1..6) {
+          foreach ($i in 1..10) {
             "$(Get-Date -Format o) ===== iteration $i" | Add-Content $env:PROBE465_LOG
-            npx vitest run --project integration packages/daemon/tests/integration/terminal-end-burst.integration.test.ts
+            npx vitest run --project integration packages/daemon/tests/integration/terminal-end-burst.integration.test.ts packages/daemon/tests/integration/terminal-unload-filters.integration.test.ts packages/daemon/tests/integration/terminal-responsiveness.integration.test.ts
             Write-Host "[probe] iteration $i exit $LASTEXITCODE"
             if ($LASTEXITCODE -ne 0) { $failed++ }
           }
-          Write-Host "[probe] $failed of 6 iterations failed"
+          Write-Host "[probe] $failed of 10 iterations failed"
           if ($failed -gt 0) { exit 1 }
 
       - name: 'Probe #465: stack of every dump'
