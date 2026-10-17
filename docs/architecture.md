@@ -509,7 +509,8 @@ copy, delete to the Recycle Bin, and undo.
 - Core: `core/src/explorer/` (tree nodes, expansion, drag payloads, naming, exclusion, path rules),
   `core/src/fs/path-id.ts` and `core/src/fileop-undo/undo-stack.ts`.
 - Main: `files-service.ts`, `files-ipc.ts`, `node-file-system.ts` (the `IFileSystem` binding,
-  with the Recycle Bin), `node-file-watcher.ts`, `explorer-watcher.ts`, `recycle-bin-restore.ts`,
+  with the Recycle Bin), `node-file-watcher.ts`, `shared-file-watcher.ts` (one watch per folder,
+  shared by the tree, the file index, editors and previews), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
   `undo-service.ts` and `in-app-moves.ts`; `file-clipboard.ts`, `transfer-service.ts` and
   `transfer-ipc.ts` for the clipboard and pastes.
 - Renderer: `renderer/explorer/`, with the tree on react-arborist and drag and drop on `@dnd-kit`.
@@ -545,9 +546,11 @@ The features that find and follow things across a project.
 
 - **Quick Open** is seeded from a per-project file index owned by UI main
   (`project-file-index.ts`, `file-index-ipc.ts`). The walk, the diff and the exclusion matcher are
-  pure, in core. Main keeps the index current in two ways: a targeted rescan of the directory a
-  watch signal names, and a trailing full reconcile that is forced after a maximum wait so sustained
-  churn cannot starve it.
+  pure, in core. Main keeps the index current in two ways. A watch report names every path its
+  burst touched, so the index rescans those directories, walks a folder that appeared and forgets
+  one that went, which costs work in proportion to the change. A report that cannot name everything
+  (a re-armed watch, an overflowing burst) earns a trailing full reconcile, forced after a maximum
+  wait so sustained churn cannot starve it.
 - **Find in Files** is a panel type whose scan runs in UI main (`file-search-service.ts`,
   `file-search-ipc.ts`, `replace-commit-service.ts`). It reuses the index's walk and exclusions,
   the editor's binary detection and size limit, and the find bar's match semantics
