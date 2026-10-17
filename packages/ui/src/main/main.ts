@@ -111,6 +111,7 @@ import { FileLinkResolver } from './file-link-resolver.js';
 import { registerLinkIpc } from './link-ipc.js';
 import { openSubWorkspace } from './subworkspace-open.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
+import { SharedFileWatcher } from './shared-file-watcher.js';
 import { TerminalReconnect } from './terminal-reconnect.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
@@ -1144,9 +1145,16 @@ if (isPrimaryInstance)
   // early enough for FilesService here.
   // Watch the active project's root and push change signals to every window so
   // the file tree stays live-synced with external + in-app edits (US2).
+  /*
+   * #272 / #482 — ONE watch per directory for everything that follows project files: the tree, the
+   * file index, every open editor and every preview. Each used to construct its own watcher, so the
+   * active root was recursively watched three or four times over, each copy debouncing the same
+   * events and triggering its own re-read.
+   */
+  const projectWatcher = new SharedFileWatcher(new NodeFileWatcher(150));
   const explorerWatcher = new ExplorerWatcher(
-    new NodeFileWatcher(150),
-    (evt, absRoot) => {
+    projectWatcher,
+    (evt, absRoot, relPaths) => {
       broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:files:changed', evt);
       /*
        * 043 FR-045d — the SECOND consumer of this ONE watch, and no watcher is added.
@@ -1160,7 +1168,11 @@ if (isPrimaryInstance)
        * directory (the signal reports no filename and no kind, so it is a prompt to look rather
        * than an answer), and a watcher callback has nowhere to report a failed stat to.
        */
-      void fileSearch.noteDirectoryChanged(absRoot, evt.relDir);
+      //
+      // #482 — a report that names its paths re-stats only the results those paths can affect,
+      // rather than every result held under the reported directory (the whole set, at the root).
+      if (relPaths) void fileSearch.notePathsChanged(absRoot, relPaths);
+      else void fileSearch.noteDirectoryChanged(absRoot, evt.relDir);
     },
     // 026 / #186 (FR-010a) — the watch is gone for good. Say so: a tree that has silently stopped
     // updating looks exactly like a project in which nothing is happening, and the user acts on it
@@ -1250,7 +1262,7 @@ if (isPrimaryInstance)
   };
   const projectFileIndex = new ProjectFileIndexService(
     fileSystem,
-    new NodeFileWatcher(150),
+    projectWatcher,
     () => currentSettings.explorer.excludeGlobs,
     (root) => projectsByRoot.get(normaliseForCompare(root))?.hiddenPaths ?? [],
     pushFileIndexUpdate,
@@ -1485,7 +1497,7 @@ if (isPrimaryInstance)
     persistUndoHistory: () => currentSettings.editor.persistUndoHistory,
     // Soft external-change detection (FR-028): a per-doc folder watch so a file
     // edited/deleted outside throng is reconciled (reload if clean, warn if dirty).
-    fileWatcher: new NodeFileWatcher(150),
+    fileWatcher: projectWatcher,
     // Mirror an edit (content + dirty) to every OTHER window (FR-034), like the
     // panel-*-sync broadcasts.
     relaySync: (fromWebContentsId, msg) => {
@@ -1551,7 +1563,7 @@ if (isPrimaryInstance)
     documents: editorCoordinator,
     reader: editorService,
     fs: fileSystem,
-    fileWatcher: new NodeFileWatcher(150),
+    fileWatcher: projectWatcher,
     settings: () => currentSettings,
     registry: SHIPPED_PREVIEW_PROVIDERS,
     projectRoot: async (projectId) => {

@@ -41,6 +41,7 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Fixed
 
 - **The language picker no longer dims the window**: opening it from the status bar left everything, the picker included, behind a dark overlay.
+- **A busy project no longer slows throng down** ([#482](https://github.com/Bidthedog/throng/issues/482)): steady file activity under a project's root, such as an agent appending to a log or a build writing output, kept the main process at up to a full core and made typing and project switching lag. A changed file now costs work proportional to the change, and each folder is watched once however many panels need it ([#272](https://github.com/Bidthedog/throng/issues/272)).
 
 ## 1.0.0-alpha10 — 2026-10-14
 
