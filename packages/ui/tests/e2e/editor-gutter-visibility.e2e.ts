@@ -180,6 +180,9 @@ function topVisibleLine(win: Page): Promise<string> {
  */
 const RENDERED_LINES_NEEDED = 6;
 
+/** Frames a scroll must survive before it counts as stuck — see `scrollToWrappedRow`. */
+const SCROLL_SETTLE_FRAMES = 6;
+
 async function scrollToWrappedRow(
   win: Page,
 ): Promise<{ marker: string; offset: number; rows: number; row: number }> {
@@ -247,13 +250,29 @@ async function scrollToWrappedRow(
     return { scrollTop, rows: rects.length, row };
   });
 
+  /*
+   * ══ STUCK MEANS STILL THERE SEVERAL FRAMES LATER ══
+   *
+   * Accepting the first readout below line 001 was not enough (#465, 2 runs in 80 on a hosted
+   * runner): the caller's keyboard selection queues CodeMirror's scroll-into-view, which can land a
+   * frame AFTER that readout and take the viewport back to the top — so the poll passed and the very
+   * next read said "line 001". The scroll now counts only once it has survived
+   * {@link SCROLL_SETTLE_FRAMES} animation frames, which outlasts both the measure cycle and a queued
+   * scroll-into-view; a scroll that was undone is simply applied again.
+   */
   await expect
     .poll(
       async () => {
-        await win.evaluate((to) => {
-          const scroller = document.querySelector('.editor-panel .cm-scroller');
-          if (scroller) scroller.scrollTop = to;
-        }, target.scrollTop);
+        await win.evaluate(
+          async ({ to, frames }) => {
+            const scroller = document.querySelector('.editor-panel .cm-scroller');
+            if (!scroller) return;
+            scroller.scrollTop = to;
+            for (let i = 0; i < frames; i += 1) await new Promise((r) => requestAnimationFrame(r));
+          },
+          { to: target.scrollTop, frames: SCROLL_SETTLE_FRAMES },
+        );
+        // Read AFTER the frames, so an undone scroll reads "line 001" here and is applied again.
         return topVisibleLine(win);
       },
       {
