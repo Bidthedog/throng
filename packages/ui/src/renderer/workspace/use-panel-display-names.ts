@@ -22,10 +22,12 @@
  * hook calls.
  */
 import {
+  activeContextLabel,
   defaultPanelTypeRegistry,
   panelDisplayTitle,
   type Panel,
   type PanelTitleSources,
+  type WorkspaceLayout,
 } from '@throng/core';
 import { getEditorState, useEditorStateVersion } from '../editor/editor-state.js';
 import { useTerminalCommandVersion } from '../terminal/command-store.js';
@@ -130,4 +132,18 @@ export function usePanelDisplayNames(panels: Panel[], maxNameLength?: number): P
     name: panelDisplayTitle(panel, panelTitleSources(panel), maxNameLength),
     ...panelType(panel),
   }));
+}
+
+/**
+ * The window's "Tab · Panel" label with the active panel named as its header names it (#504) —
+ * the file it holds, the terminal's live name — and kept current as those change. The title bar
+ * and the OS window title both read it, so neither can show the stored "Blank Panel 2".
+ */
+export function useActiveContextLabel(layout: WorkspaceLayout | null): string {
+  useTerminalTitleVersion();
+  useEditorStateVersion();
+  useTerminalCommandVersion();
+  useTerminalCwdVersion();
+  useTerminalTitleContextVersion();
+  return layout ? activeContextLabel(layout, currentPanelTitle) : '';
 }

@@ -9,6 +9,7 @@ import {
 } from './model.js';
 import { collectPanels, countPanels } from './invariants.js';
 import { nextDefaultPanelName } from './unique-name.js';
+import { panelDisplayTitle } from './panel-title.js';
 import { clampZoomLevel, stepZoomLevel } from '../config/zoom.js';
 
 // Typed-panel ops (005) live in the panel-type module but are surfaced here so
@@ -582,15 +583,23 @@ export function effectiveActivePanelId(tab: Tab): string | undefined {
 /**
  * The active "Tab · Panel" label shared by the status bar (FR-004) and the window
  * title (FR-040): the active Tab's title joined with its effective active Panel's
- * title, just the Tab title when the Tab has no Panel, or '' when no Tab is active.
+ * name, just the Tab title when the Tab has no Panel, or '' when no Tab is active.
  * Pure — one source of truth so the two surfaces can never drift.
+ *
+ * The panel is named by `nameOf`, never by its stored `title` — a generated fallback
+ * ("Blank Panel 2") that exists only to keep names unique (#504, 048 FR-032). The
+ * default names it from what the panel itself persists; the renderer passes its live
+ * resolver (`currentPanelTitle`), so the label matches the panel's header.
  */
-export function activeContextLabel(layout: WorkspaceLayout): string {
+export function activeContextLabel(
+  layout: WorkspaceLayout,
+  nameOf: (panel: Panel) => string = (panel) => panelDisplayTitle(panel),
+): string {
   const tab = layout.tabs.find((t) => t.id === layout.activeTabId);
   if (!tab) return '';
   const activeId = effectiveActivePanelId(tab);
   const panel = collectPanels(tab.root).find((p) => p.id === activeId);
-  return panel ? `${tab.title} · ${panel.title}` : tab.title;
+  return panel ? `${tab.title} · ${nameOf(panel)}` : tab.title;
 }
 
 /** A single panel's effective zoom level (absent → 0), clamped on read (012). */
