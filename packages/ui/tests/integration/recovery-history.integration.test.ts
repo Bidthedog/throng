@@ -17,7 +17,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DEFAULT_APP_SETTINGS } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
@@ -31,9 +31,27 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
 let root: string;
 let recoveryDir: string;
 
-function makeCoordinator(persistUndoHistory = true): EditorCoordinator {
+/**
+ * A recovery store whose writes take `ms` longer, as they do on a slow disk. The CI runner's disk is
+ * where #465's failure of this file came from: the snapshot had not landed when the test looked.
+ */
+class SlowRecovery extends EditorRecovery {
+  constructor(
+    dir: string,
+    private readonly ms: number,
+  ) {
+    super(dir);
+  }
+  override async write(...args: Parameters<EditorRecovery['write']>): Promise<void> {
+    await wait(this.ms);
+    return super.write(...args);
+  }
+}
+
+function makeCoordinator(persistUndoHistory = true, writeDelayMs = 0): EditorCoordinator {
   const service = new EditorService(fs, () => DEFAULT_APP_SETTINGS);
-  return new EditorCoordinator(service, new EditorRecovery(recoveryDir), {
+  const recovery = writeDelayMs > 0 ? new SlowRecovery(recoveryDir, writeDelayMs) : new EditorRecovery(recoveryDir);
+  return new EditorCoordinator(service, recovery, {
     recoveryDebounceMs: 10,
     relaySync: () => {},
     persistUndoHistory: () => persistUndoHistory,
@@ -62,6 +80,34 @@ async function recoveryFiles(): Promise<string[]> {
   return Promise.all(names.map((n) => readFile(join(recoveryDir, n), 'utf8')));
 }
 
+/**
+ * Wait for a snapshot holding `text`, and hand it back parsed.
+ *
+ * The snapshot lands after a debounce AND an atomic temp-then-rename write, so how long that takes is
+ * the disk's business, not the test's. A fixed `wait(40)` here was #465: on the CI runner the write
+ * had not landed, `recover()` found nothing, and the test failed on `undefined.text`.
+ */
+async function snapshotHolding(text: string): Promise<Record<string, unknown>> {
+  let found: Record<string, unknown> | undefined;
+  await vi.waitFor(
+    async () => {
+      const names = (await readdir(recoveryDir).catch(() => [] as string[])).filter((n) => !n.endsWith('.tmp'));
+      const snapshots = await Promise.all(
+        names.map(async (n) => JSON.parse(await readFile(join(recoveryDir, n), 'utf8')) as Record<string, unknown>),
+      );
+      found = snapshots.find((s) => s.text === text);
+      expect(found, `a recovery snapshot holding ${JSON.stringify(text)}`).toBeDefined();
+    },
+    { timeout: 5000, interval: 10 },
+  );
+  return found!;
+}
+
+/** Wait for the recovery directory to be empty — removal is asynchronous too. */
+async function noRecoveryFiles(): Promise<void> {
+  await vi.waitFor(async () => expect(await recoveryFiles()).toEqual([]), { timeout: 5000, interval: 10 });
+}
+
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'throng-hist-root-'));
   recoveryDir = await mkdtemp(join(tmpdir(), 'throng-hist-dir-'));
@@ -87,10 +133,8 @@ describe('the snapshot is structured, and tolerant of the one that came before i
     const coord = makeCoordinator();
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'secret');
-    await wait(40);
 
-    const [raw] = await recoveryFiles();
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = await snapshotHolding('secret');
 
     expect(parsed.text).toBe('secret');
     expect(parsed.version).toBe(1);
@@ -128,7 +172,7 @@ describe('a TORN snapshot is refused, never read as the document (review finding
     const coord = makeCoordinator();
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'content');
-    await wait(40);
+    await snapshotHolding('content');
 
     // No .tmp is left behind, and the one file present parses.
     const names = await readdir(recoveryDir);
@@ -140,12 +184,12 @@ describe('a TORN snapshot is refused, never read as the document (review finding
 
 describe('the history survives a crash, and the toggle governs only that (T089/T090)', () => {
   it('restores the undo history alongside the content, so Ctrl+Z still reaches the past', async () => {
-    // Two edits, so there is a past worth restoring.
-    const s1 = makeCoordinator();
+    // Two edits, so there is a past worth restoring — on a disk as slow as the CI runner's was.
+    const s1 = makeCoordinator(true, 80);
     s1.register(meta('p1', null), '');
     editDocument(s1, meta('p1', null), 'one');
     editDocument(s1, meta('p1', null), 'one two');
-    await wait(40);
+    await snapshotHolding('one two');
 
     // Relaunch: a fresh coordinator, the same recovery directory.
     const s2 = makeCoordinator();
@@ -167,10 +211,8 @@ describe('the history survives a crash, and the toggle governs only that (T089/T
     const coord = makeCoordinator(false);
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'work in progress');
-    await wait(40);
 
-    const [raw] = await recoveryFiles();
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = await snapshotHolding('work in progress');
 
     // FR-027c is explicit that a crash with the toggle off still recovers the DOCUMENT. Turning off
     // the history must not turn off recovery.
@@ -185,8 +227,7 @@ describe('the history survives a crash, and the toggle governs only that (T089/T
     const on = makeCoordinator(true);
     on.register(meta('p1', null), '');
     editDocument(on, meta('p1', null), 'SECRET-KEY');
-    await wait(40);
-    expect((await recoveryFiles())[0]).toContain('history');
+    expect(await snapshotHolding('SECRET-KEY')).toHaveProperty('history');
 
     await makeCoordinator(false).purgePersistedHistories();
 
@@ -235,14 +276,13 @@ describe('the history’s lifetime NEVER exceeds the snapshot’s (T112 · FR-02
     const coord = makeCoordinator();
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'API_KEY=hunter2');
-    await wait(40);
+    await snapshotHolding('API_KEY=hunter2');
     expect(await recoveryFiles()).toHaveLength(1);
 
     coord.destroy('p1');
-    await wait(40);
 
     // Nothing survives — not the text, and not the history that held what was cut out of it.
-    expect(await recoveryFiles()).toEqual([]);
+    await noRecoveryFiles();
   });
 
   it('is deleted on a successful SAVE — the moment the disk holds the document', async () => {
@@ -252,13 +292,12 @@ describe('the history’s lifetime NEVER exceeds the snapshot’s (T112 · FR-02
     const coord = makeCoordinator();
     coord.register(meta('p1', file), 'seed\n');
     editDocument(coord, meta('p1', file), 'API_KEY=hunter2\n');
-    await wait(40);
+    await snapshotHolding('API_KEY=hunter2\n');
     expect(await recoveryFiles()).toHaveLength(1);
 
     await coord.save({ panelId: 'p1' });
-    await wait(40);
 
-    expect(await recoveryFiles()).toEqual([]);
+    await noRecoveryFiles();
   });
 
   it('is written ONLY to the snapshot’s own protected directory — nowhere else', async () => {
@@ -268,7 +307,7 @@ describe('the history’s lifetime NEVER exceeds the snapshot’s (T112 · FR-02
     const coord = makeCoordinator();
     coord.register(meta('p1', null), '');
     editDocument(coord, meta('p1', null), 'API_KEY=hunter2');
-    await wait(40);
+    await snapshotHolding('API_KEY=hunter2');
 
     // Exactly one artefact, in the recovery directory, and the deleted text appears nowhere in the
     // user's project tree.
