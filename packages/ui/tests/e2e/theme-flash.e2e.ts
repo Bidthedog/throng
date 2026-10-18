@@ -22,7 +22,7 @@
  * a Chromium compositing artefact of `color-scheme`, so pinning `color-scheme` (and the native backing)
  * to the theme is the exact, deterministic invariant whose violation IS the bug.
  */
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -129,9 +129,78 @@ async function closeNewest(app: ElectronApplication): Promise<void> {
  * above. Recorded because the false result was far more convincing than the true one.)
  *
  * So this change stands only on its own merits — an evented wait that can miss its event is worse
- * than a retrying one that cannot — and #286 stays OPEN. What the next person inherits is a narrowed
- * search: it is not teardown lag and it is not a pre-existing window.
+ * than a retrying one that cannot.
+ *
+ * A third candidate is refuted too: `reloadWindow` returning before the reload had begun, so the click
+ * landed on the outgoing document. It did return early, and now waits for the new document — but the
+ * rate did not move (1 run in 80 before and after), so that was not #286. What is left is narrowed
+ * by {@link installOpenProbes}, whose dump on failure says which hop the open died at.
  */
+
+/**
+ * #286 — record each hop of a sub-workspace open, so a failure says where it stopped rather than only
+ * that no window appeared. Main: the IPC arriving, a `BrowserWindow` being created, a renderer dying.
+ * Renderer: what the click actually hit.
+ */
+async function installOpenProbes(app: ElectronApplication, win: Page): Promise<void> {
+  await app.evaluate(({ ipcMain, app: electronApp }) => {
+    const g = globalThis as unknown as { __swProbe?: { ipc: number[]; created: number[]; gone: string[] } };
+    const probe = { ipc: [] as number[], created: [] as number[], gone: [] as string[] };
+    g.__swProbe = probe;
+    // An extra listener alongside the app's own: it observes, it does not handle.
+    ipcMain.on('throng:subworkspace:open', () => probe.ipc.push(Date.now()));
+    electronApp.on('browser-window-created', (_e, w) => probe.created.push(w.id));
+    electronApp.on('render-process-gone', (_e, wc, d) => probe.gone.push(`${wc.id}:${d.reason}`));
+  });
+  await win.evaluate(() => {
+    const w = window as unknown as { __clicks?: string[] };
+    w.__clicks = [];
+    document.addEventListener(
+      'click',
+      (e) => {
+        const target = e.target as HTMLElement;
+        w.__clicks!.push(target.closest('[data-testid]')?.getAttribute('data-testid') ?? target.tagName);
+      },
+      true,
+    );
+  });
+}
+
+/**
+ * Print every hop {@link installOpenProbes} recorded, and keep the main log. Read it as:
+ * the click missing from `clicks` with `loaded` "false" — the click was lost; `loaded` "true" with no
+ * `ipc` — the IPC never arrived; `ipc` without `created` — main failed (see main.log / `notice`);
+ * `created` and two `wins` but one `pw` window — Playwright never saw the page.
+ */
+async function dumpOpenProbes(app: ElectronApplication, win: Page, userDataDir: string): Promise<void> {
+  const main = await app
+    .evaluate(({ BrowserWindow }) => ({
+      probe: (globalThis as unknown as { __swProbe?: unknown }).__swProbe,
+      wins: BrowserWindow.getAllWindows().map((w) => ({
+        id: w.id,
+        url: w.webContents.getURL(),
+        visible: w.isVisible(),
+        loading: w.webContents.isLoading(),
+        crashed: w.webContents.isCrashed(),
+      })),
+    }))
+    .catch((error: unknown) => String(error));
+  const renderer = await win
+    .evaluate(() => ({
+      clicks: (window as unknown as { __clicks?: string[] }).__clicks,
+      loaded: document.querySelector('[data-testid="subworkspace-item-sw1"]')?.getAttribute('data-loaded') ?? null,
+      notice: document.querySelector('[data-testid="subworkspace-error"]')?.textContent ?? null,
+      button: document.querySelector('[data-testid="subworkspace-open-sw1"]')?.getBoundingClientRect().toJSON() ?? null,
+    }))
+    .catch((error: unknown) => String(error));
+  const pw = app.windows().map((p) => p.url());
+  console.warn('[#286]', JSON.stringify({ main, renderer, pw }));
+  try {
+    copyFileSync(join(userDataDir, 'logs', 'main.log'), test.info().outputPath('main.log'));
+  } catch {
+    /* no log to keep */
+  }
+}
 async function openChildWindow(
   app: ElectronApplication,
   trigger: () => Promise<void>,
@@ -200,7 +269,7 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
   const cfg = mkdtempSync(join(tmpdir(), 'throng-flash-cfg-'));
   try {
     await runApp(
-      async (app, win) => {
+      async (app, win, { userDataDir }) => {
         await activateTheme(win, cfg, 'Light');
 
         // MAIN window: the scheme follows the light theme, the preload painted the token inline, and
@@ -237,9 +306,14 @@ test('every window kind follows the saved LIGHT theme — no dark canvas flash (
         await reloadWindow(win);
         await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
         // Polled, not evented — this is the open #286 was about; see `openChildWindow`.
-        const child = await openChildWindow(app, () =>
-          win.getByTestId('subworkspace-open-sw1').click(),
-        );
+        await installOpenProbes(app, win);
+        let child: Page;
+        try {
+          child = await openChildWindow(app, () => win.getByTestId('subworkspace-open-sw1').click());
+        } catch (error) {
+          await dumpOpenProbes(app, win, userDataDir);
+          throw error;
+        }
         await child.waitForLoadState('domcontentloaded', { timeout: 15_000 });
         await child.waitForSelector('.throng-shell', { timeout: 8000 });
         expect(await colorScheme(child)).toBe('light');
