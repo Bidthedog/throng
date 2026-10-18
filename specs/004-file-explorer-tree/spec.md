@@ -92,6 +92,17 @@ exist (003); this feature fills the pane body.
   This is a **deliberate scope addition** beyond the original plan: it adds a small persistence change
   (a per-project hidden-paths field + a `setHidden` operation) to the otherwise migration-free 004.
 
+### Session 2026-10-18
+
+> Amendment for [#470](https://github.com/Bidthedog/throng/issues/470). **Supersedes the A–Z half of
+> FR-036 and its 2026-06-29 clarification** for numbers inside names; folders-first and the
+> case/accent handling stand unchanged.
+
+- Q: Numbered files list as `test 1`, `test 10`, `test 11`, `test 2` … — should numbers sort by
+  value? → A: **Yes, by default ("natural" order)**: `test 1`, `test 2` … `test 9`, `test 10`,
+  `test 11` … `test 19`, `test 20`, wherever the digits appear in a name (`v2-final` before
+  `v10-final`). A Preferences setting switches back to character-by-character order — FR-036a.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See the active project's files as a tree (Priority: P1)
@@ -428,6 +439,14 @@ observable on its own).
 
 - **FR-036**: Within each folder, entries MUST be ordered **folders first, then files**, each group
   sorted **case-insensitive A–Z** by name.
+- **FR-036a** *(2026-10-18, #470 — supersedes FR-036's A–Z comparison for digits)*: Within each
+  group, runs of digits in a name MUST compare by their **numeric value** by default (`natural`), so
+  `test 2` sorts before `test 10`. The setting `explorer.sortOrder` (`natural` · `characters`,
+  default `natural`, Preferences → File Explorer) MUST switch to FR-036's character-by-character
+  comparison. Folders-first and case/accent handling are unchanged in both orders. Changing the
+  setting MUST re-sort every open explorer tree immediately, with no reload or restart; an invalid
+  value MUST fall back to `natural`. Other surfaces that list names (Quick Open, Find in Files) are
+  out of scope.
 - **FR-037**: Symbolic links / junctions MUST be **shown** (with a visual indicator) but **not
   followed out of the root**: the tree MUST NOT recurse link cycles, and any operation whose resolved
   target lies outside the project root MUST be rejected (FR-022). Links are not auto-expanded across

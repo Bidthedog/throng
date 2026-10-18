@@ -45,6 +45,13 @@ export interface ProjectsSettings {
 /** File delete behaviour: OS Recycle Bin (default, recoverable) or permanent (004, FR-018). */
 export type DeleteMode = 'recycle' | 'permanent';
 
+/**
+ * How the File Explorer orders names within a group (#470, 004 FR-036a): `natural` compares runs of
+ * digits by value (`test 2` before `test 10`, the default); `characters` compares character by
+ * character, the order before #470.
+ */
+export type ExplorerSortOrder = 'natural' | 'characters';
+
 /** File Explorer tree preferences (004, contracts/config-additions.md). */
 export interface ExplorerSettings {
   deleteMode: DeleteMode;
@@ -67,6 +74,8 @@ export interface ExplorerSettings {
    * where only the manual "Reveal File" action moves it (#137).
    */
   autoRevealActiveFile: boolean;
+  /** Name ordering within folders and within files (#470). Default `natural`. */
+  sortOrder: ExplorerSortOrder;
 }
 
 /** A user-defined terminal flavour (005 Phase B, settings.terminals.flavours). */
@@ -740,6 +749,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     dragCopyModifier: 'ctrl',
     dragMoveModifier: 'shift',
     autoRevealActiveFile: true,
+    sortOrder: 'natural',
   },
   terminals: {
     flavours: [],
@@ -1049,7 +1059,17 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     : fallback.dragMoveModifier;
   const autoRevealActiveFile =
     typeof v.autoRevealActiveFile === 'boolean' ? v.autoRevealActiveFile : fallback.autoRevealActiveFile;
-  return { deleteMode, replaceMode, excludeGlobs, dragCopyModifier, dragMoveModifier, autoRevealActiveFile };
+  const sortOrder: ExplorerSortOrder =
+    v.sortOrder === 'natural' || v.sortOrder === 'characters' ? v.sortOrder : fallback.sortOrder;
+  return {
+    deleteMode,
+    replaceMode,
+    excludeGlobs,
+    dragCopyModifier,
+    dragMoveModifier,
+    autoRevealActiveFile,
+    sortOrder,
+  };
 }
 
 const DRAG_MODIFIER_KEYS: readonly DragModifierKey[] = ['ctrl', 'shift', 'alt'];
@@ -1062,6 +1082,7 @@ function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
     dragCopyModifier: e.dragCopyModifier,
     dragMoveModifier: e.dragMoveModifier,
     autoRevealActiveFile: e.autoRevealActiveFile,
+    sortOrder: e.sortOrder,
   };
 }
 

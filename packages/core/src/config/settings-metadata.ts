@@ -425,6 +425,20 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     },
   },
   {
+    // #470 / 004 FR-036a.
+    key: 'explorer.sortOrder',
+    label: 'Sort names',
+    description:
+      'How names are ordered within folders and within files: numbers by their value (file 2 before file 10), or character by character (file 10 before file 2).',
+    group: 'File Explorer',
+    control: 'select',
+    allowedValues: ['natural', 'characters'],
+    optionLabels: {
+      natural: 'Numbers by value (1, 2, … 10)',
+      characters: 'Character by character (1, 10, 2)',
+    },
+  },
+  {
     key: 'explorer.excludeGlobs',
     label: 'Excluded globs',
     description: 'Root-relative glob patterns hiding entries from the file tree.',
