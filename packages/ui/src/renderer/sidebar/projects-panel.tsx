@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type CSSProperties,
   type FocusEvent as ReactFocusEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -13,7 +14,13 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { formatGrouped, listRows, projectRootWouldContainOpenEditor, type ListRow } from '@throng/core';
+import {
+  formatGrouped,
+  listRows,
+  projectRootWouldContainOpenEditor,
+  readableTextOn,
+  type ListRow,
+} from '@throng/core';
 import type { ProjectCategoryDto, ProjectDto } from '@throng/ipc-contract';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
@@ -287,8 +294,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
    * can never disagree.
    */
   const rows = useMemo<Row[]>(
-    () => listRows(projects, categories, activeProject?.id ?? null),
-    [projects, categories, activeProject],
+    () => listRows(projects, categories, activeProject?.id ?? null, loadedIds),
+    [projects, categories, activeProject, loadedIds],
   );
 
   /** Category ids in LIST order (FR-056) — read off `rows`, so it can never disagree with what is
@@ -1159,6 +1166,9 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                 };
                 const headerOnContextMenu = (e: ReactMouseEvent<HTMLLIElement>): void =>
                   openCategoryMenu(e, row.category);
+                // FR-051a (#489) — a minimised category that hides projects says how many: its count
+                // reads "shown of total" rather than the bare total.
+                const hidden = row.category.minimised ? row.count - row.shown : 0;
                 const headerChildren = (
                   <>
                     {row.collapsible ? (
@@ -1211,11 +1221,18 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                     ) : (
                       <span className="category-header__name">{row.category.name}</span>
                     )}
-                    <span className="category-header__count" data-testid={`category-count-${row.category.id}`}>
-                      {formatGrouped(row.count)}
+                    <span
+                      className="category-header__count"
+                      data-testid={`category-count-${row.category.id}`}
+                      title={hidden > 0 ? `${formatGrouped(row.shown)} shown, ${formatGrouped(hidden)} hidden` : undefined}
+                    >
+                      {hidden > 0
+                        ? `${formatGrouped(row.shown)} of ${formatGrouped(row.count)}`
+                        : formatGrouped(row.count)}
                     </span>
                   </>
                 );
+                const headerClass = `category-header${row.category.minimised ? ' category-header--minimised' : ''}`;
                 // FR-083 — the default category's header is never draggable: it stays a plain `<li>`,
                 // so no `useDraggable` is ever wired for it and no drop can ever place a category
                 // above it.
@@ -1224,7 +1241,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                     <li
                       key={key}
                       ref={headerRefCallback}
-                      className="category-header"
+                      className={headerClass}
                       data-testid={`category-header-${row.category.id}`}
                       data-row-key={key}
                       role="treeitem"
@@ -1245,7 +1262,7 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                     key={key}
                     id={row.category.id}
                     refCallback={headerRefCallback}
-                    className="category-header"
+                    className={headerClass}
                     data-testid={`category-header-${row.category.id}`}
                     data-row-key={key}
                     role="treeitem"
@@ -1272,6 +1289,14 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                       panels: ws.layout.tabs.reduce((n, t) => n + countPanels(t.root), 0),
                     }
                   : { tabs: project.tabCount ?? 0, panels: project.panelCount ?? 0 };
+              // #489 — the selected row is filled with the project's own colour, and everything on
+              // it is drawn in black or white, whichever reads on that fill. A colour that does not
+              // parse sets neither, and the stylesheet falls back to the theme's accent pair.
+              const fillText = isActive ? readableTextOn(project.colour) : null;
+              const fill =
+                fillText === null
+                  ? undefined
+                  : ({ '--project-fill': project.colour, '--project-fill-text': fillText } as CSSProperties);
               return (
                 <DraggableProjectRow
                   key={project.id}
@@ -1284,10 +1309,11 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                   data-testid={`project-item-${project.id}`}
                   data-active={isActive ? 'true' : 'false'}
                   data-loaded={loaded ? 'true' : 'false'}
-                  // 046 US5 (FR-052) — the active project's row stays visible under its own
-                  // minimised category header; this names that it is pinned there rather than
-                  // ordinarily listed.
-                  data-pinned-active={row.pinnedActive ? 'true' : undefined}
+                  // 046 US5 (FR-052, FR-052a / #489) — an active or loaded project's row stays
+                  // visible under its own minimised category header; this names that it is pinned
+                  // there rather than ordinarily listed.
+                  data-pinned={row.pinned ? 'true' : undefined}
+                  style={fill}
                   data-row-key={key}
                   role="treeitem"
                   aria-level={2}

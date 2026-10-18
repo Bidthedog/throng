@@ -36,9 +36,10 @@ export interface SidePaneActions {
 }
 
 export function useSidePaneActions(onRevealLeft: () => void, onRevealRight: () => void): SidePaneActions {
-  const { projects, categories, activeProject, switchProject } = useProjects();
+  const { projects, categories, activeProject, switchProject, loadedIds } = useProjects();
   const activeId = activeProject?.id ?? null;
-  const reachable = reachableProjectIds(listRows(projects, categories, activeId));
+  // FR-012a (#489) — the loaded projects a minimised category still shows are reachable too.
+  const reachable = reachableProjectIds(listRows(projects, categories, activeId, loadedIds));
   const canStepNext = stepProject(reachable, activeId, 1) !== null;
   const canStepPrevious = stepProject(reachable, activeId, -1) !== null;
 

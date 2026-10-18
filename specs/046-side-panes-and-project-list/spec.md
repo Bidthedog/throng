@@ -525,6 +525,27 @@ chord, new exception".
 - Q: Does Reset Panel Zoom ship the main-row Ctrl+Alt+0 too? → A: **Yes, as a second keyboard
   chord**, beside Ctrl+Alt+Numpad0, under a new named exception to Principle IV. (FR-127)
 
+### Session 2026-10-18 (maintainer, [#489](https://github.com/Bidthedog/throng/issues/489))
+
+> **Supersedes** the 2026-09-23 answer "Its other projects are hidden. Switching away from the active
+> project hides its row too" (FR-052), and narrows FR-012's "projects in a minimised category are
+> skipped" and FR-051's "MUST NOT be listed". Both were shipped as specified; this changes the design so
+> loaded work stays reachable without expanding a category.
+
+- Q: Which projects does a minimised category show? → A: **Every loaded project in it**, active or
+  not, in their usual order; unloaded projects stay hidden. Loading a project is what makes it
+  visible, unloading it hides it again. The header's count still counts every project. (FR-052a)
+- Q: Do Next/Previous Project step into those rows? → A: **Yes.** They step through the visible
+  rows, loaded ones included, and still skip the hidden ones, so the keyboard matches the screen.
+  (FR-012a)
+- Q: How is the selected project told apart from a category header? → A: **Its whole row is filled
+  with the project's colour**, and the text and markers on it are drawn black or white, whichever
+  reaches 4.5:1 against the fill. A colour that cannot be read falls back to the theme's accent pair.
+  Unselected rows and headers are unchanged. (FR-072a)
+- Q: (hand-testing MT-03) How does a minimised category show that it is minimised and still hides
+  projects? → A: **Its header is styled as minimised, and its count reads "shown of total"**
+  ("2 of 5") whenever it hides any. The header keeps FR-072's bold uppercase. (FR-051a)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - One name for the file tree (Priority: P1)
@@ -1027,6 +1048,8 @@ and layouts.
 - **FR-012**: The cycle commands MUST step only through reachable projects: those listed and not
   hidden by a minimised category (FR-051). Projects in a minimised category are skipped. The active
   project's own row counts as the starting point even when its category is minimised (FR-052).
+- **FR-012a** *(2026-10-18, #489 — narrows FR-012)*: The loaded projects a minimised category still
+  lists (FR-052a) are reachable, in row order; only the projects it hides are skipped.
 - **FR-013**: The cycle commands MUST work whether or not the Projects pane is visible, and MUST NOT
   change its visibility. The switch MUST be visible in the title bar and status bar, as a click
   switch is.
@@ -1957,9 +1980,18 @@ and layouts.
   row, by clicking it or with the keyboard (FR-018). A minimised category MUST show its name and the
   number of projects it holds, and its projects, except the active one (FR-052), MUST NOT be listed,
   clickable or reachable by any switch route.
+- **FR-051a** *(2026-10-18, #489 — extends FR-051)*: A minimised category's header MUST look
+  minimised — a dashed lower edge in the theme's border colour and an italic, muted name, beside the
+  chevron — and, while it hides any project, its count MUST read "*shown* of *total*" (both
+  digit-grouped), with a hover title naming how many are shown and hidden. With nothing hidden, or
+  expanded, the count is the bare total, as FR-051 states.
 - **FR-052**: The active project MUST never be hidden by a minimise. If its category is minimised,
   the active project's row stays visible under the collapsed header. Once another project becomes
   active, that row is hidden with the rest of the category.
+- **FR-052a** *(2026-10-18, #489 — supersedes FR-052's last sentence and narrows FR-051)*: A minimise
+  MUST NOT hide a **loaded** project. A minimised category MUST list, under its header and
+  in position order, every project in it that is loaded or active; it MUST hide the rest. Unloading a
+  project in a minimised category MUST hide its row. The header's count is unchanged.
 - **FR-053**: Users MUST be able to create, rename and delete categories. Creating and moving happen
   from a project's context menu: **Move to Category**, listing the existing categories and **New
   Category…**. Renaming, deleting and minimising happen from a category header's context menu and
@@ -1998,6 +2030,11 @@ and layouts.
   style: the stored name and the rename field keep the user's casing, and the count is unaffected.
   A new token ships through the additive shipped-defaults upgrade, so existing theme files receive it
   (FR-079's version 13).
+- **FR-072a** *(2026-10-18, #489)*: The selected project's row MUST be filled, across its whole
+  width, with the project's colour. Its text, markers and controls MUST be drawn in black or white,
+  whichever has the higher contrast against the fill (at least WCAG AA 4.5:1 for every colour). A
+  colour that is not a valid hex value MUST fall back to the theme's `accent` / `accentText` pair, which
+  is distinct from the category header background. Unselected rows and category headers are unchanged.
 - **FR-075** *(Session 2026-09-23, iterate round 1; extends FR-055 and 002 FR-046)*: A project drag
   MUST be able to start from anywhere on the row that is not itself an interactive control. That
   covers the grip, the name, the colour swatch and the row's empty space. It excludes the inline

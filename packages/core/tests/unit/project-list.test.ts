@@ -41,7 +41,7 @@ function shape(rows: ReadonlyArray<ListRow<Proj, Cat>>): string[] {
   return rows.map((r) =>
     r.kind === 'category'
       ? `[${r.category.id}:${r.count}${r.collapsible ? '' : ':fixed'}]`
-      : `${r.project.id}${r.pinnedActive ? '*' : ''}`,
+      : `${r.project.id}${r.pinned ? '*' : ''}`,
   );
 }
 
@@ -90,13 +90,54 @@ describe('listRows', () => {
     const rows = listRows(projects, categories, 'c');
     expect(shape(rows)).toEqual(['[def:1:fixed]', 'a', '[old:2]', 'c*']);
     const pinned = rows.find((r) => r.kind === 'project' && r.project.id === 'c');
-    expect(pinned).toMatchObject({ kind: 'project', categoryId: 'old', pinnedActive: true });
+    expect(pinned).toMatchObject({ kind: 'project', categoryId: 'old', pinned: true });
+  });
+
+  it('keeps every LOADED project under its minimised header, in order, and hides the unloaded (#489, FR-052a)', () => {
+    const categories = [
+      cat('def', '2026-01-01', { isDefault: true }),
+      cat('old', '2026-01-02', { minimised: true }),
+    ];
+    const projects = [proj('a', 'def'), proj('b', 'old'), proj('c', 'old'), proj('d', 'old'), proj('e', 'old')];
+    // `a` active elsewhere; `b` and `d` loaded; `c` and `e` not. The count still counts all four.
+    expect(shape(listRows(projects, categories, 'a', new Set(['a', 'b', 'd'])))).toEqual([
+      '[def:1:fixed]',
+      'a',
+      '[old:4]',
+      'b*',
+      'd*',
+    ]);
+    // The active project is shown whether or not the loaded set names it yet (a switch in flight).
+    expect(shape(listRows(projects, categories, 'e', new Set(['b'])))).toEqual([
+      '[def:1:fixed]',
+      'a',
+      '[old:4]',
+      'b*',
+      'e*',
+    ]);
+  });
+
+  it('says how many of a category’s projects are shown, so a minimised header can tell what it hides (#489, FR-051a)', () => {
+    const categories = [
+      cat('def', '2026-01-01', { isDefault: true }),
+      cat('old', '2026-01-02', { minimised: true }),
+      cat('open', '2026-01-03'),
+    ];
+    const projects = [proj('a', 'def'), proj('b', 'old'), proj('c', 'old'), proj('d', 'old'), proj('e', 'open')];
+    const headers = listRows(projects, categories, 'a', new Set(['a', 'b'])).flatMap((r) =>
+      r.kind === 'category' ? [[r.category.id, r.shown, r.count]] : [],
+    );
+    expect(headers).toEqual([
+      ['def', 1, 1],
+      ['old', 1, 3],
+      ['open', 1, 1],
+    ]);
   });
 
   it('never marks a project in an EXPANDED category as pinned, active or not', () => {
     const categories = [cat('def', '2026-01-01', { isDefault: true })];
     const rows = listRows([proj('a', 'def')], categories, 'a');
-    expect(rows[1]).toMatchObject({ kind: 'project', pinnedActive: false });
+    expect(rows[1]).toMatchObject({ kind: 'project', pinned: false });
   });
 
   it('makes every category but the default collapsible', () => {
@@ -148,6 +189,19 @@ describe('reachableProjectIds', () => {
     expect(reachableProjectIds(listRows(projects, categories, 'c'))).toEqual(['a', 'c', 'd']);
     // With the active project elsewhere, the minimised category contributes nothing.
     expect(reachableProjectIds(listRows(projects, categories, 'a'))).toEqual(['a', 'd']);
+  });
+
+  it('includes the loaded projects a minimised category still shows, so the chords match the screen (#489, FR-012a)', () => {
+    const categories = [
+      cat('def', '2026-01-01', { isDefault: true }),
+      cat('old', '2026-01-02', { minimised: true }),
+      cat('new', '2026-01-03'),
+    ];
+    const projects = [proj('a', 'def'), proj('b', 'old'), proj('c', 'old'), proj('d', 'new')];
+    const ids = reachableProjectIds(listRows(projects, categories, 'a', new Set(['a', 'c'])));
+    expect(ids).toEqual(['a', 'c', 'd']);
+    expect(stepProject(ids, 'a', 1)).toBe('c');
+    expect(stepProject(ids, 'd', -1)).toBe('c');
   });
 });
 

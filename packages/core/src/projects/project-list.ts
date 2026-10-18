@@ -26,6 +26,12 @@ export type ListRow<P extends ListableProject, C extends ListableCategory> =
       category: C;
       /** Every project in the category, hidden ones included (FR-051). */
       count: number;
+      /**
+       * How many of them are listed under the header — `count` unless the category is minimised,
+       * when it is the pinned rows alone. `shown < count` is what a minimised header reports as
+       * hidden (FR-051a, #489).
+       */
+      shown: number;
       /** False only for the default category, which cannot be minimised (FR-050). */
       collapsible: boolean;
     }
@@ -37,8 +43,11 @@ export type ListRow<P extends ListableProject, C extends ListableCategory> =
        * listed headerless because no default category is known (see {@link listRows}).
        */
       categoryId: string;
-      /** The active project shown under its minimised category's header (FR-052). */
-      pinnedActive: boolean;
+      /**
+       * Shown under its minimised category's header because it is active or loaded (FR-052,
+       * superseded by FR-052a for loaded projects, #489).
+       */
+      pinned: boolean;
     };
 
 /** The default category first, then by `createdAt`, then by `id` (FR-056). */
@@ -66,9 +75,10 @@ export function healCategoryId(
 
 /**
  * The visible rows, in list order: each category's header and then, when it is expanded, its
- * projects in position order. A minimised category shows only its header — plus the active project,
- * pinned, when it lives there (FR-052). A project naming no known category is listed under the
- * default one, the read-time heal rule, so it is never lost (R9).
+ * projects in position order. A minimised category shows its header and, pinned beneath it in
+ * position order, every project in it that is active or in `loadedIds` (FR-052, FR-052a / #489:
+ * no loaded project is hidden by a minimise). A project naming no known category is listed under
+ * the default one, the read-time heal rule, so it is never lost (R9).
  *
  * With no default category to heal into — the categories not loaded yet, or their fetch failed —
  * such projects lead the list without a header, in position order, with `categoryId` `''`. A list
@@ -78,6 +88,7 @@ export function listRows<P extends ListableProject, C extends ListableCategory>(
   projects: readonly P[],
   categories: readonly C[],
   activeId: string | null,
+  loadedIds: ReadonlySet<string> = new Set(),
 ): ListRow<P, C>[] {
   const ordered = inListOrder(categories);
   const known = new Set(ordered.map((c) => c.id));
@@ -86,19 +97,27 @@ export function listRows<P extends ListableProject, C extends ListableCategory>(
 
   const rows: ListRow<P, C>[] = projects
     .filter((p) => resolve(p) === undefined)
-    .map((project) => ({ kind: 'project', project, categoryId: '', pinnedActive: false }));
+    .map((project) => ({ kind: 'project', project, categoryId: '', pinned: false }));
   for (const category of ordered) {
     const members = projects.filter((p) => resolve(p) === category.id);
-    rows.push({ kind: 'category', category, count: members.length, collapsible: !category.isDefault });
-    const shown = category.minimised ? members.filter((p) => p.id === activeId) : members;
+    const shown = category.minimised
+      ? members.filter((p) => p.id === activeId || loadedIds.has(p.id))
+      : members;
+    rows.push({
+      kind: 'category',
+      category,
+      count: members.length,
+      shown: shown.length,
+      collapsible: !category.isDefault,
+    });
     for (const project of shown) {
-      rows.push({ kind: 'project', project, categoryId: category.id, pinnedActive: category.minimised });
+      rows.push({ kind: 'project', project, categoryId: category.id, pinned: category.minimised });
     }
   }
   return rows;
 }
 
-/** Every project a user can reach from the list, in row order — the pinned active one included. */
+/** Every project a user can reach from the list, in row order — pinned rows included (FR-012a). */
 export function reachableProjectIds(
   rows: ReadonlyArray<ListRow<ListableProject, ListableCategory>>,
 ): string[] {
