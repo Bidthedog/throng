@@ -240,7 +240,31 @@ export async function focusEditor(win: Page, panelId: string): Promise<void> {
 }
 
 export async function reloadWindow(win: Page): Promise<void> {
-  await win.evaluate(() => location.reload());
+  await win.evaluate(() => {
+    (window as unknown as { __throngBeforeReload?: true }).__throngBeforeReload = true;
+    location.reload();
+  });
+  /*
+   * ══ WAIT FOR THE NEW DOCUMENT, NOT THE OLD ONE (#286) ══
+   *
+   * `location.reload()` only SCHEDULES the navigation, and `waitForLoadState('load')` answers for
+   * whatever document is current — which, until the navigation starts, is the OLD one, long since
+   * loaded. So this returned in ~1ms with the reload still to come, and the caller asserted against
+   * and clicked in a page about to be torn down: theme-flash's "open sub-workspace" click landed on
+   * the outgoing document, its request died with it, and no window ever opened (1 run in 80 on a
+   * hosted runner, the trace showing the 1ms load wait). The old document is marked, and the wait is
+   * for a document WITHOUT the mark; a read that hits the navigation mid-flight throws, and counts as
+   * not yet.
+   */
+  await expect
+    .poll(
+      () =>
+        win
+          .evaluate(() => (window as unknown as { __throngBeforeReload?: true }).__throngBeforeReload === true)
+          .catch(() => true),
+      { timeout: 15_000, message: 'the window never reloaded — the old document was still current' },
+    )
+    .toBe(false);
   // Bounded (issue #75): a bare waitForLoadState defaults to the whole test timeout, so a reload
   // that never fires `load` hung the full budget as an unnamed timeout. 15s is generous for a
   // renderer reload and turns a genuine stall into a fast, named failure.
