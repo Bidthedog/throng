@@ -329,12 +329,24 @@ async function mount(options: MountOptions = {}) {
     // Answering false keeps that menu simple.
     editor: { isOpen: () => Promise.resolve(false) },
   };
+  let configListener: ((payload: unknown) => void) | null = null;
   if (options.settings) {
     throng.config = {
       get: () => Promise.resolve({ settings: options.settings }),
-      onChange: () => () => {},
+      onChange: (cb: (payload: unknown) => void) => {
+        configListener = cb;
+        return () => {
+          configListener = null;
+        };
+      },
     };
   }
+  /** Deliver a changed settings document, as main's watcher broadcast does after a Preferences edit. */
+  const pushSettings = async (settings: Record<string, unknown>): Promise<void> => {
+    await act(async () => {
+      configListener?.({ settings });
+    });
+  };
   Reflect.set(window, 'throng', throng);
 
   const treeWith = (hiddenPaths: string[]): ReactElement =>
@@ -383,7 +395,7 @@ async function mount(options: MountOptions = {}) {
   // role rather than for a timeout means a regression that stops the tree mounting fails HERE,
   // with "unable to find role=tree", instead of silently satisfying every absence assertion below.
   const tree = await screen.findByRole('tree');
-  return { user, tree, files, listed, onHide, projectId, setHidden };
+  return { user, tree, files, listed, onHide, projectId, setHidden, pushSettings };
 }
 
 /**
@@ -424,6 +436,24 @@ describe('the rows the tree draws (004 FR-004/005/016, migrated from explorer.e2
     const { tree } = await mount();
 
     expect(rowLabels(tree)).toEqual(['demo', 'src', 'a.txt', 'README.md']);
+  });
+
+  it('orders numbered names by value, and re-sorts straight away when the setting changes (#470)', async () => {
+    /*
+     * The comparator's truth table is core's (`explorer-node.test.ts`). What only a mounted tree
+     * shows is FR-036a's "re-sorts every open tree straight away": the rows on screen change order
+     * when `explorer.sortOrder` changes, with no remount and no second listing of the folder.
+     */
+    const numbered = { '': ['test 10.md', 'test 2.md', 'test 1.md'].map((n) => entry(n, 'file')) };
+    const { tree, listed, pushSettings } = await mount({ listing: numbered, settings: { version: 1 } });
+
+    await waitFor(() => expect(rowLabels(tree)).toEqual(['demo', 'test 1.md', 'test 2.md', 'test 10.md']));
+    const listingsBefore = listed.length;
+
+    await pushSettings({ version: 1, explorer: { sortOrder: 'characters' } });
+
+    await waitFor(() => expect(rowLabels(tree)).toEqual(['demo', 'test 1.md', 'test 10.md', 'test 2.md']));
+    expect(listed.length, 'a re-sort must not re-read the folder').toBe(listingsBefore);
   });
 
   it('names the root row after the project folder, and never collapses it', async () => {

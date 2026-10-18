@@ -35,6 +35,7 @@ import {
   recordFileOp,
   redoFileOp as popRedo,
   resolveTarget,
+  sortNodes,
   toNodes,
   undoFileOp as popUndo,
   validateFileOp,
@@ -316,6 +317,7 @@ export function useExplorerData(
   const { documents, fileOpUndo, projects: projectsClient } = services;
   const globs = settings.explorer.excludeGlobs;
   const globsKey = globs.join(' ');
+  const sortOrder = settings.explorer.sortOrder;
 
   /**
    * Carry a document's language override with the file across a move (016, FR-028e).
@@ -515,7 +517,7 @@ export function useExplorerData(
        * folder is not the user succeeding at the thing they were refused; only the next OPERATION
        * (see `report`) is, and only a dismissal is their acknowledgement.
        */
-      return toNodes(res.entries as DirEntry[], relDir)
+      return toNodes(res.entries as DirEntry[], relDir, sortOrder)
         .filter((n) => !isExcluded(n.relPath, globs))
         .map((n) => ({
           id: n.id,
@@ -525,7 +527,7 @@ export function useExplorerData(
           isSymlink: n.isSymlink,
         }));
     },
-    [globs, projectId],
+    [globs, projectId, sortOrder],
   );
   const fetchRef = useRef(fetchChildren);
   fetchRef.current = fetchChildren;
@@ -592,6 +594,19 @@ export function useExplorerData(
       cancelled = true;
     };
   }, [rootFolder, projectId, globsKey, documents]);
+
+  /*
+   * #470 — a change of `explorer.sortOrder` re-sorts every loaded folder in place, straight away.
+   * Nothing is re-read: the entries have not changed, only their order, so a re-listing would cost a
+   * round-trip per open folder to learn nothing. Listings fetched after the change are sorted by
+   * `fetchChildren` itself.
+   */
+  const appliedSortOrder = useRef(sortOrder);
+  useEffect(() => {
+    if (appliedSortOrder.current === sortOrder) return;
+    appliedSortOrder.current = sortOrder;
+    setChildrenMap((prev) => new Map([...prev].map(([dir, kids]) => [dir, sortNodes(kids, sortOrder)])));
+  }, [sortOrder]);
 
   // Project-scoped hidden paths (004), applied on top of the global excludeGlobs.
   const hiddenSet = useMemo(() => new Set(hiddenPaths), [hiddenPaths]);

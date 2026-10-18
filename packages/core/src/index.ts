@@ -222,6 +222,7 @@ export type {
   PaneState,
   ExplorerSettings,
   DeleteMode,
+  ExplorerSortOrder,
   TerminalSettings,
   TerminalFlavourConfig,
   // 039 FR-020 (#293) — automatic vs manual terminal reload.

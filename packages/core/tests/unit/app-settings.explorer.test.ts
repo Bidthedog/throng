@@ -80,6 +80,15 @@ describe('AppSettings explorer section (004 T004/T005)', () => {
     expect(d?.group).toBe('File Explorer');
   });
 
+  it('sorts naturally by default, accepts character order, and coerces anything else (#470)', () => {
+    expect(DEFAULT_APP_SETTINGS.explorer.sortOrder).toBe('natural');
+    expect(parseAppSettings({ explorer: { sortOrder: 'characters' } }).explorer.sortOrder).toBe('characters');
+    expect(parseAppSettings({ explorer: { sortOrder: 'numeric' } }).explorer.sortOrder).toBe('natural');
+    const d = SETTINGS_METADATA.find((m) => m.key === 'explorer.sortOrder');
+    expect(d?.allowedValues).toEqual(['natural', 'characters']);
+    expect(d?.group).toBe('File Explorer');
+  });
+
   it('coerces a non-boolean follow setting back to the default (#188)', () => {
     // 'false' the STRING is the classic hand-edit; it must not read as "off" by being truthy, nor
     // silently disable the feature by being falsy.

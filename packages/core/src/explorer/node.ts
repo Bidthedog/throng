@@ -1,9 +1,11 @@
 /**
  * File-explorer tree nodes (004, data-model §1). Pure — maps `IFileSystem`
- * directory entries to tree nodes and sorts them folders-first, A–Z (FR-036).
+ * directory entries to tree nodes and sorts them folders-first, A–Z (FR-036), numbers by value
+ * unless the user chose character order (FR-036a, #470).
  * Identity is the node's path relative to the project root. No OS/DOM.
  */
 import type { DirEntry } from '../abstractions/file-system.js';
+import type { ExplorerSortOrder } from '../config/app-settings.js';
 
 export type NodeKind = 'file' | 'folder';
 
@@ -33,8 +35,12 @@ export function parentRel(relPath: string): string {
   return i < 0 ? '' : relPath.slice(0, i);
 }
 
-/** Map directory entries (under `parentRelPath`) to sorted tree nodes. */
-export function toNodes(entries: readonly DirEntry[], parentRelPath: string): FileNode[] {
+/** Map directory entries (under `parentRelPath`) to tree nodes sorted in `order`. */
+export function toNodes(
+  entries: readonly DirEntry[],
+  parentRelPath: string,
+  order: ExplorerSortOrder = 'natural',
+): FileNode[] {
   const nodes = entries.map((e): FileNode => {
     const relPath = joinRel(parentRelPath, e.name);
     return {
@@ -46,13 +52,30 @@ export function toNodes(entries: readonly DirEntry[], parentRelPath: string): Fi
       hasChildren: e.kind === 'folder' ? (e.hasChildren ?? false) : false,
     };
   });
-  return sortNodes(nodes);
+  return sortNodes(nodes, order);
 }
 
-/** Sort folders before files; within each group, case-insensitive A–Z by name. */
-export function sortNodes(nodes: readonly FileNode[]): FileNode[] {
+/**
+ * One collator per order, built once: `localeCompare` with options constructs a fresh collator on
+ * every call (see `search/file-search.ts`). `numeric` is the only difference between the two —
+ * case and accent handling are 004 FR-036's in both (#470, FR-036a).
+ */
+const NAME_COLLATORS: Readonly<Record<ExplorerSortOrder, Intl.Collator>> = {
+  natural: new Intl.Collator(undefined, { sensitivity: 'accent', numeric: true }),
+  characters: new Intl.Collator(undefined, { sensitivity: 'accent' }),
+};
+
+/**
+ * Sort folders before files; within each group, case-insensitive A–Z by name, with runs of digits
+ * compared by value unless `order` is `characters` (004 FR-036 / FR-036a).
+ */
+export function sortNodes<T extends Pick<FileNode, 'kind' | 'name'>>(
+  nodes: readonly T[],
+  order: ExplorerSortOrder = 'natural',
+): T[] {
+  const collator = NAME_COLLATORS[order];
   return [...nodes].sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'accent' });
+    return collator.compare(a.name, b.name);
   });
 }
