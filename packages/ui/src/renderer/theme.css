@@ -547,6 +547,18 @@ textarea,
   letter-spacing: normal;
 }
 
+/* FR-051a (#489) — a minimised category reads as collapsed at a glance: a dashed lower edge in the
+   theme's border colour and an italic, muted name, beside the "shown of total" count. The bold
+   uppercase of FR-072 stays. */
+.category-header--minimised {
+  border-bottom: 1px dashed var(--throng-colour-border);
+}
+
+.category-header--minimised .category-header__name {
+  font-style: italic;
+  color: var(--throng-colour-textMuted);
+}
+
 /* 046 US5 (FR-051, FR-061) — the minimise/expand chevron, and the space it leaves for the default
    header (which draws none), so every header's name lines up in the same column. */
 .category-header__toggle {
@@ -586,9 +598,37 @@ textarea,
   outline-offset: -2px;
 }
 
+/*
+ * #489 — the selected row is filled with its project's colour, edge to edge, so it can never be
+ * mistaken for a category header (which shares `surfaceActive`). `--project-fill` and
+ * `--project-fill-text` are set on the row from the project's colour, the text being black or white
+ * by contrast (`readableTextOn`); without them — a colour that does not parse — the theme's own
+ * accent / accentText pair stands in. Everything drawn on the row follows the text colour.
+ */
 .project-item--active {
-  border-left-color: var(--accent);
-  background: var(--throng-colour-surfaceActive);
+  border-left-color: var(--project-fill, var(--accent));
+  background: var(--project-fill, var(--accent));
+  color: var(--project-fill-text, var(--throng-colour-accentText));
+}
+
+.project-item--active .project-item__switch,
+.project-item--active .project-item__name,
+.project-item--active .project-item__counts,
+.project-item--active .project-item__path,
+.project-item--active .project-item__grip,
+.project-item--active .project-item__controls button {
+  color: inherit;
+}
+
+/* The dot is drawn in the fill's own colour, so on the fill it gets an outline to stay visible; the
+   loaded and unsaved markers take the text colour, the one colour guaranteed to read there. */
+.project-item--active .project-item__dot {
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+.project-item--active .project-item__loaded,
+.project-item--active .project-item__unsaved {
+  background: currentColor;
 }
 
 .project-item__switch {

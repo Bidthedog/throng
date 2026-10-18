@@ -39,6 +39,7 @@ pick a folder, and accept or change the suggested name and colour. Projects cann
   as the row says.
 - **Categories** group projects; every project starts in **In Progress**. Create one from Move to
   Category ▸ **New Category…**, then rename, minimise, reorder or delete it from its header's menu.
+  A minimised category still lists the projects you have loaded, so open work stays one click away.
   Drag a project by its row to move it.
 
 Removing a project from throng never deletes anything on disk.

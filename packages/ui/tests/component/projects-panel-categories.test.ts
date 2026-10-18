@@ -336,7 +336,7 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
     await waitFor(() => expect(screen.queryByTestId('project-item-p2')).toBeNull());
   });
 
-  it('the active project stays visible under a minimised category, pinned, and disappears once another project becomes active', async () => {
+  it('the active project stays visible under a minimised category, pinned, and STAYS once another project becomes active, because it is still loaded (#489, FR-052a)', async () => {
     const server = twoCategoryFixture();
     await mount(server);
     await act(async () => {
@@ -346,10 +346,65 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
     await waitFor(() => expect(screen.queryByTestId('project-item-p3')).toBeNull());
 
     const pinned = screen.getByTestId('project-item-p2');
-    expect(pinned).toHaveAttribute('data-pinned-active', 'true');
+    expect(pinned).toHaveAttribute('data-pinned', 'true');
 
     await act(async () => {
       await store.switchProject('p1');
+    });
+
+    expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-pinned', 'true');
+    expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-active', 'false');
+    expect(screen.queryByTestId('project-item-p3'), 'never loaded, so still hidden').toBeNull();
+    expect(screen.getByTestId('category-count-cat-a').textContent).toBe('1 of 2');
+  });
+
+  it('a minimised header looks minimised and says how many it hides; expanded, or hiding nothing, it shows the bare total (#489, FR-051a)', async () => {
+    const server = twoCategoryFixture();
+    await mount(server);
+    const header = await screen.findByTestId('category-header-cat-a');
+    expect(header).not.toHaveClass('category-header--minimised');
+    expect(screen.getByTestId('category-count-cat-a').textContent).toBe('2');
+
+    fireEvent.click(screen.getByTestId('category-toggle-cat-a'));
+
+    await waitFor(() => expect(screen.getByTestId('category-header-cat-a')).toHaveClass('category-header--minimised'));
+    const count = screen.getByTestId('category-count-cat-a');
+    expect(count.textContent).toBe('0 of 2');
+    expect(count).toHaveAttribute('title', '0 shown, 2 hidden');
+
+    // Load both: nothing is hidden any more, so the header reports the plain total again.
+    await act(async () => {
+      await store.switchProject('p2');
+    });
+    await act(async () => {
+      await store.switchProject('p3');
+    });
+    await waitFor(() => expect(screen.getByTestId('category-count-cat-a').textContent).toBe('2'));
+    expect(screen.getByTestId('category-count-cat-a')).not.toHaveAttribute('title');
+    expect(screen.getByTestId('category-header-cat-a'), 'still minimised').toHaveClass('category-header--minimised');
+  });
+
+  it('the minimised style is declared: a dashed lower edge and an italic, muted name, from theme tokens (FR-051a)', () => {
+    expect(cssRule('.category-header--minimised').get('border-bottom')).toBe('1px dashed var(--throng-colour-border)');
+    const name = cssRule('.category-header--minimised .category-header__name');
+    expect(name.get('font-style')).toBe('italic');
+    expect(name.get('color')).toBe('var(--throng-colour-textMuted)');
+  });
+
+  it('unloading a project in a minimised category hides its row (#489, FR-052a)', async () => {
+    const server = twoCategoryFixture();
+    await mount(server);
+    await act(async () => {
+      await store.switchProject('p2');
+    });
+    await act(async () => {
+      await store.switchProject('p1');
+    });
+    fireEvent.click(screen.getByTestId('category-toggle-cat-a'));
+    await waitFor(() => expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-pinned', 'true'));
+
+    act(() => {
+      store.unloadProject('p2');
     });
 
     await waitFor(() => expect(screen.queryByTestId('project-item-p2')).toBeNull());
@@ -375,23 +430,19 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('category-header-cat-a')));
   });
 
-  it('minimising does not unload a hidden project — it keeps its loaded state (FR-060)', async () => {
+  it('minimising does not unload a project — a loaded one stays listed, loaded, under the header (FR-060, FR-052a)', async () => {
     const server = twoCategoryFixture();
     await mount(server);
     await act(async () => {
       await store.switchProject('p2'); // loads + activates p2
     });
     await act(async () => {
-      await store.switchProject('p3'); // loads + activates p3; p2 stays loaded, not active
+      await store.switchProject('p1'); // p2 stays loaded, not active; p3 was never loaded
     });
-    fireEvent.click(screen.getByTestId('category-toggle-cat-a')); // minimise: p3 (active) pinned, p2 hidden
-    await waitFor(() => expect(screen.queryByTestId('project-item-p2')).toBeNull());
+    fireEvent.click(screen.getByTestId('category-toggle-cat-a'));
+    await waitFor(() => expect(screen.queryByTestId('project-item-p3')).toBeNull());
 
-    fireEvent.click(screen.getByTestId('category-toggle-cat-a')); // expand again
-
-    await waitFor(() =>
-      expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-loaded', 'true'),
-    );
+    expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-loaded', 'true');
   });
 });
 
@@ -506,5 +557,70 @@ describe('the header background token (FR-072)', () => {
     const input = (await screen.findByTestId('category-name-input')) as HTMLInputElement;
     expect(input.value).toBe('Side Quests'); // not the display-only uppercase 'SIDE QUESTS'
     expect(screen.getByTestId('category-count-cat-a')).toHaveTextContent(formatGrouped(1234));
+  });
+});
+
+/** One rule's declarations from theme.css, comments stripped — as the FR-072 test above reads them. */
+function cssRule(selector: string): Map<string, string> {
+  const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = text.match(new RegExp(`(?:^|\\})\\s*${escaped}\\s*\\{([^}]*)\\}`));
+  const declarations = new Map<string, string>();
+  for (const part of (match?.[1] ?? '').split(';')) {
+    const colon = part.indexOf(':');
+    if (colon < 0) continue;
+    declarations.set(part.slice(0, colon).trim().toLowerCase(), part.slice(colon + 1).trim());
+  }
+  return declarations;
+}
+
+describe('the selected project row is filled with its colour (#489, FR-072a)', () => {
+  /*
+   * Layer: component — the row's inline custom properties are what the panel computes from the
+   * project's colour; the colour maths itself is core's (`readable-text-on.test.ts`). jsdom does not
+   * cascade a stylesheet, so the rule that consumes the properties is asserted as declared CSS.
+   */
+  const fillOf = (el: HTMLElement): [string, string] => [
+    el.style.getPropertyValue('--project-fill'),
+    el.style.getPropertyValue('--project-fill-text'),
+  ];
+
+  it('fills the active row and draws dark text on a very light colour, light text on a very dark one', async () => {
+    const server = makeServer(
+      [makeProject('light', DEFAULT_ID, { colour: '#f5f5dc' }), makeProject('dark', DEFAULT_ID, { colour: '#101018' })],
+      [makeCategory(DEFAULT_ID, 'In Progress')],
+    );
+    await mount(server);
+    await screen.findByTestId('project-item-light');
+
+    await act(async () => {
+      await store.switchProject('light');
+    });
+    expect(fillOf(screen.getByTestId('project-item-light'))).toEqual(['#f5f5dc', '#000000']);
+    expect(fillOf(screen.getByTestId('project-item-dark')), 'an unselected row is not filled').toEqual(['', '']);
+
+    await act(async () => {
+      await store.switchProject('dark');
+    });
+    expect(fillOf(screen.getByTestId('project-item-dark'))).toEqual(['#101018', '#ffffff']);
+    expect(fillOf(screen.getByTestId('project-item-light'))).toEqual(['', '']);
+  });
+
+  it('sets no fill for a colour that does not parse, leaving the stylesheet’s theme fallback', async () => {
+    const server = makeServer([makeProject('odd', DEFAULT_ID, { colour: 'not-a-colour' })], [makeCategory(DEFAULT_ID, 'In Progress')]);
+    await mount(server);
+    await screen.findByTestId('project-item-odd');
+    await act(async () => {
+      await store.switchProject('odd');
+    });
+    expect(fillOf(screen.getByTestId('project-item-odd'))).toEqual(['', '']);
+  });
+
+  it('the active rule consumes the fill, with the accent pair as fallback — never the category header surface', () => {
+    const active = cssRule('.project-item--active');
+    expect(active.get('background')).toBe('var(--project-fill, var(--accent))');
+    expect(active.get('color')).toBe('var(--project-fill-text, var(--throng-colour-accentText))');
+    expect(cssRule('.category-header').get('background')).toBe('var(--throng-colour-categoryHeaderBackground)');
   });
 });

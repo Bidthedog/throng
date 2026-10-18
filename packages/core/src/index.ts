@@ -386,6 +386,7 @@ export {
   hexToRgb,
   relativeLuminance,
   contrastRatio,
+  readableTextOn,
   rgbToLab,
   ciede2000,
   themePairDistance,

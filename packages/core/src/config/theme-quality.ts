@@ -60,6 +60,21 @@ export function contrastRatio(hexA: string, hexB: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * Black or white, whichever has more contrast against `fill` — or `null` when `fill` is not a 3- or
+ * 6-digit hex colour (#489).
+ *
+ * For a fill a USER picked, a project's colour, so no theme pair was ever checked against it. One of
+ * the two always clears WCAG AA 4.5:1: the worst case is a fill of luminance ~0.18, where both give
+ * ~4.58.
+ */
+export function readableTextOn(fill: string): '#000000' | '#ffffff' | null {
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(fill.trim());
+  const hex = short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : fill.trim();
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return null;
+  return contrastRatio(hex, '#000000') >= contrastRatio(hex, '#ffffff') ? '#000000' : '#ffffff';
+}
+
 /** sRGB (0–255) → CIE XYZ (D65). */
 function rgbToXyz(rgb: Rgb): { x: number; y: number; z: number } {
   const r = channelToLinear(rgb.r);
