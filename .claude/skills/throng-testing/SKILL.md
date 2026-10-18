@@ -39,6 +39,13 @@ worker per core, so even a narrow run of a few component files pins the whole ma
 Half the cores leaves the desktop and every other session usable; the gate runner is unaffected.
 This is throng's rule, not a general one — no other repo here spikes like it.
 
+**From a worktree, run vitest through `npm --prefix <worktree> run test:<project> -- <files>`**, never
+`npx --prefix <worktree> vitest run --root <worktree> …` from the main checkout. npm runs the script
+with the worktree as its cwd; `npx --prefix` leaves the cwd where the shell is, and every test that
+resolves the repo root from `process.cwd()` — `docs-currency.test.ts`, the component tests that read
+`theme.css` — then reads the **main checkout's** files while the code under test is the worktree's.
+It reports red for a doc you have already written, or green for one you have not.
+
 **The only thing that lifts this is the user asking for it, in that turn.** Not a plan that concludes
 the run is warranted, not a green set of cheaper layers, not "I expect it to pass". Those are
 arguments for dispatching the gate, which is free and does not touch this machine.
