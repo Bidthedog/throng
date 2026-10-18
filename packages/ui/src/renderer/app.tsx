@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { activeContextLabel, effectiveActivePanelId } from '@throng/core';
+import { effectiveActivePanelId } from '@throng/core';
+import { useActiveContextLabel } from './workspace/use-panel-display-names.js';
 import { MAIN_WINDOW_CAPABILITIES, WindowDispatcher } from './keybindings/window-dispatcher.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
@@ -58,8 +59,8 @@ const SIDE_PANE_MIN_WIDTH = 250;
 
 /**
  * Keeps the window title a live view of the active context (FR-040): the active
- * project name, the active Tab · Panel (the same `activeContextLabel` the status bar
- * uses, so they can't drift), and a trailing `[ADMIN]` marker when throng runs
+ * project name, the active Tab · Panel (`useActiveContextLabel`, the same label the
+ * title bar shows, with the panel named as its header names it — #504), and a trailing `[ADMIN]` marker when throng runs
  * elevated (the same daemon-capability signal as the status-bar pill, FR-025e). No
  * path and no project/tab/panel totals. "No project" when nothing is open.
  */
@@ -67,13 +68,13 @@ function TitleManager(): null {
   const { activeProject } = useProjects();
   const { layout } = useWorkspace();
   const { elevated } = useCapabilities();
+  const context = useActiveContextLabel(layout);
   useEffect(() => {
     const project = activeProject?.name ?? 'No project';
-    const context = layout ? activeContextLabel(layout) : '';
     const label = [project, context].filter(Boolean).join(' · ');
     // Fold [ADMIN] into the middle BEFORE the suffix, so the title still ends ` — throng`.
     window.throng?.setTitle?.(windowTitle(`${label}${elevated ? ' [ADMIN]' : ''}`));
-  }, [activeProject, layout, elevated]);
+  }, [activeProject, context, elevated]);
   return null;
 }
 
@@ -179,7 +180,7 @@ export function AppTitleBar(): ReactElement {
   const { layout } = useWorkspace();
   const { elevated } = useCapabilities();
   const project = activeProject?.name ?? 'No project';
-  const context = layout ? activeContextLabel(layout) : '';
+  const context = useActiveContextLabel(layout);
   const identity = windowTitle(
     `${[project, context].filter(Boolean).join(' · ')}${elevated ? ' [ADMIN]' : ''}`,
   );

@@ -1,7 +1,13 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultLayout, type WorkspaceLayout } from '@throng/core';
+import {
+  addPanel,
+  createDefaultLayout,
+  setActivePanel,
+  type LayoutNode,
+  type WorkspaceLayout,
+} from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
 import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
 import { WorkspaceClient } from '../../src/renderer/state/workspace-client.js';
@@ -68,8 +74,9 @@ function servicesOver(bridge: ThrongBridge): Services {
   };
 }
 
-function mount(opts: { elevated: boolean; projectName?: string }) {
-  const layout: WorkspaceLayout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'pan1' });
+function mount(opts: { elevated: boolean; projectName?: string; layout?: WorkspaceLayout }) {
+  const layout: WorkspaceLayout =
+    opts.layout ?? createDefaultLayout(PROJECT, { tab: 't1', panel: 'pan1' });
   const project = {
     id: PROJECT,
     name: opts.projectName ?? 'Alpha',
@@ -173,5 +180,44 @@ describe('the title bar’s identity carries the elevation marker (#166)', () =>
     expect(identity()).toContain('Bravo');
     expect(identity(), 'the marker goes at the END, after the context').toMatch(/\[ADMIN\]/);
     expect(identity().indexOf('Bravo')).toBeLessThan(identity().indexOf('[ADMIN]'));
+  });
+});
+
+/** Make `panelId` an editor holding `filePath`, leaving its stored fallback title as it was. */
+function asEditor(node: LayoutNode, panelId: string, filePath: string): LayoutNode {
+  if (node.type === 'panel') {
+    return node.id === panelId ? { ...node, kind: 'editor', config: { filePath } } : node;
+  }
+  return { ...node, children: node.children.map((c) => asEditor(c, panelId, filePath)) };
+}
+
+/**
+ * The title bar names the active panel by the name its header wears (#504).
+ *
+ * The stored `panel.title` is a generated fallback ("Blank Panel 2") that exists only to keep names
+ * unique (048 FR-032, `use-panel-display-names.ts`). A panel holding a file is named after the file
+ * in its header, the tab popover and every notice, so the title bar reading the stored title showed
+ * a name that appears nowhere else. The identity is the string `TitleManager` sends to the taskbar,
+ * so this surface stands for both.
+ *
+ * Layer: component — the defect is in `AppTitleBar`'s composition; core's `activeContextLabel` has
+ * no access to the renderer's live naming sources and cannot observe it.
+ */
+describe('the title bar names the active panel as its header does (#504)', () => {
+  it('shows the file an editor panel holds, not its stored "Blank Panel 2"', async () => {
+    let layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'pan1' });
+    layout = addPanel(layout, 't1', 'pan2'); // stored as "Blank Panel 2"
+    layout = setActivePanel(layout, 't1', 'pan2');
+    layout = {
+      ...layout,
+      tabs: layout.tabs.map((t) => ({ ...t, root: asEditor(t.root, 'pan2', 'C:/proj/notes.md') })),
+    };
+    mount({ elevated: false, layout });
+    await openProject();
+
+    await waitFor(() => expect(identity()).toContain('Tab 1'));
+    // The header names an editor by its file's stem (`editorAutoTitle`), so `notes`, not `notes.md`.
+    expect(identity()).toContain('Tab 1 · notes —');
+    expect(identity()).not.toContain('Blank Panel');
   });
 });
