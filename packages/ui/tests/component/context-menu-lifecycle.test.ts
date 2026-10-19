@@ -178,6 +178,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     cogMenuItems({
       openPreferences: vi.fn(),
       openLogs: vi.fn(),
+      openResourceMonitor: vi.fn(),
       openAbout: vi.fn(),
       keybindings: DEFAULT_KEYBINDINGS,
     });
@@ -238,6 +239,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
         items: cogMenuItems({
           openPreferences,
           openLogs: vi.fn(),
+          openResourceMonitor: vi.fn(),
           openAbout: vi.fn(),
           keybindings: DEFAULT_KEYBINDINGS,
         }),
@@ -261,7 +263,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / About throng', () => {
+  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / Resource Monitor / About throng', () => {
     /*
      * MIGRATED FROM `packages/ui/tests/e2e/titlebar-chrome.e2e.ts:107` (035 FR-001).
      *
@@ -279,13 +281,15 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
       .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
     // 057 FR-082 added Go to Next Marked Panel here; FR-106 (round 3) supersedes that and moves it to a
-    // marked project's context menu, so these are the five again.
-    expect(labels).toHaveLength(5);
+    // marked project's context menu. 055 (FR-056) adds Resource Monitor, so these are six.
+    expect(labels).toHaveLength(6);
     expect(labels[0]).toMatch(/Settings/);
     expect(labels[1]).toMatch(/Key Bindings/);
     expect(labels[2]).toMatch(/Themes/);
     expect(labels[3]).toMatch(/Open Logs Folder/);
-    expect(labels[4]).toMatch(/About throng/);
+    // 055 FR-056 — after Open Logs Folder, before About.
+    expect(labels[4]).toMatch(/Resource Monitor/);
+    expect(labels[5]).toMatch(/About throng/);
   });
 });
 

@@ -61,6 +61,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // HTML `title` on the panel, which the OS draws and positions — there is no element of ours left
   // for this guard to have an opinion about. The wording that tip carried moved to `.link-hint`.
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
+  '.monitor-help':
+    'resources/help-panel.tsx (055 FR-093) — the Resource Monitor\'s help popover. ANCHORED to its "?" button, so it has edges to run off and really does flip: it opens below the button by default and clampToViewport (the positioner the context menu, colour picker and tab popover share) right-aligns it to the button when it would overflow the window, flips it above near the bottom, and clamps whatever remains. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints in the wrong place first; its own max-height and scroll clamp it when the window is shorter than the text',
 
   // Everything below is CHROME, not a popup: fixed furniture with a z-index, anchored to nothing, so
   // there is no edge for it to flip away from. Registered rather than pattern-matched away, because the
