@@ -130,6 +130,7 @@ launches.
 | `THRONG_CLAUDE_E2E` | `1` runs the specs that drive the real `claude` binary. Never on CI. | unset |
 | `THRONG_CLAUDE_E2E_ROOT` | An existing project, with real Claude sessions, for those specs to use. | a temp folder |
 | `THRONG_CLAUDE_PROJECT` | The project whose Claude session history the resume spec reads. | this repository |
+| `THRONG_COLLECTOR_FAKE` | `1` makes the resource collector read a fake process table its integration test drives, instead of Windows'. | unset |
 | `THRONG_INPUT_SOAK` | `1` runs the keystroke soak. | unset |
 | `THRONG_INPUT_SOAK_REPS` | Repetitions per shell in the soak. | `50` |
 | `CI` / `GITHUB_ACTIONS` | Mark a CI run: skips the Claude and SLA specs, warms Electron once in global setup. | set by GitHub Actions |

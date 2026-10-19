@@ -29,6 +29,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- **Resource Monitor** ([#5](https://github.com/Bidthedog/throng/issues/5), [#133](https://github.com/Bidthedog/throng/issues/133)): the status bar shows the CPU, memory, GPU and I/O that throng and everything it started are using. Clicking it, or `Ctrl+Shift+Alt+R`, opens a monitor window — movable, above throng's windows, with throng usable behind it, in two columns — the lists on the left, the selected item's bars, details and graphs on the right — with a **?** guide to using it, that breaks usage down by part of throng and by project, tab, panel, process and subprocess, with graphs, a filter, idle hiding and the folders throng holds. From it you can unload a project, destroy a tab or panel, or force-end a process or everything below a node, confirmed by the new **Kill processes** setting.
+
 ## 1.0.0-alpha11 — 2026-10-22
 
 ### Added
