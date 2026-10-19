@@ -193,6 +193,10 @@ function onCommand(msg: AgentCommand): void {
         });
         send({ ev: 'started', key: msg.key, pid: h.pid });
         log(`sent started key=${msg.key} pid=${h.pid}`);
+        // 055 T101: the console host is attributed after the spawn; tell the daemon when it is known.
+        void pty.conhostOf(h.pid).then((conhost) => {
+          if (conhost !== null && handles.has(msg.key)) send({ ev: 'conhost', key: msg.key, pid: conhost });
+        });
       } catch (error) {
         log(`ERROR pty.start threw key=${msg.key}: ${errText(error)}`);
         send({ ev: 'error', key: msg.key, message: (error as Error).message });
@@ -281,7 +285,7 @@ const server = createServer((connection) => {
   sock = connection;
   let buffer = '';
   connection.setEncoding('utf8');
-  send({ ev: 'ready' });
+  send({ ev: 'ready', pid: process.pid });
   connection.on('data', (chunk: string) => {
     buffer += chunk;
     let nl: number;

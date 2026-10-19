@@ -3595,3 +3595,963 @@ textarea,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ══ 055 — the Resource Monitor ═════════════════════════════════════════════════════════════════
+   Every colour is a theme token (FR-067); the usage bands are `warning` and `danger` and nothing else.
+   ───────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* The status-bar item (FR-040): one button holding up to four icon + value figures. */
+.status-resources {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+:where(body:not([data-window-blurred])) .status-resources:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.status-resources:focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
+}
+
+.status-resources__figure,
+.status-resources__icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-resources__value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bands (FR-046): warning and danger — the band is also in the title, so colour is never the only signal. */
+.status-resources__figure[data-band='warning'] {
+  color: var(--throng-colour-warning);
+}
+
+.status-resources__figure[data-band='critical'] {
+  color: var(--throng-colour-danger);
+}
+
+/* Unavailable, partial and stale (FR-044): visibly not a plain live number. */
+.status-resources__figure[data-unavailable='true'] .status-resources__value {
+  font-style: italic;
+}
+
+.status-resources__figure[data-partial='true'] .status-resources__value {
+  text-decoration: underline dotted;
+}
+
+.status-resources[data-stale='true'] {
+  opacity: 0.6;
+}
+
+/*
+ * The monitor window (FR-081 – FR-087). Laid out like `.prefs-root`: fixed, the title bar on top, the body
+ * below it, on the base application font. It is a window of its own, so there is no scrim, no dialog
+ * chrome and no maximised variant — Maximise is the window's, and main remembers it with the bounds.
+ */
+.resource-monitor {
+  position: fixed;
+  inset: 0;
+  --title-bar-height: var(--pane-header-height, 34px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: var(--throng-font-size);
+  font-weight: var(--throng-font-weight-normal);
+}
+
+/* Inputs and buttons take the OS widget font unless told otherwise. */
+.resource-monitor input,
+.resource-monitor select,
+.resource-monitor textarea,
+.resource-monitor button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* The title bar pins to the top (position:absolute vs the fixed root); the content fills what is left. */
+.resource-monitor .title-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.resource-monitor__content {
+  position: absolute;
+  top: var(--title-bar-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 16px 12px;
+  box-sizing: border-box;
+}
+
+/*
+ * The one liveness line (FR-091, FR-044, FR-051): collecting, "Updated <time> · every <n> s", or "Figures
+ * from N s ago" — a status line above the body, not a second notice. The pulse is a dot that fades once
+ * per capture; under reduced motion it is not played at all.
+ */
+.monitor-liveness {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  align-self: flex-end;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-liveness--stale {
+  color: var(--throng-colour-warning);
+}
+
+.monitor-liveness__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--throng-colour-success);
+  animation: monitor-liveness-pulse 900ms ease-out 1;
+}
+
+@keyframes monitor-liveness-pulse {
+  from {
+    opacity: 1;
+    transform: scale(1.6);
+  }
+  to {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitor-liveness__pulse {
+    animation: none;
+  }
+}
+
+/* The left column: breadcrumb, rows (FR-060, FR-096). */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The header: Back, where the user is, and what the rows are sorted by (FR-092). */
+.breakdown__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.breakdown__header .breadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.breakdown__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breakdown__back:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.breakdown__back:disabled {
+  color: var(--throng-colour-textMuted);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.breakdown__sorted-by {
+  flex: none;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+/* What the filter matched and what Hide idle left out. */
+.breakdown__status {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+/* Column names over the rows, in the rows' own grid; they stay in view while the list scrolls. */
+.breakdown__columns {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  gap: 8px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--throng-colour-border);
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+}
+
+.breakdown__column:not(:first-child):not(:last-child) {
+  text-align: right;
+}
+
+.breakdown__column[data-column='trend'] {
+  text-align: left;
+}
+
+.breakdown__column[data-chosen='true'] {
+  color: var(--throng-colour-text);
+  font-weight: var(--throng-font-weight-bold);
+  box-shadow: inset 0 -2px 0 var(--throng-colour-accent);
+}
+
+.monitor-controls__label {
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumb__item + .breadcrumb__item::before {
+  content: '›';
+  margin-right: 2px;
+  color: var(--throng-colour-textMuted);
+}
+
+.breadcrumb__segment {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--throng-colour-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breadcrumb__segment:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.breadcrumb__segment[aria-current='location'] {
+  font-weight: var(--throng-font-weight-bold);
+  cursor: default;
+}
+
+.breakdown__heading {
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+  color: var(--throng-colour-textMuted);
+}
+
+/*
+ * The right column's share bars (FR-097). A bar's LENGTH is the child's share of the item; its COLOUR is how
+ * much of the machine it takes (FR-094). The component hands over one number, `--heat` — 0 at nothing, 0.5
+ * at the warning threshold, 1 at the critical one — and the colour is mixed here from the theme's own
+ * success, warning and danger: green to amber over the first half, amber to red over the second. It is laid
+ * over the surface at 70% so the track stays legible in light and dark themes.
+ */
+.share-bars {
+  margin: 8px 0;
+}
+
+.share-bars__heading {
+  margin: 0 0 4px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.share-bars__metric {
+  font-weight: var(--throng-font-weight-normal);
+}
+
+.share-bars__empty {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+}
+
+.share-bars__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-bars__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-bar {
+  display: grid;
+  grid-template-columns: minmax(80px, 30%) minmax(0, 1fr) minmax(56px, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .share-bar:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.share-bar--others {
+  color: var(--throng-colour-textMuted);
+  cursor: default;
+}
+
+.share-bar__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-bar__track {
+  display: block;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--throng-colour-inputSurface);
+}
+
+.share-bar__fill {
+  --heat: 0;
+  --heat-to-warning: clamp(0, var(--heat) * 2, 1);
+  --heat-to-danger: clamp(0, (var(--heat) - 0.5) * 2, 1);
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, var(--throng-colour-warning) calc(var(--heat-to-warning) * 100%), var(--throng-colour-success))
+        calc((1 - var(--heat-to-danger)) * 100%),
+      var(--throng-colour-danger)
+    )
+      70%,
+    var(--throng-colour-surface)
+  );
+}
+
+/* Nothing measured to colour it by: neutral. */
+.share-bar__fill[data-heat='none'] {
+  background: var(--throng-colour-border);
+}
+
+.share-bar__figure {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.share-bar[data-band='warning'] .share-bar__figure {
+  color: var(--throng-colour-warning);
+}
+
+.share-bar[data-band='critical'] .share-bar__figure {
+  color: var(--throng-colour-danger);
+}
+
+/* The key to the colours, under the bars: Low … Amber … Red along the same three-colour scale. */
+.share-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--throng-colour-textMuted);
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.share-key__label {
+  flex: none;
+  white-space: nowrap;
+}
+
+.share-key__label--low {
+  order: 0;
+}
+
+.share-key__bar {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 8px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 3px;
+  /* The same mix as a bar at heat 0, 0.5 and 1, so the bar IS the scale. */
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--throng-colour-success) 70%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-warning) 70%, var(--throng-colour-surface)),
+    color-mix(in srgb, var(--throng-colour-danger) 70%, var(--throng-colour-surface))
+  );
+}
+
+.share-key__label--mid {
+  order: 2;
+}
+
+.share-key__label--high {
+  order: 3;
+}
+
+.breakdown__rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breakdown-row {
+  /* Set per row by the component (inline); this is the top level's. */
+  --breakdown-depth: 0;
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breakdown-row:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* The selected row: the explorer's active-file convention — surface plus an accent stripe (FR-089). */
+.breakdown-row--selected {
+  background: var(--throng-colour-surfaceActive);
+  box-shadow: inset 2px 0 0 var(--throng-colour-accent);
+}
+
+/* An unloaded project is greyed and italic, as in the project list (FR-020c). */
+.breakdown-row--unloaded {
+  color: var(--throng-colour-textMuted);
+  font-style: italic;
+}
+
+/* An ended process stays in its place, greyed and struck through (FR-065a). */
+.breakdown-row--ended {
+  color: var(--throng-colour-textMuted);
+  text-decoration: line-through;
+}
+
+.breakdown-row--limitation .breakdown-row__reason {
+  grid-column: 2 / -1;
+  color: var(--throng-colour-textMuted);
+}
+
+.breakdown-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdown-row__tag {
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.breakdown-row__cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.breakdown-row__cell[data-band='warning'] {
+  color: var(--throng-colour-warning);
+}
+
+.breakdown-row__cell[data-band='critical'] {
+  color: var(--throng-colour-danger);
+}
+
+.breakdown-row__cell[data-unavailable='true'] {
+  font-style: italic;
+}
+
+.breakdown-row__cell[data-partial='true'] {
+  text-decoration: underline dotted;
+}
+
+/* The canvas is drawn in this colour: sparkline.tsx reads it back with getComputedStyle. */
+.sparkline {
+  display: block;
+  width: 90px;
+  height: 18px;
+  color: var(--throng-colour-accent);
+}
+
+.breakdown__readout {
+  margin: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--throng-colour-border);
+  color: var(--throng-colour-textMuted);
+  font: inherit;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+/* The body's layout: two columns (FR-096, FR-097). DOM order is the Tab order (filter, breakdown, detail,
+   controls — FR-068); the grid areas put the filter, the list controls, the notice and the rows down the LEFT
+   column and the detail down the whole of the RIGHT. Each column scrolls on its own. */
+.monitor-body {
+  display: grid;
+  grid-template-columns: minmax(360px, 9fr) minmax(300px, 11fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'filter    detail'
+    'controls  detail'
+    'notice    detail'
+    'breakdown detail';
+  gap: 8px 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.monitor-body__filter {
+  grid-area: filter;
+}
+.monitor-body__notice {
+  grid-area: notice;
+}
+.monitor-body__breakdown {
+  grid-area: breakdown;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.monitor-body__detail {
+  grid-area: detail;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--throng-colour-border);
+}
+.monitor-body__controls {
+  grid-area: controls;
+}
+
+.monitor-filter {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.monitor-filter__input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  font: inherit;
+}
+
+/*
+ * Every control in the window shows a 2px ring in the active-panel colour when it is reached from the
+ * keyboard — throng's convention (the project list, the panels). One rule for every kind of control, so a
+ * control added later is covered without anyone remembering to (FR-089, D7).
+ */
+.resource-monitor :is(button, input, select, textarea, a[href], [tabindex]):focus-visible {
+  outline: 2px solid var(--throng-colour-activePanelBorder);
+  outline-offset: -2px;
+}
+
+.monitor-filter__clear,
+.monitor-controls__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .monitor-filter__clear:hover,
+:where(body:not([data-window-blurred])) .monitor-controls__button:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* A pressed toggle: the chosen metric, Hide idle. A mark, not a focus ring — that one is 2px, below. */
+.monitor-controls__button[aria-pressed='true'] {
+  background: var(--throng-colour-surfaceActive);
+  box-shadow: inset 0 0 0 1px var(--throng-colour-accent);
+}
+
+.monitor-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monitor-controls__group {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.monitor-controls__select {
+  padding: 3px 6px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-inputSurface);
+  color: var(--throng-colour-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The help panel (FR-093): hangs under its button; placed by clampToViewport, so it is fixed to the window. */
+.monitor-help {
+  position: fixed;
+  z-index: 30;
+  box-sizing: border-box;
+  width: 380px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 8px 14px 12px;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 6px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-text);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--throng-colour-text) 25%, transparent);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.monitor-help__heading {
+  margin: 10px 0 3px;
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.monitor-help p,
+.monitor-help ul {
+  margin: 0 0 4px;
+}
+
+.monitor-help ul {
+  padding-left: 18px;
+}
+
+.monitor-help .icon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* The right column: the item's name and kind, its bars, its facts and its line graphs (FR-097). Its focus ring is the window-wide one above. */
+
+/* The small line graphs: one per metric, drawn on a canvas in the theme's accent (line-graph.tsx). */
+.line-graphs {
+  margin: 12px 0 4px;
+}
+
+.line-graphs__heading {
+  margin: 0 0 4px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.line-graphs__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 12px;
+}
+
+.line-graph {
+  margin: 0;
+  min-width: 0;
+}
+
+.line-graph__caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+}
+
+.line-graph__value {
+  color: var(--throng-colour-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The canvas is drawn in this colour: sparkline.tsx reads it back with getComputedStyle. */
+.line-graph__plot {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: 44px;
+  color: var(--throng-colour-accent);
+}
+
+/* A graph with fewer than two points says so, in the place the line will be (FR-091). */
+.line-graph__building {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 220px;
+  max-width: 100%;
+  height: 44px;
+  margin: 0;
+  border: 1px dashed var(--throng-colour-border);
+  border-radius: 3px;
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+}
+
+.detail-pane {
+  padding: 4px 6px;
+}
+
+.detail-pane__name {
+  margin: 0;
+  font-size: 14px;
+}
+
+.detail-pane__kind {
+  margin: 0 0 6px;
+  color: var(--throng-colour-textMuted);
+  font-size: 12px;
+}
+
+.detail-pane__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-pane__term {
+  color: var(--throng-colour-textMuted);
+}
+
+.detail-pane__value {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail-pane__value[data-band='warning'] {
+  color: var(--throng-colour-warning);
+}
+
+.detail-pane__value[data-band='critical'] {
+  color: var(--throng-colour-danger);
+}
+
+.detail-pane__tag {
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.detail-pane__empty {
+  margin: 0;
+  color: var(--throng-colour-textMuted);
+}
+
+/* Held folders (FR-070). */
+.held-folders {
+  margin-top: 8px;
+  border-top: 1px solid var(--throng-colour-border);
+}
+
+.held-folders__list,
+.held-folder__terminals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.held-folder {
+  padding: 4px 6px;
+}
+
+.held-folder__path {
+  overflow-wrap: anywhere;
+}
+
+.held-folder__project {
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+}
+
+.held-folder__terminals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding-left: 12px;
+}
+
+.held-folder__terminal {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--throng-colour-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.held-folder__terminal:disabled {
+  color: var(--throng-colour-textMuted);
+  cursor: default;
+}
+
+.held-folders__empty {
+  margin: 4px 6px;
+  color: var(--throng-colour-textMuted);
+}
+
+/* The one inline notice a failed action raises (FR-064). */
+.monitor-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--throng-colour-danger);
+  border-radius: 4px;
+  background: var(--throng-colour-surfaceActive);
+  color: var(--throng-colour-text);
+}
+
+.monitor-notice__heading {
+  color: var(--throng-colour-danger);
+}
+
+.monitor-notice__line {
+  margin: 2px 0 0;
+}
+
+.monitor-notice__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .monitor-notice__dismiss:hover {
+  background: var(--throng-colour-hoverSurface);
+}
+
+/* The list in a kill confirmation. */
+.kill-details {
+  margin: 8px 0;
+  max-height: 220px;
+  overflow: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.kill-details__list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.kill-details__more {
+  margin: 4px 0 0;
+  color: var(--throng-colour-textMuted);
+}
+
+/* The detail pane's action row. */
+.detail-pane__actions {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.detail-pane__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .detail-pane__action:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.detail-pane__action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── 055 end ── */

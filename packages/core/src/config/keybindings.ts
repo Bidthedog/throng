@@ -55,6 +55,8 @@ export type ActionId =
   | 'view.fullscreen'
   | 'view.toggleProjects'
   | 'view.toggleExplorer'
+  /** 055 FR-050 — open the Resource Monitor; from a sub-workspace window it opens in the main one. */
+  | 'view.resourceMonitor'
   /**
    * 046 US2 (FR-015/FR-019/FR-020) — step the active project forward/back, and move keyboard
    * focus straight to the File Explorer or the Projects pane, from anywhere in the window. All
@@ -335,6 +337,8 @@ export const COMMAND_SCOPES: CommandScopes = {
   'view.fullscreen': EVERYWHERE,
   'view.toggleProjects': EVERYWHERE,
   'view.toggleExplorer': EVERYWHERE,
+  // 055 R12 — the monitor is about the whole application, so it opens from any surface.
+  'view.resourceMonitor': EVERYWHERE,
   // 046 US2 (FR-015/020) — window-level, the same reasoning as the pane toggles above: a user
   // stepping projects or jumping focus to a side pane means the same thing from a terminal, an
   // editor or the tree, and `projects` (046 R3) is included so the commands work FROM the pane too.
@@ -532,6 +536,8 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      */
     'view.toggleProjects': ['Ctrl+Shift+Alt+J'],
     'view.toggleExplorer': ['Ctrl+Shift+Alt+K'],
+    // 055 R12 — tier 1 like the pane toggles; R is not taken in any scope.
+    'view.resourceMonitor': ['Ctrl+Shift+Alt+R'],
     /*
      * 046 iterate round 1 (FR-102) — TIER 1, alongside the rest of the navigation family. Moved
      * from their pre-round Ctrl+Alt values (US2, FR-020/021): none of the four is in the reserved
@@ -1089,6 +1095,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'view.fullscreen',
   'view.toggleProjects',
   'view.toggleExplorer',
+  'view.resourceMonitor',
   'menu.open',
   'file.undo',
   'file.redo',

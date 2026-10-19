@@ -40,6 +40,8 @@ export interface MenuAction {
   label?: string;
   onClick?: () => void;
   disabled?: boolean;
+  /** Hover text for the row — chiefly WHY it is disabled, so a greyed row explains itself (055 FR-063). */
+  title?: string;
   /** Theme icon token shown before the label (e.g. 'rename', 'send', 'destroy'). */
   icon?: string;
   /**
@@ -384,6 +386,7 @@ function MenuLevel({
             className={`context-menu__item${item.disabled ? ' context-menu__item--disabled' : ''}${hasSub ? ' context-menu__item--parent' : ''}`}
             data-testid={item.testId ?? `menu-item-${item.label}`}
             role="menuitem"
+            title={item.title}
             aria-disabled={item.disabled ?? false}
             aria-haspopup={hasSub || undefined}
             // Roving tabindex: one item is reachable, and it is the one that has focus.

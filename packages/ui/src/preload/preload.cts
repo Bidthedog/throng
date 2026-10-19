@@ -103,6 +103,60 @@ contextBridge.exposeInMainWorld('throng', {
     },
     differentCopyReady: () => ipcRenderer.send('throng:instance:differentCopyReady'),
   },
+  /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
+  resources: {
+    summary: () => ipcRenderer.invoke('throng:resources:summary:get'),
+    onSummary: (cb: (s: unknown) => void) => {
+      const h = (_e: unknown, s: unknown): void => cb(s);
+      ipcRenderer.on('throng:resources:summary', h);
+      return () => ipcRenderer.removeListener('throng:resources:summary', h);
+    },
+    /** Whether any window has the monitor open, then every change: report panels while true. */
+    detailDemand: () => ipcRenderer.invoke('throng:resources:detail-demand:get'),
+    onDetailDemand: (cb: (on: boolean) => void) => {
+      const h = (_e: unknown, on: boolean): void => cb(on);
+      ipcRenderer.on('throng:resources:detail-demand', h);
+      return () => ipcRenderer.removeListener('throng:resources:detail-demand', h);
+    },
+    subscribeDetail: () => ipcRenderer.invoke('throng:resources:detail:subscribe'),
+    unsubscribeDetail: (subscriptionId: number) => ipcRenderer.invoke('throng:resources:detail:unsubscribe', subscriptionId),
+    onDetail: (cb: (f: unknown) => void) => {
+      const h = (_e: unknown, f: unknown): void => cb(f);
+      ipcRenderer.on('throng:resources:detail', h);
+      return () => ipcRenderer.removeListener('throng:resources:detail', h);
+    },
+    reportPanels: (context: unknown, estimates: unknown) =>
+      ipcRenderer.send('throng:resources:panels', { context, estimates }),
+    kill: (req: unknown) => ipcRenderer.invoke('throng:resources:kill', req),
+    /** From any window: open the monitor window, or bring it forward (R14, FR-086). */
+    open: () => ipcRenderer.send('throng:resources:open'),
+    /** Monitor window: shrink into the status-bar figures and close, or just close (FR-085). */
+    minimise: (opts: unknown) => ipcRenderer.send('throng:resources:minimise', opts),
+    /** Monitor window: the view it left, held by main until restart (FR-087); `null` the first time. */
+    viewState: () => ipcRenderer.invoke('throng:resources:view:get'),
+    saveViewState: (view: unknown) => ipcRenderer.send('throng:resources:view:set', view),
+    /** Main window: answer main's request for the status-bar figures' rectangle (FR-085). */
+    onStatusRectRequest: (cb: () => unknown) => {
+      const h = (_e: unknown, requestId: unknown): void => {
+        let rect: unknown;
+        try {
+          rect = cb();
+        } catch {
+          rect = null;
+        }
+        ipcRenderer.send('throng:resources:status-rect:reply', { requestId, rect });
+      };
+      ipcRenderer.on('throng:resources:status-rect:request', h);
+      return () => ipcRenderer.removeListener('throng:resources:status-rect:request', h);
+    },
+    /** Run Unload Project, Destroy Tab or Destroy Panel in the window that owns it; false when none does. */
+    routeAction: (req: unknown) => ipcRenderer.invoke('throng:resources:action:route', req),
+    onAction: (cb: (req: unknown) => void) => {
+      const h = (_e: unknown, req: unknown): void => cb(req);
+      ipcRenderer.on('throng:resources:action', h);
+      return () => ipcRenderer.removeListener('throng:resources:action', h);
+    },
+  },
   daemon: {
     state: () => ipcRenderer.invoke('throng:daemon:state'),
     restart: () => ipcRenderer.invoke('throng:daemon:restart'),

@@ -28,10 +28,9 @@ import { IconButton } from '../common/icon-button.js';
 import { CategoryHeaderMark, ProjectRowLead } from '../attention/holder-marks.js';
 import { goToNextMarkedOf, hasMarkedPanel, projectCycleKey } from '../attention/mark-cycle.js';
 import { useErrorNotice } from '../common/notification.js';
-import { allEditorStates, useDirtyProjectKey } from '../editor/editor-state.js';
+import { useDirtyProjectKey } from '../editor/editor-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { failedBeyondSaveAs, saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
-import { disposeEditor } from '../editor/use-editor.js';
 import {
   DndContext,
   PointerSensor,
@@ -55,10 +54,9 @@ import { useConfirm } from '../confirm-dialog.js';
 import { FolderPicker } from '../common/folder-picker.js';
 import { setActivePane, useActivePane } from '../workspace/active-pane.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useDetach } from '../workspace/detach-context.js';
 import { projectMenu } from './project-menu.js';
 import { categoryMenu } from './category-menu.js';
-import { unloadProject as runUnload, type UnloadCollaborators } from './unload-project.js';
+import { useUnloadProject } from './use-unload-project.js';
 import {
   registerProjectsPanelCommands,
   unregisterProjectsPanelCommands,
@@ -243,7 +241,6 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     deleteProject,
     switchProject,
     reorderProjects,
-    unloadProject: unloadProjectInStore,
     reportFailure,
     createCategory,
     renameCategory,
@@ -261,9 +258,6 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
   const settings = useAppSettings();
   const ws = useWorkspace();
   const contextMenu = useContextMenu();
-  // 046 US4 (FR-037) — the sub-workspaces WITH their Tabs, so Unload can spare a panel one of them
-  // holds. `null` only outside the main window, which never renders ProjectsPanel.
-  const detach = useDetach();
   // Projects with any unsaved editor light the shared unsaved dot (006, US8) —
   // which replaces the old "loaded" dot.
   const dirtyKey = useDirtyProjectKey();
@@ -687,32 +681,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
   /** 046 US4 — Unload, routed through the orchestrator (contracts/unload.md §6). `variant` is the
    *  opposite-action row's action; `undefined` (the plain Unload Project row) runs the configured
    *  default. No dialog either way (FR-111). */
-  const runUnloadProject = (project: ProjectDto, variant?: 'keepRunning' | 'endTerminals'): void => {
-    // Review round (US4-B #1) — NOT `ws.layout`, which only ever holds the ACTIVE project's layout
-    // (the main Workspace Pane never mixes projects). Unloading a project that is loaded but not
-    // active (US4's own Independent Test) must still find and dispose its editors, and
-    // `allEditorStates()` keeps an entry per panel for exactly that case: an editor's state SURVIVES
-    // its panel unmounting when you switch away from its project, and is removed only on an explicit
-    // destroy — the same reason `useDirtyProjectKey`'s dot survives the switch above.
-    const editorPanelIds = allEditorStates()
-      .filter((s) => s.ownerProjectId === project.id)
-      .map((s) => s.panelId);
-    const collaborators: UnloadCollaborators = {
-      settings: {
-        projects: { unloadTerminalAction: settings.projects.unloadTerminalAction },
-      },
-      isDirty: (id) => dirtyProjects.has(id),
-      subWorkspaces: detach?.subWorkspaces ?? [],
-      editorPanelIds,
-      unloadProject: unloadProjectInStore,
-      // Review round (US4-B #2) — the REAL teardown (state, actions, language, view state, search,
-      // caret, links, metrics, and `window.throng.editor.destroy` → EditorCoordinator.destroy, which
-      // stops the file watcher and drops the recovery entry), not a bare `Map.delete`.
-      disposeEditor,
-      reportFailure,
-    };
-    void runUnload(project.id, project.name, variant, collaborators);
-  };
+  // 055 FR-063 — `use-unload-project.ts` is the one implementation; the Resource Monitor runs it too.
+  const runUnloadProject = useUnloadProject();
 
   /** 046 US5 (FR-053) — move `project` into `categoryId`, at the end of its current members (the
    *  same rule the drag-and-drop "drop on a minimised header" case uses, FR-055). */
