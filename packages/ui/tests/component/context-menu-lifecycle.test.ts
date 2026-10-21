@@ -278,6 +278,8 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
       .getAllByRole('menuitem')
       .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
+    // 057 FR-082 added Go to Next Marked Panel here; FR-106 (round 3) supersedes that and moves it to a
+    // marked project's context menu, so these are the five again.
     expect(labels).toHaveLength(5);
     expect(labels[0]).toMatch(/Settings/);
     expect(labels[1]).toMatch(/Key Bindings/);

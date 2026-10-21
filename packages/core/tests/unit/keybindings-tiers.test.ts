@@ -47,6 +47,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'focus.projects': 'tier1',
   // 046 iterate round 3 (FR-116) — the route back to the centre, beside its two side-pane siblings.
   'focus.workspace': 'tier1',
+  // 057 (R15) — Go to Next Marked Panel: Ctrl+Shift+Alt+G, beside the other navigation commands.
+  'focus.nextMarkedPanel': 'tier1',
   'tabs.openPicker': 'tier1',
   'focus.cycle': 'tier1', // recorded exception (Shift reverses direction)
   'focus.cycleBack': 'tier1', // recorded exception
@@ -333,6 +335,7 @@ describe('the FR-101 tier guard', () => {
       'focus.explorer': ['Ctrl+Shift+Alt+M'],
       'focus.projects': ['Ctrl+Shift+Alt+B'],
       'focus.workspace': ['Ctrl+Shift+Alt+N'],
+      'focus.nextMarkedPanel': ['Ctrl+Shift+Alt+G'], // 057 (R15)
       'menu.open': ['Shift+F10', 'ContextMenu'],
       'tabs.openPicker': ['Ctrl+Shift+Alt+T'],
       'navigate.quickOpen': ['Ctrl+Shift+T'],

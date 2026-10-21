@@ -18,14 +18,19 @@ import {
  */
 
 const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
+// 057 FR-109 – FR-111: the section also holds the global OS switch and the Attention type.
+const TYPES = [...SEVERITIES, 'attention'] as const;
+const SECTION_KEYS = [...TYPES, 'os'].sort();
 
 describe('the shipped defaults (FR-013)', () => {
   it('ships error and warning as dismiss-only, info and success timed', () => {
     expect(DEFAULT_NOTIFICATION_SETTINGS).toEqual({
-      error: { mode: 'dismiss', timeoutMs: 5000 },
-      warning: { mode: 'dismiss', timeoutMs: 5000 },
-      info: { mode: 'timed', timeoutMs: 10000 },
-      success: { mode: 'timed', timeoutMs: 5000 },
+      os: true,
+      error: { mode: 'dismiss', timeoutMs: 5000, os: false },
+      warning: { mode: 'dismiss', timeoutMs: 5000, os: false },
+      info: { mode: 'timed', timeoutMs: 10000, os: false },
+      success: { mode: 'timed', timeoutMs: 5000, os: false },
+      attention: { mode: 'timed', timeoutMs: 10000, os: true },
     });
   });
 
@@ -70,7 +75,7 @@ describe('parseNotificationSettings — the contract truth table', () => {
 
   it('resolves an absent severity to its own default', () => {
     const parsed = parseNotificationSettings({ error: { mode: 'never', timeoutMs: 4000 } });
-    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: 4000 });
+    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: 4000, os: false });
     expect(parsed.warning).toEqual(DEFAULT_NOTIFICATION_SETTINGS.warning);
     expect(parsed.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
     expect(parsed.success).toEqual(DEFAULT_NOTIFICATION_SETTINGS.success);
@@ -78,12 +83,12 @@ describe('parseNotificationSettings — the contract truth table', () => {
 
   it('keeps a mode with no timeout, defaulting only the timeout', () => {
     const parsed = parseNotificationSettings({ error: { mode: 'never' } });
-    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs });
+    expect(parsed.error).toEqual({ mode: 'never', timeoutMs: DEFAULT_NOTIFICATION_SETTINGS.error.timeoutMs, os: false });
   });
 
   it('resolves an unrecognised mode to that severity default, honouring a valid timeout', () => {
     const parsed = parseNotificationSettings({ info: { mode: 'sometimes', timeoutMs: 20000 } });
-    expect(parsed.info).toEqual({ mode: 'timed', timeoutMs: 20000 });
+    expect(parsed.info).toEqual({ mode: 'timed', timeoutMs: 20000, os: false });
   });
 
   it.each([
@@ -138,8 +143,8 @@ describe('parseNotificationSettings — the contract truth table', () => {
       fatal: { mode: 'never', timeoutMs: 3000 },
       warning: { mode: 'timed', timeoutMs: 3000 },
     });
-    expect(Object.keys(parsed).sort()).toEqual([...SEVERITIES].sort());
-    expect(parsed.warning).toEqual({ mode: 'timed', timeoutMs: 3000 });
+    expect(Object.keys(parsed).sort()).toEqual(SECTION_KEYS);
+    expect(parsed.warning).toEqual({ mode: 'timed', timeoutMs: 3000, os: false });
     expect(parsed.error).toEqual(DEFAULT_NOTIFICATION_SETTINGS.error);
   });
 
@@ -161,7 +166,7 @@ describe('parseNotificationSettings — the contract truth table', () => {
    * valid mode and an in-bounds timeout. A row-by-row table can only cover what someone thought of;
    * this covers the shape.
    */
-  it('returns four valid severities for any JSON value whatsoever', () => {
+  it('returns five valid types and a boolean OS switch for any JSON value whatsoever', () => {
     const values: unknown[] = [
       undefined,
       null,
@@ -182,8 +187,10 @@ describe('parseNotificationSettings — the contract truth table', () => {
     ];
     for (const raw of values) {
       const parsed = parseNotificationSettings(raw);
-      expect(Object.keys(parsed).sort()).toEqual([...SEVERITIES].sort());
-      for (const severity of SEVERITIES) {
+      expect(Object.keys(parsed).sort()).toEqual(SECTION_KEYS);
+      expect(typeof parsed.os).toBe('boolean');
+      for (const severity of TYPES) {
+        expect(typeof parsed[severity].os).toBe('boolean');
         expect(['never', 'timed', 'dismiss']).toContain(parsed[severity].mode);
         expect(parsed[severity].timeoutMs).toBeGreaterThanOrEqual(TIMEOUT_MIN_MS);
         expect(parsed[severity].timeoutMs).toBeLessThanOrEqual(TIMEOUT_MAX_MS);

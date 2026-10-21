@@ -69,8 +69,8 @@ describe('notifications merge contract', () => {
         success: { mode: 'never', timeoutMs: 4000 },
       },
     });
-    expect(resolved.notifications.error).toEqual({ mode: 'timed', timeoutMs: 20000 });
-    expect(resolved.notifications.success).toEqual({ mode: 'never', timeoutMs: 4000 });
+    expect(resolved.notifications.error).toEqual({ mode: 'timed', timeoutMs: 20000, os: false });
+    expect(resolved.notifications.success).toEqual({ mode: 'never', timeoutMs: 4000, os: false });
     // Unwritten severities are still the shipped values, not undefined.
     expect(resolved.notifications.warning).toEqual(DEFAULT_NOTIFICATION_SETTINGS.warning);
     expect(resolved.notifications.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
@@ -89,7 +89,7 @@ describe('notifications merge contract', () => {
       ...preFeatureFile,
       notifications: { info: { mode: 'timed', timeoutMs: 3567 } },
     });
-    expect(resolved.notifications.info).toEqual({ mode: 'timed', timeoutMs: 3567 });
+    expect(resolved.notifications.info).toEqual({ mode: 'timed', timeoutMs: 3567, os: false });
   });
 
   it('resolves a malformed value per-value, discarding neither the section nor the file (FR-015)', () => {
@@ -105,21 +105,44 @@ describe('notifications merge contract', () => {
         fatal: { mode: 'never' },
       },
     });
-    expect(resolved.notifications.error).toEqual({ mode: 'dismiss', timeoutMs: 30000 });
+    expect(resolved.notifications.error).toEqual({ mode: 'dismiss', timeoutMs: 30000, os: false });
     expect(resolved.notifications.warning).toEqual({
       mode: 'timed',
       timeoutMs: DEFAULT_NOTIFICATION_SETTINGS.warning.timeoutMs,
+      os: false,
     });
     expect(resolved.notifications.info).toEqual(DEFAULT_NOTIFICATION_SETTINGS.info);
+    // 057 FR-108 – FR-111 add the global OS switch and the Attention type; an unknown severity is still dropped.
     expect(Object.keys(resolved.notifications).sort()).toEqual([
+      'attention',
       'error',
       'info',
+      'os',
       'success',
       'warning',
     ]);
     // The rest of the file is untouched by a broken neighbour.
     expect(resolved.appearance.theme).toBe('Light');
     expect(resolved.diagnostics.logLevel).toBe('debug');
+  });
+
+  // 057 FR-109 – FR-111: one OS switch over everything, an OS switch per type, and Attention as a type.
+  it('ships the OS switches and the Attention type so nothing changes on upgrade', () => {
+    const d = DEFAULT_NOTIFICATION_SETTINGS;
+    expect(d.os).toBe(true);
+    for (const severity of ['error', 'warning', 'info', 'success'] as const) expect(d[severity].os).toBe(false);
+    expect(d.attention).toEqual({ mode: 'timed', timeoutMs: 10000, os: true });
+  });
+
+  it('reads the OS switches and the Attention type per value, falling back on anything malformed', () => {
+    const resolved = parseAppSettings({
+      ...preFeatureFile,
+      notifications: { os: 'no', error: { os: true }, attention: { mode: 'dismiss', os: 0, timeoutMs: 1 } },
+    });
+    expect(resolved.notifications.os).toBe(true);
+    expect(resolved.notifications.error).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: true });
+    expect(resolved.notifications.attention).toEqual({ mode: 'dismiss', timeoutMs: 10000, os: true });
+    expect(parseAppSettings({ notifications: { os: false } }).notifications.os).toBe(false);
   });
 
   it('a section that is not an object at all still yields the four shipped rows', () => {
@@ -141,5 +164,7 @@ describe('notifications merge contract', () => {
     const cloned = parseAppSettings(null);
     cloned.notifications.info.mode = 'never';
     expect(DEFAULT_APP_SETTINGS.notifications.info.mode).toBe('timed');
+    cloned.notifications.attention.os = false;
+    expect(DEFAULT_APP_SETTINGS.notifications.attention.os).toBe(true);
   });
 });

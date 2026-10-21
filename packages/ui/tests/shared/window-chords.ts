@@ -229,6 +229,12 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
   ['focus.projects', { test: 'side-pane-focus-commands.test.ts', key: 'B', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
   ['focus.workspace', { test: 'side-pane-focus-commands.test.ts', key: 'N', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
   /*
+   * 057 (T059, R15) — `focus.nextMarkedPanel` (`Ctrl+Shift+Alt+G`) is the same letter shape, claimed by
+   * its own component test: it mounts the real dispatcher, and asserts a press from a focused terminal
+   * reaches it (US7 AS2).
+   */
+  ['focus.nextMarkedPanel', { test: 'attention-next-command.test.ts', key: 'G', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
+  /*
    * 046 iterate round 1 (T106/T111) — `project.next` / `project.previous` moved to the tier-1
    * `Ctrl+Shift+Alt+PageDown` / `Ctrl+Shift+Alt+PageUp` at the same checkpoint (T099), and newly
    * appear in `discoverKeepShiftChords()` once `chordCandidates` gains the tier-1 rule. Pressed,

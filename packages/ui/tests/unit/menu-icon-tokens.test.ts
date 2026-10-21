@@ -215,7 +215,7 @@ describe('the rows #126 shipped blank now carry a glyph (#127)', () => {
     expect(glyphFor(row(items, 'Paste').icon ?? '')?.trim()).toBeTruthy();
   });
 
-  it('all five cog rows, which read as one gear beside four blank lines before 023', () => {
+  it('all five cog rows (057 FR-106 took Go to Next Marked Panel back out), which read as one gear beside blank lines before 023', () => {
     const items = cogMenu();
     for (const testId of [
       'cog-menu-settings',

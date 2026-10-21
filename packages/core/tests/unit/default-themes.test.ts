@@ -31,7 +31,10 @@ const BUTTON_TOKENS = ['confirm', 'cancel', 'destroy'].flatMap((t) =>
 //
 // 78 since 049 (FR-018a, FR-025) added `searchMatchOccurrence`, `searchMatchOccurrenceInactive` and
 // `editorSelectionInactive` — selection occurrences, focused and not, and a kept unfocused selection.
-const EXPECTED_COLOUR_TOKEN_COUNT = 78;
+//
+// 80 since 057 (R11) added `attentionMark` and `attentionFailedMark` — the colour of a panel's
+// attention mark and of its Failed variant.
+const EXPECTED_COLOUR_TOKEN_COUNT = 80;
 /**
  * The icon set's counterpart to the colour count above — 63 before 043, plus `findInFiles` and
  * `searchScope` (FR-029a/FR-029b, FR-030).
@@ -65,7 +68,9 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 78;
 // `diagramFullPane`.
 // 82 since 056 (FR-007, research R7): `warning`, the marker on a folded Preferences heading that hides
 // an invalid entry — no warning glyph existed, only the `warning` colour.
-const EXPECTED_ICON_TOKEN_COUNT = 82;
+// 85 since 057 (R11): `attention`, `attentionFailed` and `goToPanel` — the mark, its Failed variant and
+// the toast's link control.
+const EXPECTED_ICON_TOKEN_COUNT = 85;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -97,6 +102,8 @@ const ADDED_SINCE_FIXTURE = [
   'searchMatchOccurrence',
   'searchMatchOccurrenceInactive',
   'editorSelectionInactive',
+  'attentionMark',
+  'attentionFailedMark',
 ];
 
 const EXPECTED = [

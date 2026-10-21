@@ -187,7 +187,7 @@ describe('the terminal-tier rule judges a multi-stroke chord by its first stroke
         'focus.left', 'focus.right', 'focus.up', 'focus.down', 'focus.cycle', 'focus.cycleBack',
         'focus.notice', 'view.fullscreen', 'view.toggleProjects', 'view.toggleExplorer', 'menu.open',
         'file.undo', 'file.redo', 'project.next', 'project.previous', 'focus.explorer', 'focus.projects',
-        'focus.workspace', 'tabs.openPicker', 'navigate.quickOpen', 'navigate.gotoLine',
+        'focus.workspace', 'focus.nextMarkedPanel', 'tabs.openPicker', 'navigate.quickOpen', 'navigate.gotoLine',
         'search.findInFiles', 'search.replaceInFiles', 'navigate.back', 'navigate.forward',
         'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy',
         'panel.toggleMaximise',

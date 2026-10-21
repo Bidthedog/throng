@@ -5,6 +5,7 @@
     "about.e2e.ts": "FOCUS",
     "app-icon.e2e.ts": "FOCUS",
     "app-shell.e2e.ts": "TIMING",
+    "attention-marks.e2e.ts": "CPU",
     "colour-picker.e2e.ts": "FOCUS",
     "config-write-failure.e2e.ts": "FOCUS",
     "context-menu-shortcuts.e2e.ts": "FOCUS",
