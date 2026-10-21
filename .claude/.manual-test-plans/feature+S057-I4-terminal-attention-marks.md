@@ -4,26 +4,26 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Project row marks from a bell | signed off | 804323f89f73 | 2026-10-21 | |
-| MT-02 | Tab, overflow and panel marks | signed off | 804323f89f73 | 2026-10-21 | |
-| MT-03 | Toasts and Windows notifications | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-04 | Taskbar badge | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-05 | Attention settings | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-06 | Command finished and terminal exited | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-07 | Go to Next Marked Panel | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-08 | Marks across a closed window | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-09 | Mark in the dot's place, blinking | signed off | 804323f89f73 | 2026-10-21 | |
-| MT-10 | A mark stays until you focus the panel | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-11 | Hover popovers on the project list | signed off | 804323f89f73 | 2026-10-21 | |
-| MT-12 | Claude Code's notifications reach throng | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-13 | Popovers and notifications name the tab and say what ran | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-14 | Attention row display settings | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-15 | Overflow control popover | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-16 | Clicking a mark cycles its panels | signed off | 804323f89f73 | 2026-10-21 | |
-| MT-17 | One row per notification type | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-18 | Ordinary notices reach Windows | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-19 | A mark is announced once | signed off | 213a879a9c3f | 2026-10-21 | |
-| MT-20 | A marked panel's header is filled | signed off | 213a879a9c3f | 2026-10-21 | |
+| MT-01 | Project row marks from a bell | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-02 | Tab, overflow and panel marks | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-03 | Toasts and Windows notifications | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-04 | Taskbar badge | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-05 | Attention settings | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-06 | Command finished and terminal exited | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-07 | Go to Next Marked Panel | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-08 | Marks across a closed window | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-09 | Mark in the dot's place, blinking | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-10 | A mark stays until you focus the panel | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-11 | Hover popovers on the project list | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-12 | Claude Code's notifications reach throng | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-13 | Popovers and notifications name the tab and say what ran | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-14 | Attention row display settings | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-15 | Overflow control popover | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-16 | Clicking a mark cycles its panels | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-17 | One row per notification type | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-18 | Ordinary notices reach Windows | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-19 | A mark is announced once | signed off | 5a0e82ea099b | 2026-10-21 | |
+| MT-20 | A marked panel's header is filled | signed off | 5a0e82ea099b | 2026-10-21 | |
 
 ## MT-01: Project row marks from a bell
 
