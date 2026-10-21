@@ -40,10 +40,18 @@ export interface ProjectMenuArgs {
   categories: ProjectMenuCategoryOption[];
   onMoveToCategory: (categoryId: string) => void;
   onNewCategory: () => void;
+  /**
+   * 057 FR-106 (supersedes FR-082's cog row) — Go to Next Marked Panel, for THIS project. Passed only
+   * while the project has a marked panel, so the row is present exactly then. It shows no chord: it walks
+   * this project's cycle (FR-105), while `focus.nextMarkedPanel`'s chord ranges over every project, so
+   * advertising it here would teach a key that does something else. The chord's command is not a panel
+   * action and may stand without a menu item (constitution VI, v5.6.0).
+   */
+  nextMarked?: { run: () => void };
 }
 
 export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
-  const { loaded, defaultAction, onEdit, onRename, onRemove, onUnload, categories, onMoveToCategory, onNewCategory } =
+  const { loaded, defaultAction, onEdit, onRename, onRemove, onUnload, categories, onMoveToCategory, onNewCategory, nextMarked } =
     args;
   const opposite = defaultAction === 'keepRunning' ? 'endTerminals' : 'keepRunning';
   const oppositeLabel =
@@ -53,6 +61,17 @@ export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
     { label: 'Edit', icon: 'editVisual', section: 'content', onClick: onEdit },
     { label: 'Rename', icon: 'rename', section: 'content', onClick: onRename },
     { label: 'Remove', icon: 'destroy', section: 'destroy', onClick: onRemove },
+    // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106).
+    ...(nextMarked === undefined
+      ? []
+      : [
+          {
+            label: 'Go to Next Marked Panel',
+            icon: 'attention',
+            section: 'navigate' as const,
+            onClick: nextMarked.run,
+          },
+        ]),
     {
       label: 'Move to Category',
       icon: 'category',

@@ -29,6 +29,11 @@ const SIZE = {
 
 let ghost: BrowserWindow | null = null;
 let ghostReady: Promise<unknown> = Promise.resolve();
+
+/** Is this the drag ghost? It has no taskbar button (`skipTaskbar`), so the badge skips it (057 FR-039). */
+export function isGhostWindow(win: BrowserWindow): boolean {
+  return ghost !== null && win === ghost;
+}
 let timer: ReturnType<typeof setInterval> | null = null;
 
 /** Ghost theme tokens. Defaults are the `throng` theme; overwritten live from the

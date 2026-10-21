@@ -356,6 +356,9 @@ export function registerTerminalIpc(deps: {
             ...launch,
             // FR-080: throng's one addition, layered over whatever the flavour's own env carries.
             ...(hyperlinkEnv ? { env: { ...launch.env, ...hyperlinkEnv } } : {}),
+            // 057 FR-065a, R8: a recipe launch folds the command into args, so only main knows a
+            // startup command is in effect; the daemon needs it to tell that command's finish apart.
+            ...(req.startupCommand?.trim() ? { startupCommand: true } : {}),
             /*
              * #209 — the environment the shell is built from comes from HERE.
              *

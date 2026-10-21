@@ -17,11 +17,14 @@ export {
   DISPLAY_MODES,
   DISPLAY_MODE_LABELS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  NOTIFICATION_TYPES,
   TIMEOUT_MIN_MS,
   TIMEOUT_MAX_MS,
   parseNotificationSettings,
   type DisplayMode,
   type SeverityNotificationSettings,
+  type NotificationTypeSettings,
+  type NotificationType,
   type NotificationSettings,
 } from './display-mode.js';
 export { noticeLogLevel } from './log-level.js';

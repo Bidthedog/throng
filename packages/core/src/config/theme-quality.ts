@@ -279,8 +279,13 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * three more terms that sit near the page and near counterparts every theme already has, so the mean
  * drops by construction with no theme becoming more alike in character. The threshold is untouched at
  * 4.3.
+ *
+ * Re-measured by 057 (R11), which added `attentionMark` (each theme's accent) and `attentionFailedMark`
+ * (its danger colour, or the shared red where that equals the accent) to every theme: 6.093435722242142
+ * → 6.061137717854353. Both are copies of colours the theme already carries, so the mean drops by
+ * construction with no theme becoming more alike in character. The threshold is untouched at 4.3.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.093435722242142;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.061137717854353;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

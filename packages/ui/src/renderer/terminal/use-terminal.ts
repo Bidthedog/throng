@@ -80,6 +80,7 @@ import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
 /** #290 debug — the DEC modes worth a log line: the screens, alternate scroll, and mouse reporting. */
 const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
+import { isFocusReport } from './focus-reports.js';
 import { getActivePane } from '../workspace/active-pane.js';
 
 /*
@@ -1517,37 +1518,18 @@ export function useTerminal(opts: UseTerminalOptions): void {
       if (isOurs(e)) takeExit(e);
     });
     /*
-     * Focus reports are only honest when focus actually moved (028 follow-up).
+     * Focus reports are the daemon's to send, never the view's (057 FR-099).
      *
-     * With focus reporting on (DEC 1004), a terminal tells the program when it gains or loses focus:
-     * `CSI I` / `CSI O`. Claude Code re-asserts the mode on every screen transition, and xterm answers
-     * each time with the CURRENT state — so a report was landing after keystrokes during which focus
-     * never moved. Measured: a DOM focus listener saw nothing while `\x1b[I` went out after every
-     * arrow press and every Escape.
-     *
-     * That is not cosmetic. A lone ESC is ambiguous — it is both the Escape key and the first byte of
-     * every sequence — so a program waits to see what follows before deciding. Handing it
-     * `ESC` then `ESC [ I` turns the user's Escape into something else, which is the reported
-     * "Escape enters the session instead of leaving it", and intermittent because it depends on what
-     * the program was doing.
-     *
-     * So: a report is transmitted only if a real focus change produced it. The listeners sit on the
-     * container in the CAPTURE phase, which runs before xterm's own handlers on the textarea, so the
-     * flag is set by the time xterm asks to send.
+     * A program with focus reporting on (DEC 1004) must hear `CSI O` when its panel stops being attended
+     * and `CSI I` when it is attended again. A tab or project switch unmounts this view first, so the view
+     * could never be the complete source — and Claude Code, told nothing, suppressed its own
+     * notifications. The daemon tells it from main's attendance instead, so xterm's own reports are
+     * dropped here: two sources would report twice. That also retires 028's gate, which existed because
+     * xterm answers a re-asserted 1004 with a report when focus never moved, turning a lone Escape into
+     * `ESC` `ESC [ I`.
      */
-    let realFocusChange = false;
-    const noteFocusChange = (): void => {
-      realFocusChange = true;
-    };
-    container.addEventListener('focus', noteFocusChange, true);
-    container.addEventListener('blur', noteFocusChange, true);
-
     term.onData((data) => {
-      // `CSI I` / `CSI O` — a focus report. Send it only when focus really moved.
-      if (data === '[I' || data === '[O') {
-        if (!realFocusChange) return;
-        realFocusChange = false;
-      }
+      if (isFocusReport(data)) return;
       // 028 (#200) — count what left the renderer and what the daemon acknowledged. The reported
       // defect is a character the SHELL never received, which is invisible from the rendered view:
       // a test can only tell "typed" from "arrived" by counting both ends (FR-009b/FR-023).
@@ -1870,9 +1852,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       forgetDiagnostics(panelId); // 028 FR-009 — counters are per live view, not a growing ledger
       unregisterTerminalFocus(panelId);
       unregisterRefresh();
-      container.removeEventListener('focus', noteFocusChange, true);
-      container.removeEventListener('blur', noteFocusChange, true);
-      term.dispose();
+          term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
     };

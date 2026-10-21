@@ -49,6 +49,9 @@ import type {
   IExecutableExtensions,
   IFileSystem,
   IForegroundHandoff,
+  ISystemNotifier,
+  ITaskbarBadge,
+  FocusReport,
   IPathForms,
   IRefusedUriSchemes,
   IShellIntegration,
@@ -143,6 +146,9 @@ import type { ClipboardService } from './clipboard-service.js';
 import { WindowsShellDetection, WindowsElevation, lookupHolder } from '@throng/platform-windows';
 import { createShellDetectionService } from './shell-detection-service.js';
 import { DaemonEvents } from './daemon-events.js';
+import { raiseWindow } from './window-raise.js';
+import { AttentionService, type AttentionWindows } from './attention-service.js';
+import { NoticeOs } from './notice-os.js';
 import { DaemonSupervisor } from './daemon-supervisor.js';
 import { registerTerminalIpc, UNLOAD_RPC_TIMEOUT_MS } from './terminal-ipc.js';
 
@@ -544,6 +550,9 @@ function createSubWorkspaceWindow(
 // Electron's per-user data (recovery temps, window state) lives in %APPDATA%\throng
 // — alongside the daemon's throng.db — instead of the dev-default %APPDATA%\Electron.
 app.setName('throng');
+// 057 FR-039: Windows shows a toast and a taskbar overlay only for an app with an identity, and
+// without one the toast is attributed to Electron (or dropped). Set before any notification.
+app.setAppUserModelId('com.throng.throng');
 
 /*
  * The `throng-preview:` scheme (044, contracts/preview-ipc.md §4) — registered at MODULE TOP LEVEL
@@ -713,15 +722,8 @@ function bringMainWindowForward(): void {
   if (!existing) return;
   // Recover a window the user "lost" — e.g. left on a now-disconnected monitor: move it onto a
   // visible display before focusing, so a second launch un-hides it rather than silently doing nothing.
-  const di = new ElectronDisplayInfo(() => screen.getAllDisplays());
-  const b = existing.getBounds();
-  if (!di.isVisible(b)) {
-    const v = di.clampToVisible(b);
-    existing.setBounds({ x: v.x, y: v.y, width: v.width, height: v.height });
-  }
-  if (existing.isMinimized()) existing.restore();
-  existing.show();
-  existing.focus();
+  // The same raise an attention notification's click uses (057, window-raise.ts).
+  raiseWindow(existing, new ElectronDisplayInfo(() => screen.getAllDisplays()));
 }
 
 /*
@@ -1317,6 +1319,7 @@ if (isPrimaryInstance)
    * projects may share a root — the constraint that makes the id→root map total and unambiguous.
    */
   const projectsByRoot = new Map<string, { id: string; rootFolder: string; hiddenPaths: string[] }>();
+  let attentionOnProjectsListed: ((projectIds: ReadonlySet<string>) => void) | null = null;
   const sameHidden = (a: readonly string[], b: readonly string[]): boolean =>
     a.length === b.length && a.every((v, i) => v === b[i]);
   /** Re-list from the daemon; answer with the roots whose hidden set ACTUALLY changed. */
@@ -1352,6 +1355,9 @@ if (isPrimaryInstance)
     // 050 FR-011 — a project removed or re-rooted empties a clipboard holding its items. Here, inside
     // the refresh, so EVERY caller's fresh list is checked — and only a list the daemon actually gave.
     fileClipboard.retainProjects(new Map(projects.map((p) => [p.id, p.rootFolder])));
+    // 057 FR-007 — the same fresh list tells attention which projects are gone. Late-bound: the
+    // service is built after this function, and a refresh can run before it exists.
+    attentionOnProjectsListed?.(new Set(projects.map((p) => p.id)));
     return changed;
   };
   const projectFileIndex = new ProjectFileIndexService(
@@ -1992,11 +1998,143 @@ if (isPrimaryInstance)
   });
   ipcMain.handle('throng:daemon:restart', () => daemonSupervisor.requestRestart());
   ipcMain.handle('throng:daemon:state', () => daemonSupervisor.current());
-  const daemonEvents = new DaemonEvents(settings.pipeName, daemonSupervisor);
+  /*
+   * 057 — panel attention marks. Main owns the mark state (contracts/app-attention.md); the renderer
+   * never sees the daemon. Built by hand like its neighbours here: its windows port needs the live
+   * main window, which does not exist when the container is composed.
+   */
+  let attentionMainWindow: BrowserWindow | null = null;
+  let attentionWindowManager: WindowManager | null = null;
+  const attentionWindowOf = (id: number): BrowserWindow | undefined =>
+    BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && w.webContents.id === id);
+  const pendingBadgeImages = new Map<string, (dataUrl: string | null) => void>();
+  const attentionWindows: AttentionWindows = {
+      ids: () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed()).map((w) => w.webContents.id),
+      focusedId: () => {
+        const focused = BrowserWindow.getFocusedWindow();
+        return focused && !focused.isDestroyed() ? focused.webContents.id : null;
+      },
+      mainId: () =>
+        attentionMainWindow && !attentionMainWindow.isDestroyed() ? attentionMainWindow.webContents.id : null,
+      // The windows that mount AttentionToasts: main and the sub-workspace windows, never Preferences or About.
+      toastHostIds: () => {
+        const ids: number[] = [];
+        if (attentionMainWindow && !attentionMainWindow.isDestroyed()) ids.push(attentionMainWindow.webContents.id);
+        for (const childId of attentionWindowManager?.childIds() ?? []) {
+          const child = attentionWindowManager?.getChild(childId) as unknown as BrowserWindow | null | undefined;
+          if (child && !child.isDestroyed()) ids.push(child.webContents.id);
+        }
+        return ids;
+      },
+      send: (windowId, channel, payload) => {
+        const win = attentionWindowOf(windowId);
+        if (win && !win.webContents.isDestroyed()) win.webContents.send(channel, payload);
+      },
+      broadcast: (channel, payload) => broadcastToWindows(BrowserWindow.getAllWindows(), channel, payload),
+      raise: (windowId) => {
+        const win = attentionWindowOf(windowId);
+        if (win) raiseWindow(win, new ElectronDisplayInfo(() => screen.getAllDisplays()));
+      },
+      requestBadgeImage: (windowId, req) =>
+        new Promise<string | null>((resolve) => {
+          const win = attentionWindowOf(windowId);
+          if (!win) return resolve(null);
+          const requestId = randomUUID();
+          const timer = setTimeout(() => {
+            pendingBadgeImages.delete(requestId);
+            resolve(null);
+          }, 2000);
+          pendingBadgeImages.set(requestId, (dataUrl) => {
+            clearTimeout(timer);
+            pendingBadgeImages.delete(requestId);
+            resolve(dataUrl);
+          });
+          win.webContents.send('throng:attention:badgeImage', { requestId, ...req });
+        }),
+  };
+  const attentionService = new AttentionService({
+    windows: attentionWindows,
+    daemon: { call: <T>(method: string, params: unknown) => daemonClient.call<T>(method, params) },
+    notifier: container.get<ISystemNotifier>(UI_TYPES.SystemNotifier),
+    badge: container.get<ITaskbarBadge>(UI_TYPES.TaskbarBadge),
+    settings: () => currentSettings,
+    log: (message, err) => diagnostics.log.warn(`${message} ${err instanceof Error ? err.message : String(err)}`),
+  });
+  // 057 FR-110: an ordinary notice reaches the OS through the same notifier and window port.
+  const noticeOs = new NoticeOs({
+    notifier: container.get<ISystemNotifier>(UI_TYPES.SystemNotifier),
+    windows: attentionWindows,
+    settings: () => currentSettings,
+  });
+  ipcMain.on('throng:notices:toOs', (_event, payload: unknown) => noticeOs.show(payload));
+  attentionOnProjectsListed = (ids) => attentionService.reconcileProjects(ids);
+  onSettingsChanged.push((previous, next) => attentionService.onSettingsChanged(previous, next));
+  // The renderer cannot know its own webContents id, so the id on a FocusReport is stamped here and
+  // whatever the renderer sent is ignored.
+  ipcMain.on('throng:attention:focus', (event, payload: unknown) => {
+    const r = payload as Partial<FocusReport> | null;
+    const windowId = senderWebContentsId(event.sender);
+    if (!r || windowId === null || !Array.isArray(r.hostedPanels)) return;
+    attentionService.onFocusReport({
+      windowId,
+      windowFocused: r.windowFocused === true,
+      focusedPanelId: typeof r.focusedPanelId === 'string' ? r.focusedPanelId : null,
+      hostedPanels: r.hostedPanels,
+    });
+  });
+  ipcMain.on('throng:attention:goTo', (_event, payload: unknown) => {
+    const p = payload as { panelId?: unknown } | null;
+    if (p && typeof p.panelId === 'string') attentionService.goTo(p.panelId);
+  });
+  // T068: a renderer that registers late pulls the set it missed; T069: one that can draw the badge says so.
+  ipcMain.handle('throng:attention:getMarks', () => ({ marks: attentionService.currentMarks() }));
+  ipcMain.on('throng:attention:badgeReady', () => attentionService.onBadgeAnswererReady());
+  ipcMain.on('throng:attention:badgeImage', (_event, payload: unknown) => {
+    const p = payload as { requestId?: unknown; dataUrl?: unknown } | null;
+    if (!p || typeof p.requestId !== 'string') return;
+    pendingBadgeImages.get(p.requestId)?.(typeof p.dataUrl === 'string' ? p.dataUrl : null);
+  });
+  app.on('browser-window-created', (_event, win) => {
+    const id = win.webContents.id;
+    win.on('closed', () => attentionService.onWindowClosed(id));
+    // Window focus is main's to judge: a minimised window's renderer stops reporting (rAF pauses), so
+    // its last report would keep a panel "attended" for ever.
+    // T068/T069: a window that has just loaded missed every broadcast so far, and can now draw the badge.
+    win.webContents.on('did-finish-load', () => {
+      attentionService.sendMarksTo(id);
+      attentionService.onBadgeAnswererReady();
+    });
+    const refocus = (): void => attentionService.onWindowFocusChanged();
+    win.on('focus', refocus);
+    win.on('blur', refocus);
+    win.on('minimize', refocus);
+    win.on('restore', refocus);
+    win.on('hide', refocus);
+    win.on('show', refocus);
+  });
+  const daemonEvents = new DaemonEvents(settings.pipeName, daemonSupervisor, {
+    onSignal: (signal) => attentionService.onSignal(signal),
+    onConnected: () => void attentionService.onDaemonConnected(),
+  });
   daemonEvents.start();
-  app.on('will-quit', () => {
+  /*
+   * 057 FR-091 — a mark raised in the last 250 ms is still waiting out the sync debounce when the
+   * user quits, and would never reach the daemon ledger. Hold the quit once, for at most a second,
+   * to send it; the daemon socket is still open here because `daemonEvents.stop()` runs after.
+   */
+  let attentionFlushedForQuit = false;
+  app.on('will-quit', (event) => {
+    if (!attentionFlushedForQuit) {
+      attentionFlushedForQuit = true;
+      event.preventDefault();
+      void Promise.race([attentionService.flush(), new Promise<void>((r) => setTimeout(r, 1000))]).finally(() =>
+        app.quit(),
+      );
+      return;
+    }
     daemonEvents.stop();
     daemonSupervisor.dispose();
+    attentionService.dispose();
   });
 
   // Window geometry persistence (FR-047) restored onto a visible display (FR-028).
@@ -2015,6 +2153,8 @@ if (isPrimaryInstance)
   );
   windowManager.registerMain(mainWindow);
   instanceMainWindow = mainWindow; // a second launch brings THIS window forward (058 FR-018)
+  attentionMainWindow = mainWindow;
+  attentionWindowManager = windowManager;
   /*
    * 044 FR-063 — a preview provider turned off, MAIN's half (contracts/preview-ipc.md §5).
    *
@@ -2401,6 +2541,7 @@ if (isPrimaryInstance)
     const p = payload as { id?: unknown } | null;
     if (!p || typeof p.id !== 'string') return;
     panelStateHandoff.forget(p.id);
+    attentionService.onPanelDestroyed(p.id); // 057 FR-007: a mark never outlives its panel
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:panel:destroyed', { id: p.id });
   });
 

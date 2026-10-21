@@ -226,6 +226,16 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The amber cue for something that went ahead but not as asked — the edge of a warning notice, such as a panel name that had to be adjusted because it was already taken.',
   },
+  'colours.attentionMark': {
+    label: 'Attention Marker',
+    description:
+      'The colour of the mark on a panel, project or category that needs you, and of the count on the taskbar icon. Distinct from the brief flash a panel gives when it is brought into view.',
+  },
+  'colours.attentionFailedMark': {
+    label: 'Failed Attention Marker',
+    description:
+      'The colour of the mark on a panel, project or category where a command or program ended with an error, and of the taskbar count while one is marked. Keep it clearly different from the Attention Mark.',
+  },
   'colours.railBg': {
     label: 'Collapsed Rail Background',
     description: 'The narrow strip shown when a side pane is collapsed, carrying its expand toggle.',
@@ -884,6 +894,21 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Warning icon',
     description:
       'The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.',
+  },
+  'icons.attention': {
+    label: 'Attention mark icon',
+    description:
+      'The mark on a panel, project or category that needs you, and the glyph on the cog menu’s Go to Next Marked Panel row.',
+  },
+  'icons.attentionFailed': {
+    label: 'Failed attention mark icon',
+    description:
+      'The mark on a panel, project or category where a command or program ended with an error.',
+  },
+  'icons.goToPanel': {
+    label: 'Go to panel icon',
+    description:
+      'The glyph on the link control of an attention notification, which takes you to the panel that raised it.',
   },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {

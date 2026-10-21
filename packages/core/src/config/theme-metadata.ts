@@ -260,6 +260,8 @@ const GENERAL_COLOURS: ReadonlySet<string> = new Set([
   // preview (FR-166), so it is no more one area's than the underline above.
   'linkHintBackground', 'linkHintText', 'linkHintBorder',
   'statusBarBg', 'success', 'warning',
+  // 057 (R11) — a mark shows on panels, projects, categories and the taskbar, so no one area owns it.
+  'attentionMark', 'attentionFailedMark',
   // `surface`/`surfaceActive` are the present-day, overloaded former `panelSurface` (#62) — no single
   // dominant area, so General is their home (FR-014). 021 removed `menuSurface`/`dialogSurface` and the
   // four legacy `button*` tokens; the 18 typed button tokens live under General · Buttons (§2, Buttons).

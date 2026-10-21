@@ -38,7 +38,7 @@ import { useAppSettings } from '../config/config-store.js';
 import './notification.css';
 import { copyToClipboard } from './clipboard-copy.js';
 import { IconButton } from './icon-button.js';
-import { noticeParts, noticeToText, projectOf, type NoticePart } from './notice-text.js';
+import { noticeHeading, noticeParts, noticeToText, projectOf, type NoticePart } from './notice-text.js';
 import {
   pruneSilenced,
   rememberSilenced,
@@ -180,6 +180,12 @@ export interface Notice {
   testIds?: { message?: string; dismiss?: string };
   /** Arbitrary content under the message — e.g. the editor notice's structured file list. */
   body?: ReactNode;
+  /**
+   * Controls of the notice's own, drawn before Copy and Dismiss at the card's top-right and styled as
+   * they are (`notice__control`) — e.g. an attention toast's go-to-panel (057 FR-122). Not part of the
+   * notice's content, so never in the copied text.
+   */
+  controls?: ReactNode;
   /**
    * Run when the user dismisses this notice.
    *
@@ -961,6 +967,29 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         });
       }
 
+      /*
+       * ALSO IN THE OS (057 FR-110). A notice accepted as a NEW card — past the flash and duplicate
+       * returns above, so never a repeat, and `update` does not come through here — is also offered to
+       * main, which raises the Windows notification only while no throng window is focused.
+       *
+       * Independent of the display mode: Never display with OS Notify on gives the Windows
+       * notification alone. And a notice carrying its own `display` does not go (the find-in-files
+       * summary): attention reaches the OS from main itself, and a notice that states its own display
+       * has not asked for the severity's OS setting either.
+       */
+      const os = displaySettings.current;
+      if (
+        input.display === undefined &&
+        os?.os === true &&
+        os[input.severity]?.os === true
+      ) {
+        window.throng?.notices?.toOs?.({
+          severity: input.severity,
+          title: noticeHeading(input) ?? input.severity.charAt(0).toUpperCase() + input.severity.slice(1),
+          body: input.message,
+        });
+      }
+
       if (behaviour.mode === 'never') {
         // The only state a silenced notice creates: no id, never rendered, never dismissible.
         rememberSilenced(silenced.current, shadowKey, {
@@ -1147,6 +1176,7 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
                 need somewhere else — in an issue, in a message to us — and it is also the one thing
                 they cannot accurately retype: a path, an errno, a daemon's own words. Selecting text
                 out of a toast that may auto-dismiss is not a serious answer. */}
+            {n.controls}
             <IconButton
               token="copy"
               className="notice__copy"

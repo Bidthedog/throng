@@ -82,10 +82,12 @@ function confirmDescriptor(key: string, label: string, description: string): Fie
  * where a descriptor's bounds and the code's clamp disagreed and only the clamp was real.
  */
 function noticeDescriptors(
-  severity: 'error' | 'warning' | 'info' | 'success',
+  severity: 'error' | 'warning' | 'info' | 'success' | 'attention',
   noun: string,
   consequence: string,
 ): FieldDescriptor[] {
+  // 057 FR-108: the three settings of one type share a line in Preferences.
+  const row = { id: `notifications.${severity}`, label: noun };
   return [
     {
       key: `notifications.${severity}.mode`,
@@ -94,6 +96,7 @@ function noticeDescriptors(
         `Whether ${noun.toLowerCase()} notices stay until you dismiss them, disappear on their own, or are never shown. ` +
         `${consequence} Whatever this says, the event is still written to the log.`,
       group: 'Notifications',
+      row,
       control: 'select',
       allowedValues: DISPLAY_MODES,
       /*
@@ -121,8 +124,9 @@ function noticeDescriptors(
     {
       key: `notifications.${severity}.timeoutMs`,
       label: `${noun} notice duration`,
-      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used when the setting above is "Display for".`,
+      description: `How long a ${noun.toLowerCase()} notice stays on screen, in milliseconds. Only used under "Display for".`,
       group: 'Notifications',
+      row,
       // A bounded numeric is a slider in this app (018, FR-032/034) — and the converse guard makes
       // that mandatory, not optional: anything declaring both a min and a max must declare the
       // control those bounds exist for.
@@ -150,6 +154,17 @@ function noticeDescriptors(
        * mechanism instead of needing a third pattern.
        */
       enabledWhen: { key: `notifications.${severity}.mode`, is: 'timed' },
+    },
+    {
+      // 057 FR-110: independent of the mode above — "Never display" with this on is a Windows notification alone.
+      key: `notifications.${severity}.os`,
+      label: 'OS Notify',
+      description: `Raise a Windows notification for ${noun.toLowerCase()} notices, whatever the display setting says — but only while throng is not focused. While it is focused, the in-app notice and its display setting decide. Unavailable while "Operating system notifications" is off, keeping its setting.`,
+      group: 'Notifications',
+      row,
+      control: 'toggle',
+      // Round 5: greyed out, its value kept, while the global switch is off.
+      enabledWhen: { key: 'notifications.os', is: true },
     },
   ];
 }
@@ -954,6 +969,125 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     step: 5,
   },
 
+  // Terminal › Attention (057, FR-061/FR-081/FR-082). Which terminal events raise an attention mark.
+  // The exact signals ship on; the two heuristics ship off, because they can be wrong.
+  {
+    key: 'terminals.attention.enabled',
+    label: 'Mark terminals that need you',
+    description:
+      'Raise an attention mark on a terminal panel when something happens in it that you may want to look at. Off, no terminal raises a mark and every existing terminal mark is withdrawn. The switches below choose which events count.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.attention.signals.processExited',
+    label: 'Program exited',
+    description:
+      'Mark a terminal whose program ended without you ending it. A zero exit code raises the Attention mark, anything else the Failed mark. Exact: throng is told when the process exits.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.commandFinished',
+    label: 'Command finished',
+    description:
+      'Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to one Command tracking interval late, because throng notices by watching the foreground command; a command that starts and ends between two checks can be missed.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.bell',
+    label: 'Bell',
+    description:
+      'Mark a terminal when a program rings the terminal bell. Exact: the program asked for it.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.notification',
+    label: 'Program notification',
+    description:
+      'Mark a terminal when a program sends a desktop notification request through the terminal. Exact: the program asked for it.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.progressEnded',
+    label: 'Progress ended',
+    description:
+      'Mark a terminal when a program reports that the progress it was showing completed (Attention mark) or failed (Failed mark). Exact: the program reported it.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.unseenOutput',
+    label: 'Unseen output',
+    description:
+      'Mark a terminal that prints output while it is not the focused panel. A heuristic: it means the terminal changed, not that it needs you.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.signals.outputQuiet',
+    label: 'Output went quiet',
+    description:
+      'Mark a terminal whose output stops for the quiet time below, after it printed while not focused. A heuristic: throng cannot tell a program that is waiting from one that is working silently.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'toggle',
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+  {
+    key: 'terminals.attention.quietSeconds',
+    label: 'Quiet time',
+    description:
+      'How many seconds a terminal must stay silent after activity before Output went quiet marks it.',
+    group: 'Terminal',
+    subgroup: 'Attention',
+    control: 'slider',
+    // Spec says 5-600 step 5, but slider-descriptors.test.ts requires a step of at least 1% of the
+    // range (0.84% here). 10-600 step 10 keeps the default of 10 on the grid and passes.
+    min: 10,
+    max: 600,
+    step: 10,
+    enabledWhen: { key: 'terminals.attention.enabled', is: true },
+  },
+
+  // Attention (057, FR-095/FR-039): how a raised mark clears, and the taskbar badge. How it is announced is
+  // the Attention row under Notifications (FR-111).
+  {
+    key: 'attention.clearDelayMs',
+    label: 'Clear delay',
+    description:
+      'How long, in milliseconds, you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel.',
+    group: 'Attention',
+    control: 'slider',
+    min: 0,
+    max: 10000,
+    step: 100,
+  },
+  {
+    key: 'attention.taskbarBadge',
+    label: 'Taskbar badge',
+    description:
+      'Show the number of marked panels, across every project, on throng’s taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings.',
+    group: 'Attention',
+    control: 'toggle',
+  },
+
   // Indentation (016, FR-018/FR-022). The order of precedence is the requirement: what the FILE
   // already does beats the language, which beats the global default. A setting NEVER reformats an
   // existing document (FR-018d) — it decides what the next keystroke inserts.
@@ -1226,12 +1360,22 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   },
   // Notifications (030 US1, #224)
   //
-  // Eight leaves, two per severity, and every one of them exists because the old behaviour was
+  // A mode and a duration per severity (057 FR-108 adds an OS switch to each, a fifth type and one switch
+  // over them all), and every one of them exists because the old behaviour was
   // hardcoded: severity decided persistence, and everything below `error` vanished after a constant
   // nobody could change. A notice that disappeared before it was read was indistinguishable from one
   // that never happened, which is the bug — so the dwell is the USER's to set (Principle X).
   //
   // `error` and `warning` come first because they are the ones people change.
+  {
+    // 057 FR-109: one switch over every type's "OS Notify".
+    key: 'notifications.os',
+    label: 'Operating system notifications',
+    description:
+      'Allow throng to send Windows notifications at all. Off, nothing reaches Windows and every OS Notify is unavailable, though each keeps its setting.',
+    group: 'Notifications',
+    control: 'toggle',
+  },
   ...noticeDescriptors(
     'error',
     'Error',
@@ -1247,6 +1391,12 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     'success',
     'Success',
     'These confirm an operation that worked, so they are the safest to shorten or switch off.',
+  ),
+  // 057 FR-111: one type for both kinds of attention mark; a Failed mark keeps the Error colour and icon.
+  ...noticeDescriptors(
+    'attention',
+    'Attention',
+    'These announce a terminal that needs you, Attention and Failed marks alike. The mark itself is raised whatever you choose.',
   ),
 
   {

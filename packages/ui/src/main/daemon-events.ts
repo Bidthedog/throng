@@ -1,5 +1,6 @@
 import { connect, type Socket } from 'node:net';
 import { BrowserWindow } from 'electron';
+import type { AttentionSignal } from '@throng/core';
 import { broadcastToWindows } from './broadcast.js';
 import {
   TERMINAL_SUBSCRIBE_METHOD,
@@ -8,6 +9,7 @@ import {
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
+  TERMINAL_ATTENTION_NOTIFICATION,
 } from '@throng/ipc-contract';
 
 /**
@@ -30,9 +32,15 @@ export class DaemonEvents {
    * Optional so every existing construction site keeps working untouched: without one, this class
    * behaves exactly as it did, silently reconnecting forever.
    */
+  /**
+   * 057 — where attention goes. A `terminal.attention` notification is NOT broadcast to windows: the
+   * renderer never sees the daemon, and main's AttentionService turns it into marks. `onConnected`
+   * fires on every (re)connect so the producer config is pushed again to a restarted daemon.
+   */
   constructor(
     private readonly pipeName: string,
     private readonly supervisor?: { onConnected(): void; onDisconnected(): void },
+    private readonly attention?: { onSignal(signal: AttentionSignal): void; onConnected(): void },
   ) {}
 
   start(): void {
@@ -57,6 +65,7 @@ export class DaemonEvents {
       // It is also what cancels a grace still running from a previous close, so a blip the user
       // never noticed never becomes a notice.
       this.supervisor?.onConnected();
+      this.attention?.onConnected();
     });
     socket.on('data', (chunk: string) => {
       buffer += chunk;
@@ -88,6 +97,10 @@ export class DaemonEvents {
     try {
       msg = JSON.parse(line) as { method?: string; params?: unknown };
     } catch {
+      return;
+    }
+    if (msg.method === TERMINAL_ATTENTION_NOTIFICATION) {
+      if (msg.params && typeof msg.params === 'object') this.attention?.onSignal(msg.params as AttentionSignal);
       return;
     }
     const channel =

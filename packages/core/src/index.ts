@@ -176,6 +176,46 @@ export type { IProcessCwd } from './abstractions/process-cwd.js';
 export type { IForegroundHandoff } from './abstractions/foreground-handoff.js';
 export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-handoff.js';
 
+// 057 — panel attention marks: the shared vocabulary and the two OS seams (notifications, taskbar badge).
+export type {
+  AttentionKind,
+  AttentionLedgerEntry,
+  AttentionMark,
+  AttentionProducerConfig,
+  AttentionReason,
+  AttentionSignal,
+  AttentionSignalName,
+  FocusReport,
+  HostedPanel,
+} from './attention/attention-types.js';
+export { ATTENTION_SIGNAL_NAMES } from './attention/attention-types.js';
+export { createAttentionScan, isTerminalReport, sanitiseAttentionText } from './terminal/attention-scan.js';
+export type { AttentionHit, AttentionScanner } from './terminal/attention-scan.js';
+export { nextMarkedPanel } from './attention/attention-next.js';
+export type { AttentionOrder, AttentionPosition, MarkedPanelTarget } from './attention/attention-next.js';
+export { AttentionModel } from './attention/attention-model.js';
+export type { AttentionModelOptions } from './attention/attention-model.js';
+export {
+  badgeSummary,
+  categoryKind,
+  holderKind,
+  holderLabel,
+  kindLabel,
+  marksForPanels,
+  marksForProject,
+  marksForProjects,
+  projectKind,
+  reasonLabel,
+  reasonText,
+  describeMark,
+  notificationText,
+  tooltipLines,
+} from './attention/attention-holders.js';
+export type { ISystemNotifier } from './abstractions/system-notifier.js';
+export { NoSystemNotifier } from './abstractions/system-notifier.js';
+export type { ITaskbarBadge } from './abstractions/taskbar-badge.js';
+export { NoTaskbarBadge } from './abstractions/taskbar-badge.js';
+
 // De-elevation OS seam (005 Phase G, FR-025c): wrap a launch to run de-elevated.
 export type { IDeElevator, DeElevateSpec } from './abstractions/de-elevator.js';
 export { passthroughDeElevator } from './abstractions/de-elevator.js';
@@ -258,6 +298,10 @@ export type {
   TerminalFlavourConfig,
   // 039 FR-020 (#293) — automatic vs manual terminal reload.
   TerminalReloadMode,
+  // 057 — attention settings (config boundary).
+  AttentionSettings,
+  TerminalAttentionSettings,
+  TerminalAttentionSignals,
   EditorSettings,
   // 045 FR-050/FR-060 (#394) — the `Editor · Links` block.
   EditorLinkSettings,
@@ -866,6 +910,8 @@ export {
   trackAltScreen,
   createWindowTitleScan,
   scanWindowTitle,
+  isShellTitle,
+  isProgramTitle,
   type WindowTitleScan,
   createNegotiationScan,
   scanKeyboardNegotiation,

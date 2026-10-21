@@ -72,6 +72,11 @@ export type ActionId =
    * v5.6.0 Principle VI, "A chord MAY stand without a menu item").
    */
   | 'focus.workspace'
+  /**
+   * 057 (R15) — Go to Next Marked Panel: focus the next panel carrying an attention mark, across
+   * projects and tabs. A window command, so it fires from a focused terminal.
+   */
+  | 'focus.nextMarkedPanel'
   // File Explorer tree operations (004, FR-021). Resolved only while the
   // File Explorer Pane has focus (research D8).
   | 'file.rename'
@@ -340,6 +345,8 @@ export const COMMAND_SCOPES: CommandScopes = {
   // 046 FR-116 — the way back from a side pane or a notice must work from wherever focus is now,
   // a terminal included; the `focus.` prefix already makes it a window command in `isPanelScoped`.
   'focus.workspace': EVERYWHERE,
+  // 057 (R15) — the `focus.` prefix makes it a window command; a mark can be waiting while a terminal has focus.
+  'focus.nextMarkedPanel': EVERYWHERE,
   // 024 US6: the keyboard "open context menu" works wherever a focusable item has one (explorer,
   // editor, terminal) — EVERYWHERE covers those three scopes.
   'menu.open': EVERYWHERE,
@@ -543,6 +550,8 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     'focus.explorer': ['Ctrl+Shift+Alt+M'],
     'focus.projects': ['Ctrl+Shift+Alt+B'],
     'focus.workspace': ['Ctrl+Shift+Alt+N'],
+    // 057 (R15) — G for "go": tier 1, in neither the reserved nor the shadowable terminal tier.
+    'focus.nextMarkedPanel': ['Ctrl+Shift+Alt+G'],
     'menu.open': ['Shift+F10', 'ContextMenu'],
     /*
      * 046 iterate round 1 (FR-102) — TIER 1, moved from its pre-round Ctrl+Alt+T (031 FR-032a):
@@ -1088,6 +1097,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'focus.explorer',
   'focus.projects',
   'focus.workspace',
+  'focus.nextMarkedPanel',
   'tabs.openPicker',
   'navigate.quickOpen',
   'navigate.gotoLine',

@@ -76,6 +76,9 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
       }),
     ),
   ];
+  // 057 FR-082 added a Go to Next Marked Panel row here, making the Application section six; FR-106
+  // (round 3) supersedes that — it is offered by a marked project's context menu instead
+  // (`sidebar/project-menu.ts`) — so the pinned shape is back to five.
   // About throng (020, FR-003) — the discoverable entry point to the About window. It lives here,
   // not on a native menu bar: throng draws its own title bar (`frame: false`), so the native
   // application menu never appears on screen. Its circled-information glyph reads as "about".

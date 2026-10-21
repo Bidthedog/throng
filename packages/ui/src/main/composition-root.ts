@@ -1,7 +1,17 @@
 import 'reflect-metadata';
+import { appendFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Container } from 'inversify';
-import { app, clipboard as electronClipboard, ClipboardItem, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard as electronClipboard,
+  ClipboardItem,
+  nativeImage,
+  Notification as ElectronNotification,
+  shell,
+} from 'electron';
 import type {
   IClipboard,
   IConfigSettings,
@@ -13,10 +23,18 @@ import type {
   IForegroundHandoff,
   IPathForms,
   IRefusedUriSchemes,
+  ISystemNotifier,
+  ITaskbarBadge,
   IUiSettings,
   ShippedDefaults,
 } from '@throng/core';
-import { buildShippedDefaults, defaultPipeName, NoForegroundHandoff } from '@throng/core';
+import {
+  buildShippedDefaults,
+  defaultPipeName,
+  NoForegroundHandoff,
+  NoSystemNotifier,
+  NoTaskbarBadge,
+} from '@throng/core';
 import {
   WindowsExecutableExtensions,
   WindowsFontEnumeration,
@@ -32,6 +50,10 @@ import { UI_TYPES } from './tokens.js';
 import { ElectronClipboard } from './electron-clipboard.js';
 import { MemoryClipboard } from './memory-clipboard.js';
 import { ClipboardService } from './clipboard-service.js';
+import { ElectronSystemNotifier } from './electron-system-notifier.js';
+import { ElectronTaskbarBadge, windowsWithTaskbarButton } from './electron-taskbar-badge.js';
+import { isGhostWindow } from './ghost-window.js';
+import { RecordingSystemNotifier, RecordingTaskbarBadge, type OsCall } from './recording-attention-os.js';
 import { DaemonClient } from './daemon-client.js';
 import { FileConfigStore } from './config-store.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
@@ -133,6 +155,48 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
       ? new NoForegroundHandoff()
       : new WindowsForegroundHandoff();
   container.bind<IForegroundHandoff>(UI_TYPES.ForegroundHandoff).toConstantValue(foregroundHandoff);
+  /*
+   * 057 — the two OS seams attention marks reach the desktop through.
+   *
+   * Under E2E (`THRONG_E2E_ATTENTION_OS=record`) Electron's Notification and overlay icon cannot be
+   * observed from Playwright, so recorders stand in and append each effective call to a JSONL log the
+   * harness reads. The shipped path is the Electron adapters, and a spec that does not ask for the
+   * recorder gets the no-ops, so a suite never raises real notifications on the developer's desktop.
+   */
+  const attentionOsLog =
+    process.env.THRONG_E2E_ATTENTION_OS_LOG ?? join(app.getPath('userData'), 'attention-os.jsonl');
+  const recordOsCall = (call: OsCall): void => {
+    try {
+      appendFileSync(attentionOsLog, `${JSON.stringify(call)}\n`);
+    } catch {
+      // A harness log that cannot be written must not break the app under test.
+    }
+  };
+  let systemNotifier: ISystemNotifier;
+  let taskbarBadge: ITaskbarBadge;
+  if (process.env.THRONG_E2E_ATTENTION_OS === 'record') {
+    systemNotifier = new RecordingSystemNotifier(recordOsCall);
+    taskbarBadge = new RecordingTaskbarBadge(recordOsCall);
+  } else if (underHarness) {
+    systemNotifier = new NoSystemNotifier();
+    taskbarBadge = new NoTaskbarBadge();
+  } else {
+    systemNotifier = new ElectronSystemNotifier((o) => new ElectronNotification(o));
+    const electronBadge = new ElectronTaskbarBadge(
+      () => windowsWithTaskbarButton(BrowserWindow.getAllWindows(), isGhostWindow),
+      (dataUrl) => nativeImage.createFromDataURL(dataUrl),
+    );
+    taskbarBadge = electronBadge;
+    // FR-039: a window that gets its taskbar button after the badge was set (a tear-off, a reopened
+    // main window) shows the same count once it is on screen — an overlay set before then is lost.
+    app.on('browser-window-created', (_event, win) => {
+      win.once('show', () => {
+        if (windowsWithTaskbarButton([win], isGhostWindow).length > 0) electronBadge.reapply(win);
+      });
+    });
+  }
+  container.bind<ISystemNotifier>(UI_TYPES.SystemNotifier).toConstantValue(systemNotifier);
+  container.bind<ITaskbarBadge>(UI_TYPES.TaskbarBadge).toConstantValue(taskbarBadge);
 
   const configSettings = readConfigSettings(devMode);
   container.bind<IConfigSettings>(UI_TYPES.ConfigSettings).toConstantValue(configSettings);

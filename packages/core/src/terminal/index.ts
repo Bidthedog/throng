@@ -119,6 +119,8 @@ export {
 export { trackAltScreen } from './alt-screen.js';
 export {
   createWindowTitleScan,
+  isProgramTitle,
+  isShellTitle,
   scanWindowTitle,
   type WindowTitleScan,
 } from './window-title.js';

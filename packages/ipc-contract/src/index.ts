@@ -126,6 +126,11 @@ export {
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
+  TERMINAL_ATTENTION_NOTIFICATION,
+  TERMINAL_ATTENTION_CONFIG_METHOD,
+  TERMINAL_ATTENTION_LEDGER_METHOD,
+  TERMINAL_ATTENTION_SYNC_METHOD,
+  TERMINAL_ATTENTION_FOCUS_METHOD,
 } from './terminal.js';
 export type {
   LaunchSpecDto,
@@ -153,6 +158,11 @@ export type {
   TerminalFlavourMissingNotification,
   TerminalGridNotification,
   TerminalCwdNotification,
+  TerminalAttentionNotification,
+  TerminalAttentionConfigParams,
+  TerminalAttentionLedgerResult,
+  TerminalAttentionSyncParams,
+  TerminalAttentionFocusParams,
   JsonRpcNotification,
 } from './terminal.js';
 

@@ -28,6 +28,8 @@ import {
   type Tab,
 } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
+import { OverflowMark, TabMark } from '../attention/holder-marks.js';
+import { hiddenTabIds } from '../attention/hidden-tabs.js';
 import { NameLimitField } from '../common/name-limit-field.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
 import { TabPopover, popoverTabName } from './tab-popover.js';
@@ -83,6 +85,16 @@ import {
   NEW_TAB_DROP_ID,
 } from './drag-state.js';
 import { dragFromNonInteractive } from './drag-handle.js';
+
+/** Joins tab ids into the by-value key `hiddenSides` holds; ids never contain it. */
+const TAB_ID_SEP = '\n';
+
+/** The panel ids held by the tabs named in `joinedTabIds` (a {@link TAB_ID_SEP}-joined id list). */
+function panelIdsOfTabs(tabs: readonly Tab[], joinedTabIds: string): string[] {
+  if (joinedTabIds === '') return [];
+  const wanted = new Set(joinedTabIds.split(TAB_ID_SEP));
+  return tabs.filter((t) => wanted.has(t.id)).flatMap((t) => collectPanels(t.root).map((p) => p.id));
+}
 
 function mergeRefs<T>(...refs: Array<(node: T | null) => void>): (node: T | null) => void {
   return (node) => refs.forEach((ref) => ref(node));
@@ -483,6 +495,8 @@ function TabChip({
               aria-label="Unsaved changes"
             />
           ) : null}
+          {/* 057 FR-010 — marked while any of this tab's panels is; beside the unsaved dot, never in place of it. */}
+          <TabMark site="tab" tabId={tab.id} panelIds={collectPanels(tab.root).map((p) => p.id)} />
           {/* P1 / FR-042 — a PILL, not `[3]`. The bracketed form read as markup rather than as a
               count of the things inside the tab. */}
           <span
@@ -531,6 +545,7 @@ function TabChip({
           tabId={tab.id}
           name={popoverName()}
           panelNames={panelNames}
+          panelIds={panels.map((p) => p.id)}
           anchor={chipRef.current}
         />
       ) : null}
@@ -948,6 +963,12 @@ export function TabGroup(): ReactElement {
    * must still be able to step back to the start.
    */
   const [canStep, setCanStep] = useState({ left: false, right: false });
+  /*
+   * 057 FR-011 — the ids of the tabs wholly off each edge, as one string per side so the state is
+   * compared by value and a scroll that hides the same tabs sets nothing. Measured by `syncStrip` from
+   * the offsets it already reads for the counts, so the marks add no layout read.
+   */
+  const [hiddenSides, setHiddenSides] = useState({ left: '', right: '' });
   // The trailing controls' width, so the right-hand fade stops at their leading edge instead of
   // painting a gradient over them. Measured rather than guessed: the group's width changes with the
   // number of digits in its counts.
@@ -1050,6 +1071,9 @@ export function TabGroup(): ReactElement {
           ? prev
           : next,
       );
+      const sides = hiddenTabIds(metrics, layoutRef.current?.tabs.map((t) => t.id) ?? []);
+      const hiddenKey = { left: sides.left.join(TAB_ID_SEP), right: sides.right.join(TAB_ID_SEP) };
+      setHiddenSides((prev) => (prev.left === hiddenKey.left && prev.right === hiddenKey.right ? prev : hiddenKey));
       const left = stepTarget(metrics, 'left') !== null;
       const right = stepTarget(metrics, 'right') !== null;
       setCanStep((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
@@ -1772,6 +1796,7 @@ export function TabGroup(): ReactElement {
                * right-hand step is `badgeFirst`; the show-all chevron leads its total because it
                * points at the list it opens, not at either edge of the strip.
                */}
+              <OverflowMark side="left" panelIds={panelIdsOfTabs(layout.tabs, hiddenSides.left)} />
               <IconButton
                 token="chevronLeft"
                 className="tabstrip-actions__btn"
@@ -1818,6 +1843,7 @@ export function TabGroup(): ReactElement {
                   hold.consumedClick();
                 }}
               />
+              <OverflowMark side="right" panelIds={panelIdsOfTabs(layout.tabs, hiddenSides.right)} />
               <IconButton
                 token="chevronDown"
                 // FR-052a — the modifier is what centres the chevron in its own box; see the

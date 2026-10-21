@@ -306,7 +306,12 @@ import { setAtPath } from './metadata.js';
 //
 // Bumped by 056 (22 → 23): one icon token, `warning`, the marker on a folded Preferences heading that
 // hides an invalid entry (FR-007). The additive case again: the payload arrives, no existing value moves.
-export const SHIPPED_DEFAULTS_VERSION = 23;
+//
+// Bumped by 057 (23 → 24): two colour tokens, `attentionMark` and `attentionFailedMark`, and three icon
+// tokens, `attention`, `attentionFailed` and `goToPanel` (research R11). The additive case again: every
+// payload arrives, no existing value moves. The fourteen attention settings need no bump (044's 7 → 8
+// reasoning: an absent settings key is filled with its shipped default on every read).
+export const SHIPPED_DEFAULTS_VERSION = 24;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
