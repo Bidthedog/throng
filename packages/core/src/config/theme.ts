@@ -213,6 +213,11 @@ export const THRONG_THEME: Theme = {
        Distinct from `danger` on purpose: a warning is not a failure, and colouring it red would
        teach users to read a red card as "something you can ignore". */
     warning: '#d29922',
+    /* 057 (R11). The attention mark on a panel, project or category and the count on the taskbar badge,
+       and its Failed variant. Two colours so a failure reads as one at a glance; both distinct from
+       047 FR-083's attention FLASH — a flash is a moment, a mark is a state. */
+    attentionMark: '#6aa3ff',
+    attentionFailedMark: '#e5534b',
     /* Scrollbars (018, FR-009). Before this, the ONLY styled scrollbar in the app was the
        terminal's, which borrowed `border` for its thumb and `textMuted` for the hover, and
        hard-coded `transparent` for the track. Everything else rendered the browser engine's default
@@ -617,6 +622,15 @@ export const THRONG_THEME: Theme = {
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
     warning: '⚠',
+    /* 057 (R11). `attention` is the mark that says a panel wants you and the cog menu's Go to Next
+       Marked Panel row; `attentionFailed` is its Failed variant, so a failure is not told apart by
+       colour alone. `goToPanel` is the toast's link control. None reuses `warning` (a folded-heading
+       cue) or `notification`-style glyphs: retheming one must never retheme another. Both are text
+       glyphs, not emoji, so they take the attentionMark / attentionFailedMark colours; a flag rather
+       than a bell, because most marks are not raised by a bell. */
+    attention: '⚑',
+    attentionFailed: '✖',
+    goToPanel: '↗',
   },
 };
 

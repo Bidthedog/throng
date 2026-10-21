@@ -38,4 +38,9 @@ export const UI_TYPES = {
   // `throng:linkUri:*` handlers (contracts platform-ports.md §7.1).
   RefusedUriSchemes: Symbol.for('throng:IRefusedUriSchemes'),
   FileSystem: Symbol.for('throng:IFileSystem'),
+  // 057: the two OS seams panel attention marks reach the desktop through, and the service that
+  // owns the marks. Bound here because Electron's Notification and overlay icon are main's.
+  SystemNotifier: Symbol.for('throng:ISystemNotifier'),
+  TaskbarBadge: Symbol.for('throng:ITaskbarBadge'),
+  AttentionService: Symbol.for('throng:AttentionService'),
 } as const;

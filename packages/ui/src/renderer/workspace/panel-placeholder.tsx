@@ -65,6 +65,8 @@ import { requestRedraw } from '../terminal/redraw.js';
 import { focusTerminal } from '../terminal/focus-registry.js';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
+import { PanelHeaderMark } from '../attention/holder-marks.js';
+import { usePanelMark } from '../attention/use-attention.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -521,11 +523,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   const destroyRef = useRef(destroyPanel);
   destroyRef.current = destroyPanel;
   useEffect(() => registerPanelDestroy(panel.id, () => void destroyRef.current()), [panel.id]);
+  const attentionMark = usePanelMark(panel.id);
 
   return (
     <div
       className={`panel-box${isDragging ? ' panel-box--dragging' : ''}${showsActive ? ' panel-box--active' : ''}${isActiveDimmed ? ' panel-box--active-dimmed' : ''}${isMaximisedPanel ? ' panel-box--maximised' : ''}${hiddenByMaximise ? ' panel-box--maximise-hidden' : ''}`}
       data-testid={`panel-${panel.id}`}
+      // FR-118: the header is tinted in the mark's colour while the panel is marked.
+      data-attention={attentionMark?.kind}
       data-maximised={isMaximisedPanel ? 'true' : undefined}
       // 054 FR-072, FR-074 — hidden by a maximised target: out of the tab order and every pointer route,
       // never closed or unmounted.
@@ -959,6 +964,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             aria-label="Unsaved changes"
           />
         ) : null}
+        {/* 057 FR-003 — a marked panel says so in its header, for every panel type; beside the unsaved
+            dot, never in place of it (FR-017). */}
+        <PanelHeaderMark panelId={panel.id} />
         {panel.kind === 'terminal' && panel.config?.runAsAdmin === true && elevated ? (
           <span className="panel-box__admin" data-testid={`panel-admin-${panel.id}`} title="Running as administrator">
             ADMIN

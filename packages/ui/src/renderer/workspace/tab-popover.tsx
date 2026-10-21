@@ -26,14 +26,12 @@
  * `pointer-events: none` so it can never swallow a click meant for the strip underneath, and can
  * never strand a hover of its own.
  */
-import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
-import { clampToViewport } from '../common/clamp-to-viewport.js';
+import { useAnchoredPosition } from '../common/use-anchored-position.js';
 import { Icon } from '../common/icon.js';
+import { PopoverPanelMark } from '../attention/holder-marks.js';
 import type { PanelListEntry } from './use-panel-display-names.js';
-
-/** Breathing room between the chip and the surface, baked into the anchor rect. */
-const GAP = 6;
 
 /**
  * Whether the popover carries the tab's name, and the whole of #296 (031 FR-043, narrowed).
@@ -70,6 +68,8 @@ export interface TabPopoverProps {
   name: string | null;
   /** Each panel's row — its name and its type — in layout order. */
   panelNames: PanelListEntry[];
+  /** The ids of those panels, in the same order — so a marked panel's row can say so (057 FR-010). */
+  panelIds?: readonly string[];
   /** The chip to anchor against. `null` renders nothing. */
   anchor: HTMLElement | null;
 }
@@ -78,12 +78,11 @@ export function TabPopover({
   tabId,
   name,
   panelNames,
+  panelIds,
   anchor,
 }: TabPopoverProps): ReactElement | null {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   /*
-   * The CONTENT, as one value the effect below can depend on. A panel renamed while the popover is
+   * The CONTENT, as one value the placement depends on. A panel renamed while the popover is
    * open changes the surface's size, and a surface positioned for the size it used to be is a
    * surface off the edge of the screen.
    */
@@ -92,24 +91,9 @@ export function TabPopover({
   /*
    * Position BEFORE paint. The size is measured from the rendered element rather than guessed — the
    * surface is as tall as the tab has panels and as wide as the longest name in it, so there is no
-   * constant to guess with.
+   * constant to guess with. Shared with the attention popover: `useAnchoredPosition`.
    */
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || !anchor) return;
-    const a = anchor.getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    const next = clampToViewport(
-      { left: a.left, right: a.right, top: a.top - GAP, bottom: a.bottom + GAP },
-      { width: r.width, height: r.height },
-      { width: window.innerWidth, height: window.innerHeight },
-    );
-    setPos((prev) =>
-      prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5
-        ? prev
-        : next,
-    );
-  }, [anchor, name, contents]);
+  const { ref, pos } = useAnchoredPosition<HTMLDivElement>(anchor, `${name ?? ''}\n${contents}`);
 
   if (!anchor) return null;
 
@@ -170,6 +154,7 @@ export function TabPopover({
                 </span>
               )}
               <span className="tabstrip-popover__panel-name">{panel.name}</span>
+              {panelIds?.[index] === undefined ? null : <PopoverPanelMark panelId={panelIds[index]} />}
             </li>
           ))}
         </ul>

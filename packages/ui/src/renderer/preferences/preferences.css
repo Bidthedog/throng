@@ -476,6 +476,34 @@
   justify-content: flex-end;
 }
 
+/* 057 FR-108 — several settings on one row: their controls sit inline on one line and WRAP rather than
+   leave the row (015 FR-019). The row's label keeps its column; the controls take the room that is left. */
+.settings-row__control--inline {
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: none;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.settings-row__leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-row__leaf-label {
+  font-size: 12px;
+  color: var(--text-dim, var(--text));
+}
+
+/* An inert leaf's own label greys with its control (057 round 5: OS Notify while the global switch is
+ * off), at the same opacity as an inert duration. */
+.settings-row__leaf[data-inert='true'] .settings-row__leaf-label {
+  opacity: 0.4;
+}
+
 /* 053 FR-014 — a wide control: its own line under the description, the whole text column wide. One
    line still — a template is a single line, so the field scrolls rather than wraps. */
 .settings-row__control--wide {

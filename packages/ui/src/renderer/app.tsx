@@ -17,6 +17,8 @@ import { TabGroup } from './workspace/tab-group.js';
 import { requestPanelFocus } from './workspace/panel-focus.js';
 import { consumeProjectSwitchPendingFor, setActivePane } from './workspace/active-pane.js';
 import { MouseZoomHandler } from './workspace/mouse-zoom.js';
+import { FocusReporter } from './attention/focus-reporter.js';
+import { AttentionNavigation } from './attention/attention-navigation.js';
 import { DetachProvider } from './workspace/detach-context.js';
 import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
@@ -529,6 +531,11 @@ export function App(): ReactElement {
             <PanelStateSync />
       <PanelNameSync />
             <PanelFocusSync />
+            {/* 057 — what this window shows and where focus is, for main's attended-panel rule. A
+                sub-workspace window is its own renderer realm and mounts its own copy. */}
+            <FocusReporter />
+            {/* 057 — takes the user to a marked panel (toast link, OS notification, Go to Next). */}
+            <AttentionNavigation />
             <EditorChrome />
             {/* 043 — the one registration that turns the two chords, the toolbar control and the
                 folder menu item into an opened panel. A sub-workspace window is its own renderer

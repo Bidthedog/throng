@@ -14,10 +14,12 @@ import {
   appendScrollback,
   trackAltScreen,
   createWindowTitleScan,
+  isTerminalReport,
   scanWindowTitle,
   type WindowTitleScan,
   createNegotiationScan,
   scanKeyboardNegotiation,
+  isProgramTitle,
   type NegotiationScan,
   classifyFailure,
   type FailureCause,
@@ -35,6 +37,10 @@ import {
   TERMINAL_CAPABILITIES_METHOD,
   TERMINAL_CLOSE_IDLE_METHOD,
   TERMINAL_KILL_ALL_METHOD,
+  TERMINAL_ATTENTION_CONFIG_METHOD,
+  TERMINAL_ATTENTION_LEDGER_METHOD,
+  TERMINAL_ATTENTION_SYNC_METHOD,
+  TERMINAL_ATTENTION_FOCUS_METHOD,
   type TerminalAttachParams,
   type TerminalAttachResult,
   type TerminalCapabilitiesResult,
@@ -55,6 +61,7 @@ import {
 import { RpcError, type RpcRouter } from './rpc-router.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
+import { TerminalAttention, type TerminalAttentionOptions } from './terminal-attention.js';
 
 /** Bounded scrollback kept per session for reattach replay (~64 KB). */
 const MAX_SCROLLBACK = 64 * 1024;
@@ -162,11 +169,26 @@ interface Session {
    */
   negotiation: NegotiationScan;
   /**
+   * 057 FR-099 — what this program was last told about focus while it has focus reporting on. A
+   * program that turns the mode on assumes it is focused, as it would in any terminal.
+   */
+  focusTold: 'in' | 'out';
+  /**
    * 053 — the window title the program last set (OSC 0/2), followed for the same reason: a view that
    * re-attaches rebuilds from a bounded tail, empty on the alternate screen, which may no longer hold
    * the sequence. Every attach hands it back, so the new view's header names the program as before.
    */
   windowTitle: WindowTitleScan;
+  /** 057 FR-102 — the last command this terminal ran, kept after it finishes; null until one runs. */
+  lastRanCommand: string | null;
+  /**
+   * 057 FR-102 — the window title at the last observation that saw nothing running: the prompt's, so not a
+   * program's. A title that arrived after that reading began is left out: the program that set it started
+   * after the reading, as the renderer's `{title}` reasons (command-store.ts, 053 FR-003).
+   */
+  promptTitle: string;
+  /** When the window title last changed (epoch ms), to tell a prompt's title from a program's that raced it. */
+  titleSetAt: number;
   /**
    * The grid is stale because every view has gone (028 follow-up). The next attach MUST push a real
    * resize even when the recomputed grid equals the stored one, because the program needs a window
@@ -186,6 +208,11 @@ interface Session {
    * (FR-017). Reset when that end fails (051 FR-005), so a later genuine exit is unexpected again.
    */
   userKilled: boolean;
+  /**
+   * 057 R8 — the launch carried a Startup Command and nothing has finished or been typed since. The first
+   * command to finish is then the startup command's, which raises its mark without a notification.
+   */
+  startupPending: boolean;
   /**
    * 051 — the in-flight end, resolving to the failure reason or `null`. Non-null ⇔ this is an
    * ENDING terminal: never reattached (FR-004), never probed for busy.
@@ -222,6 +249,8 @@ function viewIdOf(params: { viewId?: unknown }): string {
  */
 export class TerminalService {
   private readonly sessions = new Map<string, Session>();
+  /** 057 FR-099 — the panels main judges attended; until it says otherwise, none. */
+  private attendedPanels = new Set<string>();
   private nextSessionId = 1;
   /** 051 FR-004 — ending sessions whose panel already has a fresh terminal; still ended at shutdown. */
   private readonly endingSessions = new Set<Session>();
@@ -270,7 +299,20 @@ export class TerminalService {
      * composition root; a test substitutes its own.
      */
     private readonly endTimeoutMs: number = TERMINAL_END_TIMEOUT_MS,
+    /** 057 — name resolution and a scanner seam for the attention producer. */
+    attentionOptions?: TerminalAttentionOptions,
   ) {
+    this.attention = new TerminalAttention(events, {
+      ...attentionOptions,
+      describeDoing: (subject) => this.describeDoing(subject as Session),
+      // Names are resolved for the outgoing signal, not the session, so the session is looked up.
+      liveTitle: (subject) => this.sessions.get(subject.panelId)?.windowTitle.title || null,
+    });
+    // 057 FR-099: with no UI attached nothing is attended — main may have died before its last push.
+    events.onLastSinkRemoved(() => {
+      this.attendedPanels = new Set();
+      for (const session of this.sessions.values()) this.tellFocus(session);
+    });
     if (this.processCwd) {
       this.cwdTimer = setInterval(() => void this.pollCwd(), CWD_POLL_MS);
       this.cwdTimer.unref?.(); // never keep the daemon process alive for polling
@@ -281,6 +323,9 @@ export class TerminalService {
     this.commandTimer = setInterval(() => void this.pollCommands(), this.commandPollMs);
     this.commandTimer.unref?.();
   }
+
+  /** 057 — recognises attention signals and publishes them (`terminal-attention.ts`). */
+  private readonly attention: TerminalAttention;
 
   /** Last cwd published per panel, so we only emit on an actual change. */
   private readonly lastCwd = new Map<string, string>();
@@ -404,7 +449,14 @@ export class TerminalService {
     const last = this.lastCommand.get(session.panelId);
     if (last && last.command === command && last.arch === arch) return;
     this.lastCommand.set(session.panelId, { command, arch });
+    if (command !== null) session.lastRanCommand = command;
+    else if (session.titleSetAt <= observedAt) session.promptTitle = session.windowTitle.title;
     this.events.publishCommand(session.panelId, command, arch, observedAt);
+    // 057 FR-065: only a command that FINISHES (command → nothing) is a signal; command → command is not.
+    if (last?.command != null && command === null) {
+      this.attention.raise(session, 'commandFinished', 'attention', last.command, session.startupPending);
+      session.startupPending = false;
+    }
   }
 
   /**
@@ -446,6 +498,55 @@ export class TerminalService {
     router.register(TERMINAL_CAPABILITIES_METHOD, () => this.capabilities());
     router.register(TERMINAL_CLOSE_IDLE_METHOD, (p) => this.closeIdle(p));
     router.register(TERMINAL_KILL_ALL_METHOD, (p) => this.killAll(p));
+    router.register(TERMINAL_ATTENTION_CONFIG_METHOD, (p) => this.attentionConfig(p));
+    router.register(TERMINAL_ATTENTION_LEDGER_METHOD, () => ({ entries: this.attention.readLedger() }));
+    router.register(TERMINAL_ATTENTION_SYNC_METHOD, (p) => {
+      this.attention.syncLedger(p);
+      return { ok: true };
+    });
+    router.register(TERMINAL_ATTENTION_FOCUS_METHOD, (p) => this.attentionFocus(p));
+  }
+
+  /** 057: main pushes the producer settings (idempotent). */
+  private attentionConfig(rawParams: unknown): TerminalOkResult {
+    this.attention.setConfig(rawParams);
+    return { ok: true };
+  }
+
+  /**
+   * 057 FR-102: what a terminal is doing — the title its running program set, else the last command it ran.
+   * A title counts only while a command runs, and only as `isProgramTitle` judges it — the rule the
+   * renderer's `{title}` uses (053).
+   */
+  private describeDoing(session: Session): string | null {
+    const running = this.lastCommand.get(session.panelId)?.command ?? null;
+    const title = session.windowTitle.title;
+    return running !== null && isProgramTitle(title, session.promptTitle) ? title : session.lastRanCommand;
+  }
+
+  /** 057 FR-099: main's attended set changed — tell each focus-reporting program that crossed it. */
+  private attentionFocus(rawParams: unknown): TerminalOkResult {
+    const attended = asObject(rawParams).attended;
+    this.attendedPanels = new Set(Array.isArray(attended) ? attended.filter((id): id is string => typeof id === 'string') : []);
+    for (const session of this.sessions.values()) this.tellFocus(session);
+    return { ok: true };
+  }
+
+  /**
+   * Write `CSI I` or `CSI O` to a program that asked for focus reports, when what it was last told is
+   * no longer true. Written straight to the PTY, not through `write`: it is throng speaking for the
+   * terminal, not the user typing, so it never touches the startup tag (R8).
+   */
+  private tellFocus(session: Session): void {
+    if (session.status !== 'running' || !session.negotiation.focusReporting) return;
+    const now = this.attendedPanels.has(session.panelId) ? 'in' : 'out';
+    if (session.focusTold === now) return;
+    session.focusTold = now;
+    try {
+      session.host.write(session.handle, now === 'in' ? '\x1b[I' : '\x1b[O');
+    } catch {
+      // A PTY that refuses a write is ending; its exit is reported on its own path.
+    }
   }
 
   /** Report daemon capabilities to the UI (FR-025a): currently just elevation. */
@@ -464,6 +565,7 @@ export class TerminalService {
    * sub-workspace-owned terminals are unaffected (they carry no owning project).
    */
   killForProject(projectId: string): void {
+    this.attention.forgetProject(projectId); // 057: the project's marks go with it, terminal or not
     for (const session of [...this.sessions.values()]) {
       if (session.projectId === projectId && !session.rootless && session.status === 'running') {
         // The project is going: nothing could ever reattach a terminal whose end failed, so a
@@ -523,6 +625,7 @@ export class TerminalService {
     }
     session.userKilled = true;
     session.escalate = escalate;
+    this.attention.forgetPanel(session.panelId); // 057 FR-066: a terminal throng ends leaves no mark to restore
     const ending = session.host.end(session.handle, this.endTimeoutMs).then(
       () => null,
       async (error: unknown) => {
@@ -721,10 +824,16 @@ export class TerminalService {
       scrollback: '',
       altScreen: false,
       negotiation: createNegotiationScan(),
+      focusTold: 'in',
       windowTitle: createWindowTitleScan(),
+      lastRanCommand: null,
+      promptTitle: '',
+      titleSetAt: 0,
       gridStale: false,
       status: 'running',
       userKilled: false,
+      startupPending:
+        launch.startupCommand === true || (typeof launch.writeOnReady === 'string' && launch.writeOnReady.length > 0),
       ending: null,
       superseded: false,
       escalate: false,
@@ -749,8 +858,17 @@ export class TerminalService {
         session.altScreen = trackAltScreen(session.altScreen, chunk);
         // #290 — the other half a rebuilt view must be TOLD rather than left to infer.
         session.negotiation = scanKeyboardNegotiation(session.negotiation, chunk);
+        // 057 FR-099: a program that turns focus reporting on assumes focus; tell it at once if it has none.
+        if (session.negotiation.focusReporting && session.negotiation.focusReportingEnabled) {
+          session.focusTold = 'in';
+          this.tellFocus(session);
+        }
+        const titleBefore = session.windowTitle.title;
         session.windowTitle = scanWindowTitle(session.windowTitle, chunk);
+        if (session.windowTitle.title !== titleBefore) session.titleSetAt = Date.now();
         this.events.publishOutput(panelId, chunk);
+        // 057: read after the views have it — attention never delays or alters the bytes (FR-067).
+        this.attention.onOutput(session, chunk);
         if (startupCommandPending) {
           startupCommandPending = false;
           try {
@@ -777,6 +895,7 @@ export class TerminalService {
     // no command until it changed. An exit clears the cwd but not the command; a new terminal clears both.
     this.lastCwd.delete(panelId);
     this.lastCommand.delete(panelId);
+    this.attention.dropPanel(panelId); // 057: the previous terminal's scanner and rate window are not this one's
     // Test seam (008 FR-005): simulate a slow-starting shell. The session is already
     // registered, so a client that times out and retries reuses it immediately.
     if (this.attachColdStartDelayMs > 0) {
@@ -959,6 +1078,7 @@ export class TerminalService {
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
     this.lastCwd.delete(session.panelId); // a reused panelId must re-publish its cwd
     this.lastCommand.delete(session.panelId); // 025: and its command
+    this.attention.stopActivity(session.panelId); // 057
     if (!session.rootless) void this.locks.release(session.projectId);
     // The surface that owned it is gone, so a failed end is escalated: nothing could reattach it.
     void this.beginEnd(session, true);
@@ -970,6 +1090,7 @@ export class TerminalService {
     session.exit = exit;
     const current = this.sessions.get(session.panelId) === session;
     if (current) this.lastCwd.delete(session.panelId); // stop reporting a dead shell's cwd
+    if (current) this.attention.stopActivity(session.panelId); // 057: a dead shell goes neither quiet nor noisy
     const unexpected = !session.userKilled;
     for (const dispose of session.disposers) {
       try {
@@ -997,6 +1118,15 @@ export class TerminalService {
         const now = this.sessions.get(session.panelId);
         if (now && now !== session) return;
         this.events.publishExit(session.panelId, exit.code, exit.signal, unexpected, session.id);
+        // 057 FR-064 / R7: only an end throng did not ask for raises a mark; non-zero is a failure.
+        if (unexpected) {
+          this.attention.raise(
+            session,
+            'processExited',
+            exit.code === 0 ? 'attention' : 'failed',
+            exit.code !== null ? String(exit.code) : (exit.signal ?? null),
+          );
+        }
       });
   }
 
@@ -1004,6 +1134,9 @@ export class TerminalService {
     const params = asObject(rawParams) as unknown as TerminalWriteParams;
     const session = this.sessions.get(params.panelId);
     if (session && session.status === 'running' && typeof params.data === 'string') {
+      // 057 R8: input from the user means a later command is theirs, not the startup command's. What xterm
+      // writes by itself (DA, focus and mouse reports) is not the user, and a startup TUI gets plenty of it.
+      if (!isTerminalReport(params.data)) session.startupPending = false;
       session.host.write(session.handle, params.data);
     }
     return { ok: true };

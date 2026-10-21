@@ -16,6 +16,7 @@ import {
 } from 'react';
 import {
   formatGrouped,
+  healCategoryId,
   listRows,
   projectRootWouldContainOpenEditor,
   readableTextOn,
@@ -24,6 +25,8 @@ import {
 import type { ProjectCategoryDto, ProjectDto } from '@throng/ipc-contract';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
+import { CategoryHeaderMark, ProjectRowLead } from '../attention/holder-marks.js';
+import { goToNextMarkedOf, hasMarkedPanel, projectCycleKey } from '../attention/mark-cycle.js';
 import { useErrorNotice } from '../common/notification.js';
 import { allEditorStates, useDirtyProjectKey } from '../editor/editor-state.js';
 import { promptDirtyClose } from '../editor/dirty-close-store.js';
@@ -69,6 +72,8 @@ const rowKey = (row: Row): RowKey =>
   row.kind === 'category' ? `category:${row.category.id}` : `project:${row.project.id}`;
 
 const MARQUEE_DELAY_MS = 200;
+
+const NO_PROJECTS: readonly string[] = [];
 
 const projectDragId = (id: string): string => `proj|${id}`;
 const parseProjectDragId = (id: string): string | null =>
@@ -297,6 +302,25 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
     () => listRows(projects, categories, activeProject?.id ?? null, loadedIds),
     [projects, categories, activeProject, loadedIds],
   );
+
+  /**
+   * 057 FR-013 — every project in each category, hidden rows included, resolved by the same heal rule
+   * `listRows` uses. A minimised header marks for a project its list does not show, so the header cannot
+   * read its members off `rows`.
+   */
+  const categoryMembers = useMemo(() => {
+    const known = new Set(categories.map((c) => c.id));
+    const defaultId = categories.find((c) => c.isDefault)?.id;
+    const byCategory = new Map<string, string[]>();
+    for (const p of projects) {
+      const id = healCategoryId(p.categoryId, known, defaultId);
+      if (id === undefined) continue;
+      const list = byCategory.get(id);
+      if (list) list.push(p.id);
+      else byCategory.set(id, [p.id]);
+    }
+    return byCategory;
+  }, [projects, categories]);
 
   /** Category ids in LIST order (FR-056) — read off `rows`, so it can never disagree with what is
    *  drawn. Used to find "the next category" when a target category has no current members. */
@@ -725,6 +749,15 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
       // moves the project into the category it creates. `commitCategoryName` below is what performs
       // the move, once the create RPC hands back the new category's id.
       onNewCategory: () => setCategoryDraft({ mode: 'create', forProjectId: project.id }),
+      // 057 FR-106 — present only while THIS project has a marked panel (read at open time, like every
+      // row here), and on the cycle its row mark's click walks (FR-105).
+      ...(hasMarkedPanel([project.id])
+        ? {
+            nextMarked: {
+              run: () => void goToNextMarkedOf(projectCycleKey(project.id), [project.id], ws.layout),
+            },
+          }
+        : {}),
     });
     contextMenu.openMenu(e.clientX, e.clientY, items);
   };
@@ -1221,6 +1254,12 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                     ) : (
                       <span className="category-header__name">{row.category.name}</span>
                     )}
+                    {/* 057 FR-013 — over EVERY member, so a minimised header marks for a hidden row. */}
+                    <CategoryHeaderMark
+                      categoryId={row.category.id}
+                      projectIds={categoryMembers.get(row.category.id) ?? NO_PROJECTS}
+                    />
+
                     <span
                       className="category-header__count"
                       data-testid={`category-count-${row.category.id}`}
@@ -1358,11 +1397,8 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                     onDoubleClick={() => setRenamingId(project.id)}
                     title="Double-click to rename"
                   >
-                    <span
-                      className="project-item__dot"
-                      style={{ background: project.colour }}
-                      aria-hidden
-                    />
+                    {/* 057 FR-092 — the mark takes the colour dot's place while the project is marked. */}
+                    <ProjectRowLead projectId={project.id} colour={project.colour} />
                     <span className="project-item__labels">
                       <span className="project-item__name-row">
                         <span className="project-item__name">{project.name}</span>

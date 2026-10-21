@@ -238,6 +238,12 @@ export interface FieldDescriptor {
    */
   confirmWhen?: { is: string | number | boolean };
   /**
+   * 057 FR-108: settings drawn together on one line. Consecutive descriptors of a group that share
+   * `row.id` are one row in the form, labelled `row.label`, with one Reset / Revert for all of them.
+   * Each is still its own descriptor over its own key (007 FR-025a) — the row only groups them.
+   */
+  row?: { id: string; label: string };
+  /**
    * A rule the value must satisfy beyond its type, bounds and allowed set (053 FR-008): `null` when
    * the value is acceptable, else a message naming what is wrong. One function serves both the
    * control, which refuses to commit a value it rejects, and settings validity, which reports a

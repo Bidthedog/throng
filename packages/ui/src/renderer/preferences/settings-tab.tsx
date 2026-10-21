@@ -120,10 +120,17 @@ function silenceConfirmation(d: FieldDescriptor, value: unknown): ConfirmOptions
     title: `Never display ${d.label.toLowerCase()}?`,
     message:
       `${d.label} will not be shown anywhere in the application. When one of these events happens ` +
-      `it will report nothing on screen, and the only record of it will be the diagnostic log.`,
+      `it will report nothing on screen, and the only record of it will be the diagnostic log. ` +
+      // 057 FR-110 — the OS route is independent of the display mode, so the consent says so.
+      `If its OS Notify is on, it will still reach the operating system while throng is not focused.`,
     confirmLabel: 'Never display them',
     danger: true,
   };
+}
+
+/** 057 FR-108 — descriptors sharing a `row.id` render as one row. */
+function rowOf(d: FieldDescriptor): { id: string; label: string } | undefined {
+  return d.row;
 }
 
 export function SettingsTab({
@@ -448,7 +455,7 @@ export function SettingsTab({
           >
             {/* FR-036b — the fields with no subgroup FIRST. A field must never appear below a
                 subsection heading it does not belong to. */}
-            {items.map(row)}
+            {renderRows(items)}
             {/* FR-036a — then each subsection, in declaration order. The markup itself lives in
                 `Subsection`, shared with the other two tabs: `contracts/metadata.md` pins six
                 rendering rules on all three at once, and three copies of it meant three edits to
@@ -463,7 +470,7 @@ export function SettingsTab({
                 onToggle={() => folds.toggle(foldKey(group, subgroup))}
                 count={countOf(foldKey(group, subgroup))}
               >
-                {subItems.map(row)}
+                {renderRows(subItems)}
                 {/* 054 FR-050a — the subgroup's own rows first, then its nested subsections. */}
                 {subsections.map(({ subsection, items: sectionItems }) => (
                   <Subsection
@@ -477,7 +484,7 @@ export function SettingsTab({
                     onToggle={() => folds.toggle(foldKey(group, subgroup, subsection))}
                     count={countOf(foldKey(group, subgroup, subsection))}
                   >
-                    {sectionItems.map(row)}
+                    {renderRows(sectionItems)}
                   </Subsection>
                 ))}
               </Subsection>
@@ -487,6 +494,92 @@ export function SettingsTab({
       ))}
     </div>
   );
+
+  /**
+   * Render a list of descriptors, folding CONSECUTIVE ones that share a `row.id` into one row (057
+   * FR-108). A descriptor without a `row` renders through {@link row} exactly as it always did.
+   */
+  function renderRows(list: readonly FieldDescriptor[]): ReactElement[] {
+    const out: ReactElement[] = [];
+    let i = 0;
+    while (i < list.length) {
+      const r = rowOf(list[i]);
+      if (r === undefined) {
+        out.push(row(list[i]));
+        i += 1;
+        continue;
+      }
+      const leaves = [list[i]];
+      let j = i + 1;
+      while (j < list.length && rowOf(list[j])?.id === r.id) {
+        leaves.push(list[j]);
+        j += 1;
+      }
+      out.push(groupedRow(r, leaves));
+      i = j;
+    }
+    return out;
+  }
+
+  /**
+   * ONE row holding several settings (057 FR-108): the row's label once, each leaf's control inline on
+   * one line, and ONE Reset / Revert / Clear set acting on all of them. Every leaf is still its own
+   * setting with its own descriptor (007 FR-025a) and keeps its `control-<key>` test id, its inertness
+   * (`enabledWhen`) and its consent (`confirmWhen`) — the row only groups them.
+   *
+   * The inline container wraps rather than overflows (015 FR-019): the controls are bounded by the
+   * row and drop to a second line before they leave it.
+   */
+  function groupedRow(r: { id: string; label: string }, leaves: readonly FieldDescriptor[]): ReactElement {
+    const overridden = leaves.some((d) => isSettingOverridden(settings, d.key, SHIPPED));
+    const changed = leaves.some((d) => settingDiffersFromEntry(settings, entry, d.key));
+    const clearable = leaves.some(canClear);
+    return (
+      <div className="settings-row settings-row--grouped" key={r.id} data-testid={`setting-row-${r.id}`}>
+        <div className="settings-row__meta">
+          <label className="settings-row__label">{r.label}</label>
+        </div>
+        <div className="settings-row__control settings-row__control--inline">
+          {leaves.map((d) => (
+            <div
+              className="settings-row__leaf"
+              key={d.key}
+              data-testid={`setting-${d.key}`}
+              data-inert={isInert(d) ? 'true' : 'false'}
+              title={inertReason(d) ?? d.description}
+            >
+              {d.control === 'toggle' ? <span className="settings-row__leaf-label">{d.label}</span> : null}
+              <SettingControl
+                descriptor={d}
+                value={shownValue(d)}
+                options={dynamicOptions(d, themes, detected)}
+                optionLabels={dynamicOptionLabels(d, detected)}
+                disabled={isInert(d)}
+                onCommit={(v) => commit(d, v)}
+              />
+            </div>
+          ))}
+        </div>
+        <RowActions
+          kind="setting"
+          itemKey={r.id}
+          label={r.label}
+          overridden={overridden}
+          changed={changed}
+          clearable={clearable}
+          onReset={() => {
+            // Each leaf goes through the main process's shipped record (FR-011b), then ONE report.
+            void Promise.all(leaves.map((d) => Promise.resolve(window.throng?.config?.resetSetting?.(d.key)))).then(
+              (results) => report(`Resetting ${r.label}`, results.find((x) => x !== undefined && !x.ok) ?? results[0]),
+              () => report(`Resetting ${r.label}`, undefined),
+            );
+          }}
+          onRevert={() => leaves.forEach((d) => commit(d, getAtPath(entry, d.key)))}
+          onClear={clearable ? () => leaves.filter(canClear).forEach((d) => commit(d, emptyValueFor(d))) : undefined}
+        />
+      </div>
+    );
+  }
 
   /**
    * ONE row, rendered from TWO places now — the group's own fields and each of its subsections

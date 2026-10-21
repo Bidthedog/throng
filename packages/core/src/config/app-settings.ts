@@ -10,11 +10,11 @@ import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/
 import { DEFAULT_ROTATION } from '../diagnostics/rotation.js';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
+  NOTIFICATION_TYPES,
   parseNotificationSettings,
   type DisplayMode,
   type NotificationSettings,
 } from '../notice/display-mode.js';
-import { NOTICE_SEVERITIES } from '../notice/severity.js';
 // 044 — imports neither this module nor `settings-metadata.ts`, so no cycle (see its header).
 import { parsePreviewSettings, previewSettingsDefaults } from './preview-settings.js';
 import { SHIPPED_PREVIEW_PROVIDERS } from '../preview/providers/index.js';
@@ -94,6 +94,37 @@ export interface TerminalFlavourConfig {
    * `['/K', '{command}']`. Absent → the universal PTY-write fallback (FR-012).
    */
   commandRecipe?: string[];
+}
+
+/**
+ * The mechanism's preferences (057): how marks clear, and the taskbar badge. How they are announced is
+ * `notifications.attention` (FR-111).
+ */
+export interface AttentionSettings {
+  /** FR-095: how long a marked panel must be in view before its mark clears, in milliseconds. */
+  clearDelayMs: number;
+  /** FR-039: master switch for the taskbar badge. */
+  taskbarBadge: boolean;
+}
+
+/** 057 FR-081/FR-082: which terminal signals raise a mark. Exact signals first, heuristics last. */
+export interface TerminalAttentionSignals {
+  processExited: boolean;
+  commandFinished: boolean;
+  bell: boolean;
+  notification: boolean;
+  progressEnded: boolean;
+  unseenOutput: boolean;
+  outputQuiet: boolean;
+}
+
+/** 057: the terminal PRODUCER's preferences, under `terminals.attention`. */
+export interface TerminalAttentionSettings {
+  /** Master switch: off withdraws every terminal mark (FR-063). */
+  enabled: boolean;
+  signals: TerminalAttentionSignals;
+  /** How long a terminal must be silent before `outputQuiet` fires, in seconds. */
+  quietSeconds: number;
 }
 
 /**
@@ -181,6 +212,8 @@ export interface TerminalSettings {
   titleCommandMaxLength: number;
   /** 053 FR-012: the longest `{path}` a name shows, in characters, before middle folders drop. */
   titlePathMaxLength: number;
+  /** 057: which terminal events raise an attention mark. */
+  attention: TerminalAttentionSettings;
 }
 
 /** 039 FR-020 (#293). A closed set, rendered as a `select` so both states are named (039 D-4). */
@@ -496,6 +529,8 @@ export interface AppSettings {
   explorer: ExplorerSettings;
   /** Terminal preferences (005 Phase B). */
   terminals: TerminalSettings;
+  /** Attention marks: clearing and delivery (057). */
+  attention: AttentionSettings;
   /** Editor panel preferences (006). */
   editor: EditorSettings;
   /** Tab-strip preferences (031). */
@@ -773,6 +808,24 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
     titleCommandMaxLength: 40,
     titlePathMaxLength: 40,
+    // 057 FR-081/FR-082: the exact signals ship ON, the two heuristics OFF (they can be wrong).
+    attention: {
+      enabled: true,
+      signals: {
+        processExited: true,
+        commandFinished: true,
+        bell: true,
+        notification: true,
+        progressEnded: true,
+        unseenOutput: false,
+        outputQuiet: false,
+      },
+      quietSeconds: 10,
+    },
+  },
+  attention: {
+    clearDelayMs: 1000,
+    taskbarBadge: true,
   },
   editor: {
     openOnClick: 'single',
@@ -1184,6 +1237,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     typeof v.titleTemplate === 'string' ? v.titleTemplate : fallback.titleTemplate;
   const titleCommandMaxLength = wholeNumber(v.titleCommandMaxLength, fallback.titleCommandMaxLength);
   const titlePathMaxLength = wholeNumber(v.titlePathMaxLength, fallback.titlePathMaxLength);
+  const attention = terminalAttentionSettings(v.attention, fallback.attention);
   return {
     flavours,
     disabledBuiltins,
@@ -1200,7 +1254,52 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     titleTemplate,
     titleCommandMaxLength,
     titlePathMaxLength,
+    attention,
   };
+}
+
+function boolOr(v: unknown, fallback: boolean): boolean {
+  return typeof v === 'boolean' ? v : fallback;
+}
+
+/** 057: per-field tolerant parse of `terminals.attention` — a bad leaf costs only itself. */
+function terminalAttentionSettings(
+  v: unknown,
+  fallback: TerminalAttentionSettings,
+): TerminalAttentionSettings {
+  if (!isRecord(v)) return cloneTerminalAttention(fallback);
+  const s = isRecord(v.signals) ? v.signals : {};
+  const f = fallback.signals;
+  return {
+    enabled: boolOr(v.enabled, fallback.enabled),
+    signals: {
+      processExited: boolOr(s.processExited, f.processExited),
+      commandFinished: boolOr(s.commandFinished, f.commandFinished),
+      bell: boolOr(s.bell, f.bell),
+      notification: boolOr(s.notification, f.notification),
+      progressEnded: boolOr(s.progressEnded, f.progressEnded),
+      unseenOutput: boolOr(s.unseenOutput, f.unseenOutput),
+      outputQuiet: boolOr(s.outputQuiet, f.outputQuiet),
+    },
+    quietSeconds: wholeNumber(v.quietSeconds, fallback.quietSeconds),
+  };
+}
+
+function cloneTerminalAttention(a: TerminalAttentionSettings): TerminalAttentionSettings {
+  return { enabled: a.enabled, signals: { ...a.signals }, quietSeconds: a.quietSeconds };
+}
+
+/** 057: per-field tolerant parse of the top-level `attention` section. */
+function attentionSettings(v: unknown, fallback: AttentionSettings): AttentionSettings {
+  if (!isRecord(v)) return cloneAttention(fallback);
+  return {
+    clearDelayMs: wholeNumber(v.clearDelayMs, fallback.clearDelayMs),
+    taskbarBadge: boolOr(v.taskbarBadge, fallback.taskbarBadge),
+  };
+}
+
+function cloneAttention(a: AttentionSettings): AttentionSettings {
+  return { clearDelayMs: a.clearDelayMs, taskbarBadge: a.taskbarBadge };
 }
 
 function cloneTerminals(t: TerminalSettings): TerminalSettings {
@@ -1230,6 +1329,8 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
     titleTemplate: t.titleTemplate,
     titleCommandMaxLength: t.titleCommandMaxLength,
     titlePathMaxLength: t.titlePathMaxLength,
+    // 057 — the same note applies, and the nested `signals` object must not be shared.
+    attention: cloneTerminalAttention(t.attention),
   };
 }
 
@@ -1598,6 +1699,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
     },
     explorer: explorerSettings(explorer, d.explorer),
     terminals: terminalSettings(raw.terminals, d.terminals),
+    attention: attentionSettings(raw.attention, d.attention),
     editor: editorSettings(raw.editor, d.editor),
     tabs: tabsSettings(raw.tabs, d.tabs),
     newProject: newProjectSettings(raw.newProject, d.newProject),
@@ -1625,6 +1727,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     behaviour: { ...s.behaviour },
     explorer: cloneExplorer(s.explorer),
     terminals: cloneTerminals(s.terminals),
+    attention: cloneAttention(s.attention),
     // Shared with the `!isRecord` path in `editorSettings` rather than spelled out twice: the two
     // used to be separate spreads, and they disagreed about which nested members to re-clone —
     // this one cloned all four, that one cloned `navigation` alone.
@@ -1646,7 +1749,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
 }
 
 function cloneNotifications(n: NotificationSettings): NotificationSettings {
-  const out = {} as NotificationSettings;
-  for (const severity of NOTICE_SEVERITIES) out[severity] = { ...n[severity] };
+  const out = { os: n.os } as NotificationSettings;
+  for (const type of NOTIFICATION_TYPES) out[type] = { ...n[type] };
   return out;
 }

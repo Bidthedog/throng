@@ -9,7 +9,6 @@
  * The three modes are exhaustive by design: never display it, display it for a bounded time, or
  * leave it until it is dismissed. There is no fourth, and no severity is exempt.
  */
-import { NOTICE_SEVERITIES } from './severity.js';
 
 /**
  * How a severity's notices behave.
@@ -68,11 +67,25 @@ export interface SeverityNotificationSettings {
   timeoutMs: number;
 }
 
+/** One notification type's row (057 FR-108): its display, and whether it also reaches the OS (FR-110). */
+export interface NotificationTypeSettings extends SeverityNotificationSettings {
+  /** Also raise a Windows notification while no throng window is focused. Independent of `mode`. */
+  os: boolean;
+}
+
+/** The notification types, in the order Preferences lists them (057 FR-108). */
+export const NOTIFICATION_TYPES = ['error', 'warning', 'info', 'success', 'attention'] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
 export interface NotificationSettings {
-  error: SeverityNotificationSettings;
-  warning: SeverityNotificationSettings;
-  info: SeverityNotificationSettings;
-  success: SeverityNotificationSettings;
+  /** 057 FR-109: while off, nothing reaches the OS, whatever each type says. */
+  os: boolean;
+  error: NotificationTypeSettings;
+  warning: NotificationTypeSettings;
+  info: NotificationTypeSettings;
+  success: NotificationTypeSettings;
+  /** 057 FR-111: attention marks, both kinds. */
+  attention: NotificationTypeSettings;
 }
 
 /**
@@ -89,12 +102,17 @@ export interface NotificationSettings {
  * `DEFAULT_APP_SETTINGS.notifications` is this object — the defaults live beside the parse that
  * falls back to them, because `parseNotificationSettings` takes no defaults argument and a second
  * copy in the settings file would be a table nobody remembers to keep in step.
+ *
+ * 057 FR-110/FR-111: the four severities ship with the OS off, so nothing changes on upgrade; attention ships
+ * with it on, as its marks did before they had a row here.
  */
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  error: { mode: 'dismiss', timeoutMs: 5000 },
-  warning: { mode: 'dismiss', timeoutMs: 5000 },
-  info: { mode: 'timed', timeoutMs: 10000 },
-  success: { mode: 'timed', timeoutMs: 5000 },
+  os: true,
+  error: { mode: 'dismiss', timeoutMs: 5000, os: false },
+  warning: { mode: 'dismiss', timeoutMs: 5000, os: false },
+  info: { mode: 'timed', timeoutMs: 10000, os: false },
+  success: { mode: 'timed', timeoutMs: 5000, os: false },
+  attention: { mode: 'timed', timeoutMs: 10000, os: true },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -122,11 +140,21 @@ function timeoutMs(raw: unknown, fallback: number): number {
  */
 export function parseNotificationSettings(raw: unknown): NotificationSettings {
   const section = isRecord(raw) ? raw : {};
-  const resolved = {} as NotificationSettings;
-  for (const severity of NOTICE_SEVERITIES) {
-    resolved[severity] = severitySettings(section[severity], DEFAULT_NOTIFICATION_SETTINGS[severity]);
+  const resolved = { os: typeof section.os === 'boolean' ? section.os : DEFAULT_NOTIFICATION_SETTINGS.os } as NotificationSettings;
+  for (const type of NOTIFICATION_TYPES) {
+    const fallback = DEFAULT_NOTIFICATION_SETTINGS[type];
+    const v = isRecord(section[type]) ? section[type] : {};
+    resolved[type] = { ...severitySettings(v, fallback), os: typeof v.os === 'boolean' ? v.os : fallback.os };
   }
   return resolved;
+}
+
+/**
+ * One mode-and-duration pair, resolved field by field against `fallback`: what a setting that owns a
+ * notice's display instead of its severity reads (043 FR-082).
+ */
+export function parseNoticeDisplay(raw: unknown, fallback: SeverityNotificationSettings): SeverityNotificationSettings {
+  return severitySettings(raw, fallback);
 }
 
 function severitySettings(

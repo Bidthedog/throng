@@ -51,6 +51,11 @@ export interface PickerEntry {
   meta?: string;
   /** Marks the entry the user is already on, so "where am I?" is answerable without choosing. */
   isCurrent?: boolean;
+  /**
+   * Something drawn after the label (057: a tab's attention mark). Additive — no existing caller sets
+   * it, and it takes no part in matching, ordering or choosing.
+   */
+  adornment?: ReactNode;
 }
 
 export interface PickerProps {
@@ -394,6 +399,7 @@ export function Picker({
                 <span className="picker__label">
                   <Marked text={entry.label} query={compiled} />
                 </span>
+                {entry.adornment ?? null}
                 {entry.meta ? <span className="picker__meta">{entry.meta}</span> : null}
               </div>
             ))

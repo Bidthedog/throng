@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isProgramTitle } from '@throng/core';
 import { getTerminalTitle, getTerminalTitleSetAt } from './title-store.js';
 
 /**
@@ -133,16 +134,10 @@ export function forgetTerminalCommand(panelId: string): void {
   if (archs.delete(panelId) || had) emit();
 }
 
-/**
- * Titles a shell sets for itself (053 FR-003): Git Bash's prompt (`MINGW64:/d/git/throng`, and the
- * other MSYS2 environments), and a program's own path — how cmd, PowerShell and Windows PowerShell
- * title their window, cmd with ` - <command>` while one runs, either with `Administrator: ` first.
- */
-const SHELL_TITLE = /^(?:(?:MINGW(?:32|64)|MSYS|UCRT64|CLANG(?:32|64|ARM64)):|(?:Administrator: )?[A-Za-z]:\\[^"]*?\.(?:exe|com)(?: - |$))/i;
 
 /**
  * The window title the running program set (053 `{title}`): `undefined` while nothing runs, and for
- * a title the shell set — one of {@link SHELL_TITLE}'s forms, or the title its last prompt showed
+ * a title the shell set — see {@link isProgramTitle} — or the title its last prompt showed
  * (cmd's `<that> - <command>` included).
  *
  * By form rather than by when it arrived: a program restored with its terminal, or one whose view
@@ -152,9 +147,7 @@ const SHELL_TITLE = /^(?:(?:MINGW(?:32|64)|MSYS|UCRT64|CLANG(?:32|64|ARM64)):|(?
 export function peekProgramTitle(panelId: string): string | undefined {
   if (!commands.get(panelId)) return undefined;
   const title = getTerminalTitle(panelId);
-  if (title === undefined || SHELL_TITLE.test(title)) return undefined;
-  const atPrompt = promptTitles.get(panelId);
-  if (atPrompt !== undefined && (title === atPrompt || title.startsWith(`${atPrompt} - `))) return undefined;
+  if (title === undefined || !isProgramTitle(title, promptTitles.get(panelId))) return undefined;
   return title;
 }
 

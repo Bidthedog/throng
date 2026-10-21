@@ -154,6 +154,14 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Move keyboard focus back to the active panel in the centre workspace, without switching tab, panel or project.',
   ),
 
+  // 057 (R15) — also the cog menu's "Go to Next Marked Panel" row, so the description names no chord.
+  chord(
+    'focus.nextMarkedPanel',
+    'Navigate',
+    'Go to Next Marked Panel',
+    'Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked.',
+  ),
+
   // View
   chord('view.fullscreen', 'View', 'Toggle fullscreen', 'Enter or leave fullscreen mode.'),
   chord(

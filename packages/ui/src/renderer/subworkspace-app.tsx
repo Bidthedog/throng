@@ -13,6 +13,8 @@ import { PanelRenameSync } from './workspace/panel-rename-sync.js';
 import { PanelDestroySync } from './workspace/panel-destroy-sync.js';
 import { PanelStateSync } from './workspace/panel-state-sync.js';
 import { MouseZoomHandler } from './workspace/mouse-zoom.js';
+import { FocusReporter } from './attention/focus-reporter.js';
+import { AttentionNavigation } from './attention/attention-navigation.js';
 import { EditorChrome } from './editor/editor-chrome.js';
 import { FindInFilesChrome } from './find-in-files/find-in-files-chrome.js';
 import { NavigationChrome } from './navigate/navigation-chrome.js';
@@ -177,6 +179,10 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <PanelRenameSync />
           <PanelDestroySync />
           <PanelStateSync />
+          {/* 057 — the second mount of the focus reporter: main must know what THIS window attends. */}
+          <FocusReporter />
+          {/* …and its navigation: panels here are focused in place; there is no project to switch to. */}
+          <AttentionNavigation switchProjects={false} />
           {/* 046 iterate round 1 (T118/T119, FR-106) — the second of this registration's two mounts:
               a sub-workspace window is its own renderer realm, so the gesture would be dead here
               otherwise (Assumption 6). */}

@@ -26,6 +26,11 @@ declare global {
        */
       notices?: {
         log: (record: import('@throng/core').NoticeLogRecord) => void;
+        /**
+         * 057 FR-110 — an accepted notice of a type whose OS Notify is on, for main to raise as a
+         * Windows notification while no throng window is focused. Fire-and-forget.
+         */
+        toOs?: (input: { severity: import('@throng/core').NoticeSeverity; title: string; body: string }) => void;
       };
       /** 029 FR-013 — panel id to displayed title, published so main can name a throng holder. */
       panels?: {
@@ -272,6 +277,24 @@ declare global {
         onCommand?: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => () => void;
         onExit: (
           cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number }) => void,
+        ) => () => void;
+      };
+      /**
+       * 057 (contracts/app-attention.md) — terminal attention marks. Main owns the mark set and
+       * broadcasts it; a window reports its focus (coalesced per frame) and answers navigation, toast
+       * and badge-image requests. The renderer never sees the daemon.
+       */
+      attention?: {
+        onChanged: (cb: (e: { marks: import('@throng/core').AttentionMark[] }) => void) => () => void;
+        reportFocus: (report: import('@throng/core').FocusReport) => void;
+        onToast: (cb: (e: AttentionToastEvent) => void) => () => void;
+        onFocusPanel: (cb: (e: { panelId: string; projectId: string }) => void) => () => void;
+        goTo: (panelId: string) => void;
+        /** The current mark set, for a window that attaches after marks were raised (057 T068). */
+        getMarks?: () => Promise<{ marks: import('@throng/core').AttentionMark[] }>;
+        /** The callback returns the PNG data URL; the preload correlates the reply. */
+        onBadgeRequest: (
+          cb: (req: { count: number; kind: 'attention' | 'failed' }) => string | Promise<string>,
         ) => () => void;
       };
       // File Explorer tree (004): directory reads + file operations, confined to
@@ -764,6 +787,18 @@ declare global {
       };
     };
   }
+}
+
+/** 057 — one `throng:attention:toast` push (contracts/app-attention.md): a toast per mark, raised in one window. */
+export interface AttentionToastEvent {
+  op: 'raise' | 'update' | 'dismiss';
+  panelId: string;
+  kind?: 'attention' | 'failed';
+  title?: string;
+  projectName?: string;
+  /** FR-120: the tab holding the panel; empty when not known. */
+  tabTitle?: string;
+  reason?: string;
 }
 
 /** Result of `window.throng.editor.load`. */

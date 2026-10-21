@@ -16,6 +16,8 @@ import { NotificationProvider } from './common/notification.js';
 import { ContextMenuProvider } from './context-menu-provider.js';
 import { ConfigProvider } from './config/config-store.js';
 import { LinkHint } from './links/link-hint.js';
+import { AttentionToasts } from './attention/attention-toasts.js';
+import { BadgeAnswerer } from './attention/badge-answerer.js';
 import { App } from './app.js';
 import { SubWorkspaceApp } from './subworkspace-app.js';
 
@@ -126,6 +128,9 @@ export function CompositionRoot(): ReactElement {
       <ConfigProvider>
         {/* 018 / FR-054 — the two notice models, in every window. */}
         <NotificationProvider>
+          {/* 057 R12 — the toast for a panel that needs the user; every window mounts its own. */}
+          <AttentionToasts />
+          <BadgeAnswerer />
           <ConfirmProvider>
             <ContextMenuProvider>
               <ProjectsProvider client={services.projects}>
@@ -177,6 +182,8 @@ export function SubWorkspaceCompositionRoot({ id }: { id: string }): ReactElemen
     <ServicesProvider services={services}>
       <ConfigProvider>
         <NotificationProvider>
+          <AttentionToasts />
+          <BadgeAnswerer />
           <ConfirmProvider>
             <ContextMenuProvider>
               {/* A sub-workspace MAY hold Panels from several projects (INV-5), and

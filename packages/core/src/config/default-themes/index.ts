@@ -641,6 +641,13 @@ function makeTheme(name: string, p: Palette): Theme {
       errorText: readableOn(mix(p.danger ?? '#e5534b', p.bg, 0.18), p.text),
       success: p.success ?? '#3fb950',
       warning: p.warning ?? '#d29922',
+      // 057 (R11): the attention mark follows the theme's accent and its Failed variant its danger
+      // colour, so each bundled theme gets two distinct marks without a hand-picked pair.
+      // A theme whose danger IS its accent (Debian, Ubuntu) falls back to the shared red, so the two
+      // marks stay distinguishable by colour as well as by glyph.
+      attentionMark: p.accent,
+      attentionFailedMark:
+        p.danger && p.danger.toLowerCase() !== p.accent.toLowerCase() ? p.danger : '#e5534b',
       railBg: p.sidebar ?? p.bg,
       // `categoryHeaderBackground` (046, FR-072) is NOT set here — it is a carved-out role that
       // follows `surfaceActive` (see TOKEN_PARENT), derived below via `splitRolesFrom` exactly the

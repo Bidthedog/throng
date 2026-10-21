@@ -64,6 +64,9 @@ const ESC = '\x1b';
 // eslint-disable-next-line no-control-regex
 const CSI = /\u001b\[([?=><])?([0-9;]*)([A-Za-z])/g;
 
+/** DEC private mode 1004: the program asks to be told `CSI I` / `CSI O` as the terminal gains and loses focus. */
+const FOCUS_REPORTING_MODE = 1004;
+
 /** The kitty CSI-u private markers throng honours — the same set the renderer registers. */
 const KITTY_PREFIXES = new Set<string>(['?', '=', '>', '<']);
 
@@ -80,13 +83,25 @@ export interface NegotiationScan {
    * enable several modes and release them one at a time.
    */
   readonly mouseModes: readonly number[];
+  /**
+   * Whether the program has turned on focus reporting (DEC 1004) and not turned it off (057 FR-099).
+   * The daemon writes `CSI I` / `CSI O` to a program that asked, as its panel is attended and left —
+   * which a view cannot do for a background tab or an unloaded project, because it has been unmounted.
+   */
+  readonly focusReporting: boolean;
+  /**
+   * Whether THIS chunk turned focus reporting on, even if it was already on at the start or was turned
+   * off earlier in the chunk. A program that turns the mode on assumes it is focused, so an
+   * off-then-on inside one chunk is a fresh start that the before/after booleans cannot show.
+   */
+  readonly focusReportingEnabled: boolean;
   /** An unterminated trailing escape sequence, to be prepended to the next chunk. */
   readonly pending: string;
 }
 
 /** A fresh scan: nothing negotiated, nothing half-read. */
 export function createNegotiationScan(): NegotiationScan {
-  return { state: createKittyKeyboardState(), mouseModes: [], pending: '' };
+  return { state: createKittyKeyboardState(), mouseModes: [], focusReporting: false, focusReportingEnabled: false, pending: '' };
 }
 
 /** Fold one DEC private mode set/reset into the live mouse-reporting set. */
@@ -121,6 +136,8 @@ export function scanKeyboardNegotiation(previous: NegotiationScan, chunk: string
   const text = previous.pending + chunk;
   let state = previous.state;
   let mouseModes = previous.mouseModes;
+  let focusReporting = previous.focusReporting;
+  let focusReportingEnabled = false;
   let consumedTo = 0;
 
   CSI.lastIndex = 0;
@@ -137,10 +154,14 @@ export function scanKeyboardNegotiation(previous: NegotiationScan, chunk: string
       const modes = params(m[2] ?? '');
       state = applyDecPrivateMode(state, modes, final === 'h');
       mouseModes = applyMouseModes(mouseModes, modes, final === 'h');
+      if (modes.includes(FOCUS_REPORTING_MODE)) {
+        focusReporting = final === 'h';
+        if (focusReporting) focusReportingEnabled = true;
+      }
     }
   }
 
-  return { state, mouseModes, pending: trailingPartial(text, consumedTo) };
+  return { state, mouseModes, focusReporting, focusReportingEnabled, pending: trailingPartial(text, consumedTo) };
 }
 
 /**

@@ -6,7 +6,9 @@ import {
   TERMINAL_GRID_NOTIFICATION,
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
+  TERMINAL_ATTENTION_NOTIFICATION,
 } from '@throng/ipc-contract';
+import type { AttentionSignal } from '@throng/core';
 
 /** Anything that can receive a serialized notification frame (a connected socket). */
 export interface NotificationSink {
@@ -24,13 +26,20 @@ export interface NotificationSink {
 @injectable()
 export class TerminalEvents {
   private readonly sinks = new Set<NotificationSink>();
+  private readonly lastSinkListeners = new Set<() => void>();
 
   addSink(sink: NotificationSink): void {
     this.sinks.add(sink);
   }
 
   removeSink(sink: NotificationSink): void {
-    this.sinks.delete(sink);
+    if (this.sinks.delete(sink) && this.sinks.size === 0) for (const listener of this.lastSinkListeners) listener();
+  }
+
+  /** Called when the last events socket goes: no UI is attached any more (057 FR-099). */
+  onLastSinkRemoved(listener: () => void): () => void {
+    this.lastSinkListeners.add(listener);
+    return () => this.lastSinkListeners.delete(listener);
   }
 
   /** Number of subscribed sinks — a closed events socket must drop to release it
@@ -76,6 +85,11 @@ export class TerminalEvents {
    */
   publishCommand(panelId: string, command: string | null, arch: string | null = null, observedAt?: number): void {
     this.emit(TERMINAL_COMMAND_NOTIFICATION, { panelId, command, arch, ...(observedAt !== undefined ? { observedAt } : {}) });
+  }
+
+  /** 057: a terminal signal that may raise a panel attention mark (contracts/daemon-attention.md). */
+  publishAttention(signal: AttentionSignal): void {
+    this.emit(TERMINAL_ATTENTION_NOTIFICATION, signal);
   }
 
   private emit(method: string, params: unknown): void {

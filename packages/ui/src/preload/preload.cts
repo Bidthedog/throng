@@ -83,6 +83,8 @@ contextBridge.exposeInMainWorld('throng', {
    */
   notices: {
     log: (record: unknown) => ipcRenderer.send('throng:notices:log', record),
+    /** 057 FR-110 — a notice accepted in this window; main decides whether it reaches the OS. */
+    toOs: (input: unknown) => ipcRenderer.send('throng:notices:toOs', input),
   },
   /** 029 FR-013 — panel id -> what a user calls it, so main can NAME a throng lock holder. */
   panels: {
@@ -923,6 +925,85 @@ contextBridge.exposeInMainWorld('throng', {
       const handler = (_event: unknown, msg: { panelId: string }): void => cb(msg);
       ipcRenderer.on('throng:editor:focus', handler);
       return () => ipcRenderer.removeListener('throng:editor:focus', handler);
+    },
+  },
+  /*
+   * 057 — panel attention marks (contracts/app-attention.md). The renderer never sees the daemon:
+   * main owns the mark state and broadcasts the full set; the renderer reports what has focus and
+   * asks main to route a "go to".
+   */
+  attention: {
+    /** The full mark set, on every change (FR-002). Delivered to every window. */
+    onChanged: (cb: (msg: { marks: unknown[] }) => void) => {
+      const handler = (_event: unknown, msg: { marks: unknown[] }): void => cb(msg);
+      ipcRenderer.on('throng:attention:changed', handler);
+      return () => ipcRenderer.removeListener('throng:attention:changed', handler);
+    },
+    /** What this window shows and what has focus — coalesced to one call per frame by the caller. */
+    reportFocus: (report: unknown) => ipcRenderer.send('throng:attention:focus', report),
+    /** One toast per mark (FR-035), delivered to ONE window: the focused one, else the main window. */
+    onToast: (
+      cb: (msg: {
+        op: 'raise' | 'update' | 'dismiss';
+        panelId: string;
+        kind?: 'attention' | 'failed';
+        title?: string;
+        projectName?: string;
+        reason?: string;
+      }) => void,
+    ) => {
+      const handler = (
+        _event: unknown,
+        msg: {
+          op: 'raise' | 'update' | 'dismiss';
+          panelId: string;
+          kind?: 'attention' | 'failed';
+          title?: string;
+          projectName?: string;
+          reason?: string;
+        },
+      ): void => cb(msg);
+      ipcRenderer.on('throng:attention:toast', handler);
+      return () => ipcRenderer.removeListener('throng:attention:toast', handler);
+    },
+    /**
+     * The current mark set, pulled when the renderer's store registers: a window that loads after
+     * marks were raised missed every broadcast (the push on load is the belt, this is the braces).
+     */
+    getMarks: (): Promise<{ marks: unknown[] }> => ipcRenderer.invoke('throng:attention:getMarks'),
+    /** Main asks THIS window to navigate to and focus a panel (FR-034, FR-080a). */
+    onFocusPanel: (cb: (msg: { panelId: string; projectId: string }) => void) => {
+      const handler = (_event: unknown, msg: { panelId: string; projectId: string }): void => cb(msg);
+      ipcRenderer.on('throng:attention:focusPanel', handler);
+      return () => ipcRenderer.removeListener('throng:attention:focusPanel', handler);
+    },
+    /** A toast link or Go to Next Marked Panel: main routes to the window that hosts the panel. */
+    goTo: (panelId: string) => ipcRenderer.send('throng:attention:goTo', { panelId }),
+    /**
+     * Main asks the renderer to draw the taskbar badge (R13, so it uses the theme's colours). The
+     * callback returns the PNG data URL; this wrapper correlates the reply by `requestId` on the same
+     * channel, so the renderer never handles the id. Main asks a single window (the main window, or
+     * a sub-workspace window when it is closed), so there is exactly one answerer per request.
+     */
+    onBadgeRequest: (
+      cb: (req: { count: number; kind: 'attention' | 'failed' }) => string | Promise<string>,
+    ) => {
+      const handler = (
+        _event: unknown,
+        req: { requestId: string; count: number; kind: 'attention' | 'failed' },
+      ): void => {
+        void Promise.resolve()
+          .then(() => cb({ count: req.count, kind: req.kind }))
+          .then(
+            (dataUrl) => ipcRenderer.send('throng:attention:badgeImage', { requestId: req.requestId, dataUrl }),
+            () => ipcRenderer.send('throng:attention:badgeImage', { requestId: req.requestId, dataUrl: null }),
+          );
+      };
+      ipcRenderer.on('throng:attention:badgeImage', handler);
+      // Announce that this window CAN draw the badge, at the only moment that is true (as the
+      // shutdown drain does): main re-requests an image it could not get while no window could.
+      ipcRenderer.send('throng:attention:badgeReady');
+      return () => ipcRenderer.removeListener('throng:attention:badgeImage', handler);
     },
   },
 });

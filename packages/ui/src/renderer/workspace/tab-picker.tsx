@@ -12,7 +12,8 @@
  * the user can see.
  */
 import { type ReactElement } from 'react';
-import { countPanels, truncateGraphemes, type Tab } from '@throng/core';
+import { collectPanels, countPanels, truncateGraphemes, type Tab } from '@throng/core';
+import { TabMark } from '../attention/holder-marks.js';
 import { Picker, type PickerEntry } from '../common/picker.js';
 
 /**
@@ -86,7 +87,13 @@ export function TabPicker({
       testId="tabpicker"
       placeholder="Type to filter tabs…"
       emptyMessage="No tabs match"
-      entries={tabPickerEntries(tabs, activeTabId, maxNameLength)}
+      entries={tabPickerEntries(tabs, activeTabId, maxNameLength).map((entry, i) => ({
+        ...entry,
+        // 057 FR-010 — a tab with a marked panel says so in its row.
+        adornment: (
+          <TabMark site="tab-picker" tabId={entry.id} panelIds={collectPanels(tabs[i]!.root).map((p) => p.id)} />
+        ),
+      }))}
       onChoose={(entry) => onChoose(entry.id)}
       onDismiss={onDismiss}
     />

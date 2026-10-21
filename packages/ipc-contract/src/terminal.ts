@@ -2,7 +2,12 @@
 // contracts/terminal-rpc.md). Commands are request/response; output/exit are
 // JSON-RPC *notifications* (no id) pushed over a long-lived subscribed socket.
 
-import type { KittyKeyboardState } from '@throng/core';
+import type {
+  AttentionLedgerEntry,
+  AttentionProducerConfig,
+  AttentionSignal,
+  KittyKeyboardState,
+} from '@throng/core';
 
 // --- Command methods (request → response) ---
 export const TERMINAL_ATTACH_METHOD = 'terminal.attach';
@@ -83,6 +88,8 @@ export interface TerminalCommandNotification {
    * or unreadable. A change of `arch` alone is published like a change of `command`.
    */
   arch?: string | null;
+  /** 025 FR-019d — epoch ms of the observation `command` came from; absent when the daemon did not stamp it. */
+  observedAt?: number;
 }
 
 /** Resolved at (re)start; never persisted. cwd = project root. */
@@ -105,6 +112,13 @@ export interface LaunchSpecDto {
    * (FR-008): re-attach never carries one.
    */
   writeOnReady?: string;
+  /**
+   * 057 R8 — a Startup Command is part of this launch, whether it travels as `writeOnReady` or inside
+   * `args` / `commandLine` through a flavour's command recipe. The daemon tags the first command that
+   * finishes after such a launch as a startup command (FR-065a), so no notification is raised for it.
+   * `writeOnReady` alone implies it; a recipe launch has no other tell, so the sender sets this.
+   */
+  startupCommand?: boolean;
   /** 025 follow-up: verbatim command line for a shell that does not un-escape argv (cmd). */
   commandLine?: string;
   /**
@@ -411,6 +425,38 @@ export interface TerminalCwdNotification {
   panelId: string;
   /** Absolute path of the shell's current working directory. */
   cwd: string;
+}
+
+// --- 057 attention (contracts/daemon-attention.md) ---
+
+/**
+ * A terminal signal that may raise a panel attention mark. Params are an {@link AttentionSignal}. At most
+ * one per `(panelId, signal)` per 250 ms; never while attention is disabled or the signal is off; never
+ * while no events sink is attached (the ledger holds it instead).
+ */
+export const TERMINAL_ATTENTION_NOTIFICATION = 'terminal.attention';
+/** Main pushes the producer settings ({@link AttentionProducerConfig}); idempotent. */
+export const TERMINAL_ATTENTION_CONFIG_METHOD = 'terminal.attentionConfig';
+/** Read the daemon's attention ledger, clearing `whileDetached` on every entry returned. */
+export const TERMINAL_ATTENTION_LEDGER_METHOD = 'terminal.attentionLedger';
+/** Replace the daemon's attention ledger with the set main holds (debounced by main). */
+export const TERMINAL_ATTENTION_SYNC_METHOD = 'terminal.attentionSync';
+/**
+ * Main pushes the panels it judges attended (FR-004), the whole set, whenever it changes and on connect.
+ * The daemon tells each focus-reporting program (DEC 1004) when its panel enters or leaves it (FR-099).
+ */
+export const TERMINAL_ATTENTION_FOCUS_METHOD = 'terminal.attentionFocus';
+
+export type TerminalAttentionNotification = AttentionSignal;
+export type TerminalAttentionConfigParams = AttentionProducerConfig;
+export interface TerminalAttentionLedgerResult {
+  entries: AttentionLedgerEntry[];
+}
+export interface TerminalAttentionSyncParams {
+  entries: AttentionLedgerEntry[];
+}
+export interface TerminalAttentionFocusParams {
+  attended: string[];
 }
 
 /** A JSON-RPC 2.0 notification frame (no `id`) — the daemon→UI streaming shape. */

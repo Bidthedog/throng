@@ -60,6 +60,7 @@ import { focusPanel } from '../workspace/panel-focus.js';
 import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
+import { requestNextMarkedPanel } from '../attention/attention-navigation.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { getMaximiseStack, isPanelHidden, isPanelTabMaximised, toggleMaximisePanel } from '../workspace/maximise-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
@@ -723,6 +724,15 @@ export function WindowDispatcher({
          */
         case 'focus.notice':
           focusMostRecentNotice();
+          break;
+        /*
+         * 057 FR-080 — Go to Next Marked Panel, from anywhere (EVERYWHERE scope, so a focused terminal
+         * does not see the chord). With nothing marked it does nothing and raises no notice (US7 AS2).
+         * `AttentionNavigation` registers the implementation for this window, which owns the project
+         * list and the layout the order is read from.
+         */
+        case 'focus.nextMarkedPanel':
+          requestNextMarkedPanel();
           break;
         case 'view.fullscreen':
           window.throng?.fullscreenToggle?.();

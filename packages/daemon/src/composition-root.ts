@@ -20,9 +20,12 @@ import {
   TERMINAL_END_TIMEOUT_MS,
   ProjectCategoryService,
   ProjectService,
+  collectPanels,
   countPanels,
   defaultPipeName,
+  panelDisplayTitle,
   parseSettingsGuarded,
+  type Tab,
 } from '@throng/core';
 import {
   WindowsPlatformInfo,
@@ -277,6 +280,30 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     new WindowsProcessCwd(), // 012: poll each terminal's shell cwd for the panel title
     readCommandPollMs(env), // 025 FR-019c: the shared command-observation interval
     TERMINAL_END_TIMEOUT_MS, // 051 FR-013a: the one limit every end and the shutdown wait read
+    {
+      // 057 FR-015/FR-033: the daemon holds every layout and project, so it names the panel and project.
+      resolveNames: (panelId, projectId, liveTitle) => {
+        const owner = userContext.currentUser().userId;
+        const projectName = projectStore.getById(owner, projectId)?.name ?? '';
+        // FR-100: the tab holding the panel is named with it — in the project's layout, else (loaded only on
+        // a miss, as before) a sub-workspace's.
+        const find = (tabs: readonly Tab[]) => {
+          for (const tab of tabs) {
+            const panel = collectPanels(tab.root).find((candidate) => candidate.id === panelId);
+            // FR-116: the live window title is one of the header's sources, so the name matches the header.
+            if (panel) {
+              const panelTitle = panelDisplayTitle(panel, liveTitle === null ? {} : { terminalTitle: liveTitle });
+              return { panelTitle, projectName, tabTitle: tab.title };
+            }
+          }
+          return null;
+        };
+        return (
+          find(workspaceStore.load(owner, projectId).layout.tabs) ??
+          find(workspaceStore.loadSubWorkspaces(owner).flatMap((sub) => sub.tabs)) ?? { panelTitle: 'Terminal', projectName, tabTitle: '' }
+        );
+      },
+    },
   );
   container.bind<TerminalEvents>(DAEMON_TYPES.TerminalEvents).toConstantValue(terminalEvents);
   container.bind<TerminalLockManager>(DAEMON_TYPES.TerminalLockManager).toConstantValue(lockManager);
