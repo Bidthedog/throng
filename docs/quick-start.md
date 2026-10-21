@@ -88,6 +88,17 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
   prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
   your browser), and **right-click** offers every other place it could open. Nothing is ever run by
   a click.
+- **A terminal can ask for you.** When a command finishes, a program exits (a failed exit is marked differently), or something rings
+  the bell, the panel gets an **attention mark**; so do its tab, its project and, if folded away, its
+  category, and throng can also raise a notification and a count on the taskbar icon. Hover a
+  project's or category's mark to see which terminals are waiting. Click into the panel and, a moment
+  later, the mark goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To
+  have a program such as Claude Code ring the bell or send a notification when it needs you, see
+  [its own documentation](https://code.claude.com/docs). Claude Code sends its "waiting for your input"
+  notification only after a minute idle; for one as soon as it finishes, lower its
+  `messageIdleNotifThresholdMs` setting (in milliseconds). What raises a mark is in
+  [Preferences](preferences.md#terminal), and how it is announced under
+  [Notifications](preferences.md#notifications).
 - **Find in the scrollback** with **Ctrl+F**; it searches read-only and never types at the shell.
 - **Something wrong?** A terminal that cannot start says why on the panel and offers **Try again**;
   if the background service stops, a **↻** in the status bar restarts it.

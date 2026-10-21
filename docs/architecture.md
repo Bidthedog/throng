@@ -277,8 +277,8 @@ terminal, and the component that can see every panel in every project.
 per user, derived from the user token (`core/src/config/pipe-endpoint.ts`), so two accounts on one
 machine never collide. `DaemonClient` opens one connection per request. A connection whose first
 request is `terminal.subscribe` becomes a long-lived **events socket**, and the daemon pushes
-`terminal.output`, `terminal.exit`, `terminal.grid`, `terminal.cwd` and `terminal.command`
-notifications down it. A failure can carry a structured `error.data` payload, so the cause of a
+`terminal.output`, `terminal.exit`, `terminal.grid`, `terminal.cwd`, `terminal.command` and
+`terminal.attention` notifications down it. A failure can carry a structured `error.data` payload, so the cause of a
 failure crosses the wire as data rather than as a message string that has to be parsed
 ([Failure notices and diagnostics](#failure-notices-and-diagnostics)). Changing a method means
 changing `ipc-contract`, both ends and the contract tests together. The shared package is what stops
@@ -407,6 +407,47 @@ that the renderer joins in `title-context.ts`: the daemon's once-a-second comman
 (`terminal.command`, with the program's architecture and when its reading began) and the window title
 the program sets through its own output. A title that is the shell's own, or the one its prompt
 showed, is never presented as the program's.
+
+**Attention marks.** A panel that needs the user carries a mark, and the work is split along the process
+boundary so no layer knows more than it has to.
+
+- *Recognising a signal* is the daemon's, because only it sees a terminal's output while no window is
+  attached. `daemon/src/terminal-attention.ts` runs the scanner in `core/terminal/attention-scan.ts`
+  (bell, desktop-notification and progress sequences, split-chunk safe) beside the exit and
+  command-finished observations, gates each signal on the producer configuration main pushes down
+  (`terminal.attentionConfig`, built from the [Terminal › Attention settings](preferences.md#terminal)),
+  rate-limits it per panel and signal, and publishes `terminal.attention`.
+- *Remembering one* is the daemon's too. A bounded in-memory ledger keeps what arrived while no events
+  socket was attached; main reads it (`terminal.attentionLedger`) when it reconnects and replaces it with
+  its own state (`terminal.attentionSync`), so a mark raised while throng was closed is still there when
+  it opens.
+- *Deciding what a mark is* is main's. `main/attention-service.ts` owns the mark model from
+  `core/attention/`: at most one mark per panel, merged and sticky when Failed, cleared once the panel
+  has held keyboard focus, in a focused window, for the
+  [clear delay](preferences.md#attention). Main also sends the daemon the set of attended panels
+  (`terminal.attentionFocus`), and the daemon writes `CSI I` / `CSI O` to every program that turned on
+  focus reporting (DEC 1004) as its panel enters or leaves that set — the view cannot, because a tab or
+  project switch unmounts it. Windows report which panels they host and which has focus; main
+  broadcasts the full set to every window, so each draws its own holders (panel header, tab chip, project
+  row, minimised category) from the same marks.
+- *Announcing one* goes through two core ports, `ISystemNotifier` and `ITaskbarBadge`, each with a no-op
+  and an Electron adapter in `main/`, chosen by the [notification settings](preferences.md#notifications). An
+  ordinary notice whose type is also sent to the OS reaches the same notifier through main's
+  `NoticeOs`, which shows it only while no throng window is focused. An
+  in-app toast is raised in a renderer, where notices live; the taskbar badge image is drawn in a
+  renderer too, because the colour must come from the theme.
+
+```mermaid
+flowchart LR
+  PTY["Shell output,<br/>exit, command end"] --> SC["Daemon<br/>attention scanner + ledger"]
+  SC -->|"terminal.attention"| AS["UI main<br/>AttentionService + mark model"]
+  AS -->|"attention:changed"| R["Every window<br/>marks on holders"]
+  AS --> T["Toast in one window"]
+  AS --> N["ISystemNotifier"]
+  AS --> B["ITaskbarBadge"]
+  R -->|"focus report"| AS
+  AS -->|"attentionConfig"| SC
+```
 
 **The keyboard belongs to the terminal.** A chord throng consumes never reaches the shell, so which
 keys may be bound in a terminal scope is decided by the constitution's reserved and shadowable tiers.
