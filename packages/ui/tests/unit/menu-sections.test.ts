@@ -1612,6 +1612,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
 describe('the cog menu’s Application section is one group, therefore no divider WITHIN it (FR-052 as corrected, AS-5)', () => {
   const cog = (): MenuAction[] => cogMenu();
 
+  // 057 FR-082 made the pinned five six (Go to Next Marked Panel); FR-106 (round 3, which supersedes
+  // FR-082) takes it back out to a marked project's context menu, so the pinned shape is five again.
   it('draws five Application items and nothing between them', () => {
     const application = cog().filter((i) => i.section === 'application');
     expect(application.map((i) => i.section)).toEqual(['application', 'application', 'application', 'application', 'application']);
@@ -2080,9 +2082,11 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     categories?: { id: string; name: string }[];
     onMoveToCategory?: (categoryId: string) => void;
     onNewCategory?: () => void;
+    nextMarked?: { run: () => void };
   }): Promise<MenuAction[]> {
     const { projectMenu } = await import('../../src/renderer/sidebar/project-menu.js');
     return projectMenu({
+      ...(opts.nextMarked === undefined ? {} : { nextMarked: opts.nextMarked }),
       loaded: opts.loaded,
       defaultAction: opts.defaultAction ?? 'keepRunning',
       onEdit: opts.onEdit ?? noop,
@@ -2130,6 +2134,26 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
   it('never draws the third, now-retired row ("Unload and Keep Terminals Running" / "Unload and End Terminals" as unconditional labels)', async () => {
     const items = await build({ loaded: true, defaultAction: 'keepRunning' });
     expect(items.filter((i) => i.label?.startsWith('Unload')).length, 'exactly two Unload rows').toBe(2);
+  });
+
+  // 057 FR-106 (supersedes FR-082): Go to Next Marked Panel is offered by a project's own menu, only
+  // while that project has a marked panel, in the `navigate` section ("takes you somewhere").
+  it('offers Go to Next Marked Panel, in navigate, only while the project has a marked panel (057 FR-106)', async () => {
+    const run = vi.fn();
+    const marked = await build({ loaded: true, nextMarked: { run } });
+    const row = marked.find((i) => i.label === 'Go to Next Marked Panel');
+    expect(row, 'the row is present for a marked project').toBeDefined();
+    expect(row?.section).toBe('navigate');
+    expect(row?.icon).toBe('attention');
+    // No chord: the row walks this project's cycle, the chord every project's (review of FR-106).
+    expect(row?.shortcut).toBeUndefined();
+    expect(row?.disabled ?? false).toBe(false);
+    assertSectioned(marked, 'project menu (marked)');
+    row?.onClick?.();
+    expect(run).toHaveBeenCalledTimes(1);
+
+    const unmarked = await build({ loaded: true });
+    expect(unmarked.find((i) => i.label === 'Go to Next Marked Panel'), 'absent when nothing in the project is marked').toBeUndefined();
   });
 
   it('Move to Category ▸ (FR-053) lists every category it is given, in order, then New Category…, carries the category icon, and never disables', async () => {

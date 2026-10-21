@@ -212,10 +212,33 @@ describe('SETTINGS_METADATA notification leaves (030 US1, #224)', () => {
     }
   });
 
-  it('groups all eight under Notifications, so they arrive as one section', () => {
+  // 057 FR-108 – FR-111: the global OS switch, then five types of three leaves each.
+  it('groups all sixteen under Notifications, so they arrive as one section', () => {
     const notifications = SETTINGS_METADATA.filter((d) => d.key.startsWith('notifications.'));
-    expect(notifications).toHaveLength(8);
+    expect(notifications).toHaveLength(16);
     for (const d of notifications) expect(d.group, d.key).toBe('Notifications');
+  });
+
+  it('gives each type one row of mode, duration and OS switch, after the global switch (FR-108)', () => {
+    const notifications = SETTINGS_METADATA.filter((d) => d.group === 'Notifications');
+    expect(notifications[0]).toMatchObject({ key: 'notifications.os', control: 'toggle' });
+    expect(notifications[0]!.row).toBeUndefined();
+    for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
+      const row = notifications.filter((d) => d.row?.id === `notifications.${type}`).map((d) => d.key);
+      expect(row, type).toEqual([`notifications.${type}.mode`, `notifications.${type}.timeoutMs`, `notifications.${type}.os`]);
+    }
+  });
+
+  // Round 5: "OS Notify", independent of the mode, shown only while throng is not focused, and inert
+  // (keeping its value) while the global switch is off.
+  it('labels each OS leaf "OS Notify", says when it shows, and makes it wait on the global switch', () => {
+    for (const type of ['error', 'warning', 'info', 'success', 'attention']) {
+      const d = SETTINGS_METADATA.find((x) => x.key === `notifications.${type}.os`)!;
+      expect(d.label, type).toBe('OS Notify');
+      expect(d.description, type).toMatch(/not focused/);
+      expect(d.description, type).toMatch(/whatever .*display/i);
+      expect(d.enabledWhen, type).toEqual({ key: 'notifications.os', is: true });
+    }
   });
 });
 
@@ -519,10 +542,11 @@ describe('the replace summary notice has a display mode and a duration of its ow
   it('leaves the four global severities exactly as they were — this overrides nothing else', () => {
     // The discriminating half. FR-082 takes the global settings out of the loop for ONE notice; a
     // change that reached `notifications.*` would be a far larger one than the requirement asks for.
-    expect(DEFAULT_NOTIFICATION_SETTINGS.error).toEqual({ mode: 'dismiss', timeoutMs: 5000 });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.warning).toEqual({ mode: 'dismiss', timeoutMs: 5000 });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.info).toEqual({ mode: 'timed', timeoutMs: 10000 });
-    expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ mode: 'timed', timeoutMs: 5000 });
+    // (057 FR-110 gave each an OS switch, off by default.)
+    expect(DEFAULT_NOTIFICATION_SETTINGS.error).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.warning).toEqual({ mode: 'dismiss', timeoutMs: 5000, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.info).toEqual({ mode: 'timed', timeoutMs: 10000, os: false });
+    expect(DEFAULT_NOTIFICATION_SETTINGS.success).toEqual({ mode: 'timed', timeoutMs: 5000, os: false });
   });
 });
 

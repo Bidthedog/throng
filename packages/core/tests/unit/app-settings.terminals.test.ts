@@ -1,6 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { parseAppSettings, DEFAULT_APP_SETTINGS, DEFAULT_TERMINAL_TITLE_TEMPLATE } from '@throng/core';
 
+// 057 — spelled out here because these assertions are exhaustive; its parse is asserted in
+// `app-settings.attention.test.ts`.
+const ATTENTION_DEFAULTS = {
+  enabled: true,
+  signals: {
+    processExited: true,
+    commandFinished: true,
+    bell: true,
+    notification: true,
+    progressEnded: true,
+    unseenOutput: false,
+    outputQuiet: false,
+  },
+  quietSeconds: 10,
+};
+
 describe('parseAppSettings — terminals section (005 Phase B)', () => {
   it('defaults to empty flavours / disabledBuiltins / defaultShellArguments (+ showStatusBar on) when absent', () => {
     expect(parseAppSettings({}).terminals).toEqual({
@@ -25,6 +41,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
       titleCommandMaxLength: 40,
       titlePathMaxLength: 40,
+      attention: ATTENTION_DEFAULTS,
     });
     expect(DEFAULT_APP_SETTINGS.terminals).toEqual({
       flavours: [],
@@ -48,6 +65,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
       titleCommandMaxLength: 40,
       titlePathMaxLength: 40,
+      attention: ATTENTION_DEFAULTS,
     });
   });
 
@@ -188,6 +206,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       titleTemplate: DEFAULT_TERMINAL_TITLE_TEMPLATE,
       titleCommandMaxLength: 40,
       titlePathMaxLength: 40,
+      attention: ATTENTION_DEFAULTS,
     });
   });
 });

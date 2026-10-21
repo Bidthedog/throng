@@ -228,30 +228,57 @@ describe('the reset restores every row AT ONCE (clearSearch cancels the pending 
  */
 
 const SEVERITIES = ['error', 'warning', 'info', 'success'] as const;
+/** 057 FR-108: Attention is the fifth type, with its own row; the four severities keep their keys. */
+const TYPES = [...SEVERITIES, 'attention'] as const;
 
 /** The mode `<select>` for one severity. */
 const modeFor = (severity: string): HTMLSelectElement =>
   screen.getByTestId(`control-notifications.${severity}.mode`) as HTMLSelectElement;
 
 describe('the Notifications category (migrated from notification-prefs.e2e.ts:304)', () => {
-  it('offers a mode and a duration for every severity — eight leaves, no more', () => {
+  it('offers a mode, a duration and OS Notify for every type — fifteen leaves, no more', () => {
     mount();
 
     expect(screen.getByTestId('settings-group-Notifications')).toBeVisible();
-    for (const severity of SEVERITIES) {
-      expect(modeFor(severity)).toBeVisible();
+    for (const type of TYPES) {
+      expect(modeFor(type)).toBeVisible();
       // `timeoutMs`, and it renders TWO controls — a slider and a number field, which the E2E's
       // `durationMs` guess would have missed even had the name been right.
-      expect(screen.getByTestId(`control-notifications.${severity}.timeoutMs`)).toBeVisible();
-      expect(screen.getByTestId(`control-notifications.${severity}.timeoutMs-slider`)).toBeVisible();
+      expect(screen.getByTestId(`control-notifications.${type}.timeoutMs`)).toBeVisible();
+      expect(screen.getByTestId(`control-notifications.${type}.timeoutMs-slider`)).toBeVisible();
+      expect(screen.getByTestId(`control-notifications.${type}.os`)).toBeVisible();
     }
-    // "No more" is the half the migrated test could not state: it looked up four names it already
-    // knew. A fifth severity added without a duration, or a stray control in the group, is exactly
-    // the drift a per-severity surface accumulates.
+    // "No more" is the half the migrated test could not state: it looked up names it already knew. A
+    // sixth type added without a duration, or a stray control in the group, is exactly the drift a
+    // per-type surface accumulates.
     const modes = screen.getAllByTestId(/^control-notifications\.[a-z]+\.mode$/);
     const durations = screen.getAllByTestId(/^control-notifications\.[a-z]+\.timeoutMs$/);
-    expect(modes).toHaveLength(SEVERITIES.length);
-    expect(durations).toHaveLength(SEVERITIES.length);
+    const oses = screen.getAllByTestId(/^control-notifications\.[a-z]+\.os$/);
+    expect(modes).toHaveLength(TYPES.length);
+    expect(durations).toHaveLength(TYPES.length);
+    expect(oses).toHaveLength(TYPES.length);
+  });
+
+  it('shows the global OS switch first, then one row each for Error, Warning, Information, Success, Attention (FR-108, FR-109)', () => {
+    mount();
+
+    const group = screen.getByTestId('settings-group-Notifications');
+    expect(within(group).getByTestId('control-notifications.os')).toBeVisible();
+    const rows = [...group.querySelectorAll<HTMLElement>('[data-testid^="setting-row-"]')];
+    expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual(TYPES.map((t) => `setting-row-notifications.${t}`));
+    expect(rows.map((r) => r.querySelector('.settings-row__label')?.textContent)).toEqual([
+      'Error',
+      'Warning',
+      'Information',
+      'Success',
+      'Attention',
+    ]);
+    // The global switch is ahead of every row, in document order.
+    const all = [...group.querySelectorAll('[data-testid="setting-notifications.os"], [data-testid^="setting-row-"]')];
+    expect(all[0]).toBe(within(group).getByTestId('setting-notifications.os'));
+    // One set of row actions per row, none per leaf.
+    for (const t of TYPES) expect(within(group).getByTestId(`setting-reset-notifications.${t}`)).toBeInTheDocument();
+    expect(within(group).queryByTestId('setting-reset-notifications.error.mode')).toBeNull();
   });
 
   it('names each mode as FR-001 names it — the words, not the stored token', () => {

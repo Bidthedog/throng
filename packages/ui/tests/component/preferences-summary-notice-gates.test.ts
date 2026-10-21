@@ -198,6 +198,16 @@ describe('silencing the replace summary is confirmed (FR-082b, 030 FR-008)', () 
     expect(message.textContent ?? '').toMatch(/log/i);
   });
 
+  it('says that a silenced type still reaches the OS while its OS Notify is on (057 FR-110)', async () => {
+    await mount(DISMISS_ONLY);
+
+    choose('never');
+
+    const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
+    expect(message.textContent ?? '').toMatch(/OS Notify/);
+    expect(message.textContent ?? '').toMatch(/still/i);
+  });
+
   it('writes NOTHING when the dialog is declined', async () => {
     await mount(DISMISS_ONLY);
 

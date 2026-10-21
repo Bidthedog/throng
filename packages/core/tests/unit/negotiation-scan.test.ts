@@ -144,6 +144,44 @@ describe('scanKeyboardNegotiation', () => {
     });
   });
 
+  describe('focus reporting, DEC 1004 — 057 FR-099', () => {
+    /*
+     * The daemon tells a program when its panel stops and starts being attended, because a tab or
+     * project switch unmounts the view — the only thing that could otherwise tell it. It can only do
+     * that for a program that asked, so it has to know who asked.
+     */
+    it('starts off', () => {
+      expect(createNegotiationScan().focusReporting).toBe(false);
+    });
+
+    it('turns on at CSI ?1004h and off at CSI ?1004l', () => {
+      expect(feed('\x1b[?1004h').focusReporting).toBe(true);
+      expect(feed('\x1b[?1004h', '\x1b[?1004l').focusReporting).toBe(false);
+    });
+
+    it('sees 1004 among other modes in one sequence — how Claude Code sends it', () => {
+      expect(feed('\x1b[?2004;1004;2031h').focusReporting).toBe(true);
+    });
+
+    it('sees it split across two chunks', () => {
+      const stream = '\x1b[?1004h';
+      for (let cut = 0; cut <= stream.length; cut++) {
+        expect(feed(stream.slice(0, cut), stream.slice(cut)).focusReporting, `split after ${String(cut)} byte(s)`).toBe(true);
+      }
+    });
+
+    it('is not touched by other modes', () => {
+      expect(feed('\x1b[?1004h', '\x1b[?2004l\x1b[?1049l').focusReporting).toBe(true);
+    });
+
+    it('reports an enable in the chunk that made it, even an off-then-on — and only that chunk', () => {
+      expect(feed('\x1b[?1004h').focusReportingEnabled).toBe(true);
+      expect(feed('\x1b[?1004h', '\x1b[?1004l\x1b[?1004h').focusReportingEnabled).toBe(true);
+      expect(feed('\x1b[?1004h', 'text').focusReportingEnabled).toBe(false);
+      expect(feed('\x1b[?1004h', '\x1b[?1004l').focusReportingEnabled).toBe(false);
+    });
+  });
+
   it('THE DEFECT: applying one tail twice leaves the protocol stuck on (#290)', () => {
     /*
      * This is the whole reason the daemon is now the authority, expressed at the layer where it can
