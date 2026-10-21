@@ -34,6 +34,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '@throng/core';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { FILE_OP_TIMEOUT_MS,
   cleanupTemp,
@@ -383,7 +384,8 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
       );
       await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('timed');
       await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(SHORT_MS);
-      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: SHORT_MS });
+      // 057 FR-107: each type also carries its OS switch, which this edit leaves at its default.
+      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: SHORT_MS, os: false });
 
       const notices = win.getByTestId('explorer-error');
       await raiseErrorNotice(win);
@@ -404,7 +406,7 @@ test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, 
         String(LONG_MS),
       );
       await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(LONG_MS);
-      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: LONG_MS });
+      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: LONG_MS, os: false });
 
       await raiseErrorNotice(win);
       await expect(notices).toHaveCount(1, { timeout: 20_000 });
@@ -451,12 +453,9 @@ test('a pre-030 settings file opens with its preferences intact and no configura
 
       // ── The absent section resolves to the shipped defaults (FR-013), in the running application
       // and not merely in a parse.
-      await appliedInMainWindow(win, (n) => n, {
-        error: { mode: 'dismiss', timeoutMs: 5000 },
-        warning: { mode: 'dismiss', timeoutMs: 5000 },
-        info: { mode: 'timed', timeoutMs: 10000 },
-        success: { mode: 'timed', timeoutMs: 5000 },
-      });
+      // The whole resolved section, from the one source of the defaults (057 FR-107 added the OS
+      // switches and the Attention type to it).
+      await appliedInMainWindow(win, (n) => n, DEFAULT_NOTIFICATION_SETTINGS);
 
       // ── …and the preferences the user had already set are still theirs (SC-014).
       const editor = await win.evaluate(async () => {
