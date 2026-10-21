@@ -239,6 +239,15 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Terminal title template | `terminals.titleTemplate` | `({title} ? "{app}: {title} \| " : {command} ? "{command} \| " : ""){shell}({path} ? " ({path})" : "")` | a [title template](#terminal-title-templates) | What a terminal panel is named, everywhere it is named. The panel-type icon is always shown beside it. |
 | Longest command in a terminal title | `terminals.titleCommandMaxLength` | 40 | 10 – 200, step 5 | `{command}` beyond this is shortened, with `…`. |
 | Longest directory in a terminal title | `terminals.titlePathMaxLength` | 40 | 10 – 200, step 5 | `{path}` beyond this keeps its root and last folder and drops folders from the middle. |
+| Mark terminals that need you | `terminals.attention.enabled` | on | on · off | Raise an [attention mark](#attention) on a terminal panel when something happens in it that you may want to look at. Off, no terminal raises a mark and every existing terminal mark is withdrawn. The signals below are switched off with it. |
+| Program exited | `terminals.attention.signals.processExited` | on | on · off | Mark a terminal whose program ended without you ending it. A zero exit code raises the Attention mark, anything else the Failed mark. Exact: throng is told when the process exits. |
+| Command finished | `terminals.attention.signals.commandFinished` | on | on · off | Mark a terminal when its foreground command ends and nothing replaces it. Always the Attention mark: the exit code is not known. Exact, but up to one Command tracking interval late, because throng notices by watching the foreground command; a command that starts and ends between two checks can be missed. |
+| Bell | `terminals.attention.signals.bell` | on | on · off | Mark a terminal when a program rings the terminal bell. Exact: the program asked for it. |
+| Program notification | `terminals.attention.signals.notification` | on | on · off | Mark a terminal when a program sends a desktop notification request through the terminal. Exact: the program asked for it. |
+| Progress ended | `terminals.attention.signals.progressEnded` | on | on · off | Mark a terminal when a program reports that the progress it was showing completed (Attention mark) or failed (Failed mark). Exact: the program reported it. |
+| Unseen output | `terminals.attention.signals.unseenOutput` | off | on · off | Mark a terminal that prints output while it is not the focused panel. A heuristic: it means the terminal changed, not that it needs you. |
+| Output went quiet | `terminals.attention.signals.outputQuiet` | off | on · off | Mark a terminal whose output stops for the quiet time below, after it printed while not focused. A heuristic: throng cannot tell a program that is waiting from one that is working silently. |
+| Quiet time | `terminals.attention.quietSeconds` | 10 | 10 – 600 s, step 10 | How long a terminal must stay silent after activity before Output went quiet marks it. |
 
 ### Terminal title templates
 
@@ -254,6 +263,17 @@ program set · `{shell}` the terminal type · `{path}` the working directory · 
   reads `claude: work on links | Git Bash (D:\git\throng)` while a program that titled itself runs,
   `ping localhost -t | Git Bash (D:\git\throng)` while a command runs, and `Git Bash (D:\git\throng)` at a prompt.
 - In text, `((` is a bracket, so an expression that opens on a bracket needs a space: `( ({title} ?? {app}) ? … )`.
+
+## Attention
+
+An attention mark flags a panel that needs you; these settings decide how a mark clears and whether
+the taskbar counts it, whatever raised it. How it is announced is the Attention row under
+[Notifications](#notifications); which terminal events raise one is under [Terminal](#terminal).
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Clear delay | `attention.clearDelayMs` | 1,000 | 0 – 10,000 ms, step 100 | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
+| Taskbar badge | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings. |
 
 ## Editor · Indentation
 
@@ -308,20 +328,36 @@ failed write reports itself; whatever the mode, the outcome is still written to 
 
 ## Notifications
 
-A mode and a duration for each severity. *Never display* for errors or warnings asks you to confirm
-first, because it means a failure reports nothing on screen. Whatever the mode, the event is still
-written to the log.
+One row per notification type, each holding three settings on one line: a display mode, its duration
+(used only under *Display for*), and *OS Notify*, which raises a Windows notification whatever the mode —
+but only while throng is not focused; while it is, the in-app notice and its mode decide. One switch above
+the rows stops anything reaching Windows, and greys out every OS Notify while it is off, keeping their
+settings. *Never display* for errors or warnings
+asks you to confirm first, because it means a failure reports nothing on screen. Whatever the mode, the
+event is still written to the log. A row's Reset and Revert act on all three of its settings.
+
+The Attention row announces [attention marks](#attention), Attention and Failed alike; a Failed mark keeps
+the error colour and icon. A mark is announced once: a later signal on a panel still marked updates its
+toast, if one is showing, and raises nothing new.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
+| Operating system notifications | `notifications.os` | on | on · off | Allow throng to send Windows notifications at all. Off, nothing reaches Windows and every OS Notify is unavailable, though each keeps its setting. |
 | Error notices | `notifications.error.mode` | `dismiss` | `never` (Never display) · `timed` (Display for) · `dismiss` (Dismiss only) | Whether error notices stay until dismissed, disappear on their own, or never show. |
 | Error notice duration | `notifications.error.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | How long an error notice stays under *Display for*. |
+| Error: OS Notify | `notifications.error.os` | off | on · off | Raise a Windows notification for an error notice, whatever its mode, while throng is not focused. |
 | Warning notices | `notifications.warning.mode` | `dismiss` | as above | The same, for warnings — typically a partly-failed operation. |
 | Warning notice duration | `notifications.warning.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | |
+| Warning: OS Notify | `notifications.warning.os` | off | on · off | |
 | Information notices | `notifications.info.mode` | `timed` | as above | Ordinary progress and status messages. |
 | Information notice duration | `notifications.info.timeoutMs` | 10,000 | 3,000 – 30,000 ms, step 500 | |
+| Information: OS Notify | `notifications.info.os` | off | on · off | |
 | Success notices | `notifications.success.mode` | `timed` | as above | Confirmations of an operation that worked — the safest to shorten or switch off. |
 | Success notice duration | `notifications.success.timeoutMs` | 5,000 | 3,000 – 30,000 ms, step 500 | |
+| Success: OS Notify | `notifications.success.os` | off | on · off | |
+| Attention notices | `notifications.attention.mode` | `timed` | as above | Whether a mark's toast stays until dismissed, disappears on its own, or never shows. The mark itself is raised whatever you choose. |
+| Attention notice duration | `notifications.attention.timeoutMs` | 10,000 | 3,000 – 30,000 ms, step 500 | |
+| Attention: OS Notify | `notifications.attention.os` | on | on · off | Raise a Windows notification for a mark, whatever its mode, while throng is not focused; clicking it goes to the panel. |
 
 ## Logging
 

@@ -124,6 +124,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 |---|---|---|---|---|
 | Quick Open | `navigate.quickOpen` | `Ctrl+Shift+T` | Everywhere | Open any file in the current project by typing part of its name or path; **Enter** opens it. |
 | Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Jump to a line number in the focused editor. A terminal keeps its own `Ctrl+G`. |
+| Go to Next Marked Panel | `focus.nextMarkedPanel` | `Ctrl+Shift+Alt+G` | Everywhere | Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked. Works from a focused terminal. Also in the right-click menu of a project that has a marked panel, where it goes to that project's next marked panel. |
 | Open Preview | `preview.open` | *(unbound)* | Editor · File Explorer | Open a rendered preview of the focused editor's file, or of the file selected in File Explorer. |
 | Back | `navigate.back` | `Alt+ArrowLeft` | Editor · Preview | Show the previous file in the focused editor or preview's history. In an editor this takes the key from moving by syntax. |
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
@@ -261,7 +262,7 @@ does nothing visible: throng waits for the next key.
 the same way on every layout. Three consequences:
 
 - **Letters are the key in the US position.** On a French AZERTY keyboard, `Ctrl+Shift+Alt+M` (Focus
-  File Explorer) is the key labelled **,**. B, N, J, K and V sit in the same place on AZERTY and
+  File Explorer) is the key labelled **,**. B, G, N, J, K and V sit in the same place on AZERTY and
   QWERTZ as on a UK or US keyboard, so the three focus chords still run left to right.
 - **The window zoom's + and - are the keys beside 0 on a US keyboard.** On German, Spanish and
   Italian layouts the keys labelled **+** and **-** sit elsewhere and don't fire it; on Nordic
@@ -271,7 +272,7 @@ the same way on every layout. Three consequences:
 - **A few AltGr+Shift characters are taken.** Where AltGr+Shift types a character on a key a
   Ctrl+Shift+Alt chord uses, the chord wins and the character doesn't type: **Ń** (N) on Polish
   (programmer's); **Ñ** (N) and **Þ** (T) on US-International; and **Ț** (T) on Romanian
-  (Programmers). UK, German, French, Spanish, Italian and Nordic layouts lose none. B, M, J, K and V
+  (Programmers). UK, German, French, Spanish, Italian and Nordic layouts lose none. B, G, M, J, K and V
   carry no AltGr+Shift character on any of these layouts, and no default uses P or F, so
   US-International's **Ö** (P) types. If you type one of these, rebind the chord. Characters typed
   with AltGr *without* Shift — **€**, **@**, **{**, **µ** and the rest — are unaffected.

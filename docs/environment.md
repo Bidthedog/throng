@@ -118,6 +118,8 @@ launches.
 | `THRONG_E2E_IGNORE_ELEVATION_GUARD` | `1` runs the specs that normally skip on an elevated host. See [elevation](../.claude/skills/throng-testing/references/elevation.md). | unset |
 | `THRONG_E2E_STEP_MS` | Pauses between the steps of a spec that opts in, so a run can be watched. | `0` |
 | `THRONG_E2E_CLIPBOARD` | `memory` gives each app an in-memory clipboard; the harness sets it, and it also marks a run as a test run. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
+| `THRONG_E2E_ATTENTION_OS` | `record` swaps the operating system notification and taskbar badge for recorders that append each effective call to a JSON-lines log, which Playwright cannot otherwise observe. Without it a test run uses no-ops, so no real notification is raised. | unset |
+| `THRONG_E2E_ATTENTION_OS_LOG` | Where the recorders write; read only when `THRONG_E2E_ATTENTION_OS` is `record`. | `attention-os.jsonl` in the app's user data folder |
 | `THRONG_E2E_FOREGROUND_HANDOFF` | `1` re-enables the terminal foreground hand-off, which a test run otherwise turns off; set by the one spec that covers it. | unset |
 | `THRONG_TEST_SHELL_HISTORY` | `off` makes every shell a test run opens keep no history; the harness sets it. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
 | `THRONG_PREFS_SECTIONS_OPEN` | `1` makes Preferences sections start unfolded, as before 056 FR-016; the harness sets it. | unset |
