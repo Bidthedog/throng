@@ -11,6 +11,8 @@
 // exit codes are unit-testable without packaging anything.
 //
 //   node scripts/artifact-set.mjs list [--json] [--dir <path>]
+//   node scripts/artifact-set.mjs list --combinations [--json]
+//       one line per verification combination: <id>\t<role>\t<scope|->\t<verdictFile> (058)
 //   node scripts/artifact-set.mjs resolve <role> [--dir <path>]
 //   node scripts/artifact-set.mjs reconcile [--dir <path>]
 //
@@ -20,7 +22,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { declareArtifactSet, reconcileArtifactSet, resolveArtifact } from '@throng/core';
+import { combinationsOf, declareArtifactSet, reconcileArtifactSet, resolveArtifact } from '@throng/core';
 import { sha256OfFile } from './checksum.mjs';
 
 const SUBCOMMANDS = ['list', 'resolve', 'reconcile', 'checksums'];
@@ -44,6 +46,14 @@ export function runArtifactSet({ argv, version, filenames, dir = '' }) {
   const set = declareArtifactSet(version);
 
   if (subcommand === 'list') {
+    if (rest.includes('--combinations')) {
+      // The single list the workflow's matrix and the publish gate both read (058 FR-028/FR-030);
+      // neither writes it out, so neither can drift from the declared set.
+      const combinations = combinationsOf(set);
+      if (rest.includes('--json')) return { code: 0, stdout: JSON.stringify(combinations, null, 2), stderr: '' };
+      const lines = combinations.map((c) => `${c.id}\t${c.role}\t${c.scope ?? '-'}\t${c.verdictFile}`);
+      return { code: 0, stdout: lines.join('\n'), stderr: '' };
+    }
     if (rest.includes('--json')) {
       return { code: 0, stdout: JSON.stringify(set, null, 2), stderr: '' };
     }

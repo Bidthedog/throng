@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:net';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDaemon } from '../../src/main/daemon-lifecycle.js';
@@ -118,6 +118,37 @@ describe('ensureDaemon and a daemon whose install folder has been deleted', () =
 
     expect(res?.foreign).not.toBe(true);
     expect(kill).toHaveBeenCalledWith(999_998);
+  }, 30_000);
+
+  it('replaces a deleted portable copy’s daemon now that portable shares the user namespace (058 D6)', async () => {
+    // #429's shape on the ONE pipe every packaged copy now uses: the portable copy's daemon reports
+    // itself packaged, from a self-extraction folder that is gone. The installed copy must replace it.
+    const pipeName = pipe();
+    const installed = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
+    dirs.push(installed);
+    const oursDir = join(installed, 'resources', 'app', 'packages', 'daemon', 'dist');
+    mkdirSync(oursDir, { recursive: true });
+    const ours = join(oursDir, 'main.js');
+    writeFileSync(ours, '// daemon entry', 'utf8');
+    writeFileSync(join(oursDir, 'BUILD_ID'), 'beta7-build', 'utf8');
+    const extraction = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
+    const portable = join(extraction, 'resources', 'app', 'packages', 'daemon', 'dist', 'main.js');
+    rmSync(extraction, { recursive: true, force: true });
+
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_996,
+      buildId: 'beta7-build',
+      daemonEntry: portable,
+      packaged: true,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
+      () => undefined,
+    );
+
+    expect(kill).toHaveBeenCalledWith(999_996);
   }, 30_000);
 
   it('still reuses a same-build daemon whose entry exists — the ordinary case is untouched', async () => {

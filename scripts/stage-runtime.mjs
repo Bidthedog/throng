@@ -39,3 +39,20 @@ copyFileSync(source, outExe);
 const record = { version: process.version, arch: process.arch, platform: process.platform };
 writeFileSync(join(outDir, 'RUNTIME_VERSION.json'), JSON.stringify(record, null, 2) + '\n');
 console.log(`[stage-runtime] bundled ${process.version} (${process.arch}) runtime → ${outExe}`);
+
+// Stage the "who is using this installation" helper pair (058 FR-016a, research D9). The setup
+// `File`s them (packaging/installer.nsh) and electron-builder.yml ships them to resources/in-use/,
+// and the MSI's in-use custom action runs the same pair with the installed runtime. The names are
+// exact: the NSIS compile fails without them. `install-in-use.js` is core's compiled classifier, so
+// core must be built first — `npm run package` builds before it stages.
+const inUseDir = join(repoRoot, 'packages', 'ui', 'build', 'resources', 'in-use');
+const classifier = join(repoRoot, 'packages', 'core', 'dist', 'config', 'install-in-use.js');
+if (!existsSync(classifier)) {
+  console.error(`[stage-runtime] ${classifier} is missing — build @throng/core first (npm run build).`);
+  process.exit(1);
+}
+mkdirSync(inUseDir, { recursive: true });
+copyFileSync(join(repoRoot, 'packaging', 'in-use.mjs'), join(inUseDir, 'in-use.mjs'));
+copyFileSync(join(repoRoot, 'packaging', 'in-use-cli.mjs'), join(inUseDir, 'in-use-cli.mjs'));
+copyFileSync(classifier, join(inUseDir, 'in-use-classify.js'));
+console.log(`[stage-runtime] staged the in-use helper → ${inUseDir}`);

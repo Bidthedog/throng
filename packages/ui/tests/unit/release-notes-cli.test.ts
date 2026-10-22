@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { lookupReleaseNotes } from '@throng/core';
+import { declareArtifactSet, lookupReleaseNotes } from '@throng/core';
 
 // @ts-expect-error — plain-JS build/CI script, imported for its pure command decision.
 import { runReleaseNotes } from '../../../../scripts/release-notes.mjs';
@@ -23,7 +23,9 @@ const ARTIFACTS = [
   {
     role: 'setup',
     filename: 'throng-setup-1.2.3.exe',
-    label: 'Installer (per-user setup)',
+    label: 'Installer (setup)',
+    audience: 'Most people: installs for you, or for everyone on the machine',
+    scopes: ['per-user', 'machine'],
     applicableSteps: [],
     sha256: 'a'.repeat(64),
   },
@@ -80,6 +82,33 @@ describe('release-notes render (042 FR-002)', () => {
       const r = runReleaseNotes({ argv: ['render', '--version', version], ...BASE });
       expect(r.stdout).toBe('');
     }
+  });
+});
+
+describe('release-notes render — the MSI and the verification gaps (058 FR-032/FR-033)', () => {
+  const FOUR = declareArtifactSet('1.2.3').artifacts.map((a, i) => ({ ...a, sha256: String(i + 1).repeat(64) }));
+  const FOUR_BASE = { ...BASE, artifacts: FOUR };
+
+  it('renders each artifact’s audience line and one SHA-256 row for each of the four artifacts', () => {
+    const r = runReleaseNotes({ argv: ['render', '--version', '1.2.3'], ...FOUR_BASE });
+    expect(r.code).toBe(0);
+    for (const artifact of FOUR) {
+      expect(r.stdout).toContain(artifact.filename);
+      expect(r.stdout).toContain(artifact.audience);
+      expect(r.stdout).toContain(artifact.sha256);
+    }
+    expect(r.stdout).toContain('throng-1.2.3.msi');
+  });
+
+  it('lists every unproven step when given them, and nothing when given none', () => {
+    const gaps = [{ combination: 'msi-machine', step: 'second-account', reason: 'no second desktop' }];
+    const withGaps = runReleaseNotes({ argv: ['render', '--version', '1.2.3'], ...FOUR_BASE, gaps });
+    expect(withGaps.stdout).toMatch(/verification gaps/i);
+    expect(withGaps.stdout).toContain('msi-machine');
+    expect(withGaps.stdout).toContain('no second desktop');
+
+    const without = runReleaseNotes({ argv: ['render', '--version', '1.2.3'], ...FOUR_BASE });
+    expect(without.stdout).not.toMatch(/verification gap/i);
   });
 });
 

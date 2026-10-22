@@ -59,6 +59,37 @@ describe('artifact-set list (042 FR-011)', () => {
   });
 });
 
+describe('artifact-set list --combinations (058 FR-028, FR-030)', () => {
+  const EXPECTED = [
+    ['setup-user', 'setup', 'per-user', 'verification-verdict-setup-user.json'],
+    ['setup-machine', 'setup', 'machine', 'verification-verdict-setup-machine.json'],
+    ['msi-user', 'msi', 'per-user', 'verification-verdict-msi-user.json'],
+    ['msi-machine', 'msi', 'machine', 'verification-verdict-msi-machine.json'],
+    ['portable', 'portable', '-', 'verification-verdict-portable.json'],
+    ['archive', 'archive', '-', 'verification-verdict-archive.json'],
+  ];
+
+  it('prints one tab-separated line per combination — id, role, scope or "-", verdict file — and exits 0', () => {
+    const r = runArtifactSet({ argv: ['list', '--combinations'], version: VERSION, filenames: [] });
+    expect(r.code).toBe(0);
+    expect(r.stdout.split('\n').map((l: string) => l.split('\t'))).toEqual(EXPECTED);
+  });
+
+  it('emits the combinations as JSON for the workflow’s matrix', () => {
+    const r = runArtifactSet({ argv: ['list', '--combinations', '--json'], version: VERSION, filenames: [] });
+    expect(r.code).toBe(0);
+    const parsed = JSON.parse(r.stdout);
+    expect(parsed.map((c: { id: string }) => c.id)).toEqual(EXPECTED.map((e) => e[0]));
+    expect(parsed[3]).toMatchObject({ id: 'msi-machine', role: 'msi', scope: 'machine' });
+    expect(parsed[4].scope).toBeNull();
+  });
+
+  it('lists the MSI among the plain artifacts too, in the unchanged shape', () => {
+    const r = runArtifactSet({ argv: ['list'], version: VERSION, filenames: [] });
+    expect(r.stdout).toContain(`msi\tthrong-${VERSION}.msi\tInstaller (MSI, for managed deployment)`);
+  });
+});
+
 describe('artifact-set resolve (042 FR-012)', () => {
   it('prints the bare filename and nothing else, so $(…) interpolation is safe', () => {
     const r = runArtifactSet({ argv: ['resolve', 'setup'], version: VERSION, filenames: [SETUP] });

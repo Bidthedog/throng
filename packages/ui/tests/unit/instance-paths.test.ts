@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
+  copyExecPath,
   DEV_CONFIG_DIR_NAME,
   DEV_DATA_DIR_NAME,
   hasUserDataDirSwitch,
@@ -12,6 +13,8 @@ import {
   PROD_CONFIG_DIR_NAME,
   PROD_DATA_DIR_NAME,
 } from '../../src/main/instance-paths.js';
+import * as instancePaths from '../../src/main/instance-paths.js';
+import { readUiSettings } from '../../src/main/ui-settings.js';
 
 /**
  * Dev-instance isolation. An UNPACKAGED run (`npm start`) develops throng while a PACKAGED
@@ -35,20 +38,64 @@ describe('instance paths: packaged (installed) defaults', () => {
   });
 });
 
-describe('instance paths: the portable build (#429)', () => {
+/**
+ * 058 research D6 — the portable build joins the user's namespace. It used to take a pipe of its
+ * own (#429's fix); that left a portable copy and an installed one running side by side with two
+ * daemons, which FR-018 and FR-021 forbid. #429's orphan is now handled by `ensureDaemon`'s
+ * deleted-entry check on any pipe (`daemon-deleted-entry.test.ts`).
+ */
+describe('instance paths: the portable build shares the user namespace (058 D6)', () => {
   // electron-builder's portable launcher sets this for the app it unpacks and starts.
   const PORTABLE_ENV = { PORTABLE_EXECUTABLE_DIR: 'C:\\Users\\dev\\Downloads' };
 
-  it('takes its own pipe, so it never adopts or leaves a daemon for the installed app', () => {
-    expect(instancePipeName(BASE_PIPE, false, PORTABLE_ENV)).toBe(`${BASE_PIPE}.portable`);
-    expect(instancePipeName(BASE_PIPE, false, PORTABLE_ENV)).not.toBe(instancePipeName(BASE_PIPE, false, {}));
+  it('resolves the same pipe as an installed launch — the pipe no longer reads the environment', () => {
+    expect(instancePipeName(BASE_PIPE, false)).toBe(BASE_PIPE);
+    // The suffix and the portable branch are gone, not merely unused.
+    expect(Object.keys(instancePaths)).not.toContain('PORTABLE_PIPE_SUFFIX');
+    expect(instancePipeName.length).toBe(2);
   });
 
-  it('leaves the installed and dev pipes as they were', () => {
-    expect(instancePipeName(BASE_PIPE, false, {})).toBe(BASE_PIPE);
-    expect(instancePipeName(BASE_PIPE, true, {})).toBe(`${BASE_PIPE}.dev`);
-    // A dev run started from a shell that happens to carry the variable is still a dev run.
-    expect(instancePipeName(BASE_PIPE, true, PORTABLE_ENV)).toBe(`${BASE_PIPE}.dev`);
+  it('a dev run keeps .dev', () => {
+    expect(instancePipeName(BASE_PIPE, true)).toBe(`${BASE_PIPE}.dev`);
+  });
+
+  it('THRONG_PIPE_NAME still wins over the resolved default, portable or not', () => {
+    const env = { ...PORTABLE_ENV, THRONG_PIPE_NAME: '\\\\.\\pipe\\throng-e2e-1' };
+    expect(readUiSettings(env, instancePipeName(BASE_PIPE, false)).pipeName).toBe('\\\\.\\pipe\\throng-e2e-1');
+    expect(readUiSettings(env, instancePipeName(BASE_PIPE, true)).pipeName).toBe('\\\\.\\pipe\\throng-e2e-1');
+  });
+});
+
+/**
+ * Review A3 — which executable IS this copy (058 FR-018's "the copy that is running (its location)").
+ *
+ * The portable build runs from a temp folder its self-extractor creates per launch, so
+ * `process.execPath` would name a different, throwaway folder every time: two launches of the same
+ * portable exe would read as two different copies, and the notice would send the user to a path
+ * that is deleted when throng exits. The extractor says where the real exe is.
+ */
+describe('copyExecPath: the executable that identifies this copy (058 review A3)', () => {
+  const TEMP_EXE = 'C:\\Users\\dev\\AppData\\Local\\Temp\\2xYz\\throng.exe';
+
+  it('is process.execPath for an installed or extracted copy', () => {
+    expect(copyExecPath(TEMP_EXE, {})).toBe(TEMP_EXE);
+  });
+
+  it('is the portable exe itself when the self-extractor names it', () => {
+    expect(
+      copyExecPath(TEMP_EXE, {
+        PORTABLE_EXECUTABLE_FILE: 'D:\\tools\\throng-portable.exe',
+        PORTABLE_EXECUTABLE_DIR: 'D:\\tools',
+      }),
+    ).toBe('D:\\tools\\throng-portable.exe');
+  });
+
+  it('falls back to the portable folder when only that is named', () => {
+    expect(copyExecPath(TEMP_EXE, { PORTABLE_EXECUTABLE_DIR: 'D:\\tools' })).toBe('D:\\tools\\throng.exe');
+  });
+
+  it('ignores empty values', () => {
+    expect(copyExecPath(TEMP_EXE, { PORTABLE_EXECUTABLE_FILE: '', PORTABLE_EXECUTABLE_DIR: '' })).toBe(TEMP_EXE);
   });
 });
 
@@ -120,12 +167,28 @@ describe('main.ts wires the dev redirection early enough', () => {
     'utf8',
   );
 
-  it("sets userData before acquiring the single-instance lock", () => {
+  it('sets userData before the instance guard, and the guard runs before app.whenReady (058 T028)', () => {
     const setPath = source.indexOf("app.setPath('userData'");
-    const lock = source.indexOf('acquireSingleInstance(');
+    // The guard takes Electron's lock (keyed to userData) on its primary path, so the dev
+    // redirection must already have happened.
+    const guard = source.indexOf('createInstanceGuard(');
+    const ready = source.indexOf('app.whenReady().then(');
     expect(setPath).toBeGreaterThan(-1);
-    expect(lock).toBeGreaterThan(-1);
-    expect(setPath).toBeLessThan(lock);
+    expect(guard).toBeGreaterThan(-1);
+    expect(setPath).toBeLessThan(guard);
+    expect(guard).toBeLessThan(ready);
+    // The old bare lock is gone — it is what let `--user-data-dir` start a second instance.
+    expect(source).not.toContain('acquireSingleInstance(');
+  });
+
+  it('resolves the namespace ONCE and hands that value to the container (058 review A4)', () => {
+    // The lock and the daemon must be in the same namespace by construction, not by two calls that
+    // happen to agree today. One resolution in main, one bound value in the container.
+    expect(source.match(/uiDefaultPipeName\(/g) ?? []).toHaveLength(1);
+    expect(source).toMatch(/createUiContainer\(\s*instanceUiSettings\s*\)/);
+    expect(source).toMatch(/instanceLockName\(\s*instanceUiSettings\.pipeName\s*\)/);
+    const root = readFileSync(fileURLToPath(new URL('../../src/main/composition-root.ts', import.meta.url)), 'utf8');
+    expect(root).not.toMatch(/readUiSettings\(/);
   });
 
   it('gates the redirection on the app being unpackaged', () => {

@@ -9,7 +9,7 @@
 // missing section is a refusal, because a fallback that produces a plausible body is exactly how an
 // unreviewed release ships.
 //
-//   node scripts/release-notes.mjs render --version <v> [--out <file>] [--artifacts <json>] [--sha <commit>]
+//   node scripts/release-notes.mjs render --version <v> [--out <file>] [--artifacts <json>] [--gaps <json>] [--sha <commit>]
 //
 // Exit codes: 0 rendered · 2 no section for that version (or no version given) · 3 the section is
 // empty · 4 unusable input.
@@ -34,7 +34,7 @@ function flagValue(argv, name) {
  * @param {{argv: string[], changelog: string, artifacts: object[], commitSha: string}} input
  * @returns {{code: number, stdout: string, stderr: string}}
  */
-export function runReleaseNotes({ argv, changelog, artifacts, commitSha }) {
+export function runReleaseNotes({ argv, changelog, artifacts, commitSha, gaps = [] }) {
   const [subcommand, ...rest] = argv;
 
   if (subcommand !== 'render') {
@@ -75,7 +75,7 @@ export function runReleaseNotes({ argv, changelog, artifacts, commitSha }) {
 
   return {
     code: 0,
-    stdout: composeReleaseBody({ notes: lookup.found, artifacts, commitSha }),
+    stdout: composeReleaseBody({ notes: lookup.found, artifacts, commitSha, verificationGaps: gaps }),
     stderr: '',
   };
 }
@@ -101,7 +101,20 @@ function main() {
 
   const commitSha = flagValue(argv, '--sha') ?? process.env.GITHUB_SHA ?? '(unknown revision)';
 
-  const { code, stdout, stderr } = runReleaseNotes({ argv, changelog, artifacts, commitSha });
+  // The unproven steps `publish-gates.mjs` reports (058): a JSON array of {combination, step, reason}.
+  let gaps = [];
+  const gapsJson = flagValue(argv, '--gaps');
+  if (gapsJson) {
+    try {
+      gaps = JSON.parse(gapsJson);
+      if (!Array.isArray(gaps)) throw new Error('expected an array');
+    } catch (err) {
+      console.error(`[release-notes] --gaps is not a valid JSON array: ${err instanceof Error ? err.message : err}`);
+      process.exit(4);
+    }
+  }
+
+  const { code, stdout, stderr } = runReleaseNotes({ argv, changelog, artifacts, commitSha, gaps });
   if (stderr) console.error(stderr);
 
   if (code === 0) {
