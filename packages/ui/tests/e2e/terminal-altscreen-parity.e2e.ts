@@ -4,6 +4,7 @@ import { basename, join } from 'node:path';
 import { test, expect, type Page, type ElectronApplication } from '@playwright/test';
 import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, quiesced, reloadWindow, runApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
  * 008 User Story 2 — the DEFINITIVE reproduction, on the ALTERNATE SCREEN.
@@ -165,10 +166,7 @@ test('@quarantine a full-screen (alt-screen) program renders identically in two 
       await quiesced(win.getByTestId(`terminal-${pid}`), { what: 'alt-screen render before mirroring' });
 
       // Now mirror into the small sub-workspace window.
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
       await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await win.getByTestId('menu-item-Sync to').hover();

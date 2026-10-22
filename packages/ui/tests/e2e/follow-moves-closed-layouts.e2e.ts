@@ -35,6 +35,7 @@ import {
   FILE_OP_TIMEOUT_MS,
 } from './harness.js';
 import { openQuickOpen, quickOpenRows, chooseQuickOpenRow } from './helpers/navigation.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 const BODY = 'FOLLOW-CLOSED-BODY';
 const OTHER = 'OTHER-FILE-BODY';
@@ -67,7 +68,7 @@ async function swRecord(pipeName: string, id: string): Promise<string> {
 }
 
 async function openSub(app: ElectronApplication, win: Page, id: string): Promise<Page> {
-  const [child] = await Promise.all([app.waitForEvent('window'), win.getByTestId(`subworkspace-open-${id}`).click()]);
+  const child = await openSubWorkspaceWindow(app, win, id);
   await child.waitForLoadState('domcontentloaded');
   await settle(child);
   return child;

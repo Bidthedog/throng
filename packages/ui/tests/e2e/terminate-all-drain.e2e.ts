@@ -9,6 +9,7 @@ import { runApp, createProject, firstPanelId, panelGrip, panelIds, reloadWindow,
 // restating a number that was true when it was written. `ui-settings` is a pure reader with no
 // OS or native imports — it says so in its own docblock — so importing it here costs nothing.
 import { DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS } from '../../src/main/ui-settings.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
  * Issue #86 — deferred writes and the app's shutdown paths.
@@ -521,10 +522,7 @@ test('#86 C6: a SUB-WORKSPACE rearrangement survives closing the MAIN window', {
 
         // Open its detached window: this is the second WorkspaceProvider, with its own layout
         // write behind its own debounce, in a window the closing user never touches.
-        const [child] = await Promise.all([
-          app.waitForEvent('window'),
-          win.getByTestId('subworkspace-open-sw1').click(),
-        ]);
+        const child = await openSubWorkspaceWindow(app, win, 'sw1');
         await child.waitForLoadState('domcontentloaded');
         await expect(child.getByTestId('subworkspace-window')).toBeVisible({ timeout: 10_000 });
         await expect(child.locator('.panel-box')).toHaveCount(1);

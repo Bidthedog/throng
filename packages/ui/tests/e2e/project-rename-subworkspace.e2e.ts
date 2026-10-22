@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // Renaming a project MUST update that project's name shown in OTHER windows —
 // specifically the owner text on sub-workspace panels — without needing a reload.
@@ -40,10 +41,7 @@ test('renaming a project updates its name on sub-workspace panels live', { tag: 
       }, pid);
       await reloadWindow(win);
 
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       // The panel's owner text shows the project's CURRENT name.

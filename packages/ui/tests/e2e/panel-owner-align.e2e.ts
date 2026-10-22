@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, reloadWindow, cleanupTemp} from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // FR-087: in a sub-workspace window, a Panel's project/sub-workspace owner text is
 // right-aligned in the header, immediately beside the Panel controls (not floating
@@ -23,10 +24,7 @@ test('the sub-workspace/project owner text is right-aligned beside the panel con
       await reloadWindow(win);
       await createProject(win, 'Host', root);
 
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       const owner = child.getByTestId('panel-project-p');

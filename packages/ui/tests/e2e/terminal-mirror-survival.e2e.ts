@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
  * 008 User Story 1 (SC-001/SC-004). A long-running program in a project terminal MUST
@@ -40,10 +41,7 @@ test('a running terminal survives being mirrored into a new sub-workspace and st
       const pid = await newTerminal(win, root);
 
       // Open the sub-workspace window, then mirror the RUNNING terminal into its Tab "T".
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       // "Sync to" → <sub-workspace name "Mirror"> → tab "T". Submenu parents open on a

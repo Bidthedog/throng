@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { TERMINAL_OUTPUT_TIMEOUT_MS, cleanupTemp, createProject, daemonRpc, firstPanelId, reloadWindow, runApp } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
  * 008 User Story 2 (SC-002/SC-003). One terminal session presented in two windows of
@@ -40,10 +41,7 @@ test('one terminal in two different-sized windows renders legibly in both, stabl
       await createProject(win, 'DualSize', root);
       const pid = await newTerminal(win, root);
 
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       // "Sync to" → <sub-workspace name "Small"> → tab "T". Submenu parents open on a
