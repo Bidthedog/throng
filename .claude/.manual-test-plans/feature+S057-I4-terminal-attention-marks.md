@@ -4,25 +4,25 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Project row marks from a bell | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-01 | Project row marks from a bell | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-02 | Tab, overflow and panel marks | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-03 | Toasts and Windows notifications | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
-| MT-04 | Taskbar badge | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
-| MT-05 | Attention settings | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-03 | Toasts and Windows notifications | signed off | f4d7f344f5c3 | 2026-10-22 | |
+| MT-04 | Taskbar badge | signed off | f4d7f344f5c3 | 2026-10-22 | |
+| MT-05 | Attention settings | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-06 | Command finished and terminal exited | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-07 | Go to Next Marked Panel | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-08 | Marks across a closed window | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-08 | Marks across a closed window | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-09 | Mark in the dot's place, blinking | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-10 | A mark stays until you focus the panel | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-10 | A mark stays until you focus the panel | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-11 | Hover popovers on the project list | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-12 | Claude Code's notifications reach throng | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
-| MT-13 | Popovers and notifications name the tab and say what ran | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-12 | Claude Code's notifications reach throng | signed off | f4d7f344f5c3 | 2026-10-22 | |
+| MT-13 | Popovers and notifications name the tab and say what ran | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-14 | Attention row display settings | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-15 | Overflow control popover | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-16 | Clicking a mark cycles its panels | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-17 | One row per notification type | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-18 | Ordinary notices reach Windows | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/main.ts |
-| MT-19 | A mark is announced once | needs retest | 5a0e82ea099b | 2026-10-21 | 2809cd01 touched packages/ui/src/main/attention-service.ts |
+| MT-18 | Ordinary notices reach Windows | signed off | f4d7f344f5c3 | 2026-10-22 | |
+| MT-19 | A mark is announced once | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-20 | A marked panel's header is filled | signed off | 5a0e82ea099b | 2026-10-21 | |
 
 ## MT-01: Project row marks from a bell
