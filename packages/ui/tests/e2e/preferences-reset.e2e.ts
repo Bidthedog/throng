@@ -212,13 +212,19 @@ test('the per-tab reset restores the Settings editor from the shipped record (wi
       /*
        * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
        *
-       * Every reset in this file is computed by the window from what it currently holds, so a reset
-       * issued while its view is still pre-toggle writes a document that does not contain the
-       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
-       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
-       * its whole budget, in a test that otherwise finishes in under a second.
+       * The reset no longer depends on the window's view. It runs in main, under the document lock,
+       * against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a stale
+       * view back. The window's view still decides what the test is pressing: whether a row offers
+       * its reset at all (FR-004a), and the document the editors compose their next edit from
+       * (#348). The settle keeps the test acting on the state the user would see.
        *
-       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       * The symptom this guarded against — a poll for `false` that returns `true` for its whole
+       * budget, in a test that otherwise finishes in under a second — was measured again on a hosted
+       * runner after resets moved to main. That one was the reset's rename failing on a momentary
+       * hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`).
+       *
+       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
       // Reset-current → confirm.
@@ -265,13 +271,15 @@ test('reset-all reverts the session to on-entry; cancel is a no-op', { tag: ['@e
       /*
        * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
        *
-       * Every reset in this file is computed by the window from what it currently holds, so a reset
-       * issued while its view is still pre-toggle writes a document that does not contain the
-       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
-       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
-       * its whole budget, in a test that otherwise finishes in under a second.
+       * Revert All is the one control in this file that is still planned in the window, and it is
+       * planned from the window's ON-ENTRY snapshot (`planRevertAll`), not from its live view. The
+       * plan is applied in main as a key-scoped patch, under the document lock, against the file as
+       * it stands (032 FR-001a/FR-002a), so a stale live view cannot be written back by it. The
+       * settle stays so the revert is pressed against the state the user would see, toggle included:
+       * the window's view is what the editors compose their next edit from (#348).
        *
-       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
       // Reset-all → cancel: no change.
@@ -380,13 +388,19 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
       /*
        * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
        *
-       * Every reset in this file is computed by the window from what it currently holds, so a reset
-       * issued while its view is still pre-toggle writes a document that does not contain the
-       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
-       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
-       * its whole budget, in a test that otherwise finishes in under a second.
+       * The reset no longer depends on the window's view. It runs in main, under the document lock,
+       * against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a stale
+       * view back. The window's view still decides what the test is pressing: whether a row offers
+       * its reset at all (FR-004a), and the document the editors compose their next edit from
+       * (#348). The settle keeps the test acting on the state the user would see.
        *
-       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       * The symptom this guarded against — a poll for `false` that returns `true` for its whole
+       * budget, in a test that otherwise finishes in under a second — was measured again on a hosted
+       * runner after resets moved to main. That one was the reset's rename failing on a momentary
+       * hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`).
+       *
+       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
 
@@ -399,17 +413,20 @@ test('US2: a setting shows a reset icon only once overridden, and resetting it l
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
 
       /*
-       * THE SECOND WRITE NEEDS THE SAME SETTLE AS THE FIRST (#284, again).
+       * THE SECOND WRITE GETS THE SAME SETTLE AS THE FIRST (#284, again).
        *
-       * The poll above proves the debounce value reached DISK. The reset below is computed by the
-       * WINDOW from what it currently holds, and those are different facts -- which is exactly what
-       * the note on `settleAppConfig` a few lines up says, for the toggle. The toggle got the
-       * guard; this write did not, and the gap is the same one: a reset issued against a stale view
-       * writes that stale view back, and the poll for `false` then reads `true` for its whole
-       * budget in a test that otherwise finishes in a second.
+       * The poll above proves the debounce value reached DISK; the settle proves the WINDOW holds it
+       * too, and those are different facts. The single-setting reset below runs in main, under the
+       * document lock, against the file as it stands (`shipped-defaults-service.ts`), so it reads
+       * the debounce value from disk and cannot write a stale view back. The window's view is still
+       * what enables the row the test clicks (FR-004a) and what the editor composes its next edit
+       * from (#348), which is why the settle stays.
        *
-       * Measured on a hosted runner: this failed exactly that way while every assertion before it
-       * passed. `readSettings` cannot see it, because the disk was never the laggard.
+       * Measured on a hosted runner: the poll for `false` read `true` for its whole budget while
+       * every assertion before it passed. That turned out to be the reset's rename failing on a
+       * momentary hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`), not a
+       * stale view. `readSettings` cannot see the window's view, because the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSaveDebounceMs': 900 });
 
@@ -438,13 +455,19 @@ test('US3: Reset All Preferences restores settings + bindings, states both sides
       /*
        * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
        *
-       * Every reset in this file is computed by the window from what it currently holds, so a reset
-       * issued while its view is still pre-toggle writes a document that does not contain the
-       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
-       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
-       * its whole budget, in a test that otherwise finishes in under a second.
+       * The reset no longer depends on the window's view. It runs in main, under the document lock,
+       * against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a stale
+       * view back. The window's view still decides what the test is pressing: whether a row offers
+       * its reset at all (FR-004a), and the document the editors compose their next edit from
+       * (#348). The settle keeps the test acting on the state the user would see.
        *
-       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       * The symptom this guarded against — a poll for `false` that returns `true` for its whole
+       * budget, in a test that otherwise finishes in under a second — was measured again on a hosted
+       * runner after resets moved to main. That one was the reset's rename failing on a momentary
+       * hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`).
+       *
+       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
       await prefs.getByTestId('prefs-tab-keybindings').click();
@@ -553,13 +576,19 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
       /*
        * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
        *
-       * Every reset in this file is computed by the window from what it currently holds, so a reset
-       * issued while its view is still pre-toggle writes a document that does not contain the
-       * toggle — and the toggle's own write, already on disk, is what the later poll then reads
-       * back. The symptom is exactly what #284 records: a poll for `false` that returns `true` for
-       * its whole budget, in a test that otherwise finishes in under a second.
+       * The reset no longer depends on the window's view. It runs in main, under the document lock,
+       * against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a stale
+       * view back. The window's view still decides what the test is pressing: whether a row offers
+       * its reset at all (FR-004a), and the document the editors compose their next edit from
+       * (#348). The settle keeps the test acting on the state the user would see.
        *
-       * `readSettings` cannot see this: it reads the disk, and the disk was never the laggard.
+       * The symptom this guarded against — a poll for `false` that returns `true` for its whole
+       * budget, in a test that otherwise finishes in under a second — was measured again on a hosted
+       * runner after resets moved to main. That one was the reset's rename failing on a momentary
+       * hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`).
+       *
+       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
+       * laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
 

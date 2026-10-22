@@ -11,7 +11,7 @@
  * + rename) and best-effort (a failure is logged, never thrown).
  */
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
@@ -41,11 +41,18 @@ const RENAME_RETRY_INTERVAL_MS = 20;
  * of hanging the write.
  */
 async function renameWithRetry(from: string, to: string): Promise<void> {
+  await withTransientRetry(() => rename(from, to));
+}
+
+/**
+ * Run `op`, retrying it while it fails with a transient sharing violation, within the same bounded
+ * budget the rename has. Any other failure, or one that outlasts the budget, is thrown at once.
+ */
+async function withTransientRetry<R>(op: () => Promise<R>): Promise<R> {
   const deadline = Date.now() + RENAME_RETRY_BUDGET_MS;
   for (;;) {
     try {
-      await rename(from, to);
-      return;
+      return await op();
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? '';
       if (!TRANSIENT_RENAME_CODES.has(code) || Date.now() >= deadline) throw err;
@@ -127,16 +134,26 @@ export class FileConfigStore implements IConfigStore {
 
   /** Run `op` after every write already queued for `path`, and queue it for the next one. */
   private chain<R>(path: string, op: () => Promise<R>): Promise<R> {
-    const prior = this.writeChains.get(path) ?? Promise.resolve();
-    // `then(op, op)` rather than `then(op)`: a prior write that rejected must not strand the queue.
-    const run = prior.then(op, op);
-    this.writeChains.set(
-      path,
-      run.then(
-        () => undefined,
-        () => undefined,
-      ),
+    return this.chainAll([path], op);
+  }
+
+  /**
+   * Run `op` after every write already queued for ANY of `paths`, and queue it on all of them.
+   *
+   * What lets `writeFilesAtomic` join the same per-path order as `commit` and the write-back (#514).
+   * No deadlock is possible, for the reason `withDocumentsLock` gives: the tails are snapshotted
+   * together and awaited together, so nothing holds one path while waiting for another.
+   */
+  private chainAll<R>(paths: readonly string[], op: () => Promise<R>): Promise<R> {
+    const keys = [...new Set(paths.map((p) => resolve(p)))];
+    // A prior write that rejected must not strand the queue, hence the catch on each tail.
+    const prior = Promise.all(keys.map((k) => (this.writeChains.get(k) ?? Promise.resolve()).catch(() => undefined)));
+    const run = prior.then(op);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
     );
+    for (const key of keys) this.writeChains.set(key, settled);
     return run;
   }
 
@@ -334,16 +351,43 @@ export class FileConfigStore implements IConfigStore {
    * and rolls back any already-committed files to their prior bytes (deleting
    * those that did not exist before), leaving the previous configuration exactly
    * as it was, and reports the offending path. Absolute `path`s only.
+   *
+   * It runs on the SAME per-path chain as `commit` and the write-back, for every path it touches
+   * (032 FR-002a, 031 FR-013c; #514). The resets already hold the document lock, but the write-back
+   * never takes it — it runs from the watcher's read — so the document lock alone left the two
+   * unordered: a correction that had passed its compare-and-swap could rename over a reset that
+   * landed in the gap, putting back the document the user had just reset. On the chain, whichever
+   * comes second sees the other's result, and the write-back's compare abandons a superseded
+   * correction.
    */
   async writeFilesAtomic(files: Array<{ path: string; content: string }>): Promise<WriteAllResult> {
+    return this.chainAll(
+      files.map((f) => f.path),
+      () => this.writeFilesAtomicNow(files),
+    );
+  }
+
+  private async writeFilesAtomicNow(files: Array<{ path: string; content: string }>): Promise<WriteAllResult> {
+    /*
+     * Snapshot phase: ONLY ENOENT means "absent before" (010 FR-012/012a; #515).
+     *
+     * Rollback deletes a file that was absent before, so recording a file as absent when it merely
+     * could not be read turns a failed reset into a deleted `settings.json`. A file this cannot
+     * snapshot is a file it cannot put back, so the operation fails here, before anything is
+     * written, and names that file. A momentary hold on the read is ridden out with the same bounded
+     * retry the rename gets (032 FR-009), so a scanner glancing at the file does not fail the reset.
+     */
     const snaps: FileSnapshot[] = [];
     for (const f of files) {
       let existed: boolean;
       let original: Buffer | undefined;
       try {
-        original = await readFile(f.path);
+        original = await withTransientRetry(() => readFile(f.path));
         existed = true;
-      } catch {
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          return { ok: false, failedPath: f.path, error: errorMessage(err) };
+        }
         existed = false; // absent before
       }
       snaps.push({ path: f.path, content: f.content, existed, original, tmp: `${f.path}.${(this.writeSeq += 1)}.staging` });
@@ -362,10 +406,18 @@ export class FileConfigStore implements IConfigStore {
 
     // Commit phase: atomic renames. On the first failure, roll back the committed
     // ones and clean up the rest.
+    //
+    // Each rename gets the SAME bounded retry `commit` has (032 FR-009, #341). Every reset in the
+    // preferences window lands here, usually straight after an ordinary edit to the same file —
+    // which is exactly when a scanner or our own watcher is holding it. Without the retry that one
+    // momentary hold failed the reset outright, the rollback left the edit in place, and nothing
+    // ever re-applied it: `preferences-reset.e2e.ts:204`/`:367` polling `false` against a file that
+    // said `true` for thirty seconds. A hold that outlasts the budget is still a real failure, and
+    // still rolls back and reports exactly as 010 FR-012a requires.
     const committed: FileSnapshot[] = [];
     for (const s of snaps) {
       try {
-        await rename(s.tmp, s.path);
+        await renameWithRetry(s.tmp, s.path);
         this.commitGeneration += 1;
         committed.push(s);
       } catch (err) {
@@ -391,7 +443,9 @@ export class FileConfigStore implements IConfigStore {
         if (s.existed && s.original !== undefined) {
           const tmp = `${s.path}.${(this.writeSeq += 1)}.rollback`;
           await writeFile(tmp, s.original);
-          await rename(tmp, s.path);
+          // Retried too: a rollback defeated by the same momentary hold would leave exactly the
+          // half-applied mixture 010 FR-012 forbids.
+          await renameWithRetry(tmp, s.path);
         } else {
           await rm(s.path, { force: true });
         }
