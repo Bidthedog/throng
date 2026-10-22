@@ -1,6 +1,6 @@
 # The artifact set and what ships inside it
 
-The three roles, their filenames and what each one is are listed in
+The four roles, their filenames and what each one is are listed in
 [`docs/releasing.md`](../../../../docs/releasing.md#the-artifact-set) — that is their home. This file
 holds how the set is declared and enforced, and what every artifact contains. Packaging constraints
 (`npmRebuild: false`, `asar: false`, the bundled host-Node runtime) live in
@@ -8,9 +8,11 @@ holds how the set is declared and enforced, and what every artifact contains. Pa
 
 ## Declared, not discovered
 
-All three artifacts are per-user and none needs elevation. Machine-wide installation is **not**
-offered — that is [#361](https://github.com/Bidthedog/throng/issues/361), which will supersede spec
-020's FR-040 and FR-012 and add a fourth role when it lands.
+Four roles: `setup`, `msi`, `portable`, `archive`. The two installers each carry two **install
+scopes** (`per-user`, `machine`) — spec 058 superseded 020 FR-040 and, for the machine-wide path
+only, FR-012 — and the declaration derives one **verification combination** per artifact and scope
+(`combinationsOf`): `setup-user`, `setup-machine`, `msi-user`, `msi-machine`, `portable`, `archive`.
+An artifact verified in two scopes is still one file with one checksum.
 
 **The declaration is `packages/core/src/config/release-artifacts.ts`, and it is the contract.** Every
 step of the pipeline — the upload, the verification, the publish gates, the checksum table in the
@@ -24,7 +26,28 @@ node scripts/artifact-set.mjs list        # role, filename, label
 node scripts/artifact-set.mjs resolve setup   # the one path for that role
 node scripts/artifact-set.mjs reconcile   # what was built == what was declared?
 node scripts/artifact-set.mjs checksums   # the set, with each SHA-256 filled in
+node scripts/artifact-set.mjs list --combinations   # id, role, scope, verdict file — the matrix's one source
 ```
+
+## How the installers are customised
+
+- **The setup** shadows two electron-builder NSIS templates — `installSection.nsh` and
+  `multiUserUi.nsh` — with modified copies in `packaging/nsis/`, pulled in by `packaging/installer.nsh`
+  with `!addincludedir` + `!cd`. Never `nsis.script`: it makes electron-builder skip the uninstaller
+  pass. `packaging/nsis/multiUser.nsh` is a forwarding shim, because NSIS's own include dir has a
+  `MultiUser.nsh` that otherwise wins. `nsis-vendored-templates.test.ts` pins the `app-builder-lib`
+  version and upstream hashes (`packaging/nsis/UPSTREAM.md`): **an electron-builder upgrade fails it
+  on purpose**, and the vendored copies are re-diffed against the new upstream before the pin moves.
+- **The MSI** is electron-builder's `msi` target, its generated WiX project rewritten by
+  `packaging/msi-project.cjs` (`msiProjectCreated`) through the pure transforms in
+  `packages/core/src/config/msi-project.ts`. Each transform throws when its anchor is missing, so a
+  template change upstream fails the build rather than silently dropping a transform; the fixture
+  `msi-template-output.wxs` is re-captured when it does. `additionalWixArgs: -sw1077` is needed
+  because property values carry PowerShell containing `[`. `InstallPrivileges="limited"` is what
+  keeps a per-user double-click from prompting — the template alone requires elevation.
+- **The in-use helper** (`packaging/in-use.mjs` + a standalone copy of `install-in-use.js`, staged by
+  `stage-runtime.mjs` into `resources/in-use/`) answers "who is using this install root" for both
+  installers, run with the installed copy's bundled `node.exe`.
 
 ## Reconcile fails in both directions
 
@@ -61,11 +84,13 @@ npm run build      # tsc + renderer + BUILD_ID + generated version constant
 npm run package    # electron-builder → dist/installer/, one file per declared role
 ```
 
-The setup installer refuses a **downgrade** in place: installing an older version over a newer one
-is blocked with a message telling the user to uninstall first (the user's side is
+Both installers refuse a **downgrade** of the copy they replace, in its own scope (setup: exit `2`;
+MSI: `MajorUpgrade`, exit `1603`); installing an older version as a *separate* copy is allowed. The
+message tells the user to uninstall first (the user's side is
 [Installation → Downgrading](../../../../docs/installation.md#downgrading)).
 
 ## Requirements behind it
 
 [`specs/020-application-packaging/`](../../../../specs/020-application-packaging/),
-[`specs/042-release-notes-and-artifacts/`](../../../../specs/042-release-notes-and-artifacts/).
+[`specs/042-release-notes-and-artifacts/`](../../../../specs/042-release-notes-and-artifacts/),
+[`specs/058-machine-wide-install-msi/`](../../../../specs/058-machine-wide-install-msi/).

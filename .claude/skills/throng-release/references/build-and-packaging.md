@@ -41,9 +41,10 @@ sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.
 deliberate, documented choice, not an omission to fix.
 
 **A release is a DECLARED SET of artifacts, not a file the pipeline finds** (042). The declaration
-is `packages/core/src/config/release-artifacts.ts` — three roles today (`setup`, `portable`,
-`archive`), and #361 will add a fourth. Every step resolves by **role** through
-`scripts/artifact-set.mjs` (`list`, `resolve`, `reconcile`, `checksums`). Nothing globs, and nothing
+is `packages/core/src/config/release-artifacts.ts` — four roles (`setup`, `msi`, `portable`,
+`archive`), the two installers each with two install scopes. Every step resolves by **role** through
+`scripts/artifact-set.mjs` (`list`, `list --combinations`, `resolve`, `reconcile`, `checksums`).
+How the setup and the MSI are customised is in [artifact-set.md](artifact-set.md#how-the-installers-are-customised). Nothing globs, and nothing
 resolves by file extension: `nsis` and `portable` both produce a `.exe`, which is exactly why
 `ls dist/installer/*.exe | head -n1` was removed from three separate places in `release.yml`.
 
@@ -51,8 +52,9 @@ resolves by file extension: `nsis` and `portable` both produce a `.exe`, which i
   that was not built, and one that was built but never declared. `npm run package` empties
   `dist/installer` first (`prepackage` → `scripts/clean-dist.mjs`) so a stale artifact from a
   previous release cannot fail a clean build.
-- **Verification produces one `ArtifactVerdict` per role**, and a step has THREE outcomes:
-  `passed`, `failed`, `not-applicable`. An archive has no installer, and a verdict asserting an
+- **Verification produces one verdict per artifact-and-scope combination**, plus a coexistence
+  verdict, and a step has FOUR outcomes: `passed`, `failed`, `not-applicable`, `unproven` (one named
+  runner-limited step only). An archive has no installer, and a verdict asserting an
   uninstall that never ran is worse than one that fails honestly. A verdict marking an *applicable*
   step `not-applicable` is **invalid**; a verdict covering only some of the set is a **refusal**,
   not a partial pass.
@@ -64,9 +66,10 @@ resolves by file extension: `nsis` and `portable` both produce a `.exe`, which i
   set reconciles → verified → notes bind to this version → QA sign-off.
 
 When running `verify-installer.mjs` on a developer machine, two things look like product bugs and
-are not: the launch probe needs its own `--user-data-dir` (Electron keys the single-instance lock to
-`userData`, which a *packaged* build does not isolate, so it collides with any throng already
-running), and the residue scan attributes processes **by path** because a throng running from
+are not: every launch the probe makes needs its own `THRONG_PIPE_NAME` (the one-running-throng lock
+follows the pipe namespace, so a packaged probe on the default pipe just focuses the throng you have
+open and exits) — `verify-installer.mjs` sets it, with `--user-data-dir`, `THRONG_CONFIG_ROOT` and
+`THRONG_DATABASE_PATH`, on every launch; and the residue scan attributes processes **by path** because a throng running from
 somewhere else is a different installation. Neither can occur on a clean runner.
 
 **Verifying the `portable` role has three rules, and breaking any one of them produces a failure that
