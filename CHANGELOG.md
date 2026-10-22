@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha11 — 2026-10-22
+
 ### Added
 
 - **See which terminal needs you** ([#4](https://github.com/Bidthedog/throng/issues/4)): when a terminal you are not looking at rings the bell, sends a notification, finishes a command or ends, its panel, tab, project row and minimised category show a mark, a toast or Windows notification names it, and throng's taskbar button counts what is waiting. *Go to Next Marked Panel* (Ctrl+Shift+Alt+G, and in a marked project's right-click menu) jumps there, as does clicking a project's or category's mark; hovering one lists what is waiting, by tab and panel. Preferences → Terminal chooses which events count; Attention, how a mark clears.
@@ -43,6 +45,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **An MSI for managed deployment** ([#351](https://github.com/Bidthedog/throng/issues/351)): each release now includes `throng-<version>.msi`, for Intune, SCCM or Group Policy. Run unattended as an administrator it installs for every user; run by a standard user it installs for that user alone.
 - **Several copies side by side** ([#361](https://github.com/Bidthedog/throng/issues/361)): any number of copies can be installed, of any kind and version, and every one opens the same projects and settings. Only one runs at a time: starting another brings the running throng to the front, and says which copy it is when it is a different one.
 - **Numbers in file names sort by value** ([#470](https://github.com/Bidthedog/throng/issues/470)): File Explorer lists `test 2` before `test 10`. Preferences → File Explorer → *Sort names* switches back to character-by-character order.
+- **Fold Preferences sections** ([#479](https://github.com/Bidthedog/throng/issues/479)): every section and subsection on Settings, Key Bindings and Themes folds from its heading and shows how many rows it holds, with Expand All and Collapse All beside each search box. A search unfolds whatever matches and puts the folds back when cleared, a folded heading warns when it hides an invalid entry, and your folds are remembered across restarts.
 
 ### Changed
 
@@ -54,6 +57,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - **A busy project no longer slows throng down** ([#482](https://github.com/Bidthedog/throng/issues/482)): steady file activity under a project's root, such as an agent appending to a log or a build writing output, kept the main process at up to a full core and made typing and project switching lag. A changed file now costs work proportional to the change, and each folder is watched once however many panels need it ([#272](https://github.com/Bidthedog/throng/issues/272)).
 - **Closing several terminals at once no longer risks losing every terminal** ([#465](https://github.com/Bidthedog/throng/issues/465)): closing throng, unloading a project or ending a group of terminals could crash the process that hosts them, taking every running terminal down with it. Terminals are now ended one after another, which costs a fraction of a second each.
 - **The title bar names the panel you are in** ([#504](https://github.com/Bidthedog/throng/issues/504)): it, and the taskbar entry, showed an internal name such as "Blank Panel 2" instead of the file or terminal name on the panel's header.
+- **A reset in Preferences always sticks** ([#514](https://github.com/Bidthedog/throng/issues/514), [#515](https://github.com/Bidthedog/throng/issues/515)): a reset made just after an edit could fail and roll back, or be quietly undone by a correction worked out before it, and a Reset All that failed while `settings.json` was briefly held by another program could delete the file.
 
 ## 1.0.0-alpha10 — 2026-10-14
 
