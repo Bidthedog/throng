@@ -317,6 +317,16 @@ describe('AttentionService — restore and sync (T031)', () => {
     expect(r.daemonCalls.filter((c) => c.method === TERMINAL_ATTENTION_SYNC_METHOD)).toHaveLength(1);
   });
 
+  // A quit holds only while there is something to flush (main.ts will-quit).
+  it('reports a pending sync until it is flushed', async () => {
+    const r = rig();
+    expect(r.service.hasPendingSync()).toBe(false);
+    r.service.onSignal(signal({ panelId: 'p1' }));
+    expect(r.service.hasPendingSync()).toBe(true);
+    await r.service.flush();
+    expect(r.service.hasPendingSync()).toBe(false);
+  });
+
   it('flush() with nothing pending sends nothing', async () => {
     const r = rig();
     await r.service.flush();

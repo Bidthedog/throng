@@ -2119,22 +2119,29 @@ if (isPrimaryInstance)
   daemonEvents.start();
   /*
    * 057 FR-091 — a mark raised in the last 250 ms is still waiting out the sync debounce when the
-   * user quits, and would never reach the daemon ledger. Hold the quit once, for at most a second,
-   * to send it; the daemon socket is still open here because `daemonEvents.stop()` runs after.
+   * user quits, and would never reach the daemon ledger. Hold the quit, for at most a second, to send
+   * it; the daemon socket is still open here because `daemonEvents.stop()` runs after.
+   *
+   * Only while a sync is pending, and finished with `app.exit`, not a second `app.quit()`: Electron
+   * stays "quitting" after a prevented will-quit, so that call is ignored and the main process lingered
+   * with no windows (phase9.e2e.ts FR-047 timed out on every relaunch). Every other will-quit listener
+   * has already run by then.
    */
-  let attentionFlushedForQuit = false;
-  app.on('will-quit', (event) => {
-    if (!attentionFlushedForQuit) {
-      attentionFlushedForQuit = true;
-      event.preventDefault();
-      void Promise.race([attentionService.flush(), new Promise<void>((r) => setTimeout(r, 1000))]).finally(() =>
-        app.quit(),
-      );
-      return;
-    }
+  const stopAttention = (): void => {
     daemonEvents.stop();
     daemonSupervisor.dispose();
     attentionService.dispose();
+  };
+  app.on('will-quit', (event) => {
+    if (!attentionService.hasPendingSync()) {
+      stopAttention();
+      return;
+    }
+    event.preventDefault();
+    void Promise.race([attentionService.flush(), new Promise<void>((r) => setTimeout(r, 1000))]).finally(() => {
+      stopAttention();
+      app.exit(0);
+    });
   });
 
   // Window geometry persistence (FR-047) restored onto a visible display (FR-028).
