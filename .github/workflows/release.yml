@@ -1,15 +1,42 @@
 name: Release
 
-# Packaging, clean-machine installer verification, and gated GitHub-Releases publish for throng
-# (feature 020, #21). Windows-only (FR-038), windows-2022 + Node 24 to match CI's native builds so
-# the bundled runtime's ABI matches the daemon's native modules (better-sqlite3, node-pty, koffi).
+# Packaging, clean-machine verification of every artifact in every install scope, and a gated
+# GitHub-Releases publish for throng (features 020 #21, 042, 058).
+# Windows-only (FR-038), windows-2022 + Node 24 to match CI's native builds so the bundled runtime's
+# ABI matches the daemon's native modules (better-sqlite3, node-pty, koffi).
 #
-# - build-installer + verify-installer run on every push to the packaging branch and on demand, so
-#   the installer is actually built and CLEAN-INSTALLED on a fresh runner (the closest thing to a
-#   clean machine for a GUI app — the runner has a virtual desktop the Electron app needs).
+# The shape (058 FR-028 to FR-031):
+#
+#   e2e-full ─▶ build-installer ─┬─▶ verify-installer × N  (one clean runner per COMBINATION)
+#                                │        ▲
+#                  combinations ─┘        │ the matrix, from `artifact-set.mjs list --combinations`
+#                                         ▼
+#                                    coexistence  (one machine, every copy at once)
+#                                         ▼
+#                                    render-body  (the exact body publication will use)
+#                                         ▼
+#                                      publish    (gated by the `release` Environment)
+#
+# - A COMBINATION is an artifact in one install scope: setup and MSI each in per-user and machine-wide,
+#   plus portable and archive, which have none. Each runs on its own clean runner so a residue left by
+#   one is never another's starting state (FR-028). The list is DERIVED from the declared artifact
+#   set; nothing here writes it out, so a new role or scope cannot be left unverified (FR-030).
+# - Each combination writes its own verdict. An absent verdict is a failure and the publish gate names
+#   the combination that is missing (FR-030).
+# - build-installer + verify-installer run on every push to master and on demand, so the artifacts are
+#   actually built and CLEAN-INSTALLED on a fresh runner (the closest thing to a clean machine for a
+#   GUI app — the runner has a virtual desktop the Electron app needs).
 # - publish runs only for a version tag or an explicit dispatch, and is gated on the `release`
 #   Environment's required reviewers (the human QA sign-off, FR-029) — it cannot be triggered from a
 #   developer machine or an unreviewed branch (FR-037).
+# - A step the hosted runner cannot exercise is recorded `unproven` with its reason and is listed in the
+#   job summary and the release body on every run; it never counts as a pass (058 spec Assumptions).
+#   Only the GUI half of the second-account step may be unproven.
+#
+# The MSI's interactive dialogs (scope page, elevation prompt, in-use refusal) are NOT exercised here:
+# the matrix drives every installer silently. They are checked by hand (the branch's manual test plan).
+#
+# A rehearsal that publishes nothing:  gh workflow run Release --ref <branch> -f publish=false
 
 on:
   workflow_dispatch:
@@ -20,6 +47,14 @@ on:
         default: false
       trace:
         description: 'Capture Playwright traces + terminal diagnostics on failure (perturbs timing)'
+        type: boolean
+        default: false
+      hand_tests:
+        description: 'Also run the manual test plan (MT-01..MT-08) on runners and upload the evidence. Never publishes.'
+        type: boolean
+        default: false
+      skip_e2e:
+        description: 'Skip the full E2E suite (a verification-only rehearsal). Can never publish.'
         type: boolean
         default: false
   push:
@@ -52,7 +87,12 @@ jobs:
   # One job, no shards, one worker: the same arithmetic that removed sharding from CI (FR-057). This
   # lane is not on anyone's critical path, so trading wall-clock for runner-minutes is the right way
   # round here even more clearly than there.
+  #
+  # `skip_e2e` (a dispatch input) leaves it out, so a rehearsal that is only about the installers does
+  # not wait ~33 minutes for a suite `gate.yml` already runs on the same tree. `publish` refuses to
+  # run when it is set, so a release can never follow a skipped suite.
   e2e-full:
+    if: ${{ !inputs.skip_e2e }}
     name: E2E (full suite)
     runs-on: windows-2022
     # The full suite measured 21.2 minutes locally at 229 spec files / 641 declarations, on the
@@ -114,9 +154,47 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # THE VERIFICATION MATRIX, derived (058 FR-028, FR-030).
+  #
+  # What to verify is a property of the declared artifact set — which artifacts, in which scopes — so
+  # it is READ from `artifact-set.mjs list --combinations --json`, never written out here. The matrix
+  # below and the publish gate both consume the same list, which is what stops a combination from
+  # being added to one and not the other. It needs no build, only the declaration, so it runs beside
+  # the end-to-end suite rather than behind it.
+  combinations:
+    name: Work out the verification matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # Scripts are skipped (no native build) and only @throng/core is compiled: the declaration is
+      # all this job reads.
+      - name: Install dependencies (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core
+        run: npx tsc -b packages/core
+      - name: Emit the matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          matrix=$(node scripts/artifact-set.mjs list --combinations --json | tr -d '\n')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Verifying these combinations:"
+          node scripts/artifact-set.mjs list --combinations
+
   build-installer:
-    name: Build the per-user installer
+    name: Build the release artifacts
     needs: e2e-full
+    # A red suite still blocks the build. A SKIPPED one (skip_e2e) does not: GitHub would otherwise
+    # skip every job that needs a skipped job.
+    if: ${{ !cancelled() && (needs.e2e-full.result == 'success' || needs.e2e-full.result == 'skipped') }}
     runs-on: windows-2022
     timeout-minutes: 30
     outputs:
@@ -141,39 +219,78 @@ jobs:
       - name: Reconcile the built artifacts against the declared set
         shell: bash
         run: node scripts/artifact-set.mjs reconcile
-      - name: Resolve the artifact paths to upload
+      # Each artifact is uploaded under its own name, resolved by ROLE (042 FR-012), so a verification
+      # runner downloads only the one it checks. The upload steps below name the four roles, so this
+      # guard fails the build when the declared set gains a role they do not cover — otherwise a new
+      # artifact would be built, reconciled and verified, and then silently never attached.
+      - name: Check every declared role is uploaded below
         id: artifacts
         shell: bash
         run: |
-          {
-            echo "paths<<ARTIFACT_PATHS_EOF"
-            node scripts/artifact-set.mjs list --paths
-            echo "ARTIFACT_PATHS_EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Upload installer
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list | cut -f1 | sort | paste -sd' ' -)
+          uploaded="archive msi portable setup"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      # The installers are ~130 MB each and these artifacts are only a hand-off between the jobs
+      # below; the bytes anyone actually wants are the ones `publish` attaches to the GitHub Release,
+      # which does not expire. At the 90-day default, seventeen superseded builds from one afternoon
+      # of packaging iteration sat in Actions storage until mid-October.
+      #
+      # They cannot go to 1 day. `publish` is gated on the release Environment's required reviewers,
+      # so the artifacts have to outlive however long the human takes to approve — expire them first
+      # and the gated job fails at download-artifact, having passed every check. Five days is the
+      # approval window, not a storage target.
+      - name: Upload the setup
         uses: actions/upload-artifact@v6
         with:
-          name: throng-installer
-          # 042 FR-012 — every artifact is named. A `*.exe` glob would silently pick up a second
-          # `.exe`-producing target, or silently miss one.
-          path: ${{ steps.artifacts.outputs.paths }}
+          name: throng-setup
+          path: ${{ steps.artifacts.outputs.setup }}
           if-no-files-found: error
-          # The installer is ~131 MB and this artifact is only a hand-off between the three jobs
-          # below; the bytes anyone actually wants are the ones `publish` attaches to the GitHub
-          # Release, which does not expire. At the 90-day default, seventeen superseded builds from
-          # one afternoon of packaging iteration sat in Actions storage until mid-October.
-          #
-          # It cannot go to 1 day. `publish` is gated on the release Environment's required
-          # reviewers, so the artifact has to outlive however long the human takes to approve —
-          # expire it first and the gated job fails at download-artifact, having passed every check.
-          # Five days is the approval window, not a storage target.
+          retention-days: 5
+      - name: Upload the MSI
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-msi
+          path: ${{ steps.artifacts.outputs.msi }}
+          if-no-files-found: error
+          retention-days: 5
+      - name: Upload the portable build
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-portable
+          path: ${{ steps.artifacts.outputs.portable }}
+          if-no-files-found: error
+          retention-days: 5
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-archive
+          path: ${{ steps.artifacts.outputs.archive }}
+          if-no-files-found: error
           retention-days: 5
 
+  # ONE RUNNER PER COMBINATION (058 FR-028). Each starts from a clean machine, so a residue left by one
+  # combination is never the next one's starting state. `fail-fast: false` because every combination's
+  # verdict is wanted even when one fails: the gate names exactly which did not pass.
   verify-installer:
-    name: Verify on a clean machine
+    name: Verify ${{ matrix.id }}
     runs-on: windows-2022
-    timeout-minutes: 30
-    needs: build-installer
+    # The machine-wide combinations create a second account and run an in-use reinstall on top of the
+    # lifecycle; 40 is a hang detector with headroom, not a budget.
+    timeout-minutes: 40
+    needs: [build-installer, combinations]
+    # Explicit, because a skipped e2e-full (skip_e2e) would otherwise skip every job downstream of it.
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.combinations.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.combinations.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -184,27 +301,239 @@ jobs:
         run: npm ci
       - name: Build (@throng/core for the verify harness)
         run: npm run build
-      - name: Download installer
+      - name: Download the artifact
         uses: actions/download-artifact@v7
         with:
-          name: throng-installer
+          name: throng-${{ matrix.role }}
           path: dist/installer
-      # 042 FR-012/FR-014 — every artifact of the declared set is verified, each resolved by ROLE.
-      # This replaced `ls dist/installer/*.exe | head -n1`, which picks a file rather than naming
-      # one: with two `.exe`-producing targets, this step and the two gate steps below could each
-      # have picked a different artifact, silently.
-      - name: Verify every declared artifact
+      # 042 FR-012/FR-014 — the artifact is resolved by ROLE, not by extension or position; with
+      # two `.exe` targets (setup, portable) that is the difference between verifying the file you
+      # meant and verifying another. The scope is passed only for a combination that has one: the
+      # harness refuses it for the others.
+      - name: Verify ${{ matrix.id }}
         shell: bash
         run: |
           set -euo pipefail
-          for role in $(node scripts/artifact-set.mjs list | cut -f1); do
-            artifact=$(node scripts/artifact-set.mjs resolve "$role")
-            echo "Verifying $role — $artifact"
-            node scripts/verify-installer.mjs "$artifact" \
-              --role "$role" \
-              --expected-version "${{ needs.build-installer.outputs.version }}" \
-              --verdict-out "verification-verdict-$role.json"
-          done
+          artifact=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          scope_args=()
+          if [ "${{ matrix.scope }}" != "-" ] && [ -n "${{ matrix.scope }}" ] && [ "${{ matrix.scope }}" != "null" ]; then
+            scope_args=(--scope "${{ matrix.scope }}")
+          fi
+          echo "Verifying ${{ matrix.id }} — $artifact"
+          node scripts/verify-installer.mjs "$artifact" \
+            --role "${{ matrix.role }}" \
+            "${scope_args[@]}" \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --verdict-out "${{ matrix.verdictFile }}"
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          # `publish` downloads these too, so they expire with the artifacts rather than outliving
+          # them — a verdict without its build is a gate failure that reads like a bug.
+          retention-days: 5
+      # The verbose Windows Installer logs and the second account's daemon output — the only record
+      # of why a scope, an in-use decision or a daemon start went the way it did.
+      - name: Upload the installer logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          # Inside the workspace: the upload refuses a file outside its root directory ("The
+          # rootDirectory … is not a parent directory of the file"), which is why the first rehearsal
+          # kept none. The harness writes the MSI logs here and copies the others in on a failure.
+          path: installer-logs/*.log
+          if-no-files-found: ignore
+          retention-days: 5
+
+  # EVERY COPY ON ONE MACHINE (058 FR-031). The six combinations each prove one copy alone; this proves
+  # the five that can coexist do, with the real per-user namespace and data folder. It runs after the
+  # matrix because there is no point installing everything once a combination has already failed.
+  coexistence:
+    name: Verify coexistence
+    runs-on: windows-2022
+    timeout-minutes: 40
+    needs: [build-installer, verify-installer]
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.verify-installer.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the verify harness)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      - name: Verify coexistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-installer.mjs --coexistence \
+            --dir dist/installer \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --verdict-out verification-verdict-coexistence.json
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-coexistence
+          path: verification-verdict-coexistence.json
+          if-no-files-found: warn
+          retention-days: 5
+
+  # THE MANUAL TEST PLAN, ON RUNNERS (058; .claude/.manual-test-plans/). Dispatch-only, enabled by the
+  # `hand_tests` input, and never part of the gate: nothing needs it, and `publish` refuses to run when
+  # it is set. One fresh runner per MT group; each drives the real installers' dialogs through
+  # Windows UI Automation (scripts/verify-hand-tests.mjs) and uploads `hand-test-MT-0N.json` — every
+  # step passed, failed, or a named runner-gap with its stand-in — plus a screenshot at each dialog.
+  #   node scripts/verify-hand-tests.mjs --list     shows every step a run will claim
+  #   gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true -f hand_tests=true
+  hand-tests:
+    name: Hand test ${{ matrix.group }}
+    runs-on: windows-2022
+    timeout-minutes: 50
+    needs: build-installer
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.hand_tests && needs.build-installer.result == 'success' }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [MT-01, MT-02, MT-03, MT-04, MT-05, MT-06, MT-07, MT-08]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # MT-08 needs an OLDER build of this branch's setup: the same sources with the version set to
+      # 0.9.0, on this runner's copy only (nothing is committed or published).
+      - name: Build the older setup (MT-08)
+        if: matrix.group == 'MT-08'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package
+          mkdir -p older
+          cp dist/installer/throng-setup-0.9.0.exe older/throng-setup-0.9.0.exe
+          git checkout -- .
+          rm -rf dist/installer
+      - name: Build (@throng/core for the driver)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      # MT-06: the previous release's archive, to run beside the current copy.
+      - name: Download the previous release (MT-06)
+        if: matrix.group == 'MT-06'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p older
+          gh release download v1.0.0-alpha10 -p '*.zip' -D older
+          ls older
+      - name: Run ${{ matrix.group }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ "${{ matrix.group }}" = "MT-06" ]; then extra=(--older-zip "$(ls older/*.zip | head -n 1)"); fi
+          if [ "${{ matrix.group }}" = "MT-08" ]; then extra=(--older-setup older/throng-setup-0.9.0.exe); fi
+          node scripts/verify-hand-tests.mjs --group "${{ matrix.group }}" \
+            --expected-version "${{ needs.build-installer.outputs.version }}" \
+            --out-dir hand-test-evidence "${extra[@]}"
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: hand-test-${{ matrix.group }}
+          path: |
+            hand-test-evidence/**
+            installer-logs/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  # THE BODY THE HUMAN APPROVES (042 FR-006), with the verification gaps in it (058 FR-032, FR-033).
+  #
+  # It collects every verdict, asks the publish gate everything EXCEPT the sign-off (which is the only
+  # thing the human supplies), renders the exact release body publication will use, and writes each
+  # `unproven` step to the job summary. A non-publishing `workflow_dispatch` rehearses all of it
+  # without releasing anything.
+  render-body:
+    name: Render the release body
+    runs-on: windows-2022
+    timeout-minutes: 20
+    needs: [build-installer, verify-installer, coexistence]
+    # Even when a verification failed: the preview and the refusal naming it are what a maintainer
+    # needs to see. Not when the build itself never happened.
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (@throng/core for the gate and the renderer)
+        run: npm run build
+      - name: Download the artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: throng-*
+          merge-multiple: true
+          path: dist/installer
+      - name: Download every verdict
+        uses: actions/download-artifact@v7
+        with:
+          pattern: verdict-*
+          merge-multiple: true
+          path: .
+      # Everything the publish gate checks except the human's sign-off. The only acceptable refusal
+      # here is "QA sign-off is missing": it is the last condition evaluated, so reaching it means
+      # every verdict, the artifact set and the notes all passed. Anything else is a failure to read.
+      - name: Ask the publish gate (all but the sign-off)
+        shell: bash
+        env:
+          THRONG_GAPS_OUT: verification-gaps.json
+          # A tag run checks the real tag. A rehearsal (a dispatch, or a push to master) has no tag, and
+          # the gate would otherwise compare the version with the BRANCH name and refuse; it binds to the
+          # tag the version would publish as. The publish job always checks the real ref.
+          THRONG_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', needs.build-installer.outputs.version) }}
+        run: |
+          set -uo pipefail
+          THRONG_VERDICT_FILES="$(node scripts/artifact-set.mjs list --combinations | cut -f4 | paste -sd, -),verification-verdict-coexistence.json"
+          export THRONG_VERDICT_FILES
+          set +e
+          node scripts/publish-gates.mjs 2> gates.log
+          code=$?
+          set -e
+          cat gates.log
+          if [ ! -f verification-gaps.json ]; then echo '[]' > verification-gaps.json; fi
+          if [ "$code" -ne 0 ] && ! grep -q "QA sign-off is missing" gates.log; then
+            echo "::error::the publish gate would refuse for a reason other than the missing sign-off"
+            exit 1
+          fi
+      - name: Report the verification gaps
+        if: always()
+        shell: bash
+        run: node scripts/verification-summary.mjs verification-gaps.json | tee -a "$GITHUB_STEP_SUMMARY"
       # 042 FR-006 — render the EXACT body publication will use, before the gated job, so the
       # person giving the QA sign-off approves the text that actually ships. It also means a
       # non-publishing `workflow_dispatch` rehearses the composition without releasing anything.
@@ -215,31 +544,37 @@ jobs:
           node scripts/release-notes.mjs render \
             --version "${{ needs.build-installer.outputs.version }}" \
             --artifacts "$(node scripts/artifact-set.mjs checksums)" \
+            --gaps "$(cat verification-gaps.json)" \
             --sha "${{ github.sha }}" \
             --out release-body-preview.md
           echo "--- release body preview ---"
           cat release-body-preview.md
-      - name: Upload verdicts and the rendered body
+      - name: Upload the rendered body and the gaps
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: verification-verdict
+          name: release-body
           path: |
-            verification-verdict-*.json
             release-body-preview.md
+            verification-gaps.json
           if-no-files-found: warn
-          # `publish` downloads this too, so it expires with the installer above rather than
-          # outliving it — a verdict without its build is a gate failure that reads like a bug.
           retention-days: 5
 
   publish:
     name: Publish GitHub Release (gated)
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer]
+    needs: [build-installer, verify-installer, coexistence, render-body]
     # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
     # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    #
+    # Never when the full E2E suite was skipped (`skip_e2e`): publish does not `need` e2e-full, so
+    # without this a skipped suite would simply not be consulted. The gate runs the same suite on the
+    # same tree, but a release must not depend on remembering that.
+    #
+    # And never when `hand_tests` is set: that dispatch is a rehearsal of the manual test plan, which
+    # installs and removes things on its own runners, and is not a release candidate.
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)) && !inputs.skip_e2e && !inputs.hand_tests
     environment: release
     permissions:
       contents: write
@@ -253,17 +588,19 @@ jobs:
         run: npm ci
       - name: Build (@throng/core for the gate + checksum)
         run: npm run build
-      - name: Download installer
+      - name: Download the artifacts
         uses: actions/download-artifact@v7
         with:
-          name: throng-installer
+          pattern: throng-*
+          merge-multiple: true
           path: dist/installer
-      - name: Download verdict
+      - name: Download every verdict
         uses: actions/download-artifact@v7
         with:
-          name: verification-verdict
+          pattern: verdict-*
+          merge-multiple: true
           path: .
-      - name: Evaluate publish gates (real version + set reconciles + verified + notes + signed off)
+      - name: Evaluate publish gates (real version + set reconciles + every combination verified + notes + signed off)
         shell: bash
         env:
           THRONG_QA_SIGNED_OFF: '1' # the release Environment approval gates this job's run
@@ -271,18 +608,16 @@ jobs:
           # refuses unless the installer filename, package version, verdict-reported version and this
           # tag all agree, so an approval cannot satisfy the gate for a different build.
           THRONG_RELEASE_TAG: ${{ github.ref_name }}
+          THRONG_GAPS_OUT: verification-gaps.json
         run: |
           set -euo pipefail
           version="${{ needs.build-installer.outputs.version }}"
           if gh release view "v$version" >/dev/null 2>&1; then export THRONG_ALREADY_PUBLISHED=1; fi
-          # 042 FR-016 — one verdict per declared artifact, and the list is DERIVED from the
-          # declaration rather than written out here, so adding a role cannot leave its verdict
-          # silently unread. A verdict covering only some of the set is a refusal, not a partial
-          # pass; the gate names the artifact with no verdict.
-          THRONG_VERDICT_FILES=$(node scripts/artifact-set.mjs list \
-            | cut -f1 \
-            | sed 's|^|verification-verdict-|; s|$|.json|' \
-            | paste -sd, -)
+          # 058 FR-030 — one verdict per verification COMBINATION plus the coexistence verdict, and
+          # the list is DERIVED from the declaration rather than written out here, so adding a role or
+          # a scope cannot leave its verdict silently unread. A verdict covering only some of them is
+          # a refusal, not a partial pass; the gate names the combination with no verdict.
+          THRONG_VERDICT_FILES="$(node scripts/artifact-set.mjs list --combinations | cut -f4 | paste -sd, -),verification-verdict-coexistence.json"
           export THRONG_VERDICT_FILES
           # No artifact is resolved here any more: the gate reads the declared set itself, so the
           # thing it gates on cannot differ from the thing that gets published.
@@ -296,15 +631,17 @@ jobs:
           set -euo pipefail
           version="${{ needs.build-installer.outputs.version }}"
           # 020 FR-042a — each digest is computed from the exact published bytes, here, as the last
-          # step that reads them. 042 FR-017 — every artifact gets its own row, against its own
-          # filename.
+          # step that reads them. 042 FR-017 / 058 FR-032 — every artifact gets its own row, against
+          # its own filename: four files, four checksums, whatever their scope count.
           artifacts=$(node scripts/artifact-set.mjs checksums)
           # 042 FR-001/FR-007 — the body is COMPOSED from CHANGELOG.md and the invariant footer,
           # never authored here. This step used to hold a hardcoded string that made every release
-          # textually identical apart from a version number and a hash.
+          # textually identical apart from a version number and a hash. Any unproven step the gate
+          # let through is listed in it (058 SC-008), exactly as in the preview that was approved.
           node scripts/release-notes.mjs render \
             --version "$version" \
             --artifacts "$artifacts" \
+            --gaps "$(cat verification-gaps.json)" \
             --sha "${{ github.sha }}" \
             --out release-body.md
           # A SemVer prerelease suffix (1.0.0-alpha1, 1.0.0-rc.2) publishes as a GitHub PRERELEASE, so an
