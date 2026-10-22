@@ -50,8 +50,9 @@ goes away.
 throng runs on **Windows 11** today; macOS ([#22](https://github.com/Bidthedog/throng/issues/22)) and
 Linux ([#23](https://github.com/Bidthedog/throng/issues/23)) are planned.
 
-1. **Install it** — download the installer, a portable build or a zip from the
-   [Releases page](https://github.com/Bidthedog/throng/releases). No admin rights and no prerequisites;
+1. **Install it** — download the installer, an MSI, a portable build or a zip from the
+   [Releases page](https://github.com/Bidthedog/throng/releases), for just you or for everyone on the
+   machine. No prerequisites, and no admin rights unless you install for everyone;
    [installation](docs/installation.md) covers every option, verifying the download, and running from
    source.
 2. **Take the tour** — the [quick start](docs/quick-start.md) goes from first launch to a working

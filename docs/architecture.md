@@ -85,8 +85,17 @@ broadcast is what lets one terminal session be mirrored in several panels and wi
 **Startup.** Main's `ensureDaemon` (`daemon-lifecycle.ts`) pings the pipe with `health.ping`. If a
 daemon answers and is current, main adopts it and its terminals reattach. Otherwise main spawns the
 daemon detached and unref'd, under host Node (never Electron, whose Node ABI does not match the
-daemon's native modules), and waits for it to answer. The pipe itself is the single-instance lock:
-if two UIs spawn at once, only one daemon binds it, and both connect to that one.
+daemon's native modules), and waits for it to answer. If two UIs spawn at once, only one daemon
+binds the pipe, and both connect to that one.
+
+**One running throng per namespace.** Before any window, main's instance guard
+(`instance-guard.ts`) listens on `<daemon pipe>.instance`. The pipe name is the instance's
+**namespace**: every installed or extracted copy a user runs resolves the same one, a dev run and
+each test run another. A launch that cannot listen connects instead, sends its executable path and
+version, and quits; the running instance brings its window forward and, when the launch came from a
+different install folder, raises one inline notice naming the copy that is running. The guard also
+holds Electron's userData-keyed `requestSingleInstanceLock()`, the only lock releases before 058 hold,
+so an older copy and a newer one never run together either.
 
 **Retiring a daemon.** The daemon build is stamped with a content hash (`dist/BUILD_ID`, see
 [Build and packaging](#build-and-packaging)). A running daemon is **retired and respawned**, which
@@ -96,11 +105,14 @@ ends its terminals, when:
 - the app is elevated and the daemon is not (integrity cannot be raised in place); or
 - its own entry file no longer exists on disk (a portable build whose temp folder has gone).
 
-A daemon whose entry path is not this app's own is **foreign**, and is never retired: main carries on
-without a daemon rather than end another instance's terminals. Instance separation is the first line
-of defence. A dev run (`npm start`) and the portable build each take their own pipe, config root and
-data folder, so a rebuild never retires the installed app's daemon (`instance-paths.ts`). The
-locations and their overrides are listed in [environment.md](environment.md).
+A daemon from **another installed copy** (a different entry path, reporting `packaged: true` in
+`health.ping`) is retired like any stale build when its build differs, because every copy shares the
+user's one daemon. A daemon started from a **development tree**, or any daemon when this app is itself
+a dev build, is **foreign**, and is never retired: main carries on without a daemon rather than end
+another instance's terminals. Instance separation is the first line of defence: a dev run
+(`npm start`) takes its own pipe, config root and data folder, so a rebuild never retires the
+installed app's daemon (`instance-paths.ts`). The locations and their overrides are listed in
+[environment.md](environment.md).
 
 **Losing the daemon.** `DaemonSupervisor` watches the events socket. A close enters `reconnecting`
 and only becomes `stopped` when a grace period expires, so an ordinary rebuild-and-retire raises no
@@ -751,8 +763,11 @@ id and reuses the running daemon, so terminals survive, while a real code change
 [Process topology](#process-topology)).
 
 **Packaging** (`npm run package`: build, `stage:runtime`, then electron-builder with
-`electron-builder.yml`) produces a per-user NSIS installer, a portable build and an archive. Three
-decisions make the layout unusual:
+`electron-builder.yml`) produces an NSIS setup and an MSI — each installing per-user or for every
+user of the machine — a portable build and an archive. The setup shadows two of electron-builder's
+NSIS templates from `packaging/nsis/`, and the MSI's WiX project is rewritten by a
+`msiProjectCreated` hook; both, and the one in-use helper they share, are described under
+[releasing.md](releasing.md). Three decisions make the layout unusual:
 
 - **`npmRebuild: false`.** The daemon's native modules (`better-sqlite3`, `node-pty`, `koffi`) are
   built for the **host-Node** ABI and loaded by a bundled `node.exe` that
