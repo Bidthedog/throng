@@ -46,6 +46,21 @@ on:
           - 'test:integration'
           - 'test:contract'
           - 'test:e2e'
+      # Stress ONE E2E test instead of running the gate — see the `stress` job. Here rather than in a
+      # workflow of its own because a workflow_dispatch file is only dispatchable once it is on the
+      # default branch, and a flake is stressed on the branch that fixes it.
+      stress_spec:
+        description: 'Stress one E2E spec instead (full path, .e2e.ts). Leave empty for the gate.'
+        type: string
+        default: ''
+      stress_grep:
+        description: 'With stress_spec: --grep for one test in the file'
+        type: string
+        default: ''
+      stress_rounds:
+        description: 'With stress_spec: separate invocations to run'
+        type: number
+        default: 20
 
   schedule:
     # 01:00 UTC — 02:00 BST, 01:00 GMT. Two reasons, and the second is the less obvious one:
@@ -67,7 +82,9 @@ concurrency:
   #
   # Within a group a newer request still wins: a second dispatch would otherwise queue behind a run
   # that is already obsolete.
-  group: gate-${{ github.event_name }}
+  # Every stress run is its own group, so stress runs never cancel a gate, each other, or a parallel
+  # stress of the same spec (several at once is how a 1-in-400 flake gets sampled in an afternoon).
+  group: gate-${{ github.event_name }}-${{ inputs.stress_spec && github.run_id || 'gate' }}
   cancel-in-progress: true
 
 env:
@@ -107,6 +124,7 @@ env:
 jobs:
   gate:
     name: npm run gate
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.stress_spec == '' }}
 
     # == GITHUB-HOSTED, FOR EVERY TRIGGER ==
     #
@@ -337,3 +355,72 @@ jobs:
               });
               core.notice(`Opened issue #${made.data.number}`);
             }
+
+  # Stress ONE E2E test until it fails on demand — or show it no longer does.
+  #
+  # Separate invocations, never `--repeat-each` (throng-testing, references/flakes.md): each round is
+  # its own `playwright test` process with its own app and config root, exactly as the suite runs it,
+  # with retries OFF so a first-attempt failure counts as one. Here and not on a workstation because
+  # repeated Electron launches pin every core and steal focus for the whole duration.
+  #
+  #   gh workflow run gate.yml --ref <branch> -f stress_spec=packages/ui/tests/e2e/<file>.e2e.ts \
+  #     -f stress_grep='<title>' -f stress_rounds=20
+  #
+  # It gates nothing; the verdict is the pass count in the job summary.
+  stress:
+    name: Stress ${{ inputs.stress_spec }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.stress_spec != '' }}
+    runs-on: windows-2022
+    timeout-minutes: 340   # a long stress at 1-in-400 needs the hosted maximum, nearly
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # Same reasons as the gate job: an alias-free temp dir, and a realistic screen size.
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Set screen resolution to 1920x1080
+        shell: pwsh
+        run: ./scripts/ci-set-resolution.ps1
+      - name: Build
+        run: npm run build
+      - name: Run the rounds
+        shell: bash
+        env:
+          SPEC: ${{ inputs.stress_spec }}
+          GREP: ${{ inputs.stress_grep }}
+          ROUNDS: ${{ inputs.stress_rounds }}
+          THRONG_E2E_RETRIES: 0
+          THRONG_E2E_WORKERS: 1
+        run: |
+          set -u
+          if [[ "$SPEC" != *.e2e.ts ]]; then echo "::error::stress_spec must be a full path ending .e2e.ts"; exit 2; fi
+          args=("$SPEC" --workers=1 --retries=0)
+          if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
+          pass=0; fail=0
+          for i in $(seq 1 "$ROUNDS"); do
+            if npx playwright test "${args[@]}" > "round-$i.log" 2>&1; then
+              pass=$((pass + 1)); echo "round $i: pass"
+            else
+              fail=$((fail + 1)); echo "round $i: FAIL"; tail -60 "round-$i.log"
+            fi
+          done
+          echo "### $SPEC: $pass passed, $fail failed of $ROUNDS" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$fail" -eq 0 ]
+      - name: Upload the round logs and test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-stress
+          path: |
+            round-*.log
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
