@@ -11,7 +11,7 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 | MT-05 | Attention settings | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-06 | Command finished and terminal exited | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-07 | Go to Next Marked Panel | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-08 | Marks across a closed window | needs retest | f4d7f344f5c3 | 2026-10-22 | 1fd101c3 touched packages/ui/src/main/main.ts |
+| MT-08 | Marks across a closed window | signed off | f517014ab511 | 2026-10-22 | |
 | MT-09 | Mark in the dot's place, blinking | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-10 | A mark stays until you focus the panel | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-11 | Hover popovers on the project list | signed off | 5a0e82ea099b | 2026-10-21 | |
@@ -21,7 +21,7 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 | MT-15 | Overflow control popover | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-16 | Clicking a mark cycles its panels | signed off | 5a0e82ea099b | 2026-10-21 | |
 | MT-17 | One row per notification type | signed off | 5a0e82ea099b | 2026-10-21 | |
-| MT-18 | Ordinary notices reach Windows | needs retest | f4d7f344f5c3 | 2026-10-22 | 1fd101c3 touched packages/ui/src/main/main.ts |
+| MT-18 | Ordinary notices reach Windows | signed off | f517014ab511 | 2026-10-22 | |
 | MT-19 | A mark is announced once | signed off | f4d7f344f5c3 | 2026-10-22 | |
 | MT-20 | A marked panel's header is filled | signed off | 5a0e82ea099b | 2026-10-21 | |
 
