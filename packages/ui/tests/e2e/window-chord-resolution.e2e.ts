@@ -501,9 +501,14 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
   const beforeSwitch = (await inputWrites(win, pid)) ?? [];
   /*
    * The switch takes this view away, and its log with it (`forgetDiagnostics` on unmount), so the log
-   * is copied in the page on the chord's own KEYUP — after the keydown has been fully dispatched, which
-   * is when a leaked key would have been written, and before the new project's layout can arrive over
-   * IPC. A copy that is missing fails below rather than passing as "nothing written".
+   * is copied in the page in a task queued from the chord's KEYDOWN: that task runs once the keydown
+   * has been fully dispatched — when a leaked key would have been written — and before the new
+   * project's layout can arrive, since that needs an IPC round trip queued behind it. A copy that is
+   * missing fails below rather than passing as "nothing written".
+   *
+   * It used to copy on the KEYUP. Playwright sends keyup as a separate CDP message, and on a runner
+   * the layout reply sometimes landed between the two: the view was gone by the keyup, and the copy
+   * read null (release.yml run 39514654648, flaky on first attempt).
    */
   await win.evaluate((id) => {
     const w = window as unknown as {
@@ -511,20 +516,23 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
       __t049Writes?: string[] | null;
     };
     w.__t049Writes = undefined;
-    window.addEventListener(
-      'keyup',
-      () => {
+    const onChordKey = (e: KeyboardEvent): void => {
+      if (['Control', 'Shift', 'Alt'].includes(e.key)) return; // the modifiers arrive first
+      window.removeEventListener('keydown', onChordKey, true);
+      setTimeout(() => {
         w.__t049Writes = w.__throngTerminalDiagnostics?.()[id]?.writes ?? null;
-      },
-      { capture: true, once: true },
-    );
+      }, 0);
+    };
+    window.addEventListener('keydown', onChordKey, true);
   }, pid);
-  await win.keyboard.press(chordFor('project.next'));
+  // Held 500 ms between keydown and keyup, so the new project's layout arrives BEFORE the keyup —
+  // the order that broke the old keyup probe 5/5 (gate run 39552994036). The probe must hold either way.
+  await win.keyboard.press(chordFor('project.next'), { delay: 500 });
   await expect(win.locator('.project-item', { hasText: 'ChordNext' })).toHaveAttribute('data-active', 'true');
-  const atKeyup = await win.evaluate(() => (window as unknown as { __t049Writes?: string[] | null }).__t049Writes ?? null);
-  expect(atKeyup, 'the terminal view was gone by the chord’s keyup — the probe read nothing').not.toBeNull();
+  const atChord = await win.evaluate(() => (window as unknown as { __t049Writes?: string[] | null }).__t049Writes ?? null);
+  expect(atChord, 'the terminal view was gone before the chord’s keydown had been dispatched — the probe read nothing').not.toBeNull();
   expect(
-    (atKeyup ?? []).slice(beforeSwitch.length).filter((chunk) => !FOCUS_REPORTS.has(chunk)),
+    (atChord ?? []).slice(beforeSwitch.length).filter((chunk) => !FOCUS_REPORTS.has(chunk)),
     'Ctrl+Shift+Alt+PageDown reached the shell',
   ).toEqual([]);
 
