@@ -4,20 +4,21 @@ Spec: `specs/058-machine-wide-install-msi/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Setup, installed just for me | signed off | 88102b299666 | 2026-10-22 | |
-| MT-02 | Setup, installed for everyone | signed off | 88102b299666 | 2026-10-22 | |
-| MT-03 | Declining the administrator prompt | signed off | 88102b299666 | 2026-10-22 | |
-| MT-04 | The MSI, interactively, in both scopes | signed off | 88102b299666 | 2026-10-22 | |
-| MT-05 | Upgrading or removing an everyone-install someone else is using | signed off | 88102b299666 | 2026-10-22 | |
-| MT-06 | Several copies, one running throng | signed off | 88102b299666 | 2026-10-22 | |
-| MT-07 | Uninstall keeps other people's data | signed off | 88102b299666 | 2026-10-22 | |
-| MT-08 | Downgrading a copy in place | signed off | 88102b299666 | 2026-10-22 | |
+| MT-01 | Setup, installed just for me | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-02 | Setup, installed for everyone | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-03 | Declining the administrator prompt | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-04 | The MSI, interactively, in both scopes | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-05 | Upgrading or removing an everyone-install someone else is using | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-06 | Several copies, one running throng | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-07 | Uninstall keeps other people's data | signed off | 6b63ddf8b44e | 2026-10-22 | |
+| MT-08 | Downgrading a copy in place | signed off | 6b63ddf8b44e | 2026-10-22 | |
 
 **How these were signed off.** At the maintainer's direction (2026-10-21), every group was run on
 GitHub-hosted Windows runners rather than by hand, by `scripts/verify-hand-tests.mjs` driving the
 real setup and MSI dialogs through UI Automation: `release.yml` with `hand_tests=true`, run
 [39699265655](https://github.com/Bidthedog/throng/actions/runs/39699265655) at `88102b29`, all
-eight groups green. Each group's `hand-test-MT-0N` artifact holds its per-step verdict and a
+eight groups green. The branch's history was then regrouped; `6b63ddf8`, where the sign-off is
+recorded, differs from `88102b29` only in this file. Each group's `hand-test-MT-0N` artifact holds its per-step verdict and a
 screenshot at every dialog. Steps a runner physically cannot perform are recorded as `runner-gap`
 with the stand-in used: UAC is off (no prompt to decline or approve), the desktop is already
 High integrity (the app's level is measured, not compared), and the job cannot restart mid-run.
