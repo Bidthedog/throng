@@ -17,17 +17,28 @@ never picks up the identity of the throng that hosts it.
 
 | Variable | What it controls | Default |
 |---|---|---|
-| `THRONG_CONFIG_ROOT` | The folder holding `settings.json`, `keybindings.json`, `themes\` and `icon-packs\` — see [where the files live](preferences.md#where-the-files-live). | `%USERPROFILE%\.throng` (dev run: `%USERPROFILE%\.throng-dev`) |
-| `THRONG_DATABASE_PATH` | The SQLite database holding projects, layouts and sub-workspaces. | `%APPDATA%\throng\throng.db` (dev run: `%APPDATA%\throng-dev\throng.db`) |
-| `THRONG_PIPE_NAME` | The named pipe the app and its daemon talk over. Two throngs on different pipes are fully independent. | `\\.\pipe\throng.<user>.<hash>.daemon`; `….daemon.dev` for a dev run, `….daemon.portable` for the portable build |
 | `THRONG_WINDOW_WIDTH` / `THRONG_WINDOW_HEIGHT` | The main window's starting size, in pixels. | `1280` × `800` |
 | `THRONG_PING_TIMEOUT_MS` | How long the app waits for the daemon to answer a health-check ping. | `2000` |
 | `THRONG_ATTACH_TIMEOUT_MS` | How long the app waits for a terminal to attach — sized for launching an interactive shell. | `15000` |
 | `THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS` | On close, the longest the app waits for a window to confirm its pending writes are done, so an unresponsive window cannot hold the app open. | `5000` |
 | `THRONG_AGENT_CONNECT_TIMEOUT_MS` / `THRONG_AGENT_READY_TIMEOUT_MS` | How long an elevated daemon waits for its de-elevated terminal agent to connect, then to report ready. | `15000` / `15000` |
 
+### Where an instance lives — development and testing only
+
+Every copy of throng a user installs or extracts uses that user's one data folder; there is no
+supported way to point an installed throng somewhere else. These overrides exist for development
+and the test harnesses, which run isolated throngs beside an installed one — see
+[running a dev build beside an installed throng](#running-a-dev-build-beside-an-installed-throng).
+
+| Variable | What it controls | Default |
+|---|---|---|
+| `THRONG_CONFIG_ROOT` | The folder holding `settings.json`, `keybindings.json`, `themes\` and `icon-packs\` — see [where the files live](preferences.md#where-the-files-live). | `%USERPROFILE%\.throng` (dev run: `%USERPROFILE%\.throng-dev`) |
+| `THRONG_DATABASE_PATH` | The SQLite database holding projects, layouts and sub-workspaces. | `%APPDATA%\throng\throng.db` (dev run: `%APPDATA%\throng-dev\throng.db`) |
+| `THRONG_PIPE_NAME` | The instance's **namespace**: the named pipe the app and its daemon talk over, and the one-running-throng lock (`<pipe>.instance`). Two throngs on different pipes are fully independent. | `\\.\pipe\throng.<user>.<hash>.daemon` for every installed or extracted copy; `….daemon.dev` for a dev run |
+
 `--user-data-dir=<folder>` (a command-line switch, not a variable) moves Electron's user-data folder —
-window state, editor recovery, font cache and logs — and, with it, the default database.
+window state, editor recovery, font cache and logs — and, with it, the default database. On its own it
+does **not** start a second throng beside a running one: only a different `THRONG_PIPE_NAME` does.
 
 ### Settings passed to throng's own processes
 
@@ -50,7 +61,7 @@ They are set by throng; each only mirrors a preference, so change the preference
 | `THRONG_RESTORE_TARGET` | The original path of a file being restored from the Recycle Bin by an undo. |
 | `THRONG_START_DIR` | The start folder handed to a shell whose launcher cannot start in it directly (Git Bash); the shell moves there and unsets it. |
 | `THRONG_VERSION` | The product version the app hands the daemon it starts, recorded in the daemon's crash report; `unknown` for a daemon started by hand. |
-| `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` | Set by the portable build's launcher; its presence is what gives the portable build its own pipe. |
+| `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` | Set by the portable build's launcher. throng reads them only to name the portable copy by where the user put it, rather than its temporary unpack folder; the portable build shares the user's pipe like every other copy. |
 
 ## Running a dev build beside an installed throng
 
@@ -68,7 +79,8 @@ packaged.
 The separate pipe is the load-bearing one: an instance that finds a daemon running a *different*
 build **retires it**, ending every terminal that daemon owns — so a shared pipe would mean a rebuild
 destroys the terminals in the throng you are working in. Distinct pipes also give each instance its
-own single-instance lock, so both can run at once. The overrides above (`THRONG_CONFIG_ROOT`,
+own one-running-throng lock, so both can run at once — a dev instance is never counted against the
+installed one. The overrides above (`THRONG_CONFIG_ROOT`,
 `THRONG_DATABASE_PATH`, `THRONG_PIPE_NAME`, `--user-data-dir`) still win in both modes, and a dev
 launch prints the three locations it resolved.
 
@@ -127,7 +139,8 @@ the `throng-release` skill's [publishing reference](../.claude/skills/throng-rel
 
 | Variable | What it controls | Default |
 |---|---|---|
-| `THRONG_VERDICT_FILES` | Comma-separated verification verdicts, one per declared artifact. Absent or partial means verification failed. | unset |
+| `THRONG_VERDICT_FILES` | Comma-separated verification verdicts, one per artifact-and-scope combination plus the coexistence run. Absent or partial means verification failed. | unset |
+| `THRONG_GAPS_OUT` | Where `publish-gates.mjs` writes the runner-limited checks that passed as `unproven`, so the release body and job summary can name them. | unset (not written) |
 | `THRONG_ARTIFACT_DIR` | Where the built artifacts are. | `dist/installer` |
 | `THRONG_QA_SIGNED_OFF` | `1` only when a human approved the release in the GitHub `release` Environment. | unset |
 | `THRONG_ALREADY_PUBLISHED` | `1` when a release for this version already exists. | unset |
