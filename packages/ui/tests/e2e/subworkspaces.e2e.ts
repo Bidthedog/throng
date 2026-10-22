@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { openApp, runApp as runOwnApp, reloadWindow, daemonRpc, type OpenApp } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // US7: the Sub-workspaces panel lists the user's first-class sub-workspaces and
 // lets them be renamed and deleted (delete warns then destroys). Detach (which
@@ -111,10 +112,7 @@ test('deleting an open sub-workspace closes its window', { tag: ['@core', '@wind
   await reloadWindow(win);
   await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
 
-  const [child] = await Promise.all([
-    app.waitForEvent('window'),
-    win.getByTestId('subworkspace-open-sw1').click(),
-  ]);
+  const child = await openSubWorkspaceWindow(app, win, 'sw1');
   await child.waitForLoadState('domcontentloaded');
 
   // Delete (double confirm) → the open window closes and the list empties.
@@ -138,10 +136,7 @@ test('opens a sub-workspace window that renders its panels (lazy reopen)', { tag
   await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
 
   // The Open button → a NEW window opens, mounting the sub-workspace shell.
-  const [child] = await Promise.all([
-    app.waitForEvent('window'),
-    win.getByTestId('subworkspace-open-sw1').click(),
-  ]);
+  const child = await openSubWorkspaceWindow(app, win, 'sw1');
   await child.waitForLoadState('domcontentloaded');
   try {
     // Opening marks it "loaded" for the session (green dot in the list).
@@ -203,10 +198,7 @@ test('closing the main window closes all sub-workspace windows', { tag: ['@core'
     await reloadWindow(win);
     await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
 
-    const [child] = await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('subworkspace-open-sw1').click(),
-    ]);
+    const child = await openSubWorkspaceWindow(app, win, 'sw1');
     await child.waitForLoadState('domcontentloaded');
 
     // Close the main window → the sub-workspace window closes with it.
@@ -235,10 +227,7 @@ test('persists and restores a sub-workspace window size on reopen', { tag: ['@co
     });
 
     // Open, resize, then close (close persists the bounds immediately).
-    const [child] = await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('subworkspace-open-sw1').click(),
-    ]);
+    const child = await openSubWorkspaceWindow(app, win, 'sw1');
     await child.waitForLoadState('domcontentloaded');
     await app.evaluate(({ BrowserWindow }, { urlMatch, target }) => {
       const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes(urlMatch));
@@ -293,10 +282,7 @@ test('persists and restores a sub-workspace window size on reopen', { tag: ['@co
       .toEqual(target);
 
     // Reopen → the window comes back at the saved size, not the default.
-    await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('subworkspace-open-sw1').click(),
-    ]);
+    await openSubWorkspaceWindow(app, win, 'sw1');
     const restored = await app.evaluate(({ BrowserWindow }, urlMatch) => {
       const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes(urlMatch));
       return w?.getBounds() ?? null;

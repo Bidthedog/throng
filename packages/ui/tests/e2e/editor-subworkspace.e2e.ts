@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // US10 (Delivery E): a project editor synced into a sub-workspace mirrors ONE
 // document across both windows — content typed in the main window appears in the
@@ -39,10 +40,7 @@ test('a synced project editor mirrors one document across both windows', { tag: 
       });
 
       // Open the sub-workspace window.
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       // Sync the editor Panel into the sub-workspace's Tab "T".
@@ -112,10 +110,7 @@ test('cut-line, a column paste and the language picker all work in a sub-workspa
       await win.keyboard.press('Control+c');
 
       // Open the sub-workspace window and sync the panel into it.
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
       await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await win.getByTestId('menu-item-Sync to').click();

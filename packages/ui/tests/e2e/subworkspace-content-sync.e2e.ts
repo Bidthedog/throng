@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createProject, firstPanelId, runApp, reloadWindow } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // US7 / 003 clone-sync — feedback: a sub-workspace edited in ITS OWN window must
 // propagate back to the main window so the "Sync to" menu (and the cross-window
@@ -24,10 +25,7 @@ test('a sub-workspace edited in its own window updates the main window’s sync 
     await expect(win.getByTestId('subworkspace-counts-sw1')).toContainText('1T·1P');
 
     // Open Detached A's window up front (clean, before any menu interaction).
-    const [child] = await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('subworkspace-open-sw1').click(),
-    ]);
+    const child = await openSubWorkspaceWindow(app, win, 'sw1');
     await child.waitForLoadState('domcontentloaded');
     await expect(child.getByTestId('subworkspace-window')).toHaveAttribute('data-subworkspace', 'sw1');
     await expect(child.locator('.panel-box')).toHaveCount(1);

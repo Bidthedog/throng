@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { runApp as runOwnApp, createProject, daemonRpc, reloadWindow, cleanupTemp, geom, settle, switchProject } from './harness.js';
 import { openQuickOpen, quickOpenRows, chooseQuickOpenRow } from './helpers/navigation.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /*
  * 052 US1 · T011 — a rename reaches the layout of a sub-workspace NO WINDOW HOLDS.
@@ -53,7 +54,7 @@ async function swRecord(pipeName: string): Promise<string> {
 }
 
 async function openSub(app: ElectronApplication, win: Page): Promise<Page> {
-  const [child] = await Promise.all([app.waitForEvent('window'), win.getByTestId('subworkspace-open-sw1').click()]);
+  const child = await openSubWorkspaceWindow(app, win, 'sw1');
   await child.waitForLoadState('domcontentloaded');
   await settle(child);
   return child;

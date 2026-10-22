@@ -37,6 +37,7 @@ import {
   quickOpenRowPaths,
   chooseQuickOpenRow,
 } from './helpers/navigation.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -545,10 +546,7 @@ test('in a sub-workspace window the candidate set is that window’s own root, n
       await win.evaluate(seedSubWorkspace(ownedId));
       await reloadWindow(win);
 
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
       await settle(child);
 

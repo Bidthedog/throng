@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { runApp, createProject, reloadWindow, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // FR-077 (post-Delivery-E feedback): a sub-workspace-OWNED editor (created inside a
 // sub-workspace, no owning project) can be SAVED (outside every project) and
@@ -29,10 +30,7 @@ test('a sub-workspace-owned editor saves outside projects and can be destroyed',
       await createProject(win, 'HostProj', projectRoot);
 
       // Open the sub-workspace window.
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       // The seeded panel 'p' is untyped here and owned by the sub-workspace (no

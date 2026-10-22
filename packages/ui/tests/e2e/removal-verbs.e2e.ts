@@ -6,6 +6,7 @@ import {
   type AppOptions,
   type OpenApp,
 } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -150,10 +151,7 @@ test('a sub-workspace-OWNED panel uses Destroy in its sub-workspace window', { t
     await reloadWindow(win);
     await createProject(win, 'HostProj', 'C:/c/hostproj');
 
-    const [child] = await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('subworkspace-open-sw1').click(),
-    ]);
+    const child = await openSubWorkspaceWindow(app, win, 'sw1');
     await child.waitForLoadState('domcontentloaded');
 
     // The sub-workspace OWNS panel 'p' (no backing project) → Destroy, not Close.

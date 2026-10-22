@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, reloadWindow, cleanupTemp, geom, quiesced } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 /**
  * SC-013 — constitution XI, proven to a USER (016, FR-026c/FR-028f · T127).
@@ -49,10 +50,7 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
       await quiesced(mainEditor, { what: 'main editor after typing ALPHA' });
 
       // Open the sub-workspace window and mirror the panel into it: ONE document, TWO views.
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
 
       await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
@@ -115,10 +113,7 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
       await win.keyboard.type('one\ntwo\nthree');
       await quiesced(mainEditor, { what: 'main editor after typing one/two/three' });
 
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
       await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
       await win.getByTestId('menu-item-Sync to').click();

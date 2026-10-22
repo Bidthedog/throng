@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitTabRename, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // 012 US4 (FR-005/006/010, SC-003): focus + per-type zoom survive layout changes.
 // A sensible panel stays active across every transition, and each type's
@@ -91,10 +92,7 @@ test('the main window and a detached sub-workspace hold independent active panel
       await win.locator('.project-item', { hasText: 'MainProj' }).click();
       await expect(win.locator('.panel-box')).toHaveCount(2); // main layout restored
       await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
-      const [child] = await Promise.all([
-        app.waitForEvent('window'),
-        win.getByTestId('subworkspace-open-sw1').click(),
-      ]);
+      const child = await openSubWorkspaceWindow(app, win, 'sw1');
       await child.waitForLoadState('domcontentloaded');
       await expect(child.getByTestId('panel-p')).toBeVisible();
 
