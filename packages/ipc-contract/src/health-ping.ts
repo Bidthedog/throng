@@ -60,6 +60,13 @@ export interface HealthPongResult {
    * killed along with every terminal it owns.
    */
   daemonEntry?: string;
+  /**
+   * Whether `daemonEntry` lies inside a packaged copy (058 research D7) — diagnostics. Another copy
+   * replaces a packaged daemon of a different build (FR-021a) and leaves a source-tree one alone
+   * (#192, FR-018a), but `ensureDaemon` decides that from `daemonEntry` itself, because a daemon
+   * from before 058 sends no `packaged` at all, dev or release alike (058 review A2).
+   */
+  packaged?: boolean;
 }
 
 /** Client-side outcome: the daemon answered the ping. */

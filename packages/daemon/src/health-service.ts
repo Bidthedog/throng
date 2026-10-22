@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { injectable } from 'inversify';
 import { HEALTH_PING_METHOD, type HealthPongResult } from '@throng/ipc-contract';
-import type { IElevationState } from '@throng/core';
+import { isPackagedEntry, type IElevationState } from '@throng/core';
 import type { RpcRouter } from './rpc-router.js';
 
 /** Build id stamped into dist/BUILD_ID by the build; identifies the running code. */
@@ -23,11 +23,15 @@ function readBuildId(): string {
 export class HealthService {
   private readonly startedAt = new Date().toISOString();
   private readonly buildId = readBuildId();
-  /** Which entry script this daemon is running, so a stranger's daemon is recognisable (#192). */
-  private readonly daemonEntry = process.argv[1] ?? '';
-
-  /** @param elevation reports the daemon's own integrity (FR-025b); omitted → unknown. */
-  constructor(private readonly elevation?: IElevationState) {}
+  /**
+   * @param elevation reports the daemon's own integrity (FR-025b); omitted → unknown.
+   * @param daemonEntry which entry script this daemon is running, so a stranger's daemon is
+   *   recognisable (#192) — and whether it came from a packaged copy (058 research D7).
+   */
+  constructor(
+    private readonly elevation?: IElevationState,
+    private readonly daemonEntry: string = process.argv[1] ?? '',
+  ) {}
 
   get daemonStartedAt(): string {
     return this.startedAt;
@@ -45,6 +49,7 @@ export class HealthService {
       buildId: this.buildId,
       elevated: this.elevation?.isElevated() ?? false,
       daemonEntry: this.daemonEntry,
+      packaged: isPackagedEntry(this.daemonEntry),
     };
   }
 }

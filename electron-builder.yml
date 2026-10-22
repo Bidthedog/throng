@@ -87,9 +87,15 @@ extraResources:
     to: runtime
   - from: LICENSE
     to: LICENSE
+  # 058 D9: the in-use helper and its classifier, shipped beside the install so an uninstaller (the
+  # setup's, and the MSI's custom action) can ask who is using this copy. Staged by
+  # scripts/stage-runtime.mjs from packaging/in-use.mjs + the built @throng/core classifier. The setup
+  # also embeds the same pair (packaging/installer.nsh), because an earlier install root has none.
+  - from: packages/ui/build/resources/in-use
+    to: in-use
 
 win:
-  # 042 FR-018 — three artifacts, and every filename is DECLARED rather than discovered. The
+  # 042 FR-018, 058 FR-023 — four artifacts, and every filename is DECLARED rather than discovered. The
   # declaration in packages/core/src/config/release-artifacts.ts is the contract; `npm run package`
   # is followed by `node scripts/artifact-set.mjs reconcile`, which fails the build if what is
   # produced here disagrees with it, in either direction.
@@ -98,6 +104,7 @@ win:
   # an artifact by extension any more.
   target:
     - nsis
+    - msi
     - portable
     - zip
   icon: packages/ui/assets/throng.ico
@@ -106,9 +113,30 @@ win:
   # the archive artifact gets its declared filename. `nsis` and `portable` override it below.
   artifactName: throng-${version}.${ext}
 
+# 058 FR-003a/FR-023-FR-025, research D1 -- the MSI. electron-builder's template with oneClick: false
+# already authors a dual-purpose package (ALLUSERS=2, MSIINSTALLPERUSER=1, the WixUI_InstallDir dialogs
+# with an install-scope page); packaging/msi-project.cjs rewrites the generated WiX project for
+# throng's scope default, folder, labels, in-use check and scope-page elevation (research D2/D4/D9/D10a).
+# upgradeCode is fixed and recorded here so every release upgrades the last: it is the value
+# electron-builder derives from the appId, written out so a change of appId cannot move it.
+# -sw1077 only silences WiX's warning that a Property VALUE holds '[' (the custom actions' PowerShell is
+# stored in Property rows so Windows Installer's formatter never rewrites it); -wx stays on for the rest.
+msi:
+  oneClick: false
+  perMachine: false
+  artifactName: throng-${version}.${ext}
+  upgradeCode: 8772146F-5B7B-51AB-B403-AB0565F2084D
+  runAfterFinish: true
+  createStartMenuShortcut: true
+  additionalWixArgs:
+    - -sw1077
+
+# 058 research D1 -- rewrites the MSI's WiX project before it is compiled. Needs @throng/core built.
+msiProjectCreated: packaging/msi-project.cjs
+
 # A single self-extracting executable: download it, double-click it, throng runs. No install, no
 # administrator rights (020 FR-012 and FR-040 both still hold — see specs/042, "Requirements this
-# feature supersedes"; machine-wide install is #361, not this).
+# feature supersedes"). Machine-wide installation is the setup's and the MSI's (spec 058).
 #
 # It unpacks itself before running, and throng is deliberately NOT asar-packed (020 FR-009): it
 # ships its workspace packages/* tree verbatim plus a bundled host-Node runtime. So the unpack is
@@ -124,13 +152,20 @@ portable:
 # configuration section. Neither of the portable target's two risks applies to it: nothing
 # self-extracts, and deleting the folder is the whole uninstall.
 
-# Per-user (no administrator) install (FR-012/040). The uninstaller "also delete my data" checkbox
-# (FR-021) and the install-time downgrade refusal (FR-016a) are added via a custom NSIS include in
-# a follow-up task (packages/ui/build/installer.nsh).
+# The setup offers BOTH scopes (058 FR-001/FR-005): the install-mode page lists "Only for me"
+# (the default, per-user, no administrator; 020 FR-012/040) and "Anyone who uses this computer"
+# (machine-wide, one elevation prompt at the page). `perMachine: false` keeps per-user the default and
+# `allowElevation: true` is what makes the second choice selectable for a non-administrator.
+#
+# The template is adapted through `include:` below, NOT `script:` -- a custom NSIS script makes
+# electron-builder skip the uninstaller pass, so no uninstaller would be produced (specs/058
+# research D3; packaging/nsis/UPSTREAM.md). The downgrade refusal, the in-use check and the
+# "also delete my data" prompt (020 FR-016a/018/019/021) live in packaging/installer.nsh and the
+# two vendored template files in packaging/nsis/.
 nsis:
   perMachine: false
   oneClick: false
-  allowElevation: false
+  allowElevation: true
   # Let the user pick the install folder (the wizard shows a directory page). Per-user still, so no
   # admin rights and the default stays %LOCALAPPDATA%\Programs\throng.
   allowToChangeInstallationDirectory: true

@@ -43,6 +43,20 @@ export type {
   IConfigSettings,
 } from './config/settings.js';
 export { defaultPipeName, sanitisePipeToken } from './config/pipe-endpoint.js';
+export {
+  INSTANCE_LOCK_SUFFIX,
+  copyIdentity,
+  differentCopyNoticeText,
+  formatLaunchMessage,
+  instanceLockName,
+  isPackagedEntry,
+  isSameCopy,
+  parseLaunchMessage,
+} from './config/instance-identity.js';
+export type { CopyIdentity, DifferentCopyNotice, LaunchMessage } from './config/instance-identity.js';
+export * from './config/install-in-use.js';
+export { ELEVATION_DECLINED_TEXT, MACHINE_SCOPE_CONDITION, transformMsiProject } from './config/msi-project.js';
+export type { MsiProjectOptions } from './config/msi-project.js';
 export { TERMINAL_END_TIMEOUT_MS } from './config/terminal-limits.js';
 export { compareVersions, isPlaceholderVersion, matchReleaseVersions } from './config/product-version.js';
 export type { ReleaseVersionSources, VersionMatchResult } from './config/product-version.js';
@@ -56,28 +70,45 @@ export type {
   LiveTerminalChoiceOutcome,
 } from './config/install-handoff.js';
 export {
+  COEXISTENCE_STEPS,
+  RUNNER_LIMITED_STEPS,
   VERIFICATION_STEPS,
   buildArtifactVerdict,
+  buildCoexistenceVerdict,
   buildSetVerdict,
-  isVerdictPassingForSet,
+  evaluateVerification,
+  firstCoexistenceProblem,
+  isCoexistenceVerdictPassing,
+  isVerdictPassingForCombinations,
+  unprovenGaps,
 } from './config/verification-verdict.js';
 export type {
   ArtifactVerdict,
+  CoexistenceCopy,
+  CoexistenceStep,
+  CoexistenceVerdict,
   StepOutcome,
+  StepResult,
+  UnprovenGap,
+  VerificationEvaluation,
+  VerificationEvidence,
   VerificationStep,
   VerificationVerdict,
 } from './config/verification-verdict.js';
 export {
   END_STATE_STEPS,
+  combinationsOf,
   declareArtifactSet,
   reconcileArtifactSet,
   resolveArtifact,
 } from './config/release-artifacts.js';
 export type {
+  InstallScope,
   ReconcileResult,
   ReleaseArtifact,
   ReleaseArtifactRole,
   ReleaseArtifactSet,
+  VerificationCombination,
 } from './config/release-artifacts.js';
 export {
   NO_USER_VISIBLE_CHANGES,

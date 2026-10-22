@@ -28,6 +28,7 @@ import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
 import { TransferCompletionHost } from './explorer/transfer-completion.js';
 import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
+import { DifferentCopyNotice } from './common/different-copy-notice.js';
 import { ClashPrompt } from './explorer/clash-prompt.js';
 import { PasteQuitPrompt } from './explorer/paste-quit-prompt.js';
 import { useResize } from './util/use-resize.js';
@@ -577,6 +578,8 @@ export function App(): ReactElement {
               they are mounted here and not in the explorer. */}
           <TransferCompletionHost />
           <PasteProgressNotice />
+          {/* 058 FR-018 — a launch of a different copy, reported in the main window only. */}
+          <DifferentCopyNotice />
           <ClashPrompt />
           <PasteQuitPrompt />
         </div>

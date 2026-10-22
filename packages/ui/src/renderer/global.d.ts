@@ -33,6 +33,15 @@ declare global {
           list: Array<{ panelId: string; panelTitle: string; windowTitle?: string }>,
         ) => void;
       };
+      /**
+       * 058 FR-018 — a launch of a different copy reached this running instance. `onDifferentCopy`
+       * subscribes; `differentCopyReady` tells main this window is listening, so a launch that
+       * arrived before it loaded is delivered rather than dropped.
+       */
+      instance?: {
+        onDifferentCopy: (cb: (notice: import('@throng/core').DifferentCopyNotice) => void) => () => void;
+        differentCopyReady: () => void;
+      };
       /** 029 / #182 — daemon liveness, pushed rather than pulled. */
       daemon?: {
         state: () => Promise<import('@throng/core').DaemonState>;

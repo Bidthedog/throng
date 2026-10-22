@@ -19,6 +19,7 @@ import {
 } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
+  instanceLockName,
   parseKeybindings,
   parseSettingsGuarded,
   // 033 FR-069a — the index is keyed by root, the daemon keys projects by id; this is what makes
@@ -43,6 +44,7 @@ import {
   providersTurnedOff,
 } from '@throng/core';
 import type {
+  DifferentCopyNotice,
   IClipboard,
   IExecutableExtensions,
   IFileSystem,
@@ -51,7 +53,8 @@ import type {
   IRefusedUriSchemes,
   IShellIntegration,
 } from '@throng/core';
-import { createUiContainer, UI_TYPES } from './composition-root.js';
+import { createUiContainer, uiDefaultPipeName, UI_TYPES } from './composition-root.js';
+import { DIFFERENT_COPY_NOTICE_CHANNEL, DIFFERENT_COPY_READY_CHANNEL } from './instance-notice-channels.js';
 import { appIcon } from './app-icon.js';
 import { registerLinkUriIpc, registerOpenExternalIpc } from './external-url.js';
 import { notifySettingsSubscribers, type SettingsSubscriber } from './settings-subscribers.js';
@@ -89,11 +92,13 @@ import { openInEditorOrPreview } from './open-document-check.js';
 import { openPreferences, isPreferencesTab, type PreferencesWindowDeps } from './preferences-window.js';
 import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
-import { acquireSingleInstance } from './single-instance.js';
+import { createInstanceGuard } from './instance-guard.js';
+import { readUiSettings } from './ui-settings.js';
 import { installCrashHandlers, startUiDiagnostics } from './diagnostics.js';
 import { registerNoticeLogIpc } from './notice-log.js';
 import { registerRendererDebugLogIpc } from './renderer-debug-log.js';
 import {
+  copyExecPath,
   hasUserDataDirSwitch,
   instanceConfigRoot,
   instanceDatabasePath,
@@ -105,6 +110,7 @@ import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
 import { registerGhostIpc, setGhostTheme, disposeGhost } from './ghost-window.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
+import { loadFirstDocument } from './first-load.js';
 import { WindowManager } from './window-manager.js';
 import { pickFolder } from './pick-folder.js';
 import { FileLinkResolver } from './file-link-resolver.js';
@@ -431,7 +437,9 @@ async function createMainWindow(
     saveWindowState(statePath, { ...bounds, maximized: window.isMaximized() });
   });
 
-  await window.loadFile(resolveFromHere('../renderer/index.html'), { query: rendererQuery() });
+  await loadFirstDocument(window.webContents, () =>
+    window.loadFile(resolveFromHere('../renderer/index.html'), { query: rendererQuery() }),
+  );
   return window;
 }
 
@@ -620,6 +628,12 @@ function configuredDiagnostics(): AppSettings['diagnostics'] {
 const startupDiagnostics = configuredDiagnostics();
 const startupLogLevel: LogLevel = startupDiagnostics.logLevel;
 
+/** The product version (020 FR-001) — for the startup log, and the instance guard's launch message. */
+const startupVersion = readProductInfo([
+  resolveFromHere('../../../../package.json'),
+  join(app.getAppPath(), 'package.json'),
+]).version;
+
 const diagnostics = startUiDiagnostics({
   level: startupLogLevel,
   policy: {
@@ -627,10 +641,7 @@ const diagnostics = startUiDiagnostics({
     keep: startupDiagnostics.keepFiles,
   },
   userDataDir: app.getPath('userData'),
-  version: readProductInfo([
-    resolveFromHere('../../../../package.json'),
-    join(app.getAppPath(), 'package.json'),
-  ]).version,
+  version: startupVersion,
   buildId: readBuildId(resolveFromHere('../../../daemon/dist/BUILD_ID')),
 });
 diagnostics.log.attachConsole();
@@ -661,25 +672,108 @@ ipcMain.on('throng:appClose:drainReady', (event) => {
   contents.once('destroyed', () => drainableWindows.delete(contents.id));
 });
 
-// Single-instance: a second launch focuses the existing window and exits, rather
-// than starting a rival instance that would fracture project/terminal ownership.
-const isPrimaryInstance = acquireSingleInstance(app, () => {
-  const [existing] = BrowserWindow.getAllWindows();
-  if (existing) {
-    // Recover a window the user "lost" — e.g. left on a now-disconnected monitor:
-    // move it onto a visible display before focusing, so a second launch un-hides
-    // it rather than silently doing nothing.
-    const di = new ElectronDisplayInfo(() => screen.getAllDisplays());
-    const b = existing.getBounds();
-    if (!di.isVisible(b)) {
-      const v = di.clampToVisible(b);
-      existing.setBounds({ x: v.x, y: v.y, width: v.width, height: v.height });
-    }
-    if (existing.isMinimized()) existing.restore();
-    existing.show();
-    existing.focus();
+/**
+ * The main window, once it exists — where a launch of another copy is reported (058 FR-018). Set
+ * after `createMainWindow`; until then a second launch has nothing to bring forward.
+ */
+let instanceMainWindow: BrowserWindow | undefined;
+
+/**
+ * The different-copy notice's delivery (058 FR-018, D5a). The main window's renderer announces when
+ * it is listening (`DIFFERENT_COPY_READY_CHANNEL`); a launch that arrives before that — during
+ * startup, or across a reload — is held and delivered on the announcement, rather than sent into a
+ * window that would drop it. Only the latest is held: the notice shows one launched copy, the last.
+ * Registered at module scope for the reason `drainReady` is, above.
+ */
+let differentCopyListener: WebContents | undefined;
+let pendingDifferentCopy: DifferentCopyNotice | undefined;
+ipcMain.on(DIFFERENT_COPY_READY_CHANNEL, (event) => {
+  const contents = event.sender;
+  differentCopyListener = contents;
+  contents.once('destroyed', () => {
+    if (differentCopyListener === contents) differentCopyListener = undefined;
+  });
+  if (pendingDifferentCopy) {
+    contents.send(DIFFERENT_COPY_NOTICE_CHANNEL, pendingDifferentCopy);
+    pendingDifferentCopy = undefined;
   }
 });
+function showDifferentCopyNotice(notice: DifferentCopyNotice): void {
+  if (differentCopyListener && !differentCopyListener.isDestroyed()) {
+    differentCopyListener.send(DIFFERENT_COPY_NOTICE_CHANNEL, notice);
+  } else {
+    pendingDifferentCopy = notice;
+  }
+}
+
+/** Bring the main window forward for a second launch: restore, onto a visible display, show, focus. */
+function bringMainWindowForward(): void {
+  const existing =
+    instanceMainWindow && !instanceMainWindow.isDestroyed() ? instanceMainWindow : BrowserWindow.getAllWindows()[0];
+  if (!existing) return;
+  // Recover a window the user "lost" — e.g. left on a now-disconnected monitor: move it onto a
+  // visible display before focusing, so a second launch un-hides it rather than silently doing nothing.
+  const di = new ElectronDisplayInfo(() => screen.getAllDisplays());
+  const b = existing.getBounds();
+  if (!di.isVisible(b)) {
+    const v = di.clampToVisible(b);
+    existing.setBounds({ x: v.x, y: v.y, width: v.width, height: v.height });
+  }
+  if (existing.isMinimized()) existing.restore();
+  existing.show();
+  existing.focus();
+}
+
+/*
+ * One running throng per user (058 FR-018, FR-018b; contracts/instance-lock.md). A second launch —
+ * of this copy or any other, whatever switches it carries — brings this window forward and exits,
+ * rather than starting a rival instance that would fracture project/terminal ownership.
+ *
+ * Here, after the dev-userData redirection (the guard's primary path takes Electron's lock, which is
+ * keyed to userData) and before `app.whenReady()`. The lock is derived from the daemon's namespace,
+ * so a dev build or a test run — each in its own namespace — never meets the installed copy's lock
+ * (FR-018a). Top-level await: the pipe's `listen` is asynchronous, and nothing below may run in a
+ * launch that is about to quit.
+ */
+/** This instance's UI settings — resolved ONCE: the lock below and the container share its `pipeName`. */
+const instanceUiSettings = readUiSettings(process.env, uiDefaultPipeName(isDevInstance));
+const instanceRole = await createInstanceGuard({
+  lockName: instanceLockName(instanceUiSettings.pipeName),
+  // The portable build's execPath is a per-launch temp folder; this names the user's copy (review A3).
+  self: { execPath: copyExecPath(process.execPath, process.env), version: startupVersion },
+  legacyLock: {
+    request: () => app.requestSingleInstanceLock(),
+    onSecondInstance: (listener) => app.on('second-instance', (_event, argv) => listener(argv)),
+  },
+  bringForward: () => bringMainWindowForward(),
+  showDifferentCopyNotice,
+  log: (message) => diagnostics.log.info(message),
+}).acquire();
+const isPrimaryInstance = instanceRole === 'primary';
+if (instanceRole === 'yields-to-legacy') {
+  diagnostics.log.info('an older throng is already running for this user; it brings itself forward');
+  app.quit();
+} else if (instanceRole === 'secondary') {
+  // The guard has already logged what happened to the launch message, truthfully.
+  app.quit();
+} else if (instanceRole === 'unreachable') {
+  /*
+   * Review A1 — the running throng was started as administrator, and a normal launch may not reach
+   * it, so nothing came forward. Still no second instance (constitution, Single instance), but the
+   * user is told why nothing happened, from this process, before it exits. Says what is wrong and
+   * what resolves it — not merely what may not be done.
+   */
+  void app.whenReady().then(async () => {
+    await dialog.showMessageBox({
+      type: 'info',
+      title: 'throng',
+      message: 'throng is already running as administrator.',
+      detail: 'Switch to that window, or close it to open throng from here.',
+      buttons: ['OK'],
+    });
+    app.quit();
+  });
+}
 
 if (isPrimaryInstance)
   app.whenReady().then(async () => {
@@ -688,7 +782,7 @@ if (isPrimaryInstance)
   // and set below, once its dependencies (the resolved paths + main window) exist.
   Menu.setApplicationMenu(null);
 
-  const container = createUiContainer();
+  const container = createUiContainer(instanceUiSettings);
   const settings = container.get<IUiSettings>(UI_TYPES.UiSettings);
   const daemonClient = container.get<DaemonClient>(UI_TYPES.DaemonClient);
 
@@ -1920,6 +2014,7 @@ if (isPrimaryInstance)
     shellIntegration,
   );
   windowManager.registerMain(mainWindow);
+  instanceMainWindow = mainWindow; // a second launch brings THIS window forward (058 FR-018)
   /*
    * 044 FR-063 — a preview provider turned off, MAIN's half (contracts/preview-ipc.md §5).
    *
@@ -2359,7 +2454,10 @@ if (isPrimaryInstance)
         statePath,
         themeBackground(),
         shellIntegration,
-      ).then((w) => windowManager.registerMain(w));
+      ).then((w) => {
+        windowManager.registerMain(w);
+        instanceMainWindow = w;
+      });
     }
   });
 });
