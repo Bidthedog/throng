@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeReleaseBody, lookupReleaseNotes } from '../../src/index.js';
+import { composeReleaseBody, declareArtifactSet, lookupReleaseNotes } from '../../src/index.js';
 import type { ReleaseArtifact } from '../../src/index.js';
 
 /**
@@ -44,7 +44,9 @@ const ARTIFACTS: ReleaseArtifact[] = [
   {
     role: 'setup',
     filename: 'throng-setup-1.2.3.exe',
-    label: 'Installer (per-user setup)',
+    label: 'Installer (setup)',
+    audience: 'Most people: installs for you, or for everyone on the machine',
+    scopes: ['per-user', 'machine'],
     applicableSteps: [],
     sha256: 'a'.repeat(64),
   },
@@ -52,6 +54,8 @@ const ARTIFACTS: ReleaseArtifact[] = [
     role: 'portable',
     filename: 'throng-portable-1.2.3.exe',
     label: 'Portable',
+    audience: 'Run without installing',
+    scopes: [],
     applicableSteps: [],
     sha256: 'b'.repeat(64),
   },
@@ -224,6 +228,58 @@ describe('composeReleaseBody — a release with nothing user-visible (042 FR-009
     expect(body).toMatch(/No user-visible changes/i);
     expect(body).toContain('SHA-256');
     expect(body).toContain(COMMIT);
+  });
+});
+
+/**
+ * 058 FR-032/FR-033 — the MSI gets its own checksum row, and the body says which download suits whom.
+ */
+describe('composeReleaseBody — four artifacts and their audiences (058 FR-032/FR-033)', () => {
+  const notes = lookupReleaseNotes(CHANGELOG, '1.2.3').found!;
+  const FOUR = declareArtifactSet('1.2.3').artifacts.map((a, i) => ({
+    ...a,
+    sha256: String(i + 1).repeat(64),
+  }));
+  const body = composeReleaseBody({ notes, artifacts: FOUR, commitSha: COMMIT });
+
+  it('carries each artifact’s audience line beside its filename', () => {
+    expect(FOUR).toHaveLength(4);
+    for (const artifact of FOUR) {
+      const row = body.split('\n').find((l) => l.includes(artifact.filename));
+      expect(row, artifact.filename).toBeDefined();
+      expect(row).toContain(artifact.audience);
+    }
+  });
+
+  it('has one SHA-256 row per artifact, the MSI’s against its own filename', () => {
+    const rows = body.split('\n').filter((l) => /\|\s*`[0-9]{64}`\s*\|$/.test(l));
+    expect(rows).toHaveLength(4);
+    const msi = FOUR.find((a) => a.role === 'msi')!;
+    expect(rows.find((l) => l.includes(msi.filename))).toContain(msi.sha256);
+  });
+
+  it('keeps the unsigned warning (020 FR-043)', () => {
+    expect(body).toMatch(/not code-signed/i);
+    expect(body).toMatch(/More info/i);
+  });
+
+  it('says nothing about verification gaps when there are none', () => {
+    expect(body).not.toMatch(/verification gap/i);
+  });
+
+  it('lists every unproven step by combination, step and reason, above the table', () => {
+    const gaps = [
+      { combination: 'setup-machine', step: 'second-account', reason: 'no desktop for a second account' },
+      { combination: 'msi-machine', step: 'second-account', reason: 'no desktop for a second account' },
+    ] as const;
+    const withGaps = composeReleaseBody({ notes, artifacts: FOUR, commitSha: COMMIT, verificationGaps: gaps });
+    expect(withGaps).toMatch(/verification gaps/i);
+    for (const gap of gaps) {
+      const line = withGaps.split('\n').find((l) => l.includes(gap.combination) && l.includes(gap.step));
+      expect(line, gap.combination).toContain(gap.reason);
+    }
+    expect(withGaps.search(/verification gaps/i)).toBeLessThan(withGaps.indexOf('SHA-256'));
+    expect(withGaps.indexOf('Built from')).toBeGreaterThan(withGaps.indexOf('SHA-256'));
   });
 });
 

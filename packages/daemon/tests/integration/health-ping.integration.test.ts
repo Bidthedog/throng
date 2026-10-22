@@ -70,6 +70,20 @@ describe('daemon health.ping IPC', () => {
     expect(typeof response.result.pid).toBe('number');
     expect(response.result.daemonStartedAt).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
     expect(Number.isNaN(Date.parse(response.result.daemonStartedAt))).toBe(false);
+    // 058 research D7: a daemon started from the source tree says it is not packaged, so another
+    // copy's `ensureDaemon` leaves it alone rather than replacing it (FR-018a).
+    expect(response.result.packaged).toBe(false);
+  });
+
+  it('reports packaged: true for a daemon whose entry lies under a packaged resources\\app tree (058 D7)', () => {
+    const service = new HealthService(
+      undefined,
+      'C:\\Program Files\\throng\\resources\\app\\packages\\daemon\\dist\\main.js',
+    );
+    expect(service.ping().packaged).toBe(true);
+    expect(new HealthService(undefined, 'D:\\git\\throng\\packages\\daemon\\dist\\main.js').ping().packaged).toBe(
+      false,
+    );
   });
 
   it('returns a JSON-RPC method-not-found error for unknown methods', async () => {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  combinationsOf,
   declareArtifactSet,
+  END_STATE_STEPS,
   reconcileArtifactSet,
   resolveArtifact,
   VERIFICATION_STEPS,
@@ -137,5 +139,130 @@ describe('reconcileArtifactSet (042 FR-013)', () => {
   it('ignores files that are not artifacts at all, rather than calling them unexpected', () => {
     const result = reconcileArtifactSet(declared, [...allFilenames, 'builder-debug.yml', 'latest.yml']);
     expect(result.matched).toBe(true);
+  });
+
+  it('treats .msi as an artifact extension (058 FR-027): an undeclared MSI fails, a missing one is named', () => {
+    const extra = reconcileArtifactSet(declared, [...allFilenames, 'throng-9.9.9.msi']);
+    expect(extra.matched).toBe(false);
+    expect(extra.unexpected).toEqual(['throng-9.9.9.msi']);
+
+    const missing = reconcileArtifactSet(
+      declared,
+      allFilenames.filter((f) => !f.endsWith('.msi')),
+    );
+    expect(missing.matched).toBe(false);
+    expect(missing.missing).toEqual([`throng-${VERSION}.msi`]);
+  });
+});
+
+/**
+ * 058 FR-003a/FR-026/FR-033 — the MSI is a role in the declared set; setup and MSI offer both install
+ * scopes; every artifact says who it is for.
+ */
+describe('the MSI role and install scopes (058 FR-003a, FR-026, FR-033)', () => {
+  const set = declareArtifactSet(VERSION);
+
+  it('declares four artifacts, the MSI among them, resolved by role', () => {
+    expect(set.artifacts.map((a) => a.role).sort()).toEqual(['archive', 'msi', 'portable', 'setup']);
+    const msi = resolveArtifact(set, 'msi');
+    expect(msi.filename).toBe(`throng-${VERSION}.msi`);
+    expect(msi.label).toBe('Installer (MSI, for managed deployment)');
+  });
+
+  it('labels the setup without naming a scope, since it offers both (FR-003)', () => {
+    const label = resolveArtifact(set, 'setup').label;
+    expect(label).toBe('Installer (setup)');
+    expect(label).not.toMatch(/per-user|machine|all users/i);
+  });
+
+  it('gives setup and msi both scopes, and portable and archive none (FR-003)', () => {
+    expect(resolveArtifact(set, 'setup').scopes).toEqual(['per-user', 'machine']);
+    expect(resolveArtifact(set, 'msi').scopes).toEqual(['per-user', 'machine']);
+    expect(resolveArtifact(set, 'portable').scopes).toEqual([]);
+    expect(resolveArtifact(set, 'archive').scopes).toEqual([]);
+  });
+
+  it('gives every artifact a one-line audience for the release body (FR-033)', () => {
+    for (const artifact of set.artifacts) {
+      expect(artifact.audience.trim()).not.toBe('');
+      expect(artifact.audience).not.toContain('\n');
+    }
+  });
+
+  it('checks the install labels on every installer, whatever its scope (FR-017b)', () => {
+    expect(resolveArtifact(set, 'setup').applicableSteps).toContain('install-labels');
+    expect(resolveArtifact(set, 'msi').applicableSteps).toContain('install-labels');
+  });
+});
+
+describe('combinationsOf (058 FR-028, FR-030)', () => {
+  const combos = combinationsOf(declareArtifactSet(VERSION));
+  const byId = (id: string) => {
+    const found = combos.find((c) => c.id === id);
+    if (!found) throw new Error(`no combination ${id}`);
+    return found;
+  };
+
+  it('yields exactly one combination per artifact-and-scope, in a fixed order', () => {
+    expect(combos.map((c) => c.id)).toEqual([
+      'setup-user',
+      'setup-machine',
+      'msi-user',
+      'msi-machine',
+      'portable',
+      'archive',
+    ]);
+  });
+
+  it('names each verdict file for its combination', () => {
+    for (const c of combos) expect(c.verdictFile).toBe(`verification-verdict-${c.id}.json`);
+  });
+
+  it('carries the role and the scope, null for an artifact without scopes', () => {
+    expect(byId('msi-machine')).toMatchObject({ role: 'msi', scope: 'machine' });
+    expect(byId('setup-user')).toMatchObject({ role: 'setup', scope: 'per-user' });
+    expect(byId('portable').scope).toBeNull();
+    expect(byId('archive').scope).toBeNull();
+  });
+
+  it('adds the standard-account install to every per-user combination (FR-006)', () => {
+    expect(byId('setup-user').applicableSteps).toContain('standard-account-install');
+    expect(byId('msi-user').applicableSteps).toContain('standard-account-install');
+    expect(byId('setup-machine').applicableSteps).not.toContain('standard-account-install');
+  });
+
+  it('adds the second-account, in-use and not-elevated steps to every machine-wide combination', () => {
+    for (const id of ['setup-machine', 'msi-machine']) {
+      for (const step of ['second-account', 'in-use-upgrade', 'not-elevated-launch']) {
+        expect(byId(id).applicableSteps).toContain(step);
+      }
+    }
+    expect(byId('setup-user').applicableSteps).not.toContain('second-account');
+  });
+
+  it('adds silent-elevation-refused to the setup’s machine-wide combination only (FR-010)', () => {
+    expect(byId('setup-machine').applicableSteps).toContain('silent-elevation-refused');
+    expect(byId('msi-machine').applicableSteps).not.toContain('silent-elevation-refused');
+    expect(byId('setup-user').applicableSteps).not.toContain('silent-elevation-refused');
+  });
+
+  it('puts install-labels and no-write on every setup and msi combination', () => {
+    for (const id of ['setup-user', 'setup-machine', 'msi-user', 'msi-machine']) {
+      expect(byId(id).applicableSteps).toContain('install-labels');
+      expect(byId(id).applicableSteps).toContain('no-write');
+    }
+  });
+
+  it('leaves portable and archive with their own steps only', () => {
+    const artifact = resolveArtifact(declareArtifactSet(VERSION), 'portable');
+    expect(byId('portable').applicableSteps).toEqual(artifact.applicableSteps);
+  });
+
+  it('holds every combination to the same end state (042 FR-015)', () => {
+    for (const c of combos) for (const step of END_STATE_STEPS) expect(c.applicableSteps).toContain(step);
+  });
+
+  it('stays within the step vocabulary', () => {
+    for (const c of combos) for (const step of c.applicableSteps) expect(VERIFICATION_STEPS).toContain(step);
   });
 });

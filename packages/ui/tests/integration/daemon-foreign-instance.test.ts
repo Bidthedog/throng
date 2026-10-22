@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:net';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDaemon } from '../../src/main/daemon-lifecycle.js';
@@ -59,8 +59,11 @@ async function fakeDaemon(pipeName: string, pong: Record<string, unknown>): Prom
  * build makes `stale` false, so `ensureDaemon` returns before it ever reaches the guard under test.
  * The fixture has to be a build, not merely a file.
  */
-function entryFile(buildId: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'throng-192-'));
+function entryFile(buildId: string, layout: 'source' | 'packaged' = 'source'): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-192-'));
+  // A packaged copy is not asar-packed, so its daemon runs from under `resources\app` (058 D7).
+  const dir = layout === 'packaged' ? join(root, 'resources', 'app', 'packages', 'daemon', 'dist') : root;
+  mkdirSync(dir, { recursive: true });
   const file = join(dir, 'main.js');
   writeFileSync(file, '// daemon entry', 'utf8');
   writeFileSync(join(dir, 'BUILD_ID'), buildId, 'utf8');
@@ -71,11 +74,11 @@ let seq = 0;
 const pipe = (): string => `\\\\.\\pipe\\throng-192-${process.pid}-${seq++}`;
 
 describe('ensureDaemon and another instance (#192)', () => {
-  it('leaves a daemon belonging to a DIFFERENT entry alone, however stale it looks', async () => {
+  it('leaves a daemon started from a DEVELOPMENT tree alone, however stale it looks', async () => {
     const pipeName = pipe();
-    const ours = entryFile('our-current-build');
-    // A daemon on our pipe reporting a mismatching build id AND a different entry — which is exactly
-    // what a packaged install, or another worktree, looks like from here.
+    const ours = entryFile('our-current-build', 'packaged');
+    // A daemon on our pipe reporting a mismatching build id AND a different entry, from a source
+    // checkout — another worktree, or a developer's `npm start` (058 FR-018a keeps it safe).
     //
     // The other instance's entry must EXIST: #429 retires a daemon whose entry is gone from disk,
     // whoever it belongs to. This used a hardcoded `E:/tools/throng/…` path, which only ever
@@ -87,6 +90,7 @@ describe('ensureDaemon and another instance (#192)', () => {
       pid: 999_999,
       buildId: 'someone-elses-build',
       daemonEntry: theirs,
+      packaged: false,
     });
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
@@ -103,6 +107,103 @@ describe('ensureDaemon and another instance (#192)', () => {
     expect(kill).not.toHaveBeenCalled();
     expect(res.spawned).toBe(false);
     expect(res.foreign).toBe(true);
+  }, 30_000);
+
+  /*
+   * 058 FR-021a (research D7): each user has ONE daemon, shared by every copy. Starting a copy of a
+   * different build replaces it — ending its terminals, with no prompt — exactly as a stale build of
+   * our own is replaced. Under #192 as first written that daemon was "foreign" and left squatting on
+   * the pipe, so the new copy could start no daemon at all.
+   */
+  it('retires a different-build daemon from ANOTHER PACKAGED copy on our pipe (058 FR-021a)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-current-build', 'packaged');
+    const theirs = entryFile('other-copy-build', 'packaged');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_996,
+      buildId: 'other-copy-build',
+      daemonEntry: theirs,
+      packaged: true,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
+      () => undefined,
+    );
+
+    expect(res?.foreign).not.toBe(true);
+    expect(kill).toHaveBeenCalledWith(999_996);
+  }, 30_000);
+
+  it('retires a pre-058 RELEASE daemon (no packaged field, entry under resources\\app) (058 D7)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-current-build', 'packaged');
+    const theirs = entryFile('pre-058-build', 'packaged');
+    await fakeDaemon(pipeName, { status: 'ok', pid: 999_995, buildId: 'pre-058-build', daemonEntry: theirs });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
+      () => undefined,
+    );
+
+    expect(kill).toHaveBeenCalledWith(999_995);
+  }, 30_000);
+
+  /*
+   * Review A2. Whether the stranger is a dev daemon is read from its ENTRY, here, not from a field it
+   * has to volunteer: a dev daemon built before 058 reports no `packaged` field, and taking absence
+   * to mean "packaged" would retire a developer's running terminals.
+   */
+  it('leaves a PRE-058 dev-tree daemon alone though it reports no packaged field (058 review A2)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-current-build', 'packaged');
+    const theirs = entryFile('pre-058-dev-build');
+    await fakeDaemon(pipeName, { status: 'ok', pid: 999_992, buildId: 'pre-058-dev-build', daemonEntry: theirs });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(res).toEqual({ spawned: false, foreign: true });
+  }, 30_000);
+
+  it('a development build never retires a packaged copy’s daemon (058 FR-018a)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-dev-build');
+    const theirs = entryFile('installed-build', 'packaged');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_994,
+      buildId: 'installed-build',
+      daemonEntry: theirs,
+      packaged: true,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(res).toEqual({ spawned: false, foreign: true });
+  }, 30_000);
+
+  it('reuses a SAME-build daemon started by another packaged copy, so its terminals reattach (058 FR-021)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('shared-build', 'packaged');
+    const theirs = entryFile('shared-build', 'packaged');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_993,
+      buildId: 'shared-build',
+      daemonEntry: theirs,
+      packaged: true,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000 });
+
+    expect(res).toEqual({ spawned: false });
+    expect(kill).not.toHaveBeenCalled();
   }, 30_000);
 
   it('still retires OUR daemon when its build is stale — the mechanism is not disabled', async () => {

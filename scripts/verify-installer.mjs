@@ -4,12 +4,22 @@
 // bound to the exact package {version, installerSha256}. Designed to run on a fresh CI runner
 // (a real "clean machine"); an ABSENT verdict is a failure, never a pass (FR-027).
 //
-// Usage: node scripts/verify-installer.mjs <path-to-installer.exe> [--expected-version X]
-//        [--verdict-out verdict.json] [--expected-sha <sha256>]
+// Usage: node scripts/verify-installer.mjs <artifact> --role <role> [--scope per-user|machine]
+//        --expected-version X [--verdict-out verdict.json] [--expected-sha <sha256>]
+//        node scripts/verify-installer.mjs --coexistence [--dir dist/installer] --expected-version X
+//
+// One run verifies ONE combination of artifact and install scope (058 FR-028) and writes that
+// combination's own verdict. `--scope` is required for the roles that have one (setup, msi) and
+// refused for the ones that do not (portable, archive).
 //
 // Steps (each recorded pass/fail; the first failure names the verdict's failedStep):
-//   interrupted-install → install → launch → version-match → self-contained → shortcut →
-//   no-service → core-journey → reattach → checksum-match → no-write → uninstall → residue-scan
+//   interrupted-install → install → install-labels → launch → version-match → self-contained →
+//   shortcut → no-service → core-journey → reattach → checksum-match → no-write → uninstall →
+//   residue-scan
+// plus, by scope (contracts/verification-matrix.md):
+//   per-user: standard-account-install
+//   machine:  second-account, in-use-upgrade, not-elevated-launch, and for the setup
+//             silent-elevation-refused
 //
 // NOTE: `launch` drives the INSTALLED app through Playwright's Electron launcher and requires a
 // real window to appear — so a main-process crash at startup (e.g. an unresolved import) FAILS
@@ -20,25 +30,42 @@
 // installed manifest, checksum, uninstall, residue) are exercised here.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
-import { homedir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   buildArtifactVerdict,
+  combinationsOf,
   declareArtifactSet,
   matchReleaseVersions,
-  resolveArtifact,
 } from '@throng/core';
 import { sha256OfFile } from './checksum.mjs';
 import { scanResidue } from './residue-scan.mjs';
+import { installLayout, parseVerifyArgs } from './verify-installer-args.mjs';
+import {
+  installLabelsCorrect,
+  launchShortcutExistsFor,
+  makeSharedDir,
+  notElevatedLaunch,
+  removeSharedDir,
+  reportInstallLogs,
+  runCommand,
+  secondAccountAndInUse,
+  silentElevationRefused,
+  standardAccountInstall,
+} from './verify-scope-steps.mjs';
 
 /**
  * A private Electron profile for the launch probes.
  *
- * Electron keys its single-instance lock to `userData`, and a PACKAGED throng does not isolate that
+ * Since 058 the single-instance lock derives from the daemon pipe name (`<pipe>.instance`), with
+ * Electron's own userData-keyed lock still held beneath it, and a PACKAGED throng isolates neither
  * (only an unpackaged dev run does — see `main.ts`, dev-instance isolation). So on any machine where
- * throng is already running, a verification launch acquires no lock, quits immediately, and the
- * probe reports "no window" — a failure that looks like a broken package and is not one. Measured:
+ * throng is already running, a verification launch without its own pipe acquires no lock, quits
+ * immediately, and the probe reports "no window" — a failure that looks like a broken package and
+ * is not one. Every launch below therefore sets THRONG_PIPE_NAME, THRONG_CONFIG_ROOT and
+ * THRONG_DATABASE_PATH beside `--user-data-dir` (FR-018a, research D8). Measured:
  * verifying the archive artifact on a developer machine with throng open from `E:\tools\throng`.
  *
  * A clean CI runner never hits this, which is exactly why it would have gone unnoticed until
@@ -65,11 +92,6 @@ const unpackUserDataDir = join(process.env.TEMP ?? homedir(), `throng-verify-unp
  * against a copy (see `unpackArtifact`); this is the original, and it must be gone by the end.
  */
 let portableUnpackDir = '';
-
-function arg(name, fallback) {
-  const i = process.argv.indexOf(name);
-  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
-}
 
 /** Escape a string for safe interpolation inside a single-quoted PowerShell literal. */
 function psq(s) {
@@ -120,7 +142,16 @@ async function launchInstalledApp(exe, extraEnv = {}) {
     app = await electron.launch({
       executablePath: exe,
       args: [`--user-data-dir=${probeUserDataDir}`],
-      env: { ...process.env, THRONG_PIPE_NAME: pipe, ...extraEnv },
+      // All three, not just the pipe (058 FR-018a, research D8): the instance lock derives from the
+      // pipe, and the config root and database are what an installed throng would otherwise share
+      // with the developer's own.
+      env: {
+        ...process.env,
+        THRONG_PIPE_NAME: pipe,
+        THRONG_CONFIG_ROOT: join(probeUserDataDir, 'config'),
+        THRONG_DATABASE_PATH: join(probeUserDataDir, 'throng.db'),
+        ...extraEnv,
+      },
       timeout: 45000,
     });
     const win = await app.firstWindow({ timeout: 30000 });
@@ -199,14 +230,20 @@ function daemonPids(installDir) {
  * install, kill it early (mid-extraction), then confirm the partial does not boot a window. Returns
  * true when no launchable product resulted (nothing installed, or a non-launchable partial).
  */
-async function interruptedInstallLeavesNoLaunchable(installer, installedExe, installDir) {
+async function interruptedInstallLeavesNoLaunchable(command, installedExe, installDir) {
+  // Arguments with a space are quoted for the child's command line; the whole list is a PowerShell
+  // array of single-quoted strings.
+  const argumentList = command.args.map((a) => `'${psq(/\s/.test(a) ? `"${a}"` : a)}'`).join(',');
+  // An MSI install runs in the Windows Installer SERVICE, which outlives its client: killing msiexec
+  // here must reach every instance, or the "interrupted" install simply finishes.
+  const alsoMsiexec = /msiexec/i.test(command.file) ? `Get-Process msiexec -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; ` : '';
   // Start the installer, then kill it and its children well before a 130 MB extraction can finish.
   const child = spawnSync('powershell', [
     '-NoProfile',
     '-Command',
-    `$p = Start-Process -FilePath '${psq(installer)}' -ArgumentList '/S' -PassThru; Start-Sleep -Milliseconds 1500; ` +
+    `$p = Start-Process -FilePath '${psq(command.file)}' -ArgumentList @(${argumentList}) -PassThru; Start-Sleep -Milliseconds 1500; ` +
       `Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $p.Id } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; ` +
-      `Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue`,
+      `Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; ${alsoMsiexec}`,
   ], { stdio: 'ignore', timeout: 30000 });
   void child;
   await delay(2000);
@@ -233,7 +270,13 @@ async function daemonReattaches(exe, installDir) {
     return false;
   }
   const pipe = `\\\\.\\pipe\\throng-verify-reattach-${process.pid}`;
-  const env = { ...process.env, THRONG_PIPE_NAME: pipe };
+  // The same values for both launches, so the reattach finds the same daemon and the same database.
+  const env = {
+    ...process.env,
+    THRONG_PIPE_NAME: pipe,
+    THRONG_CONFIG_ROOT: join(probeUserDataDir, 'config'),
+    THRONG_DATABASE_PATH: join(probeUserDataDir, 'throng.db'),
+  };
   const openWindow = async () => {
     const app = await electron.launch({
       executablePath: exe,
@@ -266,13 +309,6 @@ async function daemonReattaches(exe, installDir) {
     killInstalledProcesses(installDir);
     await delay(1500);
   }
-}
-
-/** T034e (FR-014): the install created a Start-menu launch shortcut. */
-function launchShortcutExists() {
-  const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
-  const start = join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
-  return existsSync(join(start, 'throng.lnk')) || existsSync(join(start, 'throng', 'throng.lnk'));
 }
 
 /** T034d (FR-011): the install registered NO Windows service. */
@@ -319,16 +355,34 @@ function snapshotTree(dir) {
   return acc.sort().join('\n');
 }
 
-const installer = process.argv[2];
-if (!installer || !existsSync(installer)) {
-  console.error('usage: node scripts/verify-installer.mjs <artifact> [--role setup|portable|archive] [--expected-version X]');
+const parsed = parseVerifyArgs(process.argv.slice(2));
+if (!parsed.ok) {
+  console.error(parsed.message);
+  process.exit(parsed.code);
+}
+
+// The coexistence run is its own harness (058 FR-031): it installs every copy on one machine.
+if (parsed.mode === 'coexistence') {
+  const { runCoexistence } = await import('./verify-coexistence.mjs');
+  process.exit(await runCoexistence(parsed));
+}
+
+const installer = parsed.artifact;
+if (!existsSync(installer)) {
+  console.error(`[verify-installer] the artifact does not exist: ${installer}`);
   process.exit(2);
 }
 
-const role = arg('--role', 'setup');
-const installDir = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Programs', 'throng');
+const { role, scope, combination: combinationId, verdictOut } = parsed;
+const layout = installLayout({
+  role,
+  scope,
+  version: parsed.expectedVersion ?? 'unknown',
+  artifactPath: installer,
+  env: process.env,
+});
+const installDir = layout?.root ?? '';
 const installedExe = join(installDir, 'throng.exe');
-const verdictOut = arg('--verdict-out', join(process.cwd(), 'verification-verdict.json'));
 
 /**
  * Put an artifact that does not install onto disk, and say where its root is (042 FR-015).
@@ -391,6 +445,15 @@ async function unpackArtifact(kind, artifactPath) {
       launcher = spawn(artifactPath, [`--user-data-dir=${unpackUserDataDir}`], {
         detached: true,
         stdio: 'ignore',
+        // The self-extractor passes its environment to the app. Since 058 the single-instance lock
+        // derives from the pipe name, so without these the app meets the instance lock of any throng
+        // already running, quits at once, and the unpack directory is never observed (FR-018a).
+        env: {
+          ...process.env,
+          THRONG_PIPE_NAME: `\\\\.\\pipe\\throng-verify-unpack-${process.pid}`,
+          THRONG_CONFIG_ROOT: join(unpackUserDataDir, 'config'),
+          THRONG_DATABASE_PATH: join(unpackUserDataDir, 'throng.db'),
+        },
       });
       launcher.unref();
     } catch (err) {
@@ -459,31 +522,87 @@ async function unpackArtifact(kind, artifactPath) {
 
 async function main() {
   const results = {};
-  const expectedVersion = arg('--expected-version', undefined);
+  const unprovenReasons = {};
+  const expectedVersion = parsed.expectedVersion;
   const installerSha256 = await sha256OfFile(installer);
+  const log = (message) => console.error(`[verify-installer] ${message}`);
+
+  // Each step announces itself with a timestamp, and records where the run is for the watchdog: a
+  // separate process, because a harness blocked inside a synchronous call cannot run its own timer.
+  // Without this a job that hangs reports nothing about WHERE (and a job cancelled at its time limit
+  // uploads nothing at all).
+  const progressFile = join(tmpdir(), `throng-verify-progress-${process.pid}.json`);
+  const step = (name) => {
+    console.error(`[verify-installer] ${new Date().toISOString()} step ${name} starting`);
+    try {
+      writeFileSync(
+        progressFile,
+        JSON.stringify({ version: expectedVersion ?? '0.0.0', combinationId, sha256: installerSha256, current: name, results, unprovenReasons }),
+      );
+    } catch {
+      /* the watchdog then has less to name; the run is unaffected */
+    }
+  };
+  spawn(
+    process.execPath,
+    [
+      fileURLToPath(new URL('./verify-watchdog.mjs', import.meta.url)),
+      '--progress', progressFile,
+      '--verdict-out', verdictOut,
+      '--pid', String(process.pid),
+      '--minutes', '30',
+    ],
+    { detached: true, stdio: 'inherit', windowsHide: true },
+  ).unref();
 
   // Where the app ends up, and how it gets there — the ONLY thing that varies by format (042
   // FR-015). Everything below this block is the shared end state every artifact is held to.
-  const installs = role === 'setup';
+  const installs = layout !== null;
   let appRoot = installDir;
 
+  // Files handed to a second account need a directory both accounts can reach. Only the combinations
+  // that use one make it, and it is removed in the `finally` at the end of main().
+  const needsAccount = installs;
+  const sharedDir = needsAccount ? makeSharedDir() : '';
+  const reinstall = () => runCommand(layout.reinstall.file, layout.reinstall.args, 300000);
+
   if (installs) {
+    // FR-010 — before anything is installed, a standard account asking the setup for a machine-wide
+    // install silently is refused with 740 and nothing is installed.
+    if (role === 'setup' && scope === 'machine') {
+      step('silent-elevation-refused');
+      results['silent-elevation-refused'] = await silentElevationRefused({ layout, artifactPath: installer, sharedDir, log });
+    }
+
     // 0. interrupted-install (FR-022): a killed install must leave no launchable partial product.
     //    Runs first, on the clean machine, before the real install below.
+    step('interrupted-install');
     results['interrupted-install'] = await interruptedInstallLeavesNoLaunchable(
-      installer,
+      layout.install,
       installedExe,
       installDir,
     );
 
-    // 1. install (per-user, silent NSIS). Hard timeout so a wedged installer can never hang the job.
-    try {
-      execFileSync(installer, ['/S'], { stdio: 'inherit', timeout: 180000 });
-      await delay(4000); // NSIS returns before it finishes writing files
-      results.install = existsSync(installedExe);
-    } catch {
-      results.install = false;
+    // 1. install (silent; the scope picks the switches). Hard timeout so a wedged installer can never
+    //    hang the job. The MSI's 3010 ("restart required") is a success, the setup's is not expected.
+    step('install');
+    const code = runCommand(layout.install.file, layout.install.args, 300000);
+    await delay(4000); // an installer can return before it finishes writing files
+    results.install = layout.install.okCodes.includes(code) && existsSync(installedExe);
+    if (!results.install) {
+      log(`install: exit ${code}; throng.exe ${existsSync(installedExe) ? 'present' : 'absent'} in ${installDir}`);
+      // The log's own account of the context it chose (ALLUSERS, MSIINSTALLPERUSER, the folder).
+      const logArg = layout.install.args[layout.install.args.indexOf('/l*v') + 1];
+      if (layout.install.args.includes('/l*v') && logArg) reportInstallLogs(dirname(logArg), log);
+      // Where it went instead, if anywhere: a per-user request that landed machine-wide (or the
+      // reverse) is a scope defect in the package, not a failed install.
+      const other = installDir.toLowerCase().includes('program files')
+        ? join(process.env.LOCALAPPDATA ?? '', 'Programs', basename(installDir))
+        : join(process.env.ProgramFiles ?? 'C:\\Program Files', basename(installDir));
+      if (existsSync(join(other, 'throng.exe'))) log(`install: the copy landed in the OTHER scope — ${other}`);
     }
+    // FR-017b — the registered entry and the shortcut say which scope and which installer this is.
+    if (results.install) results['install-labels'] = installLabelsCorrect(layout);
   } else {
     // A portable or archive artifact installs nothing; it is put on disk and run from there. A
     // failure to unpack is recorded as a `launch` failure below, since there is no install step to
@@ -514,6 +633,7 @@ async function main() {
   // binary driven the same way WITHOUT them, passes. Measured directly: the unpacked tree opens a
   // real window when run with neither variable and no Playwright arguments.
   if (onDisk) {
+    step('launch');
     results.launch = await launchInstalledApp(appExe);
     // Kill the app AND its detached daemon before uninstalling or deleting, or the daemon holds
     // the runtime locked and the removal blocks forever (the CI hang this fixes).
@@ -523,10 +643,11 @@ async function main() {
 
   // Post-install / post-run assertions (each names its own verdict step, FR-025).
   if (onDisk) {
+    step('self-contained');
     results['self-contained'] = daemonRunsSelfContained(appRoot); // T027 / T023a
     results['no-service'] = noThrongService(); // T034d
     if (installs) {
-      results.shortcut = launchShortcutExists(); // T034e
+      results.shortcut = launchShortcutExistsFor(layout); // T034e, in this scope's Start menu
       // no-write (T034d): the install root is byte-identical after a run session — all state lives
       // in the user profile, so an upgrade/uninstall never touches the user's data.
       results['no-write'] = snapshotTree(installDir) === rootBeforeRun;
@@ -548,6 +669,7 @@ async function main() {
       reportedVersion: installedVersion,
       releaseTag: `v${pkg}`,
     });
+    step('version-match');
     results['version-match'] = match.matched;
     if (!match.matched) console.error(`[verify-installer] version-match: ${match.reason}`);
   }
@@ -561,16 +683,53 @@ async function main() {
   // 4b. reattach (SC-009, FR-019, T034c): the detached daemon survives the app closing and is
   //     reattached (not respawned) on reopen — Principle III surviving packaging.
   if (onDisk) {
+    step('reattach');
     results.reattach = await daemonReattaches(appExe, appRoot);
     killInstalledProcesses(appRoot);
     await delay(1500);
   }
 
+  // The machine-wide scope's own steps (058 contracts/verification-matrix.md). They run while the
+  // copy is installed and idle, and before the checksum and uninstall steps that follow.
+  if (installs && scope === 'machine' && onDisk) {
+    // FR-007 — the app the elevated installer starts runs at the desktop's integrity level.
+    step('not-elevated-launch');
+    const launched = await notElevatedLaunch({
+      layout,
+      throngPids,
+      killTree: (root) => killInstalledProcesses(root),
+      log,
+    });
+    if (launched && typeof launched === 'object') {
+      results['not-elevated-launch'] = 'unproven';
+      unprovenReasons['not-elevated-launch'] = launched.unproven;
+    } else {
+      results['not-elevated-launch'] = launched;
+    }
+    await delay(2000);
+
+    // FR-012/FR-013/FR-029 and FR-016a — a second, standard account uses the shared install, and
+    // an unattended reinstall then runs with that account's throng up.
+    step('second-account');
+    const second = await secondAccountAndInUse({
+      layout,
+      reinstall,
+      sharedDir,
+      killTree: (root) => killInstalledProcesses(root),
+      log,
+    });
+    results['second-account'] = second.secondAccount;
+    results['in-use-upgrade'] = second.inUseUpgrade;
+    Object.assign(unprovenReasons, second.reasons);
+    await delay(2000);
+  }
+
   // 5. checksum-match — with --expected-sha, the installer's bytes must equal it; without one (the
   //    verify job's case), assert the SHA-256 was actually computed over the bytes (a real 64-hex
   //    digest, not an empty/failed one), so the verdict binds to real bytes. The published-checksum
-  //    equality is enforced at publish time (publish-gates + isVerdictPassingForSet, FR-024a).
-  const expectedSha = arg('--expected-sha', undefined);
+  //    equality is enforced at publish time (publish-gates + isVerdictPassingForCombinations, FR-024a).
+  const expectedSha = parsed.expectedSha;
+  step('checksum-match');
   results['checksum-match'] = expectedSha
     ? installerSha256 === expectedSha
     : /^[a-f0-9]{64}$/i.test(installerSha256);
@@ -578,29 +737,27 @@ async function main() {
   // 6. uninstall (silent) — the uninstaller is written next to the app. A portable or archive
   //    throng has no uninstaller: removing the folder IS the whole removal, which is done below so
   //    the residue scan has something to find (or not find).
-  const uninstaller = installs ? join(installDir, 'Uninstall throng.exe') : '';
-  if (uninstaller && existsSync(uninstaller)) {
+  // The setup writes `Uninstall throng.exe` beside the app; the MSI is removed by `msiexec /x` on the
+  // package itself. Either way the command comes from the layout, and "removed" is the app gone.
+  if (installs && onDisk) {
     // Make sure NOTHING under the install dir is still running before uninstalling — the launch and
     // the self-contained probe each start a daemon from the bundled runtime that would hold the
     // runtime image locked and block the silent uninstaller.
     killInstalledProcesses(installDir);
     await delay(3000); // let Windows release the killed processes' image locks
-    try {
-      execFileSync(uninstaller, ['/S'], { stdio: 'inherit', timeout: 120000 });
-      await delay(4000);
-      results.uninstall = !existsSync(installedExe);
-    } catch {
+    step('uninstall');
+    const uninstallOnce = () => runCommand(layout.uninstall.file, layout.uninstall.args, 180000);
+    let code = uninstallOnce();
+    await delay(4000);
+    if (!layout.uninstall.okCodes.includes(code) || existsSync(installedExe)) {
       // Still held → kill again and retry once; a genuine lock (not our own daemon) then fails.
       killInstalledProcesses(installDir);
       await delay(3000);
-      try {
-        execFileSync(uninstaller, ['/S'], { stdio: 'inherit', timeout: 120000 });
-        await delay(4000);
-      } catch {
-        /* fall through to the existence check */
-      }
-      results.uninstall = !existsSync(installedExe);
+      code = uninstallOnce();
+      await delay(4000);
     }
+    results.uninstall = existsSync(installedExe) === false;
+    if (!results.uninstall) log(`uninstall: exit ${code}; throng.exe still present in ${installDir}`);
   }
 
   // 7. residue-scan — nothing left under the install root, no throng process, and no detached
@@ -664,6 +821,7 @@ async function main() {
   }
 
   const scanRoot = installs ? installDir : appRoot;
+  step('residue-scan');
   results['residue-scan'] =
     scanResidue(scanRoot || undefined, running).length === 0 &&
     // A folder that still exists after removal is residue in its own right, whatever is running.
@@ -673,14 +831,33 @@ async function main() {
     ? JSON.parse(readFileSync(appManifest, 'utf8')).version
     : 'unknown');
 
-  // 042 FR-014/FR-015 — the verdict covers ONE artifact of the declared set, named by role. Steps
-  // outside that role's applicable list are recorded `not-applicable` rather than passed: an
+  // FR-006 — a per-user install as a REAL standard account. Last, so the account's install cannot
+  // be mistaken for residue of the one above, and so a failure to make the account does not hide
+  // any of the steps before it.
+  if (installs && scope === 'per-user') {
+    step('standard-account-install');
+    results['standard-account-install'] = await standardAccountInstall({
+      role,
+      artifactPath: installer,
+      version,
+      sharedDir,
+      log,
+    });
+  }
+  if (sharedDir) removeSharedDir(sharedDir);
+
+  // 042 FR-014/FR-015 — the verdict covers ONE combination of the declared set, named by id. Steps
+  // outside that combination's applicable list are recorded `not-applicable` rather than passed: an
   // archive has no uninstaller, and a verdict asserting an uninstall that never ran is worse than
-  // one that fails honestly (020 FR-027 takes the same position about an absent verdict).
-  const artifact = resolveArtifact(declareArtifactSet(version), role);
-  const verdict = buildArtifactVerdict(artifact, installerSha256, results);
-  writeFileSync(verdictOut, JSON.stringify(verdict, null, 2));
-  console.log(`[verify-installer] verdict → ${verdictOut}\n${JSON.stringify(verdict, null, 2)}`);
+  // one that fails honestly (020 FR-027 takes the same position about an absent verdict). A step
+  // the runner could not exercise is `unproven` (only for the steps the spec names), with its reason.
+  const set = declareArtifactSet(version);
+  const combination = combinationsOf(set).find((c) => c.id === combinationId);
+  const verdict = buildArtifactVerdict(combination, installerSha256, results, unprovenReasons);
+  // `version` travels in the file so the publish gate can bind the verdict to the release.
+  const document = { version, ...verdict };
+  writeFileSync(verdictOut, JSON.stringify(document, null, 2));
+  console.log(`[verify-installer] verdict → ${verdictOut}\n${JSON.stringify(document, null, 2)}`);
   process.exit(verdict.passed ? 0 : 1);
 }
 
@@ -704,7 +881,9 @@ function writeCrashVerdict(err) {
       verdictOut,
       JSON.stringify(
         {
+          version: parsed.expectedVersion ?? 'unknown',
           role,
+          combination: combinationId,
           sha256: '',
           steps: {},
           passed: false,
