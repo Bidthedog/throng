@@ -15,6 +15,11 @@ evaluated **before** the human one, so a release that was never going to publish
 consume an approval. The human QA sign-off is a **GitHub Environment (`release`) with required
 reviewers**; it cannot be satisfied by automation, a default, or the passage of time.
 
+`THRONG_VERDICT_FILES` is derived in the workflow from `artifact-set.mjs list --combinations` (the
+verdict-file column) plus the coexistence file — never written out by hand, so a new combination
+cannot be left unread. `THRONG_GAPS_OUT` makes the gate write the allowed `unproven` steps for
+`release-notes.mjs render --gaps`.
+
 The gate takes its inputs from the environment so CI can supply them — the `THRONG_*` publish-gate
 variables are documented in [`docs/environment.md`](../../../../docs/environment.md).
 
@@ -36,8 +41,8 @@ When all five hold, publication:
 | Write the release notes | A human, in `CHANGELOG.md`, **before the tag** — reviewed as a diff. |
 | Bump version, build, package | Locally or in CI (`npm run build`, `npm run package`). |
 | Reconcile the artifact set | Wherever packaging ran, immediately after it. |
-| Artifact verification (clean machine) | **CI** — a fresh `windows-2022` runner. Runs locally too, with the caveats in [verification.md](verification.md#running-it-on-a-developer-machine). |
-| Render the release body | CI, in the verify job, uploaded for the approver to read. |
+| Artifact verification (clean machine) | **CI** — one fresh `windows-2022` runner per combination (matrix), then the coexistence job. Runs locally too, with the caveats in [verification.md](verification.md#running-it-on-a-developer-machine). Never install on the workstation by hand. |
+| Render the release body | CI, the `render-body` job, after every verdict exists; uploaded with `verification-gaps.json` for the approver to read. It runs the gate without the sign-off and accepts exactly one refusal — the missing sign-off — so any other refusal fails it before anyone is asked. |
 | QA sign-off | A human, via the GitHub `release` Environment. |
 | Publish the GitHub Release | **CI only**, gated as above. |
 

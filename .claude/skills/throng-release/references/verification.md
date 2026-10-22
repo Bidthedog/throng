@@ -23,9 +23,40 @@ the app gets on and off disk differs:
 node scripts/verify-installer.mjs "$(node scripts/artifact-set.mjs resolve archive)" --role archive
 ```
 
-## A step has three outcomes, not two
+### Scopes add steps
 
-`passed`, `failed`, and **`not-applicable`**. An archive has no install step and no uninstaller, and
+Every combination runs on **its own** fresh runner (a matrix job), so a machine-wide install's
+residue can never become the next combination's starting state. On top of the format's own steps:
+
+| Step | Combinations | Proves |
+|---|---|---|
+| `install-labels` | setup and MSI, both scopes | the *Installed apps* entry and shortcut carry the scope and installer |
+| `standard-account-install` | `*-user` | a silent per-user install **run as a real standard account** succeeds — nobody could approve a prompt, so this proves no elevation is needed |
+| `second-account` | `*-machine` | a standard account launches the shared install: shortcut present, its own daemon (by process owner, medium integrity, own pipe), a terminal works, isolation both ways |
+| `in-use-upgrade` | `*-machine` | with that account's daemon running, a same-version reinstall exits `3010`, terminates nothing, and registers pending renames under the install root |
+| `not-elevated-launch` | `*-machine` | the app the elevated installer starts runs at medium integrity |
+| `silent-elevation-refused` | `setup-machine` | `/S /allusers` as the standard account exits `740` and installs nothing |
+
+The standard account is created per run with a random password (`scripts/second-account.mjs`,
+`Start-Process -Credential`) and deleted in a `finally`. Failing to create it is `failed`, never
+`unproven` — an administrator can always create one.
+
+A seventh job, **coexistence** (`verify-installer.mjs --coexistence`), installs the setup and the
+MSI in both scopes plus the archive on one runner and proves: all install, each launches its own
+version, a second launch is refused, every copy logs the same data folder, a terminal started from
+one copy reattaches from another, and reinstalling then uninstalling one copy leaves the others. It
+runs only after the whole matrix is green, and exits `2` with **no verdict** on a machine that already
+has `%APPDATA%\throng` (pass `--allow-dirty-profile` to override, locally only).
+
+## A step has four outcomes, not two
+
+`passed`, `failed`, **`not-applicable`**, and **`unproven`**. `unproven` is allowed for exactly two
+steps. `second-account`'s GUI half — the hosted runner cannot be assumed to give a second account an
+interactive desktop, so that half is never attempted and its daemon half carries the proof. `not-elevated-launch`, only while the runner's desktop (explorer.exe) is above medium integrity, as a hosted runner's is with UAC disabled. Any other
+step reporting `unproven` is treated as `failed`. An `unproven` passes the gate but is named in the job
+summary and in the release body, every run.
+
+On `not-applicable`: An archive has no install step and no uninstaller, and
 both of the two-state answers are wrong: running the installer's step list against it would fail a
 perfectly good release, and marking those steps *passed* would make the verdict assert an uninstall
 that never ran. Spec 020's FR-027 already refuses to conflate absence with success for a missing
@@ -36,12 +67,13 @@ The rule has teeth in both directions. A verdict marking a step `not-applicable`
 **does** declare it applicable is **invalid**, not merely failing — that is a skipped check wearing
 an exemption's clothes. An applicable step with no result at all is a failure, not a skip.
 
-## One verdict per artifact
+## One verdict per combination
 
-The result is a **verdict per artifact**, bound to that artifact's exact bytes and recorded as a CI
-artifact. A **missing verdict is treated as a failure**, never as a pass — and a verdict covering
-only *some* of the declared set is a refusal, not a partial pass. A broken artifact fails
-verification and the failure **names the step** and the artifact that broke.
+The result is a **verdict per combination** (`verification-verdict-<id>.json`, field `combination`),
+bound to that artifact's exact bytes, plus `verification-verdict-coexistence.json`. A **missing
+verdict is treated as a failure**, never as a pass — and a set covering only *some* combinations is a
+refusal, not a partial pass. A failure **names the combination and the step**:
+`msi-machine: in-use-upgrade`, or `coexistence: same-data-folder`.
 
 ## What each artifact costs to start
 
@@ -103,3 +135,24 @@ node scripts/verify-installer.mjs "$(node scripts/artifact-set.mjs resolve porta
 
 The unpacked tree is left in place and `residue-scan` **must** come back `failed`. If it passes, the
 scan is looking somewhere the app never was.
+
+## The manual test plan on runners (`hand_tests`)
+
+A dispatch with `-f hand_tests=true` also runs the branch's manual test plan (MT-01..MT-08,
+`.claude/.manual-test-plans/`) on one fresh runner per group, so sign-off rests on evidence rather than
+a person at a VM:
+
+```sh
+gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true -f hand_tests=true
+```
+
+`scripts/verify-hand-tests.mjs` drives the real installers' dialogs through Windows UI Automation
+(`scripts/ui-automation.ps1`), as the account each step names, and writes `hand-test-MT-0N.json` plus a
+screenshot at each dialog (artifact `hand-test-MT-0N`). `--list` prints every step it will claim.
+
+- Each step is `passed`, `failed`, or `runner-gap`. A gap is only for what a hosted runner physically
+  cannot do (a restart, a UAC prompt with UAC off, a desktop that is not medium integrity) and always
+  names the stand-in done instead — read those before signing a group off.
+- It is never a gate: `publish` refuses to run when `hand_tests` is set. MT-06 links the coexistence
+  job's verdict rather than repeating it; MT-08 builds a second setup at version 0.9.0 on the
+  runner's copy only.

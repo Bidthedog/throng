@@ -1,6 +1,6 @@
 ---
 name: throng-release
-description: Cut a throng release end to end — settle the version, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, audit the dependencies, bring the docs current, gate it, tag it, watch release.yml build and verify all three artifacts, and publish behind the human QA sign-off. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. Do NOT guess the version — if the request does not name one unambiguously, ask before touching a file. This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
+description: Cut a throng release end to end — settle the version, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, audit the dependencies, bring the docs current, gate it, tag it, watch release.yml build and verify all four artifacts in every install scope, and publish behind the human QA sign-off. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. Do NOT guess the version — if the request does not name one unambiguously, ask before touching a file. This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
 ---
 
 # Releasing throng
@@ -33,7 +33,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 ```
 preflight → branch → CHANGELOG → version bump → dependency audit → docs
   → local checks → commit → PR → gate.yml → merge → tag → release.yml (full E2E
-  → package → reconcile → verify ×3 → render body) → human sign-off → publish
+  → package → reconcile → verify ×6 combinations → coexistence → render body) → human sign-off → publish
 ```
 
 Publication is refused unless all five conditions in
@@ -264,46 +264,62 @@ the ref. The `master` run does everything except publish and is pure duplication
 public repo, so leave it unless runner minutes are being watched. **Take every verdict from the tag
 run**, which is the one carrying the publish job.
 
-Four jobs, in order, each gating the next. Measured on the alpha5 run (`35531917920`), tag pushed to
-approval gate in **45 minutes**:
+The jobs, each gating the next (`needs` in brackets). Before 058 the alpha5 run (`35531917920`) took
+**45 minutes** tag-to-approval. This shape, measured on the first green rehearsal (`39520454070`,
+`skip_e2e`): build 5 min, the six verify legs 2.5–4 min each in parallel, coexistence 9 min,
+render-body 1 min — **20 minutes** without the E2E job, so about **53** with its 33:
 
-1. **E2E (full suite)** — everything except `@core`'s 50; one worker, no shards. This is the only
-   place the `@extended` half of the suite runs. **33 min** on a runner. A red suite means no
-   artifact.
-2. **Build the per-user installer** — `npm run package`, then `artifact-set.mjs reconcile`, which
-   fails in **both** directions: a declared artifact that was not built, and a built artifact nobody
-   declared. **5 min.**
-3. **Verify on a clean machine** — every declared artifact, resolved by **role**, each installed,
-   launched, version-checked, journey-tested (project → terminal → reopen → reattach), checksummed
-   and removed, with a verdict per role. It also renders `release-body-preview.md` — the exact body
-   publication will use. **7 min.**
-4. **Publish (gated)** — waits at the `release` Environment for required reviewers, then **3 min**
-   to compute the checksums, compose the body and create the release.
+1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. This is
+   the only place the `@extended` half of the suite runs. **33 min** on a runner. A red suite means
+   no artifact.
+2. **Work out the verification matrix** `combinations` (ubuntu, beside the E2E) — emits
+   `artifact-set.mjs list --combinations --json`.
+3. **Build the release artifacts** `build-installer` [e2e-full] — `npm run package`, then
+   `artifact-set.mjs reconcile`, which fails in **both** directions: a declared artifact that was not
+   built, and a built artifact nobody declared. Four uploads (`throng-setup`, `throng-msi`,
+   `throng-portable`, `throng-archive`); a guard step fails if the declared roles and the uploads
+   differ. ~5 min.
+4. **Verify `<combination>`** `verify-installer` ×6 [build-installer, combinations] — one fresh runner
+   per combination, `fail-fast: false`, 40-minute timeout. Each installs (or extracts, or unpacks),
+   launches, version-checks, journey-tests (project → terminal → reopen → reattach), checksums and
+   removes, plus the scope steps in [references/verification.md](references/verification.md#scopes-add-steps).
+   Uploads `verdict-<id>`.
+5. **Verify coexistence** `coexistence` [build-installer, verify-installer] — only when the whole
+   matrix is green. Uploads `verdict-coexistence`.
+6. **Render the release body** `render-body` [all of the above, `!cancelled()`] — runs the gate
+   without the sign-off (any refusal but the missing sign-off fails it), writes `unproven` steps to the
+   job summary, and uploads `release-body` (`release-body-preview.md` + `verification-gaps.json`).
+7. **Publish (gated)** — waits at the `release` Environment for required reviewers, then ~3 min to
+   compute the checksums, compose the body and create the release.
 
-**What a passing verdict looks like**, so a skipped check is not mistaken for a clean one. `setup`
-passes all **13** steps. `portable` and `archive` pass **8** and mark **5 `not-applicable`** —
-`interrupted-install`, `install`, `shortcut`, `no-write`, `uninstall` — because neither format has
-an installer or an uninstaller. Any other shape deserves a look: a `not-applicable` on `setup`, or
-a role reporting fewer than 13 results in total, is a check that did not run.
+**What a passing verdict looks like**, so a skipped check is not mistaken for a clean one. The
+vocabulary is 19 steps. Applicable counts: `setup-user` **15**, `msi-user` **15**, `setup-machine`
+**18**, `msi-machine` **17**, `portable` and `archive` **8** (11 `not-applicable`). The coexistence
+verdict has **5** copies and **7** steps, all `passed`. `second-account` and `not-elevated-launch` are expected to read
+`unproven` on hosted runners — the GUI half is never attempted there, and the runner's desktop is high integrity; the daemon half carries the
+proof, and both gaps are listed in the body. Any other shape deserves a look: a `not-applicable` on an
+installer combination, `unproven` on any other step, or fewer results than the counts above is a
+check that did not run.
 
 ```sh
-gh run download <tag-run-id> --name verification-verdict --dir <scratch>
+gh run download <tag-run-id> --pattern 'verdict-*' --dir <scratch>
+gh run download <tag-run-id> --name release-body --dir <scratch>
 ```
 
-That artifact carries the three verdicts and `release-body-preview.md` together. Read the body
+Those carry the seven verdicts and `release-body-preview.md`. Read the body
 before asking anyone to approve it.
 
 The declared roles are listed in
 [`docs/releasing.md` → The artifact set](../../../docs/releasing.md#the-artifact-set); why nothing
 globs or resolves by extension is [references/artifact-set.md](references/artifact-set.md). What
-each verification step proves, and the three-outcome verdict model, is
+each verification step proves, and the four-outcome verdict model, is
 [references/verification.md](references/verification.md).
 
 ## 11. The human QA sign-off
 
 **Blocking, and it is the user's to give.** Put in front of them what they need to decide with,
-rather than a link to go and find it: the rendered body you already downloaded in step 10, the three
-verdicts summarised (steps passed, steps `not-applicable`, each artifact's SHA-256), and the run
+rather than a link to go and find it: the rendered body you already downloaded in step 10, the seven
+verdicts summarised (steps passed, `not-applicable` and `unproven` per combination, each artifact's SHA-256), and the run
 URL. Then one flagged line asking for the approval.
 
 They may be away — this is the point in the release where an hour can pass, so it is worth a push
@@ -320,7 +336,7 @@ gh release view v<version> --json name,isPrerelease,assets,publishedAt \
 
 Confirm, and report:
 
-- three assets attached, named for this version;
+- four assets attached (setup, MSI, portable, archive), named for this version;
 - `isPrerelease: true` for any version carrying a suffix;
 - the body carries this release's notes, one SHA-256 row per artifact against its own filename, and
   the source revision;
@@ -341,6 +357,13 @@ Then say it plainly: the version, the release URL, the gate run URL, and anythin
 | Publish gate: already published | The version exists | Published bytes are immutable. Cut the next version; never delete and re-push a tag. |
 | A single E2E fails in the full lane | Possibly a flake | The **throng-testing** skill owns this. The lane retries once only on an infrastructure fault (0 unexpected, 0 flaky). |
 | Verification fails locally but passes on CI | Almost always the harness colliding with your session | The launch probe needs its own `--user-data-dir`; the residue scan attributes processes by path. See [references/verification.md](references/verification.md#running-it-on-a-developer-machine). |
+| Publish gate or render-body: `<combination>: no verification verdict` | That matrix leg failed before writing, or was cancelled | Read that leg's log; a partial set is a refusal. |
+| `coexistence: no verification verdict` | The coexistence job exited 2: the runner had a `%APPDATA%\throng` | Never on a clean runner; locally pass `--allow-dirty-profile`. |
+| `nsis-vendored-templates.test.ts` fails after a dependency bump | electron-builder moved | Re-diff `packaging/nsis/*` against the new upstream templates, then update `UPSTREAM.md`'s pins. Never just re-pin. |
+| MSI packaging: "anchor not found" from `msi-project.ts` | electron-builder's MSI template changed | Re-capture `msi-template-output.wxs` and repair the transform; never drop it. |
+| `setup-machine: silent-elevation-refused` fails | `/S /allusers` did not exit `740`, or installed something | The silent no-elevation branch in `packaging/nsis/multiUserUi.nsh`. |
+| `*-machine: in-use-upgrade` fails | No `3010`, a process was terminated, or no pending renames | The installers' in-use path (`packaging/in-use.mjs`, `installSection.nsh`, the MSI's `MSIRESTARTMANAGERCONTROL`). |
+| `*-machine: not-elevated-launch` fails | The run-after-finish app ran elevated — or another throng was already running on the runner | Setup: `ExecShellAsUser`; MSI: the `explorer.exe` launch. |
 | The portable role fails verification | Three known traps | Copy the unpacked tree *before* stopping the launcher, wait for it to settle, and pass **no** `PORTABLE_EXECUTABLE_*` variables. Why: [references/verification.md](references/verification.md#the-portable-role). |
 
 **Rehearsing without releasing** — a dispatch with `publish: false` runs the full suite, packages,
@@ -351,6 +374,15 @@ gh workflow run release.yml --ref master -f publish=false
 ```
 
 Use it when the pipeline itself is what is being fixed.
+
+When only the installers or the verification harness are being fixed, add `-f skip_e2e=true`: it
+leaves out the full E2E suite (~33 minutes) and the build and verification jobs still run. `gate.yml`
+already runs that suite on the same tree. The publish job refuses to run when `skip_e2e` is set, so a
+release can never follow a skipped suite:
+
+```sh
+gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true
+```
 
 ## Never
 
@@ -376,10 +408,12 @@ version guards, update this file and the affected `references/` file in the same
 `docs/releasing.md` too if the overview it gives is no longer true.
 
 Open work that will change this: [#118](https://github.com/Bidthedog/throng/issues/118) code
-signing, [#119](https://github.com/Bidthedog/throng/issues/119) automatic update,
-[#351](https://github.com/Bidthedog/throng/issues/351) MSI and portable formats,
-[#361](https://github.com/Bidthedog/throng/issues/361) machine-wide installation. Each adds or
-changes a role in the declared set or a step in this runbook.
+signing, [#119](https://github.com/Bidthedog/throng/issues/119) automatic update (which must respect
+install scope and side-by-side copies), and the package managers — winget
+[#509](https://github.com/Bidthedog/throng/issues/509), Scoop
+[#510](https://github.com/Bidthedog/throng/issues/510), Chocolatey
+[#511](https://github.com/Bidthedog/throng/issues/511). Each adds or changes a role in the declared
+set or a step in this runbook.
 
 ## Where the detail lives
 
@@ -390,7 +424,7 @@ changes a role in the declared set or a step in this runbook.
   - [versioning.md](references/versioning.md) — the single version, `BUILD_ID`, prereleases.
   - [artifact-set.md](references/artifact-set.md) — the declaration, `artifact-set.mjs`,
     `reconcile`, what ships inside an artifact, downgrade refusal.
-  - [verification.md](references/verification.md) — what is proved, the three-outcome verdict,
+  - [verification.md](references/verification.md) — what is proved, the four-outcome verdict,
     start-up costs, developer-machine caveats, the portable rules, `--keep-residue`.
   - [release-notes.md](references/release-notes.md) — how the body is composed and why it never
     falls back.
