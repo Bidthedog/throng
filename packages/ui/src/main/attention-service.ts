@@ -428,6 +428,11 @@ export class AttentionService {
   }
 
   /** Send a pending ledger sync now (on quit, so a fresh mark reaches the daemon — FR-091). */
+  /** Whether a mark set is still waiting out the sync debounce, so a quit has something to flush. */
+  hasPendingSync(): boolean {
+    return this.syncTimer !== null;
+  }
+
   async flush(): Promise<void> {
     if (this.syncTimer === null) return;
     clearTimeout(this.syncTimer);
