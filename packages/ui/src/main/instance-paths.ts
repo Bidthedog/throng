@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 /**
  * Dev-instance isolation: where THIS instance keeps its data.
@@ -57,31 +57,33 @@ export function instanceDatabasePath(userDataDir: string, env: NodeJS.ProcessEnv
   return env.THRONG_DATABASE_PATH ?? join(userDataDir, 'throng.db');
 }
 
-/** Appended for the portable build, so its daemon never answers for an installed throng (#429). */
-export const PORTABLE_PIPE_SUFFIX = '.portable';
-
 /**
- * Whether this is the portable build: electron-builder's self-extracting launcher sets
- * `PORTABLE_EXECUTABLE_DIR` for the app it unpacks and starts.
+ * The default pipe for this instance — its NAMESPACE (058 contracts/instance-lock.md): the
+ * per-user default for every installed or extracted copy, whatever its kind, and that plus
+ * `.dev` for an unpackaged run. `THRONG_PIPE_NAME` overrides it in `readUiSettings`.
+ *
+ * The portable build no longer takes a pipe of its own (058 research D6). It did for #429 — its
+ * daemon outlived the temp folder the launcher deletes, and an installed launch adopted the
+ * orphan — but `ensureDaemon` now retires a daemon whose entry is gone on any pipe, and a
+ * separate pipe let a portable and an installed copy run side by side (058 FR-018, FR-021).
  */
-export function isPortableLaunch(env: NodeJS.ProcessEnv): boolean {
-  return typeof env.PORTABLE_EXECUTABLE_DIR === 'string' && env.PORTABLE_EXECUTABLE_DIR !== '';
+export function instancePipeName(basePipeName: string, devMode: boolean): string {
+  return devMode ? `${basePipeName}${DEV_PIPE_SUFFIX}` : basePipeName;
 }
 
 /**
- * The default pipe for this instance, derived from the per-user default.
+ * The executable that identifies THIS COPY — its install root and the path a launch message
+ * carries (058 FR-018, contracts/instance-lock.md).
  *
- * The portable build takes its own (#429). It runs from a temp folder its launcher deletes on exit,
- * and its detached daemon outlives that folder; on the installed app's pipe that orphan was adopted
- * by the next installed launch, and every terminal failed to load `conpty.node`.
+ * `process.execPath` for every copy but one. The portable build runs from a temp folder its
+ * self-extractor creates per launch and deletes on exit, so its `execPath` names a different,
+ * throwaway folder every time; the extractor sets `PORTABLE_EXECUTABLE_FILE` (the portable exe) and
+ * `PORTABLE_EXECUTABLE_DIR` (its folder), and those are where the user's copy actually is.
  */
-export function instancePipeName(
-  basePipeName: string,
-  devMode: boolean,
-  env: NodeJS.ProcessEnv = {},
-): string {
-  if (devMode) return `${basePipeName}${DEV_PIPE_SUFFIX}`;
-  return isPortableLaunch(env) ? `${basePipeName}${PORTABLE_PIPE_SUFFIX}` : basePipeName;
+export function copyExecPath(execPath: string, env: NodeJS.ProcessEnv): string {
+  if (env.PORTABLE_EXECUTABLE_FILE) return env.PORTABLE_EXECUTABLE_FILE;
+  if (env.PORTABLE_EXECUTABLE_DIR) return join(env.PORTABLE_EXECUTABLE_DIR, basename(execPath));
+  return execPath;
 }
 
 /**

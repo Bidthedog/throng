@@ -27,6 +27,7 @@
  */
 
 import type { ReleaseArtifact } from './release-artifacts.js';
+import type { UnprovenGap } from './verification-verdict.js';
 
 /** The exact line that declares a release deliberately has nothing user-visible in it (FR-009). */
 export const NO_USER_VISIBLE_CHANGES = 'No user-visible changes in this release.';
@@ -155,6 +156,8 @@ export interface ComposeReleaseBodyInput {
   artifacts: readonly ReleaseArtifact[];
   /** The exact source revision the artifacts were built from (020 FR-035). */
   commitSha: string;
+  /** Steps that could not be proven on the runner; each is listed by name above the table (058). */
+  verificationGaps?: readonly UnprovenGap[];
   /** Overridable for tests; defaults to {@link RELEASE_BODY_MAX_LENGTH}. */
   maxLength?: number;
 }
@@ -173,10 +176,27 @@ function renderNotes(notes: ReleaseNotes): string {
  * Render the invariant footer: the warning, how to verify a download, one checksum row per
  * artifact, and the source revision. Never shortened, never reordered, always last.
  */
-function renderFooter(artifacts: readonly ReleaseArtifact[], commitSha: string): string {
+function renderFooter(
+  artifacts: readonly ReleaseArtifact[],
+  commitSha: string,
+  gaps: readonly UnprovenGap[],
+): string {
+  // One row per FILE, whatever its scope count (058 FR-032), each saying who it is for (FR-033).
   const rows = artifacts
-    .map((a) => `| ${a.label} | \`${a.filename}\` | \`${a.sha256 ?? ''}\` |`)
+    .map((a) => `| ${a.label} | ${a.audience} | \`${a.filename}\` | \`${a.sha256 ?? ''}\` |`)
     .join('\n');
+
+  // Reported on every run it applies to, never assumed covered (058 spec Assumptions).
+  const gapLines =
+    gaps.length === 0
+      ? []
+      : [
+          '**Verification gaps.** These steps could not be exercised on the release runner, and were',
+          'not assumed to pass:',
+          '',
+          ...gaps.map((g) => `- \`${g.combination}\`: \`${g.step}\` — ${g.reason}`),
+          '',
+        ];
 
   return [
     '---',
@@ -184,10 +204,11 @@ function renderFooter(artifacts: readonly ReleaseArtifact[], commitSha: string):
     '**These downloads are not code-signed.** Windows will show an "unrecognised app" warning',
     '(SmartScreen) — click **More info → Run anyway**. Never disable a security feature to install.',
     '',
+    ...gapLines,
     'Verify your download matches its checksum below (`Get-FileHash <file> -Algorithm SHA256`).',
     '',
-    '| Artifact | File | SHA-256 |',
-    '|---|---|---|',
+    '| Artifact | Who it is for | File | SHA-256 |',
+    '|---|---|---|---|',
     rows,
     '',
     `Built from ${commitSha}.`,
@@ -204,7 +225,7 @@ function renderFooter(artifacts: readonly ReleaseArtifact[], commitSha: string):
 export function composeReleaseBody(input: ComposeReleaseBodyInput): string {
   const { notes, artifacts, commitSha, maxLength = RELEASE_BODY_MAX_LENGTH } = input;
 
-  const footer = renderFooter(artifacts, commitSha);
+  const footer = renderFooter(artifacts, commitSha, input.verificationGaps ?? []);
   const full = `${renderNotes(notes)}\n\n${footer}`;
   if (full.length <= maxLength) return full;
 

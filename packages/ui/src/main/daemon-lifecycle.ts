@@ -4,7 +4,7 @@ import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { HEALTH_PING_METHOD, type HealthPongResult, type JsonRpcResponse } from '@throng/ipc-contract';
-import { shouldRespawnDaemonElevated } from '@throng/core';
+import { isPackagedEntry, shouldRespawnDaemonElevated } from '@throng/core';
 
 /**
  * Resolve the executable that runs the daemon (020 FR-009). The daemon MUST run on host Node,
@@ -230,24 +230,35 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
     if (!stale && !elevate && !orphaned) return { spawned: false }; // up to date — reuse it (Principle III)
 
     /*
-     * NEVER retire a daemon that is not ours (#192).
+     * Never retire a DEVELOPMENT instance's daemon, and never let a development build retire an
+     * installed one (#192, narrowed by 058 FR-021a / research D7).
      *
      * Everything below kills the daemon on this pipe because its build id does not match. That is
-     * right when it is OUR daemon running older code, and catastrophic when it belongs to another
-     * instance: two throngs on one machine — a packaged install beside a dev build, or a dev build
-     * beside an E2E run — is not an edge case, it is how throng is developed, and killing the other
-     * one ends every terminal it owns with no warning and a raw ENOENT for everything after.
+     * right when it is OUR daemon running older code — and, since 058, when it is another INSTALLED
+     * or extracted copy's: each user has one daemon shared by every copy (FR-021), and starting a
+     * copy of a different build replaces it, ending its terminals without a prompt (FR-021a). Left
+     * alone, it would squat on the pipe and the new copy could start no daemon at all.
      *
-     * Instance separation is supposed to prevent the pipes ever meeting (`instancePipeName`), and
-     * that is the first line of defence, not a guarantee: a stray `THRONG_PIPE_NAME`, a spec that
-     * forgets to set one, a future packaging change. This is the second line, and it is the one that
-     * makes the promise unconditional — "must not touch the installed instance's daemon, at all, by
-     * any route".
+     * It is catastrophic when a development tree is on either side: a dev build beside an installed
+     * throng, or beside an E2E run, is how throng is developed, and killing the other one ends every
+     * terminal it owns (FR-018a). Instance separation (`instancePipeName`, `THRONG_PIPE_NAME`) keeps
+     * those pipes apart and is the first line of defence; this is the second — a stray pipe name, a
+     * spec that forgets to set one, a future packaging change.
      *
-     * An old daemon that predates this field reports nothing, and is retired as before: it is
-     * necessarily running code older than this handshake, so it can only be ours to replace.
+     * Whether a side is packaged is read from its ENTRY, here (`isPackagedEntry`), not from the
+     * `packaged` field the daemon reports: a dev daemon built before 058 reports no such field, and
+     * reading its absence as "packaged" would retire a developer's terminals (058 review A2). The
+     * field is consulted only when there is no entry to read — and a daemon with no entry predates
+     * #192 and never reaches this check: it can only be ours to replace.
      */
-    if (!orphaned && info.daemonEntry && !sameEntry(info.daemonEntry, opts.daemonEntry)) {
+    const theirsIsDev = info.daemonEntry ? !isPackagedEntry(info.daemonEntry) : info.packaged === false;
+    const oursIsDev = !isPackagedEntry(opts.daemonEntry);
+    if (
+      !orphaned &&
+      info.daemonEntry &&
+      !sameEntry(info.daemonEntry, opts.daemonEntry) &&
+      (theirsIsDev || oursIsDev)
+    ) {
       return { spawned: false, foreign: true };
     }
 

@@ -88,6 +88,19 @@ contextBridge.exposeInMainWorld('throng', {
   panels: {
     publishIdentities: (list: unknown) => ipcRenderer.send('throng:panels:identities', list),
   },
+  /*
+   * 058 FR-018 — a launch of a different copy reached this running instance. The channel strings are
+   * `main/instance-notice-channels.ts`'s, spelled out because a sandboxed preload cannot import it;
+   * `instance-channels.test.ts` keeps them equal.
+   */
+  instance: {
+    onDifferentCopy: (cb: (notice: unknown) => void) => {
+      const h = (_e: unknown, notice: unknown): void => cb(notice);
+      ipcRenderer.on('throng:instance:differentCopy', h);
+      return () => ipcRenderer.removeListener('throng:instance:differentCopy', h);
+    },
+    differentCopyReady: () => ipcRenderer.send('throng:instance:differentCopyReady'),
+  },
   daemon: {
     state: () => ipcRenderer.invoke('throng:daemon:state'),
     restart: () => ipcRenderer.invoke('throng:daemon:restart'),

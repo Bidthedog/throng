@@ -9,6 +9,8 @@
  * cannot be satisfied by automation — FR-029).
  */
 
+import type { UnprovenGap } from './verification-verdict.js';
+
 export interface PublishGateInput {
   /** The version is real (not `0.0.0`/blank) — see `isPlaceholderVersion`. */
   isRealVersion: boolean;
@@ -36,6 +38,17 @@ export interface PublishGateInput {
    * declared — publishing an artifact that was never verified is what FR-016 forbids.
    */
   artifactSetReconciles: boolean;
+  /**
+   * Why verification was refused, from `evaluateVerification` (058 FR-030): names the combination —
+   * and the step — that did not pass. Carried into the gate's reason so a maintainer sees which of
+   * the verdicts to look at. Ignored when `isVerified`.
+   */
+  verificationRefusal?: string | null;
+  /**
+   * Steps that could not be exercised but are allowed not to be (058 spec Assumptions). They do not
+   * refuse publication; they are handed back so the release body and job summary can report them.
+   */
+  reportedGaps?: readonly UnprovenGap[];
 }
 
 export interface PublishGateResult {
@@ -43,6 +56,8 @@ export interface PublishGateResult {
   allowed: boolean;
   /** The single unmet condition when refused; `null` when allowed. */
   reason: string | null;
+  /** The unproven steps to report, passed through from the input; empty when there are none. */
+  reportedGaps: readonly UnprovenGap[];
 }
 
 /**
@@ -50,37 +65,36 @@ export interface PublishGateResult {
  * result is a pure function of the inputs.
  */
 export function evaluatePublishGate(input: PublishGateInput): PublishGateResult {
+  const reportedGaps = input.reportedGaps ?? [];
+  const refuse = (reason: string): PublishGateResult => ({ allowed: false, reason, reportedGaps });
+
   if (!input.isRealVersion) {
-    return { allowed: false, reason: 'the package is not versioned (placeholder version)' };
+    return refuse('the package is not versioned (placeholder version)');
   }
   if (!input.versionsAligned) {
-    return {
-      allowed: false,
-      reason: 'the installer, package, reported and release-tag versions do not all match',
-    };
+    return refuse('the installer, package, reported and release-tag versions do not all match');
   }
   if (input.isAlreadyPublished) {
-    return { allowed: false, reason: 'this version has already been published' };
+    return refuse('this version has already been published');
   }
   if (!input.artifactSetReconciles) {
-    return {
-      allowed: false,
-      reason: 'the built artifacts do not match the declared artifact set',
-    };
+    return refuse('the built artifacts do not match the declared artifact set');
   }
   if (!input.isVerified) {
-    return { allowed: false, reason: 'the installer is not verified' };
+    // 058 FR-030 — name the combination that did not pass, not just that something did not.
+    return refuse(
+      input.verificationRefusal
+        ? `the release is not verified — ${input.verificationRefusal}`
+        : 'the installer is not verified',
+    );
   }
   // Cheap and deterministic, so it is checked BEFORE the human condition: a release whose notes
   // were never written should be refused before anyone is asked to certify the build (042 FR-005).
   if (!input.notesBindToVersion) {
-    return {
-      allowed: false,
-      reason: 'the release notes are missing, empty, or written for a different version',
-    };
+    return refuse('the release notes are missing, empty, or written for a different version');
   }
   if (!input.isSignedOff) {
-    return { allowed: false, reason: 'QA sign-off is missing' };
+    return refuse('QA sign-off is missing');
   }
-  return { allowed: true, reason: null };
+  return { allowed: true, reason: null, reportedGaps };
 }

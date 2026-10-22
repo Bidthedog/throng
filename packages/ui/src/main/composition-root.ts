@@ -37,7 +37,7 @@ import { FileConfigStore } from './config-store.js';
 import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { DEFAULT_CONFIG_WATCH_POLICY, type ConfigWatchPolicy } from './config-watcher.js';
-import { numberFromEnv, readUiSettings } from './ui-settings.js';
+import { numberFromEnv } from './ui-settings.js';
 import { instanceConfigRoot, instancePipeName } from './instance-paths.js';
 
 export { UI_TYPES } from './tokens.js';
@@ -69,28 +69,33 @@ function readConfigSettings(
   };
 }
 
-export function createUiContainer(): Container {
+/**
+ * This instance's default daemon pipe — its NAMESPACE (058 contracts/instance-lock.md).
+ *
+ * Exported because `main.ts` resolves the UI settings from it BEFORE `app.whenReady()` — the
+ * instance guard's lock is derived from the result — and hands that same value to
+ * `createUiContainer`. `THRONG_PIPE_NAME` overrides it in `readUiSettings`.
+ */
+export function uiDefaultPipeName(devMode: boolean): string {
+  // Per-user (020 FR-013): two OS accounts on one machine never collide. The SID/username call sits
+  // behind the platform abstraction (Principle II); `defaultPipeName` (core) is pure. A dev instance
+  // takes a suffixed endpoint so it can neither adopt nor RETIRE the installed app's daemon. Every
+  // installed or extracted copy — portable included — shares the unsuffixed one (058 D6).
+  return instancePipeName(defaultPipeName(new NodeUserContext().currentUser().userId), devMode);
+}
+
+/**
+ * @param uiSettings resolved ONCE by `main.ts` (`readUiSettings` over `uiDefaultPipeName`), before
+ *   `app.whenReady()`, because the instance guard's lock is derived from the same `pipeName`. Taking
+ *   the value rather than resolving it again here is what keeps the lock and the daemon in one
+ *   namespace by construction (058 review A4).
+ */
+export function createUiContainer(uiSettings: IUiSettings): Container {
   const container = new Container({ defaultScope: 'Singleton' });
   // An unpackaged run is a DEV instance: its data lives beside — never inside — the installed
   // app's (see `instance-paths.ts`).
   const devMode = !app.isPackaged;
-  // Per-user default pipe (020 FR-013): the endpoint is scoped to the current user so two
-  // OS accounts on one machine never collide. The SID/username call sits behind the platform
-  // abstraction (Principle II); `defaultPipeName` (core) is pure. `THRONG_PIPE_NAME` still overrides.
-  //
-  // A dev instance takes a suffixed endpoint so it can neither adopt nor RETIRE the installed
-  // app's daemon — a build-id mismatch on a shared pipe would kill its terminals.
-  const uiUserContext = new NodeUserContext();
-  // The portable build takes its own endpoint too (#429): its daemon outlives the temp folder it
-  // runs from, and must never be adopted by an installed throng.
-  const uiDefaultPipe = instancePipeName(
-    defaultPipeName(uiUserContext.currentUser().userId),
-    devMode,
-    process.env,
-  );
-  container
-    .bind<IUiSettings>(UI_TYPES.UiSettings)
-    .toConstantValue(readUiSettings(process.env, uiDefaultPipe));
+  container.bind<IUiSettings>(UI_TYPES.UiSettings).toConstantValue(uiSettings);
   // The OS clipboard seam (016, FR-013a) — bound ONCE, here, at the boundary that owns Electron.
   //
   // Under E2E it is filled in-process instead, because Electron's clipboard DOES NOT WORK in the

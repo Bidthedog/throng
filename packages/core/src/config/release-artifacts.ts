@@ -28,7 +28,13 @@ import type { VerificationStep } from './verification-verdict.js';
  * The set is closed for 042 and deliberately open to growth: #361 adds a machine-wide installer, so
  * no consumer may assume the count.
  */
-export type ReleaseArtifactRole = 'setup' | 'portable' | 'archive';
+export type ReleaseArtifactRole = 'setup' | 'msi' | 'portable' | 'archive';
+
+/**
+ * Where an installer puts itself (058 FR-003, spec entity *Install scope*): for the signed-in user
+ * alone, needing no elevation, or for every account on the machine, needing it.
+ */
+export type InstallScope = 'per-user' | 'machine';
 
 /**
  * The steps that constitute "it works, and it leaves nothing behind" — the end state 042 FR-015
@@ -52,6 +58,14 @@ export interface ReleaseArtifact {
   filename: string;
   /** What the release body calls it, for a reader choosing between artifacts (042 FR-023). */
   label: string;
+  /** One line saying who should download this one (058 FR-033, research D12). */
+  audience: string;
+  /**
+   * The install scopes this format offers (058 FR-003): both for the installers, none for the
+   * formats that install nothing. Each scope is verified on its own (FR-028) — see
+   * {@link combinationsOf}.
+   */
+  scopes: readonly InstallScope[];
   /**
    * Which verification steps mean something for this format. A step OUTSIDE this list is recorded
    * `not-applicable` in the verdict — never `passed`. An archive has no uninstaller, and a verdict
@@ -94,7 +108,9 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
       {
         role: 'setup',
         filename: `throng-setup-${version}.exe`,
-        label: 'Installer (per-user setup)',
+        label: 'Installer (setup)',
+        audience: 'Most people: installs for you, or for everyone on the machine',
+        scopes: ['per-user', 'machine'],
         // The installer is the only format that installs, and therefore the only one that can
         // uninstall, register a shortcut, or be interrupted mid-install. `no-write` asserts nothing
         // is written under the INSTALL ROOT at runtime (020 FR-008) — a property of an installed
@@ -102,6 +118,33 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
         applicableSteps: [
           'interrupted-install',
           'install',
+          'install-labels',
+          'launch',
+          'version-match',
+          'self-contained',
+          'shortcut',
+          'no-service',
+          'core-journey',
+          'reattach',
+          'checksum-match',
+          'no-write',
+          'uninstall',
+          'residue-scan',
+        ],
+        sha256: null,
+      },
+      {
+        role: 'msi',
+        filename: `throng-${version}.msi`,
+        label: 'Installer (MSI, for managed deployment)',
+        audience: 'Administrators deploying with Intune, SCCM or Group Policy',
+        scopes: ['per-user', 'machine'],
+        // A Windows Installer package registers a shortcut and an uninstall entry and is interrupted
+        // and uninstalled exactly as the setup is, so it takes the setup's whole list.
+        applicableSteps: [
+          'interrupted-install',
+          'install',
+          'install-labels',
           'launch',
           'version-match',
           'self-contained',
@@ -120,6 +163,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
         role: 'portable',
         filename: `throng-portable-${version}.exe`,
         label: 'Portable (no installation)',
+        audience: 'Run without installing',
+        scopes: [],
         // A self-extracting executable installs nothing, so it has no install, uninstall or
         // shortcut step, and `no-write` — which asserts nothing is written under the INSTALL ROOT
         // at runtime — has no install root to be about.
@@ -144,6 +189,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
         role: 'archive',
         filename: `throng-${version}.zip`,
         label: 'Archive (extract and run)',
+        audience: 'Extract and run anywhere',
+        scopes: [],
         // Extract-and-run: the folder IS the installation, so deleting it is the whole uninstall.
         applicableSteps: [
           'launch',
@@ -159,6 +206,63 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
       },
     ],
   };
+}
+
+/**
+ * One thing to verify on one clean machine (058 FR-028, spec entity *Verification combination*):
+ * an artifact in one of its scopes, or an artifact that has none.
+ *
+ * DERIVED from the declaration, never declared by hand, so the matrix in `release.yml` and the
+ * publish gate both read the same list and cannot drift from the artifact set (FR-030).
+ */
+export interface VerificationCombination {
+  /** `<role>-<user|machine>`, or `<role>` for an artifact without scopes. Unique. */
+  id: string;
+  role: ReleaseArtifactRole;
+  /** `null` for an artifact without scopes. */
+  scope: InstallScope | null;
+  /** The artifact's own steps plus the ones its scope adds. */
+  applicableSteps: readonly VerificationStep[];
+  /** Where this combination's verdict is written and read. */
+  verdictFile: string;
+}
+
+/** The steps a scope adds to the artifact's own (research D11). */
+function scopeSteps(role: ReleaseArtifactRole, scope: InstallScope): readonly VerificationStep[] {
+  if (scope === 'per-user') return ['standard-account-install'];
+  const machine: VerificationStep[] = ['second-account', 'in-use-upgrade', 'not-elevated-launch'];
+  // Only the setup has a silent switch that can ask for machine-wide without elevation (FR-010); the
+  // MSI's equivalent is Windows Installer's own refusal.
+  if (role === 'setup') machine.push('silent-elevation-refused');
+  return machine;
+}
+
+/** Every combination of the set, in declaration order, per-user before machine-wide. */
+export function combinationsOf(set: ReleaseArtifactSet): readonly VerificationCombination[] {
+  const combinations: VerificationCombination[] = [];
+  for (const artifact of set.artifacts) {
+    if (artifact.scopes.length === 0) {
+      combinations.push({
+        id: artifact.role,
+        role: artifact.role,
+        scope: null,
+        applicableSteps: artifact.applicableSteps,
+        verdictFile: `verification-verdict-${artifact.role}.json`,
+      });
+      continue;
+    }
+    for (const scope of artifact.scopes) {
+      const id = `${artifact.role}-${scope === 'per-user' ? 'user' : 'machine'}`;
+      combinations.push({
+        id,
+        role: artifact.role,
+        scope,
+        applicableSteps: [...artifact.applicableSteps, ...scopeSteps(artifact.role, scope)],
+        verdictFile: `verification-verdict-${id}.json`,
+      });
+    }
+  }
+  return combinations;
 }
 
 /**
