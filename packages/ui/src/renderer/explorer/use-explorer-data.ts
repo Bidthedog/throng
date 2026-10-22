@@ -534,6 +534,27 @@ export function useExplorerData(
   // Latest childrenMap for the live-sync reloader (avoids stale closures).
   const childrenMapRef = useRef(childrenMap);
   childrenMapRef.current = childrenMap;
+  /*
+   * LATEST-ISSUED LISTING WINS, per folder (gate flake on `explorer-keyboard-selection.e2e.ts:53`).
+   *
+   * Listings are read concurrently — the watcher's re-read, a finished paste's reconcile, a lazy
+   * expand — and their answers can arrive in any order. A read ISSUED before a move, answering after
+   * the paste's own re-read, used to be merged over it: the moved file's source row came back and
+   * nothing re-read the folder again, so it stayed as a ghost. Each read now takes a ticket when it is
+   * issued, and a folder's listing is only replaced by an answer whose ticket is newer than the one
+   * already applied. `listingEpoch` is the ticket the current project's restore started at: anything
+   * issued before it belongs to a tree that no longer exists.
+   */
+  const listingTicket = useRef(0);
+  const appliedTicket = useRef(new Map<string, number>());
+  const listingEpoch = useRef(0);
+  /** Whether a listing of `dir` read under `ticket` may still be applied — and if so, claims it. */
+  const claimListing = useCallback((dir: string, ticket: number): boolean => {
+    if (ticket < listingEpoch.current) return false;
+    if (ticket < (appliedTicket.current.get(dir) ?? 0)) return false;
+    appliedTicket.current.set(dir, ticket);
+    return true;
+  }, []);
   // True once the persisted selection has been restored (or there was none). Used
   // to ignore react-arborist's spurious empty onSelect on mount, which would
   // otherwise clobber the restored selection.
@@ -552,6 +573,9 @@ export function useExplorerData(
     let cancelled = false;
     setReady(false);
     window.throng?.files?.setRoot?.(rootFolder ?? null);
+    // A new tree: every listing issued before this point was read for the one it replaces.
+    listingEpoch.current = ++listingTicket.current;
+    appliedTicket.current.clear();
     if (!rootFolder) {
       setChildrenMap(new Map());
       setInitialOpenState({ [ROOT_ID]: true });
@@ -570,6 +594,9 @@ export function useExplorerData(
     void (async () => {
       const persisted = loadPersisted(projectId);
       const map = new Map<string, TreeNodeData[]>();
+      /** The ticket each listing below was issued under — see `claimListing`. */
+      const tickets = new Map<string, number>();
+      tickets.set('', ++listingTicket.current);
       const rootKids = await fetchRef.current('');
       if (cancelled) return;
       map.set('', rootKids ?? []);
@@ -578,6 +605,7 @@ export function useExplorerData(
         // project was closed. An unresolvable one is discarded and logged, never raised at the user
         // (026 / #197, FR-021).
         persisted.expanded.map(async (rel) => {
+          tickets.set(rel, ++listingTicket.current);
           const kids = await fetchRef.current(rel, true);
           if (kids) map.set(rel, kids);
         }),
@@ -585,7 +613,19 @@ export function useExplorerData(
       if (cancelled) return;
       const open: OpenMap = { [ROOT_ID]: true };
       for (const rel of persisted.expanded) if (map.has(rel)) open[rel] = true;
-      setChildrenMap(map);
+      // Keep whatever a NEWER read already applied to this tree (a watcher re-read that overtook
+      // the restore); everything else comes from the restore itself.
+      const overtaken = new Set(appliedTicket.current.keys());
+      const claimed = new Set([...map.keys()].filter((dir) => claimListing(dir, tickets.get(dir)!)));
+      setChildrenMap((prev) => {
+        const next = new Map<string, TreeNodeData[]>();
+        for (const dir of overtaken) {
+          const kept = prev.get(dir);
+          if (kept) next.set(dir, kept);
+        }
+        for (const [dir, kids] of map) if (claimed.has(dir)) next.set(dir, kids);
+        return next;
+      });
       setInitialOpenState(open);
       setSelectedId(persisted.selectedId);
       setReady(true);
@@ -593,7 +633,7 @@ export function useExplorerData(
     return () => {
       cancelled = true;
     };
-  }, [rootFolder, projectId, globsKey, documents]);
+  }, [rootFolder, projectId, globsKey, documents, claimListing]);
 
   /*
    * #470 — a change of `explorer.sortOrder` re-sorts every loaded folder in place, straight away.
@@ -740,18 +780,29 @@ export function useExplorerData(
      */
     const visible = speculative ? visibleOpenRef.current() : null;
     const results = await Promise.all(
-      keys.map(async (k) => [k, await fetchRef.current(k, visible !== null && k !== '' && !visible.has(k))] as const),
+      keys.map(async (k) => {
+        const ticket = ++listingTicket.current; // taken as the read is ISSUED — see `claimListing`
+        return [k, await fetchRef.current(k, visible !== null && k !== '' && !visible.has(k)), ticket] as const;
+      }),
     );
     // The child relPaths that EXIST after this re-read, across every dir we reloaded.
     // Returned so callers can bound a stale pending open/select target: a move/rename
     // whose node never materialised must not linger and later act on a same-named
     // node created at that exact path (Finding 2).
+    //
+    // A read issued before one already applied to the same folder answers about an older disk, and
+    // is dropped (`claimListing`) — that folder's present children are the newer listing's.
+    const applied = results.filter(([k, , ticket]) => claimListing(k, ticket));
     const present = new Set<string>();
-    for (const [, kids] of results) if (kids) for (const kid of kids) present.add(kid.relPath);
+    for (const [k, kids, ticket] of results) {
+      const shown = applied.some(([a, , t]) => a === k && t === ticket) ? kids : childrenMapRef.current.get(k);
+      if (shown) for (const kid of shown) present.add(kid.relPath);
+    }
+    if (applied.length === 0) return present;
     setChildrenMap((prev) => {
       const next = new Map(prev);
       let changed = false;
-      for (const [k, kids] of results) {
+      for (const [k, kids] of applied) {
         if (kids) {
           if (!sameEntries(prev.get(k), kids)) {
             next.set(k, kids);
@@ -767,7 +818,7 @@ export function useExplorerData(
       return changed ? next : prev;
     });
     return present;
-  }, []);
+  }, [claimListing]);
 
   /**
    * The watcher's re-read (#482): the loaded folders among `dirs`, or every loaded folder when the
@@ -867,11 +918,15 @@ export function useExplorerData(
     async (rel: string, silent = false): Promise<TreeNodeData[] | undefined> => {
       const cached = childrenMap.get(rel);
       if (cached !== undefined) return cached;
+      const ticket = ++listingTicket.current;
       const kids = await fetchRef.current(rel, silent);
-      if (kids) setChildrenMap((p) => new Map(p).set(rel, kids));
-      return kids ?? undefined;
+      // A newer listing of this folder already landed (a watcher re-read overtook this one): it wins.
+      if (!kids) return undefined;
+      if (!claimListing(rel, ticket)) return childrenMapRef.current.get(rel) ?? kids;
+      setChildrenMap((p) => new Map(p).set(rel, kids));
+      return kids;
     },
-    [childrenMap],
+    [childrenMap, claimListing],
   );
 
   // #120 — reconcile the two independent "is it open?" signals so they can never
