@@ -44,6 +44,6 @@ describe('057 attention theme tokens', () => {
   });
 
   it('bumps the shipped-defaults version so existing installs receive the tokens', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(26);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(27);
   });
 });

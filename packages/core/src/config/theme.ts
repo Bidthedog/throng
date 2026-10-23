@@ -646,6 +646,12 @@ export const THRONG_THEME: Theme = {
     /* 055 (FR-093, research R15). The Resource Monitor's help button, which explains what the monitor
        shows and how to use it. No question glyph existed. */
     help: '?',
+    /* 055, Session 2026-10-23 (FR-110, FR-105). The Resource Monitor's Activate — go to the project, tab
+       or panel a row names — and its Hide ended processes toggle. A hooked arrow reads "take me there",
+       distinct from `goToPanel` ↗, the attention toast's link (retheming one must not retheme the other);
+       a stop square reads "has ended", distinct from Hide idle's 💤. */
+    activate: '↪',
+    resourceHideEnded: '⏹',
   },
 };
 

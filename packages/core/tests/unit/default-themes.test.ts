@@ -73,7 +73,11 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 80;
 // 93 since 055: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
 // `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`).
 // 94 since 055's second feedback round (FR-093): `help`, the Resource Monitor's "?" button.
-const EXPECTED_ICON_TOKEN_COUNT = 94;
+// 96 since 055's Session 2026-10-23 (FR-110, FR-105): `activate`, the monitor's go-to control, and
+// `resourceHideEnded`, its Hide ended processes toggle.
+const EXPECTED_ICON_TOKEN_COUNT = 96;
+/** The icon tokens 055's Session 2026-10-23 adds; named, because a count alone is satisfied by a rename. */
+const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded'] as const;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -198,6 +202,14 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
       for (const token of PREVIEW_ICON_TOKENS) {
         expect(theme.icons[token], `${name}.icons.${token}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('every bundled theme carries the Resource Monitor’s Activate and Hide ended icon tokens (055 FR-110, FR-105)', () => {
+    for (const [name, theme] of Object.entries({ throng: THRONG_THEME, ...ALL_DEFAULT_THEMES })) {
+      for (const token of MONITOR_2026_10_23_ICON_TOKENS) {
+        expect((theme.icons as Record<string, string | undefined>)[token], `${name}.icons.${token}`).toBeTruthy();
       }
     }
   });

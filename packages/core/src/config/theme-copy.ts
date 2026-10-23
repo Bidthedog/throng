@@ -800,6 +800,14 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Help icon',
     description: 'The glyph on the Resource Monitor control that explains what it shows and how to use it.',
   },
+  'icons.activate': {
+    label: 'Activate icon',
+    description: 'The glyph on the Resource Monitor control that goes to the project, tab or panel a row names, bringing its window forward.',
+  },
+  'icons.resourceHideEnded': {
+    label: 'Hide ended processes icon',
+    description: 'The glyph on the Resource Monitor control that hides processes that have ended.',
+  },
   'icons.showHidden': {
     label: 'Show hidden entries icon',
     description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',

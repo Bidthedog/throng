@@ -318,7 +318,10 @@ import { setAtPath } from './metadata.js';
 //
 // Bumped by 055's second feedback round (25 → 26): one icon token, `help`, the Resource Monitor's "?"
 // button (FR-093). The additive case again.
-export const SHIPPED_DEFAULTS_VERSION = 26;
+//
+// Bumped by 055's Session 2026-10-23 (26 → 27): two icon tokens, `activate` (the monitor's go-to control,
+// FR-110) and `resourceHideEnded` (its Hide ended processes toggle, FR-105). The additive case again.
+export const SHIPPED_DEFAULTS_VERSION = 27;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
