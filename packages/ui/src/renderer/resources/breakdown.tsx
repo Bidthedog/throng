@@ -53,7 +53,7 @@ import {
 import { IDLE_SAMPLES, formatGrouped, type ResourceNode } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { Breadcrumb } from './breadcrumb.js';
-import { FIGURE_LABEL, FIGURE_ORDER, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
+import { FIGURE_LABEL, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
 import { moveFrom } from './flip.js';
 import {
   allRows,
@@ -80,6 +80,7 @@ import {
 import { useNodeActionsContext } from './node-actions.js';
 import { Sparkline, holdSparklines } from './sparkline.js';
 import { useBreakdownKeys } from './use-breakdown-keys.js';
+import { useColumnFit, type ColumnFit, type ColumnId } from './use-column-fit.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import { usePointerHold } from './use-pointer-hold.js';
 
@@ -104,6 +105,8 @@ interface RowProps {
   readonly row: BreakdownRow;
   readonly ctx: FigureContext;
   readonly metric: FigureId;
+  /** The columns that fit the list's width (FR-106), in display order; one identity while they do not change. */
+  readonly columns: readonly ColumnId[];
   readonly active: boolean;
   readonly selected: boolean;
   readonly onSelect: (id: string) => void;
@@ -118,7 +121,7 @@ export function __onRowDrawn(listener: ((nodeId: string) => void) | undefined): 
   rowDrawn = listener;
 }
 
-function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu }: RowProps): ReactElement {
+function RowView({ row, ctx, metric, columns, active, selected, onSelect, onOpen, onMenu }: RowProps): ReactElement {
   const { node, ended } = row;
   rowDrawn?.(node.id);
   const testId = `breakdown-row-${node.id}`;
@@ -139,6 +142,7 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
     const f: Figure | undefined = figures.find((x) => x.id === id);
     return (
       <span
+        key={id}
         className="breakdown-row__cell"
         data-testid={`${testId}-${id}`}
         data-metric={id}
@@ -186,13 +190,16 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
         </span>
       ) : (
         <>
-          {ended ? <span className="breakdown-row__spark" /> : <span className="breakdown-row__spark"><Sparkline nodeId={node.id} metric={metric} /></span>}
-          {/* Five cells in a fixed order: written out, not mapped, so none of them needs a key (a dev build pays for each). */}
-          {cell('cpu', 0)}
-          {cell('memory', 1)}
-          {cell('gpu', 2)}
-          {cell('io', 3)}
-          {cell('network', 4)}
+          {/* Only the columns that fit (FR-106): the grid has a track for each of these and no others. */}
+          {columns.map((id, i) =>
+            id === 'trend' ? (
+              <span key={id} className="breakdown-row__spark">
+                {ended ? null : <Sparkline nodeId={node.id} metric={metric} />}
+              </span>
+            ) : (
+              cell(id, columns[0] === 'trend' ? i - 1 : i)
+            ),
+          )}
         </>
       )}
     </li>
@@ -214,7 +221,7 @@ function sameFigures(a: readonly Figure[], b: readonly Figure[]): boolean {
  * the session itself (`sparkline.tsx`).
  */
 function sameRow(a: RowProps, b: RowProps): boolean {
-  if (a.metric !== b.metric || a.active !== b.active || a.selected !== b.selected) return false;
+  if (a.metric !== b.metric || a.columns !== b.columns || a.active !== b.active || a.selected !== b.selected) return false;
   if (a.onSelect !== b.onSelect || a.onOpen !== b.onOpen || a.onMenu !== b.onMenu) return false;
   if (a.ctx.thresholds !== b.ctx.thresholds || a.ctx.machine.installedRamBytes !== b.ctx.machine.installedRamBytes) return false;
   if (a.row === b.row) return true;
@@ -243,10 +250,12 @@ function Section({
   onOpen,
   onMenu,
   networkTitle,
+  fit,
 }: {
   section: BreakdownSection;
   ctx: FigureContext;
   metric: FigureId;
+  fit: ColumnFit;
   /** Why Network cannot be ordered by, or `null` when it is measured. */
   networkTitle: string | null;
   activeId: string | null;
@@ -264,7 +273,7 @@ function Section({
         </p>
       ) : (
         <>
-          <Columns sectionId={section.id} chosen={metric} network={networkTitle} />
+          <Columns sectionId={section.id} chosen={metric} network={networkTitle} fit={fit} />
           <ul className="breakdown__rows" role="tree" aria-label={section.title}>
           {section.rows.map((row) => (
             <Row
@@ -272,6 +281,7 @@ function Section({
               row={row}
               ctx={ctx}
               metric={metric}
+              columns={fit.visible}
               active={row.node.id === activeId}
               selected={row.node.id === selectedId}
               onSelect={onSelect}
@@ -282,7 +292,7 @@ function Section({
           </ul>
         </>
       )}
-      <TotalRow sectionId={section.id} total={section.total} ctx={ctx} />
+      <TotalRow sectionId={section.id} total={section.total} ctx={ctx} columns={fit.visible} />
     </section>
   );
 }
@@ -292,9 +302,19 @@ function Section({
  * above it add up to, ended processes never among them. The filter does not change it; it says instead how
  * many of the rows it counts are hidden. Not a row of the tree: not selectable, no actions, no sparkline.
  */
-function TotalRow({ sectionId, total, ctx }: { sectionId: string; total: BreakdownTotal; ctx: FigureContext }): ReactElement {
+function TotalRow({
+  sectionId,
+  total,
+  ctx,
+  columns,
+}: {
+  sectionId: string;
+  total: BreakdownTotal;
+  ctx: FigureContext;
+  columns: readonly ColumnId[];
+}): ReactElement {
   const testId = `breakdown-total-${sectionId}`;
-  const figures = figuresOf(total.node, ctx);
+  const figures = figuresOf(total.node, ctx).filter((f) => columns.includes(f.id));
   return (
     <div className="breakdown-total" data-testid={testId}>
       <span className="breakdown-total__name">
@@ -306,7 +326,7 @@ function TotalRow({ sectionId, total, ctx }: { sectionId: string; total: Breakdo
           </span>
         ) : null}
       </span>
-      <span className="breakdown-total__spark" />
+      {columns.includes('trend') ? <span className="breakdown-total__spark" /> : null}
       {figures.map((f) => (
         <span key={f.id} className="breakdown-row__cell" data-testid={`${testId}-${f.id}`} data-metric={f.id} title={columnTitle(f.id, f)}>
           {f.text}
@@ -321,14 +341,28 @@ function TotalRow({ sectionId, total, ctx }: { sectionId: string; total: Breakdo
  * a button that orders the list by it (FR-099) — a text button, the column's own name, as a table header
  * is; Network is disabled, saying why, while it is not measured (FR-113).
  */
-function Columns({ sectionId, chosen, network }: { sectionId: string; chosen: FigureId; network: string | null }): ReactElement {
+function Columns({
+  sectionId,
+  chosen,
+  network,
+  fit,
+}: {
+  sectionId: string;
+  chosen: FigureId;
+  network: string | null;
+  fit: ColumnFit;
+}): ReactElement {
   return (
     <div className="breakdown__columns" data-testid={`breakdown-columns-${sectionId}`} role="group" aria-label="Columns">
       <span />
-      <span className="breakdown__column" data-testid="breakdown-column-trend" data-column="trend">
-        Trend
-      </span>
-      {FIGURE_ORDER.map((id) => {
+      {fit.visible.map((id) => {
+        if (id === 'trend') {
+          return (
+            <span key={id} className="breakdown__column" data-testid="breakdown-column-trend" data-column="trend">
+              Trend
+            </span>
+          );
+        }
         const why = id === 'network' ? network : null;
         return (
           <button
@@ -347,9 +381,22 @@ function Columns({ sectionId, chosen, network }: { sectionId: string; chosen: Fi
           </button>
         );
       })}
+      {/* FR-106: the list does not scroll sideways, so what did not fit is named here instead. */}
+      {fit.hidden.length > 0 ? (
+        <span
+          className="breakdown__columns-hidden"
+          data-testid="breakdown-columns-hidden"
+          title={`Hidden: ${fit.hidden.map(columnLabel).join(', ')}. Widen the list or the window to see them`}
+          aria-label={`${formatGrouped(fit.hidden.length)} ${fit.hidden.length === 1 ? 'column' : 'columns'} hidden: ${fit.hidden.map(columnLabel).join(', ')}`}
+        >
+          »
+        </span>
+      ) : null}
     </div>
   );
 }
+
+const columnLabel = (id: ColumnId): string => (id === 'trend' ? 'Trend' : FIGURE_LABEL[id]);
 
 const plural = (n: number, one: string, many: string): string => `${formatGrouped(n)} ${n === 1 ? one : many}`;
 
@@ -527,6 +574,7 @@ export function Breakdown(): ReactElement | null {
   }, [rows, selectedId]);
   const keys = useBreakdownKeys({ rows, activeId, focusPath: model?.focusPath ?? ['root'] });
   useRowMoves(model, keys.ref);
+  const fit = useColumnFit(keys.ref, view.metric, model !== null);
   // The sparklines hold with the figures beside them (FR-095).
   useEffect(() => {
     const list = keys.ref.current;
@@ -544,6 +592,7 @@ export function Breakdown(): ReactElement | null {
       onKeyDown={keys.onKeyDown}
       ref={keys.ref}
       {...pointer.bind}
+      style={{ ['--breakdown-columns' as string]: fit.template }}
       // Empty space is not a node: a click on it clears the selection (FR-088).
       onClick={(e) => {
         if (!(e.target as Element).closest(CLICKABLE)) setSelection(null);
@@ -563,6 +612,7 @@ export function Breakdown(): ReactElement | null {
           onOpen={focusOn}
           onMenu={onMenu}
           networkTitle={networkTitle}
+          fit={fit}
         />
       ))}
       {/* No readout of the selected row's figures (FR-101): they are on the row, its detail on the right. */}

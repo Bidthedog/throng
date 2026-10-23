@@ -3759,7 +3759,9 @@ textarea,
   gap: 6px;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  /* FR-106: never sideways — columns drop instead (use-column-fit.ts). */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* The header: Back, where the user is, and what the rows are sorted by (FR-092). */
@@ -3819,7 +3821,8 @@ textarea,
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
+  /* Built from the columns that fit (use-column-fit.ts, FR-106); this is every column, before the first measure. */
+  grid-template-columns: var(--breakdown-columns, minmax(160px, 1fr) 90px 56px 64px 56px 72px 72px);
   gap: 8px;
   padding: 2px 6px;
   border-bottom: 1px solid var(--throng-colour-border);
@@ -3834,6 +3837,20 @@ textarea,
 
 .breakdown__column[data-column='trend'] {
   text-align: left;
+}
+
+/* Columns are hidden (FR-106): a marker at the header's right end, out of the grid's tracks, naming them on hover. */
+.breakdown__columns-hidden {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  background: var(--throng-colour-surface);
+  color: var(--throng-colour-accent);
+  cursor: help;
 }
 
 /* A metric's header is the button that orders by it (FR-099): a column name, not a boxed control. */
@@ -4080,7 +4097,8 @@ textarea,
   /* Set per row by the component (inline); this is the top level's. */
   --breakdown-depth: 0;
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
+  /* Built from the columns that fit (use-column-fit.ts, FR-106); this is every column, before the first measure. */
+  grid-template-columns: var(--breakdown-columns, minmax(160px, 1fr) 90px 56px 64px 56px 72px 72px);
   align-items: center;
   gap: 8px;
   padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
@@ -4155,7 +4173,8 @@ textarea,
 /* The Total row at the end of every list (FR-104): the rows' grid, ruled off above, not a row of the tree. */
 .breakdown-total {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
+  /* Built from the columns that fit (use-column-fit.ts, FR-106); this is every column, before the first measure. */
+  grid-template-columns: var(--breakdown-columns, minmax(160px, 1fr) 90px 56px 64px 56px 72px 72px);
   align-items: center;
   gap: 8px;
   padding: 3px 6px;
