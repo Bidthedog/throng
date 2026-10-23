@@ -204,6 +204,20 @@ export function summary(total: Metrics, over: Partial<ResourceSummary> = {}): Re
   };
 }
 
+/**
+ * `root` with every node's Network figure set to `value` — what an unelevated throng reads
+ * (`unavailable(NETWORK_ELEVATION_REQUIRED)`) or one whose trace failed. Own and rolled alike: the
+ * collector rolls a figure that is not a number up as itself.
+ */
+export function withNetwork(root: ResourceNode, value: MetricValue): ResourceNode {
+  return {
+    ...root,
+    own: { ...root.own, network: value },
+    rolled: { ...root.rolled, network: value },
+    children: root.children.map((c) => withNetwork(c, value)),
+  };
+}
+
 /** Walk a hierarchy depth-first. */
 export function flatten(n: ResourceNode): ResourceNode[] {
   return [n, ...n.children.flatMap(flatten)];

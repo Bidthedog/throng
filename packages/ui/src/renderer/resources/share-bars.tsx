@@ -18,15 +18,15 @@
  */
 import { useMemo, type CSSProperties, type ReactElement } from 'react';
 import { formatGrouped, heatFor, type HeatMetric, type ResourceNode, type UsageThresholds } from '@throng/core';
-import { FIGURE_LABEL, figureOf, type FigureId } from './figures.js';
+import { FIGURE_LABEL, figureOf, orderMetric, type FigureId } from './figures.js';
 import { barsFor, type BarItem } from './monitor-model.js';
-import { focusOn, getIoPeak, isEnded, setSelection, useView } from './monitor-session.js';
+import { focusOn, getIoPeak, getNetworkPeak, isEnded, setSelection, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import { usePointerHold } from './use-pointer-hold.js';
 import type { Subject } from './use-subject.js';
 
 /** The metric the machine-share scale takes for a figure (the bar's own figure, so the colour agrees with the length). */
-const HEAT_METRIC: Readonly<Record<FigureId, HeatMetric>> = { cpu: 'cpu', memory: 'memory', gpu: 'gpu', io: 'io' };
+const HEAT_METRIC: Readonly<Record<FigureId, HeatMetric>> = { cpu: 'cpu', memory: 'memory', gpu: 'gpu', io: 'io', network: 'network' };
 
 /** The ids from the root down to `id`, or `null` when it is not in the tree. */
 function pathTo(root: ResourceNode, id: string): string[] | null {
@@ -91,7 +91,8 @@ function Bar({
 }
 
 export function ShareBars({ subject }: { subject: Subject }): ReactElement {
-  const { metric } = useView();
+  // The bars follow what the rows are ordered by: a chosen Network is CPU while it is not measured (FR-099).
+  const metric = orderMetric(useView().metric, subject.tree);
   const { thresholds } = useResourceMonitorSettings();
   // A hold belongs to the item it was taken on: choosing another item (a click on a bar does) takes a new one.
   const hold = usePointerHold(subject.node, (live) => live, (live) => live, subject.node.id);
@@ -106,7 +107,8 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   };
   const machine = subject.frame.machine;
   const model = useMemo(() => barsFor(node, metric, isEnded), [node, metric]);
-  const ioPeak = getIoPeak();
+  // I/O and Network are coloured against the highest rate this session has seen (FR-094, FR-113).
+  const ioPeak = metric === 'network' ? getNetworkPeak() : getIoPeak();
 
   return (
     <section className="share-bars" data-testid="share-bars" aria-label={`What ${node.label} is made of, by ${FIGURE_LABEL[metric]}`} {...hold.bind}>
@@ -149,6 +151,8 @@ function scaleFor(metric: FigureId, t: UsageThresholds): { warning: string; crit
       return { warning: `${formatGrouped(t.memoryWarning)}%`, critical: `${formatGrouped(t.memoryCritical)}%`, of: 'installed memory' };
     case 'io':
       return { warning: `${formatGrouped(t.cpuWarning)}%`, critical: `${formatGrouped(t.cpuCritical)}%`, of: 'the highest I/O rate this session' };
+    case 'network':
+      return { warning: `${formatGrouped(t.cpuWarning)}%`, critical: `${formatGrouped(t.cpuCritical)}%`, of: 'the highest network rate this session' };
     case 'gpu':
       return { warning: `${formatGrouped(t.cpuWarning)}%`, critical: `${formatGrouped(t.cpuCritical)}%`, of: 'the GPU' };
     case 'cpu':

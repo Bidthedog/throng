@@ -11,7 +11,7 @@ import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { allowedIntervals } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
-import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
+import { FIGURE_ICON, FIGURE_LABEL, STATUS_FIGURE_ORDER, type StatusFigureId } from './figures.js';
 import { HelpButton, HelpPanel } from './help-panel.js';
 import { setView, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
@@ -74,14 +74,16 @@ export function ToolbarControls(): ReactElement {
     <>
     <div className="monitor-controls" role="toolbar" aria-label="Monitor controls" data-testid="monitor-controls">
       <span id="monitor-size-by" className="monitor-controls__label" data-testid="monitor-size-by-label">
-        Size by
+        Order by
       </span>
+      {/* FR-099: the toolbar's Order by stays beside the column headers that set it too. Network has no glyph
+          of its own, so it is chosen by its column header. */}
       <div className="monitor-controls__group" role="group" aria-labelledby="monitor-size-by">
-        {FIGURE_ORDER.map((id: FigureId) => (
+        {STATUS_FIGURE_ORDER.map((id: StatusFigureId) => (
           <IconButton
             key={id}
             token={FIGURE_ICON[id]}
-            title={`Show by ${FIGURE_LABEL[id]}`}
+            title={`Order by ${FIGURE_LABEL[id]}`}
             testId={`monitor-metric-${id}`}
             className="icon-button monitor-controls__button"
             ariaPressed={view.metric === id}

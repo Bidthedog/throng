@@ -224,11 +224,13 @@ describe('Tab moves between the window’s regions (FR-068)', () => {
     expect(order).toEqual(['filter', 'breakdown', 'detail', 'controls']);
   });
 
-  it('puts a single stop in the breakdown, whatever its size', async () => {
+  it('puts a single stop in the rows, whatever their number; the only others are the column headers that order them (FR-099)', async () => {
     await openModal();
-    const stops = screen
-      .getByTestId('breakdown')
-      .querySelectorAll('[tabindex="0"], button:not([tabindex="-1"]), a[href], input, select');
-    expect(stops).toHaveLength(1);
+    const stops = Array.from(
+      screen.getByTestId('breakdown').querySelectorAll<HTMLElement>('[tabindex="0"], button:not([tabindex="-1"]), a[href], input, select'),
+    );
+    const headers = stops.filter((el) => el.classList.contains('breakdown__column--order'));
+    expect(stops.filter((el) => !headers.includes(el))).toHaveLength(1);
+    expect(headers.map((el) => el.getAttribute('data-column'))).toEqual(['cpu', 'memory', 'gpu', 'io', 'network']);
   });
 });

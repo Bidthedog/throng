@@ -93,6 +93,8 @@ let view: ViewState = DEFAULT_VIEW;
 let selectedId: string | null = null;
 /** The highest total read-plus-write rate seen since the window opened: what I/O bars are coloured against (FR-094). */
 let ioPeak = 0;
+/** The same for Network, bytes sent plus received (FR-113, FR-094). */
+let networkPeak = 0;
 const history = new Map<string, HistoryPoint[]>();
 const endedIds = new Set<string>();
 const listeners = new Set<() => void>();
@@ -121,6 +123,7 @@ export function startSession(settings: SessionSettings): void {
   endedIds.clear();
   selectedId = null;
   ioPeak = 0;
+  networkPeak = 0;
   notice = null;
   capacity = Math.min(DEFAULT_CAPACITY, historyLength(settings));
   version += 1;
@@ -134,6 +137,7 @@ export function endSession(): void {
   endedIds.clear();
   selectedId = null;
   ioPeak = 0;
+  networkPeak = 0;
   notice = null;
   capacity = DEFAULT_CAPACITY;
   version += 1;
@@ -216,6 +220,7 @@ export function useCatchUpEpoch(): number {
 
 function recordPoints(f: DetailFrame): void {
   ioPeak = Math.max(ioPeak, metricNumber(f.hierarchy.rolled, 'io'));
+  networkPeak = Math.max(networkPeak, metricNumber(f.hierarchy.rolled, 'network'));
   walk(f.hierarchy, (n) => {
     let points = history.get(n.id);
     if (points === undefined) {
@@ -241,6 +246,11 @@ export function getSessionSnapshot(): SessionSnapshot {
 /** The highest total I/O rate (read plus write) reached since the window opened; 0 before any. */
 export function getIoPeak(): number {
   return ioPeak;
+}
+
+/** The highest Network rate reached since the window opened; 0 before any, and while it is not measured. */
+export function getNetworkPeak(): number {
+  return networkPeak;
 }
 
 export function isEnded(nodeId: string): boolean {
@@ -273,7 +283,7 @@ export function restoreView(raw: unknown): void {
   if (typeof raw !== 'object' || raw === null) return;
   const r = raw as Record<string, unknown>;
   const patch: { -readonly [K in keyof ViewState]?: ViewState[K] } = {};
-  if (r.metric === 'cpu' || r.metric === 'memory' || r.metric === 'gpu' || r.metric === 'io') patch.metric = r.metric;
+  if (r.metric === 'cpu' || r.metric === 'memory' || r.metric === 'gpu' || r.metric === 'io' || r.metric === 'network') patch.metric = r.metric;
   if (typeof r.filterText === 'string') patch.filterText = r.filterText;
   // A view saved before FR-100 may still carry `narrowTo`: there is no narrowing, so it is not read.
   if (typeof r.hideIdle === 'boolean') patch.hideIdle = r.hideIdle;
@@ -386,6 +396,7 @@ export function __resetSession(): void {
   view = DEFAULT_VIEW;
   selectedId = null;
   ioPeak = 0;
+  networkPeak = 0;
   notice = null;
   listeners.clear();
 }

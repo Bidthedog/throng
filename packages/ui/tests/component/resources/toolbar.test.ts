@@ -91,7 +91,7 @@ describe('no narrowing (FR-100, US2 scenario 21)', () => {
 describe('the metric (FR-061)', () => {
   it('is a group of four icon toggles, one pressed, and choosing one sets the view', async () => {
     await mount();
-    const group = screen.getByRole('group', { name: /size by/i });
+    const group = screen.getByRole('group', { name: /order by/i });
     const buttons = within(group).getAllByRole('button');
     expect(buttons.map((b) => b.getAttribute('data-testid'))).toEqual([
       'monitor-metric-cpu',
@@ -99,7 +99,7 @@ describe('the metric (FR-061)', () => {
       'monitor-metric-gpu',
       'monitor-metric-io',
     ]);
-    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Show by CPU', 'Show by Memory', 'Show by GPU', 'Show by I/O']);
+    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Order by CPU', 'Order by Memory', 'Order by GPU', 'Order by I/O']);
     expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
 
     fireEvent.click(screen.getByTestId('monitor-metric-memory'));

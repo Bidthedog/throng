@@ -35,6 +35,7 @@ const SHARE_OF: Readonly<Record<FigureId, string>> = {
   memory: 'installed memory',
   gpu: 'the GPU',
   io: 'the highest I/O rate throng has reached since this window opened',
+  network: 'the highest network rate throng has reached since this window opened',
 };
 
 const pct = (n: number): string => `${formatGrouped(n)}%`;

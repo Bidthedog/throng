@@ -53,7 +53,7 @@ import {
 import { IDLE_SAMPLES, formatGrouped, type ResourceNode } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { Breadcrumb } from './breadcrumb.js';
-import { FIGURE_LABEL, FIGURE_ORDER, type Figure, type FigureId } from './figures.js';
+import { FIGURE_LABEL, FIGURE_ORDER, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
 import { moveFrom } from './flip.js';
 import {
   allRows,
@@ -72,6 +72,7 @@ import {
   getHistory,
   isEnded,
   setSelection,
+  setView,
   toggleSelection,
   useSelection,
   useSession,
@@ -187,11 +188,12 @@ function RowView({ row, ctx, metric, active, selected, onSelect, onOpen, onMenu 
       ) : (
         <>
           {ended ? <span className="breakdown-row__spark" /> : <span className="breakdown-row__spark"><Sparkline nodeId={node.id} metric={metric} /></span>}
-          {/* Four cells in a fixed order: written out, not mapped, so none of them needs a key (a dev build pays for each). */}
+          {/* Five cells in a fixed order: written out, not mapped, so none of them needs a key (a dev build pays for each). */}
           {cell('cpu', 0)}
           {cell('memory', 1)}
           {cell('gpu', 2)}
           {cell('io', 3)}
+          {cell('network', 4)}
         </>
       )}
     </li>
@@ -241,10 +243,13 @@ function Section({
   onSelect,
   onOpen,
   onMenu,
+  networkTitle,
 }: {
   section: BreakdownSection;
   ctx: FigureContext;
   metric: FigureId;
+  /** Why Network cannot be ordered by, or `null` when it is measured. */
+  networkTitle: string | null;
   activeId: string | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -260,7 +265,7 @@ function Section({
         </p>
       ) : (
         <>
-          <Columns sectionId={section.id} chosen={metric} />
+          <Columns sectionId={section.id} chosen={metric} network={networkTitle} />
           <ul className="breakdown__rows" role="tree" aria-label={section.title}>
           {section.rows.map((row) => (
             <Row
@@ -313,28 +318,36 @@ function TotalRow({ sectionId, total, ctx }: { sectionId: string; total: Breakdo
 }
 
 /**
- * The names of the columns the rows are drawn in (FR-092), the chosen metric's marked. Decoration for
- * assistive technology: each figure already names itself in its title, and a header row inside a tree
- * would be a second thing to walk past.
+ * The names of the columns the rows are drawn in (FR-092), the chosen metric's marked. Each metric's name is
+ * a button that orders the list by it (FR-099) — a text button, the column's own name, as a table header
+ * is; Network is disabled, saying why, while it is not measured (FR-113).
  */
-function Columns({ sectionId, chosen }: { sectionId: string; chosen: FigureId }): ReactElement {
+function Columns({ sectionId, chosen, network }: { sectionId: string; chosen: FigureId; network: string | null }): ReactElement {
   return (
-    <div className="breakdown__columns" data-testid={`breakdown-columns-${sectionId}`} aria-hidden="true">
+    <div className="breakdown__columns" data-testid={`breakdown-columns-${sectionId}`} role="group" aria-label="Columns">
       <span />
       <span className="breakdown__column" data-testid="breakdown-column-trend" data-column="trend">
         Trend
       </span>
-      {FIGURE_ORDER.map((id) => (
-        <span
-          key={id}
-          className="breakdown__column"
-          data-testid={`breakdown-column-${id}`}
-          data-column={id}
-          data-chosen={id === chosen ? 'true' : undefined}
-        >
-          {FIGURE_LABEL[id]}
-        </span>
-      ))}
+      {FIGURE_ORDER.map((id) => {
+        const why = id === 'network' ? network : null;
+        return (
+          <button
+            key={id}
+            type="button"
+            className="breakdown__column breakdown__column--order"
+            data-testid={`breakdown-column-${id}`}
+            data-column={id}
+            data-chosen={id === chosen ? 'true' : undefined}
+            aria-pressed={id === chosen}
+            disabled={why !== null}
+            title={why ?? `Order by ${FIGURE_LABEL[id]}`}
+            onClick={() => setView({ metric: id })}
+          >
+            {FIGURE_LABEL[id]}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -376,7 +389,7 @@ function Header({ tree, model, metric }: { tree: ResourceNode; model: BreakdownM
       />
       <Breadcrumb tree={tree} path={model.focusPath} onGo={focusOn} />
       <span className="breakdown__sorted-by" data-testid="breakdown-sorted-by">
-        Sorted by {FIGURE_LABEL[metric]}
+        Ordered by {FIGURE_LABEL[metric]}
       </span>
     </header>
   );
@@ -440,7 +453,13 @@ export function Breakdown(): ReactElement | null {
   const liveVersion = useDeferredValue(session.version);
   const liveView = useView();
   const filterText = useDeferredValue(liveView.filterText);
-  const view = useMemo(() => (filterText === liveView.filterText ? liveView : { ...liveView, filterText }), [liveView, filterText]);
+  // A chosen Network orders by CPU while Network is not measured (FR-099, derived); the choice itself is kept.
+  const networkTitle = liveTree === null ? null : networkUnavailableTitle(liveTree.rolled);
+  const metric = orderMetric(liveView.metric, liveTree);
+  const view = useMemo(
+    () => (filterText === liveView.filterText && metric === liveView.metric ? liveView : { ...liveView, filterText, metric }),
+    [liveView, filterText, metric],
+  );
   const heldKey = `${view.metric}|${view.focusPath.join('/')}`;
   // The pointer over the list freezes what it draws at what it was when the pointer arrived (FR-095): the
   // tree, the frame, the history the idle rule reads, and which processes had ended — the last is mutated in
@@ -545,6 +564,7 @@ export function Breakdown(): ReactElement | null {
           onSelect={toggleSelection}
           onOpen={focusOn}
           onMenu={onMenu}
+          networkTitle={networkTitle}
         />
       ))}
       {/* What hovering the keyboard's row would show (FR-068): the same text, as its own announcement. */}

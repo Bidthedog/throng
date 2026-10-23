@@ -27,12 +27,12 @@ import {
   FIGURE_HINT,
   FIGURE_ICON,
   FIGURE_LABEL,
-  FIGURE_ORDER,
+  STATUS_FIGURE_ORDER,
   breakdownLine,
   figureOf,
   fitFigures,
   type Figure,
-  type FigureId,
+  type StatusFigureId,
 } from './figures.js';
 import { useResourceSummary } from './use-resource-summary.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
@@ -74,17 +74,20 @@ function itemTitle(
   return lines.join('\n');
 }
 
-function figuresFor(summary: ResourceSummary, thresholds: UsageThresholds, machine: MachineInfo): Figure[] {
-  return FIGURE_ORDER.map((id) => figureOf(id, summary.total, thresholds, machine));
+/** The status bar's four figures — never Network, which is the monitor's alone (FR-113). */
+type StatusFigure = Figure & { readonly id: StatusFigureId };
+
+function figuresFor(summary: ResourceSummary, thresholds: UsageThresholds, machine: MachineInfo): StatusFigure[] {
+  return STATUS_FIGURE_ORDER.map((id) => ({ ...figureOf(id, summary.total, thresholds, machine), id }));
 }
 
 export function StatusResources(): ReactElement {
   const summary = useResourceSummary();
   const { thresholds } = useResourceMonitorSettings();
   const rootRef = useRef<HTMLButtonElement | null>(null);
-  const [visible, setVisible] = useState<readonly FigureId[]>(FIGURE_ORDER);
+  const [visible, setVisible] = useState<readonly StatusFigureId[]>(STATUS_FIGURE_ORDER);
   /** The widest each figure has been seen. */
-  const widths = useRef<Partial<Record<FigureId, number>>>({});
+  const widths = useRef<Partial<Record<StatusFigureId, number>>>({});
   const hasSummary = useRef(false);
   hasSummary.current = summary !== null;
 
@@ -107,7 +110,7 @@ export function StatusResources(): ReactElement {
       if (sibling !== root) others += sibling.getBoundingClientRect().width;
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>('[data-figure]'))) {
-      const id = el.getAttribute('data-figure') as FigureId;
+      const id = el.getAttribute('data-figure') as StatusFigureId;
       const width = el.getBoundingClientRect().width;
       if (width > (widths.current[id] ?? 0)) widths.current[id] = width;
     }

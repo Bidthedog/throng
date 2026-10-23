@@ -3819,7 +3819,7 @@ textarea,
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
   gap: 8px;
   padding: 2px 6px;
   border-bottom: 1px solid var(--throng-colour-border);
@@ -3834,6 +3834,27 @@ textarea,
 
 .breakdown__column[data-column='trend'] {
   text-align: left;
+}
+
+/* A metric's header is the button that orders by it (FR-099): a column name, not a boxed control. */
+.breakdown__column--order {
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+:where(body:not([data-window-blurred])) .breakdown__column--order:hover:not(:disabled) {
+  background: var(--throng-colour-hoverSurface);
+}
+
+.breakdown__column--order:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .breakdown__column[data-chosen='true'] {
@@ -4059,7 +4080,7 @@ textarea,
   /* Set per row by the component (inline); this is the top level's. */
   --breakdown-depth: 0;
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
   align-items: center;
   gap: 8px;
   padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
@@ -4134,7 +4155,7 @@ textarea,
 /* The Total row at the end of every list (FR-104): the rows' grid, ruled off above, not a row of the tree. */
 .breakdown-total {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(5, minmax(56px, auto));
   align-items: center;
   gap: 8px;
   padding: 3px 6px;

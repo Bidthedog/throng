@@ -14,7 +14,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { __resetSession, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
-import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, unavailable } from '@throng/core';
+import { frame, sampleHierarchy, withNetwork } from '../helpers/resource-fixtures.js';
 
 
 beforeEach(() => {
@@ -26,21 +27,23 @@ afterEach(() => __resetSession());
 
 const mount = (): void => void render(createElement(Fragment, null, createElement(Breakdown), createElement(ToolbarControls)));
 
-describe('the header (FR-092)', () => {
-  it('has a Back button, disabled at the top, and says what the rows are sorted by', () => {
+describe('the header (FR-092, FR-099)', () => {
+  it('has a Back button, disabled at the top, and says what the rows are ordered by', () => {
     mount();
     const back = screen.getByTestId('breakdown-back');
     expect(back).toBeDisabled();
     expect(back).toHaveAttribute('title', 'Back');
-    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by CPU');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by CPU');
   });
 
-  it('names the metric the rows are sorted by as it changes', () => {
+  it('names the metric the rows are ordered by as it changes', () => {
     mount();
     act(() => setView({ metric: 'memory' }));
-    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by Memory');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by Memory');
     act(() => setView({ metric: 'io' }));
-    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Sorted by I/O');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by I/O');
+    act(() => setView({ metric: 'network' }));
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by Network');
   });
 
   it('goes up one level on Back, and clears the selection', () => {
@@ -69,14 +72,36 @@ describe('the header (FR-092)', () => {
   });
 });
 
-describe('column headers over the rows (FR-092)', () => {
+describe('column headers over the rows (FR-092, FR-099)', () => {
   const columns = (section: string): HTMLElement[] => within(screen.getByTestId(`breakdown-columns-${section}`)).getAllByTestId(/^breakdown-column-/);
+  const header = (id: string): HTMLElement => screen.getByTestId(`breakdown-column-${id}`);
 
-  it('names Trend, CPU, Memory, GPU and I/O over each section’s rows', () => {
+  it('names Trend, CPU, Memory, GPU, I/O and Network over the rows', () => {
     mount();
-    for (const section of ['components']) {
-      expect(columns(section).map((c) => c.textContent)).toEqual(['Trend', 'CPU', 'Memory', 'GPU', 'I/O']);
+    expect(columns('components').map((c) => c.textContent)).toEqual(['Trend', 'CPU', 'Memory', 'GPU', 'I/O', 'Network']);
+  });
+
+  it('makes each metric’s header a button that orders by it; Trend is not one', () => {
+    mount();
+    for (const id of ['cpu', 'memory', 'gpu', 'io', 'network']) {
+      expect(header(id).tagName.toLowerCase(), id).toBe('button');
+      // Reachable from the keyboard: a real button, not taken out of the Tab order.
+      expect(header(id)).not.toHaveAttribute('tabindex', '-1');
+      expect(header(id).getAttribute('title')).toBe(`Order by ${header(id).textContent}`);
     }
+    expect(header('trend').tagName.toLowerCase()).not.toBe('button');
+  });
+
+  it('orders by Memory on a click of its header: marked there, and shown by the toolbar’s Order by (US2 scenario 20)', () => {
+    mount();
+    fireEvent.click(header('memory'));
+
+    expect(getView().metric).toBe('memory');
+    expect(header('memory')).toHaveAttribute('data-chosen', 'true');
+    expect(header('memory')).toHaveAttribute('aria-pressed', 'true');
+    expect(header('cpu')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('monitor-metric-memory')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by Memory');
   });
 
   it('marks the chosen metric’s column, and moves the mark with the choice', () => {
@@ -92,20 +117,46 @@ describe('column headers over the rows (FR-092)', () => {
     const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
     expect(/\.breakdown__columns\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position:\s*sticky/);
   });
+});
 
-  it('is decoration for assistive technology — each figure already names itself', () => {
+describe('ordering by Network (FR-099, FR-113)', () => {
+  const network = (): HTMLElement => screen.getByTestId('breakdown-column-network');
+
+  it('is disabled while throng is not elevated, titled “Elevate to show”', () => {
+    act(() => ingestFrame(frame(2, withNetwork(sampleHierarchy(), unavailable(NETWORK_ELEVATION_REQUIRED)))));
     mount();
-    expect(screen.getByTestId('breakdown-columns-components')).toHaveAttribute('aria-hidden', 'true');
+    expect(network()).toBeDisabled();
+    expect(network()).toHaveAttribute('title', 'Elevate to show');
+  });
+
+  it('is disabled, titled “Network unavailable”, when the trace failed', () => {
+    act(() => ingestFrame(frame(2, withNetwork(sampleHierarchy(), unavailable(NETWORK_TRACE_FAILED)))));
+    mount();
+    expect(network()).toBeDisabled();
+    expect(network()).toHaveAttribute('title', 'Network unavailable');
+  });
+
+  it('orders by CPU while a chosen Network is not measured, and by Network again once it is (derived)', () => {
+    act(() => setView({ metric: 'network' }));
+    act(() => ingestFrame(frame(2, withNetwork(sampleHierarchy(), unavailable(NETWORK_ELEVATION_REQUIRED)))));
+    mount();
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by CPU');
+    expect(screen.getByTestId('breakdown-column-cpu')).toHaveAttribute('data-chosen', 'true');
+    // The choice is kept, to come back to.
+    expect(getView().metric).toBe('network');
+
+    act(() => ingestFrame(frame(3, withNetwork(sampleHierarchy(), 1024))));
+    expect(screen.getByTestId('breakdown-sorted-by')).toHaveTextContent('Ordered by Network');
   });
 });
 
-describe('labels on the toolbar’s choices (FR-092)', () => {
-  it('says “Size by” over the metric buttons and “Capture every” by the interval', () => {
+describe('labels on the toolbar’s choices (FR-092, FR-099)', () => {
+  it('says “Order by” over the metric buttons and “Capture every” by the interval', () => {
     mount();
-    expect(screen.getByTestId('monitor-size-by-label')).toHaveTextContent('Size by');
+    expect(screen.getByTestId('monitor-size-by-label')).toHaveTextContent('Order by');
     expect(screen.getByTestId('monitor-interval-label')).toHaveTextContent('Capture every');
     // The visible words are the controls' names too, not a second label beside an unnamed control.
-    expect(screen.getByRole('group', { name: 'Size by' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Order by' })).toBeInTheDocument();
     expect(screen.getByLabelText('Capture every')).toBe(screen.getByTestId('monitor-interval'));
   });
 });
