@@ -4131,6 +4131,30 @@ textarea,
   text-decoration: underline dotted;
 }
 
+/* The Total row at the end of every list (FR-104): the rows' grid, ruled off above, not a row of the tree. */
+.breakdown-total {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 90px repeat(4, minmax(56px, auto));
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-top: 1px solid var(--throng-colour-border);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.breakdown-total__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdown-total__hidden {
+  color: var(--throng-colour-textMuted);
+  font-size: 11px;
+  font-weight: var(--throng-font-weight-normal);
+}
+
 /* The canvas is drawn in this colour: sparkline.tsx reads it back with getComputedStyle. */
 .sparkline {
   display: block;

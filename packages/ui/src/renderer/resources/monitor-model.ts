@@ -38,6 +38,15 @@ export interface BreakdownSection {
   readonly nodes: readonly ResourceNode[];
   /** `nodes` and, beneath processes (or everywhere, while filtering), their descendants. */
   readonly rows: readonly BreakdownRow[];
+  /** The Total row (FR-104): the listed node's own rolled-up figures, whatever the filter shows. */
+  readonly total: BreakdownTotal;
+}
+
+export interface BreakdownTotal {
+  /** The node whose children are listed, as the capture has it — not as the filter shows it. */
+  readonly node: ResourceNode;
+  /** How many of the live children it counts the filter, Hide idle or Hide ended left out. */
+  readonly hidden: number;
 }
 
 export interface BreakdownModel {
@@ -179,6 +188,14 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
   const held = ctx.heldOrder === undefined ? undefined : new Map(ctx.heldOrder.map((id, i) => [id, i] as const));
 
   const ordered = (nodes: readonly ResourceNode[]): ResourceNode[] => orderBy(nodes, view.metric, held);
+  // The Total is the listed node's own figure (FR-104), read from the capture rather than from what the
+  // filter left, so filtering never changes it; an ended child counts toward nothing, so it is not "hidden".
+  const listed = nodeAt(tree, focusPath) ?? focus;
+  const shown = new Set(focus.children.map((c) => c.id));
+  const total: BreakdownTotal = {
+    node: listed,
+    hidden: listed.children.filter((c) => c.kind !== 'limitation' && !ctx.isEnded(c.id) && !shown.has(c.id)).length,
+  };
   const section = (
     id: SectionId,
     title: string,
@@ -186,7 +203,7 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
     nodes: readonly ResourceNode[],
   ): BreakdownSection => {
     const top = ordered(nodes);
-    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held) };
+    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held), total };
   };
 
   // The top level lists the four components only (FR-103): the user's projects are one drill into Projects.

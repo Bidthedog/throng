@@ -328,6 +328,56 @@ describe('the rows', () => {
   });
 });
 
+describe('the Total row (FR-104, US2 scenario 24)', () => {
+  const TAB = ['root', 'c:projects', 'p:p1', 't:t1'];
+  const total = (): HTMLElement => screen.getByTestId('breakdown-total-children');
+
+  it('ends the list with the listed node’s own rolled-up figures, one per column', () => {
+    feed(sampleHierarchy());
+    mount();
+    act(() => setView({ focusPath: TAB }));
+
+    // The tab holds the shell (90 MB), node (300 MB), the buffers (12 MB) and the editor (40 MB).
+    expect(within(total()).getByTestId('breakdown-total-children-memory')).toHaveTextContent('442 MB');
+    expect(within(total()).getByTestId('breakdown-total-children-cpu')).toHaveTextContent(`${formatGrouped(13)}%`);
+    expect(total()).toHaveTextContent('Total');
+    // It is the last thing in the section, after the rows.
+    const section = screen.getByTestId('breakdown-section-children');
+    expect(section.lastElementChild).toBe(total());
+  });
+
+  it('ends the top level too, with throng’s whole figure', () => {
+    feed(sampleHierarchy());
+    mount();
+    // UI 200 + Daemon 80 + Helpers 6 + Projects 442.
+    expect(within(screen.getByTestId('breakdown-total-components')).getByTestId('breakdown-total-components-memory')).toHaveTextContent('728 MB');
+  });
+
+  it('is unchanged by the filter, and says how many of the rows it counts are hidden', () => {
+    feed(sampleHierarchy());
+    mount();
+    act(() => setView({ focusPath: TAB }));
+    expect(screen.queryByTestId('breakdown-total-children-hidden')).toBeNull();
+
+    act(() => setView({ filterText: 'Notes' }));
+
+    expect(within(total()).getByTestId('breakdown-total-children-memory')).toHaveTextContent('442 MB');
+    expect(within(total()).getByTestId('breakdown-total-children-hidden')).toHaveTextContent('includes 1 hidden');
+  });
+
+  it('is not selectable, has no actions and no sparkline', () => {
+    feed(sampleHierarchy(), 3);
+    mount();
+    act(() => setView({ focusPath: TAB }));
+
+    expect(total()).not.toHaveAttribute('role', 'treeitem');
+    expect(total()).not.toHaveAttribute('tabindex');
+    expect(total().querySelector('canvas, [data-testid^="sparkline"]')).toBeNull();
+    fireEvent.click(total());
+    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(0);
+  });
+});
+
 describe('colour (FR-067)', () => {
   it('draws nothing from a literal colour: the 055 stylesheet names theme variables only', () => {
     const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');

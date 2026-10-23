@@ -64,6 +64,7 @@ import {
   type BreakdownModel,
   type BreakdownRow,
   type BreakdownSection,
+  type BreakdownTotal,
   type FigureContext,
 } from './monitor-model.js';
 import {
@@ -277,7 +278,37 @@ function Section({
           </ul>
         </>
       )}
+      <TotalRow sectionId={section.id} total={section.total} ctx={ctx} />
     </section>
+  );
+}
+
+/**
+ * The last line of every list (FR-104): the listed node's own rolled-up figure per column — what the rows
+ * above it add up to, ended processes never among them. The filter does not change it; it says instead how
+ * many of the rows it counts are hidden. Not a row of the tree: not selectable, no actions, no sparkline.
+ */
+function TotalRow({ sectionId, total, ctx }: { sectionId: string; total: BreakdownTotal; ctx: FigureContext }): ReactElement {
+  const testId = `breakdown-total-${sectionId}`;
+  const figures = figuresOf(total.node, ctx);
+  return (
+    <div className="breakdown-total" data-testid={testId}>
+      <span className="breakdown-total__name">
+        Total
+        {total.hidden > 0 ? (
+          <span className="breakdown-total__hidden" data-testid={`${testId}-hidden`}>
+            {' '}
+            includes {formatGrouped(total.hidden)} hidden
+          </span>
+        ) : null}
+      </span>
+      <span className="breakdown-total__spark" />
+      {figures.map((f) => (
+        <span key={f.id} className="breakdown-row__cell" data-testid={`${testId}-${f.id}`} data-metric={f.id} title={columnTitle(f.id, f)}>
+          {f.text}
+        </span>
+      ))}
+    </div>
   );
 }
 
