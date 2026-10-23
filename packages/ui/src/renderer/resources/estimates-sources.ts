@@ -12,7 +12,6 @@ import {
   PREVIEW_KIND,
   collectPanels,
   editorRendererBytes,
-  panelDisplayTitle,
   previewRendererBytes,
   terminalRendererBytes,
   type Panel,
@@ -29,6 +28,7 @@ import type {
 } from '@throng/ipc-contract';
 import { getEditorView } from '../editor/editor-views.js';
 import { getTerminalBufferSize } from '../terminal/buffer-registry.js';
+import { currentPanelTitle } from '../workspace/use-panel-display-names.js';
 
 export interface WorkspaceFacts {
   readonly projects: readonly ProjectDto[];
@@ -95,7 +95,8 @@ export function buildWorkspaceContext(facts: WorkspaceFacts): WorkspaceContext {
           id: panel.id,
           tabId: tab.id,
           projectId: known.has(panel.originProjectId) ? panel.originProjectId : null,
-          name: panelDisplayTitle(panel),
+          // The name its own header shows (D2): the live sources, as #294 fixed for the tab popover.
+          name: currentPanelTitle(panel),
           kind: panel.kind ?? 'untyped',
           mounted,
         });

@@ -13,6 +13,11 @@ import { useServicesOptional } from '../composition-root.js';
 import { useProjectsOptional } from '../state/projects-store.js';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
 import { useUnloadProject } from '../sidebar/use-unload-project.js';
+import { useEditorStateVersion } from '../editor/editor-state.js';
+import { useTerminalCommandVersion } from '../terminal/command-store.js';
+import { useTerminalCwdVersion } from '../terminal/cwd-store.js';
+import { useTerminalTitleContextVersion } from '../terminal/title-context.js';
+import { useTerminalTitleVersion } from '../terminal/title-store.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { requestTabDestroy } from '../workspace/tab-destroy.js';
 import { createEstimatesReporter, type EstimatesReporter } from './estimates-reporter.js';
@@ -109,9 +114,16 @@ export function useEstimatesReporter(subWorkspaceName: string | null): void {
     // Another project became the active one, or one was loaded or unloaded: the layouts of the rest moved.
     if (demand.current) refreshOthers.current();
   }, [projectList, loaded, active]);
+  // A panel's name is the one its header shows (D2): its live title, command, working folder, an editor's
+  // file. Any of those changing re-reports — the reporter itself drops a context that did not change.
+  const titles = useTerminalTitleVersion();
+  const commands = useTerminalCommandVersion();
+  const cwds = useTerminalCwdVersion();
+  const titleContext = useTerminalTitleContextVersion();
+  const editors = useEditorStateVersion();
   useEffect(() => {
     reporter.current?.contextChanged();
-  }, [layout]);
+  }, [layout, titles, commands, cwds, titleContext, editors]);
 }
 
 /**

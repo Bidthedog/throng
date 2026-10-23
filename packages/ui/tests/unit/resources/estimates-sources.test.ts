@@ -7,7 +7,7 @@
  * rather than asserting the context's shape alone: a tab sent with no project was well-formed and was
  * silently dropped on the far side.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildHierarchy,
   processKey,
@@ -19,6 +19,8 @@ import {
   type WorkspaceLayout,
 } from '@throng/core';
 import { buildWorkspaceContext, loadOtherLayouts, type WorkspaceFacts } from '../../../src/renderer/resources/estimates-sources.js';
+import { clearTerminalTitle, setTerminalTitle } from '../../../src/renderer/terminal/title-store.js';
+import { currentPanelTitle } from '../../../src/renderer/workspace/use-panel-display-names.js';
 
 const panel = (id: string, originProjectId: string, kind: Panel['kind'] = 'terminal'): Panel => ({
   type: 'panel',
@@ -200,6 +202,24 @@ describe('reading the other projects’ layouts (T092)', () => {
   it('leaves out a project whose read fails, and still reads the others', async () => {
     const got = await loadOtherLayouts(['p2', 'p3'], (id) => (id === 'p2' ? Promise.reject(new Error('daemon')) : Promise.resolve(saved(id))));
     expect([...got.keys()]).toEqual(['p3']);
+  });
+});
+
+describe('a panel’s name is the one its own header shows (D2, FR-020, FR-082)', () => {
+  afterEach(() => clearTerminalTitle('nt'));
+
+  it('names a terminal by its live window title, not its flavour label', () => {
+    const t: Panel = { ...panel('nt', 'p1'), config: { flavourLabel: 'PowerShell' } };
+    setTerminalTitle('nt', 'claude — fixing the build');
+    const context = buildWorkspaceContext(facts({ layout: layout('p1', [tab('ta', [t])]) }));
+    expect(context.panels[0]!.name).toBe('claude — fixing the build');
+  });
+
+  it('names an editor by its file, as its header does', () => {
+    const e: Panel = { ...panel('ne', 'p1', 'editor'), config: { filePath: 'C:/work/notes.md' } };
+    const context = buildWorkspaceContext(facts({ layout: layout('p1', [tab('ta', [e])]) }));
+    expect(context.panels[0]!.name).toBe(currentPanelTitle(e));
+    expect(context.panels[0]!.name).toContain('notes');
   });
 });
 
