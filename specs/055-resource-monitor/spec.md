@@ -223,6 +223,103 @@ selection detail must me on the right."*
 - Q: Do rows keep the ▸ drill-down button? → A: **No — double-click only** (with Enter and Right from the
   keyboard). (FR-096; supersedes FR-088's drill-down button)
 
+### Session 2026-10-23
+
+Fourth feedback, after hand-testing the two-column monitor, verbatim:
+
+> **Left pane:** Selecting a component or a a project should highlight that line - hover when selected
+> does not need its own style. Either an entry is selected, or nothing is selected. Headers (CPU, memory,
+> GPU, I/O) can be clicked on and will change the selected "Size by" option. "Size by" should be "Order
+> By". The drop-down does not make sense as a UX component (Everything, components, all the projects) -
+> remove it. The selected component information in the top panel is superflous, remove it. Mousing over
+> each component should show a brief explaination of why that component exists and what is is
+> responsible for. I *think* projects entry in the component list is essentially a top-level version of
+> the second list (Projects). If this is the case, then the project list is superflous - the user can
+> drill-down into the list as they need to. The component list should show a "total" at the bottom of the
+> list for each column. We need a filter option that lets us "Hide ended processes". It should be on by
+> default. The left-hand table should never create a horizontal scrollbar. If all columns cannot be
+> comfortably displayed, columns should start dropping off the right side, with a visual indicator
+> showing that there is missing info available. The user can move the middle divider or resize the
+> window to see the details. When something is "Not Measured" it should just use a dash "-" instead of
+> "Not measured". When a value is estimated, it should use the "~" prefix.
+>
+> **Right pane:** When a drilled-down element is selected, the user should be able to click an action
+> button (next to the X) to activate the panel it belongs to in throng (if applicable). The drill-down
+> elements should show all 4 stats at all times - they should not be limited by the size by option. CPU,
+> RAM, GPU, I/O. When clicking on something in the right pane, the left pane should not change - the
+> right pane is drill-down information for what is selected in the left pane.
+>
+> **General:** The divider between the two panes should be moveable. The filter, order by toolbar and
+> breadcrumb should span the width of the full window and be separated by a horizontal rule / bottom
+> border / divider. Panel titles should update as they change in the application - they seem to stay
+> static, or refer to the terminal that is loaded. Use the panel title instead of the terminal title. Can
+> we also add a network stat for each element?
+
+Two items are **defects** and change nothing here: a hovered selected row losing its selected fill breaks
+FR-089, and panel names that stay static or read as the terminal's shell break FR-020 and FR-082 (the
+monitor builds panel names without the panel's title sources, so it never shows the title the panel's
+own header shows).
+
+- Q: What does selecting a row look like? → A: **Exactly one row is selected, or none.** The selected row
+  keeps its selected look under the pointer; only unselected rows take a hover style. Up and Down move
+  the selection itself *(derived — with the readout gone, the keyboard's row must be the selected one;
+  not confirmed by the user)*. (FR-098; amends FR-089)
+- Q: How does the user choose the ordering? → A: The metric control reads **"Order by"**, not "Size by",
+  and **clicking a column header** — CPU, Memory, GPU, I/O, Network — orders by that metric; the header
+  line reads "Ordered by <metric>" *(the header wording derived; not confirmed by the user)*. (FR-099;
+  amends FR-092)
+- Q: Does the monitor keep the "narrow to a component or project" drop-down? → A: **No — it is
+  removed.** The filter, drill-down and ordering remain. (FR-100; supersedes FR-061's narrowing and the
+  narrowing in FR-057)
+- Q: Which "selected component information" goes? → A: **The left readout block** — the multi-line
+  figures at the end of the left list, which repeat the right column. (FR-101; supersedes FR-068's
+  readout clause)
+- Q: What does hovering a component show? → A: A **one- or two-sentence explanation** of why it exists
+  and what it is responsible for — for UI, Daemon, Helpers and Projects, and for each of throng's own
+  process roles beneath them *(the roles derived from "each component"; not confirmed by the user)*.
+  (FR-102)
+- Q: Is the Projects list the same as the Projects component's drill-down? → A: **Yes** — the second list
+  is exactly that row's children, pre-expanded. **The top level now lists the four components only**;
+  the user drills into Projects for their projects. This reverses the 2026-10-15 answer placing
+  "Components and Projects at the top". (FR-103; supersedes FR-020b and part of FR-096)
+- Q: Does a list show a total? → A: **Yes — a Total row at the bottom of every list**, per column: the
+  rolled-up figure of the node whose children are listed. It still counts rows the filter or hiding
+  removes, and says how many *(that rule derived from SC-006; not confirmed by the user)*. (FR-104)
+- Q: Are ended processes shown? → A: A **"Hide ended processes"** option, **on by default**; off, they
+  show greyed and struck through as before. This reverses the 2026-10-14 answer that an ended process
+  "stays in place … for as long as the modal is open". (FR-105; amends FR-065a and FR-061)
+- Q: What happens when the left list is too narrow for its columns? → A: **It never scrolls
+  sideways.** Figure columns drop off the right edge, one at a time, and a marker in the header says
+  columns are hidden; widening the list or window brings them back. The name never drops, and the
+  Order-by column drops last *(derived; not confirmed by the user)*. (FR-106; amends FR-096)
+- Q: How are "not measured" and estimated figures written? → A: **"-"** for a figure that is not
+  measured, and **"~"** before an estimated one ("~12.4 MB"), each explained in its hover title. An
+  unavailable figure also shows "-" *(derived — so every column stays narrow; not confirmed by the
+  user)*. (FR-107; supersedes the wording of FR-012 and FR-024, and amends FR-011's rendering)
+- Q: What does a click in the right column do? → A: *"The right pane should show the stats for the left
+  pane's selection. This should include all its children. The right pane cannot drill-down further - it
+  offers options on the selected option only, including kill, unload, terminate terminal(s), destroy tab
+  / panel, and activate (go to the project / tab / panel in throng). When something is activated, the
+  resource monitor stays open and on top."* The right column's children are read-only, and the left
+  column never changes from it. "Terminate terminal(s)" is the existing **Kill All Below** *(derived;
+  not confirmed by the user)*. This reverses the 2026-10-15 answer that clicking a child selects it on
+  the left. (FR-108, FR-110; supersedes part of FR-097)
+- Q: Which figures does each child in the right column show? → A: **All of them, always** — CPU, Memory,
+  GPU, I/O and Network — with the bar's length and colour following Order by. (FR-109; amends FR-097)
+- Q: Can the user resize the two columns? → A: **Yes — the divider between them can be dragged**, and
+  moved from the keyboard when focused; each column keeps a minimum width, and the position is restored
+  with the window's view *(the keyboard and restore derived; not confirmed by the user)*. (FR-111)
+- Q: Where do the filter, toolbar and breadcrumb sit? → A: **Across the full width of the window**, above
+  both columns, separated from them by a rule, and they never scroll with the list. (FR-112; supersedes
+  FR-096's placement and amends FR-068's Tab order)
+- Q: Is network measured? → A: **Yes, exactly, when throng runs elevated**; unelevated, the figure shows
+  "-" and its hover title says **"Elevate to show"**. Windows gives an unelevated process no per-process
+  network counter, so exact figures need the kernel's network tracing, which needs elevation. Network
+  is a column, an Order-by choice and a line graph like the others; the status bar is unchanged
+  *(the status bar and the Order-by details derived — the request was "for each element"; not
+  confirmed by the user)*. This reverses the 2026-10-14 answer "Not at all". (FR-113, SC-011;
+  supersede FR-030's exclusion and the Out of scope entry)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See throng's total load at a glance (Priority: P1)
@@ -329,14 +426,66 @@ process; at every level the figure shown equals the sum of its children plus its
 16. **Given** the monitor, **When** it opens, **Then** it has two columns: the lists on the left
    (Components, then Projects) and, on the right, the detail of the selected item — or of the level shown
    on the left when nothing is selected. (FR-096)
+   *Amended (Session 2026-10-23): the top level lists the four components only (scenario 23, FR-103).*
 17. **Given** a row on the left, **When** the user single-clicks it, **Then** the right column shows its
    children as ranked, coloured share bars, its stats and a small line graph per metric, and the row is
    marked; **When** they double-click it, **Then** the left column drills into it and the breadcrumb
    updates. No row carries a drill-down button. (FR-096, FR-097)
+   *Amended (Session 2026-10-23): each child in the right column shows all its figures, and clicking one changes nothing (FR-108, FR-109).*
 18. **Given** the pointer resting on a row on the left, **When** captures arrive, **Then** the left list's
    order and figures stay still and a hover title stays up until the pointer moves; **When** the pointer
    leaves the list, **Then** it catches up to the latest figures. The right column keeps updating
    throughout. (FR-095)
+19. **Given** a row is selected, **When** the user moves the pointer over it, **Then** it keeps its
+   selected look; **When** they click another row, **Then** only that row is selected; **When** they click
+   the selected row again, **Then** nothing is selected. (FR-098)
+20. **Given** the list is ordered by CPU, **When** the user clicks the Memory column header, **Then** the
+   list re-orders by memory, the Memory header is marked, and the toolbar's control, labelled "Order by",
+   shows Memory. (FR-099)
+21. **Given** the monitor, **When** the user looks for a way to narrow it to one component or project,
+   **Then** there is none, and no block of the selected row's figures appears in the left column.
+   (FR-100, FR-101)
+22. **Given** the top level, **When** the user rests the pointer on Daemon, **Then** its title explains
+   that the daemon keeps terminals running when throng's windows close and what else it is responsible
+   for; each of UI, Helpers and Projects explains itself the same way. (FR-102)
+23. **Given** the monitor opens, **When** the user looks at the left column, **Then** it lists UI,
+   Daemon, Helpers and Projects only; **When** they double-click Projects, **Then** their projects are
+   listed. (FR-103)
+24. **Given** any list, **When** the user looks at its bottom, **Then** a Total row shows each column's
+   figure for the level, equal to the node the list belongs to; **When** the filter hides some rows,
+   **Then** the Total is unchanged and says how many rows are hidden. (FR-104)
+25. **Given** a process ends while the monitor is open, **When** the next capture arrives, **Then** it
+   leaves the list, because Hide ended processes is on; **When** the user turns it off, **Then** the ended
+   process shows greyed and struck through, counted in no total. (FR-105)
+26. **Given** the left list is wide enough for every column, **When** the user narrows the window or drags
+   the divider left, **Then** figure columns drop off the right one at a time, a marker shows columns are
+   hidden and names them on hover, and no horizontal scrollbar appears; **When** the user widens it
+   again, **Then** they return. (FR-106, FR-111)
+27. **Given** an editor panel's row, **When** the user reads its figures, **Then** its memory reads like
+   "~12.4 MB" and its CPU, GPU and I/O read "-", each explained by its hover title. (FR-107)
+28. **Given** a project selected on the left, **When** the user clicks one of its tabs in the right
+   column, **Then** nothing changes in either column: the right column still describes the project.
+   (FR-108)
+29. **Given** a project selected and the list ordered by CPU, **When** the user reads its tabs in the
+   right column, **Then** each tab shows its CPU, Memory, GPU, I/O and Network figures, and only the bars
+   follow CPU. (FR-109)
+30. **Given** a terminal panel selected on the left, **When** the user clicks Activate in the right
+   column's header, **Then** the window holding the panel comes forward with that panel's project and tab
+   showing and the panel focused, and the monitor window stays open above it; **When** a process is
+   selected instead, **Then** Activate goes to its panel. UI, Daemon and Helpers rows offer no Activate.
+   (FR-110)
+31. **Given** a project selected, **When** the user opens the right column's actions, **Then** they find
+   Unload Project, Kill All Below and Activate, and the row's menu offers the same. (FR-110)
+32. **Given** the monitor window, **When** the user drags the divider, **Then** the columns resize, each
+   stopping at its minimum width; **When** the monitor is closed and reopened, **Then** the divider is
+   where it was left. (FR-111)
+33. **Given** a long list scrolled down, **When** the user looks at the top of the window, **Then** the
+   filter, toolbar and breadcrumb still span the full width above both columns, separated from them by a
+   rule. (FR-112)
+34. **Given** throng runs elevated and a terminal is downloading a file, **When** the user reads that
+   terminal's row, **Then** its Network figure shows the transfer rate and matches Windows Resource
+   Monitor within 10%; **Given** throng is not elevated, **Then** every Network figure reads "-" and its
+   hover title says "Elevate to show". (FR-113, SC-011)
 
 ---
 
@@ -362,6 +511,7 @@ keeps running.
 
 1. **Given** a selected descendant process, **When** the user chooses Kill Process and confirms,
    **Then** that process ends and is shown in place as ended (FR-065a), and its parent keeps running.
+   *Amended (Session 2026-10-23): with Hide ended processes on, the default, it leaves the list at the next capture instead (FR-105).*
 2. **Given** a selected process with descendants, **When** the user chooses Kill All Below and
    confirms, **Then** it and every descendant end.
 3. **Given** a panel whose terminal is running Claude Code, **When** the user chooses Kill All Below on
@@ -534,9 +684,11 @@ reopens from it.
   implementation in this feature; the rest of throng MUST hold no Windows-specific knowledge about it.
 - **FR-011**: A platform that cannot supply a metric MUST report it as unavailable, and the UI MUST
   render "unavailable" for it — so a future platform can ship with a partial set of metrics.
+  *Amended by FR-107 (Session 2026-10-23): an unavailable figure is shown as "-", the reason in its hover title.*
 - **FR-012**: **Accuracy over coverage.** A figure MUST be shown only when the method producing it has
   been validated against the operating system's own measurement of the same thing; otherwise it MUST
   show "not measured". A plausible-looking but unvalidated number MUST NOT be shown.
+  *Amended by FR-107 (Session 2026-10-23): "not measured" is shown as "-", the reason in its hover title; the rule itself stands.*
 
 #### Hierarchy and roll-up
 
@@ -556,6 +708,7 @@ reopens from it.
   descendants — and only these are killable (FR-062).
 - **FR-020b**: The modal MUST present both halves of the Intent from its first view: throng's usage per
   component, and the user's usage per project.
+  *Superseded by FR-103 (Session 2026-10-23) — the top level lists the components; the user drills into Projects for their projects.*
 - **FR-020c**: Projects MUST list **every project added to throng**, whether or not it has open panels, in this order: the active project, then the other loaded projects, then unloaded projects
   (046's definitions). Unloaded projects MUST use the project list's greyed, italic style (006 FR-051).
   Within each of those groups, projects follow the chosen ordering metric (FR-061), ties in project-list
@@ -582,6 +735,7 @@ reopens from it.
   "not measured". Each estimate is **moved, not copied**, out of the renderer process
   it came from: that renderer's node in the UI component shows what remains unattributed, so no usage is
   counted twice and every total still sums to what the operating system reports (SC-006).
+  *Amended by FR-107 (Session 2026-10-23): an estimate is marked with "~" before the figure, and "not measured" is shown as "-".*
 - **FR-024a**: Editor and preview panels have no processes, so no kill action; their standard action is
   Destroy Panel (FR-063).
 - **FR-024b**: A terminal panel MUST also carry a **"Terminal buffers"** entry beside its shell: an
@@ -598,6 +752,7 @@ reopens from it.
   separate disk from other I/O for an unelevated reader, so the figure is labelled I/O, not disk), and
   GPU usage. **Network is not captured** in this feature
   (Clarifications, 2026-10-14).
+  *Its network exclusion is superseded by FR-113 (Session 2026-10-23) — network is measured when throng runs elevated.*
 - **FR-031**: Rates MUST be averages over the interval since the previous sample, not instantaneous
   readings.
 - **FR-032**: Every quantity MUST be shown with digit grouping and a unit that keeps it readable (KB,
@@ -667,6 +822,7 @@ reopens from it.
   longer exists, it MUST open at that node's nearest surviving ancestor. This state lasts until throng
   restarts and is not persisted; chart history is still discarded on close (FR-033).
   *Amended by FR-087 (Session 2026-10-15) — the size it restores is the monitor window's place and size.*
+  *Amended by FR-100 (Session 2026-10-23) — there is no narrowing to restore; Hide ended (FR-105) and the divider (FR-111) are restored too.*
 
 #### The monitor window (Session 2026-10-15)
 
@@ -713,6 +869,7 @@ reopens from it.
   MUST show a pointer cursor and a hover state on hover (tiles in the warning and critical bands
   included), and a visible focus ring in throng's convention when focused from the keyboard. A tile's
   resting fill MUST NOT be the selected fill.
+  *Amended by FR-098 (Session 2026-10-23): the selected row has no hover style of its own — it keeps its selected look under the pointer.*
 - **FR-090**: Tiles and rows MUST be ranked by the chosen metric, and that order MUST hold while the pointer
   is over the breakdown or a node is selected; the selected node's figures keep updating in place. When
   the order changes, tiles and rows MUST move to their new place with a short animation, and without one
@@ -732,6 +889,7 @@ reopens from it.
   labelled by their own rows, and the header reads "Sorted by <metric>".)* visible labels on the metric choice
   ("Size by") and the capture interval ("Capture every"); a count of what the filter matched and of the
   idle processes hidden, and "No process matches '<text>'" when the filter matches nothing.
+  *Amended by FR-099 (Session 2026-10-23): the metric choice reads "Order by", the header "Ordered by <metric>", and each metric's column header orders by it.*
 - **FR-093**: A help button ("?", a themeable icon control) MUST open a panel explaining what Components and
   Projects are, what a tile's size means, the mouse (click selects, the drill-down button opens,
   right-click or Shift+F10 for actions), the keys, and what amber and red mean with the thresholds
@@ -765,6 +923,7 @@ reopens from it.
   a row MUST select it and show its detail in the right column; a double-click, Enter or Right MUST drill
   into it; a row with no children does not drill. Rows carry no drill-down button. Right-click and
   Shift+F10 keep the row's menu.
+  *Amended (Session 2026-10-23): the top level lists the components only (FR-103); the breadcrumb, Back, filter and list controls move above both columns (FR-112); columns may drop off the right rather than every row keeping all its figures (FR-106).*
 - **FR-097**: The **right** column MUST hold all detail about the selected item — or, with nothing selected,
   about the level the left column shows — and no selection detail may appear anywhere else. Top to
   bottom: the item's name and kind; its children as a ranked list of share bars (each bar's length its
@@ -773,6 +932,82 @@ reopens from it.
   their bands); a small line graph per metric (CPU, Memory, GPU, I/O) of the item's own usage over the
   time the window has been open, with its current value; and its actions. There are no stacked area
   charts and no treemap.
+  *Amended (Session 2026-10-23): "clicking a child selects it on the left" is superseded by FR-108 — the children are read-only; each shows every figure (FR-109); the actions, with Activate, sit in the header (FR-110); Network joins the line graphs (FR-113).*
+
+#### Selection, columns, actions and network (Session 2026-10-23)
+
+- **FR-098**: Exactly one row MUST be selected, or none. The selected row MUST keep its selected fill and
+  accent edge while the pointer is over it — it has no separate hover style — and only unselected rows
+  take FR-089's hover state. Up and Down MUST move the selection itself, so the right column follows the
+  keyboard *(derived; not confirmed by the user)*.
+- **FR-099**: The metric control MUST be labelled **"Order by"**. Each column header for a metric — CPU,
+  Memory, GPU, I/O, Network — MUST be a button that sets Order by to that metric, operable from the
+  keyboard, with the chosen header marked; the list header reads "Ordered by <metric>" *(the wording
+  derived; not confirmed by the user)*. The toolbar's Order by control stays.
+- **FR-100**: The monitor MUST NOT offer a control to narrow the view to one component or one project. The
+  filter, the drill-down and the ordering remain the ways to find something.
+- **FR-101**: The left column MUST NOT show a readout of the selected or focused row's figures; a row's
+  figures are on the row, and its detail is in the right column (FR-097).
+- **FR-102**: Each component row — UI, Daemon, Helpers, Projects — and each row for one of throng's own
+  process roles beneath them — a window's renderer, the GPU and utility processes, the daemon, a console
+  host, a folder-lock helper, the monitor's collector and the de-elevation agent — MUST carry a hover
+  title of one or two sentences saying why it exists and what it is responsible for. These titles carry
+  no live figure (FR-095), and the help panel (FR-093) describes the components in the same terms.
+- **FR-103**: The left column's top level MUST list the four components only. The user's projects are
+  reached by drilling into Projects, where FR-020c's ordering applies.
+- **FR-104**: Every list in the left column MUST end with a **Total** row giving, for each column, the
+  rolled-up figure of the node whose children are listed — so it equals that node's own figure (FR-022)
+  and never counts an ended process. When the filter, Hide idle or Hide ended removes rows, the Total
+  still counts them and says how many of the rows it counts are hidden *(derived from SC-006; not
+  confirmed by the user)*. The Total row is not selectable and carries no actions or sparkline.
+- **FR-105**: The toolbar MUST offer **"Hide ended processes"** beside Hide idle, **on by default**. On,
+  a process that ends leaves the list at the next capture; off, it shows greyed and struck through as
+  FR-065a describes. Either way it never counts toward a live figure or total. Its state is part of the
+  view FR-057 restores *(derived; not confirmed by the user)*.
+- **FR-106**: The left list MUST NOT scroll horizontally. When its width cannot fit every column, figure
+  columns MUST drop off the right edge one at a time, and a marker at the right end of the header MUST
+  show that columns are hidden, its hover title naming them and saying to widen the list or the window.
+  The name column never drops, and the Order-by column drops last *(derived; not confirmed by the user)*.
+  Widening the list — by the divider (FR-111) or the window — brings dropped columns back.
+- **FR-107**: A figure that is not measured MUST be shown as **"-"**, its reason in the cell's hover
+  title; an unavailable figure is shown the same way *(derived; not confirmed by the user)*. An
+  estimated figure MUST be shown with **"~"** before it ("~12.4 MB"), with "Estimated" in its hover
+  title, and no separate "estimated" tag. FR-012's rule on which figures may be shown at all is
+  unchanged.
+- **FR-108**: The right column MUST describe the left column's selection — or, with nothing selected,
+  the level the left column shows — and MUST NOT change the left column. Its list of children is
+  read-only: a click on a child selects nothing, drills nowhere and re-targets nothing, and the right
+  column has no drill-down of its own. Its bars still hold still under the pointer (FR-095).
+- **FR-109**: Each child in the right column MUST show all its figures — CPU, Memory, GPU, I/O and
+  Network — at all times. Only the bar's length and heat colour (FR-094) follow Order by.
+- **FR-110**: The right column's header MUST carry the selected item's actions beside its name: its
+  standard action (FR-063), Kill Process or Kill All Below (FR-063a — the user's "terminate terminal(s)"
+  *(derived; not confirmed by the user)*), and a new **Activate** for nodes in Projects. Activate on a
+  project switches to that project; on a tab, to its project and that tab, in the window that holds it;
+  on a panel, also focuses that panel; on a process, goes to its panel *(the process case derived; not
+  confirmed by the user)*. The window it lands in comes forward, and the monitor window stays open and
+  above throng's windows (FR-083). Activate is absent on UI, Daemon and Helpers (FR-062), and disabled
+  with its reason where no window holds the target (FR-086's wording). It is a themeable icon control
+  with a hover title, and an item in the row's menu as well (constitution, *Every panel action has a menu
+  item*).
+- **FR-111**: The divider between the two columns MUST be movable by dragging, and from the keyboard
+  when focused *(derived; not confirmed by the user)*, with each column keeping a minimum width. Its
+  position is part of the view FR-087 restores *(derived; not confirmed by the user)*.
+- **FR-112**: The filter, the toolbar (Order by, Hide idle, Hide ended, the capture interval, the
+  Updated line and the help button) and the breadcrumb with Back MUST span the full width of the window
+  above both columns, separated from them by a horizontal rule, and MUST NOT scroll with either column.
+  Tab moves filter → toolbar → breadcrumb → left list → divider → right column *(derived; not confirmed
+  by the user)*.
+- **FR-113**: Every node MUST show a **Network** figure — bytes sent plus received per second, over TCP
+  and UDP, rolled up like the other figures (FR-022) *(the protocols derived; not confirmed by the
+  user)* — measured, when throng runs elevated, by the operating system's kernel network tracing behind
+  the FR-010 seam and validated per FR-012 (SC-011). Unelevated, it MUST show "-" with the hover title
+  **"Elevate to show"**. Network is a column (FR-106), an Order-by choice (FR-099; disabled with that
+  reason when unelevated *(derived; not confirmed by the user)*), a line graph (FR-097), and on FR-094's
+  heat scale against the highest rate throng has reached since the window opened, as I/O is
+  *(derived; not confirmed by the user)*. The status bar is unchanged *(derived — the request was "for
+  each element"; not confirmed by the user)*.
+
 
 #### Visualisation and navigation
 
@@ -791,8 +1026,10 @@ reopens from it.
   - filter by text matching name, command line or process id, with matches shown under their
     ancestors;
   - narrow to one component or one project;
+    *Superseded by FR-100 (Session 2026-10-23) — there is no narrowing control.*
   - choose the metric the breakdown and ordering use;
   - hide idle processes (FR-061a).
+  *Amended (Session 2026-10-23): the metric choice is "Order by", also set from the column headers (FR-099), and Hide ended processes joins Hide idle (FR-105).*
 - **FR-061a**: A process is **idle** when its own CPU is under 0.1% and its own I/O is zero in each
   of the last 3 samples (fewer while the modal has collected fewer). A process whose memory is at or
   above the memory warning threshold (FR-046) is never treated as idle. Hiding idle processes MUST keep
@@ -838,6 +1075,7 @@ reopens from it.
   and its ancestors' charts. It MUST NOT count toward any live roll-up or status-bar total. Ended entries
   remain for as long as the modal stays open, and are discarded when it closes; they are not restored by
   FR-057. A process that ended while the modal was closed is never shown.
+  *Amended by FR-105 (Session 2026-10-23): with Hide ended processes on, the default, an ended process leaves the list at the next capture; this greyed, struck-through form shows only with it off.*
 - **FR-066**: Killing a terminal's shell MUST leave its panel in the same state as any other shell exit.
 - **FR-067**: Every visual element MUST draw its colours from the theme, with metrics distinguishable in
   both light and dark themes.
@@ -847,6 +1085,7 @@ reopens from it.
   breakdown, chart, detail, controls). A focused node shows its values exactly as hovering it would,
   and every action reachable by mouse — including Kill — is reachable by keyboard. These keys apply
   only while focus is in the breakdown; in the filter field they edit text as usual.
+  *Amended (Session 2026-10-23): "a focused node shows its values" is superseded by FR-101 — there is no readout, and Up and Down move the selection (FR-098); the Tab order is FR-112's.*
 
 #### Folder locks (#133)
 
@@ -912,6 +1151,9 @@ reopens from it.
 - **SC-010** *(Session 2026-10-15)*: With about 450 processes under throng, a keystroke in the filter, a
   click that selects, a drill-down and the arrival of a capture each complete their rendering work within
   100 ms, and a filtered breakdown lists each process once.
+- **SC-011** *(Session 2026-10-23)*: With throng elevated, each process's Network figure is within 10% of
+  Windows Resource Monitor's Network figure for the same process over a 60-second steady transfer *(the
+  tolerance derived from SC-009's; not confirmed by the user)*, and collection still meets SC-004.
 
 ## Assumptions
 
@@ -934,6 +1176,7 @@ reopens from it.
 - **A charting capability is a new dependency.** throng ships none today; choosing one is a planning
   decision bound by FR-060 and FR-067.
 - **Third-party lock holders stay out of scope** (#210); this feature lists only throng's own locks.
+- *Network capture is no longer out of scope: superseded by FR-113 (Session 2026-10-23), measured when throng runs elevated.*
 - **Out of scope**: network capture of any kind (FR-030), chart history while the modal is closed
   (FR-033), setting
   process priority or affinity, suspending processes, exporting or persisting history across restarts,
