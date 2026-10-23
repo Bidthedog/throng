@@ -136,6 +136,24 @@ describe('hide idle (FR-061a)', () => {
   });
 });
 
+describe('hide ended processes (FR-105)', () => {
+  it('is a titled icon toggle beside Hide idle, on by default, with a visible label', async () => {
+    await mount();
+    const button = screen.getByTestId('monitor-hide-ended');
+    expect(button).toHaveAttribute('title', 'Hide ended processes');
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).resourceHideEnded!);
+    expect(screen.getByTestId('monitor-hide-ended-label')).toHaveTextContent('Hide ended');
+    // Beside Hide idle: the next control in the toolbar's order.
+    const order = within(screen.getByTestId('monitor-controls')).getAllByRole('button').map((b) => b.getAttribute('data-testid'));
+    expect(order.indexOf('monitor-hide-ended')).toBe(order.indexOf('monitor-hide-idle') + 1);
+
+    fireEvent.click(button);
+    expect(getView().hideEnded).toBe(false);
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
 describe('the capture interval (FR-004a)', () => {
   it('offers only the intervals the history window allows', async () => {
     await mount({ captureIntervalSeconds: 2, historyMinutes: 5 });

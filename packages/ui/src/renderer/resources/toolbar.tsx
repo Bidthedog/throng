@@ -98,6 +98,22 @@ export function ToolbarControls(): ReactElement {
         ariaPressed={view.hideIdle}
         onClick={() => setView({ hideIdle: !view.hideIdle })}
       />
+      <span className="monitor-controls__label" data-testid="monitor-hide-idle-label" aria-hidden="true">
+        Hide idle
+      </span>
+
+      {/* FR-105: on by default; on, a process that ends leaves the list at the next capture. */}
+      <IconButton
+        token="resourceHideEnded"
+        title="Hide ended processes"
+        testId="monitor-hide-ended"
+        className="icon-button monitor-controls__button"
+        ariaPressed={view.hideEnded}
+        onClick={() => setView({ hideEnded: !view.hideEnded })}
+      />
+      <span className="monitor-controls__label" data-testid="monitor-hide-ended-label" aria-hidden="true">
+        Hide ended
+      </span>
 
       <label htmlFor="monitor-interval" className="monitor-controls__label" data-testid="monitor-interval-label">
         Capture every

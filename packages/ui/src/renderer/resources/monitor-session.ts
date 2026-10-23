@@ -55,14 +55,17 @@ export interface ViewState {
   readonly metric: FigureId;
   readonly filterText: string;
   readonly hideIdle: boolean;
+  /** Hide ended processes (FR-105): on, an ended process leaves the list; off, it stays greyed (FR-065a). */
+  readonly hideEnded: boolean;
   /** Node ids from the root down to the node in focus. */
   readonly focusPath: readonly string[];
 }
 
-const DEFAULT_VIEW: ViewState = Object.freeze({
+export const DEFAULT_VIEW: ViewState = Object.freeze({
   metric: 'cpu',
   filterText: '',
   hideIdle: false,
+  hideEnded: true,
   focusPath: Object.freeze(['root']),
 });
 
@@ -274,6 +277,7 @@ export function restoreView(raw: unknown): void {
   if (typeof r.filterText === 'string') patch.filterText = r.filterText;
   // A view saved before FR-100 may still carry `narrowTo`: there is no narrowing, so it is not read.
   if (typeof r.hideIdle === 'boolean') patch.hideIdle = r.hideIdle;
+  if (typeof r.hideEnded === 'boolean') patch.hideEnded = r.hideEnded;
   if (Array.isArray(r.focusPath) && r.focusPath.length > 0 && r.focusPath.every((s) => typeof s === 'string')) {
     patch.focusPath = r.focusPath as string[];
   }

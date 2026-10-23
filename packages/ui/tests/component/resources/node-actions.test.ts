@@ -21,7 +21,7 @@ import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { DetailPane } from '../../../src/renderer/resources/detail-pane.js';
 import { MonitorNotice } from '../../../src/renderer/resources/monitor-notice.js';
 import { NodeActionsProvider } from '../../../src/renderer/resources/node-actions.js';
-import { __resetSession, focusOn, ingestFrame, setSelection, startSession } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, focusOn, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
@@ -149,6 +149,7 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
     feed(sampleHierarchy(), 1);
     feed(sampleHierarchy({ withNode: false }), 2);
     await mount();
+    act(() => setView({ hideEnded: false }));
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1', 'n:n1', 'x:200:1']));
     rightClick('x:300:1');
     expect(screen.queryByRole('menu')).toBeNull();

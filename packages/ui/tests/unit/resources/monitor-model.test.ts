@@ -4,13 +4,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildBreakdown } from '../../../src/renderer/resources/monitor-model.js';
-import type { ViewState } from '../../../src/renderer/resources/monitor-session.js';
+import { DEFAULT_VIEW, type ViewState } from '../../../src/renderer/resources/monitor-session.js';
 import { MIB, metrics, node, proc } from '../../component/helpers/resource-fixtures.js';
 
 const view = (over: Partial<ViewState> = {}): ViewState => ({
   metric: 'io',
   filterText: '',
   hideIdle: false,
+  hideEnded: true,
   focusPath: ['root', 'c:projects', 'p:a', 't:a', 'n:a'],
   ...over,
 });
@@ -137,6 +138,26 @@ describe('what the filter and Hide idle left out, in numbers (FR-092)', () => {
 
   it('counts only the idle ones inside what the filter matched', () => {
     expect(build({ hideIdle: true, filterText: 'alpha' }).hiddenIdle).toBe(1);
+  });
+});
+
+describe('Hide ended processes (FR-105)', () => {
+  const ended = new Set(['x:101:1']);
+  const build = (hideEnded: boolean) =>
+    buildBreakdown(tree(), view({ metric: 'cpu', hideEnded }), { ...ctx, isEnded: (id: string) => ended.has(id) });
+
+  it('on, an ended process leaves the list before it is ordered', () => {
+    expect(build(true).sections[0]!.rows.map((r) => r.node.id)).toEqual(['x:102:1']);
+  });
+
+  it('off, it stays in its place, marked ended (FR-065a)', () => {
+    const rows = build(false).sections[0]!.rows;
+    expect(rows.map((r) => r.node.id).sort()).toEqual(['x:101:1', 'x:102:1']);
+    expect(rows.find((r) => r.node.id === 'x:101:1')?.ended).toBe(true);
+  });
+
+  it('is on in a first-open view', () => {
+    expect(DEFAULT_VIEW.hideEnded).toBe(true);
   });
 });
 

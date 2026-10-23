@@ -238,8 +238,16 @@ describe('view state (FR-057)', () => {
       metric: 'cpu',
       filterText: '',
       hideIdle: false,
+      hideEnded: true,
       focusPath: ['root'],
     });
+  });
+
+  it('restores Hide ended processes with the view (FR-105)', () => {
+    restoreView({ hideEnded: false });
+    expect(getView().hideEnded).toBe(false);
+    restoreView({ hideEnded: 'no' });
+    expect(getView().hideEnded).toBe(false);
   });
 
   it('has no narrowing (FR-100): a saved view still carrying one is restored without it', () => {

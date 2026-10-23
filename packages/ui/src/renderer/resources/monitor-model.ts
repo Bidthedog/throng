@@ -158,18 +158,19 @@ function rank(nodes: readonly ResourceNode[], metric: FigureId): ResourceNode[] 
  * root the first view carries both halves of the intent (FR-020b): the components, and the projects.
  */
 export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelContext): BreakdownModel {
-  const filtered =
-    filterHierarchy(tree, {
-      text: view.filterText,
-      hide: view.hideIdle
-        ? (n) => !ctx.isEnded(n.id) && isIdle(ctx.ownHistory(n.id), ctx.thresholds, ctx.machine)
-        : undefined,
-    }) ?? { ...tree, children: [] };
+  // Hide ended (FR-105) takes an ended process out before anything is ordered; Hide idle a live idle one.
+  const hideEnded = view.hideEnded ? (n: ResourceNode): boolean => ctx.isEnded(n.id) : undefined;
+  const hideIdle = view.hideIdle
+    ? (n: ResourceNode): boolean => !ctx.isEnded(n.id) && isIdle(ctx.ownHistory(n.id), ctx.thresholds, ctx.machine)
+    : undefined;
+  const hide =
+    hideEnded && hideIdle ? (n: ResourceNode): boolean => hideEnded(n) || hideIdle(n) : (hideEnded ?? hideIdle);
+  const filtered = filterHierarchy(tree, { text: view.filterText, hide }) ?? { ...tree, children: [] };
   const searching = view.filterText.trim() !== '';
   const matches = searching ? countMatches(filtered, view.filterText, ctx.isEnded) : 0;
   // What Hide idle took out is what is shown without it, less what is shown with it.
   const hiddenIdle = view.hideIdle
-    ? countProcesses(filterHierarchy(tree, { text: view.filterText }) ?? filtered, ctx.isEnded) - countProcesses(filtered, ctx.isEnded)
+    ? countProcesses(filterHierarchy(tree, { text: view.filterText, hide: hideEnded }) ?? filtered, ctx.isEnded) - countProcesses(filtered, ctx.isEnded)
     : 0;
   const focusPath = resolveFocusPath(view.focusPath, filtered);
   const focus = nodeAt(filtered, focusPath) ?? filtered;

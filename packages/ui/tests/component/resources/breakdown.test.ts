@@ -270,11 +270,22 @@ describe('the rows', () => {
     expect(within(row('x:500:1')).getByTestId('breakdown-row-x:500:1-cpu')).toHaveTextContent(`${formatGrouped(1234.5)}%`);
   });
 
-  it('keeps a process that ended in its place, greyed and struck through, with no figures (FR-065a)', () => {
+  it('drops a process that ended at the next capture while Hide ended is on, as it is by default (FR-105)', () => {
+    feed(sampleHierarchy());
+    mount();
+    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1', 'n:n1'] }));
+    expect(row('x:300:1')).toBeInTheDocument();
+
+    act(() => ingestFrame(frame(2, sampleHierarchy({ withNode: false }))));
+
+    expect(screen.queryByTestId('breakdown-row-x:300:1')).toBeNull();
+  });
+
+  it('keeps a process that ended in its place, greyed and struck through, with no figures, with Hide ended off (FR-065a)', () => {
     feed(sampleHierarchy());
     act(() => ingestFrame(frame(2, sampleHierarchy({ withNode: false }))));
     mount();
-    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1', 'n:n1'] }));
+    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1', 'n:n1'], hideEnded: false }));
 
     const ended = row('x:300:1');
     expect(ended).toHaveAttribute('data-ended', 'true');
