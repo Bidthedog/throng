@@ -70,6 +70,7 @@ export function formatMetric(name: MetricName, value: MetricValue): string {
         return formatBytes(value);
       case 'ioRead':
       case 'ioWrite':
+      case 'network':
         return formatRate(value);
     }
   }
@@ -84,6 +85,7 @@ export const METRIC_LABEL: Readonly<Record<MetricName | 'io', string>> = {
   ioRead: 'I/O read',
   ioWrite: 'I/O write',
   io: 'I/O',
+  network: 'Network',
 };
 
 /**

@@ -4,7 +4,7 @@ import type {
   ProcessSnapshot,
   TerminateResult,
 } from '../abstractions/process-metrics.js';
-import type { MachineInfo, ProcessReading, Unavailable } from '../resources/types.js';
+import { NETWORK_ELEVATION_REQUIRED, type MachineInfo, type ProcessReading, type Unavailable } from '../resources/types.js';
 
 /**
  * An in-memory `IProcessMetrics` for tests (055 T019). Tests edit `readings` between ticks; a
@@ -14,6 +14,7 @@ export class FakeProcessMetrics implements IProcessMetrics {
   readings: ProcessReading[];
   wallTimeMs = 0;
   gpuReading: ReadonlyMap<number, number> | Unavailable = { kind: 'unavailable', reason: 'No GPU counters in the fake' };
+  networkReading: ReadonlyMap<number, number> | Unavailable = { kind: 'unavailable', reason: NETWORK_ELEVATION_REQUIRED };
   descriptions = new Map<string, ProcessDescription>();
   readonly terminated: { pid: number; createTime: number }[] = [];
   /** Set to make the next snapshot reject, once. */
@@ -45,6 +46,10 @@ export class FakeProcessMetrics implements IProcessMetrics {
 
   async gpu(): Promise<ReadonlyMap<number, number> | Unavailable> {
     return this.gpuReading;
+  }
+
+  async network(): Promise<ReadonlyMap<number, number> | Unavailable> {
+    return this.networkReading;
   }
 
   async describe(pid: number, createTime: number): Promise<ProcessDescription | Unavailable> {

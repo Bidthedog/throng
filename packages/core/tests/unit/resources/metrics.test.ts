@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  NETWORK_ELEVATION_REQUIRED,
+  NETWORK_TRACE_FAILED,
   NOT_MEASURED,
   processKey,
   processMetrics,
@@ -29,6 +31,7 @@ const metrics = (over: Partial<Metrics> = {}): Metrics => ({
   gpu: 0,
   ioRead: 0,
   ioWrite: 0,
+  network: 0,
   ...over,
 });
 
@@ -81,6 +84,14 @@ describe('processMetrics (055 FR-030, FR-031)', () => {
     expect(processMetrics({ prev: undefined, cur: reading(), elapsedMs: 2_000, machine, gpu: 7 }).gpu).toBe(7);
   });
 
+  it('takes network as given, not measured when the platform gave nothing (FR-113)', () => {
+    const elevate = unavailable(NETWORK_ELEVATION_REQUIRED);
+    const base = { prev: undefined, cur: reading(), elapsedMs: 2_000, machine };
+    expect(processMetrics({ ...base, network: elevate }).network).toEqual(elevate);
+    expect(processMetrics({ ...base, network: 4_096 }).network).toBe(4_096);
+    expect(processMetrics(base).network).toEqual(NOT_MEASURED);
+  });
+
   it('keys a process by pid AND create time', () => {
     expect(processKey(10, 500)).toBe('10:500');
     expect(processKey(10, 500)).not.toBe(processKey(10, 501));
@@ -93,6 +104,12 @@ describe('rollUp (055 FR-022, FR-044, SC-006)', () => {
     expect(r.cpu).toBe(6);
     expect(r.memory).toBe(60);
     expect(r.partial).toBeUndefined();
+  });
+
+  it('rolls network up like every other figure (FR-113, FR-022)', () => {
+    const r = rollUp(metrics({ network: 100 }), [metrics({ network: 50 }), metrics({ network: unavailable(NETWORK_TRACE_FAILED) })]);
+    expect(r.network).toBe(150);
+    expect(r.partial?.network).toBe(NETWORK_TRACE_FAILED);
   });
 
   it('lets an UNAVAILABLE child contribute nothing, and marks the total partial with the reason — never zero', () => {

@@ -37,6 +37,11 @@ export interface IProcessMetrics {
   snapshot(): Promise<ProcessSnapshot>;
   /** GPU % per pid (the largest per-engine-type sum), or why it cannot be read. */
   gpu(): Promise<ReadonlyMap<number, number> | Unavailable>;
+  /**
+   * Bytes sent plus received per second per pid since the previous call (FR-113), or why it cannot be
+   * read — `elevation-required` where the platform needs elevation to trace the network.
+   */
+  network(): Promise<ReadonlyMap<number, number> | Unavailable>;
   /** Read once per identity; a process that is gone or protected is `Unavailable` with the reason. */
   describe(pid: number, createTime: number): Promise<ProcessDescription | Unavailable>;
   /**

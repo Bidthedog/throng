@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { NETWORK_ELEVATION_REQUIRED } from '../../../src/resources/index.js';
 import { FakeProcessMetrics, runProcessMetricsContract } from '../../../src/testing/index.js';
 
 const self = { pid: 42, ppid: 1, createTime: 7, imageName: 'node.exe', cpuTime: 0, privateWorkingSet: 1, ioReadBytes: 0, ioWriteBytes: 0 };
@@ -14,6 +15,22 @@ describe('IProcessMetrics contract against the fake (055 T018, FR-010, FR-011)',
     expect(await m.terminate(42, 7)).toEqual({ outcome: 'ended' });
     expect(await m.terminate(42, 7)).toEqual({ outcome: 'gone' });
     expect((await m.terminate(43, 7)).outcome).toBe('denied');
+  });
+
+  it('reports network as given, unavailable until elevated by default (FR-113)', async () => {
+    const m = new FakeProcessMetrics([{ ...self }]);
+    expect(await m.network()).toEqual({ kind: 'unavailable', reason: NETWORK_ELEVATION_REQUIRED });
+    m.networkReading = new Map([[42, 2_048]]);
+    expect(await m.network()).toEqual(new Map([[42, 2_048]]));
+  });
+
+  it('rejects the contract for a network() that is unavailable without a reason', async () => {
+    const make = () => {
+      const m = new FakeProcessMetrics([{ ...self }]);
+      m.networkReading = { kind: 'unavailable', reason: '' };
+      return m;
+    };
+    await expect(runProcessMetricsContract({ make, selfPid: 42 })).rejects.toThrow(/network\(\)/);
   });
 
   it('rejects the contract for an implementation that ends a stale identity', async () => {

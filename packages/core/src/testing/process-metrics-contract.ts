@@ -43,4 +43,10 @@ export async function runProcessMetricsContract(env: ProcessMetricsContractEnv):
 
   const gpu = await m.gpu();
   assert(gpu instanceof Map || (isUnavailable(gpu) && gpu.reason.length > 0), 'gpu() must be a map or Unavailable with a reason');
+
+  const network = await m.network();
+  assert(
+    network instanceof Map || (isUnavailable(network) && network.reason.length > 0),
+    'network() must be a map or Unavailable with a reason',
+  );
 }

@@ -94,6 +94,7 @@ const NOT_MEASURED_METRICS: Metrics = {
   gpu: NOT_MEASURED,
   ioRead: NOT_MEASURED,
   ioWrite: NOT_MEASURED,
+  network: NOT_MEASURED,
 };
 
 const STATE_RANK: Record<ProjectLoadState, number> = { active: 0, loaded: 1, unloaded: 2 };
@@ -118,7 +119,7 @@ function uiNode(
 
 function limitation(slug: string, label: string, reason: string, owner: NodeOwner): ResourceNode {
   const u = unavailable(reason);
-  const own: Metrics = { cpu: u, memory: u, gpu: u, ioRead: u, ioWrite: u };
+  const own: Metrics = { cpu: u, memory: u, gpu: u, ioRead: u, ioWrite: u, network: u };
   return { id: `l:${slug}`, kind: 'limitation', label, reason, owner, own, rolled: own, children: [] };
 }
 

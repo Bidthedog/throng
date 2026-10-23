@@ -50,12 +50,16 @@ export interface NotMeasured {
 
 export type MetricValue = number | Unavailable | NotMeasured;
 
-export const METRIC_NAMES = ['cpu', 'memory', 'gpu', 'ioRead', 'ioWrite'] as const;
+/** Why the network figure is unavailable (FR-113): the kernel trace needs elevation, or it failed. */
+export const NETWORK_ELEVATION_REQUIRED = 'elevation-required';
+export const NETWORK_TRACE_FAILED = 'trace-failed';
+
+export const METRIC_NAMES = ['cpu', 'memory', 'gpu', 'ioRead', 'ioWrite', 'network'] as const;
 export type MetricName = (typeof METRIC_NAMES)[number];
 
 /**
  * One node's figures. `cpu` and `gpu` are % of the machine; `memory` bytes; `ioRead`/`ioWrite`
- * bytes per second. `partial` names, per metric, why a rolled-up total is missing a part of its
+ * bytes per second; `network` bytes sent plus received per second (FR-113). `partial` names, per metric, why a rolled-up total is missing a part of its
  * subtree (a child that could not be read).
  */
 export type Metrics = { readonly [M in MetricName]: MetricValue } & {

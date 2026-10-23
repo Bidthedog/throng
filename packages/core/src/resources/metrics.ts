@@ -24,7 +24,7 @@ export function isNotMeasured(v: MetricValue): v is NotMeasured {
 }
 
 /** All-zero figures, for nodes that are UI elements rather than processes. */
-export const ZERO_METRICS: Metrics = Object.freeze({ cpu: 0, memory: 0, gpu: 0, ioRead: 0, ioWrite: 0 });
+export const ZERO_METRICS: Metrics = Object.freeze({ cpu: 0, memory: 0, gpu: 0, ioRead: 0, ioWrite: 0, network: 0 });
 
 /** 100-ns ticks per millisecond. */
 const TICKS_PER_MS = 10_000;
@@ -38,6 +38,8 @@ export interface ProcessMetricsInput {
   readonly machine: MachineInfo;
   /** The platform's GPU figure for this process; unavailable where the platform has none. */
   readonly gpu?: MetricValue;
+  /** The platform's network rate for this process (FR-113); unavailable unless elevated. */
+  readonly network?: MetricValue;
 }
 
 /**
@@ -45,7 +47,7 @@ export interface ProcessMetricsInput {
  * machine over the interval, I/O as bytes per second over it, memory as the current private working
  * set. A first sighting has no rate.
  */
-export function processMetrics({ prev, cur, elapsedMs, machine, gpu }: ProcessMetricsInput): Metrics {
+export function processMetrics({ prev, cur, elapsedMs, machine, gpu, network }: ProcessMetricsInput): Metrics {
   const comparable = prev !== undefined && prev.pid === cur.pid && prev.createTime === cur.createTime && elapsedMs > 0;
   const rate = (delta: number, perMs: (d: number) => number): MetricValue =>
     comparable ? Math.max(0, perMs(delta)) : NOT_MEASURED;
@@ -55,6 +57,7 @@ export function processMetrics({ prev, cur, elapsedMs, machine, gpu }: ProcessMe
     gpu: gpu ?? NOT_MEASURED,
     ioRead: rate(cur.ioReadBytes - (prev?.ioReadBytes ?? 0), (d) => (d / elapsedMs) * 1_000),
     ioWrite: rate(cur.ioWriteBytes - (prev?.ioWriteBytes ?? 0), (d) => (d / elapsedMs) * 1_000),
+    network: network ?? NOT_MEASURED,
   };
 }
 

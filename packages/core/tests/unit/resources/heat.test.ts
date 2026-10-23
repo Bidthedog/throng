@@ -46,6 +46,12 @@ describe('heatFor (055 FR-094)', () => {
     expect(heatFor('memory', 1024, T, { logicalProcessors: 8, installedRamBytes: 0 }, 0)).toBeUndefined();
   });
 
+  it('scales network against the peak it is given, as I/O is (FR-113)', () => {
+    expect(heat('network', 250, 1000)).toBe(heat('io', 250, 1000));
+    expect(heat('network', 1000, 1000)).toBe(1);
+    expect(heat('network', 500, 0)).toBe(0);
+  });
+
   it('never goes below zero', () => {
     expect(heat('cpu', -3)).toBe(0);
   });

@@ -76,6 +76,7 @@ const ENDED_METRICS: Metrics = Object.freeze({
   gpu: NOT_MEASURED,
   ioRead: NOT_MEASURED,
   ioWrite: NOT_MEASURED,
+  network: NOT_MEASURED,
 });
 
 const EMPTY: readonly HistoryPoint[] = Object.freeze([]);

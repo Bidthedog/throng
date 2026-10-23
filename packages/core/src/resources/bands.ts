@@ -41,14 +41,15 @@ export function bandFor(
   return 'normal';
 }
 
-/** What a tile can be sized and coloured by: the four figures the monitor offers (I/O is read + write). */
-export type HeatMetric = 'cpu' | 'memory' | 'gpu' | 'io';
+/** What a bar can be ordered and coloured by: the figures the monitor offers (I/O is read + write). */
+export type HeatMetric = 'cpu' | 'memory' | 'gpu' | 'io' | 'network';
 
 /**
  * How much of the machine a node takes, on the scale its tile is coloured by (FR-094): 0 at nothing, 0.5
  * at the warning threshold, 1 at the critical threshold and beyond. CPU and GPU are already shares of the
- * machine (GPU takes the CPU thresholds); memory is a share of installed RAM; I/O has no machine total, so
- * it is measured against `ioPeak`, the highest rate seen, on the CPU thresholds. `undefined` when there is
+ * machine (GPU takes the CPU thresholds); memory is a share of installed RAM; I/O and network have no
+ * machine total, so each is measured against `peak` — the highest rate of THAT metric seen — on the CPU
+ * thresholds. `undefined` when there is
  * nothing to measure — a figure that is not a number, or no RAM or peak to divide by.
  */
 export function heatFor(
@@ -56,7 +57,7 @@ export function heatFor(
   value: MetricValue,
   thresholds: UsageThresholds,
   machine: Pick<MachineInfo, 'installedRamBytes'>,
-  ioPeak: number,
+  peak: number,
 ): number | undefined {
   if (typeof value !== 'number') return undefined;
   let percent: number;
@@ -67,8 +68,8 @@ export function heatFor(
     percent = (value / machine.installedRamBytes) * 100;
     warning = thresholds.memoryWarning;
     critical = thresholds.memoryCritical;
-  } else if (metric === 'io') {
-    percent = ioPeak > 0 ? (value / ioPeak) * 100 : 0;
+  } else if (metric === 'io' || metric === 'network') {
+    percent = peak > 0 ? (value / peak) * 100 : 0;
   } else {
     percent = value;
   }

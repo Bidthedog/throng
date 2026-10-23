@@ -11,6 +11,7 @@ import type {
   TerminateResult,
   Unavailable,
 } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED } from '@throng/core';
 
 /**
  * Windows {@link IProcessMetrics} (055 research R2, R8). One `NtQuerySystemInformation
@@ -130,6 +131,11 @@ export interface GpuReader {
   read(): Promise<ReadonlyMap<number, number> | Unavailable>;
 }
 
+/** Per-pid network rates since the last read (FR-113); only an elevated process has one (research R20). */
+export interface NetworkReader {
+  read(): Promise<ReadonlyMap<number, number> | Unavailable>;
+}
+
 export class WindowsProcessMetrics implements IProcessMetrics {
   /** Kept between snapshots: the table is ~0.5 MB on a busy machine and rarely grows. */
   private buf = Buffer.alloc(1 << 20);
@@ -142,6 +148,7 @@ export class WindowsProcessMetrics implements IProcessMetrics {
     private readonly gpuReader?: GpuReader,
     /** Test seam: the native calls. Defaults to koffi's bindings, loaded once. */
     private readonly api: ProcessMetricsFfi | null | undefined = undefined,
+    private readonly networkReader?: NetworkReader,
   ) {}
 
   private ffi(): ProcessMetricsFfi | null {
@@ -190,6 +197,10 @@ export class WindowsProcessMetrics implements IProcessMetrics {
 
   async gpu(): Promise<ReadonlyMap<number, number> | Unavailable> {
     return this.gpuReader ? this.gpuReader.read() : unavailable('GPU counters are not available');
+  }
+
+  async network(): Promise<ReadonlyMap<number, number> | Unavailable> {
+    return this.networkReader ? this.networkReader.read() : unavailable(NETWORK_ELEVATION_REQUIRED);
   }
 
   async describe(pid: number, createTime: number): Promise<ProcessDescription | Unavailable> {
