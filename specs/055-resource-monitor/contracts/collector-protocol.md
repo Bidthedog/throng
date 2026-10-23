@@ -94,8 +94,8 @@ validates against the shapes above, both directions.
 
 ## Session 2026-10-23 changes
 
-- Each detail and summary tick reads `IProcessMetrics.network()` alongside `gpu()`; per-process
-  `network` joins the snapshot row and rolls up in core. The summary sent to the status bar ignores it
-  (FR-113: the status bar is unchanged).
+- Each **detail** tick reads `IProcessMetrics.network()` alongside `gpu()`; per-process `network` joins
+  the snapshot row and rolls up in core. Summary-only ticks do not read it — the status bar is unchanged
+  (FR-113).
 - The collector owns the ETW session's lifetime (R20): started at its first detail tick when elevated,
   stopped on disconnect or exit, stale `throng-net-*` sessions stopped at start.

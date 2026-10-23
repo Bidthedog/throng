@@ -319,6 +319,12 @@ own header shows).
   *(the status bar and the Order-by details derived — the request was "for each element"; not
   confirmed by the user)*. This reverses the 2026-10-14 answer "Not at all". (FR-113, SC-011;
   supersede FR-030's exclusion and the Out of scope entry)
+- Q: What does a graph show before it has enough history? → A: *"I'd also like to change the graph
+  loading to a loading spinner, because it looks awful as the resource monitor graphs load in. It says
+  "Building history", and all the text overlaps."* **A loading spinner** in the graph's place, with no
+  text; the graph appears when it has two points. Sparklines in the rows do the same *(the sparklines
+  derived; not confirmed by the user)*. (FR-114; supersedes FR-091's "say they are building their
+  history")
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -486,6 +492,9 @@ process; at every level the figure shown equals the sum of its children plus its
    terminal's row, **Then** its Network figure shows the transfer rate and matches Windows Resource
    Monitor within 10%; **Given** throng is not elevated, **Then** every Network figure reads "-" and its
    hover title says "Elevate to show". (FR-113, SC-011)
+35. **Given** the monitor has just opened, **When** the user selects a row before two captures have
+   arrived, **Then** each line graph on the right shows a loading spinner in its place, with no text and
+   nothing overlapping, and becomes the graph at the second capture. (FR-114)
 
 ---
 
@@ -881,6 +890,7 @@ reopens from it.
   the first, and FR-044's stale wording when the collector is failing. Charts and sparklines with fewer
   than two points MUST say they are building their history rather than show nothing.
   *(Session 2026-10-15, third feedback: this now applies to FR-097's line graphs and the sparklines.)*
+  *Its last sentence is superseded by FR-114 (Session 2026-10-23) — a graph with fewer than two points shows a loading spinner, not text.*
 - **FR-092**: The monitor MUST explain itself in place: a header naming where the user is (the breadcrumb),
   with a Back button (disabled at the top) and "Tile size: <metric>"; column headers over the rows
   (Trend, CPU, Memory, GPU, I/O) with the chosen metric's column marked; a legend on each chart naming
@@ -1007,6 +1017,10 @@ reopens from it.
   heat scale against the highest rate throng has reached since the window opened, as I/O is
   *(derived; not confirmed by the user)*. The status bar is unchanged *(derived — the request was "for
   each element"; not confirmed by the user)*.
+- **FR-114**: A line graph or sparkline with fewer than two points MUST show a small loading spinner
+  centred in its own box, with no text, and MUST NOT overlap anything around it; it becomes the graph
+  once a second point arrives. The spinner is still under reduced motion *(derived — a pulse or static
+  ring is the convention; not confirmed by the user)*, and its accessible name is "Loading".
 
 
 #### Visualisation and navigation
@@ -1141,6 +1155,7 @@ reopens from it.
   sum of its children's, to within rounding.
 - **SC-007**: A process killed from the monitor is shown as ended, and out of every live total, within
   one capture interval.
+  *Amended by FR-105 (Session 2026-10-23): with Hide ended processes on, the default, it leaves the list within that interval instead of showing as ended.*
 - **SC-008**: No process descending from a throng terminal is missing from the hierarchy for longer than
   one capture interval, apart from those shown as limitations.
 - **SC-009**: An editor or preview panel's memory estimate is within 10% of the change in the
