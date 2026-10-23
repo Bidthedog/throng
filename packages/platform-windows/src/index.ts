@@ -5,7 +5,8 @@ export { NodePtyHost } from './node-pty-host.js';
 export { WindowsDirectoryLock } from './windows-directory-lock.js';
 export { WindowsElevation } from './windows-elevation.js';
 export { WindowsProcessCwd } from './windows-process-cwd.js';
-export { WindowsProcessMetrics, type GpuReader } from './windows-process-metrics.js';
+export { WindowsProcessMetrics, type GpuReader, type NetworkReader } from './windows-process-metrics.js';
+export { WindowsNetworkTrace } from './windows-network-trace.js';
 export { WindowsGpuCounters } from './windows-gpu-counters.js';
 // #199: AllowSetForegroundWindow, so a window a terminal command opens can raise itself.
 export { WindowsForegroundHandoff } from './windows-foreground-handoff.js';
