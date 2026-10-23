@@ -380,3 +380,93 @@ native tooltip whose text changes. FR-090's hold froze only the order.
 
 **Alternatives.** Keeping the treemap in the right column for the selected item's children was offered and
 the user chose bars; keeping smaller stacked charts was offered and the user chose none.
+
+
+## R17 — The left list, finalised (Session 2026-10-23)
+
+**Decisions.**
+- **Top level (FR-103)**: `monitor-model.ts` builds one section at the root — the components — instead of
+  Components plus a pre-expanded Projects section. `share-bars.tsx`'s "is the child listed on the left"
+  test and `toolbar.tsx`'s `pathTo` (used by the removed narrowing) go with it.
+- **Selection (FR-098, D1)**: the selected row's rule moves after the hover rule at equal specificity
+  (`.breakdown-row--selected, .breakdown-row--selected:hover`), so hovering it changes nothing; a unit
+  guard on `theme.css` keeps the order. Up/Down call `setSelection` rather than moving a separate focus
+  row; the right column follows.
+- **Ordering (FR-099)**: each metric header is a `<button>` that sets the session's metric; the header
+  line reads "Ordered by <metric>"; the toolbar group's label becomes "Order by".
+- **Totals (FR-104)**: the Total row reads the listed node's own rolled-up figures — already computed —
+  and counts the rows the filter, Hide idle or Hide ended removed ("includes N hidden").
+- **Ended processes (FR-105)**: `hideEnded` in the session's view state, default `true`; the model drops
+  ended nodes before ordering when it is on.
+- **Columns (FR-106)**: a `ResizeObserver` on the list measures its width; a pure function in core
+  (`fitColumns(width, columns, orderBy)`) returns the columns that fit — name always, then figures in
+  order, the Order-by column kept to last — and the rest feed the header marker's title. The grid's
+  template is built from the visible set, so no row can overflow; `overflow-x: hidden` is the backstop.
+- **Wording (FR-107)**: `format.ts` renders `"-"` for not-measured and unavailable figures (reason in
+  `cellTitle`) and `"~"` before estimates; the "estimated" tag spans go.
+- **Descriptions (FR-102)**: a frozen copy table in `packages/core/src/resources/descriptions.ts`, keyed by
+  component and by UI/helper role, read by the row title and the help panel.
+
+**Alternatives.** Hiding columns by CSS container queries was set aside: the Order-by column must drop
+last, which depends on state, and the header marker needs the list of what is hidden.
+
+## R18 — Right column, Activate and layout (Session 2026-10-23)
+
+**Decisions.**
+- **Read-only children (FR-108, FR-109)**: `share-bars.tsx` loses its click handler and renders every
+  figure per child (CPU, Memory, GPU, I/O, Network); the bar still follows the Order-by metric and the
+  FR-095 hold stays.
+- **Action bar (FR-110)**: `NodeActionBar` moves into the right column's header beside the name; it gains
+  **Activate**. `RoutedAction` gains `{ kind: 'activate', projectId, tabId?, panelId? }` (a process
+  resolves to its panel in the renderer); main routes it as it routes Destroy (R14): to the window holding
+  the tab, else the main window for a project. The receiving window switches project, selects the tab and
+  focuses the panel, and is brought forward; the monitor window's focus-scoped layering (R14) keeps it
+  above. A target no window holds is disabled with FR-086's reason.
+- **Divider (FR-111)**: a `role="separator"` element with `aria-valuenow`, dragged by pointer capture and
+  moved by Left/Right in 5% steps; the ratio clamps so each column keeps its minimum; saved in view state.
+- **Header (FR-112)**: the monitor body becomes a grid of two rows — a full-width header (filter,
+  toolbar, breadcrumb) with a bottom border, and the two-column area — so the header never scrolls.
+
+## R19 — Panel names (defect D2)
+
+**Cause.** `estimates-sources.ts` builds each panel's name with `panelDisplayTitle(panel)` and no title
+sources, so `resolveTitle` skips the 053 template and the live terminal title and falls back to the
+shell's flavour label — the omission #294 fixed for panel headers. The reporter re-reports only on layout,
+project and active changes.
+
+**Decision.** Resolve with `panelTitleSources(panel)` (`use-panel-display-names.ts`), exactly as a
+panel's header does, and re-report when the title, command or working-folder stores change. A component
+test renames a terminal's title and asserts the reported context changes.
+
+## R20 — Network (Session 2026-10-23, FR-113, SC-011)
+
+**Constraint.** Windows keeps no per-process network byte counter an unelevated process can read. The
+counters R3 reads (`Read/WriteTransferCount`) see file, pipe and SMB traffic; socket traffic lands in
+`OtherTransferCount`, mixed with device I/O, and cannot be separated.
+
+**Decision.** `IProcessMetrics.network(): Promise<ReadonlyMap<number, number> | Unavailable>` — bytes per
+second sent plus received per pid since the last call. The Windows implementation:
+- runs only when the collector is elevated (token elevation check); otherwise returns `Unavailable` with
+  reason `elevation-required`, rendered "-" titled "Elevate to show";
+- starts a real-time ETW session `throng-net-<collector pid>` (`StartTraceW` with
+  `EVENT_TRACE_REAL_TIME_MODE`) and enables **Microsoft-Windows-Kernel-Network**
+  ({7DD42A49-5329-4832-8DFD-43D979153A88}) for its TCP and UDP send/receive keywords (`EnableTraceEx2`);
+- consumes it in a `worker_thread` that calls `OpenTraceW` + `ProcessTrace` synchronously; the
+  `EventRecordCallback` reads the event's `PID` and `size` fields (IPv4 and IPv6 event ids 10/11,
+  26/27 for TCP send/receive, 42/43, 58/59 for UDP) and adds bytes to a per-pid counter;
+- each tick the main thread asks the worker for the counters and divides by the elapsed time;
+- on collector exit stops its session (`ControlTraceW` STOP); on start, stops any `throng-net-*`
+  session whose owner pid is no longer running (`QueryAllTracesW`), so a crash cannot leak sessions
+  against the system's limit of 64.
+
+Network rolls up like every figure (FR-022) and scales on the heat bar against the peak since the window
+opened, as I/O does. A session that fails to start, or stops, makes `network()` `Unavailable` with
+reason `trace-failed` ("Network unavailable").
+
+**Validation (SC-011).** An elevated-only integration test sends a known 20 MB over loopback between two
+child processes and asserts the sender's and receiver's summed bytes are within 10%. MT-14 compares a
+live download with Resource Monitor. SC-004's cost benchmark runs with the session active.
+
+**Alternatives.** `GetPerTcpConnectionEStats` needs elevation too, counts TCP only and must be enabled per
+connection; `OtherTransferCount` mixes device I/O into the figure, failing FR-012; the NT Kernel Logger
+would take the system's single kernel session from anything else using it.

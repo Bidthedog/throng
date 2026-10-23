@@ -90,3 +90,12 @@ HeldFolder { path, projectId, panels: { panelId, tabName, panelName }[] }
 
 Contract test: `packages/ui/tests/contract/collector-protocol.contract.test.ts` — every message type
 validates against the shapes above, both directions.
+
+
+## Session 2026-10-23 changes
+
+- Each detail and summary tick reads `IProcessMetrics.network()` alongside `gpu()`; per-process
+  `network` joins the snapshot row and rolls up in core. The summary sent to the status bar ignores it
+  (FR-113: the status bar is unchanged).
+- The collector owns the ETW session's lifetime (R20): started at its first detail tick when elevated,
+  stopped on disconnect or exit, stale `throng-net-*` sessions stopped at start.

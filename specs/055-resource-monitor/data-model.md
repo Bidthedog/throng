@@ -148,3 +148,17 @@ length = `ceil(historyMinutes × 60 / intervalSeconds)` ≤ 150 points per node.
 nodeId[] }` — restored on reopen; if `focusPath`'s last node is gone, the nearest surviving ancestor.
 
 ## Collector protocol messages — see `contracts/collector-protocol.md`.
+
+
+## Session 2026-10-23 changes
+
+- **Metrics** (core `hierarchy.ts`): gains `network` — bytes per second sent plus received — as a
+  `Figure` like `gpu`: a number, or `Unavailable` with reason `elevation-required` or `trace-failed`.
+  Rolled up like the others.
+- **Monitor view state** (FR-057, FR-087): `narrowTo` removed (FR-100); `hideEnded: boolean`, default
+  `true` (FR-105); `splitRatio: number` in 0.25 – 0.75, default 0.45 (FR-111). The chosen metric's
+  values gain `network` (FR-099).
+- **RoutedAction**: gains `{ kind: 'activate'; projectId; tabId?; panelId? }` (FR-110).
+- **Component and role descriptions** (FR-102): a frozen map from component id (`ui`, `daemon`,
+  `helpers`, `projects`) and role (`main`, `window`, `gpu`, `utility`, `conhost`, `lock-helper`,
+  `collector`, `deelevation-agent`, `daemon`) to one or two sentences.

@@ -195,3 +195,67 @@ compiled with the UI main build and launched with the bundled Node runtime; no n
 | Deferred: editor/preview CPU ("not measured") | No method meets FR-012 | A guessed figure is forbidden by FR-012; follow-up [#498](https://github.com/Bidthedog/throng/issues/498) |
 | Deferred: Linux/macOS `IProcessMetrics` | FR-010 asks for the seam only | Out of scope; follow-up [#499](https://github.com/Bidthedog/throng/issues/499) |
 | Three new E2E specs and one extended | A real process tree (kill, orphans), a real window (status bar), real process memory (calibration) | Component and integration tests cover everything else |
+
+## Session 2026-10-23 — finalising the monitor (FR-098 – FR-113, SC-011)
+
+**Input**: the fourth hand-test round — sixteen requirements, SC-011, two defects (D1 the selected row's
+hover, FR-089/FR-098; D2 panel names, FR-020/FR-082). Research R17 – R20.
+
+### Summary of the increment
+
+- **Left list (R17)**: components only at the top level (`monitor-model.ts` drops the Projects section;
+  `share-bars.tsx` and `toolbar.tsx`'s `pathTo` lose their dependency on it); a Total row; clickable metric
+  headers and the "Order by" label; no narrowing control and no readout block; ended processes hidden by
+  default; one selected row or none, its look kept under hover (D1), Up/Down moving the selection;
+  columns that drop off the right, measured by a `ResizeObserver`, with a header marker; "-" and "~"
+  from `format.ts`; a description per component and role from a new core copy table
+  (`packages/core/src/resources/descriptions.ts`).
+- **Right column (R18)**: read-only children each showing every figure; the header's action bar with the
+  item's standard action, its kills and a new **Activate** routed like Destroy (R14); the monitor stays
+  above throng through the existing floating layering.
+- **Layout (R18)**: a full-width header (filter, toolbar, breadcrumb) over a two-column grid split by a
+  draggable, keyboard-movable divider whose ratio is kept with the view.
+- **Panel names (R19, D2)**: the reporter resolves titles with `panelTitleSources`, as panel headers do,
+  and re-reports when a title, command or folder changes.
+- **Network (R20)**: `IProcessMetrics.network()` beside `gpu()`; the Windows implementation runs an ETW
+  real-time session on Microsoft-Windows-Kernel-Network in a worker thread of the collector, only when
+  elevated; unelevated it is `Unavailable` with reason `elevation-required` ("Elevate to show").
+
+### Technical context, delta
+
+- **Storage**: `SHIPPED_DEFAULTS_VERSION` 26 → 27 for two icon tokens, `activate` (Activate's control)
+  and `resourceHideEnded` (the Hide ended toggle, built as Hide idle is); `EXPECTED_ICON_TOKEN_COUNT`
+  94 → 96. The monitor's view state (FR-057/FR-087) loses `narrowTo` and gains
+  `hideEnded` (default true) and `splitRatio`.
+- **Dependencies**: none new. ETW is reached through koffi against `advapi32` (`StartTraceW`,
+  `EnableTraceEx2`, `OpenTraceW`, `ProcessTrace`, `ControlTraceW`, `CloseTrace`), as the rest of
+  `platform-windows` reaches Win32.
+- **Constraints**: `ProcessTrace` blocks its caller and calls back on the same thread, so it runs in a
+  `worker_thread` of the collector — never on a UI process, the daemon, or the collector's main loop.
+  This is the one synchronous koffi call in the feature, and it is off every event loop (Complexity
+  Tracking).
+- **Testing**: unit (core: column fitting, totals, ended hiding, descriptions, formatting, network
+  roll-up, ETW event parsing); component (left list, right column, layout, divider, header buttons,
+  Activate routing in the renderer); contract (`network()` against the fake); **integration, elevated
+  only** (a real ETW session counting a known loopback transfer, `skipIf(!isElevated())`); E2E: the
+  existing `resource-monitor.e2e.ts` adjusted to the components-only top level, plus Activate across a
+  real window — one test, `@extended`, because only a real second window shows the route landing.
+
+### Constitution Check — the increment
+
+| Principle / rule | Assessment |
+|---|---|
+| **II. Platform-Abstracted Core** | `network()` joins `IProcessMetrics`; ETW lives only in `platform-windows`; a platform without it reports `Unavailable`. Column fitting, totals and descriptions are pure core or renderer. |
+| **III. Detached, Tagged & Persistent Terminals** | *No orphaned OS resources* extends to the ETW session: it is named per collector (`throng-net-<pid>`), stopped on collector exit, and any `throng-net-*` session whose owner pid is gone is stopped when a collector starts (R20). |
+| **V. Test-First** | Every task test-first at the lowest layer; the only elevated test is the ETW integration test, which skips unelevated and is reported by `admin-reminder`. |
+| **VI. Every panel action has a menu item** | Activate is in the row's context menu and the right column's action bar. |
+| **VI. Disabled when unavailable, absent when meaningless** | Activate **absent** on UI/Daemon/Helpers; **disabled** with FR-086's reason when no window holds the target. Network as an Order-by choice **disabled** unelevated, with "Elevate to show". |
+| **VI. Themeable icon controls** | New tokens `activate` and `resourceHideEnded`; the column headers are text buttons — a column header names its column, so its label is the control (the toolbar's Order by keeps its icon buttons). |
+| **VI. One condition, one notice** | An ETW session that fails to start is "Network unavailable" in each figure's title, never a notice. |
+| **X. Externalised Configuration** | No new setting: Hide ended and the divider are view state like the metric and filter (FR-057). |
+| **XII. Responsive UI** | Column fitting runs on resize only; the Total is a roll-up the model already computes; ETW aggregation is in the collector's worker, summed per tick. |
+| **Accuracy over coverage (FR-012)** | Network is shown only from ETW and validated against Resource Monitor (SC-011); otherwise "-". |
+| **Displayed quantities digit-grouped** | Network rates through `formatGrouped` with KB/s, MB/s. |
+
+**Result: PASS.** Complexity Tracking gains one row: the synchronous `ProcessTrace` in a worker thread
+(the API has no asynchronous form; the worker is the off-loop boundary).

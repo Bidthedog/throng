@@ -62,3 +62,17 @@ bands use `warning` and `danger`.
 See research R11 for the table. Placement: a new **Resource Monitor** group in Preferences (capture
 interval, history, the four thresholds); `confirmations.killProcesses` in the existing Confirmations group
 as "Kill processes". The interval field shows a note when it was raised to the window's minimum (R11).
+
+
+## Session 2026-10-23 changes
+
+- **Activate** — themeable icon control in the right column's action bar and a row context-menu item
+  ("Go to project" / "Go to tab" / "Go to panel"; a process row reads "Go to panel"), in the standard
+  actions section. New icon token `activate` (glyph ↪ in every default theme, copy in `theme-copy.ts`).
+  With `resourceHideEnded` below: `EXPECTED_ICON_TOKEN_COUNT` 94 → 96; `SHIPPED_DEFAULTS_VERSION` 26 → 27.
+- **Order by** — the toolbar group's label; each metric column header is a text button setting it
+  (Network disabled unelevated, titled "Elevate to show").
+- **Hide ended processes** — a toolbar toggle beside Hide idle, on by default, built as Hide idle is: a
+  themeable icon control with a hover title and a visible label. New icon token `resourceHideEnded`.
+- **Divider** — `role="separator"`, keyboard Left/Right.
+- The narrowing select is removed.

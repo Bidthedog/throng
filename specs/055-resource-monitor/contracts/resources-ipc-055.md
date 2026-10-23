@@ -30,3 +30,14 @@ Exposed on `window.throng.resources` by `packages/ui/src/preload/preload.cts`, t
   (FR-051).
 
 Contract test: `packages/ui/tests/contract/resources-ipc.contract.test.ts`.
+
+
+## Session 2026-10-23 changes
+
+- `RoutedAction` gains `activate`: `{ kind: 'activate', projectId: string, tabId?: string, panelId?:
+  string }`. `throng:resources:action:route` resolves it to the window holding the tab (else the main
+  window for a project-only target), brings that window forward and posts it on `throng:resources:action`;
+  it resolves `false` when no window holds the target. The receiving window switches to the project,
+  selects the tab and focuses the panel.
+- Every metrics object on the wire (`ResourceSummary` totals are unchanged; `DetailFrame` nodes) gains
+  `network`, a number or `{ unavailable: 'elevation-required' | 'trace-failed' }`.
