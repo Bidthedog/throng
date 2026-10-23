@@ -159,17 +159,18 @@ describe('closing (FR-052)', () => {
 
 describe('the view (FR-087)', () => {
   it('applies the stored view before the body is drawn', async () => {
+    // A view saved before FR-100 still carries `narrowTo`: it is restored without it.
     bridge.setStoredView({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true, focusPath: ['root', 'c:projects'] });
     render(createElement(MonitorApp));
     await act(async () => bridge.pushDetail(frame(1, sampleHierarchy())));
 
     await screen.findByTestId('monitor-body');
-    expect(getView()).toEqual({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true, focusPath: ['root', 'c:projects'] });
+    expect(getView()).toEqual({ metric: 'memory', filterText: 'node', hideIdle: true, focusPath: ['root', 'c:projects'] });
   });
 
   it('starts from the defaults the first time (a stored view of null)', async () => {
     await mountWindow();
-    expect(getView()).toMatchObject({ metric: 'cpu', filterText: '', narrowTo: null, hideIdle: false, focusPath: ['root'] });
+    expect(getView()).toMatchObject({ metric: 'cpu', filterText: '', hideIdle: false, focusPath: ['root'] });
   });
 
   it('ignores a stored field it cannot use rather than trusting it', async () => {

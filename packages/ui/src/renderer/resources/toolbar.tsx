@@ -3,16 +3,17 @@
  * FIRST and the controls LAST (FR-068): `FilterField` and `ToolbarControls`.
  *
  * Every action is a themeable icon control with a hover title (FR-055): the metric choice, hide idle and
- * clear-filter are `IconButton`s; narrowing and the capture interval are selects, which are choices and
- * not actions, and carry titles all the same.
+ * clear-filter are `IconButton`s; the capture interval is a select, which is a choice and not an action,
+ * and carries a title all the same. There is no narrowing (FR-100): the filter, the drill-down and the
+ * ordering are the ways to find something.
  */
 import { useCallback, useRef, useState, type ReactElement } from 'react';
-import { allowedIntervals, type ResourceNode } from '@throng/core';
+import { allowedIntervals } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
 import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
 import { HelpButton, HelpPanel } from './help-panel.js';
-import { focusOn, setSelection, setView, useSession, useView } from './monitor-session.js';
+import { setView, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
 export function FilterField(): ReactElement {
@@ -48,27 +49,8 @@ export function FilterField(): ReactElement {
   );
 }
 
-const COMPONENT_OPTIONS: readonly { id: string; label: string }[] = [
-  { id: 'c:ui', label: 'UI' },
-  { id: 'c:daemon', label: 'Daemon' },
-  { id: 'c:helpers', label: 'Helpers' },
-  { id: 'c:projects', label: 'Projects' },
-];
-
-function projectOptions(tree: ResourceNode | null): { id: string; label: string }[] {
-  const projects = tree?.children.find((c) => c.id === 'c:projects');
-  return (projects?.children ?? []).filter((c) => c.kind === 'project').map((p) => ({ id: p.id, label: p.label }));
-}
-
-/** Where drilling to a narrowed node puts the focus: a project sits under the Projects component. */
-function pathTo(id: string | null): string[] {
-  if (id === null) return ['root'];
-  return id.startsWith('p:') ? ['root', 'c:projects', id] : ['root', id];
-}
-
 export function ToolbarControls(): ReactElement {
   const view = useView();
-  const { tree } = useSession();
   const settings = useResourceMonitorSettings();
 
   // The help panel (FR-093). Closing it from the keyboard, or by pressing its button again, hands focus back.
@@ -91,32 +73,6 @@ export function ToolbarControls(): ReactElement {
   return (
     <>
     <div className="monitor-controls" role="toolbar" aria-label="Monitor controls" data-testid="monitor-controls">
-      <select
-        className="monitor-controls__select"
-        data-testid="monitor-narrow"
-        title="Narrow to a component or a project"
-        aria-label="Narrow to a component or a project"
-        value={view.narrowTo ?? ''}
-        onChange={(e) => {
-          const id = e.target.value === '' ? null : e.target.value;
-          setView({ narrowTo: id });
-          focusOn(pathTo(id));
-          setSelection(null);
-        }}
-      >
-        <option value="">Everything</option>
-        {COMPONENT_OPTIONS.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-        {projectOptions(tree).map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
       <span id="monitor-size-by" className="monitor-controls__label" data-testid="monitor-size-by-label">
         Size by
       </span>

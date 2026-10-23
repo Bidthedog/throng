@@ -10,7 +10,7 @@
  *
  *  - The SESSION (history, ended entries, the displayed tree) lives from `startSession` to
  *    `endSession`: charts start empty on every open and are discarded on close (FR-033).
- *  - The VIEW (metric, filter, narrowing, hide idle, focus path) is held by UI main until throng
+ *  - The VIEW (metric, filter, hide idle, focus path) is held by UI main until throng
  *    restarts and never persisted (FR-057, FR-087): each open is a fresh renderer, so `restoreView` reapplies it.
  *
  * ══ ENDED ENTRIES ══
@@ -54,8 +54,6 @@ export interface SessionSnapshot {
 export interface ViewState {
   readonly metric: FigureId;
   readonly filterText: string;
-  /** A component (`c:…`) or project (`p:…`) id, or `null` for everything. */
-  readonly narrowTo: string | null;
   readonly hideIdle: boolean;
   /** Node ids from the root down to the node in focus. */
   readonly focusPath: readonly string[];
@@ -64,7 +62,6 @@ export interface ViewState {
 const DEFAULT_VIEW: ViewState = Object.freeze({
   metric: 'cpu',
   filterText: '',
-  narrowTo: null,
   hideIdle: false,
   focusPath: Object.freeze(['root']),
 });
@@ -229,20 +226,6 @@ function recordPoints(f: DetailFrame): void {
 
 function mergeFrame(f: DetailFrame): void {
   const tree = mergeEnded(snapshot.tree, f.hierarchy);
-  /*
-   * A narrowing to a component or project that is no longer in the tree is dropped (FR-057: fall back to
-   * the nearest thing that survives, here "everything"). Left in place it filters every node out while
-   * the toolbar's <select>, which has no such option, reads "Everything" — an empty monitor with nothing
-   * to explain it. This runs on every frame, so it covers a reopen (the first frame) and a project that
-   * goes away while the monitor is open. The focus path needs no fix: it resolves to its nearest survivor.
-   */
-  if (view.narrowTo !== null) {
-    let present = false;
-    walk(tree, (n) => {
-      if (n.id === view.narrowTo) present = true;
-    });
-    if (!present) view = { ...view, narrowTo: null };
-  }
   version += 1;
   snapshot = { frame: f, tree, version };
   notify();
@@ -289,7 +272,7 @@ export function restoreView(raw: unknown): void {
   const patch: { -readonly [K in keyof ViewState]?: ViewState[K] } = {};
   if (r.metric === 'cpu' || r.metric === 'memory' || r.metric === 'gpu' || r.metric === 'io') patch.metric = r.metric;
   if (typeof r.filterText === 'string') patch.filterText = r.filterText;
-  if (typeof r.narrowTo === 'string' || r.narrowTo === null) patch.narrowTo = r.narrowTo;
+  // A view saved before FR-100 may still carry `narrowTo`: there is no narrowing, so it is not read.
   if (typeof r.hideIdle === 'boolean') patch.hideIdle = r.hideIdle;
   if (Array.isArray(r.focusPath) && r.focusPath.length > 0 && r.focusPath.every((s) => typeof s === 'string')) {
     patch.focusPath = r.focusPath as string[];

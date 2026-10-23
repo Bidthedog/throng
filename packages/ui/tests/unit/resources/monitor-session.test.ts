@@ -18,6 +18,7 @@ import {
   isEnded,
   reconfigureSession,
   resolveFocusPath,
+  restoreView,
   setView,
   startSession,
 } from '../../../src/renderer/resources/monitor-session.js';
@@ -224,22 +225,28 @@ describe('ended entries (FR-065a)', () => {
 
 describe('view state (FR-057)', () => {
   it('survives a close and a reopen, until the module is reloaded', () => {
-    setView({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
+    setView({ metric: 'memory', filterText: 'node', hideIdle: true });
     startSession(settings());
     endSession();
     startSession(settings());
 
-    expect(getView()).toMatchObject({ metric: 'memory', filterText: 'node', narrowTo: 'p:p1', hideIdle: true });
+    expect(getView()).toMatchObject({ metric: 'memory', filterText: 'node', hideIdle: true });
   });
 
   it('has sensible first-open defaults: CPU, no filter, nothing hidden, at the root', () => {
     expect(getView()).toEqual({
       metric: 'cpu',
       filterText: '',
-      narrowTo: null,
       hideIdle: false,
       focusPath: ['root'],
     });
+  });
+
+  it('has no narrowing (FR-100): a saved view still carrying one is restored without it', () => {
+    restoreView({ metric: 'memory', narrowTo: 'p:p1', focusPath: ['root', 'c:projects'] });
+
+    expect(getView()).not.toHaveProperty('narrowTo');
+    expect(getView()).toMatchObject({ metric: 'memory', focusPath: ['root', 'c:projects'] });
   });
 
   it('resolves a focus path to the nearest surviving ancestor', () => {
@@ -256,38 +263,13 @@ describe('view state (FR-057)', () => {
     expect(resolveFocusPath(path, null)).toEqual(path);
   });
 
-  // A narrowing the toolbar can no longer show (its <select> has no such option, so it reads "Everything")
-  // but which still filtered everything out: an empty monitor with nothing to explain it.
-  it('drops a narrowing to a node that is not in the tree when the first frame arrives', () => {
-    setView({ narrowTo: 'p:gone', focusPath: ['root', 'c:projects', 'p:gone'] });
+  it('walks a focus on a node that is gone to its nearest survivor when the first frame arrives', () => {
+    setView({ focusPath: ['root', 'c:projects', 'p:gone'] });
     startSession(settings());
 
     ingestFrame(frame(1, sampleHierarchy()));
 
-    expect(getView().narrowTo).toBeNull();
-    // The focus walks to its nearest survivor: the Projects component is still there, the project is not.
     expect(resolveFocusPath(getView().focusPath, getSessionSnapshot().tree)).toEqual(['root', 'c:projects']);
-  });
-
-  it('keeps a narrowing to a node that is still there', () => {
-    setView({ narrowTo: 'p:p1' });
-    startSession(settings());
-
-    ingestFrame(frame(1, sampleHierarchy()));
-
-    expect(getView().narrowTo).toBe('p:p1');
-  });
-
-  it('drops a narrowing when its node disappears from a later frame', () => {
-    startSession(settings());
-    ingestFrame(frame(1, sampleHierarchy()));
-    setView({ narrowTo: 'p:p2' });
-    expect(getView().narrowTo).toBe('p:p2');
-
-    const without = (n: ResourceNode): ResourceNode => ({ ...n, children: n.children.filter((c) => c.id !== 'p:p2').map(without) });
-    ingestFrame(frame(2, without(sampleHierarchy())));
-
-    expect(getView().narrowTo).toBeNull();
   });
 
   it('keeps a focus on an ENDED process, which is still in its place', () => {

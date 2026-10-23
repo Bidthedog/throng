@@ -79,30 +79,12 @@ describe('the filter (FR-061)', () => {
   });
 });
 
-describe('narrowing (FR-061)', () => {
-  it('offers everything, each component and every project, and narrows to the one chosen', async () => {
+describe('no narrowing (FR-100, US2 scenario 21)', () => {
+  it('offers no control that narrows the view to a component or a project', async () => {
     await mount();
-    const select = screen.getByTestId('monitor-narrow') as HTMLSelectElement;
-    const labels = within(select).getAllByRole('option').map((o) => o.textContent);
-    expect(labels).toEqual(['Everything', 'UI', 'Daemon', 'Helpers', 'Projects', 'Alpha', 'Beta']);
-    expect(select.value).toBe('');
-
-    fireEvent.change(select, { target: { value: 'p:p1' } });
-
-    expect(getView().narrowTo).toBe('p:p1');
-    // The view lands on the node it narrowed to, not on a root that now shows one project.
-    expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1']);
-  });
-
-  it('returns to everything', async () => {
-    act(() => setView({ narrowTo: 'c:ui', focusPath: ['root', 'c:ui'] }));
-    await mount();
-    expect((screen.getByTestId('monitor-narrow') as HTMLSelectElement).value).toBe('c:ui');
-
-    fireEvent.change(screen.getByTestId('monitor-narrow'), { target: { value: '' } });
-
-    expect(getView().narrowTo).toBeNull();
-    expect(getView().focusPath).toEqual(['root']);
+    expect(screen.queryByTestId('monitor-narrow')).toBeNull();
+    // The one select left is the capture interval.
+    expect(screen.getAllByRole('combobox').map((s) => s.getAttribute('data-testid'))).toEqual(['monitor-interval']);
   });
 });
 

@@ -129,6 +129,7 @@ describe('a click on a bar marks that item on the left (FR-089, FR-097)', () => 
     feed(sampleHierarchy());
     render(createElement(Fragment, null, createElement(Breakdown), createElement(Bars)));
     // A project row, selected: the right column shows its tabs as bars, but the left lists projects.
+    act(() => focusOn(['root', 'c:projects']));
     fireEvent.click(screen.getByTestId('breakdown-row-p:p1'));
     expect(screen.queryByTestId('breakdown-row-t:t1')).toBeNull();
 

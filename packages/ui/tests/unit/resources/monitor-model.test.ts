@@ -10,7 +10,6 @@ import { MIB, metrics, node, proc } from '../../component/helpers/resource-fixtu
 const view = (over: Partial<ViewState> = {}): ViewState => ({
   metric: 'io',
   filterText: '',
-  narrowTo: null,
   hideIdle: false,
   focusPath: ['root', 'c:projects', 'p:a', 't:a', 'n:a'],
   ...over,
@@ -78,15 +77,23 @@ describe('a held order (FR-090)', () => {
   });
 });
 
+describe('the top level lists the components only (FR-103)', () => {
+  it('has one section, and its top-level nodes are the components', () => {
+    const model = buildBreakdown(tree(), view({ focusPath: ['root'] }), ctx);
+    expect(model.sections.map((s) => s.id)).toEqual(['components']);
+    expect(model.sections[0]!.nodes.map((n) => n.id)).toEqual(['c:projects']);
+    // Projects is a row, not opened: its projects are reached by drilling into it.
+    expect(model.sections[0]!.rows.map((r) => r.node.id)).toEqual(['c:projects']);
+  });
+});
+
 describe('a filter lists each node once (FR-061, SC-010)', () => {
-  it('does not repeat the Projects subtree under Components', () => {
+  it('lists every match once, under its ancestors, from the components down', () => {
     const model = buildBreakdown(tree(), view({ filterText: 'exe', focusPath: ['root'] }), ctx);
     const ids = model.sections.flatMap((s) => s.rows.map((r) => r.node.id));
     expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
-    // …and the matches are still there, under their ancestors, in the Projects section.
-    const projects = model.sections.find((s) => s.id === 'projects')!;
-    const kept = projects.rows.map((r) => r.node.process?.pid ?? r.node.id);
-    expect(kept).toEqual(expect.arrayContaining([101, 102, 'n:a', 't:a']));
+    const kept = model.sections[0]!.rows.map((r) => r.node.process?.pid ?? r.node.id);
+    expect(kept).toEqual(expect.arrayContaining(['c:projects', 'p:a', 't:a', 'n:a', 101, 102]));
   });
 
   it('keeps a match under its ancestors when the focus is below the root', () => {

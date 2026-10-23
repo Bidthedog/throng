@@ -49,7 +49,7 @@ function Bar({
   ioPeak,
   onPick,
 }: {
-  onPick: (child: ResourceNode, from: Element) => void;
+  onPick: (child: ResourceNode) => void;
   bar: BarItem;
   metric: FigureId;
   thresholds: UsageThresholds;
@@ -71,7 +71,7 @@ function Bar({
       data-band={figure.band}
       data-kind={node.kind}
       title={node.label}
-      onClick={(e) => onPick(node, e.currentTarget)}
+      onClick={() => onPick(node)}
     >
       <span className="share-bar__name">{node.label}</span>
       <span className="share-bar__track" aria-hidden="true">
@@ -98,14 +98,10 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   const node = hold.value;
   const { tree } = subject;
   const subjectId = subject.node.id;
-  const pick = (child: ResourceNode, from: Element): void => {
-    // A child with no row on the left (the left lists projects, the click was on a project's tab) is
-    // opened for first: the left shows the item the bars belong to, and the child is marked there (FR-089).
-    const listed = from.ownerDocument.querySelector(`[role="treeitem"][data-node-id="${child.id}"]`) !== null;
-    if (!listed) {
-      const path = pathTo(tree, subjectId);
-      if (path !== null) focusOn(path);
-    }
+  const pick = (child: ResourceNode): void => {
+    // The left shows the item the bars belong to, and the child is marked there (FR-089).
+    const path = pathTo(tree, subjectId);
+    if (path !== null) focusOn(path);
     setSelection(child.id);
   };
   const machine = subject.frame.machine;

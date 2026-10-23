@@ -3,7 +3,7 @@
  * over a hierarchy, so that WHICH nodes are drawn, in what order and with what words is decided in one
  * place and proven without a DOM. The components only draw this.
  *
- * Filtering, narrowing, ordering and the idle rule are core's (`filterHierarchy`, `orderChildren`,
+ * Filtering, ordering and the idle rule are core's (`filterHierarchy`, `orderChildren`,
  * `isIdle`); this module composes them with the session's ended entries and the view state.
  */
 import {
@@ -27,7 +27,7 @@ export interface BreakdownRow {
   readonly ended: boolean;
 }
 
-export type SectionId = 'components' | 'projects' | 'children';
+export type SectionId = 'components' | 'children';
 
 export interface BreakdownSection {
   readonly id: SectionId;
@@ -82,8 +82,6 @@ export interface ModelContext {
   readonly heldOrder?: readonly string[];
 }
 
-const NONE: ReadonlySet<string> = new Set();
-const PROJECTS_LISTED_BELOW: ReadonlySet<string> = new Set(['c:projects']);
 
 /** The node `path` names in `tree`, or `undefined` when any step of it is missing. */
 export function nodeAt(tree: ResourceNode, path: readonly string[]): ResourceNode | undefined {
@@ -109,8 +107,6 @@ function rowsFor(
   metric: FigureId,
   ctx: ModelContext,
   held: ReadonlyMap<string, number> | undefined,
-  /** Nodes listed as rows but not opened: another section lists their children (a filter lists each node once). */
-  stop: ReadonlySet<string>,
   depth = 0,
 ): BreakdownRow[] {
   const out: BreakdownRow[] = [];
@@ -120,8 +116,8 @@ function rowsFor(
     // A process's descendants are processes: the whole chain is the answer to "what is this running?".
     // Everything else lists its children only as far as the user drills — except while searching, when
     // a match is only useful with its ancestors showing.
-    if ((expandAll || node.kind === 'process') && !stop.has(node.id)) {
-      out.push(...rowsFor(orderBy(node.children, metric, held), path, expandAll, metric, ctx, held, stop, depth + 1));
+    if (expandAll || node.kind === 'process') {
+      out.push(...rowsFor(orderBy(node.children, metric, held), path, expandAll, metric, ctx, held, depth + 1));
     }
   }
   return out;
@@ -165,7 +161,6 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
   const filtered =
     filterHierarchy(tree, {
       text: view.filterText,
-      narrowTo: view.narrowTo,
       hide: view.hideIdle
         ? (n) => !ctx.isEnded(n.id) && isIdle(ctx.ownHistory(n.id), ctx.thresholds, ctx.machine)
         : undefined,
@@ -174,7 +169,7 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
   const matches = searching ? countMatches(filtered, view.filterText, ctx.isEnded) : 0;
   // What Hide idle took out is what is shown without it, less what is shown with it.
   const hiddenIdle = view.hideIdle
-    ? countProcesses(filterHierarchy(tree, { text: view.filterText, narrowTo: view.narrowTo }) ?? filtered, ctx.isEnded) - countProcesses(filtered, ctx.isEnded)
+    ? countProcesses(filterHierarchy(tree, { text: view.filterText }) ?? filtered, ctx.isEnded) - countProcesses(filtered, ctx.isEnded)
     : 0;
   const focusPath = resolveFocusPath(view.focusPath, filtered);
   const focus = nodeAt(filtered, focusPath) ?? filtered;
@@ -188,21 +183,16 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
     title: string,
     basePath: readonly string[],
     nodes: readonly ResourceNode[],
-    stop: ReadonlySet<string> = NONE,
   ): BreakdownSection => {
     const top = ordered(nodes);
-    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held, stop) };
+    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held) };
   };
 
-  const sections: BreakdownSection[] = [];
-  if (focus.kind === 'root') {
-    // The Projects section lists what is under Projects, so the Components section does not open it again.
-    sections.push(section('components', 'Components', focusPath, focus.children, PROJECTS_LISTED_BELOW));
-    const projects = focus.children.find((c) => c.id === 'c:projects');
-    if (projects) sections.push(section('projects', 'Projects', [...focusPath, projects.id], projects.children));
-  } else {
-    sections.push(section('children', focus.label, focusPath, focus.children));
-  }
+  // The top level lists the four components only (FR-103): the user's projects are one drill into Projects.
+  const sections: BreakdownSection[] =
+    focus.kind === 'root'
+      ? [section('components', 'Components', focusPath, focus.children)]
+      : [section('children', focus.label, focusPath, focus.children)];
   return { focusPath, focus, sections, matches, hiddenIdle };
 }
 

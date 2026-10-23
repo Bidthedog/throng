@@ -440,10 +440,11 @@ describe('the filter follows the field, not the other way round (D1, SC-010)', (
 });
 
 describe('the sample hierarchy still opens at the root (guard for the first view)', () => {
-  it('lists the components and the projects once each', () => {
+  it('lists each component once, and no project (FR-103)', () => {
     tick = 0;
     feed(sampleHierarchy());
     render(createElement(Breakdown));
-    expect(screen.getAllByTestId('breakdown-row-p:p1')).toHaveLength(1);
+    expect(screen.getAllByTestId('breakdown-row-c:projects')).toHaveLength(1);
+    expect(screen.queryByTestId('breakdown-row-p:p1')).toBeNull();
   });
 });

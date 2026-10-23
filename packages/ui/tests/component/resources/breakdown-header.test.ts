@@ -74,7 +74,7 @@ describe('column headers over the rows (FR-092)', () => {
 
   it('names Trend, CPU, Memory, GPU and I/O over each section’s rows', () => {
     mount();
-    for (const section of ['components', 'projects']) {
+    for (const section of ['components']) {
       expect(columns(section).map((c) => c.textContent)).toEqual(['Trend', 'CPU', 'Memory', 'GPU', 'I/O']);
     }
   });

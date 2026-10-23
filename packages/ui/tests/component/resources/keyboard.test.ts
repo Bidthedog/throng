@@ -53,8 +53,8 @@ const active = (): string | null => document.activeElement?.getAttribute('data-n
 const key = (target: Element, k: string, init: KeyboardEventInit = {}): boolean =>
   fireEvent.keyDown(target, { key: k, code: k, ...init });
 
-/** First view, CPU order: Projects (13), UI (3), Daemon (1), Helpers (0); then Alpha, Beta. */
-const FIRST_VIEW = ['c:projects', 'c:ui', 'c:daemon', 'c:helpers', 'p:p1', 'p:p2'];
+/** First view, CPU order: the four components only (FR-103) — Projects (13), UI (3), Daemon (1), Helpers (0). */
+const FIRST_VIEW = ['c:projects', 'c:ui', 'c:daemon', 'c:helpers'];
 
 describe('moving between nodes (FR-068)', () => {
   beforeEach(async () => {
@@ -66,7 +66,7 @@ describe('moving between nodes (FR-068)', () => {
     expect(tabbable).toEqual(['c:projects']);
   });
 
-  it('Down and Up move focus one node at a time, through both sections', () => {
+  it('Down and Up move focus one node at a time', () => {
     row('c:projects').focus();
     for (const id of FIRST_VIEW.slice(1)) {
       key(document.activeElement!, 'ArrowDown');
@@ -74,7 +74,7 @@ describe('moving between nodes (FR-068)', () => {
     }
     // At the end it stays.
     key(document.activeElement!, 'ArrowDown');
-    expect(active()).toBe('p:p2');
+    expect(active()).toBe('c:helpers');
 
     for (const id of [...FIRST_VIEW].reverse().slice(1)) {
       key(document.activeElement!, 'ArrowUp');

@@ -71,6 +71,8 @@ const feed = (root: ResourceNode, tick = 1): void => {
   act(() => ingestFrame(frame(tick, root)));
 };
 const PROCESS_PATH = ['root', 'c:projects', 'p:p1', 't:t1', 'n:n1'];
+/** The projects are one drill into Projects (FR-103). */
+const PROJECTS_PATH = ['root', 'c:projects'];
 const row = (id: string): HTMLElement => screen.getByTestId(`breakdown-row-${id}`);
 const menuLabels = (): string[] => within(screen.getByRole('menu')).getAllByRole('menuitem').map((i) => i.getAttribute('data-testid') ?? '');
 const rightClick = (id: string): void => {
@@ -115,6 +117,7 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
   it('a project: both Unload rows, and Kill All Below when it holds a live process', async () => {
     feed(sampleHierarchy());
     await mount();
+    act(() => focusOn(PROJECTS_PATH));
 
     rightClick('p:p1');
 
@@ -125,6 +128,7 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
   it('an unloaded project offers nothing to unload', async () => {
     feed(sampleHierarchy());
     await mount();
+    act(() => focusOn(PROJECTS_PATH));
     rightClick('p:p2');
     expect(screen.queryByRole('menu')).toBeNull();
   });
@@ -158,6 +162,7 @@ describe('the shared commands (FR-063)', () => {
     feed(sampleHierarchy());
     bridge.setRouteAnswer(true);
     await mount();
+    act(() => focusOn(PROJECTS_PATH));
 
     rightClick('p:p1');
     fireEvent.click(screen.getByTestId('menu-item-Unload Project'));
@@ -174,6 +179,7 @@ describe('the shared commands (FR-063)', () => {
     feed(sampleHierarchy());
     bridge.setRouteAnswer(false);
     await mount();
+    act(() => focusOn(PROJECTS_PATH));
 
     rightClick('p:p1');
     fireEvent.click(screen.getByTestId('menu-item-Unload Project'));

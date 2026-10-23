@@ -13,7 +13,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
-import { __resetSession, getView } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, focusOn, getView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
@@ -39,6 +39,9 @@ async function openWindow(): Promise<void> {
   render(createElement(MonitorApp));
   await act(async () => bridge.pushDetail(frame(1, sampleHierarchy())));
   await screen.findByTestId('breakdown');
+  // The projects are one drill into Projects (FR-103).
+  act(() => focusOn(['root', 'c:projects']));
+  await screen.findByTestId('breakdown-row-p:p1');
 }
 
 describe('a context menu opened from a row', () => {
@@ -77,6 +80,6 @@ describe('a context menu opened from a row', () => {
     // Routed to the main window, where the project list's own command runs.
     await waitFor(() => expect(bridge.routed).toEqual([{ action: 'unloadProject', id: 'p1', name: 'Alpha' }]));
     // Nothing drilled.
-    expect(getView().focusPath).toEqual(['root']);
+    expect(getView().focusPath).toEqual(['root', 'c:projects']);
   });
 });

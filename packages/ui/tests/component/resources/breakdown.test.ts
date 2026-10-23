@@ -40,22 +40,35 @@ function mount(): void {
 
 const row = (id: string): HTMLElement => screen.getByTestId(`breakdown-row-${id}`);
 
-describe('the first view (FR-020b, FR-020c)', () => {
-  it('shows usage per component AND per project at once', () => {
+describe('the first view (FR-103, FR-020c)', () => {
+  it('lists the four components and nothing else (US2 scenario 23)', () => {
     feed(sampleHierarchy());
     mount();
 
     const components = screen.getByTestId('breakdown-section-components');
-    const projects = screen.getByTestId('breakdown-section-projects');
+    expect(screen.queryByTestId('breakdown-section-projects')).toBeNull();
     for (const id of ['c:ui', 'c:daemon', 'c:helpers', 'c:projects']) expect(within(components).getByTestId(`breakdown-row-${id}`)).toBeInTheDocument();
-    for (const id of ['p:p1', 'p:p2']) expect(within(projects).getByTestId(`breakdown-row-${id}`)).toBeInTheDocument();
+    expect(screen.queryByTestId('breakdown-row-p:p1')).toBeNull();
+    expect(screen.queryByTestId('breakdown-row-p:p2')).toBeNull();
+  });
+
+  it('lists the projects once Projects is opened with a double-click', () => {
+    feed(sampleHierarchy());
+    mount();
+
+    fireEvent.doubleClick(row('c:projects'));
+
+    expect(getView().focusPath).toEqual(['root', 'c:projects']);
+    expect(row('p:p1')).toBeInTheDocument();
+    expect(row('p:p2')).toBeInTheDocument();
   });
 
   it('orders projects active, then loaded, then unloaded, and greys the unloaded ones in italics', () => {
     feed(sampleHierarchy());
     mount();
+    act(() => setView({ focusPath: ['root', 'c:projects'] }));
 
-    const projects = within(screen.getByTestId('breakdown-section-projects'))
+    const projects = within(screen.getByTestId('breakdown-section-children'))
       .getAllByTestId(/^breakdown-row-p:[^-]*$/)
       .map((el) => el.getAttribute('data-node-id'));
     expect(projects).toEqual(['p:p1', 'p:p2']);
@@ -75,6 +88,7 @@ describe('the first view (FR-020b, FR-020c)', () => {
   it('lists a project with nothing measured, though it takes no share of anything', () => {
     feed(sampleHierarchy());
     mount();
+    act(() => setView({ focusPath: ['root', 'c:projects'] }));
 
     expect(row('p:p2')).toBeInTheDocument();
     expect(row('p:p1')).toBeInTheDocument();
