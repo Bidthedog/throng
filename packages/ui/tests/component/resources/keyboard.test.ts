@@ -96,23 +96,25 @@ describe('moving between nodes (FR-068)', () => {
     expect(key(document.activeElement!, 'ArrowDown')).toBe(false);
   });
 
-  it('reads out a focused node’s name and values — the values its row shows, which a hover title no longer carries (FR-095)', () => {
+  it('shows no readout of the row’s figures in the left column: they are on the row (FR-101)', () => {
     row('c:projects').focus();
     key(document.activeElement!, 'ArrowDown');
-    const readout = screen.getByTestId('breakdown-readout');
-    // The hover title names the node; the readout starts with that name and adds what the row's cells say.
-    expect(readout.textContent?.startsWith(row('c:ui').getAttribute('title') ?? '?')).toBe(true);
-    const cpu = screen.getByTestId('breakdown-row-c:ui-cpu').textContent ?? '?';
-    expect(readout.textContent).toContain(`CPU ${cpu}`);
+    expect(screen.queryByTestId('breakdown-readout')).toBeNull();
+    expect(screen.getByTestId('breakdown').querySelector('pre, [aria-live]')).toBeNull();
   });
 
-  it('selects what it focuses, so the detail pane follows the keyboard', () => {
+  it('moves the selection itself, so the right column follows the keyboard (FR-098)', () => {
     row('c:projects').focus();
     key(document.activeElement!, 'ArrowDown');
     expect(getSelection()).toBe('c:ui');
+    expect(row('c:ui')).toHaveAttribute('aria-selected', 'true');
+    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(1);
     expect(screen.getByTestId('detail-name')).toHaveTextContent('UI');
-  });
-});
+
+    key(document.activeElement!, 'ArrowUp');
+    expect(getSelection()).toBe('c:projects');
+    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(1);
+  });});
 
 describe('drilling in and out (FR-068)', () => {
   beforeEach(async () => {

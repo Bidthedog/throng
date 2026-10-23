@@ -60,7 +60,6 @@ import {
   buildBreakdown,
   descendants,
   figuresOf,
-  valueText,
   type BreakdownModel,
   type BreakdownRow,
   type BreakdownSection,
@@ -536,7 +535,6 @@ export function Breakdown(): ReactElement | null {
 
   if (!tree || !model || !ctx) return null;
 
-  const activeRow = rows.find((r) => r.node.id === activeId);
   const onMenu = actions?.openMenu;
 
   return (
@@ -567,10 +565,7 @@ export function Breakdown(): ReactElement | null {
           networkTitle={networkTitle}
         />
       ))}
-      {/* What hovering the keyboard's row would show (FR-068): the same text, as its own announcement. */}
-      <pre className="breakdown__readout" data-testid="breakdown-readout" aria-live="polite">
-        {activeRow ? valueText(activeRow.node, activeRow.ended, ctx) : ''}
-      </pre>
+      {/* No readout of the selected row's figures (FR-101): they are on the row, its detail on the right. */}
     </div>
   );
 }

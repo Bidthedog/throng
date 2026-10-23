@@ -4184,16 +4184,6 @@ textarea,
   color: var(--throng-colour-accent);
 }
 
-.breakdown__readout {
-  margin: 0;
-  padding: 6px 8px;
-  border-top: 1px solid var(--throng-colour-border);
-  color: var(--throng-colour-textMuted);
-  font: inherit;
-  font-size: 11px;
-  white-space: pre-wrap;
-}
-
 /* The body's layout: two columns (FR-096, FR-097). DOM order is the Tab order (filter, breakdown, detail,
    controls — FR-068); the grid areas put the filter, the list controls, the notice and the rows down the LEFT
    column and the detail down the whole of the RIGHT. Each column scrolls on its own. */

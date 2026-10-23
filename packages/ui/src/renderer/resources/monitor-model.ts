@@ -15,7 +15,7 @@ import {
   type ResourceNode,
   type UsageThresholds,
 } from '@throng/core';
-import { FIGURE_HINT, FIGURE_LABEL, FIGURE_ORDER, figureOf, metricNumber, type Figure, type FigureId } from './figures.js';
+import { FIGURE_ORDER, figureOf, metricNumber, type Figure, type FigureId } from './figures.js';
 import { resolveFocusPath, type ViewState } from './monitor-session.js';
 
 export interface BreakdownRow {
@@ -287,30 +287,11 @@ interface CachedFigures {
  */
 const figuresCache = new WeakMap<ResourceNode, CachedFigures>();
 
-/** The four figures of a node's rolled-up metrics, in display order. */
+/** The figures of a node's rolled-up metrics, in display order. */
 export function figuresOf(node: ResourceNode, ctx: FigureContext): Figure[] {
   const hit = figuresCache.get(node);
   if (hit !== undefined && hit.thresholds === ctx.thresholds && hit.installedRamBytes === ctx.machine.installedRamBytes) return hit.figures;
   const figures = FIGURE_ORDER.map((id) => figureOf(id, node.rolled, ctx.thresholds, ctx.machine));
   figuresCache.set(node, { thresholds: ctx.thresholds, installedRamBytes: ctx.machine.installedRamBytes, figures });
   return figures;
-}
-
-/**
- * A node's values as text — what hovering it shows and what a focused node reads out (FR-068), so the
- * pointer and the keyboard are told exactly the same thing.
- */
-export function valueText(node: ResourceNode, ended: boolean, ctx: FigureContext, known?: readonly Figure[]): string {
-  if (node.kind === 'limitation') return `${node.label}: ${node.reason ?? 'not measured'}`;
-  const head = `${node.label}${node.estimated ? ' (estimated)' : ''}${ended ? ' — ended' : ''}`;
-  if (ended) return head;
-  // A caller that has already worked the figures out hands them in: a row does, for every row, per frame.
-  const lines = (known ?? figuresOf(node, ctx)).map((f) => {
-    let line = `${FIGURE_LABEL[f.id]} ${f.text}`;
-    if (f.band) line += ` (${f.band})`;
-    line += ` — ${FIGURE_HINT[f.id]}`;
-    if (f.partial !== undefined) line += `; partial: ${f.partial}`;
-    return line;
-  });
-  return [head, ...lines].join('\n');
 }
