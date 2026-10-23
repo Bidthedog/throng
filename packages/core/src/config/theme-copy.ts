@@ -808,6 +808,10 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     label: 'Hide ended processes icon',
     description: 'The glyph on the Resource Monitor control that hides processes that have ended.',
   },
+  'icons.resourceNetwork': {
+    label: 'Network icon',
+    description: 'The glyph on the Resource Monitor\'s "order by Network" choice.',
+  },
   'icons.showHidden': {
     label: 'Show hidden entries icon',
     description: 'The glyph on the Quick Open control that brings the files this project hides back into the list, for that one search.',

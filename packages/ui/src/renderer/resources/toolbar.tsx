@@ -11,9 +11,9 @@ import { useCallback, useRef, useState, type ReactElement } from 'react';
 import { allowedIntervals } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
-import { FIGURE_ICON, FIGURE_LABEL, STATUS_FIGURE_ORDER, type StatusFigureId } from './figures.js';
+import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
 import { HelpButton, HelpPanel } from './help-panel.js';
-import { setView, useView } from './monitor-session.js';
+import { setView, useNetworkUnavailable, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
 export function FilterField(): ReactElement {
@@ -52,6 +52,7 @@ export function FilterField(): ReactElement {
 export function ToolbarControls(): ReactElement {
   const view = useView();
   const settings = useResourceMonitorSettings();
+  const networkUnavailable = useNetworkUnavailable();
 
   // The help panel (FR-093). Closing it from the keyboard, or by pressing its button again, hands focus back.
   const [helpOpen, setHelpOpen] = useState(false);
@@ -76,20 +77,24 @@ export function ToolbarControls(): ReactElement {
       <span id="monitor-size-by" className="monitor-controls__label" data-testid="monitor-size-by-label">
         Order by
       </span>
-      {/* FR-099: the toolbar's Order by stays beside the column headers that set it too. Network has no glyph
-          of its own, so it is chosen by its column header. */}
+      {/* FR-099: the toolbar's Order by stays beside the column headers that set it too; Network is disabled
+          with its header's reason while it is not measured (FR-113). */}
       <div className="monitor-controls__group" role="group" aria-labelledby="monitor-size-by">
-        {STATUS_FIGURE_ORDER.map((id: StatusFigureId) => (
-          <IconButton
-            key={id}
-            token={FIGURE_ICON[id]}
-            title={`Order by ${FIGURE_LABEL[id]}`}
-            testId={`monitor-metric-${id}`}
-            className="icon-button monitor-controls__button"
-            ariaPressed={view.metric === id}
-            onClick={() => setView({ metric: id })}
-          />
-        ))}
+        {FIGURE_ORDER.map((id: FigureId) => {
+          const why = id === 'network' ? networkUnavailable : null;
+          return (
+            <IconButton
+              key={id}
+              token={FIGURE_ICON[id]}
+              title={why ?? `Order by ${FIGURE_LABEL[id]}`}
+              testId={`monitor-metric-${id}`}
+              className="icon-button monitor-controls__button"
+              ariaPressed={view.metric === id}
+              disabled={why !== null}
+              onClick={() => setView({ metric: id })}
+            />
+          );
+        })}
       </div>
 
       <IconButton

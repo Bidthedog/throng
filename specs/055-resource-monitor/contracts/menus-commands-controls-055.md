@@ -69,9 +69,11 @@ as "Kill processes". The interval field shows a note when it was raised to the w
 - **Activate** — themeable icon control in the right column's action bar and a row context-menu item
   ("Go to project" / "Go to tab" / "Go to panel"; a process row reads "Go to panel"), in the standard
   actions section. New icon token `activate` (glyph ↪ in every default theme, copy in `theme-copy.ts`).
-  With `resourceHideEnded` below: `EXPECTED_ICON_TOKEN_COUNT` 94 → 96; `SHIPPED_DEFAULTS_VERSION` 26 → 27.
+  With `resourceHideEnded` and `resourceNetwork` below: `EXPECTED_ICON_TOKEN_COUNT` 94 → 97;
+  `SHIPPED_DEFAULTS_VERSION` 26 → 27.
 - **Order by** — the toolbar group's label; each metric column header is a text button setting it
-  (Network disabled unelevated, titled "Elevate to show").
+  (Network disabled unelevated, titled "Elevate to show"). The toolbar group gains a Network choice, new
+  icon token `resourceNetwork`, disabled with the same reason.
 - **Hide ended processes** — a toolbar toggle beside Hide idle, on by default, built as Hide idle is: a
   themeable icon control with a hover title and a visible label. New icon token `resourceHideEnded`.
 - **Divider** — `role="separator"`, keyboard Left/Right.

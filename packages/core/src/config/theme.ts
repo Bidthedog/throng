@@ -652,6 +652,9 @@ export const THRONG_THEME: Theme = {
        a stop square reads "has ended", distinct from Hide idle's 💤. */
     activate: '↪',
     resourceHideEnded: '⏹',
+    /* 055, Session 2026-10-23 (FR-113, FR-099). Network as an Order-by choice in the toolbar, beside the
+       four metrics' glyphs: a globe for traffic leaving and reaching the machine, distinct from I/O's ⇅. */
+    resourceNetwork: '🌐',
   },
 };
 

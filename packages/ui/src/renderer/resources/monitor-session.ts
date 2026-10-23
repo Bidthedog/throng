@@ -26,7 +26,7 @@
 import { useSyncExternalStore } from 'react';
 import { NOT_MEASURED, historyLength, type Metrics, type ResourceNode } from '@throng/core';
 import type { DetailFrame } from '@throng/ipc-contract';
-import { metricNumber, type FigureId } from './figures.js';
+import { metricNumber, networkUnavailableTitle, type FigureId } from './figures.js';
 
 export interface SessionSettings {
   readonly intervalSeconds: number;
@@ -368,6 +368,16 @@ export function useNotice(): MonitorNotice | null {
 
 export function useSession(): SessionSnapshot {
   return useSyncExternalStore(subscribeSession, getSessionSnapshot, getSessionSnapshot);
+}
+
+const networkTitle = (): string | null => (snapshot.tree === null ? null : networkUnavailableTitle(snapshot.tree.rolled));
+
+/**
+ * Why Network cannot be ordered by right now ("Elevate to show", "Network unavailable"), or `null` when it is
+ * measured (FR-099, FR-113). A string, so a capture that changes nothing about it re-renders nothing.
+ */
+export function useNetworkUnavailable(): string | null {
+  return useSyncExternalStore(subscribeSession, networkTitle, networkTitle);
 }
 
 const hasFrame = (): boolean => snapshot.frame !== null;

@@ -223,9 +223,9 @@ hover, FR-089/FR-098; D2 panel names, FR-020/FR-082). Research R17 – R20.
 
 ### Technical context, delta
 
-- **Storage**: `SHIPPED_DEFAULTS_VERSION` 26 → 27 for two icon tokens, `activate` (Activate's control)
-  and `resourceHideEnded` (the Hide ended toggle, built as Hide idle is); `EXPECTED_ICON_TOKEN_COUNT`
-  94 → 96. The monitor's view state (FR-057/FR-087) loses `narrowTo` and gains
+- **Storage**: `SHIPPED_DEFAULTS_VERSION` 26 → 27 for three icon tokens, `activate` (Activate's control),
+  `resourceHideEnded` (the Hide ended toggle, built as Hide idle is) and `resourceNetwork` (Order by's
+  Network choice); `EXPECTED_ICON_TOKEN_COUNT` 94 → 97. The monitor's view state (FR-057/FR-087) loses `narrowTo` and gains
   `hideEnded` (default true) and `splitRatio`.
 - **Dependencies**: none new. ETW is reached through koffi against `advapi32` (`StartTraceW`,
   `EnableTraceEx2`, `OpenTraceW`, `ProcessTrace`, `ControlTraceW`, `CloseTrace`), as the rest of
@@ -250,7 +250,7 @@ hover, FR-089/FR-098; D2 panel names, FR-020/FR-082). Research R17 – R20.
 | **V. Test-First** | Every task test-first at the lowest layer; the only elevated test is the ETW integration test, which skips unelevated and is reported by `admin-reminder`. |
 | **VI. Every panel action has a menu item** | Activate is in the row's context menu and the right column's action bar. |
 | **VI. Disabled when unavailable, absent when meaningless** | Activate **absent** on UI/Daemon/Helpers; **disabled** with FR-086's reason when no window holds the target. Network as an Order-by choice **disabled** unelevated, with "Elevate to show". |
-| **VI. Themeable icon controls** | New tokens `activate` and `resourceHideEnded`; the column headers are text buttons — a column header names its column, so its label is the control (the toolbar's Order by keeps its icon buttons). |
+| **VI. Themeable icon controls** | New tokens `activate`, `resourceHideEnded` and `resourceNetwork`; the column headers are text buttons — a column header names its column, so its label is the control (the toolbar's Order by keeps its icon buttons). |
 | **VI. One condition, one notice** | An ETW session that fails to start is "Network unavailable" in each figure's title, never a notice. |
 | **X. Externalised Configuration** | No new setting: Hide ended and the divider are view state like the metric and filter (FR-057). |
 | **XII. Responsive UI** | Column fitting runs on resize only; the Total is a roll-up the model already computes; ETW aggregation is in the collector's worker, summed per tick. |

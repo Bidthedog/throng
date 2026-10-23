@@ -10,11 +10,11 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME, allowedIntervals } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, THRONG_THEME, allowedIntervals, unavailable } from '@throng/core';
 import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { FilterField, ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { __resetSession, getView, ingestFrame, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
-import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { frame, sampleHierarchy, withNetwork } from '../helpers/resource-fixtures.js';
 
 const writePatch = vi.fn(() => Promise.resolve({ ok: true }));
 
@@ -89,7 +89,7 @@ describe('no narrowing (FR-100, US2 scenario 21)', () => {
 });
 
 describe('the metric (FR-061)', () => {
-  it('is a group of four icon toggles, one pressed, and choosing one sets the view', async () => {
+  it('is a group of five icon toggles, one pressed, and choosing one sets the view', async () => {
     await mount();
     const group = screen.getByRole('group', { name: /order by/i });
     const buttons = within(group).getAllByRole('button');
@@ -98,9 +98,10 @@ describe('the metric (FR-061)', () => {
       'monitor-metric-memory',
       'monitor-metric-gpu',
       'monitor-metric-io',
+      'monitor-metric-network',
     ]);
-    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Order by CPU', 'Order by Memory', 'Order by GPU', 'Order by I/O']);
-    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
+    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Order by CPU', 'Order by Memory', 'Order by GPU', 'Order by I/O', 'Order by Network']);
+    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false', 'false']);
 
     fireEvent.click(screen.getByTestId('monitor-metric-memory'));
 
@@ -116,6 +117,22 @@ describe('the metric (FR-061)', () => {
     expect(screen.getByTestId('monitor-metric-memory')).toHaveTextContent(icons.resourceMemory!);
     expect(screen.getByTestId('monitor-metric-gpu')).toHaveTextContent(icons.resourceGpu!);
     expect(screen.getByTestId('monitor-metric-io')).toHaveTextContent(icons.resourceIo!);
+    expect(screen.getByTestId('monitor-metric-network')).toHaveTextContent(icons.resourceNetwork!);
+  });
+
+  it('disables Network with its header’s reason while it is not measured (FR-099, FR-113)', async () => {
+    act(() => ingestFrame(frame(2, withNetwork(sampleHierarchy(), unavailable(NETWORK_ELEVATION_REQUIRED)))));
+    await mount();
+    const network = screen.getByTestId('monitor-metric-network');
+    expect(network).toBeDisabled();
+    expect(network).toHaveAttribute('title', 'Elevate to show');
+
+    act(() => ingestFrame(frame(3, withNetwork(sampleHierarchy(), unavailable(NETWORK_TRACE_FAILED)))));
+    expect(network).toHaveAttribute('title', 'Network unavailable');
+
+    act(() => ingestFrame(frame(4, withNetwork(sampleHierarchy(), 2048))));
+    expect(network).toBeEnabled();
+    expect(network).toHaveAttribute('title', 'Order by Network');
   });
 });
 

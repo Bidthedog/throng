@@ -29,12 +29,13 @@ export const STATUS_FIGURE_ORDER: readonly StatusFigureId[] = ['cpu', 'memory', 
 /** First to go as the bar narrows, last to come back (FR-045). */
 export const DROP_ORDER: readonly StatusFigureId[] = ['gpu', 'io', 'memory', 'cpu'];
 
-/** The status bar's glyphs and the toolbar's Order by controls. Network has no glyph: its header orders by it. */
-export const FIGURE_ICON: Readonly<Record<StatusFigureId, string>> = {
+/** The status bar's glyphs and the toolbar's Order by controls (the status bar draws the first four). */
+export const FIGURE_ICON: Readonly<Record<FigureId, string>> = {
   cpu: 'resourceCpu',
   memory: 'resourceMemory',
   gpu: 'resourceGpu',
   io: 'resourceIo',
+  network: 'resourceNetwork',
 };
 
 export const FIGURE_LABEL: Readonly<Record<FigureId, string>> = {

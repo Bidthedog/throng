@@ -74,10 +74,10 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 80;
 // `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`).
 // 94 since 055's second feedback round (FR-093): `help`, the Resource Monitor's "?" button.
 // 96 since 055's Session 2026-10-23 (FR-110, FR-105): `activate`, the monitor's go-to control, and
-// `resourceHideEnded`, its Hide ended processes toggle.
-const EXPECTED_ICON_TOKEN_COUNT = 96;
+// `resourceHideEnded`, its Hide ended processes toggle; 97 with `resourceNetwork`, its Network Order-by choice (FR-113).
+const EXPECTED_ICON_TOKEN_COUNT = 97;
 /** The icon tokens 055's Session 2026-10-23 adds; named, because a count alone is satisfied by a rename. */
-const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded'] as const;
+const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded', 'resourceNetwork'] as const;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
