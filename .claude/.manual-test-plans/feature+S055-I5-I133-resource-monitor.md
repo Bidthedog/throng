@@ -6,14 +6,18 @@ Spec: `specs/055-resource-monitor/spec.md`
 |---|---|---|---|---|---|
 | MT-01 | Status bar usage figures | untested | | | |
 | MT-02 | Opening, closing and resizing the monitor | retired → MT-08 | | | |
-| MT-03 | Drilling into the breakdown | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
-| MT-04 | Charts, filter and idle hiding | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
+| MT-03 | Drilling into the breakdown | needs retest | | | failed: Panel titles should update as they change in the application - they seem to stay static, or refer to the terminal that is loaded. Use the panel title instead of the terminal title. |
+| MT-04 | Graphs, filter and idle hiding | needs retest | | | failed: The drop-down does not make sense as a UX component (Everything, components, all the projects) - remove it. 'Size by' should be 'Order By'. |
 | MT-05 | Unload, destroy and kill from the monitor | untested | | | |
 | MT-06 | Held folders | untested | | | |
 | MT-07 | Resource Monitor preferences | untested | | | |
 | MT-08 | The monitor window | needs retest | | | failed: UI seems really slow; feedback lacking - can't tell what can be clicked, what is active, what is refreshing; not sure how to use it |
 | MT-09 | Finding your way around the monitor | retired → MT-10 | | | |
-| MT-10 | Finding your way around the two-column monitor | untested | | | |
+| MT-10 | Finding your way around the two-column monitor | needs retest | | | failed: Selecting a component or a project should highlight that line - hover when selected does not need its own style. When clicking on something in the right pane, the left pane should not change. The drill-down elements should show all 4 stats at all times. |
+| MT-11 | Selecting, ordering and reading the left list | untested | | | |
+| MT-12 | The right column and Activate | untested | | | |
+| MT-13 | The monitor's layout: full-width header and movable divider | untested | | | |
+| MT-14 | Network figures | untested | | | |
 
 ## MT-01: Status bar usage figures
 
@@ -39,9 +43,10 @@ Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/rend
 ### Steps
 1. With two projects loaded and one unloaded, open the monitor. The top level shows UI, Daemon, Helpers and Projects, each with its rolled-up figure.
 2. Open Projects. Every project is listed, active and loaded first; the unloaded one is grey and italic.
-3. Double-click a project, a tab, then a terminal panel on the left. Its shell appears with a friendly name (PowerShell, Git Bash…), and anything running in it — e.g. `node`, `git`, `claude` — beneath it. The breadcrumb names each level.
+3. Double-click a project, a tab, then a terminal panel on the left. Each panel is named as its own header names it — not the shell's name — and its shell appears with a friendly name (PowerShell, Git Bash…), with anything running in it — e.g. `node`, `git`, `claude` — beneath it. The breadcrumb names each level.
+3a. With the monitor open, `cd` into another folder in that terminal, or run a command that sets the terminal's title. The panel's name in the monitor changes to match its header at the next capture.
 4. Each level's figure equals the sum of its children plus its own (check one level by eye).
-5. Open an editor panel with a large file. It shows memory marked as estimated; CPU reads "not measured".
+5. Open an editor panel with a large file. Its memory reads like "~12.4 MB" (estimated); its CPU reads "-".
 6. With focus in the breakdown, Up/Down move the selection; Right or Enter drills in; Left or Backspace goes back up.
 7. Open Helpers. Console hosts, folder locks and the resource collector are listed by name.
 
@@ -56,14 +61,15 @@ Paths: `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/ren
 
 ### Steps
 1. Open the monitor, select a row and wait a minute. Its line graphs on the right fill in from empty and grow over the history window.
-2. Switch Sort by between CPU, memory, GPU and I/O. The left list and the right column's bars re-rank for that figure.
+2. Switch **Order by** between CPU, Memory, GPU and I/O. The left list and the right column's bars re-rank for that figure.
 3. Type a process name into the filter. Only matching nodes and their parents remain; clearing the filter restores everything. Filter by a pid and by part of a command line — both match.
 4. Toggle **Hide idle**. Processes using under 0.1% CPU with no I/O disappear.
 5. Change the capture interval in the toolbar. The graphs and figures update at the new rate.
-6. Start `node -e "setTimeout(()=>{},20000)"` in a terminal, find it in the monitor, and wait for it to exit. It stays in place, greyed and struck through, with its history. Close and reopen the monitor: it is gone, and the graphs start empty.
+6. Turn **Hide ended processes** off. Start `node -e "setTimeout(()=>{},20000)"` in a terminal, find it in the monitor, and wait for it to exit. It stays in place, greyed and struck through, with its history. Close and reopen the monitor: it is gone, and the graphs start empty.
 
 ### Negative cases
 - A process at or above the memory warning level is never hidden by **Hide idle**.
+- There is no drop-down to narrow the monitor to a component or a project.
 
 ## MT-05: Unload, destroy and kill from the monitor
 
@@ -143,12 +149,12 @@ Covers: FR-095, FR-096, FR-097, FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, 
 Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`, `packages/core/src/resources/bands.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-copy.ts`
 
 ### Steps
-1. Open the monitor with a few terminals running. It has two columns: Components then Projects listed on the left, with the breadcrumb, Back (greyed at the top), the filter and column headers; the right column describes the level shown. There are no stacked area charts and no treemap.
-2. Single-click a project row. It is marked with an accent edge, and the right column shows that project: its name, its tabs as ranked share bars with their figures, its stats, and a small line graph each for CPU, Memory, GPU and I/O.
-3. Click a bar on the right. That child becomes selected and its row on the left is marked.
+1. Open the monitor with a few terminals running. It has two columns under a full-width header (filter, toolbar, breadcrumb with Back greyed at the top): the components listed on the left with their column headers, and the right column describing the level shown. There are no stacked area charts and no treemap.
+2. Double-click Projects, then single-click a project row. It is marked with an accent edge, and the right column shows that project: its name and actions, its tabs as ranked share bars each with all its figures, its stats, and a small line graph each for CPU, Memory, GPU, I/O and Network.
+3. Click a bar on the right. Nothing changes in either column.
 4. Double-click a row on the left. The left column drills into it and the breadcrumb updates; Back returns. No row has a ▸ button. A process with no children does not drill.
 5. Rest the pointer on a row for several captures. The left list's order and figures stay still, and the row's hover title stays up without flickering. The right column keeps updating. Move the pointer off the list: it catches up.
-6. Run `node -e "for(;;){}"` in a terminal and select its panel. On the right, the busy process's bar is drawn in the high colour and idle ones in the low colour, with a key showing the scale. Switch Size by to Memory: the bars re-rank and recolour.
+6. Run `node -e "for(;;){}"` in a terminal and select its panel. On the right, the busy process's bar is drawn in the high colour and idle ones in the low colour, with a key showing the scale. Switch Order by to Memory: the bars re-rank and recolour.
 7. Watch "Updated <time> · every 2 s": it pulses at each capture. A just-opened line graph says it is building its history.
 8. Click "?". It explains the two columns, click and double-click, the keys and the colours. Esc closes it.
 9. Type a process name in the filter quickly. The text keeps up, a match count shows, and each process appears once; nonsense shows "No process matches '…'".
@@ -158,3 +164,78 @@ Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.
 - No selection detail appears anywhere but the right column.
 - No hover title anywhere changes while the pointer rests on it.
 - The monitor does not stutter at each capture, with or without a filter typed.
+
+## MT-11: Selecting, ordering and reading the left list
+
+Covers: FR-098, FR-099, FR-100, FR-101, FR-102, FR-103, FR-104, FR-105, FR-106, FR-107
+Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/monitor-model.ts`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/resources/format.ts`, `packages/ui/src/renderer/resources/use-breakdown-keys.ts`, `packages/ui/src/renderer/resources/help-panel.tsx`, `packages/ui/src/renderer/theme.css`, `packages/core/src/resources/**`
+
+### Steps
+1. Open the monitor. The left column lists UI, Daemon, Helpers and Projects only, with a **Total** row at the bottom showing each column's figure for throng.
+2. Rest the pointer on each component. Its title says in a sentence or two why it exists and what it does (e.g. Daemon keeps terminals running when throng's windows close). Do the same on a Helpers child such as a console host.
+3. Click Projects. Its row is highlighted; move the pointer over it — it keeps the same highlight, with no extra hover look. Click another row: only that one is highlighted. Click it again: nothing is highlighted.
+4. Press Down and Up with focus in the list. The highlight moves, and the right column follows it.
+5. Click the **Memory** column header. The list re-orders by memory, the Memory header is marked, the header line reads "Ordered by Memory", and the toolbar's **Order by** shows Memory. Click **CPU**: back to CPU.
+6. Double-click Projects. Your projects are listed, with their own Total row at the bottom.
+7. Type a filter that hides some rows. The Total row's figures do not change, and it says how many rows it counts that are hidden.
+8. Open an editor panel and find it in the list. Its memory reads like "~12.4 MB"; its CPU, GPU and I/O read "-". Each one's hover title says why (estimated, not measured).
+9. Start `node -e "setTimeout(()=>{},10000)"` in a terminal and watch it in the monitor. When it exits it leaves the list at the next capture (**Hide ended processes** is on). Turn **Hide ended processes** off and repeat: the ended process stays, greyed and struck through, and no total includes it.
+10. Narrow the window, or drag the divider left, until the list is tight. Columns drop off the right edge one at a time and a marker appears at the right of the header, naming the hidden columns on hover. The name column stays. Widen it again: the columns return.
+
+### Negative cases
+- No horizontal scrollbar ever appears under the left list, at any width.
+- There is no drop-down to narrow the view to a component or project, and no block of the highlighted row's figures in the left column.
+- The Total row cannot be selected and has no actions.
+- No figure anywhere reads "not measured", "unavailable" or "estimated" as a word.
+
+## MT-12: The right column and Activate
+
+Covers: FR-108, FR-109, FR-110
+Paths: `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/share-bars.tsx`, `packages/ui/src/renderer/resources/node-actions.tsx`, `packages/ui/src/renderer/resources/route-action.ts`, `packages/ui/src/renderer/resources/use-subject.ts`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/preload/preload.cts`, `packages/ui/src/renderer/app.tsx`, `packages/ui/src/renderer/subworkspace-app.tsx`
+
+### Steps
+1. Select a project on the left. The right column lists its tabs; each shows CPU, Memory, GPU, I/O and Network figures, with a bar sized by the Order by metric. Change Order by: the bars re-rank, and every figure stays shown.
+2. Click a tab in the right column. Nothing changes: the left column keeps the project selected and the right column still shows the project.
+3. In the right column's header, beside the project's name, find its actions: **Unload Project**, **Kill All Below** and **Activate**. Each has a hover title.
+4. Switch throng to a different project, then click **Activate** on the first project in the monitor. throng switches to that project; the monitor stays open and above throng's window.
+5. Select a terminal panel in another tab and click **Activate**. That panel's tab is shown and the panel has focus, and the monitor stays above. Select a process inside a terminal and click **Activate**: it goes to that terminal's panel.
+6. Move a tab into a sub-workspace and **Activate** one of its panels from the monitor. The sub-workspace window comes forward with the panel focused.
+7. Right-click a project, tab, panel or process row on the left. Its menu has **Activate** too.
+
+### Negative cases
+- UI, Daemon and Helpers rows offer no Activate, in the header or their menu.
+- A tab of a project that is not active, which no window holds, shows Activate disabled with its reason on hover.
+- Nothing in the right column drills further or selects anything.
+
+## MT-13: The monitor's layout: full-width header and movable divider
+
+Covers: FR-111, FR-112
+Paths: `packages/ui/src/renderer/resources/monitor-body.tsx`, `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/breadcrumb.tsx`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/main/resource-monitor-window.ts`
+
+### Steps
+1. Open the monitor. The filter, the toolbar (Order by, Hide idle, Hide ended processes, Capture every, the Updated line, ?) and the breadcrumb with Back run across the full width of the window, above both columns, with a rule beneath them.
+2. Drill into a project with many processes and scroll the left list down. The header stays put at the top.
+3. Drag the divider between the columns left and right. Both columns resize, each stopping at a minimum width.
+4. Tab to the divider and use the arrow keys. It moves.
+5. Close the monitor and reopen it. The divider is where you left it.
+6. Tab through the window from the filter. Focus goes filter → toolbar controls → breadcrumb → left list → divider → right column.
+
+### Negative cases
+- The breadcrumb and toolbar never scroll out of view with the list.
+- Dragging the divider never produces a horizontal scrollbar in either column.
+
+## MT-14: Network figures
+
+Covers: FR-113, SC-011
+Paths: `packages/platform-windows/src/**`, `packages/ui/src/collector/**`, `packages/core/src/resources/**`, `packages/ipc-contract/src/resources.ts`, `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/renderer/resources/format.ts`
+
+### Steps
+1. Run throng normally (not as administrator) and open the monitor. Every row has a **Network** column reading "-", and hovering one says "Elevate to show". Network in Order by is disabled with the same reason.
+2. Close throng and run it as administrator. In a terminal, download something large (e.g. `curl -o NUL https://speed.hetzner.de/100MB.bin`).
+3. In the monitor, find that terminal's `curl`. Its Network figure shows the transfer rate, and the figure rolls up to its panel, tab, project and Projects.
+4. Open Windows Resource Monitor's Network tab beside it. throng's figure for `curl` is within about 10% of Resource Monitor's.
+5. Order by Network. The list re-orders with `curl` at the top, and its row's Network line graph on the right shows the transfer.
+
+### Negative cases
+- The status bar shows no network figure.
+- Unelevated, no Network figure shows a number, not even 0.
