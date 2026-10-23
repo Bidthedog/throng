@@ -64,6 +64,18 @@ export type Metrics = { readonly [M in MetricName]: MetricValue } & {
 
 export type ComponentId = 'ui' | 'daemon' | 'helpers' | 'projects';
 
+/** What one of throng's own processes is for (FR-102); the user's processes have no role. */
+export type ThrongRole =
+  | 'main'
+  | 'window'
+  | 'gpu'
+  | 'utility'
+  | 'daemon'
+  | 'conhost'
+  | 'lock-helper'
+  | 'collector'
+  | 'deelevation-agent';
+
 export type ResourceNodeKind =
   | 'root'
   | 'component'
@@ -120,4 +132,6 @@ export interface ResourceNode {
   readonly panelKind?: string;
   /** Why a limitation node exists (FR-080). */
   readonly reason?: string;
+  /** On the top process of one of throng's own roles — what it is for (FR-102). */
+  readonly role?: ThrongRole;
 }

@@ -9,3 +9,4 @@ export * from './actions.js';
 export * from './held-folders.js';
 export * from './friendly-names.js';
 export * from './hierarchy.js';
+export * from './descriptions.js';

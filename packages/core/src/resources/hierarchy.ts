@@ -10,6 +10,7 @@ import {
   type ProcessReading,
   type ProjectLoadState,
   type ResourceNode,
+  type ThrongRole,
 } from './types.js';
 
 // ── Inputs (structural mirrors of the ipc-contract roster and context; core depends on nothing) ──
@@ -96,6 +97,11 @@ const NOT_MEASURED_METRICS: Metrics = {
 };
 
 const STATE_RANK: Record<ProjectLoadState, number> = { active: 0, loaded: 1, unloaded: 2 };
+
+/** The roster's UI role as a {@link ThrongRole}; an unknown role reads as a utility process. */
+function uiRole(role: string): ThrongRole {
+  return role === 'main' || role === 'window' || role === 'gpu' ? role : 'utility';
+}
 const NO_PROJECT = '';
 
 function uiNode(
@@ -183,7 +189,13 @@ export function buildHierarchy(input: BuildHierarchyInput): BuildHierarchyResult
   };
 
   const claimed = new Set<number>();
-  const subtree = (r: ProcessReading, owner: NodeOwner, label?: string, onClaim?: (r: ProcessReading) => void): ResourceNode => {
+  const subtree = (
+    r: ProcessReading,
+    owner: NodeOwner,
+    label?: string,
+    onClaim?: (r: ProcessReading) => void,
+    role?: ThrongRole,
+  ): ResourceNode => {
     claimed.add(r.pid);
     onClaim?.(r);
     const kids: ResourceNode[] = [];
@@ -204,6 +216,7 @@ export function buildHierarchy(input: BuildHierarchyInput): BuildHierarchyResult
       rolled: rollUp(own, kids.map((k) => k.rolled)),
       children: kids,
       owner,
+      ...(role !== undefined ? { role } : {}),
       process: {
         pid: r.pid,
         createTime: r.createTime,
@@ -270,28 +283,28 @@ export function buildHierarchy(input: BuildHierarchyInput): BuildHierarchyResult
   // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
   const helperOwner: NodeOwner = { component: 'helpers' };
   const helpers: ResourceNode[] = [];
-  const helper = (pid: number | null, label: string): void => {
+  const helper = (pid: number | null, label: string, role: ThrongRole): void => {
     const r = pid === null ? undefined : byPid.get(pid);
-    if (r !== undefined && !claimed.has(r.pid)) helpers.push(subtree(r, helperOwner, label));
+    if (r !== undefined && !claimed.has(r.pid)) helpers.push(subtree(r, helperOwner, label, undefined, role));
   };
-  for (const t of roster.terminals) helper(t.conhostPid, `Console host — ${panelName(t.panelId)}`);
-  for (const l of roster.locks) helper(l.pid, `Folder lock — ${projectName.get(l.projectId) ?? l.projectId}`);
-  helper(roster.agentPid, 'De-elevation agent');
-  helper(roster.collectorPid, 'Resource collector');
+  for (const t of roster.terminals) helper(t.conhostPid, `Console host — ${panelName(t.panelId)}`, 'conhost');
+  for (const l of roster.locks) helper(l.pid, `Folder lock — ${projectName.get(l.projectId) ?? l.projectId}`, 'lock-helper');
+  helper(roster.agentPid, 'De-elevation agent', 'deelevation-agent');
+  helper(roster.collectorPid, 'Resource collector', 'collector');
 
   // ── Daemon and UI ────────────────────────────────────────────────────────────────────────────
   const daemonOwner: NodeOwner = { component: 'daemon' };
   const daemonReading = roster.daemonPid === null ? undefined : byPid.get(roster.daemonPid);
   const daemonKids =
     daemonReading !== undefined
-      ? [subtree(daemonReading, daemonOwner, 'Daemon')]
+      ? [subtree(daemonReading, daemonOwner, 'Daemon', undefined, 'daemon')]
       : [limitation('daemon-unreachable', 'Daemon', 'The daemon cannot be reached', daemonOwner)];
 
   const uiOwner: NodeOwner = { component: 'ui' };
   const uiKids: ResourceNode[] = [];
   for (const u of roster.ui) {
     const r = byPid.get(u.pid);
-    if (r !== undefined && !claimed.has(u.pid)) uiKids.push(subtree(r, uiOwner, u.label));
+    if (r !== undefined && !claimed.has(u.pid)) uiKids.push(subtree(r, uiOwner, u.label, undefined, uiRole(u.role)));
   }
 
   // ── Projects → tabs → panels ─────────────────────────────────────────────────────────────────

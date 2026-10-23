@@ -120,6 +120,17 @@ describe('buildHierarchy (055 FR-020 – FR-021, FR-080, R6)', () => {
     expect(labels).toContain('Resource collector');
   });
 
+  it("gives each of throng's own processes its role, and the user's processes none (FR-102)", () => {
+    const roleOf = (pid: number): string | undefined => find(root, `x:${processKey(pid, pid)}`)?.role;
+    expect(roleOf(100)).toBe('main');
+    expect(roleOf(101)).toBe('window');
+    expect(roleOf(200)).toBe('daemon');
+    expect(component(root, 'helpers').children.map((c) => c.role).sort()).toEqual(
+      ['collector', 'conhost', 'deelevation-agent', 'lock-helper'].sort(),
+    );
+    expect(roleOf(300)).toBeUndefined();
+  });
+
   it("puts a shell's descendants under its panel, and console-attached processes beside it", () => {
     const panel = find(root, 'n:n1')!;
     expect(pids(panel).sort()).toEqual([300, 301, 302, 400]);
