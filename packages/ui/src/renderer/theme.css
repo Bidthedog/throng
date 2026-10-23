@@ -4072,8 +4072,11 @@ textarea,
   background: var(--throng-colour-hoverSurface);
 }
 
-/* The selected row: the explorer's active-file convention — surface plus an accent stripe (FR-089). */
-.breakdown-row--selected {
+/* The selected row: the explorer's active-file convention — surface plus an accent stripe (FR-089). It has no
+   hover look of its own (FR-098, D1): it follows the hover rule, and names :hover at the hover rule's
+   specificity, so the pointer over it changes nothing. */
+.breakdown-row--selected,
+:where(body:not([data-window-blurred])) .breakdown-row--selected:hover {
   background: var(--throng-colour-surfaceActive);
   box-shadow: inset 2px 0 0 var(--throng-colour-accent);
 }

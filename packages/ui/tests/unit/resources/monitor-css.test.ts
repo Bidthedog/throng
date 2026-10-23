@@ -124,6 +124,17 @@ describe('selection is marked with an accent edge, as throng marks its active it
     expect(bodyOf('.breakdown-row--selected')).toMatch(/box-shadow:[^;]*inset[^;]*var\(--throng-colour-accent\)/);
   });
 
+  it('keeps the selected look under the pointer: the selected rule covers :hover and follows the hover rule (FR-098, D1)', () => {
+    const hoverAt = all.findIndex((r) => r.selectors.includes(`${GATE} .breakdown-row:hover`));
+    const selectedHoverAt = all.findIndex((r) => r.selectors.includes(`${GATE} .breakdown-row--selected:hover`));
+    expect(hoverAt).toBeGreaterThanOrEqual(0);
+    expect(selectedHoverAt, 'no rule styles the selected row under the pointer').toBeGreaterThan(hoverAt);
+    const rule = all[selectedHoverAt]!;
+    expect(rule.selectors).toContain('.breakdown-row--selected');
+    expect(rule.body).toMatch(/background:\s*var\(--throng-colour-surfaceActive\)/);
+    expect(rule.body).toMatch(/box-shadow:[^;]*inset[^;]*var\(--throng-colour-accent\)/);
+  });
+
   it('has no drill-down button on a row to style: a double-click opens (FR-096)', () => {
     expect(section).not.toMatch(/breakdown-row__open/);
   });
