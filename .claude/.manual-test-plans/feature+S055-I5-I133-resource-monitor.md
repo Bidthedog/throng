@@ -145,7 +145,7 @@ Paths: `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/re
 
 ## MT-10: Finding your way around the two-column monitor
 
-Covers: FR-095, FR-096, FR-097, FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060
+Covers: FR-095, FR-096, FR-097, FR-088, FR-089, FR-090, FR-091, FR-092, FR-093, FR-094, SC-010, FR-060, FR-114
 Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/config/number-format.ts`, `packages/core/src/resources/bands.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-copy.ts`
 
 ### Steps
@@ -155,7 +155,7 @@ Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.
 4. Double-click a row on the left. The left column drills into it and the breadcrumb updates; Back returns. No row has a ▸ button. A process with no children does not drill.
 5. Rest the pointer on a row for several captures. The left list's order and figures stay still, and the row's hover title stays up without flickering. The right column keeps updating. Move the pointer off the list: it catches up.
 6. Run `node -e "for(;;){}"` in a terminal and select its panel. On the right, the busy process's bar is drawn in the high colour and idle ones in the low colour, with a key showing the scale. Switch Order by to Memory: the bars re-rank and recolour.
-7. Watch "Updated <time> · every 2 s": it pulses at each capture. A just-opened line graph says it is building its history.
+7. Watch "Updated <time> · every 2 s": it pulses at each capture. Open the monitor and select a row straight away: each line graph shows a small loading spinner in its place, with no text and nothing overlapping, until it can draw.
 8. Click "?". It explains the two columns, click and double-click, the keys and the colours. Esc closes it.
 9. Type a process name in the filter quickly. The text keeps up, a match count shows, and each process appears once; nonsense shows "No process matches '…'".
 10. Tab through the window. Every control shows a clear focus ring. Right-click a row (or Shift+F10): its actions menu opens.
