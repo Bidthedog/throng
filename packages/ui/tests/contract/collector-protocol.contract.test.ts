@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProcessReading, ResourceNode } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, type ProcessReading, type ResourceNode } from '@throng/core';
 import { FakeProcessMetrics } from '@throng/core/testing';
 import type { CollectorToMain, MainToCollector, ResourceRoster } from '@throng/ipc-contract';
 import { ResourceCollector } from '../../src/collector/collector.js';
@@ -23,7 +23,7 @@ const ROSTER: ResourceRoster = {
 };
 
 const isMetrics = (m: unknown) =>
-  typeof m === 'object' && m !== null && ['cpu', 'memory', 'gpu', 'ioRead', 'ioWrite'].every((k) => k in (m as object));
+  typeof m === 'object' && m !== null && ['cpu', 'memory', 'gpu', 'ioRead', 'ioWrite', 'network'].every((k) => k in (m as object));
 
 const nodes = (n: ResourceNode): ResourceNode[] => [n, ...n.children.flatMap(nodes)];
 
@@ -171,6 +171,36 @@ describe('collector protocol (055 contract §2)', () => {
     const memory = (id: string) => summary.components.find((x) => x.id === id)!.rolled.memory;
     expect(memory('daemon')).toBe(40);
     expect(memory('projects')).toBe(260);
+    c.collector.stop();
+  });
+
+  it('reads network on detail ticks only, and ships each process figure or its reason in the detail frame (FR-113)', async () => {
+    const c = run();
+    let reads = 0;
+    const network = c.metrics.network.bind(c.metrics);
+    c.metrics.network = () => {
+      reads += 1;
+      return network();
+    };
+    c.send({ type: 'configure', intervalSeconds: 0.05, historyMinutes: 5 });
+    c.collector.start();
+    await c.next('summary');
+    await new Promise((res) => setTimeout(res, 150));
+    expect(reads, 'summary-only ticks never read the network').toBe(0);
+
+    c.metrics.networkReading = new Map([[301, 2_048]]);
+    c.send({ type: 'detail', on: true });
+    const { frame } = (await c.next('detailFrame')) as Extract<CollectorToMain, { type: 'detailFrame' }>;
+    const proc = (pid: number) => nodes(frame.hierarchy).find((n) => n.process?.pid === pid)!;
+    expect(proc(301).own.network).toBe(2_048);
+    expect(proc(300).own.network, 'a process the trace did not see moved nothing').toBe(0);
+    expect(reads).toBeGreaterThan(0);
+
+    c.metrics.networkReading = { kind: 'unavailable', reason: NETWORK_ELEVATION_REQUIRED };
+    c.out.length = 0;
+    const next = (await c.next('detailFrame')) as Extract<CollectorToMain, { type: 'detailFrame' }>;
+    const again = nodes(next.frame.hierarchy).find((n) => n.process?.pid === 301)!;
+    expect(again.own.network).toEqual({ kind: 'unavailable', reason: NETWORK_ELEVATION_REQUIRED });
     c.collector.stop();
   });
 

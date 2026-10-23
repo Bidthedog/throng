@@ -3,6 +3,7 @@ import {
   heldFolders,
   isUnavailable,
   killOrder,
+  NETWORK_TRACE_FAILED,
   processKey,
   processMetrics,
   type IProcessMetrics,
@@ -196,17 +197,23 @@ export class ResourceCollector {
     const { metrics } = this.deps;
     const readGpu = this.detail || !this.gpuSkip || this.lastGpu === null;
     this.gpuSkip = readGpu;
-    const [snapshot, gpu] = await Promise.all([
+    const [snapshot, gpu, network] = await Promise.all([
       within(metrics.snapshot(), this.limitMs),
       readGpu
         ? within(metrics.gpu(), this.limitMs).catch((): Unavailable => ({ kind: 'unavailable', reason: 'GPU counters did not answer in time' }))
         : Promise.resolve(this.lastGpu!),
+      // Network only while the monitor is open: the status bar does not show it (FR-113).
+      this.detail
+        ? within(metrics.network(), this.limitMs).catch((): Unavailable => ({ kind: 'unavailable', reason: NETWORK_TRACE_FAILED }))
+        : Promise.resolve(undefined),
     ]);
     this.lastGpu = gpu;
     const machine = metrics.machine();
     const elapsed = this.prevWall === null ? 0 : snapshot.wallTimeMs - this.prevWall;
     const gpuOf = (pid: number): number | Unavailable =>
       isUnavailable(gpu as Unavailable) ? (gpu as Unavailable) : ((gpu as ReadonlyMap<number, number>).get(pid) ?? 0);
+    const networkOf = (pid: number): number | Unavailable | undefined =>
+      network === undefined ? undefined : network instanceof Map ? (network.get(pid) ?? 0) : (network as Unavailable);
 
     const next = new Map<ProcessKey, ProcessReading>();
     for (const cur of snapshot.readings) next.set(processKey(cur.pid, cur.createTime), cur);
@@ -216,7 +223,7 @@ export class ResourceCollector {
       const cur = next.get(key);
       return cur === undefined
         ? undefined
-        : processMetrics({ prev: prev.get(key), cur, elapsedMs: elapsed, machine, gpu: gpuOf(cur.pid) });
+        : processMetrics({ prev: prev.get(key), cur, elapsedMs: elapsed, machine, gpu: gpuOf(cur.pid), network: networkOf(cur.pid) });
     });
     this.prev = next;
     this.prevWall = snapshot.wallTimeMs;

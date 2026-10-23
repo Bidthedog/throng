@@ -431,6 +431,21 @@ export class WindowsNetworkTrace implements NetworkReader {
     }
   }
 
+  /**
+   * A reader that starts the trace on its first read — the monitor's first detail tick, so a collector whose
+   * monitor never opens never traces — and keeps whatever that start gave, a trace or its reason.
+   */
+  static lazyReader(): NetworkReader {
+    let started: Promise<WindowsNetworkTrace | Unavailable> | undefined;
+    return {
+      read: async () => {
+        started ??= WindowsNetworkTrace.start();
+        const trace = await started;
+        return trace instanceof WindowsNetworkTrace ? trace.read() : trace;
+      },
+    };
+  }
+
   private static consume(api: TraceFfi, name: string): WindowsNetworkTrace {
     const worker = new Worker(WORKER_SOURCE, {
       eval: true,
