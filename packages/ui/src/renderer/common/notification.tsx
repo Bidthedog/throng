@@ -187,6 +187,13 @@ export interface Notice {
    */
   controls?: ReactNode;
   /**
+   * Run when the user activates the card itself: a click anywhere except on one of its buttons (Copy,
+   * Dismiss and any `controls`), or Enter / Space while the card has focus (057 FR-124: an attention
+   * toast's whole card is its link to the panel). A card with it is a tab stop and wears
+   * `notice--activatable`.
+   */
+  onActivate?: () => void;
+  /**
    * Run when the user dismisses this notice.
    *
    * The migrated error strips each render from a STORE's `error` field, and the store must be told
@@ -1143,7 +1150,28 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         {notices.map((n) => (
           <div
             key={n.id}
-            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}`}
+            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}${n.onActivate ? ' notice--activatable' : ''}`}
+            onClick={
+              n.onActivate
+                ? (e) => {
+                    // A press on a button inside the card (Copy, Dismiss) is that button's, never the card's.
+                    if ((e.target as Element).closest('button')) return;
+                    n.onActivate?.();
+                  }
+                : undefined
+            }
+            // Keyboard parity: the focused CARD (not a button inside it, which has its own Enter) activates.
+            tabIndex={n.onActivate ? 0 : undefined}
+            onKeyDown={
+              n.onActivate
+                ? (e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    n.onActivate?.();
+                  }
+                : undefined
+            }
             data-testid={n.testId ?? `notice-${n.severity}`}
             /* 041 FR-008aa — the pulse as MARKUP, not only as a class the stylesheet reads.
                jsdom applies no stylesheet, so a pulse expressed only in CSS could be asserted

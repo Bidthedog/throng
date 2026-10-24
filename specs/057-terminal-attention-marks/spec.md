@@ -47,6 +47,10 @@ mark is a state. Every requirement in those specs not named below as superseded 
 narrows that rule: while throng is running, a terminal whose project is unloaded stays in the shared
 observation. That is the case this feature exists for — a project the user is not looking at — and 025
 FR-019a already guarantees that observing one more terminal costs nothing extra.
+*(2026-10-24, round 12)* FR-129 supersedes **046 FR-051a**'s "shown of total" count on a minimised
+category header with a pill carrying the category's total project count, FR-132 narrows **031 FR-042** so
+a one-panel tab shows no count pill, and FR-124 supersedes this
+spec's own **FR-122** go-to control with a toast whose whole body is the link.
 
 **Extension.** Notices gain a link (FR-034). Today a toast carries no action, and this repository's
 working rule is that a message with an action attached is shown inline instead. An attention toast's
@@ -279,6 +283,37 @@ mark only after the notification had gone.
 - Q: How does a Claude Code user get a notification as Claude finishes rather than a minute later? → A:
   **Documented: lower Claude Code's `messageIdleNotifThresholdMs`.** (docs only; no requirement)
 
+### Session 2026-10-24 (round 12)
+
+From issues [#525](https://github.com/Bidthedog/throng/issues/525), [#522](https://github.com/Bidthedog/throng/issues/522),
+[#523](https://github.com/Bidthedog/throng/issues/523) and [#524](https://github.com/Bidthedog/throng/issues/524).
+#524 (duplicate notifications from a panel already marked) is a defect against FR-112, except for the clause
+the last answer below removes.
+
+- Q: What on an attention toast takes the user to the panel? → A: **Clicking anywhere on the card** except
+  Copy and Dismiss, which keep their own behaviour. The go-to control goes, and the other controls stay where
+  they are. Clicking a Windows notification brings throng forward with the panel focused. (FR-124,
+  superseding FR-122 and narrowing FR-034)
+- Q: Can the user flag a panel by hand? → A: **Yes: Flag in every panel's right-click menu.** It marks the
+  panel as Attention, reason "Flagged", and raises no toast and no Windows notification. It does not clear
+  while the panel keeps the focus it had when flagged; once focus has left and come back, the clear delay
+  runs as usual. (FR-125–FR-127) *[derived: it counts on every holder and the taskbar badge like any mark;
+  Flag on a panel already marked changes nothing; the terminal master switch does not withdraw it]*
+- Q: Does a manual flag survive closing and reopening throng? → A: **Yes, for every panel type**, as a
+  terminal's mark does. (FR-128)
+- Q: How should the project list show categories and counts? → A: **A minimised category's header is paler
+  than an expanded one's, and every category header shows a pill with its total project count** in place of
+  "N of M". (FR-129, FR-130; superseding 046 FR-051a's count text)
+- Q: How does a holder say how many panels are marked? → A: **Its blinking flag carries the number, on project
+  rows, tab chips and minimised category headers**, the glyph large enough to read it. (FR-131)
+- Q: Does a tab chip show how many panels it holds? → A: **A pill with its panel count, only when it has two or
+  more.** (FR-132)
+- Q: May a flag or pill appearing move anything? → A: **No.** Row heights, text positions and chip widths stay
+  put. (FR-133)
+- Q: Should a mark restored at reopen, or raised by a startup command, announce on its next signal (FR-112)?
+  → A: **No. A panel that is already marked never announces again until the mark clears**, whatever raised it.
+  (FR-134, superseding FR-112's last sentence and FR-038a's last sentence)
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See which project needs me from the project list (Priority: P1)
@@ -385,9 +420,28 @@ within a second of the bell. Switch to A, click into the terminal, and check tha
 31. *(2026-10-21, round 10)* **Given** a marked panel whose "Tab - Title" wraps in its popover, **Then** its
     icon sits beside the first line. (FR-121)
 32. *(2026-10-21, round 10)* **Given** an attention toast, **Then** its go-to control sits at the card's
-    top-right with Copy and Dismiss, in the same style. (FR-122)
+    top-right with Copy and Dismiss, in the same style. (FR-122; *superseded by US3 scenario 9, round 12 —
+    the card has no go-to control*)
 33. *(2026-10-21, round 11)* **Given** a marked tab, **When** its mark is hovered, **Then** no native tooltip
     appears over it; the tab's popover alone shows. (FR-123)
+34. *(2026-10-24, round 12)* **Given** project A has three marked panels, **When** the user looks at A's row,
+    **Then** its blinking flag reads 3. **When** two are cleared, it reads 1; **when** the last clears, the colour
+    dot is back. (FR-131)
+35. *(2026-10-24, round 12)* **Given** a minimised category holding projects A (two marked panels) and B (one),
+    and an expanded category beside it, **Then** the minimised header is visibly paler than the expanded one, in a
+    light and a dark theme; each header shows a pill with its total number of projects and no "N of M"; the
+    minimised header's flag reads 3. (FR-129, FR-130, FR-131)
+36. *(2026-10-24, round 12)* **Given** a project row and a category header, **When** a flag appears on them,
+    its number changes, or it goes, **Then** neither row changes height and the project and category names do not
+    move. (FR-133)
+37. *(2026-10-24, round 12)* **Given** the user is in a panel, **When** they right-click it and choose Flag,
+    **Then** the panel, its tab and its project row are marked "Flagged", the taskbar badge counts it, and no toast
+    or Windows notification appears. **When** they stay in the panel, **Then** it stays flagged however long they
+    stay; **when** they click into another panel and back, **Then** it clears after the clear delay. (FR-125,
+    FR-126, FR-127)
+38. *(2026-10-24, round 12)* **Given** an editor panel and a terminal panel are flagged by hand, **When** throng
+    is closed and reopened, **Then** both are still flagged; **when** terminal attention is switched off, **Then**
+    both stay flagged. (FR-128)
 
 ---
 
@@ -423,6 +477,9 @@ mark. Click into the right-hand panel, and check that both clear.
    (FR-093)
 7. *(2026-10-19, round 2)* **Given** a marked panel, **When** the user hovers the mark on its header,
    **Then** no tooltip appears. (FR-096)
+8. *(2026-10-24, round 12)* **Given** a tab holding three panels, two of them marked, and a tab holding one
+   panel, **Then** the first tab's chip shows a pill reading 3 and a blinking flag reading 2, and the second
+   shows no pill. **When** the marks clear, **Then** the first chip keeps its width. (FR-131, FR-132, FR-133)
 
 ---
 
@@ -463,6 +520,14 @@ that a toast appears instead, and that its link does the same.
 8. *(2026-10-19, round 2)* **Given** Claude Code is running in a terminal with its notifications set to
    `iterm2`, **When** the user asks it to notify them in 30 seconds and switches to another tab, **Then**
    its notification reaches throng: the panel is marked and the toast carries Claude's message. (FR-099)
+9. *(2026-10-24, round 12)* **Given** an attention toast for a panel in another project, **When** the user
+   clicks anywhere on the card other than Copy or Dismiss, **Then** throng switches to that project and tab and
+   focuses the panel. **When** they click Copy or Dismiss, **Then** nothing navigates. The card has no go-to
+   control, and Copy and Dismiss sit where they did. **Given** a Windows notification, **When** the user clicks
+   it, **Then** throng comes forward with that panel focused. (FR-124)
+10. *(2026-10-24, round 12)* **Given** a marked panel restored when throng reopened, or marked by its startup
+    command, **When** its terminal rings the bell while the mark still shows, **Then** no toast and no Windows
+    notification appear. **When** the mark has cleared and it rings again, **Then** it is announced. (FR-134)
 
 ---
 
@@ -647,6 +712,7 @@ lands on a marked panel and clears it.
   mark without the user focusing the panel.
 - **FR-009**: Only terminal panels have a producer in this feature. Editors, previews and search results
   MUST be able to gain one later without changing the mechanism.
+  *Extended by FR-125 (2026-10-24, round 12): the user is a second producer, on every panel type.*
 
 #### B. Holders
 
@@ -776,6 +842,8 @@ lands on a marked panel and clears it.
   flashing it or restarting its timer (an exemption from 041 FR-008) — and raises no new toast or Windows
   notification. Once the mark has cleared, the next raise announces again. A mark raised without an
   announcement — restored (FR-038) or by a startup command (FR-038a) — is announced by its next raise.
+  *Its last sentence is superseded by FR-134 (2026-10-24, round 12): such a mark is not announced by a later
+  raise either.*
 - **FR-113** *(2026-10-20, round 5; renames FR-108's and FR-110's "Also in the OS")*: Each row's OS switch
   MUST be labelled **OS Notify**, and its description MUST say it raises a Windows notification whatever
   the display mode, only while throng is not focused, the in-app notice deciding while it is. While
@@ -811,9 +879,46 @@ lands on a marked panel and clears it.
   entry, beside the first line of its "Tab - Title", however many lines the name wraps to.
 - **FR-122** *(2026-10-21, round 10; narrows FR-033)*: A toast's go-to-panel control MUST be one of the
   card's own controls, before Copy and Dismiss at its top-right and styled as they are — not in the card's
-  body. It is not part of the copied text.
+  body. It is not part of the copied text. *Superseded by FR-124 (2026-10-24, round 12): the card has no
+  go-to control; its body is the link.*
 - **FR-123** *(2026-10-21, round 11; narrows FR-015)*: No attention mark, on any holder, MUST carry a native
   tooltip; every holder that explains itself does so by its popover. Every accessible name is unchanged.
+- **FR-124** *(2026-10-24, round 12; supersedes FR-122, narrows FR-034)*: Clicking anywhere on an attention
+  toast other than its Copy and Dismiss controls MUST do what FR-034's link does: switch to the project and tab
+  holding the panel and focus it. Copy and Dismiss MUST NOT navigate. The toast MUST NOT carry a go-to control of
+  its own, and Copy and Dismiss MUST keep the position they have today. Activating a Windows notification
+  anywhere MUST bring throng forward and focus the panel (FR-034, restated).
+- **FR-125** *(2026-10-24, round 12; extends FR-001 and FR-009)*: Every panel's context menu MUST offer
+  **Flag**. Choosing it raises a mark from a second producer, the **user**: kind Attention, reason "Flagged",
+  with nothing for the user to enter. On a panel already marked it MUST change nothing *[derived]*. A key
+  binding is optional; the menu item is not (constitution VI). Out of scope: custom reasons, colours, Unflag.
+- **FR-126** *(2026-10-24, round 12)*: A manual flag MUST NOT be announced: no toast and no Windows
+  notification. It MUST otherwise be a mark like any other — on the panel header (FR-003, FR-118) and every
+  holder, counted by FR-131 and by the taskbar badge (FR-039) *[derived]*.
+- **FR-127** *(2026-10-24, round 12; narrows FR-095 for a manual flag)*: The clear delay MUST NOT run on a
+  manual flag while its panel still holds the focus it had when the flag was raised. Once focus has left the
+  panel and returned, FR-095 applies unchanged.
+- **FR-128** *(2026-10-24, round 12; extends FR-091)*: A manual flag MUST survive switching projects, unloading
+  a project, and closing and reopening throng, for every panel type. Restoring it MUST NOT announce it (FR-038).
+  It MUST NOT be withdrawn by the terminal attention master switch (FR-063), which withdraws only what the
+  terminal producer raised *[derived]*. It goes when it clears, its panel is destroyed or its project is
+  deleted (FR-007).
+- **FR-129** *(2026-10-24, round 12; supersedes 046 FR-051a's "shown of total" text)*: Every category header
+  MUST show a pill holding the total number of projects in the category, minimised or not. No "N of M" text
+  MUST remain.
+- **FR-130** *(2026-10-24, round 12)*: A minimised category's header MUST be visibly paler than an expanded
+  one's, in every bundled theme, light and dark. *[derived: mixed from the existing header surface, as FR-118
+  mixes the mark colours, so every theme has it without a token of its own]*
+- **FR-131** *(2026-10-24, round 12; extends FR-014, FR-093 and FR-114)*: The mark on a project row, a tab chip
+  and a minimised category header MUST show, inside its flag, the number of marked panels beneath it, and keep
+  blinking (FR-093) and the Failed style when any is Failed (FR-014). The glyph MUST be large enough, or changed,
+  for the number to be legible at the default UI scale. Counts above 9 show as "9+" *[derived: FR-039's rule]*.
+  A panel header's mark carries no number *[derived: it stands for one panel]*.
+- **FR-132** *(2026-10-24, round 12; narrows 031 FR-042)*: A tab chip whose tab holds two or more panels MUST
+  show a pill with its panel count; a tab holding one panel shows none. 031 FR-042's pill form is unchanged;
+  only the one-panel pill goes. The tab's hover popover still names its panel count (031 FR-043).
+- **FR-133** *(2026-10-24, round 12)*: A flag or pill appearing, changing its number or going MUST NOT change
+  a row's height, the position of any text, or a tab chip's width.
 
 #### C. Notifications
 
@@ -843,7 +948,12 @@ lands on a marked panel and clears it.
 - **FR-038a**: A mark raised by Command finished for one of a terminal's startup commands (FR-065a)
   MUST NOT raise an in-app toast or a Windows notification. It is shown on the panel and its holders,
   and counted by the taskbar badge (FR-039), like any other mark. A later signal on the same panel,
-  after its startup sequence, notifies as usual.
+  after its startup sequence, notifies as usual. *Its last sentence is superseded by FR-134 (2026-10-24,
+  round 12): a later signal notifies only once the startup command's mark has cleared.*
+- **FR-134** *(2026-10-24, round 12; supersedes FR-112's last sentence and FR-038a's last sentence)*: While a
+  panel is marked, no raise on it MUST raise a toast or a Windows notification, whatever raised the mark — a
+  signal, a restore (FR-038), a startup command (FR-038a) or a manual flag (FR-126). The first raise after the
+  mark has cleared announces as FR-112 says.
 - **FR-039**: While any panel is marked, throng's taskbar button MUST carry an overlay badge showing the
   number of marked panels, across every project. Counts above 9 show as "9+". The badge MUST use the
   Failed style while any marked panel is Failed, and the Attention style otherwise. It MUST update as
@@ -928,7 +1038,7 @@ lands on a marked panel and clears it.
 - **Attention mark**: one per panel at most. Its kind (Attention or Failed), its reason (a label and a
   detail), which producer raised it, and when. It belongs to the panel and moves with it.
 - **Producer**: something that raises and withdraws marks on panels. This feature has one: the terminal
-  signals.
+  signals. *(2026-10-24, round 12)* And a second: the user's manual Flag (FR-125), on every panel type.
 - **Holder state**: derived, never stored. Each tab chip, tab-strip overflow control, project row and
   minimised category header is marked when anything beneath it is, with the strongest kind beneath it.
 - **Attention notification**: at most one in-app toast and one Windows notification per marked panel,
@@ -969,7 +1079,8 @@ lands on a marked panel and clears it.
   Their persistence and timeout follow 030's per-severity settings, as FR-037 maps them.
 - No sound is played for any signal.
 - Only the terminal producer ships in this feature. Editor and search-result producers are future work
-  for their own issues.
+  for their own issues. *(2026-10-24, round 12)* The user's manual Flag (FR-125) ships too; it is not a
+  per-panel-type producer.
 - Windows 11 is the v1.0.0 platform, so "OS notification" means a Windows notification. Behind the OS
   abstraction (Principle II), another platform supplies its own.
 - *(2026-10-18)* Sequencing: [#481](https://github.com/Bidthedog/throng/issues/481) (per-panel output

@@ -301,6 +301,7 @@ function TabChip({
    * over the drop targets the user is actually aiming at.
    */
   const panels = collectPanels(tab.root);
+  const panelTotal = panels.length;
   /*
    * #294 — named with the SAME sources the panel's own header uses, not with none.
    *
@@ -499,11 +500,14 @@ function TabChip({
           <TabMark site="tab" tabId={tab.id} panelIds={collectPanels(tab.root).map((p) => p.id)} />
           {/* P1 / FR-042 — a PILL, not `[3]`. The bracketed form read as markup rather than as a
               count of the things inside the tab. */}
+          {/* FR-132 — only a tab holding two or more panels shows one; a single-panel tab keeps the
+              pill's footprint, hidden, so the chip is the same width either way (FR-133). */}
           <span
-            className="throng-count-pill tab-chip__count"
+            className={`throng-count-pill tab-chip__count${panelTotal < 2 ? ' tab-chip__count--empty' : ''}`}
             data-testid={`tab-count-${tab.id}`}
+            aria-hidden={panelTotal < 2 ? 'true' : undefined}
           >
-            {countPanels(tab.root)}
+            {panelTotal < 2 ? '' : panelTotal}
           </span>
         </>
       )}

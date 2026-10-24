@@ -44,6 +44,7 @@ import {
   SubWorkspaceRepository,
   DocumentStateRepository,
   FileOpUndoRepository,
+  AttentionFlagRepository,
   type ThrongDatabase,
 } from '@throng/persistence';
 import { DAEMON_TYPES } from './tokens.js';
@@ -55,6 +56,7 @@ import { WorkspaceIpcService } from './workspace-service.js';
 import { SubWorkspaceIpcService } from './subworkspace-service.js';
 import { DocumentIpcService } from './document-service.js';
 import { FileOpUndoIpcService } from './fileop-undo-service.js';
+import { AttentionFlagIpcService } from './attention-flag-service.js';
 import { PanelNameIpcService } from './panel-name-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
@@ -311,6 +313,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
 
   // JSON-RPC router with every method registered (health.ping + projects.* + workspace.* + terminal.*).
   const router = new RpcRouter();
+  const attentionFlags = new AttentionFlagRepository(database);
   new HealthService(elevation).register(router);
   new ProjectIpcService(
     projectService,
@@ -318,7 +321,10 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     (projectId) => terminalService.hasOpenTerminals(projectId),
     (projectId) => terminalService.killForProject(projectId),
     categoryService,
+    (projectId) => attentionFlags.clearProject(projectId),
   ).register(router);
+  // attention.flag* (057 round 12, FR-125 / FR-128) — the user's manual flags, which outlive the app.
+  new AttentionFlagIpcService(attentionFlags).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
   new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
   // document.* (016) — the per-document language override. Keyed by the FILE, so a panel opening

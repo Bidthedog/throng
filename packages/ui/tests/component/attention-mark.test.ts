@@ -14,8 +14,8 @@ import { AttentionMark } from '../../src/renderer/attention/attention-mark.js';
  * "distinct from the unsaved dot" test fails; drop the `aria-label` and the name test fails.
  */
 
-const ATTENTION = { kind: 'attention' as const, label: 'Build — Alpha: Bell (Attention)' };
-const FAILED = { kind: 'failed' as const, label: 'Build — Alpha: Exited with code 1 (Failed)' };
+const ATTENTION = { kind: 'attention' as const, label: 'Build — Alpha: Bell (Attention)', count: 1 };
+const FAILED = { kind: 'failed' as const, label: 'Build — Alpha: Exited with code 1 (Failed)', count: 1 };
 
 function mount(mark: typeof ATTENTION | typeof FAILED) {
   render(createElement(AttentionMark, { mark, testId: 'attention-panel-p1' }));
@@ -50,6 +50,45 @@ describe('AttentionMark', () => {
     document.body.innerHTML = '';
     const f = mount(FAILED).innerHTML;
     expect(f).not.toBe(a);
+  });
+
+  // FR-131 — a numbered mark shows how many marked panels sit beneath its holder, inside its flag.
+  describe('the number (FR-131)', () => {
+    const numbered = (count: number, kind: 'attention' | 'failed' = 'attention') => {
+      render(createElement(AttentionMark, { mark: { kind, label: 'x', count }, testId: 'm', showCount: true }));
+      return screen.getByTestId('m');
+    };
+
+    it('draws the count laid over the registry icon, with no inline svg or colour of its own', () => {
+      const el = numbered(3);
+      const digits = el.querySelector('.throng-attention-mark__count');
+      expect(digits).toHaveTextContent('3');
+      expect(el.querySelector('.icon')).not.toBeNull();
+      expect(digits).toHaveAttribute('aria-hidden', 'true');
+      expect(el.querySelector('[style]')).toBeNull();
+      expect(el.querySelector('.throng-attention-mark__count svg')).toBeNull();
+    });
+
+    it('shows 1 through 9 as they are and anything above as 9+', () => {
+      expect(numbered(1).textContent).toContain('1');
+      document.body.innerHTML = '';
+      expect(numbered(9).querySelector('.throng-attention-mark__count')).toHaveTextContent(/^9$/);
+      document.body.innerHTML = '';
+      expect(numbered(10).querySelector('.throng-attention-mark__count')).toHaveTextContent('9+');
+      document.body.innerHTML = '';
+      expect(numbered(250).querySelector('.throng-attention-mark__count')).toHaveTextContent('9+');
+    });
+
+    it('keeps the Failed style when numbered', () => {
+      const el = numbered(2, 'failed');
+      expect(el).toHaveClass('throng-attention-mark--failed');
+      expect(el.querySelector('.throng-attention-mark__count')).toHaveTextContent('2');
+    });
+
+    it('a panel header mark carries no number (it is not asked to)', () => {
+      const el = mount(ATTENTION);
+      expect(el.querySelector('.throng-attention-mark__count')).toBeNull();
+    });
   });
 
   it('is visibly distinct from the unsaved dot, and can sit beside it (FR-017)', () => {

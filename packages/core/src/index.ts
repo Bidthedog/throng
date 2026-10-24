@@ -179,7 +179,11 @@ export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-h
 // 057 — panel attention marks: the shared vocabulary and the two OS seams (notifications, taskbar badge).
 export type {
   AttentionKind,
+  AttentionFlagEntry,
+  AttentionFlagRequest,
   AttentionLedgerEntry,
+  AttentionProducer,
+  AttentionReasonSignal,
   AttentionMark,
   AttentionProducerConfig,
   AttentionReason,
@@ -197,7 +201,11 @@ export { AttentionModel } from './attention/attention-model.js';
 export type { AttentionModelOptions } from './attention/attention-model.js';
 export {
   badgeSummary,
+  categoryCount,
   categoryKind,
+  holderCount,
+  markCountLabel,
+  projectCount,
   holderKind,
   holderLabel,
   kindLabel,

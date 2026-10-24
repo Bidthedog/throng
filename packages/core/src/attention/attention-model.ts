@@ -6,6 +6,8 @@
  * Marks are immutable snapshots; every change replaces the affected mark.
  */
 import type {
+  AttentionFlagEntry,
+  AttentionFlagRequest,
   AttentionLedgerEntry,
   AttentionMark,
   AttentionSignal,
@@ -89,6 +91,54 @@ export class AttentionModel {
     }
     this.publish();
     return true;
+  }
+
+  /**
+   * FR-125: the user's Flag. Returns false, changing nothing, on a panel already marked. A flag raised on the
+   * focused panel is held: no clear delay runs until that focus has gone (FR-127).
+   */
+  flag(request: AttentionFlagRequest): boolean {
+    if (this.byPanel.has(request.panelId)) return false;
+    this.byPanel.set(request.panelId, {
+      panelId: request.panelId,
+      projectId: request.projectId,
+      panelTitle: request.panelTitle,
+      projectName: request.projectName,
+      tabTitle: request.tabTitle,
+      doing: null,
+      producer: 'user',
+      kind: 'attention',
+      reason: { signal: 'flagged', detail: null },
+      raisedAt: request.at,
+      dwellStartedAt: null,
+      heldSinceRaise: true,
+      heldFocusSeen: this.isAttended(request.panelId),
+    });
+    this.publish();
+    return true;
+  }
+
+  /** FR-128: reinstate the user's flags read from the daemon's store. Unheld; no clear events; existing marks win. */
+  restoreFlags(entries: readonly AttentionFlagEntry[]): void {
+    let dirty = false;
+    for (const e of entries) {
+      if (this.byPanel.has(e.panelId)) continue;
+      this.byPanel.set(e.panelId, {
+        panelId: e.panelId,
+        projectId: e.projectId,
+        panelTitle: e.panelTitle,
+        projectName: e.projectName,
+        tabTitle: e.tabTitle,
+        doing: null,
+        producer: 'user',
+        kind: 'attention',
+        reason: { signal: 'flagged', detail: null },
+        raisedAt: e.raisedAt,
+        dwellStartedAt: null,
+      });
+      dirty = true;
+    }
+    if (dirty && !this.settle()) this.publish();
   }
 
   /**
@@ -177,9 +227,9 @@ export class AttentionModel {
     if (dirty && !this.settle()) this.publish();
   }
 
-  /** The marks as ledger entries, for `terminal.attentionSync`. */
+  /** The terminal producer's marks as ledger entries, for `terminal.attentionSync`; user flags live apart (R19). */
   ledgerEntries(): AttentionLedgerEntry[] {
-    return this.snapshot.map((m) => ({
+    return this.snapshot.filter((m) => m.producer === 'terminal').map((m) => ({
       panelId: m.panelId,
       projectId: m.projectId,
       kind: m.kind,
@@ -233,7 +283,20 @@ export class AttentionModel {
     let dirty = false;
     const cleared: string[] = [];
     for (const mark of [...this.byPanel.values()]) {
-      const dwellStartedAt = this.isAttended(mark.panelId) ? (mark.dwellStartedAt ?? now) : null;
+      const attended = this.isAttended(mark.panelId);
+      if (mark.heldSinceRaise) {
+        // FR-127: no dwell while held. The hold ends only once the panel has been attended and then left —
+        // never while the menu Flag was chosen from still has focus.
+        if (attended && !mark.heldFocusSeen) {
+          this.byPanel.set(mark.panelId, { ...mark, heldFocusSeen: true });
+          dirty = true;
+        } else if (!attended && mark.heldFocusSeen) {
+          this.byPanel.set(mark.panelId, { ...mark, heldSinceRaise: false, heldFocusSeen: false, dwellStartedAt: null });
+          dirty = true;
+        }
+        continue;
+      }
+      const dwellStartedAt = attended ? (mark.dwellStartedAt ?? now) : null;
       if (dwellStartedAt !== null && now - dwellStartedAt >= this.clearDelayMs) {
         this.byPanel.delete(mark.panelId);
         cleared.push(mark.panelId);

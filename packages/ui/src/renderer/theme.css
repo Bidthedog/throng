@@ -541,17 +541,29 @@ textarea,
   background: var(--throng-colour-categoryHeaderBackground);
 }
 
+/* 057 FR-129 — the total number of projects, as a pill (the shared `.throng-count-pill`), whatever the
+   header's state. A minimum width keeps it from resizing the header as the number changes (FR-133). */
 .category-header__count {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 26px;
+  text-align: center;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
 }
 
 /* FR-051a (#489) — a minimised category reads as collapsed at a glance: a dashed lower edge in the
-   theme's border colour and an italic, muted name, beside the "shown of total" count. The bold
-   uppercase of FR-072 stays. */
+   theme's border colour and an italic, muted name. The bold uppercase of FR-072 stays. 057 FR-130
+   makes the header itself visibly paler: its surface mixed toward the sidebar it sits on, from the
+   two tokens already there (research R22), so it holds in every bundled theme, light or dark. */
 .category-header--minimised {
   border-bottom: 1px dashed var(--throng-colour-border);
+  background: color-mix(
+    in srgb,
+    var(--throng-colour-categoryHeaderBackground) 45%,
+    var(--throng-colour-sidebarBg)
+  );
 }
 
 .category-header--minimised .category-header__name {
@@ -1381,6 +1393,58 @@ textarea,
   height: 100%;
 }
 
+/* FR-131 — a NUMBERED flag. The plain glyph is too small to hold a digit legibly, so a numbered one is
+ * drawn at 20px; `flex: none` and the box's centring let it overlap the box's edges without moving
+ * anything (FR-133), as the project row's 16px glyph does (FR-114). */
+.throng-attention-mark {
+  position: relative;
+}
+
+.throng-attention-mark[data-numbered] .icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+}
+
+/* The digits lie over the glyph, taking no layout space and no pointer events. They carry the count
+ * pill's own pair (`.throng-count-pill`: text on the active surface), never the glyph's colour: the flag
+ * is SOLID, and digits in its colour vanished into it (MT-03, MT-04). The same pair for both kinds and
+ * on a project-coloured row, so they read whatever colour the flag is drawn in. Over the flag's
+ * pennant, whose middle sits a little above the glyph's; over a Failed ring, the ring's middle, so the
+ * cross does not cut through them. */
+.throng-attention-mark__count {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% - 3px));
+  padding: 0 1px;
+  border-radius: 3px;
+  background: var(--surface-active);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.throng-attention-mark--failed .throng-attention-mark__count {
+  transform: translate(-50%, -50%);
+}
+
+/* FR-133 — an unmarked chip or header holds the flag's footprint: the mark's 14px and its 6px margin. */
+.throng-attention-slot {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  visibility: hidden;
+}
+
 .throng-attention-mark .icon svg {
   width: 100%;
   height: 100%;
@@ -2134,6 +2198,19 @@ textarea,
 /* The per-tab count's only difference from the shared pill: it sits after the label. */
 .tab-chip__count {
   margin-left: 6px;
+  /* FR-133 — a fixed width, so a pill appearing, changing its number or going never resizes the chip. */
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 26px;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* FR-132 — a tab holding one panel shows no pill, but keeps its place (`visibility`, never `display`). */
+.tab-chip__count--empty {
+  visibility: hidden;
 }
 
 .tab-chip--active .tab-chip__count {
@@ -3141,6 +3218,18 @@ textarea,
 .notice__copy,
 .notice__dismiss {
   pointer-events: auto;
+}
+
+/* FR-124: an attention toast's card is its own link. */
+.notice--activatable {
+  cursor: pointer;
+}
+.notice--activatable button {
+  cursor: default;
+}
+.notice--activatable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* An ERROR gets its OWN CARD, not a stripe on the usual one.

@@ -137,11 +137,9 @@ const SVG_SHAPES: Record<string, string> = {
   category: '<path d="M4 6l8-2 8 6-8 10z"/><circle cx="9" cy="9" r="1.4"/>',
   // 057 — attention marks. A flag for `attention` (flagged for you, whatever raised it), a cross in
   // a ring for `attentionFailed` so the two differ in shape and not only in colour (FR-016) — the
-  // ring keeps it from reading as `windowClose` — and an arrow leaving a box for `goToPanel` (the
-  // toast's link control).
+  // ring keeps it from reading as `windowClose`.
   attention: '<path d="M6 21V4"/><path d="M6 4h11l-2.5 4 2.5 4H6"/>',
   attentionFailed: '<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
-  goToPanel: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5H5V6h5"/>',
 };
 
 const GENERIC_SHAPE = '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="2.5"/>';

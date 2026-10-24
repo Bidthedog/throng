@@ -420,7 +420,10 @@ boundary so no layer knows more than it has to.
 - *Remembering one* is the daemon's too. A bounded in-memory ledger keeps what arrived while no events
   socket was attached; main reads it (`terminal.attentionLedger`) when it reconnects and replaces it with
   its own state (`terminal.attentionSync`), so a mark raised while throng was closed is still there when
-  it opens.
+  it opens. The ledger holds terminal marks only. A panel the user flags by hand from its menu is a
+  second producer; its flag is stored in SQLite (`attention_flag`, through `attention.flagSet` /
+  `flagClear`), so it outlives the daemon and works for every panel type. Main reads it back with
+  `attention.flagList` on every connect.
 - *Deciding what a mark is* is main's. `main/attention-service.ts` owns the mark model from
   `core/attention/`: at most one mark per panel, merged and sticky when Failed, cleared once the panel
   has held keyboard focus, in a focused window, for the

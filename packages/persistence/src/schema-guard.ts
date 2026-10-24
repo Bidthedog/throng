@@ -63,6 +63,21 @@ const GUARDED_TABLES: readonly GuardedTable[] = [
       CREATE UNIQUE INDEX IF NOT EXISTS idx_project_categories_one_default
         ON project_categories(owner_user) WHERE is_default = 1;`,
   },
+  // v11 — the user's manual attention flags (057 round 12, FR-125 / FR-128). Read by the daemon's
+  // attention.flagList, so a drifted store must regain the table rather than fail the call.
+  {
+    table: 'attention_flag',
+    ddl: `
+      CREATE TABLE IF NOT EXISTS attention_flag (
+        panel_id     TEXT PRIMARY KEY,
+        project_id   TEXT NOT NULL,
+        panel_title  TEXT,
+        tab_title    TEXT,
+        project_name TEXT,
+        raised_at    INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_attention_flag_project ON attention_flag(project_id);`,
+  },
 ];
 
 interface AdditiveColumn {

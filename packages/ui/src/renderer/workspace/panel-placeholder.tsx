@@ -764,6 +764,17 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 reloadTerminal: () => {
                   ws.setPanelDormant(panel.id, false);
                 },
+                // 057 FR-125 — the mark's subject is the panel's place, the same three names a toast heads
+                // its card with. Main decides whether anything changes (a marked panel stays as it is).
+                flag: () => {
+                  window.throng?.attention?.flag({
+                    panelId: panel.id,
+                    projectId: panel.originProjectId,
+                    panelTitle: place?.name ?? panel.title,
+                    tabTitle: place?.tab ?? '',
+                    projectName: place?.project ?? '',
+                  });
+                },
                 copyDetails: () => {
                   if (editorFailure) {
                     copyToClipboard(panelFailureText(editorFailure), editorFailure.subject);

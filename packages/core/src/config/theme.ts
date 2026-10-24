@@ -624,13 +624,12 @@ export const THRONG_THEME: Theme = {
     warning: '⚠',
     /* 057 (R11). `attention` is the mark that says a panel wants you and the cog menu's Go to Next
        Marked Panel row; `attentionFailed` is its Failed variant, so a failure is not told apart by
-       colour alone. `goToPanel` is the toast's link control. None reuses `warning` (a folded-heading
+       colour alone. (`goToPanel`, the toast's link control, was retired in round 12: FR-124.) None reuses `warning` (a folded-heading
        cue) or `notification`-style glyphs: retheming one must never retheme another. Both are text
        glyphs, not emoji, so they take the attentionMark / attentionFailedMark colours; a flag rather
        than a bell, because most marks are not raised by a bell. */
     attention: '⚑',
     attentionFailed: '✖',
-    goToPanel: '↗',
   },
 };
 

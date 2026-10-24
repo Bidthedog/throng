@@ -449,6 +449,7 @@ const panelActions: PanelHeaderMenuActions = {
   openInEditor: noop,
   goToEditor: noop,
   toggleSyncScroll: noop,
+  flag: noop,
 };
 
 function destroyItem(panelVerb: 'Destroy' | 'Close', keybindings: Keybindings) {

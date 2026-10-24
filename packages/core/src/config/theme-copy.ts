@@ -905,11 +905,6 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The mark on a panel, project or category where a command or program ended with an error.',
   },
-  'icons.goToPanel': {
-    label: 'Go to panel icon',
-    description:
-      'The glyph on the link control of an attention notification, which takes you to the panel that raised it.',
-  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

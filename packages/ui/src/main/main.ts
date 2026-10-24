@@ -2086,6 +2086,19 @@ if (isPrimaryInstance)
     const p = payload as { panelId?: unknown } | null;
     if (p && typeof p.panelId === 'string') attentionService.goTo(p.panelId);
   });
+  // 057 round 12 (FR-125): the panel menu's Flag.
+  ipcMain.on('throng:attention:flag', (_event, payload: unknown) => {
+    const p = payload as Record<string, unknown> | null;
+    if (!p || typeof p.panelId !== 'string' || typeof p.projectId !== 'string') return;
+    const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+    attentionService.flag({
+      panelId: p.panelId,
+      projectId: p.projectId,
+      panelTitle: text(p.panelTitle),
+      tabTitle: text(p.tabTitle),
+      projectName: text(p.projectName),
+    });
+  });
   // T068: a renderer that registers late pulls the set it missed; T069: one that can draw the badge says so.
   ipcMain.handle('throng:attention:getMarks', () => ({ marks: attentionService.currentMarks() }));
   ipcMain.on('throng:attention:badgeReady', () => attentionService.onBadgeAnswererReady());
