@@ -158,7 +158,7 @@ nodeId[] }` — restored on reopen; if `focusPath`'s last node is gone, the near
 - **Monitor view state** (FR-057, FR-087): `narrowTo` removed (FR-100); `hideEnded: boolean`, default
   `true` (FR-105); `splitRatio: number` in 0.25 – 0.75, default 0.45 (FR-111). The chosen metric's
   values gain `network` (FR-099).
-- **RoutedAction**: gains `{ kind: 'activate'; projectId; tabId?; panelId? }` (FR-110).
+- **RoutedAction**: gains `{ action: 'activate'; projectId; tabId?; panelId? }` (FR-110).
 - **Component and role descriptions** (FR-102): a frozen map from component id (`ui`, `daemon`,
   `helpers`, `projects`) and role (`main`, `window`, `gpu`, `utility`, `conhost`, `lock-helper`,
   `collector`, `deelevation-agent`, `daemon`) to one or two sentences.

@@ -4436,7 +4436,20 @@ textarea,
   padding: 4px 6px;
 }
 
+/* The right column's header: the name, and the item's actions beside it (FR-110). */
+.detail-pane__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .detail-pane__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin: 0;
   font-size: 14px;
 }
@@ -4596,7 +4609,8 @@ textarea,
 .detail-pane__actions {
   display: flex;
   gap: 4px;
-  margin: 0 0 6px;
+  flex: none;
+  margin: 0;
 }
 
 .detail-pane__action {

@@ -34,7 +34,7 @@ Contract test: `packages/ui/tests/contract/resources-ipc.contract.test.ts`.
 
 ## Session 2026-10-23 changes
 
-- `RoutedAction` gains `activate`: `{ kind: 'activate', projectId: string, tabId?: string, panelId?:
+- `RoutedAction` gains `activate`: `{ action: 'activate', projectId: string, tabId?: string, panelId?:
   string }`. `throng:resources:action:route` resolves it to the window holding the tab (else the main
   window for a project-only target), brings that window forward and posts it on `throng:resources:action`;
   it resolves `false` when no window holds the target. The receiving window switches to the project,

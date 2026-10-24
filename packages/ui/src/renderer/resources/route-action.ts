@@ -7,4 +7,9 @@ import type { UnloadVariant } from '../sidebar/use-unload-project.js';
 
 export type RoutedAction =
   | { readonly action: 'destroyTab' | 'destroyPanel'; readonly id: string }
-  | { readonly action: 'unloadProject'; readonly id: string; readonly name: string; readonly variant?: UnloadVariant };
+  | { readonly action: 'unloadProject'; readonly id: string; readonly name: string; readonly variant?: UnloadVariant }
+  /**
+   * Activate (FR-110): go to the project — and its tab, and its panel — in the window holding it, which comes
+   * forward. A process is resolved to its panel before it is sent.
+   */
+  | { readonly action: 'activate'; readonly projectId: string; readonly tabId?: string; readonly panelId?: string };

@@ -31,8 +31,11 @@ import { useKillProcesses } from './kill-confirm.js';
 import { getSessionSnapshot, isEnded, requestCatchUp, setNotice } from './monitor-session.js';
 import type { RoutedAction } from './route-action.js';
 
+/** A row's action: core's (FR-063) or the monitor's Activate (FR-110). */
+export type ActionRowId = ResourceActionId | 'activate';
+
 export interface ActionRow {
-  readonly id: ResourceActionId;
+  readonly id: ActionRowId;
   readonly label: string;
   readonly icon: string;
   readonly section: MenuSection;
@@ -173,9 +176,43 @@ export function useNodeActions(): {
     return (tree === null ? undefined : find(tree, node.id)) ?? node;
   };
 
+  /**
+   * Activate (FR-110): go to a project, a tab, a panel — or a process's panel — in the window holding it.
+   * Absent on throng's own nodes (FR-062), on an ended process and on the "No project" group; disabled,
+   * with FR-086's wording, for a tab or panel no window holds (its project is not the active one).
+   */
+  const activateRow = (node: ResourceNode): ActionRow | null => {
+    if (node.owner.component !== 'projects' || isEnded(node.id)) return null;
+    const what = node.kind === 'project' ? 'project' : node.kind === 'tab' ? 'tab' : node.kind === 'panel' || node.kind === 'process' ? 'panel' : null;
+    const projectId = node.owner.projectId ?? (node.kind === 'project' ? bare(node.id) : undefined);
+    if (what === null || projectId === undefined || projectId === '' || node.id === 'p:') return null;
+    const tabId = node.kind === 'tab' ? (node.owner.tabId ?? bare(node.id)) : node.owner.tabId;
+    const panelId = node.kind === 'panel' ? (node.owner.panelId ?? bare(node.id)) : node.owner.panelId;
+    // A process outside any panel (a lock helper, say) has nowhere to go.
+    if (what === 'panel' && (tabId === undefined || panelId === undefined)) return null;
+    const held = what === 'project' || projectOf(node)?.projectState === 'active';
+    const project = projectOf(node)?.label;
+    const req: RoutedAction = {
+      action: 'activate',
+      projectId,
+      ...(what !== 'project' && tabId !== undefined ? { tabId } : {}),
+      ...(what === 'panel' && panelId !== undefined ? { panelId } : {}),
+    };
+    return {
+      id: 'activate',
+      label: `Go to ${what}`,
+      icon: 'activate',
+      section: 'navigate',
+      enabled: held,
+      ...(held ? {} : { reason: project === undefined ? 'It is not open in any window' : `Switch to ${project} to go to this ${what}` }),
+      run: () =>
+        void route(req, { heading: `Couldn't go to ${node.label}`, lines: ['It is not open in any window.'] }),
+    };
+  };
+
   const rowsFor = (stale: ResourceNode): ActionRow[] => {
     const node = liveNode(stale);
-    return actionsFor(node, { isEnded: (n) => isEnded(n.id), isMounted }).map((a) => ({
+    const rows: ActionRow[] = actionsFor(node, { isEnded: (n) => isEnded(n.id), isMounted }).map((a) => ({
       id: a.id,
       label: labelOf(a),
       icon: ICON[a.id],
@@ -184,6 +221,8 @@ export function useNodeActions(): {
       ...(reasonFor(a, node) !== undefined ? { reason: reasonFor(a, node) as string } : {}),
       run: () => run(a.id, liveNode(node)),
     }));
+    const go = activateRow(node);
+    return go === null ? rows : [...rows, go];
   };
 
   const openMenu = (event: ReactMouseEvent, node: ResourceNode): void => {

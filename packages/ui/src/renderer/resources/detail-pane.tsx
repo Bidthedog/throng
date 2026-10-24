@@ -71,13 +71,16 @@ function Details({ subject, ctx }: { subject: Subject; ctx: FigureContext }): Re
   const figures = ended || node.kind === 'limitation' ? [] : figuresOf(node, ctx);
   return (
     <>
-      <h3 className="detail-pane__name" data-testid="detail-name">
-        {node.label}
-      </h3>
+      {/* The item's actions sit beside its name (FR-110): its standard action, the kills and Activate. */}
+      <header className="detail-pane__header" data-testid="detail-header">
+        <h3 className="detail-pane__name" data-testid="detail-name">
+          {node.label}
+        </h3>
+        <NodeActionBar node={node} />
+      </header>
       <p className="detail-pane__kind" data-testid="detail-kind">
         {KIND_LABEL[node.kind]}
       </p>
-      <NodeActionBar node={node} />
       <ShareBars subject={subject} />
       <dl className="detail-pane__facts">
         {p ? (

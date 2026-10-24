@@ -91,11 +91,11 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
     // A leaf has nothing below it: its Kill All Below would be Kill Process again, so it is not offered.
     rightClick('x:300:1');
-    expect(menuLabels()).toEqual(['menu-item-Kill Process']);
+    expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Go to panel']);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
 
     rightClick('x:200:1');
-    expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Kill All Below']);
+    expect(menuLabels()).toEqual(['menu-item-Kill Process', 'menu-item-Kill All Below', 'menu-item-Go to panel']);
     const icons = THRONG_THEME.icons as Record<string, string>;
     expect(screen.getByTestId('menu-item-Kill Process')).toHaveTextContent(icons.resourceKill!);
     expect(screen.getByTestId('menu-item-Kill All Below')).toHaveTextContent(icons.resourceKillBelow!);
@@ -107,11 +107,11 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
 
     rightClick('n:n1');
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Kill All Below']);
+    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Kill All Below', 'menu-item-Go to panel']);
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     rightClick('n:n2');
-    expect(menuLabels()).toEqual(['menu-item-Destroy Panel']);
+    expect(menuLabels()).toEqual(['menu-item-Destroy Panel', 'menu-item-Go to panel']);
   });
 
   it('a project: both Unload rows, and Kill All Below when it holds a live process', async () => {
@@ -121,16 +121,16 @@ describe('the context menu offers exactly what a node can do (FR-063)', () => {
 
     rightClick('p:p1');
 
-    // Sections draw in the shared order (destroy before viewState), as every other menu does.
-    expect(menuLabels()).toEqual(['menu-item-Kill All Below', 'menu-item-Unload Project', 'menu-item-Unload Project and End Terminals']);
+    // Sections draw in the shared order (destroy, navigate, viewState), as every other menu does.
+    expect(menuLabels()).toEqual(['menu-item-Kill All Below', 'menu-item-Go to project', 'menu-item-Unload Project', 'menu-item-Unload Project and End Terminals']);
   });
 
-  it('an unloaded project offers nothing to unload', async () => {
+  it('an unloaded project offers nothing to unload, only going to it', async () => {
     feed(sampleHierarchy());
     await mount();
     act(() => focusOn(PROJECTS_PATH));
     rightClick('p:p2');
-    expect(screen.queryByRole('menu')).toBeNull();
+    expect(menuLabels()).toEqual(['menu-item-Go to project']);
   });
 
   it('throng’s own nodes have no menu at all — absent, not disabled', async () => {
@@ -296,7 +296,7 @@ describe('the detail pane’s action row', () => {
 
     const bar = screen.getByTestId('detail-actions');
     const buttons = within(bar).getAllByRole('button');
-    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Kill Process', 'Kill All Below']);
+    expect(buttons.map((b) => b.getAttribute('title'))).toEqual(['Kill Process', 'Kill All Below', 'Go to panel']);
     for (const b of buttons) expect(b.querySelector('.icon')).not.toBeNull();
   });
 
@@ -314,9 +314,12 @@ describe('the detail pane’s action row', () => {
     feed(node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } }));
     await mount();
     act(() => setSelection('t:t9'));
-    const button = within(screen.getByTestId('detail-actions')).getByRole('button');
-    expect(button).toBeDisabled();
-    expect(button.getAttribute('title')).toBe('Switch to Beta to destroy this tab');
+    const [destroyButton, goButton] = within(screen.getByTestId('detail-actions')).getAllByRole('button');
+    expect(destroyButton).toBeDisabled();
+    expect(destroyButton!.getAttribute('title')).toBe('Switch to Beta to destroy this tab');
+    // Activate too: no window holds the tab (FR-110, FR-086's wording).
+    expect(goButton).toBeDisabled();
+    expect(goButton!.getAttribute('title')).toBe('Switch to Beta to go to this tab');
   });
 });
 
@@ -551,5 +554,76 @@ describe('a failed kill raises ONE inline notice with a plain cause (FR-064)', (
     await kill();
 
     expect(await screen.findByTestId('monitor-notice')).toHaveTextContent('now belongs to a different program');
+  });
+});
+
+describe('Activate goes to the project, tab or panel (FR-110, US2 scenarios 30 and 31)', () => {
+  it('is an icon control in the right column’s header, beside the name, with the item’s other actions', async () => {
+    feed(sampleHierarchy());
+    await mount();
+    act(() => focusOn(PROJECTS_PATH));
+    act(() => setSelection('p:p1'));
+
+    const header = screen.getByTestId('detail-header');
+    expect(within(header).getByTestId('detail-name')).toHaveTextContent('Alpha');
+    const bar = within(header).getByTestId('detail-actions');
+    const titles = within(bar).getAllByRole('button').map((b) => b.getAttribute('title'));
+    // Scenario 31: Unload Project, Kill All Below and Activate — and the row's menu offers the same.
+    expect(titles).toEqual(expect.arrayContaining(['Unload Project', 'Kill All Below', 'Go to project']));
+    const go = screen.getByTestId('detail-action-activate');
+    expect(go).toHaveTextContent((THRONG_THEME.icons as Record<string, string>).activate!);
+    rightClick('p:p1');
+    expect(menuLabels()).toEqual(expect.arrayContaining(['menu-item-Go to project', 'menu-item-Unload Project', 'menu-item-Kill All Below']));
+  });
+
+  it.each([
+    ['a project', PROJECTS_PATH, 'p:p1', { action: 'activate', projectId: 'p1' }],
+    ['a tab', ['root', 'c:projects', 'p:p1'], 't:t1', { action: 'activate', projectId: 'p1', tabId: 't1' }],
+    ['a panel', ['root', 'c:projects', 'p:p1', 't:t1'], 'n:n1', { action: 'activate', projectId: 'p1', tabId: 't1', panelId: 'n1' }],
+    // A process goes to its panel.
+    ['a process', PROCESS_PATH, 'x:300:1', { action: 'activate', projectId: 'p1', tabId: 't1', panelId: 'n1' }],
+  ])('routes %s to the window that holds it', async (_what, path, id, routed) => {
+    feed(sampleHierarchy());
+    bridge.setRouteAnswer(true);
+    await mount();
+    act(() => focusOn(path));
+    act(() => setSelection(id));
+
+    fireEvent.click(screen.getByTestId('detail-action-activate'));
+
+    await waitFor(() => expect(bridge.routed).toEqual([routed]));
+    expect(screen.queryByTestId('monitor-notice')).toBeNull();
+  });
+
+  it('says so, once, when no window takes it', async () => {
+    feed(sampleHierarchy());
+    bridge.setRouteAnswer(false);
+    await mount();
+    act(() => focusOn(PROJECTS_PATH));
+    rightClick('p:p1');
+    fireEvent.click(screen.getByTestId('menu-item-Go to project'));
+    expect(await screen.findByTestId('monitor-notice')).toHaveTextContent('Alpha');
+  });
+
+  it('is absent on UI, Daemon and Helpers and on throng’s own processes', async () => {
+    feed(sampleHierarchy());
+    await mount();
+    for (const id of ['c:ui', 'c:daemon', 'c:helpers', 'x:10:1']) {
+      act(() => setSelection(id));
+      expect(screen.queryByTestId('detail-action-activate'), id).toBeNull();
+    }
+  });
+
+  it('with nothing selected, shows the actions of the level the left column shows — none at the top or on a component (derived)', async () => {
+    feed(sampleHierarchy());
+    await mount();
+    expect(screen.queryByTestId('detail-actions')).toBeNull();
+
+    act(() => focusOn(PROJECTS_PATH));
+    expect(screen.queryByTestId('detail-actions')).toBeNull();
+
+    act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
+    expect(screen.getByTestId('detail-name')).toHaveTextContent('Build');
+    expect(screen.getByTestId('detail-action-activate')).toHaveAttribute('title', 'Go to tab');
   });
 });
