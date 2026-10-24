@@ -273,7 +273,7 @@ the taskbar counts it, whatever raised it. How it is announced is the Attention 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Clear delay | `attention.clearDelayMs` | 1,000 | 0 – 10,000 ms, step 100 | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
-| Taskbar badge | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It uses the Failed style while any marked panel is Failed, and is not affected by the notification settings. |
+| Taskbar badge | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
 
 ## Editor · Indentation
 

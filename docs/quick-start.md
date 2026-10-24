@@ -88,10 +88,11 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
   prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
   your browser), and **right-click** offers every other place it could open. Nothing is ever run by
   a click.
-- **A terminal can ask for you.** When a command finishes, a program exits (a failed exit is marked differently), or something rings
-  the bell, the panel gets an **attention mark**; so do its tab, its project and, if folded away, its
-  category, and throng can also raise a notification and a count on the taskbar icon. Each mark carries
-  the number of panels waiting beneath it; hover a project's or category's mark to see which they are.
+- **A terminal can ask for you.** When a command finishes, a program exits, or something rings
+  the bell, the panel gets an **attention mark** — a blinking circle; so do its tab, its project (in
+  place of its colour dot) and, if folded away, its category, and throng can also raise a notification
+  and a count on the taskbar icon. The circle on a tab, project or category shows how many panels are
+  waiting beneath it; hover a project's or category's mark to see which they are, and what failed.
   Click a notification to go straight to its panel. Click into the panel and, a moment later, the mark
   goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To remind
   yourself to come back to any panel, right-click it and choose **Flag**: it is marked the same way,

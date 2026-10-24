@@ -35,7 +35,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Changed
 
-- **Marks say how many are waiting** ([#523](https://github.com/Bidthedog/throng/issues/523)): the flag on a project, a tab and a minimised category carries the number of panels that need you, every category header shows its number of projects, a tab shows its panel count once it holds two or more, and a minimised category's header is paler than an expanded one. Nothing moves as marks come and go.
+- **Marks say how many are waiting** ([#523](https://github.com/Bidthedog/throng/issues/523)): an attention mark is now one blinking circle in the theme's attention colour, the same for a failure as for a bell, and on a project, a tab and a minimised category it carries the number of panels that need you. A project's colour dot is a little larger, the size of the circle that takes its place. Every category header shows its number of projects, a tab shows its panel count once it holds two or more, and a minimised category's header is paler than an expanded one. Nothing moves as marks come and go. Themes and icon packs lose the two attention-mark icons and the Failed Attention Marker colour.
 - **Click a notification to reach its panel** ([#525](https://github.com/Bidthedog/throng/issues/525)): clicking anywhere on an attention toast, or on its Windows notification, takes you to the panel; the arrow button is gone.
 
 ### Fixed
