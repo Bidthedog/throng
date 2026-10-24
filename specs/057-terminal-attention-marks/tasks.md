@@ -326,7 +326,7 @@ From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Rou
 ### Core and main
 
 - [x] T118 [CORE] Test first, then widen `AttentionMark.producer` to `'terminal' | 'user'` and add `heldSinceRaise`; `AttentionModel.flag()` (no-op on a marked panel), `restoreFlags()` (unheld), the held dwell in `settle()`, and `ledgerEntries()` returning terminal marks only, in `packages/core/src/attention/attention-types.ts` and `attention-model.ts`, with `packages/core/tests/unit/attention-model.test.ts` (FR-125, FR-127, R20)
-- [ ] T119 [P] [CORE] Test first, then holder state carries `count` (marked panels beneath; `9+` is the renderer's), in `packages/core/src/attention/attention-holders.ts` with its unit test (FR-131)
+- [x] T119 [P] [CORE] Test first, then holder state carries `count` (marked panels beneath; `9+` is the renderer's), in `packages/core/src/attention/attention-holders.ts` with its unit test (FR-131)
 - [ ] T120 [CORE] Test first, then `AttentionService.flag()`: raise a user mark, persist it with `attention.flagSet`, announce nothing; call `attention.flagClear` whenever a user mark clears by any route; restore with `attention.flagList` on every daemon (re)connect (a restored flag reads "Flagged", whatever later signals said — the row holds no reason *[derived]*); a unit assertion that a Windows-notification click on a mark raises its window and sends `focusPanel` (FR-124's restated FR-034); the terminal master switch leaves user marks; plus the `throng:attention:flag` channel and preload `attention.flag`, in `packages/ui/src/main/attention-service.ts`, `packages/ui/src/main/main.ts` and `packages/ui/src/preload/preload.cts` (FR-125, FR-126, FR-128; depends on T118, T122)
 
 ### Persistence and daemon

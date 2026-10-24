@@ -201,7 +201,11 @@ export { AttentionModel } from './attention/attention-model.js';
 export type { AttentionModelOptions } from './attention/attention-model.js';
 export {
   badgeSummary,
+  categoryCount,
   categoryKind,
+  holderCount,
+  markCountLabel,
+  projectCount,
   holderKind,
   holderLabel,
   kindLabel,
