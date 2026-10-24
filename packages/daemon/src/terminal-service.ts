@@ -251,6 +251,8 @@ export class TerminalService {
   private readonly sessions = new Map<string, Session>();
   /** 057 FR-099 — the panels main judges attended; until it says otherwise, none. */
   private attendedPanels = new Set<string>();
+  /** 055 R5 — each panel's console-attached pids at the last command poll; read by the roster. */
+  private readonly lastAttached = new Map<string, { pid: number; startedAt: number }[]>();
   private nextSessionId = 1;
   /** 051 FR-004 — ending sessions whose panel already has a fresh terminal; still ended at shutdown. */
   private readonly endingSessions = new Set<Session>();
@@ -432,6 +434,13 @@ export class TerminalService {
     } catch {
       return; // FR-019e: keep the last known value rather than clearing it.
     }
+    const attached = attachedOnThisHost?.get(session.handle.pid);
+    if (attached !== undefined && this.sessions.get(session.panelId) === session) {
+      this.lastAttached.set(
+        session.panelId,
+        attached.filter((p) => p.pid !== session.handle.pid).map((p) => ({ pid: p.pid, startedAt: p.startedAt })),
+      );
+    }
     const chosen = foregroundProcess(
       session.handle.pid,
       children,
@@ -555,6 +564,31 @@ export class TerminalService {
   }
 
   /** Whether a project has any open terminal (backs the root-edit guard, FR-022). */
+  /**
+   * 055 R5 — every running terminal as the resource monitor names it: panel, project, host and
+   * handle, scrollback held, and the pids its console had attached at the last poll. A read of
+   * memory: the roster is asked every tick and must make no OS query.
+   */
+  rosterTerminals(): {
+    panelId: string;
+    projectId: string | null;
+    host: IPtyHost;
+    handlePid: number;
+    scrollbackChars: number;
+    attached: { pid: number; startedAt: number }[];
+  }[] {
+    return [...this.sessions.values()]
+      .filter((s) => s.status === 'running')
+      .map((s) => ({
+        panelId: s.panelId,
+        projectId: s.rootless ? null : s.projectId,
+        host: s.host,
+        handlePid: s.handle.pid,
+        scrollbackChars: s.scrollback.length,
+        attached: this.lastAttached.get(s.panelId) ?? [],
+      }));
+  }
+
   hasOpenTerminals(projectId: string): boolean {
     return this.locks.hasOpenTerminals(projectId);
   }

@@ -70,7 +70,14 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 80;
 // an invalid entry — no warning glyph existed, only the `warning` colour.
 // 85 since 057 (R11): `attention`, `attentionFailed` and `goToPanel` — the mark, its Failed variant and
 // the toast's link control.
-const EXPECTED_ICON_TOKEN_COUNT = 85;
+// 93 since 055: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
+// `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`).
+// 94 since 055's second feedback round (FR-093): `help`, the Resource Monitor's "?" button.
+// 96 since 055's Session 2026-10-23 (FR-110, FR-105): `activate`, the monitor's go-to control, and
+// `resourceHideEnded`, its Hide ended processes toggle; 97 with `resourceNetwork`, its Network Order-by choice (FR-113).
+const EXPECTED_ICON_TOKEN_COUNT = 97;
+/** The icon tokens 055's Session 2026-10-23 adds; named, because a count alone is satisfied by a rename. */
+const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded', 'resourceNetwork'] as const;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -199,6 +206,14 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     }
   });
 
+  it('every bundled theme carries the Resource Monitor’s Activate and Hide ended icon tokens (055 FR-110, FR-105)', () => {
+    for (const [name, theme] of Object.entries({ throng: THRONG_THEME, ...ALL_DEFAULT_THEMES })) {
+      for (const token of MONITOR_2026_10_23_ICON_TOKENS) {
+        expect((theme.icons as Record<string, string | undefined>)[token], `${name}.icons.${token}`).toBeTruthy();
+      }
+    }
+  });
+
   it('every bundled theme carries the four 047 Markdown fold icon tokens (research R10)', () => {
     for (const token of FOLD_ICON_TOKENS) {
       expect(THRONG_THEME.icons[token], `THRONG_THEME.icons.${token}`).toBeTruthy();
@@ -214,6 +229,13 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
     expect(THRONG_THEME.icons.warning, 'THRONG_THEME.icons.warning').toBeTruthy();
     for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
       expect(theme.icons.warning, `${name}.icons.warning`).toBeTruthy();
+    }
+  });
+
+  it('every bundled theme carries the help icon token (055 FR-093)', () => {
+    expect(THRONG_THEME.icons.help, 'THRONG_THEME.icons.help').toBeTruthy();
+    for (const [name, theme] of Object.entries(ALL_DEFAULT_THEMES)) {
+      expect(theme.icons.help, `${name}.icons.help`).toBeTruthy();
     }
   });
 

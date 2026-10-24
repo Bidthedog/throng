@@ -8,7 +8,8 @@ import type { ConfirmLevel } from '../config/app-settings.js';
 import { collectPanels } from './invariants.js';
 import type { Tab } from './model.js';
 
-export type DestroyTarget = 'tab' | 'panel' | 'project' | 'subWorkspace';
+/** `killProcesses` (055 FR-063) is the Resource Monitor's Kill Process and Kill All Below. */
+export type DestroyTarget = 'tab' | 'panel' | 'project' | 'subWorkspace' | 'killProcesses';
 
 /** How a destroy action should be confirmed. */
 export interface ConfirmPlan {
@@ -24,6 +25,7 @@ export interface DestroyConfirmSettings {
   destroyTab: ConfirmLevel;
   destroyPanel: ConfirmLevel;
   destroySubWorkspace: ConfirmLevel;
+  killProcesses: ConfirmLevel;
 }
 
 function levelToDialogs(level: ConfirmLevel): 0 | 1 | 2 {
@@ -53,7 +55,9 @@ export function planConfirmations(
         ? settings.destroyTab
         : target === 'subWorkspace'
           ? settings.destroySubWorkspace
-          : settings.destroyProject;
+          : target === 'killProcesses'
+            ? settings.killProcesses
+            : settings.destroyProject;
   const dialogs = levelToDialogs(level);
   return { dialogs, wryFinal: dialogs === 2 };
 }

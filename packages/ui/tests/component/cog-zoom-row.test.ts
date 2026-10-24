@@ -64,8 +64,9 @@ describe('046 iterate round 2 (T154, FR-113) — the Zoom row is gone from the c
     expect(bridge.zoomReset).not.toHaveBeenCalled();
   });
 
-  // 057 FR-082 made it six (Go to Next Marked Panel); FR-106 supersedes that, so it is five again.
-  it('offers exactly the five Application rows, nothing ahead of them', async () => {
+  // 057 FR-082 made it six (Go to Next Marked Panel); FR-106 supersedes that, so it was five again, and
+  // 055 (FR-056) adds Resource Monitor, so it is six.
+  it('offers exactly the six Application rows, nothing ahead of them', async () => {
     await openCog();
     const ids = screen.getAllByRole('menuitem').map((el) => el.getAttribute('data-testid'));
     expect(ids).toEqual([
@@ -73,6 +74,7 @@ describe('046 iterate round 2 (T154, FR-113) — the Zoom row is gone from the c
       'cog-menu-keybindings',
       'cog-menu-themes',
       'cog-menu-logs',
+      'cog-resource-monitor',
       'cog-menu-about',
     ]);
   });

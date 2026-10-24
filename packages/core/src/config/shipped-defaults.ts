@@ -311,7 +311,18 @@ import { setAtPath } from './metadata.js';
 // tokens, `attention`, `attentionFailed` and `goToPanel` (research R11). The additive case again: every
 // payload arrives, no existing value moves. The fourteen attention settings need no bump (044's 7 → 8
 // reasoning: an absent settings key is filled with its shipped default on every read).
-export const SHIPPED_DEFAULTS_VERSION = 24;
+//
+// Bumped by 055 (24 → 25): eight icon tokens for the resource monitor — `resourceMonitor`,
+// `resourceCpu`, `resourceMemory`, `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`,
+// `resourceKillBelow`. The additive case: every payload arrives, no existing value moves.
+//
+// Bumped by 055's second feedback round (25 → 26): one icon token, `help`, the Resource Monitor's "?"
+// button (FR-093). The additive case again.
+//
+// Bumped by 055's Session 2026-10-23 (26 → 27): three icon tokens, `activate` (the monitor's go-to control,
+// FR-110), `resourceHideEnded` (its Hide ended processes toggle, FR-105) and `resourceNetwork` (its Network
+// Order-by choice, FR-113). The additive case again.
+export const SHIPPED_DEFAULTS_VERSION = 27;
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved

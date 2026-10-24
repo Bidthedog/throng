@@ -108,7 +108,7 @@ export default tseslint.config(
   // `windows-shell-detection.ts` runs only in UI main (shell discovery for the picker), never in the
   // daemon, so it is outside the rule rather than excepted call by call.
   {
-    files: ['packages/daemon/src/**/*.ts', 'packages/platform-windows/src/**/*.ts'],
+    files: ['packages/daemon/src/**/*.ts', 'packages/platform-windows/src/**/*.ts', 'packages/ui/src/collector/**/*.ts'],
     ignores: ['packages/platform-windows/src/windows-shell-detection.ts'],
     rules: {
       'no-restricted-imports': [

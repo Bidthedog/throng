@@ -190,7 +190,7 @@ describe('the terminal-tier rule judges a multi-stroke chord by its first stroke
         'focus.workspace', 'focus.nextMarkedPanel', 'tabs.openPicker', 'navigate.quickOpen', 'navigate.gotoLine',
         'search.findInFiles', 'search.replaceInFiles', 'navigate.back', 'navigate.forward',
         'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy',
-        'panel.toggleMaximise',
+        'panel.toggleMaximise', 'view.resourceMonitor', // 055
       ].sort(),
     );
     expect(WINDOW_MULTI_STROKE_ACTIONS).toBe(WINDOW_HANDLED_ACTIONS);

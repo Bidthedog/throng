@@ -37,6 +37,13 @@ export interface PtyHandle {
   readonly pid: number;
 }
 
+/** 055 — one terminal as {@link IPtyHost.rosterEntries} names it. */
+export interface PtyRosterEntry {
+  readonly handlePid: number;
+  readonly osPid: number | null;
+  readonly conhostPid: number | null;
+}
+
 /**
  * A live descendant process of a terminal's shell (025). Carries what command memory needs to
  * decide which command "had control": who its parent is, what it is, and when it started.
@@ -125,6 +132,12 @@ export interface IPtyHost {
    * Optional: a host that cannot ask leaves command memory on direct children.
    */
   listAttachedProcesses?(handles: readonly PtyHandle[]): Promise<Map<number, ChildProcess[]>>;
+  /**
+   * 055 R5 — who each live terminal IS on the machine, from what the host already holds: its shell's
+   * OS pid (`null` until a host whose handles are keys has been told it) and its console host's.
+   * A pure read of memory, never an OS query: the resource monitor asks every tick.
+   */
+  rosterEntries?(): readonly PtyRosterEntry[];
   /**
    * 012 / 053 FR-001 — each terminal's shell working directory, keyed by `handle.pid`, for a host whose handles
    * are not OS pids (the PTY agent's are its own keys), so the daemon cannot read the shells itself. A terminal it

@@ -508,6 +508,8 @@ export interface AppSettings {
     destroyTab: ConfirmLevel;
     destroyPanel: ConfirmLevel;
     destroySubWorkspace: ConfirmLevel;
+    /** 055 FR-063 — Kill Process and Kill All Below in the Resource Monitor. */
+    killProcesses: ConfirmLevel;
     // 046 FR-111 withdrew `unloadProject` (FR-034b): no Unload row asks anything, so the level had
     // nothing to govern. A saved value is an unmodelled key, dropped by the next write (019 FR-023).
   };
@@ -549,6 +551,25 @@ export interface AppSettings {
    * four-row table beside it is a copy nobody keeps in step.
    */
   notifications: NotificationSettings;
+  /** The Resource Monitor (055). Cross-field rules resolve in `resolveResourceMonitorSettings`. */
+  resourceMonitor: ResourceMonitorSettings;
+}
+
+/**
+ * The Resource Monitor's settings (055, research R11). Each range is declared on its descriptor and
+ * enforced by the bounds guard; the rules BETWEEN fields (the history window's minimum interval, a
+ * warning below its critical) are resolved where they are read, by `resolveResourceMonitorSettings`.
+ */
+export interface ResourceMonitorSettings {
+  /** Seconds between captures, for the status bar and the modal alike (FR-004). */
+  captureIntervalSeconds: number;
+  /** Minutes of history a modal session keeps per node (FR-033a). */
+  historyMinutes: number;
+  /** Usage bands (FR-046): % of the machine for CPU, % of installed RAM for memory. */
+  cpuWarningPercent: number;
+  cpuCriticalPercent: number;
+  memoryWarningPercent: number;
+  memoryCriticalPercent: number;
 }
 
 /**
@@ -767,6 +788,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroyTab: 'double',
     destroyPanel: 'double',
     destroySubWorkspace: 'double',
+    killProcesses: 'double',
   },
   projects: { unloadTerminalAction: 'keepRunning' },
   panes: {
@@ -949,6 +971,14 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // between "what the file resolves to when the section is absent" and "what a reset returns you
   // to" could not otherwise be detected by any test either side owns.
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
+  resourceMonitor: {
+    captureIntervalSeconds: 2,
+    historyMinutes: 5,
+    cpuWarningPercent: 50,
+    cpuCriticalPercent: 80,
+    memoryWarningPercent: 50,
+    memoryCriticalPercent: 80,
+  },
 };
 
 /**
@@ -1681,6 +1711,7 @@ export function parseAppSettings(raw: unknown): AppSettings {
         confirmations.destroySubWorkspace,
         d.confirmations.destroySubWorkspace,
       ),
+      killProcesses: confirmLevel(confirmations.killProcesses, d.confirmations.killProcesses),
     },
     projects: projectsSettings(raw.projects, d.projects),
     panes: {
@@ -1711,6 +1742,20 @@ export function parseAppSettings(raw: unknown): AppSettings {
     // absent section, a malformed value and an unknown severity all resolve here rather than
     // costing the user the rest of the file (FR-015).
     notifications: parseNotificationSettings(raw.notifications),
+    resourceMonitor: resourceMonitorSettings(raw.resourceMonitor, d.resourceMonitor),
+  };
+}
+
+/** Tolerant parse; ranges are the bounds guard's, so a number outside one is kept here and clamped there. */
+function resourceMonitorSettings(raw: unknown, d: ResourceMonitorSettings): ResourceMonitorSettings {
+  const v = isRecord(raw) ? raw : {};
+  return {
+    captureIntervalSeconds: wholeNumber(v.captureIntervalSeconds, d.captureIntervalSeconds),
+    historyMinutes: wholeNumber(v.historyMinutes, d.historyMinutes),
+    cpuWarningPercent: wholeNumber(v.cpuWarningPercent, d.cpuWarningPercent),
+    cpuCriticalPercent: wholeNumber(v.cpuCriticalPercent, d.cpuCriticalPercent),
+    memoryWarningPercent: wholeNumber(v.memoryWarningPercent, d.memoryWarningPercent),
+    memoryCriticalPercent: wholeNumber(v.memoryCriticalPercent, d.memoryCriticalPercent),
   };
 }
 
@@ -1745,6 +1790,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     // IS the notice module's shipped table, so a shallow spread would hand every caller the same
     // four severity objects and let one of them edit the defaults for everybody.
     notifications: cloneNotifications(s.notifications),
+    resourceMonitor: { ...s.resourceMonitor },
   };
 }
 

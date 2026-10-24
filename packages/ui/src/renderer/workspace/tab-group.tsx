@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { registerTabDestroy } from './tab-destroy.js';
 import { holdPanelFocus, releasePanelFocus, requestPanelFocus } from './panel-focus.js';
 import { endSplitMode } from './split-mode.js';
 import {
@@ -1208,6 +1209,19 @@ export function TabGroup(): ReactElement {
    * the arithmetic of the strip as it used to be.
    */
   const stepRef = useRef<(direction: 'left' | 'right') => boolean>(() => false);
+
+  /*
+   * 055 FR-063 — every tab this window holds answers `requestTabDestroy(tabId)` with the strip's own
+   * destroy flow (below), so the Resource Monitor's Destroy Tab is that flow and not a copy. The flow is
+   * read through a ref: it closes over the layout and the store of the render that defined it.
+   */
+  const destroyTabRef = useRef<(tabId: string) => void>(() => {});
+  useEffect(() => {
+    const offs = (tabIds === '' ? [] : tabIds.split('\0')).map((id) => registerTabDestroy(id, () => destroyTabRef.current(id)));
+    return () => {
+      for (const off of offs) off();
+    };
+  }, [tabIds]);
   const hold = useHoldRepeat(chevronRepeatDelayMs, (direction) => stepRef.current(direction));
   // 054 FR-072 — the shown tab's maximised panel, if any (read before the early return: it is a hook).
   const maximisedPanelId = useMaximisedPanel(layout ? (layout.activeTabId ?? layout.tabs[0]?.id ?? null) : null);
@@ -1609,6 +1623,7 @@ export function TabGroup(): ReactElement {
     releaseTabEditors(tab);
     ws.closeTab(tabId);
   };
+  destroyTabRef.current = (id) => void confirmCloseTab(id);
 
   const confirmCloseOthers = async (tabId: string): Promise<void> => {
     const others = layout.tabs.filter((t) => t.id !== tabId);

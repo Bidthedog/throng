@@ -81,6 +81,7 @@ import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
 const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
 import { isFocusReport } from './focus-reports.js';
+import { registerTerminalBuffer, unregisterTerminalBuffer } from './buffer-registry.js';
 import { getActivePane } from '../workspace/active-pane.js';
 
 /*
@@ -685,6 +686,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
     const unregisterRefresh = registerTerminalRefresh(panelId, () => {
       term.refresh(0, term.rows - 1);
     });
+    // 055 FR-024b — what the Resource Monitor asks when it estimates this view's buffer.
+    registerTerminalBuffer(panelId, () => ({ lines: term.buffer.normal.length, cols: term.cols }));
 
     // xterm 6.0 binds its own `paste` handler to BOTH the hidden textarea and its parent element
     // (`this.element`); the textarea is a descendant, so a single native paste bubbles through both
@@ -1851,6 +1854,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // It is dropped when the program actually exits, in the `onExit` handler.
       forgetDiagnostics(panelId); // 028 FR-009 — counters are per live view, not a growing ledger
       unregisterTerminalFocus(panelId);
+      unregisterTerminalBuffer(panelId);
       unregisterRefresh();
           term.dispose();
       termRef.current = null;

@@ -41,6 +41,8 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'focus.notice': 'tier1',
   'view.toggleProjects': 'tier1',
   'view.toggleExplorer': 'tier1',
+  // 055 R12 — window-level like the pane toggles; Ctrl+Shift+Alt+R is free in every scope.
+  'view.resourceMonitor': 'tier1',
   'project.next': 'tier1',
   'project.previous': 'tier1',
   'focus.explorer': 'tier1',
@@ -330,6 +332,7 @@ describe('the FR-101 tier guard', () => {
       'view.fullscreen': ['F11'],
       'view.toggleProjects': ['Ctrl+Shift+Alt+J'],
       'view.toggleExplorer': ['Ctrl+Shift+Alt+K'],
+      'view.resourceMonitor': ['Ctrl+Shift+Alt+R'], // 055
       'project.next': ['Ctrl+Shift+Alt+PageDown'],
       'project.previous': ['Ctrl+Shift+Alt+PageUp'],
       'focus.explorer': ['Ctrl+Shift+Alt+M'],

@@ -41,6 +41,8 @@ flowchart LR
     R3["Preferences / About windows"]
     PL["preload bridge<br/>(contextBridge: window.throng)"]
     M["Electron main<br/>(UI main process)"]
+    RC["resource collector<br/>(host Node, forked by main)"]
+    M <-->|"Node IPC channel"| RC
     R1 --- PL
     R2 --- PL
     R3 --- PL
@@ -72,6 +74,8 @@ flowchart LR
 | **Preload** (`packages/ui/src/preload/preload.cts`) | Isolated world of each renderer | The only bridge, exposed as `window.throng`. It also applies the saved theme before first paint. |
 | **Daemon** (`packages/daemon`) | Bundled host `node.exe`, detached | Every terminal PTY, the SQLite store (the only writer), per-project layouts, sub-workspaces, per-document state, the file-operation undo stack and panel names. |
 | **PTY agent** (`packages/daemon/src/pty-agent-entry.ts`) | Host Node, medium integrity | Terminals that must run at the user's own integrity when the daemon itself is elevated. |
+| **Resource Monitor window** (`packages/ui/src/main/resource-monitor-window.ts`) | A `BrowserWindow` parented to the main window, created on demand and destroyed on close | Shows the collector's detail frames. Built like Preferences and sharing its layering (above throng's windows only while throng has focus); main keeps its place and view between openings, and routes its Unload and Destroy actions to the window that owns the project, tab or panel. |
+| **Resource collector** (`packages/ui/src/collector`) | Bundled host `node.exe`, forked by main; exits when main disconnects | The Resource Monitor's measurements, so measuring throng costs none of throng's own event loops. Each tick it asks main for a **roster** — the daemon's `resources.roster` (which shells, console hosts, lock helpers and agent are throng's, read from memory with no OS query) merged with main's window and GPU processes — takes one native process-table reading through `IProcessMetrics` (`WindowsProcessMetrics`, plus PDH GPU counters), attributes it into the component → project → tab → panel → process hierarchy (`core/src/resources`), and sends main a summary for the status bar and, while a monitor is open, the whole hierarchy. Kills run here, authorised against that hierarchy and checked by process identity. Network figures need elevation: on the monitor's first tick an elevated collector starts a real-time ETW session (`throng-net-<pid>`) on Microsoft-Windows-Kernel-Network, consumed on a worker thread because `ProcessTrace` blocks; the session stops when the collector exits, and one left by a collector that crashed is stopped by the next to start. Unelevated, every network figure is "-". |
 | **Shells** | PowerShell, Git Bash, CMD, custom flavours | The user's processes, each on its own ConPTY. |
 | **Drag ghost** (`ghost-window.ts`) | A frameless, click-through `BrowserWindow` | The cursor-following ghost of a dragged tab or panel, which must paint outside the app's own window. |
 

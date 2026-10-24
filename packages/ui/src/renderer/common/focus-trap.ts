@@ -37,7 +37,7 @@ const FOCUSABLE_SELECTOR = [
 ].join(',');
 
 /** What counts as "another dialog" for the stand-aside rule in the `focusin` guard below. */
-const DIALOG_SELECTOR = '[role="dialog"],[aria-modal="true"]';
+const DIALOG_SELECTOR = '[role="dialog"],[aria-modal="true"],[role="menu"]';
 
 export interface FocusTrap<T extends HTMLElement> {
   /** Attach to the dialog element. It needs `tabIndex={-1}` so it can hold focus as a last resort. */
@@ -107,6 +107,10 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(active: boolea
        * by then detached, so the restore is skipped — nothing moves focus again and the accidental
        * repair disappears. Measured: `Ctrl+Shift+T`, `Ctrl+Alt+T`, `Ctrl+G` left `document.
        * activeElement` as `BODY`, in whichever order the three were pressed.
+       *
+       * A context menu (`role="menu"`) is the same case: the provider renders it beside the application,
+       * not inside the dialog that was right-clicked (055 FR-068), so without this the guard took the
+       * keyboard back from a menu the user was arrowing through and Enter acted on the row beneath it.
        *
        * So a dialog stands aside for a dialog. Only SIBLING dialogs are affected — a modal opened
        * INSIDE this one is caught by the `root.contains` check above and never reaches here.
