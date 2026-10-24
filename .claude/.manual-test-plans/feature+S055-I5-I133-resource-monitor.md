@@ -204,7 +204,7 @@ Paths: `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/re
 
 ### Negative cases
 - UI, Daemon and Helpers rows offer no Activate, in the header or their menu.
-- A tab of a project that is not active, which no window holds, shows Activate disabled with its reason on hover.
+- Activate on a tab of a project that is not active is not disabled: throng switches to that project first, then shows the tab.
 - Nothing in the right column drills further or selects anything.
 
 ## MT-13: The monitor's layout: full-width header and movable divider
