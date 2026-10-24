@@ -6,8 +6,8 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 |---|---|---|---|---|---|
 | MT-01 | Click a notification to reach its panel | signed off | 1575753e50ca | 2026-10-24 | |
 | MT-02 | Flag a panel by hand | signed off | 1575753e50ca | 2026-10-24 | |
-| MT-03 | Project list: counts, pills and paler minimised categories | needs retest | | | failed: I don't see a number for the count of flags within a tab or project — I can just see the flag |
-| MT-04 | Tab chips: numbered flags and panel-count pills | needs retest | | | failed: don't see the number on the flag |
+| MT-03 | Project list: counts, pills and paler minimised categories | untested | | | steps rewritten for round 13 (numbered circle); failed at 63bd9532: I don't see a number for the count of flags within a tab or project — I can just see the flag |
+| MT-04 | Tab chips: numbered flags and panel-count pills | untested | | | steps rewritten for round 13 (numbered circle); failed at 63bd9532: don't see the number on the flag |
 | MT-05 | A marked panel announces once, whatever marked it | signed off | 1575753e50ca | 2026-10-24 | |
 
 A delayed bell, used below: in a PowerShell terminal, `Start-Sleep 15; Write-Host "`a"`.
@@ -46,32 +46,37 @@ Paths: `packages/core/src/attention/**`, `packages/ui/src/main/attention-service
 
 ## MT-03: Project list: counts, pills and paler minimised categories
 
-Covers: FR-129, FR-130, FR-131, FR-133, 046 FR-051a, #523
+Covers: FR-129, FR-130, FR-131, FR-133, FR-135, FR-136, FR-137, FR-114, FR-107, FR-014, 046 FR-051a, #523
 Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
 
 ### Steps
 1. Have two categories, one minimised and one expanded. The minimised header is visibly paler than the expanded one. Switch to a light theme, then a dark one: still paler in both.
 2. Each category header shows a pill with its total number of projects. No "1 of 2" text appears anywhere, minimised or not.
-3. Flag three panels in project A by hand. A's row shows a blinking flag reading 3, where the colour dot was. Clear two (focus each in turn): it reads 1; clear the last: the colour dot is back.
-4. Put A (two flagged panels) and B (one) in the minimised category. Its header's flag reads 3.
-5. With the default UI scale, the number inside each flag is readable without zooming.
+3. Every project's colour dot is a little larger than before.
+4. Flag three panels in project A by hand. Where A's colour dot was, a blinking solid circle in the theme's attention colour, the same size as the dot, reads a clear 3. No flag is drawn. Clear two (focus each in turn): it reads 1; clear the last: the colour dot is back.
+5. Select project A (its row filled with its colour) while it is marked: the same attention-coloured circle and number, still readable.
+6. Put A (two flagged panels) and B (one) in the minimised category. Its header shows the same circle reading 3.
+7. In a light theme and a dark theme, at the default UI scale, every circle's number reads clearly against its fill.
 
 ### Negative cases
-- As a flag appears, changes number or goes, no row changes height and no project or category name moves sideways.
-- One Failed mark among them turns the numbered flag to the Failed style.
+- As a circle appears, changes number or goes, no row changes height and no project or category name moves sideways.
+- A failed terminal among them (run `exit 1` in one) leaves the circle looking exactly as it does for a bell.
 
 ## MT-04: Tab chips: numbered flags and panel-count pills
 
-Covers: FR-131, FR-132, FR-133, #523
-Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
+Covers: FR-131, FR-132, FR-133, FR-135, FR-136, FR-138, FR-139, #523
+Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
 
 ### Steps
 1. Make a tab with three panels and a tab with one. The first chip shows a pill reading 3; the second shows no pill.
 2. Split the single-panel tab into two. Its chip now shows a pill reading 2.
-3. Flag two panels in the three-panel tab by hand and switch to the other tab. The first chip shows a blinking flag reading 2.
+3. Flag two panels in the three-panel tab by hand and switch to the other tab. The first chip shows the same blinking circle a project row does, reading a clear 2. No flag is drawn.
+4. Look at a flagged panel's header: the same circle, blinking, with no number.
+5. Make an editor panel unsaved and flag it: its header shows the unsaved dot and the circle, and the two are plainly different.
+6. Open the cog menu and a panel's right-click menu: *Go to Next Marked Panel* and *Flag* are there, without a flag glyph.
 
 ### Negative cases
-- As the flag appears, changes or clears, the chip's width does not change and neighbouring chips do not move.
+- As the circle appears, changes or clears, the chip's width does not change and neighbouring chips do not move.
 
 ## MT-05: A marked panel announces once, whatever marked it
 
