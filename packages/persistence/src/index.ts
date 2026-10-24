@@ -12,3 +12,4 @@ export { SubWorkspaceRepository } from './subworkspace-repository.js';
 export { DocumentStateRepository } from './document-state-repository.js';
 export { FileOpUndoRepository } from './fileop-undo-repository.js';
 export type { DocumentState } from './document-state-repository.js';
+export { AttentionFlagRepository } from './attention-flag-repository.js';

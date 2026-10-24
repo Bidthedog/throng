@@ -32,8 +32,8 @@ afterEach(() => {
 });
 
 describe('the schema version and the migration chain agree', () => {
-  it('LATEST_VERSION is 10 — 046 iterate round 1 adds the category position migration', () => {
-    expect(LATEST_VERSION).toBe(10);
+  it('LATEST_VERSION is 11 — 057 round 12 adds the manual attention flag table', () => {
+    expect(LATEST_VERSION).toBe(11);
   });
 
   it('a freshly migrated store actually REACHES LATEST_VERSION', () => {
