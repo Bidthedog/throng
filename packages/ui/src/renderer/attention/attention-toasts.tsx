@@ -1,5 +1,4 @@
 import { useEffect, useRef, type ReactElement } from 'react';
-import { IconButton } from '../common/icon-button.js';
 import { useNotify, type NoticeInput } from '../common/notification.js';
 import { useAppSettings } from '../config/config-store.js';
 import type { AttentionToastEvent } from '../global.js';
@@ -22,8 +21,8 @@ import type { AttentionToastEvent } from '../global.js';
  * Severity follows the kind — `info` for Attention, `error` for Failed (FR-037) — for the colour, icon and
  * log level. How long the card stays is the user's `notifications.attention`, for both kinds (FR-111).
  *
- * The link is a themed ICON button with a hover title, one of the card's own controls beside Copy and
- * Dismiss and drawn as they are (FR-122), and it is in the tab order (030 FR-032b). Dismiss stays (030 FR-060).
+ * The WHOLE CARD is the link (FR-124): a click anywhere but Copy and Dismiss goes to the panel (FR-034's
+ * navigation), and the card carries no go-to control of its own. Dismiss stays (030 FR-060).
  */
 export function AttentionToasts(): ReactElement | null {
   const { notify, update, dismiss } = useNotify();
@@ -54,15 +53,7 @@ export function AttentionToasts(): ReactElement | null {
         message: e.reason ?? (failed ? 'Failed' : 'Needs attention'),
         testId: `attention-toast-${e.panelId}`,
         instanceKey: `attention:${e.panelId}`,
-        controls: (
-          <IconButton
-            token="goToPanel"
-            className="notice__control"
-            testId={`attention-toast-goto-${e.panelId}`}
-            title="Go to panel"
-            onClick={() => attention.goTo(e.panelId)}
-          />
-        ),
+        onActivate: () => attention.goTo(e.panelId),
         onDismiss: () => {
           cards.delete(e.panelId);
         },

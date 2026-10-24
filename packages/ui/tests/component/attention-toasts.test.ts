@@ -66,33 +66,43 @@ describe('raise', () => {
     expect(screen.getAllByTestId(/^attention-toast-p\d$/)).toHaveLength(2);
   });
 
-  it('offers a go-to-panel control that is an icon with a title, in the tab order (030 FR-032b)', async () => {
-    raise('p1');
-    const go = within(card('p1')).getByTestId('attention-toast-goto-p1');
-    expect(go).toHaveAttribute('title', expect.stringMatching(/go to/i));
-    expect(go.tabIndex).toBeGreaterThanOrEqual(0);
+  // FR-124 — the card IS the link: a click anywhere on it goes to the panel, Copy and Dismiss do not,
+  // and there is no go-to control of its own.
+  it('goes to the panel on a click on the card body (FR-124)', async () => {
+    raise('p1', { title: 'Build' });
     const user = userEvent.setup();
-    await user.tab();
-    // Reachable by keyboard: tabbing from the document start lands on a control inside the notices.
-    expect(document.activeElement).not.toBe(document.body);
-    go.focus();
-    await user.keyboard('{Enter}');
+    await user.click(within(card('p1')).getByTestId('notice-body'));
     expect(goTo).toHaveBeenCalledWith('p1');
+    await user.click(within(card('p1')).getByText('Bell'));
+    expect(goTo).toHaveBeenCalledTimes(2);
   });
 
-  // FR-122 — the go-to control is one of the card's own controls, beside Copy and Dismiss and drawn as
-  // they are, not a button in the card's body.
-  it('puts go-to-panel beside Copy and Dismiss, styled as they are (FR-122)', () => {
+  it('goes to the right panel when two toasts are showing (FR-124)', async () => {
     raise('p1');
-    const go = within(card('p1')).getByTestId('attention-toast-goto-p1');
+    raise('p2');
+    await userEvent.setup().click(within(card('p2')).getByTestId('notice-body'));
+    expect(goTo).toHaveBeenCalledTimes(1);
+    expect(goTo).toHaveBeenCalledWith('p2');
+  });
+
+  it('Copy and Dismiss do not navigate (FR-124)', async () => {
+    raise('p1');
+    Reflect.set(window.throng, 'clipboard', { write: vi.fn(() => Promise.resolve()) });
+    const user = userEvent.setup();
+    await user.click(within(card('p1')).getByTestId('attention-toast-p1-copy'));
+    expect(goTo).not.toHaveBeenCalled();
+    await user.click(within(card('p1')).getByTestId('attention-toast-p1-dismiss'));
+    expect(goTo).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('attention-toast-p1')).toBeNull();
+  });
+
+  it('carries no go-to control, and keeps Copy then Dismiss where they were (FR-124)', () => {
+    raise('p1');
+    expect(screen.queryByTestId('attention-toast-goto-p1')).toBeNull();
     const copy = within(card('p1')).getByTestId('attention-toast-p1-copy');
     const dismiss = within(card('p1')).getByTestId('attention-toast-p1-dismiss');
-    expect(go.parentElement).toBe(copy.parentElement);
-    expect(within(card('p1')).getByTestId('notice-body')).not.toContainElement(go);
-    expect([...card('p1').children]).toEqual(expect.arrayContaining([go, copy, dismiss]));
-    expect(go.nextElementSibling).toBe(copy);
     expect(copy.nextElementSibling).toBe(dismiss);
-    expect(go.className).toContain('notice__control');
+    expect(card('p1').lastElementChild).toBe(dismiss);
   });
 
   it('keeps Dismiss (030 FR-060)', () => {

@@ -1143,7 +1143,16 @@ export function NotificationProvider({ children }: { children: ReactNode }): Rea
         {notices.map((n) => (
           <div
             key={n.id}
-            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}`}
+            className={`notice notice--${n.severity}${pulsing.includes(n.id) ? ' notice--pulsing' : ''}${n.onActivate ? ' notice--activatable' : ''}`}
+            onClick={
+              n.onActivate
+                ? (e) => {
+                    // A press on a button inside the card (Copy, Dismiss) is that button's, never the card's.
+                    if ((e.target as Element).closest('button')) return;
+                    n.onActivate?.();
+                  }
+                : undefined
+            }
             data-testid={n.testId ?? `notice-${n.severity}`}
             /* 041 FR-008aa — the pulse as MARKUP, not only as a class the stylesheet reads.
                jsdom applies no stylesheet, so a pulse expressed only in CSS could be asserted
