@@ -3,7 +3,11 @@ import {
   badgeSummary,
   describeMark,
   notificationText,
+  categoryCount,
   categoryKind,
+  holderCount,
+  markCountLabel,
+  projectCount,
   holderKind,
   holderLabel,
   marksForPanels,
@@ -140,5 +144,26 @@ describe('describeMark (FR-102)', () => {
   it('names the command an exit ended', () => {
     const exited = mark('p', 'A', { kind: 'failed', reason: { signal: 'processExited', detail: '1' }, doing: 'npm run build' });
     expect(describeMark(exited)).toBe("Process exited '1' — npm run build");
+  });
+});
+
+describe('holder counts (057 round 12, FR-131)', () => {
+  const marks = [mark('a', 'P'), mark('b', 'P'), mark('c', 'Q'), mark('d', 'R')];
+
+  it('counts the marked panels beneath each holder', () => {
+    expect(holderCount(marks, ['a', 'b', 'x'])).toBe(2);
+    expect(projectCount(marks, 'P')).toBe(2);
+    expect(categoryCount(marks, ['P', 'Q'])).toBe(3);
+    expect(categoryCount(marks, ['Z'])).toBe(0);
+  });
+
+  it('labels a count, nine and above nine as 9+', () => {
+    expect(markCountLabel(1)).toBe('1');
+    expect(markCountLabel(9)).toBe('9');
+    expect(markCountLabel(10)).toBe('9+');
+  });
+
+  it('names the Flag reason Flagged (FR-125)', () => {
+    expect(reasonLabel({ signal: 'flagged', detail: null })).toBe('Flagged');
   });
 });
