@@ -3852,7 +3852,8 @@ textarea,
   display: flex;
   align-items: center;
   padding: 0 2px;
-  background: var(--throng-colour-surface);
+  /* The column header's own fill, so the marker hides the headers under it without a token of its own. */
+  background: inherit;
   color: var(--throng-colour-accent);
   cursor: help;
 }

@@ -48,6 +48,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
@@ -585,7 +586,7 @@ export function Breakdown(): ReactElement | null {
       onKeyDown={keys.onKeyDown}
       ref={keys.ref}
       {...pointer.bind}
-      style={{ ['--breakdown-columns' as string]: fit.template }}
+      style={{ '--breakdown-columns': fit.template } as CSSProperties}
       // Empty space is not a node: a click on it clears the selection (FR-088).
       onClick={(e) => {
         if (!(e.target as Element).closest(CLICKABLE)) setSelection(null);

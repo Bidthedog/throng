@@ -18,7 +18,7 @@
  * the shell puts last). The DOM is in that order. Each region carries `data-region` so a test can say which
  * region Tab is in without naming its controls.
  */
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { Breakdown } from './breakdown.js';
 import { ColumnDivider } from './column-divider.js';
 import { DetailPane } from './detail-pane.js';
@@ -52,7 +52,7 @@ export default function MonitorBody(): ReactElement {
         <div
           className="monitor-body__columns"
           data-testid="monitor-body-columns"
-          style={{ ['--monitor-split-left' as string]: `${left}fr`, ['--monitor-split-right' as string]: `${100 - left}fr` }}
+          style={{ '--monitor-split-left': `${left}fr`, '--monitor-split-right': `${100 - left}fr` } as CSSProperties}
         >
           <div className="monitor-body__breakdown" data-region="breakdown" data-column="left">
             <Breakdown />
