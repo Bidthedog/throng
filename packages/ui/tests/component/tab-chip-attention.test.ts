@@ -12,7 +12,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { addTab, createDefaultLayout, DEFAULT_APP_SETTINGS, type WorkspaceLayout } from '@throng/core';
+import { addPanel, addTab, createDefaultLayout, DEFAULT_APP_SETTINGS, type WorkspaceLayout } from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
 import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
 import { WorkspaceClient } from '../../src/renderer/state/workspace-client.js';
@@ -36,18 +36,19 @@ const PROJECT = 'proj-tabs';
 const TAB_WIDTH = 100;
 const VIEWPORT = 250;
 
-function layoutOf(tabCount: number): WorkspaceLayout {
+function layoutOf(tabCount: number, extra: Array<[string, string]> = []): WorkspaceLayout {
   let layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
   for (let i = 2; i <= tabCount; i += 1) layout = addTab(layout, { tab: `t${i}`, panel: `p${i}` });
+  for (const [tabId, panelId] of extra) layout = addPanel(layout, tabId, panelId);
   return { ...layout, activeTabId: 't1' };
 }
 
-function mount(tabCount: number): void {
+function mount(tabCount: number, extra: Array<[string, string]> = []): void {
   Reflect.set(window, 'throng', {
     panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn(), notifyTyped: vi.fn(), publishIdentities: vi.fn() },
     config: { get: () => Promise.resolve({ settings: DEFAULT_APP_SETTINGS }), onChange: () => () => {} },
   });
-  const layout = layoutOf(tabCount);
+  const layout = layoutOf(tabCount, extra);
   const bridge: ThrongBridge = {
     invoke<T>(method: string, params?: unknown): Promise<T> {
       switch (method) {
@@ -153,6 +154,44 @@ describe('a tab chip (FR-010)', () => {
     await ready();
     act(() => setAttentionMarks([makeMark('p2', PROJECT, { kind: 'failed', signal: 'processExited', detail: '1' })]));
     expect(screen.getByTestId('attention-tab-t2')).toHaveAttribute('data-kind', 'failed');
+  });
+
+  it('shows the number of marked panels in the tab (FR-131)', async () => {
+    mount(2, [['t1', 'p1b'], ['t1', 'p1c']]);
+    await ready();
+    act(() => setAttentionMarks([makeMark('p1', PROJECT), makeMark('p1c', PROJECT, { raisedAt: 2 })]));
+    expect(screen.getByTestId('attention-tab-t1').querySelector('.throng-attention-mark__count')).toHaveTextContent('2');
+  });
+
+  it('reserves the flag’s slot while unmarked, so marking never moves the label (FR-133)', async () => {
+    mount(2);
+    await ready();
+    const chip = screen.getByTestId('tab-t2');
+    const before = [...chip.children].map((c) => c.className);
+    expect(chip.querySelector('.throng-attention-slot')).not.toBeNull();
+    act(() => setAttentionMarks([makeMark('p2', PROJECT)]));
+    expect(chip.querySelector('.throng-attention-slot')).toBeNull();
+    // Same number of children in the same order: the mark took the slot's place.
+    expect(chip.children.length).toBe(before.length);
+  });
+});
+
+describe('a tab chip’s panel-count pill (FR-132, FR-133)', () => {
+  it('shows the count for a tab holding two or more panels', async () => {
+    mount(2, [['t2', 'p2b'], ['t2', 'p2c']]);
+    await ready();
+    const pill = screen.getByTestId('tab-count-t2');
+    expect(pill).toHaveTextContent('3');
+    expect(pill).not.toHaveClass('tab-chip__count--empty');
+  });
+
+  it('shows none for a tab holding one panel, but keeps its place in the chip', async () => {
+    mount(2);
+    await ready();
+    const pill = screen.getByTestId('tab-count-t1');
+    expect(pill).toHaveTextContent('');
+    expect(pill).toHaveClass('tab-chip__count--empty');
+    expect(pill).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('clears with the mark', async () => {

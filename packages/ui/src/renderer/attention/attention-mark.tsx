@@ -1,4 +1,5 @@
 import { type HTMLAttributes, type ReactElement, type Ref } from 'react';
+import { markCountLabel } from '@throng/core';
 import { Icon } from '../common/icon.js';
 import type { HolderMark } from './use-attention.js';
 
@@ -25,11 +26,19 @@ export function AttentionMark({
   mark,
   testId,
   blockAncestorTitle = false,
+  showCount = false,
   ref,
   ...rest
 }: {
   mark: HolderMark;
   testId: string;
+  /**
+   * Draw the number of marked panels beneath the holder inside the flag (FR-131), `9+` above nine. A
+   * project row, a tab chip and a category header ask for it; a panel header's mark carries none. The
+   * digits are laid over the icon (absolutely positioned, so they take no space: FR-133) and are
+   * hidden from assistive tech, the accessible name already listing every panel.
+   */
+  showCount?: boolean;
   /**
    * Render an EMPTY `title`, which stops an ancestor's native tooltip applying over this mark. A project
    * row's mark sits inside the switch button ("Double-click to rename"), and that tooltip would show on
@@ -48,8 +57,14 @@ export function AttentionMark({
       role="img"
       title={blockAncestorTitle ? '' : undefined}
       aria-label={mark.label}
+      data-numbered={showCount ? 'true' : undefined}
     >
       <Icon token={mark.kind === 'failed' ? 'attentionFailed' : 'attention'} />
+      {showCount ? (
+        <span className="throng-attention-mark__count" aria-hidden="true">
+          {markCountLabel(mark.count)}
+        </span>
+      ) : null}
     </span>
   );
 }
