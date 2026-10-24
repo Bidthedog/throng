@@ -25,6 +25,29 @@ export async function openMonitorWindow(
   return monitor;
 }
 
+/**
+ * Drill from wherever the monitor is to the list of projects (055 FR-103): the top level lists the four
+ * components only, so the projects are one double-click into Projects. The view is held between openings
+ * (FR-087), so it first goes back to the top through the header's breadcrumb — a click on the level
+ * already shown does nothing, so this is safe from anywhere.
+ */
+export async function openProjectsList(monitor: Page): Promise<void> {
+  await monitor.getByTestId('breadcrumb-segment-root').click();
+  await expect(monitor.getByTestId('breakdown-section-components')).toBeVisible();
+  await monitor.getByTestId('breakdown-row-c:projects').dblclick();
+  await expect(monitor.getByTestId('breakdown-section-children')).toBeVisible();
+}
+
+/**
+ * Set Hide ended (FR-105) — on by default, so a spec that asserts an ended row greyed in place turns it
+ * off first. Reads the toggle's state rather than clicking blind: the view is held between openings.
+ */
+export async function setHideEnded(monitor: Page, on: boolean): Promise<void> {
+  const toggle = monitor.getByTestId('monitor-hide-ended');
+  if ((await toggle.getAttribute('aria-pressed')) !== String(on)) await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', String(on));
+}
+
 /** The monitor window if one is open right now, else `null`. */
 export async function monitorWindowPage(app: ElectronApplication): Promise<Page | null> {
   for (const page of app.windows()) {

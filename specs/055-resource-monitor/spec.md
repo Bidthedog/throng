@@ -1151,6 +1151,7 @@ reopens from it.
   average.
 - **SC-005**: A user can find the process responsible for a CPU spike, starting from the status bar, in
   under 20 seconds and in no more than four clicks.
+  *Amended by FR-103 (Session 2026-10-23): with projects reached by drilling into Projects, the bound is five clicks (status bar, Projects, project, tab, panel) (derived — the user chose the drill-down over the separate list; not confirmed by the user).*
 - **SC-006**: At every level of the hierarchy, a node's rolled-up figure equals its own figure plus the
   sum of its children's, to within rounding.
 - **SC-007**: A process killed from the monitor is shown as ended, and out of every live total, within

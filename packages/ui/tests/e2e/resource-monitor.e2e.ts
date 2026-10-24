@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
 import type { OpenApp } from './harness.js';
-import { closeMonitorWindow, monitorWindowPage, openMonitorWindow } from './helpers/monitor-window.js';
+import { closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList } from './helpers/monitor-window.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
 
 /**
@@ -108,7 +108,7 @@ function rollUpMismatches(node: Node, out: string[] = []): string[] {
   return out;
 }
 
-test('Ctrl+Shift+Alt+R opens the monitor window; Projects to the busy process is four clicks from the status bar, every level adds up, and Esc closes it', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+test('Ctrl+Shift+Alt+R opens the monitor window on the components alone; Projects to the busy process is five clicks from the status bar, every level adds up, and Esc closes it', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const { app, win } = h;
 
   // A process to find: an idle node under the terminal's shell.
@@ -123,17 +123,20 @@ test('Ctrl+Shift+Alt+R opens the monitor window; Projects to the busy process is
   // SC-005: click 1 — the status-bar item.
   const mon = await openMonitorWindow(app, () => win.getByTestId('status-resources').click());
 
-  // First view carries both halves (FR-020b): throng's own components and the user's projects.
-  await expect(mon.getByTestId('breakdown-section-components')).toBeVisible();
-  const projects = mon.getByTestId('breakdown-section-projects');
-  await expect(projects).toBeVisible();
+  // The first view is the four components only (FR-103); no project is listed at the top.
+  const components = mon.getByTestId('breakdown-section-components');
+  await expect(components).toBeVisible();
+  await expect(components.locator('[role="treeitem"][data-testid^="breakdown-row-c:"]')).toHaveCount(4);
+  await expect(mon.locator('[data-testid^="breakdown-row-p:"]')).toHaveCount(0);
 
-  // Clicks 2, 3 and 4 (double-clicks, FR-096 — a row has no drill-down button): the project, its tab, its panel.
-  await projects.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+  // Clicks 2 to 5 (double-clicks, FR-096 — a row has no drill-down button): Projects, the project, its
+  // tab, its panel. FR-103 put the projects one level down, so this is one more than SC-005's four.
+  await mon.getByTestId('breakdown-row-c:projects').dblclick();
+  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
   await mon.locator('[role="treeitem"][data-testid^="breakdown-row-t:"]').first().dblclick();
   await mon.locator('[role="treeitem"][data-testid^="breakdown-row-n:"]').first().dblclick();
 
-  // Four clicks in, the panel's processes are listed: the shell and the node under it.
+  // Five clicks in, the panel's processes are listed: the shell and the node under it.
   const nodeRow = mon.locator('[data-testid^="breakdown-row-x:"]', { hasText: 'node.exe' }).first();
   await expect(nodeRow).toBeVisible({ timeout: 15_000 });
   await expect(mon.getByTestId('breadcrumb')).toContainText('Monitor');
@@ -220,7 +223,9 @@ const median = (xs: number[]): number => {
   return s[Math.floor(s.length / 2)] ?? Number.NaN;
 };
 
-test('having the monitor open does not slow typing: terminal echo is within 5% of its median with detail collection on, and no keystroke in the monitor waits over 50 ms', { tag: ['@extended', '@terminal', '@reserve:input'] }, async (_args, testInfo) => {
+// Playwright rejects a first argument that is not an object pattern, at collection: the file would not load.
+// eslint-disable-next-line no-empty-pattern
+test('having the monitor open does not slow typing: terminal echo is within 5% of its median with detail collection on, and no keystroke in the monitor waits over 50 ms', { tag: ['@extended', '@terminal', '@reserve:input'] }, async ({}, testInfo) => {
   const { win } = h;
   test.setTimeout(120_000);
 
@@ -338,6 +343,51 @@ test('the monitor is a window beside throng: the terminal takes typing while it 
   await expect(reopenedPage.getByTestId('monitor-window')).toHaveAttribute('data-state', 'ready', { timeout: 15_000 });
   const reopened = await monitorOsState(app);
   expect(reopened?.bounds).toEqual(moved);
+
+  await closeMonitorWindow(app);
+});
+
+/**
+ * Activate (FR-110, US2 scenario 30). E2E because the claim is about real windows: the window holding the
+ * panel comes FORWARD, its tab is selected, the panel's terminal has the KEYBOARD — and the monitor, a
+ * separate always-on-top window, is still open above it. The route's payload, the receiving window's
+ * switch-then-select and the menu row are pinned below (`resources-ipc.contract.test.ts`,
+ * `action-route.test.ts`, `node-actions.test.ts`); none of them can see a window come forward or focus land.
+ */
+test('Activate on a panel in another tab brings its window forward with that panel focused, and the monitor stays open', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  const { app, win } = h;
+  test.setTimeout(120_000);
+
+  // Put the terminal's tab behind a new one, so going to its panel must select the tab, not only focus it.
+  const terminalTab = (await win.locator('.tab-chip--active').getAttribute('data-testid'))!.replace(/^tab-/, '');
+  await win.getByTestId('tab-add').click();
+  await expect(win.getByTestId(`tab-${terminalTab}`)).not.toHaveClass(/tab-chip--active/);
+  await expect(term(win)).toBeHidden();
+
+  const mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  // The view is held between openings (FR-087): an earlier test left text in the filter.
+  await mon.getByTestId('monitor-filter').fill('');
+  await openProjectsList(mon);
+  await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();
+  await mon.getByTestId(`breakdown-row-t:${terminalTab}`).dblclick();
+  await mon.getByTestId(`breakdown-row-n:${panelId}`).click();
+  await expect(mon.getByTestId('detail-action-activate')).toHaveAttribute('title', 'Go to panel');
+
+  await mon.getByTestId('detail-action-activate').click();
+
+  // The tab is selected and the terminal has the keyboard, in the main window — now the focused one.
+  await expect(win.getByTestId(`tab-${terminalTab}`)).toHaveClass(/tab-chip--active/, { timeout: 10_000 });
+  await expect(term(win)).toBeVisible();
+  await expect(term(win).locator('textarea')).toBeFocused({ timeout: 10_000 });
+  await expect
+    .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.webContents.getURL().includes('monitor') ?? null), {
+      timeout: 10_000,
+      message: 'the main window was not brought forward',
+    })
+    .toBe(false);
+  // The monitor is still open, and still above throng (FR-083).
+  expect(await monitorWindowPage(app), 'Activate closed the monitor').not.toBeNull();
+  await expect.poll(async () => (await monitorOsState(app))?.onTop, { timeout: 10_000 }).toBe(true);
 
   await closeMonitorWindow(app);
 });
