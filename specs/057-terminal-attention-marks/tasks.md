@@ -321,7 +321,7 @@ From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Rou
 
 ### Defect
 
-- [ ] T117 [US3] [CORE] Defect #524 against FR-112 / FR-134: test first in `packages/ui/tests/unit/attention-service.test.ts` — a mark restored from the ledger, then raised again while unattended, raises no toast and no `notifier.show`; same for a startup-command mark (red today), and for a terminal raise on a manually flagged panel — then announce only when the raise created the mark and drop the `announced` set, in `packages/ui/src/main/attention-service.ts` (R21)
+- [x] T117 [US3] [CORE] Defect #524 against FR-112 / FR-134: test first in `packages/ui/tests/unit/attention-service.test.ts` — a mark restored from the ledger, then raised again while unattended, raises no toast and no `notifier.show`; same for a startup-command mark (red today), and for a terminal raise on a manually flagged panel — then announce only when the raise created the mark and drop the `announced` set, in `packages/ui/src/main/attention-service.ts` (R21)
 
 ### Core and main
 

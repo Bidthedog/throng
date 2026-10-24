@@ -304,6 +304,15 @@ describe('AttentionService — restore and sync (T031)', () => {
     expect(r.notifier.shown).toHaveLength(0);
   });
 
+  it('a signal on a restored mark that still shows announces nothing (FR-134; #524)', async () => {
+    const r = rig([{ ...entry, panelId: 'p1' }]);
+    await r.service.onDaemonConnected();
+    r.service.onSignal(signal({ signal: 'bell' }));
+    expect(r.toasts()).toHaveLength(0);
+    expect(r.notifier.shown).toHaveLength(0);
+    expect(lastMarks(r).map((m: any) => m.reason.signal)).toEqual(['bell']);
+  });
+
   it('flush() sends a pending sync at once instead of waiting out the debounce (FR-091 on quit)', async () => {
     const r = rig();
     r.service.onSignal(signal({ panelId: 'p1' }));
@@ -624,9 +633,18 @@ describe('AttentionService — startup commands (T054)', () => {
     expect(r.notifier.shown).toHaveLength(0);
   });
 
-  it('a later signal on the same panel notifies as usual', () => {
+  it('a later signal while the startup mark still shows announces nothing (FR-134, superseding FR-038a)', () => {
     const r = rig();
     r.service.onSignal(signal({ signal: 'commandFinished', startup: true }));
+    r.service.onSignal(signal({ signal: 'bell' }));
+    expect(r.toasts()).toHaveLength(0);
+    expect(r.notifier.shown).toHaveLength(0);
+  });
+
+  it('once the startup mark has cleared, the next signal announces (FR-134)', () => {
+    const r = rig();
+    r.service.onSignal(signal({ signal: 'commandFinished', startup: true }));
+    r.service.onPanelDestroyed('p1');
     r.service.onSignal(signal({ signal: 'bell' }));
     expect(r.toasts().map((t) => t.payload.op)).toEqual(['raise']);
     expect(r.notifier.shown).toHaveLength(1);

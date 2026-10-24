@@ -84,8 +84,6 @@ export class AttentionService {
   private readonly reports = new Map<number, FocusReport>();
   /** Which window holds each panel's toast, so an update and a dismiss reach the same one. */
   private readonly toastWindow = new Map<string, number>();
-  /** FR-112: panels whose current mark has been announced; a later raise on one only updates. */
-  private readonly announced = new Set<string>();
   private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private badgeSeq = 0;
@@ -128,13 +126,15 @@ export class AttentionService {
     if (signal.signal === 'outputQuiet' && activityAt !== undefined && !this.unattendedSince(signal.panelId, activityAt)) {
       return;
     }
+    // FR-134: only the raise that creates a mark announces it; one on a mark already showing — announced,
+    // restored (FR-038) or a startup command's (FR-038a) — only refreshes a toast still up (FR-112).
+    const wasMarked = this.model.marks().some((m) => m.panelId === signal.panelId);
     if (!this.model.raise(signal)) return;
-    // FR-038a: a startup command's completion marks the panel but does not announce it.
-    if (signal.startup) return;
     const mark = this.model.marks().find((m) => m.panelId === signal.panelId);
     if (!mark) return;
-    if (this.announced.has(mark.panelId)) this.refresh(mark);
-    else this.notify(mark);
+    if (wasMarked) this.refresh(mark);
+    // FR-038a: a startup command's completion marks the panel but does not announce it.
+    else if (!signal.startup) this.notify(mark);
   }
 
   /** A window's renderer reported what it shows and where focus is. */
@@ -314,7 +314,6 @@ export class AttentionService {
    */
   private notify(mark: AttentionMark): void {
     const { notifications } = this.deps.settings();
-    this.announced.add(mark.panelId);
     const reason = notificationText(mark);
     this.toast(mark, reason);
     const wantOs = notifications.os && notifications.attention.os && this.deps.windows.focusedId() === null;
@@ -377,7 +376,6 @@ export class AttentionService {
 
   /** FR-036: drop a panel's toast and Windows notification, whatever cleared it. */
   private dismiss(panelId: string): void {
-    this.announced.delete(panelId);
     const target = this.toastWindow.get(panelId);
     if (target !== undefined) {
       this.toastWindow.delete(panelId);
