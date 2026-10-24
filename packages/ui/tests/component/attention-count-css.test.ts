@@ -44,6 +44,20 @@ describe('the number inside the circle (FR-131, FR-133, FR-136)', () => {
     expect(count.get('font-size')).toMatch(/^\d+px$/);
   });
 
+  /*
+   * Hand-testing 83ad8368: "the number … should be centered — it is currently offset to the top right a
+   * little". A line box keeps room for descenders digits never use (so they ride high), and negative
+   * letter-spacing narrows the box on its right (so they spill right). Trim the box to the digits' cap
+   * height and baseline, and spell them at their natural spacing, so the flex centring centres the ink.
+   */
+  it('centres the digits’ ink, not their line box: trimmed to cap height and baseline, no letter-spacing', () => {
+    for (const selector of ['.throng-attention-mark__count', ".throng-attention-mark__count[data-wide='true']"]) {
+      const count = cssRule(selector);
+      expect(count.get('letter-spacing'), selector).toBeUndefined();
+    }
+    expect(cssRule('.throng-attention-mark__count').get('text-box')).toBe('trim-both cap alphabetic');
+  });
+
   it('“9+” fits inside the circle: a smaller size for two characters (FR-136)', () => {
     const one = parseInt(cssRule('.throng-attention-mark__count').get('font-size') ?? '0', 10);
     const two = parseInt(cssRule(".throng-attention-mark__count[data-wide='true']").get('font-size') ?? '0', 10);

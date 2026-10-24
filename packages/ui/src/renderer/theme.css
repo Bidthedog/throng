@@ -1387,13 +1387,16 @@ textarea,
   cursor: pointer;
 }
 
-/* FR-131, FR-136 — the count: the circle's own text, centred by its flex box, taking no space of its own. */
+/* FR-131, FR-136 — the count: the circle's own text, centred by its flex box, taking no space of its own.
+ * The box is trimmed to the digits' cap height and baseline (`text-box`), so the flex centring centres
+ * their ink rather than a line box that keeps room for descenders digits never have — which sat them high.
+ * No letter-spacing: a negative one narrowed the box on its right, so they spilled right. */
 .throng-attention-mark__count {
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
+  text-box: trim-both cap alphabetic;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
   pointer-events: none;
   white-space: nowrap;
 }
@@ -1401,7 +1404,6 @@ textarea,
 /* "9+" is two characters in a 14 px disc: a size smaller, so it stays inside the circle. */
 .throng-attention-mark__count[data-wide='true'] {
   font-size: 7px;
-  letter-spacing: -0.04em;
 }
 
 /* FR-133 — an unmarked chip or header holds the circle's footprint: its 14px and its 6px margin. */
