@@ -47,7 +47,7 @@ Paths: `packages/core/src/attention/**`, `packages/ui/src/main/attention-service
 ## MT-03: Project list: counts, pills and paler minimised categories
 
 Covers: FR-129, FR-130, FR-131, FR-133, FR-135, FR-136, FR-137, FR-114, FR-107, FR-014, 046 FR-051a, #523
-Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
+Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/attention/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/colour-math.ts`, `packages/core/src/config/default-themes/index.ts`
 
 ### Steps
 1. Have two categories, one minimised and one expanded. The minimised header is visibly paler than the expanded one. Switch to a light theme, then a dark one: still paler in both.
@@ -65,7 +65,7 @@ Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/r
 ## MT-04: Tab chips: numbered flags and panel-count pills
 
 Covers: FR-131, FR-132, FR-133, FR-135, FR-136, FR-138, FR-139, #523
-Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
+Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/ui/src/renderer/sidebar/project-menu.ts`, `packages/ui/src/renderer/attention/**`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`, `packages/core/src/config/theme.ts`, `packages/core/src/config/theme-ops.ts`, `packages/ui/src/main/icon-pack-service.ts`
 
 ### Steps
 1. Make a tab with three panels and a tab with one. The first chip shows a pill reading 3; the second shows no pill.
