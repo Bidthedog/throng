@@ -59,15 +59,20 @@ describe('hover (FR-089)', () => {
     expect(ungated).toEqual([]);
   });
 
-  it('is drawn for rows, bars, breadcrumb segments, the toolbar’s buttons and the filter’s clear button', () => {
-    for (const el of ['.breakdown-row', '.share-bar', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear']) {
+  it('is drawn for rows, breadcrumb segments, the toolbar’s buttons and the filter’s clear button', () => {
+    for (const el of ['.breakdown-row', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear']) {
       expect(all.some((r) => r.selectors.some((s) => s.startsWith(GATE) && s.endsWith(`${el}:hover`))), `${el} has no hover rule`).toBe(true);
     }
+  });
+
+  it('is not drawn for the right column’s bars, which are read-only (FR-108)', () => {
+    expect(all.some((r) => r.selectors.some((s) => s.endsWith('.share-bar:hover')))).toBe(false);
+    expect(bodyOf('.share-bar')).not.toMatch(/cursor:\s*pointer/);
   });
 });
 
 describe('the pointer cursor (FR-089)', () => {
-  it.each(['.breakdown-row', '.share-bar', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear', '.monitor-controls__select'])('%s shows it', (selector) => {
+  it.each(['.breakdown-row', '.breadcrumb__segment', '.monitor-controls__button', '.monitor-filter__clear', '.monitor-controls__select'])('%s shows it', (selector) => {
     expect(bodyOf(selector)).toMatch(/cursor:\s*pointer/);
   });
 });

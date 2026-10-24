@@ -1,8 +1,8 @@
 /**
  * What the selected item is made of (055 FR-097, research R16): its children as ranked bars, each as long
  * as its share of the item for the chosen metric and coloured by how much of the machine it takes
- * (FR-094), with the figure beside it. A click on one selects that child — the right column then describes
- * it. This replaces the treemap, which asked for a box of its own and a key beside it.
+ * (FR-094), with every one of its figures beside it (FR-109). The list is read-only (FR-108): the right
+ * column describes the left's selection and changes nothing on a click. This replaces the treemap.
  *
  * ══ COLOUR IS HOW MUCH OF THE MACHINE IT TAKES (FR-094) ══
  *
@@ -17,10 +17,10 @@
  * order and figures — so a bar never moves under a click. The rest of the right column stays live.
  */
 import { useMemo, type CSSProperties, type ReactElement } from 'react';
-import { formatGrouped, heatFor, type HeatMetric, type ResourceNode, type UsageThresholds } from '@throng/core';
-import { FIGURE_LABEL, figureOf, monitorFigure, orderMetric, type FigureId } from './figures.js';
-import { barsFor, type BarItem } from './monitor-model.js';
-import { focusOn, getIoPeak, getNetworkPeak, isEnded, setSelection, useView } from './monitor-session.js';
+import { formatGrouped, heatFor, type HeatMetric, type UsageThresholds } from '@throng/core';
+import { FIGURE_LABEL, orderMetric, type FigureId } from './figures.js';
+import { barsFor, figuresOf, type BarItem, type FigureContext } from './monitor-model.js';
+import { getIoPeak, getNetworkPeak, isEnded, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import { usePointerHold } from './use-pointer-hold.js';
 import type { Subject } from './use-subject.js';
@@ -28,51 +28,32 @@ import type { Subject } from './use-subject.js';
 /** The metric the machine-share scale takes for a figure (the bar's own figure, so the colour agrees with the length). */
 const HEAT_METRIC: Readonly<Record<FigureId, HeatMetric>> = { cpu: 'cpu', memory: 'memory', gpu: 'gpu', io: 'io', network: 'network' };
 
-/** The ids from the root down to `id`, or `null` when it is not in the tree. */
-function pathTo(root: ResourceNode, id: string): string[] | null {
-  if (root.id === id) return [id];
-  for (const child of root.children) {
-    const below = pathTo(child, id);
-    if (below !== null) return [root.id, ...below];
-  }
-  return null;
-}
-
 /** A bar never vanishes for being small: a sliver says "something, but little". */
 const MIN_FILL_PERCENT = 0.5;
 
 function Bar({
   bar,
   metric,
-  thresholds,
-  machine,
+  ctx,
   ioPeak,
-  onPick,
 }: {
-  onPick: (child: ResourceNode) => void;
   bar: BarItem;
   metric: FigureId;
-  thresholds: UsageThresholds;
-  machine: Subject['frame']['machine'];
+  ctx: FigureContext;
   ioPeak: number;
 }): ReactElement {
   const { node } = bar;
-  const figure = monitorFigure(figureOf(metric, node.rolled, thresholds, machine), node.estimated === true);
-  const heat = heatFor(HEAT_METRIC[metric], bar.value, thresholds, machine, ioPeak);
+  // Every figure, always (FR-109); only the bar's length and colour follow Order by.
+  const figures = figuresOf(node, ctx);
+  const chosen = figures.find((f) => f.id === metric);
+  const heat = heatFor(HEAT_METRIC[metric], bar.value, ctx.thresholds, ctx.machine, ioPeak);
   const fill: CSSProperties = { width: `${Math.max(bar.share * 100, MIN_FILL_PERCENT)}%` };
   // `--heat` is a number the stylesheet turns into a colour; a bar with nothing measured to colour it sets none.
   if (heat !== undefined) (fill as Record<string, unknown>)['--heat'] = Math.round(heat * 1000) / 1000;
   return (
     // Named, never valued: a title that moved with the figure would be closed by the browser every capture (FR-095).
-    <li
-      className="share-bar"
-      data-testid={`share-bar-${node.id}`}
-      data-node-id={node.id}
-      data-band={figure.band}
-      data-kind={node.kind}
-      title={node.label}
-      onClick={() => onPick(node)}
-    >
+    // Read-only (FR-108): no click, no selection, no drill — the right column describes the left's selection.
+    <li className="share-bar" data-testid={`share-bar-${node.id}`} data-node-id={node.id} data-band={chosen?.band} data-kind={node.kind} title={node.label}>
       <span className="share-bar__name">{node.label}</span>
       <span className="share-bar__track" aria-hidden="true">
         <span
@@ -83,8 +64,19 @@ function Bar({
           style={fill}
         />
       </span>
-      <span className="share-bar__figure" data-testid={`share-bar-figure-${node.id}`}>
-        {figure.text}
+      <span className="share-bar__figures">
+        {figures.map((f) => (
+          <span
+            key={f.id}
+            className="share-bar__figure"
+            data-testid={`share-bar-figure-${node.id}-${f.id}`}
+            data-metric={f.id}
+            data-chosen={f.id === metric ? 'true' : undefined}
+            title={f.title}
+          >
+            {f.text}
+          </span>
+        ))}
       </span>
     </li>
   );
@@ -94,18 +86,11 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   // The bars follow what the rows are ordered by: a chosen Network is CPU while it is not measured (FR-099).
   const metric = orderMetric(useView().metric, subject.tree);
   const { thresholds } = useResourceMonitorSettings();
-  // A hold belongs to the item it was taken on: choosing another item (a click on a bar does) takes a new one.
+  // A hold belongs to the item it was taken on: a new selection on the left takes a new one.
   const hold = usePointerHold(subject.node, (live) => live, (live) => live, subject.node.id);
   const node = hold.value;
-  const { tree } = subject;
-  const subjectId = subject.node.id;
-  const pick = (child: ResourceNode): void => {
-    // The left shows the item the bars belong to, and the child is marked there (FR-089).
-    const path = pathTo(tree, subjectId);
-    if (path !== null) focusOn(path);
-    setSelection(child.id);
-  };
   const machine = subject.frame.machine;
+  const ctx = useMemo<FigureContext>(() => ({ thresholds, machine }), [thresholds, machine]);
   const model = useMemo(() => barsFor(node, metric, isEnded), [node, metric]);
   // I/O and Network are coloured against the highest rate this session has seen (FR-094, FR-113).
   const ioPeak = metric === 'network' ? getNetworkPeak() : getIoPeak();
@@ -123,7 +108,7 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
         <div className="share-bars__body">
           <ul className="share-bars__list">
             {model.bars.map((bar) => (
-              <Bar key={bar.node.id} onPick={pick} bar={bar} metric={metric} thresholds={thresholds} machine={machine} ioPeak={ioPeak} />
+              <Bar key={bar.node.id} bar={bar} metric={metric} ctx={ctx} ioPeak={ioPeak} />
             ))}
             {model.others !== null ? (
               <li className="share-bar share-bar--others" data-testid="share-bars-others" title="The smaller contributors, grouped">
@@ -131,7 +116,7 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
                 <span className="share-bar__track" aria-hidden="true">
                   <span className="share-bar__fill" data-heat="none" style={{ width: `${Math.max(model.others.share * 100, MIN_FILL_PERCENT)}%` }} />
                 </span>
-                <span className="share-bar__figure" />
+                <span className="share-bar__figures" />
               </li>
             ) : null}
           </ul>

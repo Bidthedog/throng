@@ -3972,17 +3972,14 @@ textarea,
 
 .share-bar {
   display: grid;
-  grid-template-columns: minmax(80px, 30%) minmax(0, 1fr) minmax(56px, auto);
+  grid-template-columns: minmax(80px, 25%) minmax(40px, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 2px 4px;
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
-  cursor: pointer;
-}
-
-:where(body:not([data-window-blurred])) .share-bar:hover {
-  background: var(--throng-colour-hoverSurface);
+  /* Read-only (FR-108): nothing to click, so no pointer and no hover. */
+  cursor: default;
 }
 
 .share-bar--others {
@@ -4029,16 +4026,30 @@ textarea,
   background: var(--throng-colour-border);
 }
 
+/* Every figure of the child (FR-109), in the left list's column order; the Order-by one is marked. */
+.share-bar__figures {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(52px, auto));
+  gap: 6px;
+  font-size: 11px;
+}
+
 .share-bar__figure {
   text-align: right;
   white-space: nowrap;
+  color: var(--throng-colour-textMuted);
 }
 
-.share-bar[data-band='warning'] .share-bar__figure {
+.share-bar__figure[data-chosen='true'] {
+  color: var(--throng-colour-text);
+  font-weight: var(--throng-font-weight-bold);
+}
+
+.share-bar[data-band='warning'] .share-bar__figure[data-chosen='true'] {
   color: var(--throng-colour-warning);
 }
 
-.share-bar[data-band='critical'] .share-bar__figure {
+.share-bar[data-band='critical'] .share-bar__figure[data-chosen='true'] {
   color: var(--throng-colour-danger);
 }
 

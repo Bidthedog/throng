@@ -70,9 +70,15 @@ describe('the children as ranked bars (FR-097)', () => {
     expect(screen.getByTestId('share-bar-fill-x:12:1').style.width).toBe('60%');
   });
 
-  it('puts the figure beside each bar', () => {
-    mountOn(scene({ 11: 60 }));
-    expect(screen.getByTestId('share-bar-figure-x:11:1')).toHaveTextContent('60%');
+  it('shows every figure of each child — CPU, Memory, GPU, I/O and Network — whatever orders them (FR-109)', () => {
+    mountOn(scene({ 11: 60 }, {}, { 11: 7 }));
+    const cells = Array.from(screen.getByTestId('share-bar-x:11:1').querySelectorAll('[data-metric]'));
+    expect(cells.map((c) => c.getAttribute('data-metric'))).toEqual(['cpu', 'memory', 'gpu', 'io', 'network']);
+    expect(screen.getByTestId('share-bar-figure-x:11:1-cpu')).toHaveTextContent('60%');
+    expect(screen.getByTestId('share-bar-figure-x:11:1-memory')).toHaveTextContent('7 MB');
+    // Only the bar follows Order by: its figure is marked, the others are plain.
+    expect(screen.getByTestId('share-bar-figure-x:11:1-cpu')).toHaveAttribute('data-chosen', 'true');
+    expect(screen.getByTestId('share-bar-figure-x:11:1-memory')).not.toHaveAttribute('data-chosen');
   });
 
   it('measures a share against the item itself, so a process doing work of its own is not 100% children', () => {
@@ -86,7 +92,8 @@ describe('the children as ranked bars (FR-097)', () => {
     mountOn(scene({ 11: 90, 12: 1 }, {}, { 11: 10, 12: 500 }));
     act(() => setView({ metric: 'memory' }));
     expect(bars()).toEqual(['x:12:1', 'x:11:1']);
-    expect(screen.getByTestId('share-bar-figure-x:12:1')).toHaveTextContent(/500/);
+    expect(screen.getByTestId('share-bar-figure-x:12:1-memory')).toHaveTextContent(/500/);
+    expect(screen.getByTestId('share-bar-figure-x:12:1-memory')).toHaveAttribute('data-chosen', 'true');
   });
 
   it('draws no bar for a process that has ended, nor for one using nothing', () => {
@@ -115,37 +122,28 @@ describe('the children as ranked bars (FR-097)', () => {
   });
 });
 
-describe('a click on a bar selects that child (FR-097)', () => {
-  it('selects it, so the column then describes that child', () => {
-    mountOn(scene({ 11: 60, 12: 30 }));
-    fireEvent.click(screen.getByTestId('share-bar-x:12:1'));
-    expect(getSelection()).toBe('x:12:1');
-  });
-});
-
-describe('a click on a bar marks that item on the left (FR-089, FR-097)', () => {
-  it('opens the item the bar belongs to when the child has no row yet, then marks the child there', () => {
+describe('the children are read-only (FR-108, US2 scenario 28)', () => {
+  it('a click on a project’s tab in the right column changes nothing in either column', () => {
     tick = 0;
     feed(sampleHierarchy());
     render(createElement(Fragment, null, createElement(Breakdown), createElement(Bars)));
-    // A project row, selected: the right column shows its tabs as bars, but the left lists projects.
     act(() => focusOn(['root', 'c:projects']));
     fireEvent.click(screen.getByTestId('breakdown-row-p:p1'));
-    expect(screen.queryByTestId('breakdown-row-t:t1')).toBeNull();
+    expect(getSelection()).toBe('p:p1');
 
     fireEvent.click(screen.getByTestId('share-bar-t:t1'));
+    fireEvent.doubleClick(screen.getByTestId('share-bar-t:t1'));
 
-    expect(getView().focusPath).toEqual(['root', 'c:projects', 'p:p1']);
-    expect(getSelection()).toBe('t:t1');
-    expect(screen.getByTestId('breakdown-row-t:t1')).toHaveClass('breakdown-row--selected');
-    expect(document.querySelectorAll('.breakdown-row--selected')).toHaveLength(1);
+    expect(getView().focusPath).toEqual(['root', 'c:projects']);
+    expect(getSelection()).toBe('p:p1');
+    expect(screen.getByTestId('share-bars')).toHaveAttribute('aria-label', expect.stringContaining('Alpha'));
   });
 
-  it('leaves the left where it is when the child already has a row there', () => {
-    mountOn(scene({ 11: 60, 12: 30 }));
-    fireEvent.click(screen.getByTestId('share-bar-x:12:1'));
-    expect(getView().focusPath).toEqual(PANEL);
-    expect(getSelection()).toBe('x:12:1');
+  it('is not drawn as something to click', () => {
+    mountOn(scene({ 11: 60 }));
+    const bar = screen.getByTestId('share-bar-x:11:1');
+    expect(bar).not.toHaveAttribute('role', 'button');
+    expect(bar).not.toHaveAttribute('tabindex');
   });
 });
 
@@ -184,33 +182,33 @@ describe('the bars hold still while the pointer is over them (FR-095)', () => {
     fireEvent.mouseEnter(region);
     feed(swapped());
     expect(bars()).toEqual(['x:11:1', 'x:12:1', 'x:13:1']);
-    expect(screen.getByTestId('share-bar-figure-x:13:1')).toHaveTextContent('10%');
+    expect(screen.getByTestId('share-bar-figure-x:13:1-cpu')).toHaveTextContent('10%');
 
     fireEvent.mouseLeave(region);
     expect(bars()).toEqual(['x:13:1', 'x:12:1', 'x:11:1']);
-    expect(screen.getByTestId('share-bar-figure-x:13:1')).toHaveTextContent('70%');
+    expect(screen.getByTestId('share-bar-figure-x:13:1-cpu')).toHaveTextContent('70%');
   });
 
-  it('moves on to the new item when a click on a bar chooses one, though the pointer is still over', () => {
+  it('moves on to the new item when the selection changes, though the pointer is still over', () => {
     const root = scene({ 11: 60, 12: 30 }, { 11: [proc(21, 'c21.exe', metrics({ cpu: 40 })), proc(22, 'c22.exe', metrics({ cpu: 20 }))] });
     mountOn(root);
     fireEvent.mouseEnter(screen.getByTestId('share-bars'));
-    fireEvent.click(screen.getByTestId('share-bar-x:11:1'));
+    act(() => setSelection('x:11:1'));
     expect(bars()).toEqual(['x:21:1', 'x:22:1']);
   });
 
-  it('keeps holding after a click on a bar chooses another item: the new bars do not move under the pointer', () => {
+  it('keeps holding after the selection changes: the new bars do not move under the pointer', () => {
     const root = (a: number, b: number): ResourceNode =>
       scene({ 11: 60, 12: 30 }, { 11: [proc(21, 'c21.exe', metrics({ cpu: a })), proc(22, 'c22.exe', metrics({ cpu: b }))] });
     mountOn(root(40, 20));
     fireEvent.mouseEnter(screen.getByTestId('share-bars'));
-    fireEvent.click(screen.getByTestId('share-bar-x:11:1'));
+    act(() => setSelection('x:11:1'));
     expect(bars()).toEqual(['x:21:1', 'x:22:1']);
 
     // The two swap rank while the pointer rests where the click was.
     feed(root(5, 50));
     expect(bars()).toEqual(['x:21:1', 'x:22:1']);
-    expect(screen.getByTestId('share-bar-figure-x:21:1')).toHaveTextContent('40%');
+    expect(screen.getByTestId('share-bar-figure-x:21:1-cpu')).toHaveTextContent('40%');
 
     fireEvent.mouseLeave(screen.getByTestId('share-bars'));
     expect(bars()).toEqual(['x:22:1', 'x:21:1']);
