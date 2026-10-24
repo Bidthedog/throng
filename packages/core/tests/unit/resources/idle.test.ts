@@ -25,6 +25,10 @@ describe('isIdle (055 FR-061a)', () => {
     expect(isIdle([s(), s(), s({ memory: 500 })], thresholds, machine)).toBe(false);
   });
 
+  it('is not idle while it moves network traffic, however quiet its CPU and disk (FR-113, review #6)', () => {
+    expect(isIdle([s({ network: 2_048 }), s(), s()], thresholds, machine)).toBe(false);
+  });
+
   it('is not idle with no samples at all — there is nothing to judge', () => {
     expect(isIdle([], thresholds, machine)).toBe(false);
   });

@@ -99,6 +99,12 @@ const NOT_MEASURED_METRICS: Metrics = {
 
 const STATE_RANK: Record<ProjectLoadState, number> = { active: 0, loaded: 1, unloaded: 2 };
 
+/**
+ * A UI element's own figures: it uses no CPU, memory or I/O of its own, but has no network figure of its own
+ * either — 0 would roll an unelevated subtree up as a measured 0 (FR-113) instead of unavailable.
+ */
+const UI_OWN: Metrics = Object.freeze({ ...ZERO_METRICS, network: NOT_MEASURED });
+
 /** The roster's UI role as a {@link ThrongRole}; an unknown role reads as a utility process. */
 function uiRole(role: string): ThrongRole {
   return role === 'main' || role === 'window' || role === 'gpu' ? role : 'utility';
@@ -113,7 +119,7 @@ function uiNode(
   children: ResourceNode[],
   extra: Partial<ResourceNode> = {},
 ): ResourceNode {
-  const own = extra.own ?? ZERO_METRICS;
+  const own = extra.own ?? UI_OWN;
   return { id, kind, label, owner, children, ...extra, own, rolled: rollUp(own, children.map((c) => c.rolled)) };
 }
 

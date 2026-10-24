@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildHierarchy,
+  NETWORK_ELEVATION_REQUIRED,
   NOT_MEASURED,
+  unavailable,
+  ZERO_METRICS,
   processKey,
   type BuildHierarchyInput,
   type HierarchyContext,
@@ -118,6 +121,19 @@ describe('buildHierarchy (055 FR-020 – FR-021, FR-080, R6)', () => {
     expect(labels).toContain('Console host — pwsh');
     expect(labels).toContain('Folder lock — Alpha');
     expect(labels).toContain('Resource collector');
+  });
+
+  it('rolls an unelevated network up as unavailable — never 0 — through components, projects, tabs and panels (FR-113, review #1)', () => {
+    const elevate = unavailable(NETWORK_ELEVATION_REQUIRED);
+    const base = input();
+    const metrics = new Map(base.readings.map((x) => [processKey(x.pid, x.createTime), { ...ZERO_METRICS, network: elevate }]));
+    const { root: r } = buildHierarchy({ ...base, metrics });
+    const all = (n: ResourceNode): ResourceNode[] => [n, ...n.children.flatMap(all)];
+    for (const n of all(r)) {
+      if (n.kind === 'limitation' || n.kind === 'buffers') continue;
+      if (!all(n).some((d) => d.kind === 'process')) continue; // no process below it: not measured, rightly
+      expect(n.rolled.network, `${n.id} reads ${JSON.stringify(n.rolled.network)}`).toEqual(elevate);
+    }
   });
 
   it("gives each of throng's own processes its role, and the user's processes none (FR-102)", () => {
