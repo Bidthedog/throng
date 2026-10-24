@@ -48,7 +48,8 @@ narrows that rule: while throng is running, a terminal whose project is unloaded
 observation. That is the case this feature exists for — a project the user is not looking at — and 025
 FR-019a already guarantees that observing one more terminal costs nothing extra.
 *(2026-10-24, round 12)* FR-129 supersedes **046 FR-051a**'s "shown of total" count on a minimised
-category header with a pill carrying the category's total project count, and FR-124 supersedes this
+category header with a pill carrying the category's total project count, FR-132 narrows **031 FR-042** so
+a one-panel tab shows no count pill, and FR-124 supersedes this
 spec's own **FR-122** go-to control with a toast whose whole body is the link.
 
 **Extension.** Notices gain a link (FR-034). Today a toast carries no action, and this repository's
@@ -913,8 +914,9 @@ lands on a marked panel and clears it.
   blinking (FR-093) and the Failed style when any is Failed (FR-014). The glyph MUST be large enough, or changed,
   for the number to be legible at the default UI scale. Counts above 9 show as "9+" *[derived: FR-039's rule]*.
   A panel header's mark carries no number *[derived: it stands for one panel]*.
-- **FR-132** *(2026-10-24, round 12)*: A tab chip whose tab holds two or more panels MUST show a pill with its
-  panel count; a tab holding one panel shows none.
+- **FR-132** *(2026-10-24, round 12; narrows 031 FR-042)*: A tab chip whose tab holds two or more panels MUST
+  show a pill with its panel count; a tab holding one panel shows none. 031 FR-042's pill form is unchanged;
+  only the one-panel pill goes. The tab's hover popover still names its panel count (031 FR-043).
 - **FR-133** *(2026-10-24, round 12)*: A flag or pill appearing, changing its number or going MUST NOT change
   a row's height, the position of any text, or a tab chip's width.
 
