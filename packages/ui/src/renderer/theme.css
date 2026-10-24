@@ -1429,7 +1429,8 @@ textarea,
   transform: translate(-50%, -50%);
   padding: 0 1px;
   border-radius: 3px;
-  background: var(--throng-colour-surface);
+  /* The count pill's own backing (`.throng-count-pill`), not the pane token. */
+  background: var(--surface-active);
 }
 
 /* FR-133 — an unmarked chip or header holds the flag's footprint: the mark's 14px and its 6px margin. */
