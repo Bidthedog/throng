@@ -345,4 +345,4 @@ From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Rou
 ### Close
 
 - [x] T128 Docs: `docs/preferences.md` / `docs/quick-start.md` mention Flag and the numbered marks where the attention feature is described; `docs-currency.test.ts` green
-- [ ] T129 Widen the round-12 manual test plan groups' `Paths:` to the files that implement them
+- [x] T129 Widen the round-12 manual test plan groups' `Paths:` to the files that implement them

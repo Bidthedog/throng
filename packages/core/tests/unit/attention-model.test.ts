@@ -352,12 +352,12 @@ describe('AttentionModel — manual flags (057 round 12: FR-125, FR-127, FR-128)
     expect(h.cleared).toEqual(['p1']);
   });
 
-  it('a flag raised on an unfocused panel is not held: focusing it clears it after the delay', () => {
+  it('a flag raised on an unfocused panel is held too: focusing it once does not clear it (R20)', () => {
     const h = harness();
     h.model.flag(flag);
     h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
     h.advance(1000);
-    expect(h.model.marks()).toHaveLength(0);
+    expect(h.model.marks()).toHaveLength(1);
   });
 
   it('a terminal raise on a flagged panel updates its reason but keeps it the user\'s (R20)', () => {
@@ -387,6 +387,31 @@ describe('AttentionModel — manual flags (057 round 12: FR-125, FR-127, FR-128)
     h.model.restoreFlags([{ panelId: 'p1', projectId: 'A', panelTitle: 'Notes', tabTitle: 'Docs', projectName: 'Alpha', raisedAt: 5 }]);
     expect(h.model.marks()[0]).toMatchObject({ producer: 'user', reason: { signal: 'flagged' }, raisedAt: 5 });
     expect(h.cleared).toEqual([]);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.advance(1000);
+    expect(h.model.marks()).toHaveLength(0);
+  });
+});
+
+describe('AttentionModel — a flag chosen from a menu that took focus (FR-127, review)', () => {
+  const flag = { panelId: 'p1', projectId: 'A', panelTitle: 'Notes', tabTitle: 'Docs', projectName: 'Alpha', at: 5 };
+
+  it('stays when focus returns from the menu to the panel, however long the user stays', () => {
+    const h = harness();
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.model.applyFocusReport(report({ focusedPanelId: null })); // the context menu takes focus
+    h.model.flag(flag);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' })); // the menu closes; focus is back
+    h.advance(60_000);
+    expect(h.model.marks()).toHaveLength(1);
+  });
+
+  it('clears once focus has left the panel and come back, after the clear delay', () => {
+    const h = harness();
+    h.model.applyFocusReport(report({ focusedPanelId: null }));
+    h.model.flag(flag);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.model.applyFocusReport(report({ focusedPanelId: 'p2' }));
     h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
     h.advance(1000);
     expect(h.model.marks()).toHaveLength(0);
