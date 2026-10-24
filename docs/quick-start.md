@@ -90,9 +90,12 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
   a click.
 - **A terminal can ask for you.** When a command finishes, a program exits (a failed exit is marked differently), or something rings
   the bell, the panel gets an **attention mark**; so do its tab, its project and, if folded away, its
-  category, and throng can also raise a notification and a count on the taskbar icon. Hover a
-  project's or category's mark to see which terminals are waiting. Click into the panel and, a moment
-  later, the mark goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To
+  category, and throng can also raise a notification and a count on the taskbar icon. Each mark carries
+  the number of panels waiting beneath it; hover a project's or category's mark to see which they are.
+  Click a notification to go straight to its panel. Click into the panel and, a moment later, the mark
+  goes, or press **Ctrl+Shift+Alt+G** to jump to the next marked panel in any project. To remind
+  yourself to come back to any panel, right-click it and choose **Flag**: it is marked the same way,
+  with no notification, until you have left it and come back. To
   have a program such as Claude Code ring the bell or send a notification when it needs you, see
   [its own documentation](https://code.claude.com/docs). Claude Code sends its "waiting for your input"
   notification only after a minute idle; for one as soon as it finishes, lower its
