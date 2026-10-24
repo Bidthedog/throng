@@ -9,7 +9,7 @@
 import { act, render, screen, within } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NETWORK_ELEVATION_REQUIRED, unavailable, type ResourceNode } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, NOT_MEASURED, unavailable, type ResourceNode } from '@throng/core';
 import { LineGraphs } from '../../../src/renderer/resources/line-graph.js';
 import { __resetSession, focusOn, ingestFrame, setSelection, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { useSubject } from '../../../src/renderer/resources/use-subject.js';
@@ -149,6 +149,14 @@ describe('Network (FR-113, T175)', () => {
     act(() => focusOn(PANEL));
     expect(screen.getByTestId('line-graph-plot-network')).toBeInTheDocument();
     expect(screen.getByTestId('line-graph-network-value')).toHaveTextContent(/\/s/);
+  });
+
+  it('not measured YET (the first sighting has no rate) is loading, not unavailable: the spinner, not the empty box (review finding 7)', () => {
+    feed(withNetwork(scene({ 11: 20 }), NOT_MEASURED));
+    render(createElement(Graphs));
+    act(() => focusOn(PANEL));
+    expect(screen.queryByTestId('line-graph-network-none')).toBeNull();
+    expect(within(screen.getByTestId('line-graph-network-building')).getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
   });
 
   it('unelevated: reads “-” titled “Elevate to show”, and draws no line of zeros', () => {

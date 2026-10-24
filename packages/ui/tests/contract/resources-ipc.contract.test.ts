@@ -47,7 +47,7 @@ function recordingHost() {
   return { host, calls };
 }
 
-function wire(opts: { mainWindowId?: number | null; statusRectTimeoutMs?: number } = {}) {
+function wire(opts: { mainWindowId?: number | null; statusRectTimeoutMs?: number; actionReplyTimeoutMs?: number } = {}) {
   const ipc = fakeIpc();
   const { host, calls } = recordingHost();
   let opened = 0;
@@ -69,6 +69,7 @@ function wire(opts: { mainWindowId?: number | null; statusRectTimeoutMs?: number
       saveViewState: (v) => void (view = v),
     },
     ...(opts.statusRectTimeoutMs !== undefined ? { statusRectTimeoutMs: opts.statusRectTimeoutMs } : {}),
+    ...(opts.actionReplyTimeoutMs !== undefined ? { actionReplyTimeoutMs: opts.actionReplyTimeoutMs } : {}),
   });
   return { ipc, calls, sent, toMain, minimised, surface, opened: () => opened };
 }
@@ -88,6 +89,7 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
       'throng:resources:view:get',
     ]);
     expect([...ipc.ons.keys()].sort()).toEqual([
+      'throng:resources:action:result',
       'throng:resources:minimise',
       'throng:resources:open',
       'throng:resources:panels',
@@ -150,23 +152,54 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
     expect(await wire({ mainWindowId: null }).ipc.handles.get('throng:resources:action:route')!(from(9), req)).toBe(false);
   });
 
-  it('routes Activate to the window holding the tab, which comes forward (FR-110)', async () => {
+  /** The receiving window's answer to the Activate it was sent (review finding 9). */
+  const answer = (w: ReturnType<typeof wire>, index: number, ok: unknown): void => {
+    const { requestId } = w.sent[index]!.payload as { requestId: number };
+    w.ipc.ons.get('throng:resources:action:result')!(from(4), { requestId, ok });
+  };
+
+  it('routes Activate to the window holding the tab, which comes forward, and resolves with ITS answer (FR-110)', async () => {
     const w = wire({ mainWindowId: 2 });
     const route = w.ipc.handles.get('throng:resources:action:route')!;
     const req = { action: 'activate', projectId: 'p1', tabId: 't-sub', panelId: 'n1' };
-    expect(await route(from(9), req)).toBe(true);
-    expect(w.sent).toEqual([{ windowId: 4, channel: 'throng:resources:action', payload: req }]);
+    const pending = route(from(9), req) as Promise<boolean>;
+    expect(w.sent).toEqual([{ windowId: 4, channel: 'throng:resources:action', payload: { ...req, requestId: expect.any(Number) } }]);
+    answer(w, 0, true);
+    expect(await pending).toBe(true);
+  });
+
+  it('resolves false when the window could not get there, so the monitor can say so (FR-086)', async () => {
+    const w = wire({ mainWindowId: 2 });
+    const pending = w.ipc.handles.get('throng:resources:action:route')!(from(9), { action: 'activate', projectId: 'p1', tabId: 't-sub' }) as Promise<boolean>;
+    // An answer to some other request is not this one's.
+    w.ipc.ons.get('throng:resources:action:result')!(from(4), { requestId: -1, ok: true });
+    answer(w, 0, false);
+    expect(await pending).toBe(false);
+  });
+
+  it('resolves false when no answer comes in time, or a malformed one does', async () => {
+    const silent = wire({ mainWindowId: 2, actionReplyTimeoutMs: 5 });
+    expect(await silent.ipc.handles.get('throng:resources:action:route')!(from(9), { action: 'activate', projectId: 'p1' })).toBe(false);
+
+    const w = wire({ mainWindowId: 2 });
+    const pending = w.ipc.handles.get('throng:resources:action:route')!(from(9), { action: 'activate', projectId: 'p1' }) as Promise<boolean>;
+    answer(w, 0, 'yes');
+    expect(await pending).toBe(false);
   });
 
   it('routes Activate to the main window when no window holds the tab, or for a project: it switches project first (FR-110)', async () => {
     const w = wire({ mainWindowId: 2 });
     const route = w.ipc.handles.get('throng:resources:action:route')!;
-    expect(await route(from(9), { action: 'activate', projectId: 'p2', tabId: 't-other' })).toBe(true);
-    expect(await route(from(9), { action: 'activate', projectId: 'p2' })).toBe(true);
+    const first = route(from(9), { action: 'activate', projectId: 'p2', tabId: 't-other' }) as Promise<boolean>;
+    const second = route(from(9), { action: 'activate', projectId: 'p2' }) as Promise<boolean>;
     expect(w.sent).toEqual([
-      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2', tabId: 't-other' } },
-      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2' } },
+      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2', tabId: 't-other', requestId: expect.any(Number) } },
+      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2', requestId: expect.any(Number) } },
     ]);
+    answer(w, 0, true);
+    answer(w, 1, true);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
   });
 
   it('answers false for a malformed Activate, or with no main window to take it', async () => {
@@ -236,6 +269,7 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
       'throng:resources:view:set',
       'throng:resources:status-rect:request',
       'throng:resources:status-rect:reply',
+      'throng:resources:action:result',
       'throng:resources:detail-demand:get',
       'throng:resources:detail-demand',
       'throng:resources:action:route',

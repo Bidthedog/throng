@@ -8,10 +8,13 @@
  * has no layout, so a drag is given the columns' box the way a real window would report it.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { createElement } from 'react';
+import { Fragment, Profiler, createElement } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
+import { ColumnDivider } from '../../../src/renderer/resources/column-divider.js';
+import { DetailPane } from '../../../src/renderer/resources/detail-pane.js';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
-import { __resetSession, getView, restoreView } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, getView, ingestFrame, restoreView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
@@ -32,6 +35,12 @@ async function openWindow(): Promise<void> {
   render(createElement(MonitorApp));
   await act(async () => bridge.pushDetail(frame(1, sampleHierarchy())));
   await screen.findByTestId('breakdown');
+}
+
+/** A session with one frame in, for a test that mounts the columns without the window. */
+function feedOnly(): void {
+  startSession({ intervalSeconds: 2, historyMinutes: 5 });
+  act(() => ingestFrame(frame(1, sampleHierarchy())));
 }
 
 const divider = (): HTMLElement => screen.getByRole('separator', { name: /resize/i });
@@ -95,6 +104,29 @@ describe('the divider (FR-111, scenario 32)', () => {
     // The columns are laid out from the ratio.
     expect(columns().style.getPropertyValue('--monitor-split-left')).toBe('75fr');
     expect(columns().style.getPropertyValue('--monitor-split-right')).toBe('25fr');
+  });
+
+  it('moving it re-renders neither column: the list and the detail do not depend on where it sits (review finding 5, Principle XII)', async () => {
+    // A drag is a setView per pointermove. Were the columns subscribed to the WHOLE view, each pixel would
+    // rebuild the breakdown model (buildBreakdown) and redraw the right column.
+    feedOnly();
+    let listRenders = 0;
+    let detailRenders = 0;
+    render(
+      createElement(
+        Fragment,
+        null,
+        createElement(Profiler, { id: 'list', onRender: () => void (listRenders += 1) }, createElement(Breakdown)),
+        createElement(Profiler, { id: 'detail', onRender: () => void (detailRenders += 1) }, createElement(DetailPane)),
+        createElement(ColumnDivider),
+      ),
+    );
+    await screen.findByTestId('breakdown');
+    const [list, detail] = [listRenders, detailRenders];
+    for (let i = 0; i < 4; i += 1) fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(getView().splitRatio).toBeCloseTo(0.65, 5);
+    expect(listRenders - list, 'the list re-rendered for the divider').toBe(0);
+    expect(detailRenders - detail, 'the right column re-rendered for the divider').toBe(0);
   });
 
   it('is where it was left when the monitor is reopened: restored with the view, clamped', async () => {

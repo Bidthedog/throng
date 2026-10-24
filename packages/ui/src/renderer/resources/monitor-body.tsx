@@ -25,12 +25,12 @@ import { DetailPane } from './detail-pane.js';
 import { HeldFolders } from './held-folders.js';
 import { MonitorLocation } from './monitor-location.js';
 import { MonitorNotice } from './monitor-notice.js';
-import { useView } from './monitor-session.js';
+import { useSplitRatio } from './monitor-session.js';
 import { NodeActionsProvider } from './node-actions.js';
 import { FilterField, ToolbarControls } from './toolbar.js';
 
 export default function MonitorBody(): ReactElement {
-  const { splitRatio } = useView();
+  const splitRatio = useSplitRatio();
   const left = Math.round(splitRatio * 100);
   return (
     <NodeActionsProvider>

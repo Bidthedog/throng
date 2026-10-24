@@ -6,7 +6,7 @@
  * Layer: component — the real listener over the real registries; the bridge is faked. Which window main
  * picks is main's (`resources-ipc` tests).
  */
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EstimatesReporterMount, UnloadRouteMount } from '../../../src/renderer/resources/use-estimates-reporter.js';
@@ -160,6 +160,20 @@ describe('Activate routed here (FR-110, US2 scenario 30)', () => {
     bridge.fireAction({ action: 'activate', projectId: 'p1', tabId: 't1', panelId: 'n1' });
 
     expect(toPanel).toHaveBeenCalledWith({ projectId: 'p1', panelId: 'n1' });
+  });
+
+  it('answers main with whether it got there, so a failure reaches the monitor’s notice (review finding 9, FR-086)', async () => {
+    registerAttentionNavigation(() => Promise.resolve(false));
+    registerPlaceNavigation(() => Promise.resolve(true));
+    render(createElement(EstimatesReporterMount));
+
+    bridge.fireAction({ action: 'activate', projectId: 'p1', tabId: 't1', panelId: 'gone', requestId: 7 });
+    bridge.fireAction({ action: 'activate', projectId: 'p2', requestId: 8 });
+
+    await waitFor(() => expect(bridge.answers).toEqual([
+      { requestId: 7, ok: false },
+      { requestId: 8, ok: true },
+    ]));
   });
 
   it('a tab or a project: this window switches project and selects the tab', () => {

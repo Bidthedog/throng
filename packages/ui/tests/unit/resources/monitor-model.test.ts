@@ -168,3 +168,28 @@ describe('ordering by I/O', () => {
     expect(ids).toEqual([102, 101]);
   });
 });
+
+describe('the Total counts every row it hides, at any depth (FR-104, review finding 8)', () => {
+  // A shell with two children: the panel lists the shell and, under it, its chain (a process lists its own).
+  function chain() {
+    const reader = proc(101, 'reader.exe', metrics({ cpu: 1 }));
+    const writer = proc(102, 'writer.exe', metrics({ cpu: 2 }));
+    const shell = proc(201, 'cmd.exe', metrics({ cpu: 1 }), [reader, writer]);
+    const panel = node({ id: 'n:a', kind: 'panel', label: 'Shell', panelKind: 'terminal', children: [shell], owner: { projectId: 'a', tabId: 'a', panelId: 'a' } });
+    const tab = node({ id: 't:a', kind: 'tab', label: 'Tab', children: [panel], owner: { projectId: 'a', tabId: 'a' } });
+    const project = node({ id: 'p:a', kind: 'project', label: 'A', projectState: 'active', children: [tab], owner: { projectId: 'a' } });
+    const projects = node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] });
+    return node({ id: 'root', kind: 'root', label: 'throng', children: [projects], owner: { component: 'ui' } });
+  }
+
+  it('a filter that keeps the shell but drops one of its children reports that child hidden', () => {
+    const model = buildBreakdown(chain(), view({ metric: 'cpu', filterText: 'writer' }), ctx);
+    const ids = model.sections[0]!.rows.map((r) => r.node.id);
+    expect(ids).not.toContain('x:101:1');
+    expect(model.sections[0]!.total.hidden).toBe(1);
+  });
+
+  it('nothing filtered, nothing hidden', () => {
+    expect(buildBreakdown(chain(), view({ metric: 'cpu' }), ctx).sections[0]!.total.hidden).toBe(0);
+  });
+});

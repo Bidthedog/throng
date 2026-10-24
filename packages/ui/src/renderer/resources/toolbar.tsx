@@ -13,11 +13,11 @@ import { IconButton } from '../common/icon-button.js';
 import { writeConfigPatch } from '../config/write-config.js';
 import { FIGURE_ICON, FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
 import { HelpButton, HelpPanel } from './help-panel.js';
-import { setView, useNetworkUnavailable, useView } from './monitor-session.js';
+import { setView, useNetworkUnavailable, useListView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
 export function FilterField(): ReactElement {
-  const view = useView();
+  const view = useListView();
   const input = useRef<HTMLInputElement | null>(null);
   return (
     <div className="monitor-filter" role="search">
@@ -50,7 +50,7 @@ export function FilterField(): ReactElement {
 }
 
 export function ToolbarControls(): ReactElement {
-  const view = useView();
+  const view = useListView();
   const settings = useResourceMonitorSettings();
   const networkUnavailable = useNetworkUnavailable();
 

@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import type { ResourceNode } from '@throng/core';
 import type { DetailFrame } from '@throng/ipc-contract';
 import { descendants, nodeAt } from './monitor-model.js';
-import { isEnded, resolveFocusPath, useSelection, useSession, useView } from './monitor-session.js';
+import { isEnded, resolveFocusPath, useSelection, useSession, useListView } from './monitor-session.js';
 
 export interface Subject {
   readonly node: ResourceNode;
@@ -18,7 +18,7 @@ export interface Subject {
 
 export function useSubject(): Subject | null {
   const { tree, frame } = useSession();
-  const view = useView();
+  const view = useListView();
   const selectedId = useSelection();
   return useMemo(() => {
     if (tree === null || frame === null) return null;

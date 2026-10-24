@@ -37,6 +37,21 @@ describe('a figure that is not a number (FR-107)', () => {
   });
 });
 
+describe('a partial total names its reason in words, never a code (FR-044, FR-113)', () => {
+  const partial = (reason: string) => metrics({ network: 2048, partial: { network: reason } } as Parameters<typeof metrics>[0]);
+
+  it('words the two network codes as the "-" title does', () => {
+    expect(fig('network', partial(NETWORK_ELEVATION_REQUIRED)).title).toBe('Network — partial: Elevate to show');
+    expect(fig('network', partial(NETWORK_TRACE_FAILED)).title).toBe('Network — partial: Network unavailable');
+    // And on the figure itself, for the surfaces that word their own title (the detail pane, the status bar).
+    expect(figureOf('network', partial(NETWORK_TRACE_FAILED), THRESHOLDS, MACHINE).partial).toBe('Network unavailable');
+  });
+
+  it('leaves a reason that is already words alone', () => {
+    expect(fig('network', partial('One process could not be read')).title).toBe('Network — partial: One process could not be read');
+  });
+});
+
 describe('an estimate (FR-107)', () => {
   it('reads "~" before the figure, and says "Estimated" in its title', () => {
     const f = fig('memory', metrics({ memory: 4.2 * MIB }), true);

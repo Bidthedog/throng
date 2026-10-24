@@ -7,10 +7,10 @@
  * measured per input beyond the render it causes (Principle XII).
  */
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactElement } from 'react';
-import { SPLIT_MAX, SPLIT_MIN, SPLIT_STEP, clampSplit, getView, setView, useView } from './monitor-session.js';
+import { SPLIT_MAX, SPLIT_MIN, SPLIT_STEP, clampSplit, getView, setView, useSplitRatio } from './monitor-session.js';
 
 export function ColumnDivider(): ReactElement {
-  const { splitRatio } = useView();
+  const splitRatio = useSplitRatio();
   const drag = useRef<{ left: number; width: number } | null>(null);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>): void => {

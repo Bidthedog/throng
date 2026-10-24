@@ -410,6 +410,35 @@ export function useView(): ViewState {
   return useSyncExternalStore(subscribeSession, getView, getView);
 }
 
+/** The view as the LISTS read it: everything but where the divider sits (FR-111). */
+export type ListView = Omit<ViewState, 'splitRatio'>;
+
+let listView: ListView = DEFAULT_VIEW;
+/**
+ * The same object for as long as none of its fields changes. A divider drag is a `setView` per pointermove;
+ * a component reading this is not re-rendered by one, and a memo keyed on it is not rebuilt (Principle XII).
+ */
+export function getListView(): ListView {
+  const v = view;
+  const l = listView;
+  if (v.metric !== l.metric || v.filterText !== l.filterText || v.hideIdle !== l.hideIdle || v.hideEnded !== l.hideEnded || v.focusPath !== l.focusPath) {
+    listView = { metric: v.metric, filterText: v.filterText, hideIdle: v.hideIdle, hideEnded: v.hideEnded, focusPath: v.focusPath };
+  }
+  return listView;
+}
+
+/** The view without the divider's ratio — what the list, the detail and the toolbar draw from. */
+export function useListView(): ListView {
+  return useSyncExternalStore(subscribeSession, getListView, getListView);
+}
+
+const getSplitRatio = (): number => view.splitRatio;
+
+/** Where the divider sits, alone: the body lays the columns out from it and nothing else re-renders. */
+export function useSplitRatio(): number {
+  return useSyncExternalStore(subscribeSession, getSplitRatio, getSplitRatio);
+}
+
 /** Tests only: no session, no view memory, no listeners. */
 export function __resetSession(): void {
   pendingCatchUps = 0;
@@ -420,6 +449,7 @@ export function __resetSession(): void {
   version = 0;
   snapshot = EMPTY_SNAPSHOT;
   view = DEFAULT_VIEW;
+  listView = DEFAULT_VIEW;
   selectedId = null;
   ioPeak = 0;
   networkPeak = 0;

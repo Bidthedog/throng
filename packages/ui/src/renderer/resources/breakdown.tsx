@@ -76,7 +76,7 @@ import {
   toggleSelection,
   useSelection,
   useSession,
-  useView,
+  useListView,
 } from './monitor-session.js';
 import { useNodeActionsContext } from './node-actions.js';
 import { Sparkline, holdSparklines } from './sparkline.js';
@@ -487,7 +487,7 @@ export function Breakdown(): ReactElement | null {
   const liveTree = useDeferredValue(session.tree);
   const liveFrame = useDeferredValue(session.frame);
   const liveVersion = useDeferredValue(session.version);
-  const liveView = useView();
+  const liveView = useListView();
   const filterText = useDeferredValue(liveView.filterText);
   // A chosen Network orders by CPU while Network is not measured (FR-099, derived); the choice itself is kept.
   const networkTitle = liveTree === null ? null : networkUnavailableTitle(liveTree.rolled);

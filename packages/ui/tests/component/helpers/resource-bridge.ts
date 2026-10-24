@@ -23,6 +23,8 @@ export interface ResourcesBridge {
   setRouteAnswer(answer: boolean): void;
   /** Deliver an action another window routed to this one. */
   fireAction(req: RoutedAction): void;
+  /** What this window answered main about an Activate it was sent: did it get there (review finding 9). */
+  readonly answers: { requestId: number; ok: boolean }[];
   /** Deliver a change of detail demand. */
   fireDemand(on: boolean): void;
   setDemand(on: boolean): void;
@@ -53,6 +55,7 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
   const actionListeners = new Set<(req: RoutedAction) => void>();
   const demandListeners = new Set<(on: boolean) => void>();
   const routed: ResourcesBridge['routed'] = [];
+  const answers: ResourcesBridge['answers'] = [];
   let routeAnswer = false;
   let demand = false;
 
@@ -90,6 +93,9 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
     onAction: (cb: (req: RoutedAction) => void) => {
       actionListeners.add(cb);
       return () => actionListeners.delete(cb);
+    },
+    answerAction: (requestId: number, ok: boolean) => {
+      answers.push({ requestId, ok });
     },
     detailDemand: () => Promise.resolve(demand),
     onDetailDemand: (cb: (on: boolean) => void) => {
@@ -130,6 +136,7 @@ export function installResourcesBridge(initial: ResourceSummary | null = null): 
       routeAnswer = a;
     },
     fireAction: (req) => actionListeners.forEach((l) => l(req)),
+    answers,
     fireDemand: (on) => demandListeners.forEach((l) => l(on)),
     setDemand: (on) => {
       demand = on;

@@ -24,7 +24,7 @@ import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
 import { FIGURE_LABEL, type FigureId } from './figures.js';
-import { useView } from './monitor-session.js';
+import { useListView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 
 /** The gap between the button and the panel hanging from it. */
@@ -81,7 +81,7 @@ export function HelpPanel({ anchor, onClose }: HelpPanelProps): ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
   const { thresholds } = useResourceMonitorSettings();
-  const { metric } = useView();
+  const { metric } = useListView();
 
   // Placed before paint: below the button, right-aligned to it where the window's edge would cut it off,
   // above it near the bottom, clamped to what remains. Focus goes in at the same moment.

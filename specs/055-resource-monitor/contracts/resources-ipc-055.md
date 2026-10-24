@@ -39,5 +39,10 @@ Contract test: `packages/ui/tests/contract/resources-ipc.contract.test.ts`.
   window for a project-only target), brings that window forward and posts it on `throng:resources:action`;
   it resolves `false` when no window holds the target. The receiving window switches to the project,
   selects the tab and focuses the panel.
+- An `activate` carries a `requestId`; the receiving window answers on
+  `throng:resources:action:result` (renderer → main, `{ requestId, ok: boolean }`, preload
+  `answerAction`) with whether the navigation landed. `action:route` resolves with that answer; no
+  answer within 8 s, a malformed one, or a failed send resolves `false`, which the monitor shows as its
+  one route-failure notice (FR-086).
 - Every metrics object on the wire (`ResourceSummary` totals are unchanged; `DetailFrame` nodes) gains
   `network`, a number or `{ unavailable: 'elevation-required' | 'trace-failed' }`.

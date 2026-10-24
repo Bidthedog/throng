@@ -34,6 +34,8 @@ export interface ResourcesIpcDeps {
   };
   /** How long to wait for the main window's status-bar rectangle before minimising without it. */
   readonly statusRectTimeoutMs?: number;
+  /** How long to wait for a window to say whether an Activate got there before reporting that it did not. */
+  readonly actionReplyTimeoutMs?: number;
 }
 
 /** What registering hands back: main's half of the status-rect exchange (FR-085). */
@@ -81,20 +83,50 @@ export function registerResourcesIpc(ipcMain: ResourcesIpcMain, deps: ResourcesI
    * or a project alone, goes to the main window: it switches project first, then selects. The monitor
    * window stays open; its focus-scoped layering keeps it above throng's windows (R14).
    */
-  const routeActivate = (r: Record<string, unknown>): boolean => {
+  /*
+   * The route resolves with the RECEIVING window's answer, not with "it was delivered": a project switch
+   * or a tab that never mounts fails after delivery, and the monitor's notice must still say so (FR-086).
+   */
+  const activateAnswers = new Map<number, (ok: boolean) => void>();
+  let nextActivate = 1;
+  ipcMain.on('throng:resources:action:result', (_event, reply: unknown) => {
+    if (typeof reply !== 'object' || reply === null) return;
+    const { requestId, ok } = reply as { requestId?: unknown; ok?: unknown };
+    if (typeof requestId !== 'number') return;
+    const resolve = activateAnswers.get(requestId);
+    if (resolve === undefined) return;
+    activateAnswers.delete(requestId);
+    resolve(ok === true);
+  });
+
+  const routeActivate = (r: Record<string, unknown>): boolean | Promise<boolean> => {
     const { projectId, tabId, panelId } = r;
     if (typeof projectId !== 'string' || projectId === '') return false;
     if (tabId !== undefined && typeof tabId !== 'string') return false;
     if (panelId !== undefined && (typeof panelId !== 'string' || tabId === undefined)) return false;
+    const holder = typeof tabId === 'string' ? host.windowHolding('tab', tabId) : null;
+    const target = holder ?? deps.mainWindowId();
+    if (target === null) return false;
+    const requestId = nextActivate++;
     const payload = {
       action: 'activate',
       projectId,
       ...(tabId !== undefined ? { tabId } : {}),
       ...(panelId !== undefined ? { panelId } : {}),
+      requestId,
     };
-    const holder = typeof tabId === 'string' ? host.windowHolding('tab', tabId) : null;
-    const target = holder ?? deps.mainWindowId();
-    return target === null ? false : deps.sendTo(target, 'throng:resources:action', payload);
+    return new Promise<boolean>((resolve) => {
+      activateAnswers.set(requestId, resolve);
+      if (!deps.sendTo(target, 'throng:resources:action', payload)) {
+        activateAnswers.delete(requestId);
+        resolve(false);
+        return;
+      }
+      // Longer than the receiving window's own wait for a switched project's layout (5 s).
+      setTimeout(() => {
+        if (activateAnswers.delete(requestId)) resolve(false);
+      }, deps.actionReplyTimeoutMs ?? 8_000);
+    });
   };
 
   ipcMain.handle('throng:resources:summary:get', () => host.latestSummary());

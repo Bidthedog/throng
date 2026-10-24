@@ -4,6 +4,7 @@
  */
 import {
   NETWORK_ELEVATION_REQUIRED,
+  NETWORK_TRACE_FAILED,
   bandFor,
   isUnavailable,
   type MachineInfo,
@@ -66,6 +67,16 @@ export function networkUnavailableTitle(m: Metrics): string | null {
 
 function networkReason(v: Exclude<MetricValue, number>): string {
   return isUnavailable(v) && v.reason === NETWORK_ELEVATION_REQUIRED ? 'Elevate to show' : 'Network unavailable';
+}
+
+/**
+ * A partial total's reason as words (FR-044): the network trace's two codes read as its "-" title does
+ * (FR-113); any other reason is already a sentence and is left alone.
+ */
+function partialReason(reason: string | undefined): string | undefined {
+  if (reason === NETWORK_ELEVATION_REQUIRED) return 'Elevate to show';
+  if (reason === NETWORK_TRACE_FAILED) return 'Network unavailable';
+  return reason;
 }
 
 /**
@@ -141,7 +152,7 @@ export function figureOf(
       value: io.value,
       text: typeof io.value === 'number' ? formatRate(io.value) : formatMetric('ioRead', io.value),
       band: undefined,
-      partial: io.partial,
+      partial: partialReason(io.partial),
     };
   }
   const value = m[id];
@@ -151,7 +162,7 @@ export function figureOf(
     text: formatMetric(id, value),
     // Network, like I/O, has no threshold of its own: its heat is against the session's peak (FR-094).
     band: id === 'network' ? undefined : bandFor(id, value, thresholds, machine),
-    partial: m.partial?.[id],
+    partial: partialReason(m.partial?.[id]),
   };
 }
 

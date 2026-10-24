@@ -156,6 +156,8 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:resources:action', h);
       return () => ipcRenderer.removeListener('throng:resources:action', h);
     },
+    /** Tell main whether an Activate it routed here got there (055 FR-086, FR-110). */
+    answerAction: (requestId: number, ok: boolean) => ipcRenderer.send('throng:resources:action:result', { requestId, ok }),
   },
   daemon: {
     state: () => ipcRenderer.invoke('throng:daemon:state'),

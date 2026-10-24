@@ -143,6 +143,21 @@ describe('selection is marked with an accent edge, as throng marks its active it
   });
 });
 
+describe('an indented row never overflows (FR-106, review finding 4)', () => {
+  // use-column-fit.ts budgets the row's padding as a FIXED 12px. Were the indent on the row, a row at depth
+  // d would need d * 14px more than was budgeted, and `overflow-x: hidden` would clip its last figure.
+  it('keeps the row’s own padding fixed, whatever its depth', () => {
+    const row = bodyOf('.breakdown-row');
+    const padding = /padding:([^;]*);/.exec(row)?.[1] ?? '';
+    expect(padding).not.toMatch(/--breakdown-depth/);
+    expect(padding.trim()).toBe('2px 6px');
+  });
+
+  it('indents inside the name track instead, so the figure tracks never move', () => {
+    expect(bodyOf('.breakdown-row__name')).toMatch(/padding-left:\s*calc\(var\(--breakdown-depth[^;]*\*\s*14px\)/);
+  });
+});
+
 describe('the line graphs (FR-097)', () => {
   it('are drawn in the theme’s accent, which the canvas reads back as its CSS colour', () => {
     expect(bodyOf('.line-graph__plot')).toMatch(/color:\s*var\(--throng-colour-accent\)/);

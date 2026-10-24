@@ -16,7 +16,7 @@ import {
   type UsageThresholds,
 } from '@throng/core';
 import { FIGURE_ORDER, figureOf, metricNumber, monitorFigure, type Figure, type FigureId } from './figures.js';
-import { resolveFocusPath, type ViewState } from './monitor-session.js';
+import { resolveFocusPath, type ListView } from './monitor-session.js';
 
 export interface BreakdownRow {
   readonly node: ResourceNode;
@@ -166,7 +166,7 @@ function rank(nodes: readonly ResourceNode[], metric: FigureId): ResourceNode[] 
  * view names (or its nearest surviving ancestor), its children ordered by the chosen metric. At the
  * root the first view carries both halves of the intent (FR-020b): the components, and the projects.
  */
-export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelContext): BreakdownModel {
+export function buildBreakdown(tree: ResourceNode, view: ListView, ctx: ModelContext): BreakdownModel {
   // Hide ended (FR-105) takes an ended process out before anything is ordered; Hide idle a live idle one.
   const hideEnded = view.hideEnded ? (n: ResourceNode): boolean => ctx.isEnded(n.id) : undefined;
   const hideIdle = view.hideIdle
@@ -191,11 +191,6 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
   // The Total is the listed node's own figure (FR-104), read from the capture rather than from what the
   // filter left, so filtering never changes it; an ended child counts toward nothing, so it is not "hidden".
   const listed = nodeAt(tree, focusPath) ?? focus;
-  const shown = new Set(focus.children.map((c) => c.id));
-  const total: BreakdownTotal = {
-    node: listed,
-    hidden: listed.children.filter((c) => c.kind !== 'limitation' && !ctx.isEnded(c.id) && !shown.has(c.id)).length,
-  };
   const section = (
     id: SectionId,
     title: string,
@@ -203,7 +198,18 @@ export function buildBreakdown(tree: ResourceNode, view: ViewState, ctx: ModelCo
     nodes: readonly ResourceNode[],
   ): BreakdownSection => {
     const top = ordered(nodes);
-    return { id, title, basePath, nodes: top, rows: rowsFor(top, basePath, expandAll, view.metric, ctx, held), total };
+    const rows = rowsFor(top, basePath, expandAll, view.metric, ctx, held);
+    // "Hidden" is every row the list would draw with no filter and no hides — the listed node's children
+    // and, under a process, its whole chain — that it does not draw now: at any depth, not just the first.
+    const shown = new Set(rows.map((r) => r.node.id));
+    let hidden = 0;
+    const count = (n: ResourceNode): void => {
+      if (n.kind !== 'limitation' && !ctx.isEnded(n.id) && !shown.has(n.id)) hidden += 1;
+      if (n.kind === 'process') for (const c of n.children) count(c);
+    };
+    for (const c of listed.children) count(c);
+    const total: BreakdownTotal = { node: listed, hidden };
+    return { id, title, basePath, nodes: top, rows, total };
   };
 
   // The top level lists the four components only (FR-103): the user's projects are one drill into Projects.

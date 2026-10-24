@@ -20,7 +20,7 @@ import { useMemo, type CSSProperties, type ReactElement } from 'react';
 import { formatGrouped, heatFor, type HeatMetric, type UsageThresholds } from '@throng/core';
 import { FIGURE_LABEL, orderMetric, type FigureId } from './figures.js';
 import { barsFor, figuresOf, type BarItem, type FigureContext } from './monitor-model.js';
-import { getIoPeak, getNetworkPeak, isEnded, useView } from './monitor-session.js';
+import { getIoPeak, getNetworkPeak, isEnded, useListView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import { usePointerHold } from './use-pointer-hold.js';
 import type { Subject } from './use-subject.js';
@@ -84,7 +84,7 @@ function Bar({
 
 export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   // The bars follow what the rows are ordered by: a chosen Network is CPU while it is not measured (FR-099).
-  const metric = orderMetric(useView().metric, subject.tree);
+  const metric = orderMetric(useListView().metric, subject.tree);
   const { thresholds } = useResourceMonitorSettings();
   // A hold belongs to the item it was taken on: a new selection on the left takes a new one.
   const hold = usePointerHold(subject.node, (live) => live, (live) => live, subject.node.id);

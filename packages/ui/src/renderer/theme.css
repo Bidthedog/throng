@@ -4117,7 +4117,8 @@ textarea,
   grid-template-columns: var(--breakdown-columns, minmax(160px, 1fr) 90px 56px 64px 56px 72px 72px);
   align-items: center;
   gap: 8px;
-  padding: 2px 6px 2px calc(6px + var(--breakdown-depth, 0) * 14px);
+  /* Fixed whatever the depth: the column fit budgets exactly this (use-column-fit.ts). The indent is the name's. */
+  padding: 2px 6px;
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
@@ -4153,7 +4154,11 @@ textarea,
   color: var(--throng-colour-textMuted);
 }
 
+/* The indent lives inside the name track (FR-106): a deep row loses name width, never a figure. */
 .breakdown-row__name {
+  box-sizing: border-box;
+  min-width: 0;
+  padding-left: calc(var(--breakdown-depth, 0) * 14px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

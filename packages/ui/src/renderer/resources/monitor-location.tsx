@@ -12,7 +12,7 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
 import { Breadcrumb } from './breadcrumb.js';
 import { IconButton } from '../common/icon-button.js';
-import { focusOn, useSession, useView } from './monitor-session.js';
+import { focusOn, useSession, useListView } from './monitor-session.js';
 
 let shown: readonly string[] | null = null;
 const listeners = new Set<() => void>();
@@ -34,7 +34,7 @@ function subscribe(l: () => void): () => void {
 
 export function MonitorLocation(): ReactElement | null {
   const { tree } = useSession();
-  const view = useView();
+  const view = useListView();
   const published = useSyncExternalStore(subscribe, () => shown);
   if (tree === null) return null;
   const path = published ?? view.focusPath;

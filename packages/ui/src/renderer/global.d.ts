@@ -73,6 +73,8 @@ declare global {
         routeAction: (req: import('./resources/route-action.js').RoutedAction) => Promise<boolean>;
         /** This window is asked to run an action for the monitor. */
         onAction: (cb: (req: import('./resources/route-action.js').RoutedAction) => void) => () => void;
+        /** Answer main about an Activate it routed here: whether this window got there (FR-086, FR-110). */
+        answerAction?: (requestId: number, ok: boolean) => void;
         /** From any window: open the monitor window, or bring it forward (R14, FR-086). */
         open: () => void;
         /** Monitor window: shrink into the status-bar figures and close, or just close (FR-085). */

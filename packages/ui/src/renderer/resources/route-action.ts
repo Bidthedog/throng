@@ -12,4 +12,11 @@ export type RoutedAction =
    * Activate (FR-110): go to the project — and its tab, and its panel — in the window holding it, which comes
    * forward. A process is resolved to its panel before it is sent.
    */
-  | { readonly action: 'activate'; readonly projectId: string; readonly tabId?: string; readonly panelId?: string };
+  | {
+      readonly action: 'activate';
+      readonly projectId: string;
+      readonly tabId?: string;
+      readonly panelId?: string;
+      /** Set by main on delivery: the receiving window answers it with whether it got there. */
+      readonly requestId?: number;
+    };

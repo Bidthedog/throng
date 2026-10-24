@@ -24,9 +24,11 @@ function LineGraph({ subject, metric }: { subject: Subject; metric: FigureId }):
   const hasLine = useHasLine(node.id);
   const figure = figuresOf(node, { thresholds, machine: frame.machine }).find((f) => f.id === metric);
   const current = ended ? 'ended' : (figure?.text ?? '');
-  // A figure that is not measured (Network unelevated, FR-113) has no line to draw: a line of zeros would
-  // claim a reading. Its "-" carries the reason in its title, as the list's cell does (FR-107).
-  const measured = ended || typeof figure?.value === 'number';
+  // An UNAVAILABLE figure (Network unelevated, FR-113) has no line to draw: a line of zeros would claim a
+  // reading. Its "-" carries the reason in its title, as the list's cell does (FR-107). One that is merely
+  // not measured YET (a first sighting has no rate) is still loading: the spinner, until two points (FR-114).
+  const value = figure?.value;
+  const measured = ended || typeof value !== 'object' || value === null || value.kind !== 'unavailable';
   return (
     <figure className="line-graph" data-testid={`line-graph-${metric}`} aria-label={`${FIGURE_LABEL[metric]} of ${node.label} over time`}>
       <figcaption className="line-graph__caption">
