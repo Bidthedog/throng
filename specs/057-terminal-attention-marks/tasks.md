@@ -346,3 +346,14 @@ From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Rou
 
 - [x] T128 Docs: `docs/preferences.md` / `docs/quick-start.md` mention Flag and the numbered marks where the attention feature is described; `docs-currency.test.ts` green
 - [x] T129 Widen the round-12 manual test plan groups' `Paths:` to the files that implement them
+
+## Phase 24: Iterate 2026-10-24, round 13 — one numbered circle in place of the flag (FR-135 – FR-139)
+
+From hand-testing round 12 (MT-03, MT-04 at 63bd9532; spec Session 2026-10-24 (round 13); plan *Round 13 addendum*). No defect; five new requirements. Boundaries: [THEME] core theme, [UI] renderer — both done by the orchestrator.
+
+- [ ] T130 [THEME] Test first, then retire the `attentionFailedMark` colour token and the `attention` / `attentionFailed` icon tokens: out of `theme.ts`, every default theme, `theme-metadata.ts`, `theme-copy.ts` and the icon-pack service, into `REMOVED_COLOUR_TOKENS` / `REMOVED_ICON_TOKENS` in `theme-ops.ts` (a stored theme carrying them loads with them dropped), the token-count tests and `CLOSEST_LEGITIMATE_PAIR_DELTA` re-measured, in `packages/core/src/config/` with its unit tests (FR-139)
+- [ ] T131 [THEME] Test first, then `toCssVariables` emits `--throng-attention-mark-text`, the `readableTextOn` black or white for the theme's resolved `attentionMark`, in `packages/core/src/config/theme.ts` with a unit test over every bundled theme (FR-136)
+- [ ] T132 [UI] Test first (component + CSS), then `AttentionMark` is a solid circle with no `Icon`: fill `attentionMark`, the count as its text in `--throng-attention-mark-text` when `showCount`, no number on a panel header, one 14 px size shared with `.project-item__dot` (the row slot 14 px, the 16 px glyph rule gone), every `failed` CSS variant collapsed to the attention one (mark, selected-row override, panel header tint, popover icon), the popover row's kind icon removed, `badge-renderer.ts` reading `attentionMark` for both kinds, and still distinct from the 8 px unsaved dot, in `packages/ui/src/renderer/attention/attention-mark.tsx`, `attention-popover.tsx`, `badge-renderer.ts`, `theme.css` and `packages/ui/tests/component/attention-count-css.test.ts` (FR-135, FR-136, FR-137, FR-138; depends on T131)
+- [ ] T133 [UI] Test first, then the Flag and Go to Next Marked Panel menu items carry no `icon`, in `packages/ui/src/renderer/workspace/panel-header-menu.ts` and `packages/ui/src/renderer/sidebar/project-menu.ts` (FR-139; depends on T130)
+- [ ] T134 Docs: `docs/quick-start.md` describes the numbered circle in place of the flag; `docs-currency.test.ts` green
+- [ ] T135 Widen MT-03 / MT-04 `Paths:` to the files that implement round 13

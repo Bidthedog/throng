@@ -182,3 +182,28 @@ amended in `contracts/app-attention.md` and `contracts/daemon-attention.md`.
   in reserved space (FR-129 – FR-133), in `holder-marks.tsx`, `attention-mark.tsx`, `tab-group.tsx`,
   `projects-panel.tsx` and `theme.css`.
 - **Boundaries** — core + main; persistence + daemon + ipc-contract; renderer.
+
+## Round 13 addendum (2026-10-24)
+
+Iterate round 13 (spec Session 2026-10-24 (round 13)): FR-135 – FR-139. No data, contract or IPC change.
+
+- **core theme** — `attentionFailedMark` leaves `ThemeColours`, `THRONG_THEME`, every default theme,
+  `theme-metadata.ts` and `theme-copy.ts`, and joins `REMOVED_COLOUR_TOKENS` in `theme-ops.ts`; `attention`
+  and `attentionFailed` leave `ThemeIcons`, `THRONG_THEME.icons`, `theme-copy.ts` and the icon-pack service,
+  and join `REMOVED_ICON_TOKENS` (FR-139), as `goToPanel` did. `CLOSEST_LEGITIMATE_PAIR_DELTA` is
+  re-measured (one shared token fewer). `toCssVariables` emits one DERIVED property,
+  `--throng-attention-mark-text`: `readableTextOn(resolved attentionMark)` — 046 FR-072a's black-or-white
+  rule, the helper the selected row already uses — so a user theme's own `attentionMark` gets a readable
+  number with no token of its own (FR-136).
+- **renderer** — `AttentionMark` draws no `Icon`: a `span` circle, background `attentionMark`, with the count
+  as its text in `--throng-attention-mark-text` when `showCount` (FR-135, FR-136). One size, 14 px, shared
+  with `.project-item__dot` (FR-137); the row slot rule becomes 14 px and drops the 16 px glyph rule.
+  Every `failed` variant in CSS (`--failed` mark, popover icon, panel header tint, selected-row override)
+  collapses to the attention one; the attention popover's per-row kind icon goes, the row's reason text
+  carries the kind (FR-135). `badge-renderer.ts` reads `attentionMark` for both kinds. The Flag and Go to
+  Next Marked Panel menu items lose `icon: 'attention'` (FR-139). The selected row's mark keeps the
+  attention fill (FR-107 superseded), so the `.project-item--active .throng-attention-mark` colour override
+  goes.
+- **Tests** — `attention-count-css.test.ts` rewritten for the circle; token-count and theme-copy tests
+  follow the removals; a unit test for the derived property in `toCssVariables`.
+- **Boundaries** — core theme; renderer. Both small; the orchestrator implements them.
