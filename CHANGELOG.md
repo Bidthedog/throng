@@ -29,6 +29,19 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Added
+
+- **Flag a panel to come back to** ([#522](https://github.com/Bidthedog/throng/issues/522)): *Flag* in any panel's right-click menu marks it as needing you, on its tab, project and category too, without a notification. The flag stays while you work in that panel and clears once you have left it and come back; it survives closing throng.
+
+### Changed
+
+- **Marks say how many are waiting** ([#523](https://github.com/Bidthedog/throng/issues/523)): the flag on a project, a tab and a minimised category carries the number of panels that need you, every category header shows its number of projects, a tab shows its panel count once it holds two or more, and a minimised category's header is paler than an expanded one. Nothing moves as marks come and go.
+- **Click a notification to reach its panel** ([#525](https://github.com/Bidthedog/throng/issues/525)): clicking anywhere on an attention toast, or on its Windows notification, takes you to the panel; the arrow button is gone.
+
+### Fixed
+
+- **A marked panel no longer notifies twice** ([#524](https://github.com/Bidthedog/throng/issues/524)): a panel whose mark came back when throng reopened, or was raised by a startup command, raised a new notification on its next signal while the mark was still showing.
+
 ## 1.0.0-alpha11 — 2026-10-22
 
 ### Added
