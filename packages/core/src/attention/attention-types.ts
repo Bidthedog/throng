@@ -90,10 +90,13 @@ export interface AttentionMark {
   /** Set while the mark's panel holds focus in a focused window (FR-095); the mark clears once it has for the clear delay. */
   dwellStartedAt: number | null;
   /**
-   * FR-127: a flag raised on the focused panel runs no clear delay until that focus has gone; the first time
-   * its panel is unattended this drops to false. Absent means false.
+   * FR-127: a manual flag runs no clear delay until its panel has held focus and then lost it. The context
+   * menu Flag is chosen from takes focus while it is open, so "the focus it had when flagged" is the focus
+   * that returns to the panel when the menu closes (R20). Absent means false.
    */
   heldSinceRaise?: boolean;
+  /** FR-127: the held flag's panel has been attended since the flag; losing that attendance ends the hold. */
+  heldFocusSeen?: boolean;
 }
 
 /** A manual flag as the daemon stores it (R19, FR-128). */

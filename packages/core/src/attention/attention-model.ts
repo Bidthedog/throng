@@ -111,7 +111,8 @@ export class AttentionModel {
       reason: { signal: 'flagged', detail: null },
       raisedAt: request.at,
       dwellStartedAt: null,
-      heldSinceRaise: this.isAttended(request.panelId),
+      heldSinceRaise: true,
+      heldFocusSeen: this.isAttended(request.panelId),
     });
     this.publish();
     return true;
@@ -284,9 +285,13 @@ export class AttentionModel {
     for (const mark of [...this.byPanel.values()]) {
       const attended = this.isAttended(mark.panelId);
       if (mark.heldSinceRaise) {
-        // FR-127: no dwell while the focus the flag was raised under holds; once it has gone, an ordinary mark.
-        if (!attended) {
-          this.byPanel.set(mark.panelId, { ...mark, heldSinceRaise: false, dwellStartedAt: null });
+        // FR-127: no dwell while held. The hold ends only once the panel has been attended and then left —
+        // never while the menu Flag was chosen from still has focus.
+        if (attended && !mark.heldFocusSeen) {
+          this.byPanel.set(mark.panelId, { ...mark, heldFocusSeen: true });
+          dirty = true;
+        } else if (!attended && mark.heldFocusSeen) {
+          this.byPanel.set(mark.panelId, { ...mark, heldSinceRaise: false, heldFocusSeen: false, dwellStartedAt: null });
           dirty = true;
         }
         continue;
