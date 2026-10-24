@@ -194,3 +194,5 @@ mode one layer down, and M7's "no menu can hold a different opinion" fails at th
 hold two. The order is now checked rather than annotated, and the union-to-order linkage is asserted
 in `packages/core/tests/unit/menu-sections.test.ts` as well, so the guarantee does not rest on a type
 alias nothing tests.)*
+
+*2026-10-24 (057 round 12, FR-125)* — every panel header menu, whatever the panel's type, ends its **View & state** section with **Flag** (icon `attention`, no command, no chord): it raises a user Attention mark on the panel.

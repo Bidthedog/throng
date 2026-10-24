@@ -230,3 +230,5 @@ window, follows a successful write through the config store (032 FR-004).
 **Principle VI**: the four menu items are the canonical route; the two buttons are accelerators, so a
 hidden status bar strands nothing. `menu-sections.test.ts` pins the four shapes and `panelActions` gains
 `toggleSyncScroll`; `menu-icon-tokens.test.ts` gains `syncScroll`.
+
+*2026-10-24 (057 round 12, FR-125)* — a preview's header menu, like every panel header menu, ends **View & state** with **Flag** (icon `attention`, no command, no chord), after the failure-banner items.
