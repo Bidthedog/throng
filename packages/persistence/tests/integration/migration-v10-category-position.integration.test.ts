@@ -283,7 +283,8 @@ describe('migration v10 (category position)', () => {
     db = openDatabase({ databasePath: path2 });
     try {
       const result = runMigrations(db);
-      expect(result.applied).toBe(false);
+      // Stamped 10, so v11 and later still apply; the guard heals the missing column regardless.
+      expect(result.from).toBe(MIGRATION_V10_VERSION);
       expect(result.repairs).toContainEqual({ table: 'project_categories', column: 'position' });
       expect(() =>
         db

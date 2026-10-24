@@ -331,7 +331,7 @@ From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Rou
 
 ### Persistence and daemon
 
-- [ ] T121 [P] [DAEMON] Test first, then migration v11 `attention_flag` (idempotent; fixture proving an old store upgrades and a re-run is a no-op) and `AttentionFlagRepository`, in `packages/persistence/src/migrations/v11-attention-flags.ts`, `migration-runner.ts` and `packages/persistence/src/attention-flag-repository.ts` (FR-128, R19)
+- [x] T121 [P] [DAEMON] Test first, then migration v11 `attention_flag` (idempotent; fixture proving an old store upgrades and a re-run is a no-op) and `AttentionFlagRepository`, in `packages/persistence/src/migrations/v11-attention-flags.ts`, `migration-runner.ts` and `packages/persistence/src/attention-flag-repository.ts` (FR-128, R19)
 - [ ] T122 [DAEMON] Test first, then `attention.flagList` / `flagSet` / `flagClear` in `packages/ipc-contract/src/terminal.ts` (or a new `attention.ts` exported from its index), routed in the daemon's composition root, with project deletion dropping its rows, and the contract test in `packages/ui/tests/contract/` (contracts/daemon-attention.md; depends on T121)
 
 ### Renderer
