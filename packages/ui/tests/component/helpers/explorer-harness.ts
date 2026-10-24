@@ -369,6 +369,11 @@ export async function mountExplorer(
     }),
   );
   const tree = await screen.findByRole('tree');
+  // `findByRole` resolves on the commit that puts the tree in the DOM, which can be before React has
+  // run that commit's passive effects — among them the tree's window `dragover` listener, which must
+  // follow react-dnd's (registered in the same commit's layout phase) to override it. Flush them, so a
+  // test dispatching straight away meets the tree as a user would.
+  await act(async () => {});
   return { clipboard, transfer, daemon, files, tree, unmount: view.unmount };
 }
 
