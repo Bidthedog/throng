@@ -290,6 +290,14 @@ declare global {
         onToast: (cb: (e: AttentionToastEvent) => void) => () => void;
         onFocusPanel: (cb: (e: { panelId: string; projectId: string }) => void) => () => void;
         goTo: (panelId: string) => void;
+        /** 057 FR-125 — the panel menu's Flag: a mark from the user, reason "Flagged". Fire and forget. */
+        flag: (req: {
+          panelId: string;
+          projectId: string;
+          panelTitle: string;
+          tabTitle: string;
+          projectName: string;
+        }) => void;
         /** The current mark set, for a window that attaches after marks were raised (057 T068). */
         getMarks?: () => Promise<{ marks: import('@throng/core').AttentionMark[] }>;
         /** The callback returns the PNG data URL; the preload correlates the reply. */

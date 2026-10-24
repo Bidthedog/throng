@@ -109,8 +109,8 @@ async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Prom
 test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag: ['@extended', '@window'] }, async () => {
   await run(async (win) => {
     await createProject(win, 'Counter');
-    // One panel → a pill reading 1. The square-bracket form went with FR-042 (031 US5).
-    await expect(win.locator('.tab-chip__count').first()).toHaveText('1');
+    // One panel → no pill (057 FR-132); it holds its place, hidden. The square-bracket form went with FR-042 (031 US5).
+    await expect(win.locator('.tab-chip__count').first()).toBeHidden();
 
     const firstPanel = await win
       .locator('.panel-box')

@@ -87,6 +87,8 @@ export class ProjectIpcService {
     private readonly killProjectTerminals?: (projectId: string) => void,
     /** Project categories (046). Without it the `projects.categories.*` methods are not served. */
     private readonly categories?: ProjectCategoryService,
+    /** Runs after a project is deleted — drops that project's manual attention flags (FR-128). */
+    private readonly onProjectDeleted?: (projectId: string) => void,
   ) {}
 
   register(router: RpcRouter): void {
@@ -130,7 +132,9 @@ export class ProjectIpcService {
       // Tear down the project's terminals first so deleting it never orphans their
       // OS hosts (the daemon keeps terminals keyed by panelId, not by project).
       this.killProjectTerminals?.(id);
-      return this.service.delete(id);
+      const result = this.service.delete(id);
+      this.onProjectDeleted?.(id);
+      return result;
     });
 
     router.register(PROJECTS_SET_ACTIVE_METHOD, (params) =>

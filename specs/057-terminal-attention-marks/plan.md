@@ -157,3 +157,53 @@ That gives four implementation boundaries (core+daemon, main+preload, renderer, 
 | Daemon ledger (in memory) | FR-066 and FR-091 need marks across a window close, when main quits | Persisting marks in SQLite outlives the daemon's terminals, which die with it, so it would restore marks for terminals that no longer exist |
 | Badge image drawn in a renderer | FR-016 needs theme colours; main has no canvas | Pre-rendered PNG assets cannot follow the theme |
 | Went-quiet range 10–600 s, not 2–600 | The slider rules need an even step | A typed-only maximum, which hides 600 from the slider |
+| *(round 12)* Manual flags in SQLite (`attention_flag`, migration v11), apart from the ledger | FR-128: a flag on an editor or preview panel survives a reboot, and its panel is in a saved layout that does too | The in-memory ledger dies with the daemon, and its restore reinstates every entry as a terminal mark (R19) |
+
+## Round 12 addendum (2026-10-24)
+
+Iterate round 12 (spec Session 2026-10-24): FR-124 – FR-134. Design in research R18 – R22; contracts
+amended in `contracts/app-attention.md` and `contracts/daemon-attention.md`.
+
+- **core** — `AttentionMark.producer` widens to `'terminal' | 'user'`, with `heldSinceRaise: boolean`
+  (FR-127). `AttentionModel` gains `flag(panel)` and `restoreFlags(entries)`; `settle()` gives a held
+  mark no dwell until its panel stops being attended, then clears the hold. `withdraw('terminal')`
+  already spares user marks. `ledgerEntries()` returns terminal marks only. Holder state gains `count`
+  (FR-131) in `attention-holders.ts`.
+- **persistence + daemon + ipc-contract** — migration v11 `attention_flag(panel_id PK, project_id,
+  panel_title, tab_title, project_name, raised_at)`; an `AttentionFlagRepository`; RPCs
+  `attention.flagList`, `attention.flagSet`, `attention.flagClear`; project deletion drops a project's
+  rows, as `forgetProject` drops ledger entries.
+- **main** — `AttentionService.flag(panelId, …)` raises via the model, persists via `flagSet`, never
+  announces (FR-126); every clear of a user mark calls `flagClear`; on connect `flagList` restores them
+  (FR-128). FR-134: announce only when the raise **created** the mark — the `announced` set goes.
+- **renderer** — Flag in `panel-header-menu.ts` (every panel type); the toast card body is the link
+  and the go-to control goes (FR-124); numbered flags on project rows, tab chips and minimised
+  category headers, the category total pill, the tab panel-count pill, a paler minimised header, all
+  in reserved space (FR-129 – FR-133), in `holder-marks.tsx`, `attention-mark.tsx`, `tab-group.tsx`,
+  `projects-panel.tsx` and `theme.css`.
+- **Boundaries** — core + main; persistence + daemon + ipc-contract; renderer.
+
+## Round 13 addendum (2026-10-24)
+
+Iterate round 13 (spec Session 2026-10-24 (round 13)): FR-135 – FR-139. No data, contract or IPC change.
+
+- **core theme** — `attentionFailedMark` leaves `ThemeColours`, `THRONG_THEME`, every default theme,
+  `theme-metadata.ts` and `theme-copy.ts`, and joins `REMOVED_COLOUR_TOKENS` in `theme-ops.ts`; `attention`
+  and `attentionFailed` leave `ThemeIcons`, `THRONG_THEME.icons`, `theme-copy.ts` and the icon-pack service,
+  and join `REMOVED_ICON_TOKENS` (FR-139), as `goToPanel` did. `CLOSEST_LEGITIMATE_PAIR_DELTA` is
+  re-measured (one shared token fewer). `toCssVariables` emits one DERIVED property,
+  `--throng-attention-mark-text`: `readableTextOn(resolved attentionMark)` — 046 FR-072a's black-or-white
+  rule, the helper the selected row already uses — so a user theme's own `attentionMark` gets a readable
+  number with no token of its own (FR-136).
+- **renderer** — `AttentionMark` draws no `Icon`: a `span` circle, background `attentionMark`, with the count
+  as its text in `--throng-attention-mark-text` when `showCount` (FR-135, FR-136). One size, 14 px, shared
+  with `.project-item__dot` (FR-137); the row slot rule becomes 14 px and drops the 16 px glyph rule.
+  Every `failed` variant in CSS (`--failed` mark, popover icon, panel header tint, selected-row override)
+  collapses to the attention one; the attention popover's per-row kind icon goes, the row's reason text
+  carries the kind (FR-135). `badge-renderer.ts` reads `attentionMark` for both kinds. The Flag and Go to
+  Next Marked Panel menu items lose `icon: 'attention'` (FR-139). The selected row's mark keeps the
+  attention fill (FR-107 superseded), so the `.project-item--active .throng-attention-mark` colour override
+  goes.
+- **Tests** — `attention-count-css.test.ts` rewritten for the circle; token-count and theme-copy tests
+  follow the removals; a unit test for the derived property in `toCssVariables`.
+- **Boundaries** — core theme; renderer. Both small; the orchestrator implements them.

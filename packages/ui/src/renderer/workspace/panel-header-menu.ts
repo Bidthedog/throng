@@ -15,7 +15,7 @@
  * | Content      | Save, Save As…, Revert, Reload from disk, Find, Replace, Replace All               |
  * | Destroy      | the panel's destroy verb                                                            |
  * | Navigate     | Reveal File in File Explorer, Open in OS Explorer, Send to Tab, Sync to           |
- * | View & state | Zoom, Synchronise Scrolling, Try again, Copy details, Clear panel type,            |
+ * | View & state | Zoom, Synchronise Scrolling, Flag, Try again, Copy details, Clear panel type,            |
  * |              | Refresh / redraw                                                                    |
  *
  * *Destroy Panel* moves from last to the middle — the same shape the File Explorer menu has always
@@ -165,6 +165,8 @@ export interface PanelHeaderMenuActions {
   goToEditor: () => void;
   /** 044 FR-122 — flip `editor.previews.syncScroll` (`toggleSyncScroll`, the one command body). */
   toggleSyncScroll: () => void;
+  /** 057 FR-125 — raise a user-flagged Attention mark on this panel (`attention.flag`). */
+  flag: () => void;
 }
 
 /** What a PREVIEW panel's menu reads. `null` for a panel that is not a preview. */
@@ -583,6 +585,19 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       onClick: () => actions.redraw(),
     });
   }
+
+  /*
+   * 057 FR-125 — Flag: raise an Attention mark on this panel from the user, whatever kind it is. A plain
+   * item with no command id and no chord (the failure banner's items above are the precedent), in View &
+   * state because it sets the panel's state. On a panel already marked main changes nothing, so it is
+   * never disabled: the user is not told "no", the mark is simply already there. No glyph: the flag icon
+   * was retired by round 13 (FR-139).
+   */
+  items.push({
+    label: 'Flag',
+    section: 'viewState',
+    onClick: () => actions.flag(),
+  });
 
   /*
    * 043 FR-015 — the panel's SEARCH commands, in the panel's own menu.

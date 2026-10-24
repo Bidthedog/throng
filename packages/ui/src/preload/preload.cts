@@ -979,6 +979,9 @@ contextBridge.exposeInMainWorld('throng', {
     },
     /** A toast link or Go to Next Marked Panel: main routes to the window that hosts the panel. */
     goTo: (panelId: string) => ipcRenderer.send('throng:attention:goTo', { panelId }),
+    /** 057 round 12 (FR-125): the panel menu's Flag — main raises a user mark and stores it. */
+    flag: (panel: { panelId: string; projectId: string; panelTitle: string; tabTitle: string; projectName: string }) =>
+      ipcRenderer.send('throng:attention:flag', panel),
     /**
      * Main asks the renderer to draw the taskbar badge (R13, so it uses the theme's colours). The
      * callback returns the PNG data URL; this wrapper correlates the reply by `requestId` on the same

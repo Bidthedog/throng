@@ -136,6 +136,25 @@ describe('a project row (FR-012)', () => {
     expect(screen.queryByTestId('attention-popover')).toBeNull();
   });
 
+  it('shows how many marked panels the project holds, inside its mark; 9+ above nine (FR-131)', async () => {
+    mountPanel();
+    await ready();
+    act(() => setAttentionMarks([makeMark('p1', 'a'), makeMark('p2', 'a', { raisedAt: 2 }), makeMark('p3', 'a', { raisedAt: 3 })]));
+    expect(mark('a')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('3');
+    act(() => setAttentionMarks(Array.from({ length: 12 }, (_, i) => makeMark(`q${i}`, 'a', { raisedAt: i }))));
+    expect(mark('a')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('9+');
+  });
+
+  // FR-014 is superseded by FR-135 (round 13): a holder with a Failed panel beneath it draws the same circle.
+  it('counts a Failed panel like any other, in the same circle, its name saying what failed (FR-131, FR-135)', async () => {
+    mountPanel();
+    await ready();
+    act(() => setAttentionMarks([makeMark('p1', 'a'), makeMark('p2', 'a', { kind: 'failed', signal: 'processExited', detail: '1' })]));
+    expect(mark('a')!.className).toBe('throng-attention-mark');
+    expect(mark('a')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('2');
+    expect(mark('a')!.getAttribute('aria-label')).toMatch(/1/);
+  });
+
   it('leaves an unmarked row’s dot alone while another row is marked (FR-092)', async () => {
     mountPanel();
     await ready();
@@ -230,6 +249,13 @@ describe('a category header (FR-013)', () => {
     fireEvent.mouseEnter(el);
     // Project list order is b then c, whatever order the marks were raised in.
     expect(screen.getAllByTestId(/^attention-popover-group-/).map((g) => g.getAttribute('data-project-id'))).toEqual(['b', 'c']);
+  });
+
+  it('counts the marked panels under every member, hidden rows included (FR-131)', async () => {
+    mountPanel();
+    await ready();
+    act(() => setAttentionMarks([makeMark('p1', 'b'), makeMark('p2', 'b', { raisedAt: 2 }), makeMark('p3', 'c', { raisedAt: 3 })]));
+    expect(headerMark('min')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('3');
   });
 
   it('marks only the category holding the marked project', async () => {

@@ -62,11 +62,13 @@ describe('the popover’s content (FR-097)', () => {
     const head = within(found[0]).getByTestId('attention-popover-head');
     expect(head).toContainElement(within(found[0]).getByTestId('attention-popover-name'));
     expect(head).not.toContainElement(within(found[0]).getByTestId('attention-popover-reason'));
-    // The kind is carried by the icon (FR-016), a different one per kind.
+    // FR-135 (round 13): no glyph, and the same circle for both kinds; the description says what failed.
     expect(found[0]).toHaveAttribute('data-kind', 'attention');
     expect(found[1]).toHaveAttribute('data-kind', 'failed');
-    expect(found[0].querySelector('.icon')).not.toBeNull();
-    expect(found[0].querySelector('.icon')!.innerHTML).not.toBe(found[1].querySelector('.icon')!.innerHTML);
+    expect(found[0].querySelector('.icon')).toBeNull();
+    expect(found[0].querySelector('.attention-popover__icon')!.outerHTML).toBe(
+      found[1].querySelector('.attention-popover__icon')!.outerHTML,
+    );
   });
 
   it('is portaled to the body, never intercepts the pointer, and is a tooltip', () => {

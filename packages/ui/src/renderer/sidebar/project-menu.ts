@@ -61,13 +61,13 @@ export function projectMenu(args: ProjectMenuArgs): MenuAction[] {
     { label: 'Edit', icon: 'editVisual', section: 'content', onClick: onEdit },
     { label: 'Rename', icon: 'rename', section: 'content', onClick: onRename },
     { label: 'Remove', icon: 'destroy', section: 'destroy', onClick: onRemove },
-    // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106).
+    // Takes you somewhere, so `navigate`; shown only while the project has a marked panel (FR-106). No
+    // glyph: the flag icon was retired by round 13 (FR-139).
     ...(nextMarked === undefined
       ? []
       : [
           {
             label: 'Go to Next Marked Panel',
-            icon: 'attention',
             section: 'navigate' as const,
             onClick: nextMarked.run,
           },

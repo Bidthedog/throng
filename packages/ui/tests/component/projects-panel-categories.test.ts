@@ -355,10 +355,10 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
     expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-pinned', 'true');
     expect(screen.getByTestId('project-item-p2')).toHaveAttribute('data-active', 'false');
     expect(screen.queryByTestId('project-item-p3'), 'never loaded, so still hidden').toBeNull();
-    expect(screen.getByTestId('category-count-cat-a').textContent).toBe('1 of 2');
+    expect(screen.getByTestId('category-count-cat-a').textContent).toBe('2');
   });
 
-  it('a minimised header looks minimised and says how many it hides; expanded, or hiding nothing, it shows the bare total (#489, FR-051a)', async () => {
+  it('a header’s pill holds the total number of projects, minimised or not, and no "N of M" survives (057 FR-129, supersedes 046 FR-051a)', async () => {
     const server = twoCategoryFixture();
     await mount(server);
     const header = await screen.findByTestId('category-header-cat-a');
@@ -369,10 +369,11 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
 
     await waitFor(() => expect(screen.getByTestId('category-header-cat-a')).toHaveClass('category-header--minimised'));
     const count = screen.getByTestId('category-count-cat-a');
-    expect(count.textContent).toBe('0 of 2');
-    expect(count).toHaveAttribute('title', '0 shown, 2 hidden');
+    expect(count.textContent).toBe('2');
+    expect(count).toHaveClass('throng-count-pill');
+    expect(count).not.toHaveAttribute('title');
 
-    // Load both: nothing is hidden any more, so the header reports the plain total again.
+    // Load both: the pill is still the total, however many rows are showing.
     await act(async () => {
       await store.switchProject('p2');
     });
@@ -380,7 +381,7 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
       await store.switchProject('p3');
     });
     await waitFor(() => expect(screen.getByTestId('category-count-cat-a').textContent).toBe('2'));
-    expect(screen.getByTestId('category-count-cat-a')).not.toHaveAttribute('title');
+    expect(screen.getByTestId('category-header-cat-a').textContent).not.toMatch(/\bof\b/);
     expect(screen.getByTestId('category-header-cat-a'), 'still minimised').toHaveClass('category-header--minimised');
   });
 

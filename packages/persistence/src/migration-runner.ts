@@ -9,6 +9,7 @@ import { applyMigrationV7, MIGRATION_V7_VERSION } from './migrations/v7-document
 import { applyMigrationV8, MIGRATION_V8_VERSION } from './migrations/v8-fileop-undo.js';
 import { applyMigrationV9, MIGRATION_V9_VERSION } from './migrations/v9-project-categories.js';
 import { applyMigrationV10, MIGRATION_V10_VERSION } from './migrations/v10-category-position.js';
+import { applyMigrationV11, MIGRATION_V11_VERSION } from './migrations/v11-attention-flags.js';
 
 /** The baseline schema version (no domain tables — only a `_meta` marker). */
 export const BASELINE_VERSION = 1;
@@ -65,6 +66,10 @@ const MIGRATIONS: readonly Migration[] = [
   {
     version: MIGRATION_V10_VERSION,
     up: applyMigrationV10,
+  },
+  {
+    version: MIGRATION_V11_VERSION,
+    up: applyMigrationV11,
   },
 ];
 

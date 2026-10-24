@@ -541,17 +541,29 @@ textarea,
   background: var(--throng-colour-categoryHeaderBackground);
 }
 
+/* 057 FR-129 — the total number of projects, as a pill (the shared `.throng-count-pill`), whatever the
+   header's state. A minimum width keeps it from resizing the header as the number changes (FR-133). */
 .category-header__count {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-width: 26px;
+  text-align: center;
   font-weight: 400;
   text-transform: none;
   letter-spacing: normal;
 }
 
 /* FR-051a (#489) — a minimised category reads as collapsed at a glance: a dashed lower edge in the
-   theme's border colour and an italic, muted name, beside the "shown of total" count. The bold
-   uppercase of FR-072 stays. */
+   theme's border colour and an italic, muted name. The bold uppercase of FR-072 stays. 057 FR-130
+   makes the header itself visibly paler: its surface mixed toward the sidebar it sits on, from the
+   two tokens already there (research R22), so it holds in every bundled theme, light or dark. */
 .category-header--minimised {
   border-bottom: 1px dashed var(--throng-colour-border);
+  background: color-mix(
+    in srgb,
+    var(--throng-colour-categoryHeaderBackground) 45%,
+    var(--throng-colour-sidebarBg)
+  );
 }
 
 .category-header--minimised .category-header__name {
@@ -647,9 +659,11 @@ textarea,
   min-width: 0;
 }
 
+/* 057 FR-137 (round 13): 14 px, the attention circle's size, which takes its place while the project is
+ * marked. */
 .project-item__dot {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   flex: 0 0 auto;
 }
@@ -1312,9 +1326,12 @@ textarea,
   }
 }
 
-/* The shared attention mark (057 FR-003, FR-010 – FR-017): a themeable icon, never a disc, so it cannot
- * be mistaken for the unsaved dot beside it. Its colour is a theme token per kind; the icon differs per
- * kind too, so the kinds do not rest on colour alone (FR-016). */
+/* The shared attention mark (057 FR-003, FR-010 – FR-017; round 13 FR-135 – FR-138): ONE solid circle on
+ * every holder, in the theme's `attentionMark`, the same for an Attention and a Failed mark — the kind is
+ * told in words (FR-015). No glyph. A numbered circle carries its count as its own text, in the black or
+ * white `toCssVariables` derives for the fill (`--throng-attention-mark-text`, FR-136). 14 px, the size of
+ * a project's colour dot (FR-137): larger than the 8 px unsaved dot, in its own colour, blinking slower, so
+ * a header showing both reads as two marks (FR-138). */
 .throng-attention-mark {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1324,6 +1341,8 @@ textarea,
   height: 14px;
   margin-left: 6px;
   border-radius: 50%;
+  background: var(--throng-colour-attentionMark);
+  color: var(--throng-attention-mark-text, #000);
   line-height: 1;
   /* FR-093 — a slow blink, opacity only (compositor work), slower than the unsaved dot's 1.5 s pulse. */
   animation: throng-attention-blink 2s ease-in-out infinite;
@@ -1347,27 +1366,20 @@ textarea,
   }
 }
 
-/* FR-092 — on a project row the mark takes the colour dot's slot: exactly its 10 x 10 box, no margin, so
- * marking or unmarking a row never moves the name. The flag takes the dot's SPACE, not its shape: the
- * glyph is that same square, and the slot is square-edged and unclipped (the dot's rounding cut the
- * flag off), with nothing behind it (T094, T098). */
+/* FR-092, FR-137 — on a project row the circle takes the colour dot's place: exactly its 14 x 14 box, no
+ * margin, so marking or unmarking a row never moves the name. */
 .project-item__switch > .throng-attention-mark {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   margin: 0;
-  border-radius: 0;
 }
 
-/* FR-114 — the glyph is drawn at 16px, larger than the 10px slot it sits in: `flex: none` keeps it from
- * stretching the slot, and the slot's centring spreads the overflow evenly, so it overlays the dot's
- * square without moving anything. A text glyph is as big as its font, so font-size is set too. */
-.project-item__switch > .throng-attention-mark .icon {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
+/* On the selected row, filled with its project's colour, the circle is ringed in the row's contrast colour
+ * exactly as the colour dot is (FR-094), so it reads even on a fill close to the attention colour. Named
+ * rather than `currentColor`: the circle's own colour is its number's, not the row's. */
+.project-item--active .throng-attention-mark {
+  box-shadow: 0 0 0 2px var(--project-fill-text, var(--throng-colour-accentText));
 }
 
 /* FR-105 — a project row's or category header's mark goes to the next marked panel when clicked. */
@@ -1375,31 +1387,33 @@ textarea,
   cursor: pointer;
 }
 
-.throng-attention-mark .icon {
-  display: inline-flex;
-  width: 100%;
-  height: 100%;
+/* FR-131, FR-136 — the count: the circle's own text, centred by its flex box, taking no space of its own.
+ * The box is trimmed to the digits' cap height and baseline (`text-box`), so the flex centring centres
+ * their ink rather than a line box that keeps room for descenders digits never have — which sat them high.
+ * No letter-spacing: a negative one narrowed the box on its right, so they spilled right. */
+.throng-attention-mark__count {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
-.throng-attention-mark .icon svg {
-  width: 100%;
-  height: 100%;
+/* "9+" is two characters in a 14 px disc: a size smaller, so it stays inside the circle. */
+.throng-attention-mark__count[data-wide='true'] {
+  font-size: 7px;
 }
 
-.throng-attention-mark--attention {
-  color: var(--throng-colour-attentionMark);
-}
-
-.throng-attention-mark--failed {
-  color: var(--throng-colour-attentionFailedMark);
-}
-
-/* On a row filled with its project's colour (#489) a mark in a theme colour can vanish into the fill, so
- * there it is drawn in the row's own contrast colour (FR-107, 046 FR-072a — the black or white its text
- * takes, which is also what the dot's ring uses), with nothing behind it. The glyph still tells the kinds
- * apart (FR-016). */
-.project-item--active .throng-attention-mark {
-  color: inherit;
+/* FR-133 — an unmarked chip or header holds the circle's footprint: its 14px and its 6px margin. */
+.throng-attention-slot {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  visibility: hidden;
 }
 
 .panel-box__actions {
@@ -2134,6 +2148,19 @@ textarea,
 /* The per-tab count's only difference from the shared pill: it sits after the label. */
 .tab-chip__count {
   margin-left: 6px;
+  /* FR-133 — a fixed width, so a pill appearing, changing its number or going never resizes the chip. */
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 26px;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* FR-132 — a tab holding one panel shows no pill, but keeps its place (`visibility`, never `display`). */
+.tab-chip__count--empty {
+  visibility: hidden;
 }
 
 .tab-chip--active .tab-chip__count {
@@ -2408,28 +2435,16 @@ textarea,
 }
 
 /* Centred on the first line: (line-height 1.4 × 12px − 12px) / 2. */
+/* FR-135 (round 13) — the mark's own circle, smaller, the same for both kinds; the reason beneath it says
+ * what failed. */
 .attention-popover__icon {
   flex: 0 0 auto;
-  display: inline-flex;
+  display: inline-block;
   margin-top: 2.4px;
-  width: 12px;
-  height: 12px;
-}
-
-.attention-popover__icon .icon,
-.attention-popover__icon svg {
-  width: 12px;
-  height: 12px;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.attention-popover__icon--attention {
-  color: var(--throng-colour-attentionMark);
-}
-
-.attention-popover__icon--failed {
-  color: var(--throng-colour-attentionFailedMark);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--throng-colour-attentionMark);
 }
 
 .attention-popover__name {
@@ -2534,12 +2549,8 @@ textarea,
 /* FR-118 — a marked panel's header is filled with its mark's colour, mixed into the header surface so the
  * title stays readable, and after the active fill so a marked active panel still shows it. Mixed from the
  * mark tokens, so every theme gets it without a token of its own. */
-.panel-box[data-attention='attention'] .panel-box__header {
+.panel-box[data-attention] .panel-box__header {
   background: color-mix(in srgb, var(--throng-colour-attentionMark) 30%, var(--bg-raised));
-}
-
-.panel-box[data-attention='failed'] .panel-box__header {
-  background: color-mix(in srgb, var(--throng-colour-attentionFailedMark) 30%, var(--bg-raised));
 }
 
 /* #486 — the zoom a step left, top-right of what zoomed (zoom-indicator.tsx). Fades in fast, out slowly; above
@@ -3141,6 +3152,18 @@ textarea,
 .notice__copy,
 .notice__dismiss {
   pointer-events: auto;
+}
+
+/* FR-124: an attention toast's card is its own link. */
+.notice--activatable {
+  cursor: pointer;
+}
+.notice--activatable button {
+  cursor: default;
+}
+.notice--activatable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* An ERROR gets its OWN CARD, not a stripe on the usual one.

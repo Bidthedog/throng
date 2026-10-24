@@ -60,7 +60,10 @@ export function CategoryHeaderMark({
   projectIds: readonly string[];
 }): ReactElement | null {
   const mark = useCategoryMark(projectIds);
-  return mark === null ? null : (
+  // The flag's slot is held while unmarked, so a header's name never moves as a mark comes and goes (FR-133).
+  return mark === null ? (
+    <MarkSlot />
+  ) : (
     <ListHolderMark
       mark={mark}
       testId={`attention-category-${categoryId}`}
@@ -107,6 +110,7 @@ function ListHolderMark({
         mark={mark}
         testId={testId}
         blockAncestorTitle={blockAncestorTitle}
+        showCount
         data-clickable="true"
         onClick={(e) => {
           e.stopPropagation();
@@ -225,7 +229,17 @@ export function TabMark({
   panelIds: readonly string[];
 }): ReactElement | null {
   const mark = useMarkForPanels(panelIds);
-  return mark === null ? null : <AttentionMark mark={mark} testId={`attention-${site}-${tabId}`} />;
+  if (mark !== null) {
+    // The chip numbers its flag; a picker row (a list of names, not a holder of panels) does not.
+    return <AttentionMark mark={mark} testId={`attention-${site}-${tabId}`} showCount={site === 'tab'} />;
+  }
+  // A chip holds the flag's slot while unmarked, so marking never changes its width (FR-133).
+  return site === 'tab' ? <MarkSlot /> : null;
+}
+
+/** The flag's footprint with nothing drawn in it: same size and margin, `visibility: hidden` (FR-133). */
+function MarkSlot(): ReactElement {
+  return <span className="throng-attention-slot" aria-hidden="true" />;
 }
 
 /** A tab strip's left/right overflow control: marked while a tab scrolled out on that side is (FR-011). */

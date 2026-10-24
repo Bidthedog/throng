@@ -21,6 +21,8 @@ const REMOVED_COLOUR_TOKENS = [
   'buttonHoverBg',
   'buttonHoverText',
   'activePaneHighlight',
+  // 057 round 13 (FR-135, FR-139): a Failed mark looks like any other, so its colour goes.
+  'attentionFailedMark',
 ] as const;
 
 /** True for a genuinely-set colour value — a non-blank string (an empty/whitespace value means "unset"). */
@@ -95,8 +97,21 @@ export function migrateThemeColours(colours: Record<string, string>): Record<str
  *
  * 054's MT-04 round retires `diagramFullSize` (the diagram's "Fill the panel" control, removed): the
  * version-21 seed wrote it into every theme file, and it is dropped here for the same reason.
+ *
+ * 057 round 12 (FR-124) retires `goToPanel`: an attention toast's whole card is now the link, so the
+ * control it drew is gone.
+ *
+ * 057 round 13 (FR-135, FR-139) retires `attention` and `attentionFailed`: the mark is a numbered circle
+ * drawn in CSS, not a glyph.
  */
-const REMOVED_ICON_TOKENS = ['projectList', 'resetName', 'diagramFullSize'] as const;
+const REMOVED_ICON_TOKENS = [
+  'projectList',
+  'resetName',
+  'diagramFullSize',
+  'goToPanel',
+  'attention',
+  'attentionFailed',
+] as const;
 
 /** Migrate one theme's `icons` to the 046 iterate round 2 model: drop {@link REMOVED_ICON_TOKENS}. */
 export function migrateThemeIcons(icons: Record<string, string>): Record<string, string> {

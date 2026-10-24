@@ -311,6 +311,12 @@ import { setAtPath } from './metadata.js';
 // tokens, `attention`, `attentionFailed` and `goToPanel` (research R11). The additive case again: every
 // payload arrives, no existing value moves. The fourteen attention settings need no bump (044's 7 → 8
 // reasoning: an absent settings key is filled with its shipped default on every read).
+//
+// 057 round 12 retires `goToPanel` (FR-124). No bump: `migrateTheme` drops the stray key the 24 seed
+// wrote (theme-ops.ts), as for `diagramFullSize`.
+//
+// 057 round 13 retires `attention`, `attentionFailed` and `attentionFailedMark` (FR-139). No bump, for
+// the same reason: `migrateTheme` drops what the 24 seed wrote.
 export const SHIPPED_DEFAULTS_VERSION = 24;
 
 /**

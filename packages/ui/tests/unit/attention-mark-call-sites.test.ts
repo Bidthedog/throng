@@ -88,9 +88,11 @@ describe('the attention mark is one component, drawn the same way everywhere', (
     expect(text).toContain('data-testid={testId}');
   });
 
-  it('draws the kind with its ICON as well as its colour (FR-016)', () => {
-    const text = SOURCES.find((s) => s.path === 'attention/attention-mark.tsx')!.text;
-    expect(text).toMatch(/'attentionFailed'\s*:\s*'attention'/);
+  // FR-135 / FR-139 (round 13): the mark is a CSS circle; no attention source draws a glyph for it.
+  it('draws no icon for a mark, whatever its kind (FR-135, FR-139)', () => {
+    for (const s of SOURCES.filter((x) => x.path.startsWith('attention/'))) {
+      expect(s.text, `${s.path} still names a retired glyph`).not.toMatch(/'attentionFailed'|token=\{?['"]attention['"]/);
+    }
   });
 
   it('shares nothing with the unsaved dot (FR-017)', () => {

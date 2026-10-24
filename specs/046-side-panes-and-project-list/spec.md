@@ -1985,6 +1985,8 @@ and layouts.
   chevron — and, while it hides any project, its count MUST read "*shown* of *total*" (both
   digit-grouped), with a hover title naming how many are shown and hidden. With nothing hidden, or
   expanded, the count is the bare total, as FR-051 states.
+  *Its "shown of total" count is superseded by 057 FR-129 (2026-10-24): every category header shows a pill
+  with its total project count; the minimised look is extended by 057 FR-130 (a paler header).*
 - **FR-052**: The active project MUST never be hidden by a minimise. If its category is minimised,
   the active project's row stays visible under the collapsed header. Once another project becomes
   active, that row is hidden with the rest of the category.

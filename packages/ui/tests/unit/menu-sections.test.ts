@@ -1000,6 +1000,9 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Destroy Panel',
       '—',
       'Send to Tab',
+      '—',
+      // 057 FR-125 — Flag, alone in View & state on a panel with nothing else to say about its state.
+      'Flag',
     ]);
   });
 
@@ -1023,6 +1026,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       'Send to Tab',
       '—',
       'Zoom',
+      'Flag',
     ]);
   });
 
@@ -1127,6 +1131,8 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       '—',
       // View & state.
       'Zoom',
+      // 057 FR-125 — Flag closes View & state on every panel.
+      'Flag',
     ]);
   });
 });
@@ -1301,6 +1307,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Zoom',
       // 044 FR-122b — after Zoom, exactly where Open Preview is present (§2).
       'Synchronise Scrolling',
+      'Flag',
     ]);
   });
 
@@ -1318,6 +1325,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       'Try again',
       'Copy details',
       'Clear panel type',
+      'Flag',
     ]);
     const sync = row(items, 'Synchronise Scrolling ✓');
     expect(sync?.section).toBe('viewState');
@@ -1427,6 +1435,8 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Zoom',
       // 044 FR-122b — every text-provider preview (§1, §10).
       'Synchronise Scrolling',
+      // 057 FR-125 — Flag, after the preview's own View & state rows.
+      'Flag',
     ]);
   });
 
@@ -1451,6 +1461,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Refresh',
       'Zoom',
       'Synchronise Scrolling',
+      'Flag',
     ]);
   });
 
@@ -1472,6 +1483,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Refresh',
       'Zoom',
+      'Flag',
     ]);
   });
 
@@ -1518,6 +1530,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       'Try again',
       'Copy details',
       'Clear panel type',
+      'Flag',
     ]);
   });
 
@@ -2144,7 +2157,8 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     const row = marked.find((i) => i.label === 'Go to Next Marked Panel');
     expect(row, 'the row is present for a marked project').toBeDefined();
     expect(row?.section).toBe('navigate');
-    expect(row?.icon).toBe('attention');
+    // FR-139 (round 13): the flag glyph is retired; the row is its label alone.
+    expect(row?.icon).toBeUndefined();
     // No chord: the row walks this project's cycle, the chord every project's (review of FR-106).
     expect(row?.shortcut).toBeUndefined();
     expect(row?.disabled ?? false).toBe(false);

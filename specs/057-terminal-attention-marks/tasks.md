@@ -312,3 +312,48 @@ From hand-testing (spec Session 2026-10-19, round 4). One defect against FR-092,
 
 - [x] T115 [US2] Test first, then drop the mark's native `title` on every holder, in `packages/ui/src/renderer/attention/attention-mark.tsx` and `holder-marks.tsx`; MT-02 (FR-123)
 - [x] T116 [US3] Document Claude Code's `messageIdleNotifThresholdMs` for a notification as Claude finishes, in `docs/quick-start.md`
+
+---
+
+## Phase 23: Iterate 2026-10-24, round 12 — manual Flag, numbered marks, toast body link, announce once (FR-124 – FR-134)
+
+From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Round 12 addendum*; research R18 – R22). One defect (#524, against FR-112 / FR-134), eleven new requirements. Boundaries: [CORE] core + main, [DAEMON] persistence + daemon + ipc-contract, [UI] renderer.
+
+### Defect
+
+- [x] T117 [US3] [CORE] Defect #524 against FR-112 / FR-134: test first in `packages/ui/tests/unit/attention-service.test.ts` — a mark restored from the ledger, then raised again while unattended, raises no toast and no `notifier.show`; same for a startup-command mark (red today), and for a terminal raise on a manually flagged panel — then announce only when the raise created the mark and drop the `announced` set, in `packages/ui/src/main/attention-service.ts` (R21)
+
+### Core and main
+
+- [x] T118 [CORE] Test first, then widen `AttentionMark.producer` to `'terminal' | 'user'` and add `heldSinceRaise`; `AttentionModel.flag()` (no-op on a marked panel), `restoreFlags()` (unheld), the held dwell in `settle()`, and `ledgerEntries()` returning terminal marks only, in `packages/core/src/attention/attention-types.ts` and `attention-model.ts`, with `packages/core/tests/unit/attention-model.test.ts` (FR-125, FR-127, R20)
+- [x] T119 [P] [CORE] Test first, then holder state carries `count` (marked panels beneath; `9+` is the renderer's), in `packages/core/src/attention/attention-holders.ts` with its unit test (FR-131)
+- [x] T120 [CORE] Test first, then `AttentionService.flag()`: raise a user mark, persist it with `attention.flagSet`, announce nothing; call `attention.flagClear` whenever a user mark clears by any route; restore with `attention.flagList` on every daemon (re)connect (a restored flag reads "Flagged", whatever later signals said — the row holds no reason *[derived]*); a unit assertion that a Windows-notification click on a mark raises its window and sends `focusPanel` (FR-124's restated FR-034); the terminal master switch leaves user marks; plus the `throng:attention:flag` channel and preload `attention.flag`, in `packages/ui/src/main/attention-service.ts`, `packages/ui/src/main/main.ts` and `packages/ui/src/preload/preload.cts` (FR-125, FR-126, FR-128; depends on T118, T122)
+
+### Persistence and daemon
+
+- [x] T121 [P] [DAEMON] Test first, then migration v11 `attention_flag` (idempotent; fixture proving an old store upgrades and a re-run is a no-op) and `AttentionFlagRepository`, in `packages/persistence/src/migrations/v11-attention-flags.ts`, `migration-runner.ts` and `packages/persistence/src/attention-flag-repository.ts` (FR-128, R19)
+- [x] T122 [DAEMON] Test first, then `attention.flagList` / `flagSet` / `flagClear` in `packages/ipc-contract/src/terminal.ts` (or a new `attention.ts` exported from its index), routed in the daemon's composition root, with project deletion dropping its rows, and the contract test in `packages/ui/tests/contract/` (contracts/daemon-attention.md; depends on T121)
+
+### Renderer
+
+- [x] T123 [UI] Test first (component), then the toast card body goes to the panel and Copy / Dismiss do not navigate; remove the go-to control, keeping Copy and Dismiss where they are; retire the `goToPanel` icon token if nothing else uses it, in `packages/ui/src/renderer/attention/attention-toasts.tsx`, `packages/ui/src/renderer/common/notification.tsx` and `theme.css` (FR-124, R18)
+- [x] T124 [UI] Test first (component), then **Flag** in every panel's header context menu, in the **View & state** section — a menu item with no command, like the failure banner's rows; FR-125 makes a binding optional *[derived]* — sending `attention.flag` with the panel's project, tab and title, in `packages/ui/src/renderer/workspace/panel-header-menu.ts` (FR-125; depends on T120)
+- [x] T125 [UI] Test first (component + CSS), then the numbered flag on project rows and minimised category headers (digits inside, `9+`, blinking, Failed style), legible at the default UI scale, in the reserved slot, still drawn from the registry's `attention` / `attentionFailed` icon in theme-token colours with the digits laid over it (no inline SVG, no hardcoded colour); no-reflow (FR-133) asserted as CSS rules — the flag and pill slots keep their size when empty (`visibility: hidden`, fixed width) — and legibility judged by hand in MT-03, in `packages/ui/src/renderer/attention/attention-mark.tsx`, `holder-marks.tsx`, `packages/ui/src/renderer/sidebar/projects-panel.tsx` and `theme.css` (FR-131, FR-133; depends on T119)
+- [x] T126 [UI] Test first, then every category header shows a pill with its total project count, replacing 046 FR-051a's "shown of total" (its existing tests updated to the new rule), and a minimised header is paler than an expanded one in every bundled theme, with the theme-quality contrast check kept green, in `projects-panel.tsx` and `theme.css` (FR-129, FR-130, FR-133)
+- [x] T127 [UI] Test first, then tab chips: the numbered flag (the same registry icon and theme tokens as T125), and a panel-count pill only when the tab holds two or more panels, both in reserved width so the chip never resizes, in `packages/ui/src/renderer/workspace/tab-group.tsx` and `theme.css` (FR-131, FR-132, FR-133; depends on T119)
+
+### Close
+
+- [x] T128 Docs: `docs/preferences.md` / `docs/quick-start.md` mention Flag and the numbered marks where the attention feature is described; `docs-currency.test.ts` green
+- [x] T129 Widen the round-12 manual test plan groups' `Paths:` to the files that implement them
+
+## Phase 24: Iterate 2026-10-24, round 13 — one numbered circle in place of the flag (FR-135 – FR-139)
+
+From hand-testing round 12 (MT-03, MT-04 at 63bd9532; spec Session 2026-10-24 (round 13); plan *Round 13 addendum*). No defect; five new requirements. Boundaries: [THEME] core theme, [UI] renderer — both done by the orchestrator.
+
+- [x] T130 [THEME] Test first, then retire the `attentionFailedMark` colour token and the `attention` / `attentionFailed` icon tokens: out of `theme.ts`, every default theme, `theme-metadata.ts`, `theme-copy.ts` and the icon-pack service, into `REMOVED_COLOUR_TOKENS` / `REMOVED_ICON_TOKENS` in `theme-ops.ts` (a stored theme carrying them loads with them dropped), `shipped-defaults.ts`'s comment, `default-themes/index.ts`, and `CLOSEST_LEGITIMATE_PAIR_DELTA` re-measured in `theme-quality.ts`; tests `theme-attention-tokens.test.ts` and `default-themes.test.ts` (token counts and lists), in `packages/core/src/config/` (FR-139)
+- [x] T131 [THEME] Test first, then `toCssVariables` emits `--throng-attention-mark-text`, the `readableTextOn` black or white for the theme's resolved `attentionMark`, in `packages/core/src/config/theme.ts` with a unit test over every bundled theme and a user colour; the colour maths (`hexToRgb`, `relativeLuminance`, `contrastRatio`, `readableTextOn`) move to a leaf `colour-math.ts`, re-exported from `theme-quality.ts`, because `theme-quality.ts` imports `THRONG_THEME` at load and `theme.ts` cannot import it back (FR-136)
+- [x] T132 [UI] Test first (component + CSS), then `AttentionMark` is a solid circle with no `Icon`: fill `attentionMark`, the count as its text in `--throng-attention-mark-text` when `showCount`, no number on a panel header, one 14 px size shared with `.project-item__dot` (the row slot 14 px, the 16 px glyph rule gone), every `failed` CSS variant collapsed to the attention one (mark, selected-row override, panel header tint, popover icon), the popover row's kind icon removed, `badge-renderer.ts` reading `attentionMark` for both kinds; distinct from the unsaved dot asserted by size (14 px vs 8 px) and blink period (2 s vs 1.5 s); on a tab chip the circle (attention fill) and the panel-count pill (`.throng-count-pill`, surface fill) stay two different shapes *[derived, analyze I2]*; the popover row still names its kind in words (FR-135, analyze U3), in `packages/ui/src/renderer/attention/attention-mark.tsx`, `attention-popover.tsx`, `badge-renderer.ts`, `theme.css`, with tests `packages/ui/tests/component/attention-count-css.test.ts`, `packages/ui/tests/unit/attention-mark-css.test.ts`, `attention-mark-call-sites.test.ts` and any popover/badge test naming the failed colour (FR-135, FR-136, FR-137, FR-138; depends on T131)
+- [x] T133 [UI] Test first, then the Flag and Go to Next Marked Panel menu items carry no `icon`, in `packages/ui/src/renderer/workspace/panel-header-menu.ts` and `packages/ui/src/renderer/sidebar/project-menu.ts` (FR-139; depends on T130)
+- [x] T134 Docs: `docs/quick-start.md` describes the numbered circle in place of the flag; `docs-currency.test.ts` green
+- [x] T135 Widen MT-03 / MT-04 `Paths:` to the files that implement round 13

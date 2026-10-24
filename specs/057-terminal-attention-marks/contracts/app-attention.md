@@ -10,6 +10,11 @@
 | `throng:attention:focusPanel` | main → one window | `{ panelId, projectId }` | navigate and focus (FR-034, FR-080a) |
 | `throng:attention:goTo` | renderer → main | `{ panelId }` | a toast link or Go to Next asks main to route |
 | `throng:attention:badgeImage` | main ↔ main window | request `{ count, kind }` → reply `{ dataUrl }` | badge drawn with theme colours (R13) |
+| `throng:attention:flag` *(round 12)* | renderer → main | `{ panelId, projectId, panelTitle, tabTitle, projectName }` | the panel menu's Flag (FR-125); main raises a user mark and persists it |
+
+*(round 12)* The preload adds `attention.flag`. A toast's card body sends `throng:attention:goTo`
+(FR-124); the card has no go-to control, so the `goToPanel` icon row below is retired unless something
+else draws it (R18). Holder state gains `count` (FR-131).
 
 The preload exposes `attention.onChanged`, `attention.reportFocus`, `attention.onToast`,
 `attention.onFocusPanel`, `attention.goTo` and `attention.onBadgeRequest`. The renderer never sees the
@@ -55,4 +60,4 @@ next panel marked as needing you, across projects and tabs, and focus it."
 | `attentionFailedMark` | colour | Failed mark icon and badge |
 | `attention` | icon | Attention mark, the cog-menu row |
 | `attentionFailed` | icon | Failed mark |
-| `goToPanel` | icon | the toast's link control |
+| `goToPanel` | icon | *retired in round 12 (FR-124): the toast card is the link* |

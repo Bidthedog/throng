@@ -29,7 +29,7 @@ export interface BadgeCanvas {
 
 export interface BadgeDeps {
   createCanvas(): BadgeCanvas;
-  /** The theme's colour for the kind's mark (`attentionMark` / `attentionFailedMark`). */
+  /** The theme's mark colour (`attentionMark`), the same for both kinds since 057 round 13 (FR-135). */
   colour(kind: AttentionKind): string;
   /** The theme's text-on-accent colour, used when the mark colour is not a hex `readableTextOn` can judge. */
   fallbackText(): string;
@@ -74,7 +74,8 @@ export function domBadgeDeps(): BadgeDeps {
   const read = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return {
     createCanvas: () => document.createElement('canvas') as unknown as BadgeCanvas,
-    colour: (kind) => read(kind === 'failed' ? '--throng-colour-attentionFailedMark' : '--throng-colour-attentionMark'),
+    // FR-135 (round 13): one mark colour for both kinds; `attentionFailedMark` is retired.
+    colour: () => read('--throng-colour-attentionMark'),
     fallbackText: () => read('--throng-colour-accentText'),
   };
 }

@@ -2,9 +2,10 @@
  * 057 — what each holder (panel header, tab chip, project row, category header, taskbar badge) shows,
  * derived from the mark set (data-model § Holder state). Never stored. Failed outranks Attention (FR-014).
  */
-import type { AttentionKind, AttentionMark, AttentionReason, AttentionSignalName } from './attention-types.js';
+import type { AttentionKind, AttentionMark, AttentionReason, AttentionReasonSignal } from './attention-types.js';
 
-const REASON_LABELS: Record<AttentionSignalName, string> = {
+const REASON_LABELS: Record<AttentionReasonSignal, string> = {
+  flagged: 'Flagged', // FR-125: the user's own Flag
   processExited: 'Process exited',
   commandFinished: 'Command finished',
   bell: 'Wants your attention', // FR-101: the user never sees a bell, only that something wants them
@@ -57,13 +58,33 @@ export function categoryKind(marks: readonly AttentionMark[], projectIds: Iterab
   return strongest(marksForProjects(marks, projectIds));
 }
 
+/** FR-131: how many marked panels a tab chip, overflow control or panel header stands for. */
+export function holderCount(marks: readonly AttentionMark[], panelIds: Iterable<string>): number {
+  return marksForPanels(marks, panelIds).length;
+}
+
+/** FR-131: how many marked panels a project row stands for, loaded or not. */
+export function projectCount(marks: readonly AttentionMark[], projectId: string): number {
+  return marksForProject(marks, projectId).length;
+}
+
+/** FR-131: how many marked panels a category header stands for, across every project in it. */
+export function categoryCount(marks: readonly AttentionMark[], projectIds: Iterable<string>): number {
+  return marksForProjects(marks, projectIds).length;
+}
+
+/** FR-131: the number a numbered flag shows — "9+" above nine, as the taskbar badge (FR-039). */
+export function markCountLabel(count: number): string {
+  return count > 9 ? '9+' : String(count);
+}
+
 /** The taskbar badge (FR-039); null when nothing is marked. */
 export function badgeSummary(
   marks: readonly AttentionMark[],
 ): { count: number; label: string; kind: AttentionKind } | null {
   const kind = strongest(marks);
   if (kind === null) return null;
-  return { count: marks.length, label: marks.length > 9 ? '9+' : String(marks.length), kind };
+  return { count: marks.length, label: markCountLabel(marks.length), kind };
 }
 
 /** The reason as a line says it: the signal's wording, then the detail it carried (an exit code, a title). */

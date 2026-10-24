@@ -747,7 +747,7 @@ context menu's Destroy Tab.
 ### Functional Requirements — per-tab presentation (US5)
 
 - **FR-042**: A tab's panel count MUST be rendered as a pill; the square-bracket form MUST no
-  longer appear.
+  longer appear. *Narrowed by 057 FR-132 (2026-10-24): a tab holding one panel shows no pill.*
 - **FR-043**: Hovering a tab MUST show its name, its panel count, and the name of each panel it
   contains, one per line.
 - **FR-044**: Each tab MUST carry a close affordance on its right-hand side that runs the existing
