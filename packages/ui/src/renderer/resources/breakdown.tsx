@@ -54,7 +54,7 @@ import {
 } from 'react';
 import { IDLE_SAMPLES, describeNode, formatGrouped, type ResourceNode } from '@throng/core';
 import { publishShownPath } from './monitor-location.js';
-import { FIGURE_LABEL, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
+import { FIGURE_LABEL, isUnelevated, metricValue, networkUnavailableTitle, neverDrawn, orderMetric, type Figure, type FigureId } from './figures.js';
 import { moveFrom } from './flip.js';
 import {
   allRows,
@@ -192,7 +192,12 @@ function RowView({ row, ctx, metric, columns, active, selected, onSelect, onOpen
           {columns.map((id, i) =>
             id === 'trend' ? (
               <span key={id} className="breakdown-row__spark">
-                {ended ? null : <Sparkline nodeId={node.id} metric={metric} />}
+                {ended ? null : neverDrawn(metricValue(node.rolled, metric), node) ? (
+                  // Nothing will ever measure it (T180): the "-" beside it says so, and no flat line claims zero.
+                  <span className="sparkline sparkline--none" data-testid={`sparkline-none-${node.id}`} aria-hidden="true" />
+                ) : (
+                  <Sparkline nodeId={node.id} metric={metric} />
+                )}
               </span>
             ) : (
               cell(id, columns[0] === 'trend' ? i - 1 : i)
@@ -529,7 +534,8 @@ export function Breakdown(): ReactElement | null {
     wasHeld.current = hold;
   }, [hold]);
 
-  const ctx = useMemo<FigureContext | null>(() => (machine ? { thresholds, machine } : null), [thresholds, machine]);
+  const unelevated = isUnelevated(tree);
+  const ctx = useMemo<FigureContext | null>(() => (machine ? { thresholds, machine, unelevated } : null), [thresholds, machine, unelevated]);
   const model = useMemo(
     () =>
       tree && ctx

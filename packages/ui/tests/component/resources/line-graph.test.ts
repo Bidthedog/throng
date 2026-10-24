@@ -159,6 +159,32 @@ describe('Network (FR-113, T175)', () => {
     expect(within(screen.getByTestId('line-graph-network-building')).getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
   });
 
+  it('never measured (an editor panel’s CPU): “-” with its reason, no spinner and no line of zeros (T180)', () => {
+    const editor = node({ id: 'n:ed', kind: 'panel', label: 'notes.md', panelKind: 'editor', estimated: true, own: metrics({ cpu: NOT_MEASURED, gpu: NOT_MEASURED, ioRead: NOT_MEASURED, ioWrite: NOT_MEASURED, network: NOT_MEASURED, memory: 4 * MIB }), owner: { projectId: 'p1', tabId: 'ed', panelId: 'ed' } });
+    const tab = node({ id: 't:ed', kind: 'tab', label: 'Tab', children: [editor], owner: { projectId: 'p1', tabId: 'ed' } });
+    const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
+    const root = node({ id: 'root', kind: 'root', label: 'throng', children: [node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] })], owner: { component: 'ui' } });
+    for (let i = 0; i < 3; i += 1) feed(root);
+    render(createElement(Graphs));
+    act(() => focusOn(['root', 'c:projects', 'p:p1', 't:ed', 'n:ed']));
+    for (const metric of ['cpu', 'gpu', 'io', 'network'] as const) {
+      expect(screen.getByTestId(`line-graph-${metric}-none`), metric).toBeInTheDocument();
+      expect(screen.queryByTestId(`line-graph-plot-${metric}`), metric).toBeNull();
+      expect(screen.queryByTestId(`line-graph-${metric}-building`), metric).toBeNull();
+      expect(screen.getByTestId(`line-graph-${metric}-value`)).toHaveAttribute('title');
+    }
+    expect(screen.getByTestId('line-graph-cpu-value')).toHaveAttribute('title', 'CPU: Not measured');
+    // Elevated (the root's Network is not "elevation-required"): a Network nothing measures is "Not measured" (T182).
+    expect(screen.getByTestId('line-graph-network-value')).toHaveAttribute('title', 'Not measured');
+    // Its memory is an estimate, and that is plotted.
+    expect(screen.getByTestId('line-graph-plot-memory')).toBeInTheDocument();
+
+    // Unelevated, the same panel's Network says what would measure it (T182, US2/AC34).
+    const unelevated = { ...root, rolled: { ...root.rolled, network: unavailable(NETWORK_ELEVATION_REQUIRED) } };
+    feed(unelevated);
+    expect(screen.getByTestId('line-graph-network-value')).toHaveAttribute('title', 'Elevate to show');
+  });
+
   it('unelevated: reads “-” titled “Elevate to show”, and draws no line of zeros', () => {
     for (let i = 0; i < 3; i += 1) feed(withNetwork(scene({ 11: 20 }), unavailable(NETWORK_ELEVATION_REQUIRED)));
     render(createElement(Graphs));

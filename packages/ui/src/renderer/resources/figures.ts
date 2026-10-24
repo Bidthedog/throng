@@ -10,6 +10,7 @@ import {
   type MachineInfo,
   type MetricValue,
   type Metrics,
+  type ResourceNode,
   type UsageBand,
   type UsageThresholds,
 } from '@throng/core';
@@ -65,8 +66,25 @@ export function networkUnavailableTitle(m: Metrics): string | null {
   return typeof v === 'number' ? null : networkReason(v);
 }
 
-function networkReason(v: Exclude<MetricValue, number>): string {
-  return isUnavailable(v) && v.reason === NETWORK_ELEVATION_REQUIRED ? 'Elevate to show' : 'Network unavailable';
+/**
+ * Why Network reads "-", in FR-113's words. A failed trace is "Network unavailable"; one that needs
+ * elevation is "Elevate to show". A figure that is merely NOT MEASURED says the same as the machine it is
+ * on: unelevated, elevating is what would measure it; elevated, it is simply not measured (T182) — never
+ * "unavailable", which would claim the trace failed.
+ */
+function networkReason(v: Exclude<MetricValue, number>, unelevated = false): string {
+  if (isUnavailable(v)) return v.reason === NETWORK_ELEVATION_REQUIRED ? 'Elevate to show' : 'Network unavailable';
+  return unelevated ? 'Elevate to show' : 'Not measured';
+}
+
+/**
+ * Whether throng is running unelevated, as the capture says: the root's Network is unavailable for want of
+ * elevation, or a part of it is (FR-113). `null` (no capture yet) is not evidence of either.
+ */
+export function isUnelevated(root: { readonly rolled: Metrics } | null): boolean {
+  if (root === null) return false;
+  const v = root.rolled.network;
+  return (isUnavailable(v) && v.reason === NETWORK_ELEVATION_REQUIRED) || root.rolled.partial?.network === NETWORK_ELEVATION_REQUIRED;
 }
 
 /**
@@ -113,11 +131,11 @@ export const ESTIMATE_MARK = '~';
  * in the title; "~" before an estimate — a node's estimate is its memory (R9) — with "Estimated" in the
  * title. Network's reasons are FR-113's words. The status bar keeps its own wording.
  */
-export function monitorFigure(f: Figure, estimated: boolean): Figure {
+export function monitorFigure(f: Figure, estimated: boolean, unelevated = false): Figure {
   const label = FIGURE_LABEL[f.id];
   if (typeof f.value !== 'number') {
     if (f.id === 'network') {
-      const note = networkReason(f.value);
+      const note = networkReason(f.value, unelevated);
       return { ...f, text: NOT_SHOWN_TEXT, title: note, note };
     }
     const note = isUnavailable(f.value) ? f.value.reason : 'Not measured';
@@ -130,6 +148,21 @@ export function monitorFigure(f: Figure, estimated: boolean): Figure {
 /** A metric of `m` as the monitor charts and orders it: I/O is read plus write. */
 export function metricValue(m: Metrics, id: FigureId): MetricValue {
   return id === 'io' ? combineIo(m).value : m[id];
+}
+
+/**
+ * Whether a figure has no line to draw, ever (T180, FR-107): it is unavailable, or it is not measured on a
+ * node with no process anywhere under it — an editor or preview panel, Terminal buffers — which nothing
+ * will ever measure. A not-measured figure on a process (a first sighting has no rate yet) WILL become a
+ * number, so it is loading, not missing.
+ */
+export function neverDrawn(value: MetricValue, node: ResourceNode): boolean {
+  if (typeof value === 'number') return false;
+  return isUnavailable(value) || !hasProcess(node);
+}
+
+function hasProcess(node: ResourceNode): boolean {
+  return node.kind === 'process' || node.children.some(hasProcess);
 }
 
 /** The number behind {@link metricValue}, or 0 for a figure that is not one (it has no height to draw). */

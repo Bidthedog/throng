@@ -10,7 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MonitorApp } from '../../../src/renderer/resources/monitor-app.js';
-import { __resetSession, getSelection, getView, setView } from '../../../src/renderer/resources/monitor-session.js';
+import { __resetSession, getSelection, getView, setSelection, setView } from '../../../src/renderer/resources/monitor-session.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
 import { frame, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
@@ -66,8 +66,23 @@ describe('moving between nodes (FR-068)', () => {
     expect(tabbable).toEqual(['c:projects']);
   });
 
+  it('with nothing selected, Down or Up selects the row the keyboard is on, not its neighbour (T181, FR-098)', () => {
+    row('c:projects').focus();
+    expect(getSelection()).toBeNull();
+    key(document.activeElement!, 'ArrowDown');
+    expect(getSelection()).toBe('c:projects');
+    expect(active()).toBe('c:projects');
+
+    act(() => setSelection(null));
+    key(document.activeElement!, 'ArrowUp');
+    expect(getSelection()).toBe('c:projects');
+  });
+
   it('Down and Up move focus one node at a time', () => {
     row('c:projects').focus();
+    // The first Down selects the row the keyboard is already on (T181); each one after moves.
+    key(document.activeElement!, 'ArrowDown');
+    expect(active()).toBe('c:projects');
     for (const id of FIRST_VIEW.slice(1)) {
       key(document.activeElement!, 'ArrowDown');
       expect(active()).toBe(id);
@@ -86,6 +101,8 @@ describe('moving between nodes (FR-068)', () => {
 
   it('keeps the focused row the one in the Tab order (a roving stop)', () => {
     row('c:projects').focus();
+    // The first Down selects the row the keyboard is on (T181); the second moves.
+    key(document.activeElement!, 'ArrowDown');
     key(document.activeElement!, 'ArrowDown');
     expect(row('c:ui')).toHaveAttribute('tabindex', '0');
     expect(row('c:projects')).toHaveAttribute('tabindex', '-1');
@@ -105,6 +122,7 @@ describe('moving between nodes (FR-068)', () => {
 
   it('moves the selection itself, so the right column follows the keyboard (FR-098)', () => {
     row('c:projects').focus();
+    key(document.activeElement!, 'ArrowDown');
     key(document.activeElement!, 'ArrowDown');
     expect(getSelection()).toBe('c:ui');
     expect(row('c:ui')).toHaveAttribute('aria-selected', 'true');

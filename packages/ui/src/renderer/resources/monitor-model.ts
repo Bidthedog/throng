@@ -279,11 +279,14 @@ export function barsFor(subject: ResourceNode, metric: FigureId, isEnded: (id: s
 export interface FigureContext {
   readonly thresholds: UsageThresholds;
   readonly machine: Pick<MachineInfo, 'installedRamBytes'>;
+  /** throng runs unelevated (`isUnelevated` of the root): a not-measured Network reads "Elevate to show" (T182). */
+  readonly unelevated?: boolean;
 }
 
 interface CachedFigures {
   readonly thresholds: UsageThresholds;
   readonly installedRamBytes: number;
+  readonly unelevated: boolean;
   readonly figures: Figure[];
 }
 /**
@@ -296,9 +299,10 @@ const figuresCache = new WeakMap<ResourceNode, CachedFigures>();
 /** The figures of a node's rolled-up metrics, in display order. */
 export function figuresOf(node: ResourceNode, ctx: FigureContext): Figure[] {
   const hit = figuresCache.get(node);
-  if (hit !== undefined && hit.thresholds === ctx.thresholds && hit.installedRamBytes === ctx.machine.installedRamBytes) return hit.figures;
+  const unelevated = ctx.unelevated === true;
+  if (hit !== undefined && hit.thresholds === ctx.thresholds && hit.installedRamBytes === ctx.machine.installedRamBytes && hit.unelevated === unelevated) return hit.figures;
   // Written as the monitor writes them (FR-107): "-" with the reason in the title, "~" before an estimate.
-  const figures = FIGURE_ORDER.map((id) => monitorFigure(figureOf(id, node.rolled, ctx.thresholds, ctx.machine), node.estimated === true));
-  figuresCache.set(node, { thresholds: ctx.thresholds, installedRamBytes: ctx.machine.installedRamBytes, figures });
+  const figures = FIGURE_ORDER.map((id) => monitorFigure(figureOf(id, node.rolled, ctx.thresholds, ctx.machine), node.estimated === true, unelevated));
+  figuresCache.set(node, { thresholds: ctx.thresholds, installedRamBytes: ctx.machine.installedRamBytes, unelevated, figures });
   return figures;
 }

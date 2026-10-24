@@ -11,7 +11,7 @@
  * handler leaves them (and the event) untouched.
  */
 import { useCallback, useLayoutEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
-import { focusOn, setSelection } from './monitor-session.js';
+import { focusOn, getSelection, setSelection } from './monitor-session.js';
 import type { BreakdownRow } from './monitor-model.js';
 
 export interface BreakdownKeysInput {
@@ -58,12 +58,15 @@ export function useBreakdownKeys({ rows, activeId, focusPath }: BreakdownKeysInp
         pending.current = { id: next.node.id };
         setSelection(next.node.id);
       };
+      // With nothing selected the active row is only where the keyboard IS (the first row): the first Down
+      // or Up selects it, rather than stepping past a row the user never saw selected (T181, FR-098).
+      const step = getSelection() === activeId ? 1 : 0;
       switch (e.key) {
         case 'ArrowDown':
-          move(index + 1);
+          move(index + step);
           break;
         case 'ArrowUp':
-          move(index - 1);
+          move(index - step);
           break;
         case 'Home':
           move(0);

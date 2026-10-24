@@ -18,7 +18,7 @@
  */
 import { useMemo, type CSSProperties, type ReactElement } from 'react';
 import { formatGrouped, heatFor, type HeatMetric, type UsageThresholds } from '@throng/core';
-import { FIGURE_LABEL, orderMetric, type FigureId } from './figures.js';
+import { FIGURE_LABEL, isUnelevated, orderMetric, type FigureId } from './figures.js';
 import { barsFor, figuresOf, type BarItem, type FigureContext } from './monitor-model.js';
 import { getIoPeak, getNetworkPeak, isEnded, useListView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
@@ -90,7 +90,8 @@ export function ShareBars({ subject }: { subject: Subject }): ReactElement {
   const hold = usePointerHold(subject.node, (live) => live, (live) => live, subject.node.id);
   const node = hold.value;
   const machine = subject.frame.machine;
-  const ctx = useMemo<FigureContext>(() => ({ thresholds, machine }), [thresholds, machine]);
+  const unelevated = isUnelevated(subject.tree);
+  const ctx = useMemo<FigureContext>(() => ({ thresholds, machine, unelevated }), [thresholds, machine, unelevated]);
   const model = useMemo(() => barsFor(node, metric, isEnded), [node, metric]);
   // I/O and Network are coloured against the highest rate this session has seen (FR-094, FR-113).
   const ioPeak = metric === 'network' ? getNetworkPeak() : getIoPeak();

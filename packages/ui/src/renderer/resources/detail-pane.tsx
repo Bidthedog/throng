@@ -10,7 +10,7 @@
  */
 import { type ReactElement } from 'react';
 import type { ResourceNodeKind } from '@throng/core';
-import { FIGURE_HINT, FIGURE_LABEL, type Figure } from './figures.js';
+import { FIGURE_HINT, FIGURE_LABEL, isUnelevated, type Figure } from './figures.js';
 import { formatDuration } from './format.js';
 import { LineGraphs } from './line-graph.js';
 import { figuresOf, type FigureContext } from './monitor-model.js';
@@ -131,7 +131,7 @@ function Details({ subject, ctx }: { subject: Subject; ctx: FigureContext }): Re
 export function DetailPane(): ReactElement {
   const subject = useSubject();
   const { thresholds } = useResourceMonitorSettings();
-  const ctx: FigureContext | null = subject ? { thresholds, machine: subject.frame.machine } : null;
+  const ctx: FigureContext | null = subject ? { thresholds, machine: subject.frame.machine, unelevated: isUnelevated(subject.tree) } : null;
   return (
     <section className="detail-pane" data-testid="detail-pane" aria-label="Details" tabIndex={0}>
       {subject && ctx ? <Details subject={subject} ctx={ctx} /> : <p className="detail-pane__empty">Nothing selected yet</p>}

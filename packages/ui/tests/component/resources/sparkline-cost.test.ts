@@ -14,6 +14,7 @@ import type { ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { __resetSession, ingestFrame, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { frame, metrics, node, proc } from '../helpers/resource-fixtures.js';
+import { NOT_MEASURED } from '@throng/core';
 
 const idle = vi.hoisted(() => ({ lengths: [] as number[] }));
 vi.mock('@throng/core', async (importOriginal) => {
@@ -161,6 +162,22 @@ describe('a sparkline with too little history shows a spinner (FR-091, FR-114)',
 
     expect(screen.queryByTestId('sparkline-building-x:100:1')).toBeNull();
     expect(screen.getByTestId('sparkline-x:100:1')).toBeInTheDocument();
+  });
+});
+
+describe('a figure that never will be measured draws no sparkline at all (T180, FR-107)', () => {
+  it('an editor panel, with no process under it, has neither a flat line nor a spinner beside its "-"', () => {
+    const editor = node({ id: 'n:ed', kind: 'panel', label: 'notes.md', panelKind: 'editor', estimated: true, own: metrics({ cpu: NOT_MEASURED, gpu: NOT_MEASURED, ioRead: NOT_MEASURED, ioWrite: NOT_MEASURED, network: NOT_MEASURED, memory: 4 * 1024 * 1024 }), owner: { projectId: 'p1', tabId: 'big', panelId: 'ed' } });
+    const tab = node({ id: 't:big', kind: 'tab', label: 'Tab', children: [editor], owner: { projectId: 'p1', tabId: 'big' } });
+    const project = node({ id: 'p:p1', kind: 'project', label: 'Alpha', projectState: 'active', children: [tab], owner: { projectId: 'p1' } });
+    const root = node({ id: 'root', kind: 'root', label: 'throng', owner: { component: 'ui' }, children: [node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [project] })] });
+    for (let i = 0; i < 3; i += 1) feed(root);
+    render(createElement(Breakdown));
+    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:big'] }));
+
+    expect(screen.queryByTestId('sparkline-n:ed')).toBeNull();
+    expect(screen.queryByTestId('sparkline-building-n:ed')).toBeNull();
+    expect(screen.getByTestId('sparkline-none-n:ed')).toBeInTheDocument();
   });
 });
 
