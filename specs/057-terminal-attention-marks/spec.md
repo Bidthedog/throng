@@ -51,6 +51,10 @@ FR-019a already guarantees that observing one more terminal costs nothing extra.
 category header with a pill carrying the category's total project count, FR-132 narrows **031 FR-042** so
 a one-panel tab shows no count pill, and FR-124 supersedes this
 spec's own **FR-122** go-to control with a toast whose whole body is the link.
+*(2026-10-24, round 13)* FR-135 – FR-139 replace this spec's own flag glyph with one numbered circle on every
+holder: they supersede **FR-131**'s flag, **FR-114**'s glyph and unchanged dot size, **FR-107**'s glyph on the
+selected row, **FR-014**'s Failed style and **FR-016**'s per-kind icon, and retire the `attention` and
+`attentionFailed` icon tokens and the `attentionFailedMark` colour token added by R11.
 
 **Extension.** Notices gain a link (FR-034). Today a toast carries no action, and this repository's
 working rule is that a message with an action attached is shown inline instead. An attention toast's
@@ -314,6 +318,32 @@ the last answer below removes.
   → A: **No. A panel that is already marked never announces again until the mark clears**, whatever raised it.
   (FR-134, superseding FR-112's last sentence and FR-038a's last sentence)
 
+### Session 2026-10-24 (round 13)
+
+From hand-testing round 12 (MT-03, MT-04 at 63bd9532): *"that number / flag combination does not look good.
+Change it back to a solid circle … with a number inside it. We should make the project circles and these new
+notification circles a little larger (they should match in size); get rid of the flag entirely and make the
+number clear. The circle should pulse like the flag does when there is a notification. Each panel and tab
+should share the same circle."*
+
+- Q: What does a mark look like? → A: **One solid circle on every holder** — panel header, tab chip, project
+  row, minimised category header — and no flag glyph anywhere. It blinks as FR-093 already says. (FR-135,
+  superseding FR-131's flag, FR-107's glyph and FR-016's per-kind icon)
+- Q: What colours does the circle use? → A: **The theme's attention colour, with the number in black or white**,
+  whichever contrasts the fill. (FR-136)
+- Q: How does a Failed mark differ from an Attention one? → A: **It does not.** *"Let's stop showing a different
+  notification indicator for failures — just use the same indicator for attention bells and errors."* The kind
+  stays in words: the toast, the Windows notification, the popovers and the accessible name *[derived]*.
+  (FR-135, superseding FR-014; FR-139 retires the Failed glyph and colour)
+- Q: Does a panel header's circle carry a number? → A: **No.** Tab chips, project rows and minimised category
+  headers carry the count. (FR-136)
+- Q: How large are the circles? → A: **The project colour dot and the attention circle are the same size, a
+  little larger than today's dot** *[derived: 14 px, from 10 px]*. (FR-137, superseding FR-114's unchanged dot)
+- Q: A manual flag is held while its panel keeps the focus it had when flagged (FR-127). Can the user flag a
+  panel other than the one they are in? → A: **No.** *"If you right click a panel title, it activates the
+  panel."* Confirmed: pressing any mouse button on a panel makes it the active one, and a keyboard-opened menu
+  belongs to the focused panel, so Flag only ever marks the panel the user is in. FR-127 stands as written.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - See which project needs me from the project list (Priority: P1)
@@ -426,11 +456,12 @@ within a second of the bell. Switch to A, click into the terminal, and check tha
     appears over it; the tab's popover alone shows. (FR-123)
 34. *(2026-10-24, round 12)* **Given** project A has three marked panels, **When** the user looks at A's row,
     **Then** its blinking flag reads 3. **When** two are cleared, it reads 1; **when** the last clears, the colour
-    dot is back. (FR-131)
+    dot is back. (FR-131) *The flag is superseded by scenario 39 (round 13).*
 35. *(2026-10-24, round 12)* **Given** a minimised category holding projects A (two marked panels) and B (one),
     and an expanded category beside it, **Then** the minimised header is visibly paler than the expanded one, in a
     light and a dark theme; each header shows a pill with its total number of projects and no "N of M"; the
-    minimised header's flag reads 3. (FR-129, FR-130, FR-131)
+    minimised header's flag reads 3. (FR-129, FR-130, FR-131) *The flag is superseded by scenario 40 (round
+    13).*
 36. *(2026-10-24, round 12)* **Given** a project row and a category header, **When** a flag appears on them,
     its number changes, or it goes, **Then** neither row changes height and the project and category names do not
     move. (FR-133)
@@ -442,6 +473,16 @@ within a second of the bell. Switch to A, click into the terminal, and check tha
 38. *(2026-10-24, round 12)* **Given** an editor panel and a terminal panel are flagged by hand, **When** throng
     is closed and reopened, **Then** both are still flagged; **when** terminal attention is switched off, **Then**
     both stay flagged. (FR-128)
+39. *(2026-10-24, round 13)* **Given** project A has three marked panels, **When** the user looks at A's row,
+    **Then** a blinking solid circle in the theme's attention colour stands where the colour dot was, the same
+    size as the dot, reading a clear 3; no flag is drawn. **When** two clear it reads 1; **when** the last clears
+    the colour dot is back and nothing on the row has moved. (FR-135, FR-136, FR-137)
+40. *(2026-10-24, round 13)* **Given** a minimised category holding projects A (two marked panels) and B (one),
+    one of them marked by a failure, **Then** its header shows the same circle reading 3, drawn exactly as an
+    Attention-only circle would be. (FR-135, FR-136)
+41. *(2026-10-24, round 13)* **Given** the project list in a light and a dark theme, **Then** every project's
+    colour dot is larger than before and the same size as an attention circle, and each circle's number reads
+    clearly against its fill. (FR-136, FR-137)
 
 ---
 
@@ -480,6 +521,13 @@ mark. Click into the right-hand panel, and check that both clear.
 8. *(2026-10-24, round 12)* **Given** a tab holding three panels, two of them marked, and a tab holding one
    panel, **Then** the first tab's chip shows a pill reading 3 and a blinking flag reading 2, and the second
    shows no pill. **When** the marks clear, **Then** the first chip keeps its width. (FR-131, FR-132, FR-133)
+   *The flag is superseded by scenario 9 (round 13).*
+9. *(2026-10-24, round 13)* **Given** a tab holding three panels, two of them marked, **Then** its chip shows the
+   same solid circle a project row does, reading a clear 2, and no flag. **When** the marks clear, **Then** the
+   chip keeps its width. (FR-135, FR-136, FR-133)
+10. *(2026-10-24, round 13)* **Given** a marked panel, **When** the user looks at its header, **Then** it shows the
+    same blinking circle with no number, distinct from the unsaved-changes dot beside it, and a failed panel's
+    circle looks the same as one raised by a bell. (FR-135, FR-136, FR-138)
 
 ---
 
@@ -728,6 +776,8 @@ lands on a marked panel and clears it.
   those rows as well as for visible ones.
 - **FR-014**: A holder MUST show the Failed kind if any panel beneath it is Failed, and Attention
   otherwise.
+  *Superseded by FR-135 (2026-10-24, round 13): a mark looks the same whatever its kind; the kind is told in
+  words.*
 - **FR-015**: The tooltip and accessible name of a mark, on the panel or on any holder, MUST name each
   marked panel it stands for, with its project, its reason and its kind.
   *Narrowed by FR-096, FR-097 and FR-098 (Session 2026-10-19, round 2) — no tooltip on a panel header's
@@ -736,6 +786,8 @@ lands on a marked panel and clears it.
 - **FR-016**: A mark MUST NOT be conveyed by colour alone. Each kind is an icon with an accessible name.
   Each kind's colour is a theme token with a value in every shipped theme. Each icon comes from the icon
   registry, so icon packs can replace it.
+  *Superseded by FR-135 and FR-139 (2026-10-24, round 13): the mark is one circle, not a per-kind icon, and
+  shape and number, not colour, are what make it a mark; the kind is in its accessible name (FR-015).*
 - **FR-017**: A mark MUST be visibly distinct from the unsaved-changes dot (011 FR-020), which appears in
   the same places. A holder may show both. *(2026-10-18)* Both kinds MUST stay legible on a selected
   project row filled with the project's colour (046, as amended for #489), whatever that colour is.
@@ -817,6 +869,8 @@ lands on a marked panel and clears it.
 - **FR-107** *(2026-10-19, round 4; narrows FR-017)*: On the selected project row a mark MUST be drawn
   in the row's contrast colour (046 FR-072a), with nothing behind it; elsewhere it keeps its kind's
   colour. The glyph tells Attention from Failed.
+  *Superseded by FR-135 (2026-10-24, round 13): the selected row's mark is the same attention-coloured circle as
+  every other row's.*
 - **FR-108** *(2026-10-19, round 4; extends 030 FR-001 and FR-002)*: Preferences → Notifications MUST show
   one row per notification type — Error, Warning, Info, Success, Attention — holding on one line its
   display mode (Never display / Display for / Dismiss only), its duration (usable only under Display
@@ -852,6 +906,7 @@ lands on a marked panel and clears it.
 - **FR-114** *(2026-10-20, round 6; narrows FR-092)*: On a project row the mark MUST reserve no more space
   than the colour dot, whose size does not change, and draw nothing of its own there; its glyph MUST be drawn
   at 16 × 16, centred over that space, overlapping its edges.
+  *Superseded by FR-137 (2026-10-24, round 13): the dot grows, and the circle is exactly its size.*
 - **FR-115** *(2026-10-20, round 6; supersedes FR-033, and FR-102 for notifications)*: A toast and a Windows
   notification MUST be headed by the panel's title — the terminal's window title unless the user named the
   panel — and read **Wants your attention** for an Attention mark, whatever raised it, or what failed for a
@@ -898,6 +953,8 @@ lands on a marked panel and clears it.
 - **FR-127** *(2026-10-24, round 12; narrows FR-095 for a manual flag)*: The clear delay MUST NOT run on a
   manual flag while its panel still holds the focus it had when the flag was raised. Once focus has left the
   panel and returned, FR-095 applies unchanged.
+  *(Round 13) Flag only ever marks the panel the user is in: pressing any mouse button on a panel makes it
+  active, and a keyboard-opened menu belongs to the focused panel. There is no other case to cater for.*
 - **FR-128** *(2026-10-24, round 12; extends FR-091)*: A manual flag MUST survive switching projects, unloading
   a project, and closing and reopening throng, for every panel type. Restoring it MUST NOT announce it (FR-038).
   It MUST NOT be withdrawn by the terminal attention master switch (FR-063), which withdraws only what the
@@ -914,11 +971,34 @@ lands on a marked panel and clears it.
   blinking (FR-093) and the Failed style when any is Failed (FR-014). The glyph MUST be large enough, or changed,
   for the number to be legible at the default UI scale. Counts above 9 show as "9+" *[derived: FR-039's rule]*.
   A panel header's mark carries no number *[derived: it stands for one panel]*.
+  *The flag and the Failed style are superseded by FR-135 and FR-136 (2026-10-24, round 13); the count, "9+"
+  and the panel header's lack of a number stand.*
 - **FR-132** *(2026-10-24, round 12; narrows 031 FR-042)*: A tab chip whose tab holds two or more panels MUST
   show a pill with its panel count; a tab holding one panel shows none. 031 FR-042's pill form is unchanged;
   only the one-panel pill goes. The tab's hover popover still names its panel count (031 FR-043).
 - **FR-133** *(2026-10-24, round 12)*: A flag or pill appearing, changing its number or going MUST NOT change
   a row's height, the position of any text, or a tab chip's width.
+- **FR-135** *(2026-10-24, round 13; supersedes FR-014, FR-016's per-kind icon, FR-107 and FR-131's flag)*: Every
+  mark — on a panel header, a tab chip, a project row and a category header — MUST be the same solid circle,
+  filled with the theme's attention colour (`attentionMark`), on every row the selected one included, blinking
+  as FR-093 says. No flag or other glyph is drawn. An Attention mark and a Failed mark MUST look identical; the
+  kind is told in words, by the toast and Windows notification (FR-115), the popovers and the accessible name
+  (FR-015) *[derived]*.
+- **FR-136** *(2026-10-24, round 13; supersedes FR-131's "inside its flag")*: The circle on a project row, a tab
+  chip and a minimised category header MUST carry the number of marked panels beneath it, "9+" above nine, in
+  black or white, whichever contrasts the fill (046 FR-072a's rule), legible at the default UI scale in every
+  bundled theme. A panel header's circle carries no number.
+- **FR-137** *(2026-10-24, round 13; supersedes FR-114's size and glyph)*: A project's colour dot and the
+  attention circle MUST be the same size, larger than the colour dot was *[derived: 14 px, from 10 px]*. On a
+  project row the circle takes the dot's place exactly (FR-092), so a row's mark appearing or going moves nothing
+  (FR-133).
+- **FR-138** *(2026-10-24, round 13; narrows FR-017)*: The circle MUST stay visibly distinct from the
+  unsaved-changes dot (011 FR-020) on a holder that shows both *[derived: by its larger size, its own colour
+  token and its slower blink]*.
+- **FR-139** *(2026-10-24, round 13; supersedes R11's mark tokens)*: The `attention` and `attentionFailed` icon
+  tokens and the `attentionFailedMark` colour token MUST leave the theme. A theme or icon pack that still carries
+  them loads without error, the entries dropped, as `goToPanel` was in round 12. The Flag and Go to Next Marked
+  Panel menu rows keep their labels without a glyph *[derived]*.
 
 #### C. Notifications
 
