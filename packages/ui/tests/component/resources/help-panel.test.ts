@@ -71,7 +71,7 @@ describe('the panel (FR-093)', () => {
     const text = panel().textContent ?? '';
     expect(panel()).toHaveAttribute('role', 'dialog');
     expect(button()).toHaveAttribute('aria-pressed', 'true');
-    for (const heading of ['Components and Projects', 'Two columns', 'Sorted by', 'Bar colour', 'The mouse', 'The keys', 'Amber and red']) {
+    for (const heading of ['Components and Projects', 'Two columns', 'Bar colour', 'The mouse', 'The keys', 'Amber and red']) {
       expect(within(panel()).getByRole('heading', { name: heading }), heading).toBeInTheDocument();
     }
     expect(text).toMatch(/Components.*throng itself/s);
@@ -110,6 +110,30 @@ describe('the panel (FR-093)', () => {
     expect(amberRed).toHaveTextContent('70%');
     expect(amberRed).toHaveTextContent('55%');
     expect(amberRed).toHaveTextContent('85%');
+  });
+
+  it('describes the finalised monitor (T174): components only at the top, Order by and the headers, Hide ended, the Total row, dropped columns, “-” and “~”, the read-only right column with Activate, the divider', async () => {
+    await mount();
+    fireEvent.click(button());
+    const text = panel().textContent ?? '';
+    for (const heading of ['Order by', 'What the list shows', 'Going to it', 'The divider']) {
+      expect(within(panel()).getByRole('heading', { name: heading }), heading).toBeInTheDocument();
+    }
+    // Components only at the top; projects one level down (FR-103).
+    expect(text).toMatch(/top level lists only the four components/i);
+    // Order by, and a column's name orders by it (FR-099).
+    expect(text).toMatch(/click a column’s name/i);
+    expect(text).toMatch(/Hide ended/);
+    expect(text).toMatch(/Total row/);
+    expect(text).toMatch(/»/);
+    expect(within(panel()).getByTestId('monitor-help-marks')).toHaveTextContent(/“-”.*not measured/i);
+    expect(within(panel()).getByTestId('monitor-help-marks')).toHaveTextContent(/“~”.*estimate/i);
+    // The right column is read-only now (FR-108): the old "click a bar" line is gone.
+    expect(text).not.toMatch(/Click a bar/i);
+    expect(text).toMatch(/right column changes nothing/i);
+    expect(within(panel()).getByTestId('monitor-help-activate')).toHaveTextContent(/Go to/);
+    expect(within(panel()).getByTestId('monitor-help-activate').querySelector('.icon')).not.toBeNull();
+    expect(text).toMatch(/drag the divider/i);
   });
 
   it('draws the Back glyph from the theme, not as a literal', async () => {
