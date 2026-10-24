@@ -42,10 +42,11 @@ function Fact({ name, label, children }: { name: string; label: string; children
   );
 }
 
-function FigureFact({ figure, estimated }: { figure: Figure; estimated: boolean }): ReactElement {
-  // What the figure IS and why it may be partial — never its value, which is the text beside it: a title
-  // that moved with every capture would be closed by the browser under a resting pointer (FR-095).
+function FigureFact({ figure }: { figure: Figure }): ReactElement {
+  // What the figure IS, and why it reads "-", "~" or is partial (FR-107) — never its value, which is the text
+  // beside it: a title that moved with every capture would be closed by the browser under a resting pointer (FR-095).
   let title = `${FIGURE_LABEL[figure.id]} — ${FIGURE_HINT[figure.id]}`;
+  if (figure.note !== undefined) title += `; ${figure.note}`;
   if (figure.partial !== undefined) title += `; partial: ${figure.partial}`;
   return (
     <>
@@ -59,7 +60,6 @@ function FigureFact({ figure, estimated }: { figure: Figure; estimated: boolean 
       >
         {figure.text}
         {figure.band ? <span className="detail-pane__tag"> ({figure.band})</span> : null}
-        {estimated && figure.id === 'memory' ? <span className="detail-pane__tag"> estimated</span> : null}
       </dd>
     </>
   );
@@ -117,7 +117,7 @@ function Details({ subject, ctx }: { subject: Subject; ctx: FigureContext }): Re
           </Fact>
         ) : null}
         {figures.map((f) => (
-          <FigureFact key={f.id} figure={f} estimated={node.estimated === true} />
+          <FigureFact key={f.id} figure={f} />
         ))}
       </dl>
       <LineGraphs subject={subject} />

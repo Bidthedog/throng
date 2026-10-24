@@ -18,7 +18,7 @@
  */
 import { useMemo, type CSSProperties, type ReactElement } from 'react';
 import { formatGrouped, heatFor, type HeatMetric, type ResourceNode, type UsageThresholds } from '@throng/core';
-import { FIGURE_LABEL, figureOf, orderMetric, type FigureId } from './figures.js';
+import { FIGURE_LABEL, figureOf, monitorFigure, orderMetric, type FigureId } from './figures.js';
 import { barsFor, type BarItem } from './monitor-model.js';
 import { focusOn, getIoPeak, getNetworkPeak, isEnded, setSelection, useView } from './monitor-session.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
@@ -57,7 +57,7 @@ function Bar({
   ioPeak: number;
 }): ReactElement {
   const { node } = bar;
-  const figure = figureOf(metric, node.rolled, thresholds, machine);
+  const figure = monitorFigure(figureOf(metric, node.rolled, thresholds, machine), node.estimated === true);
   const heat = heatFor(HEAT_METRIC[metric], bar.value, thresholds, machine, ioPeak);
   const fill: CSSProperties = { width: `${Math.max(bar.share * 100, MIN_FILL_PERCENT)}%` };
   // `--heat` is a number the stylesheet turns into a colour; a bar with nothing measured to colour it sets none.

@@ -95,9 +95,12 @@ describe('an editor panel (FR-024)', () => {
     act(() => setSelection('n:n2'));
 
     expect(field('name')).toHaveTextContent('Notes');
-    expect(field('figure-memory')).toHaveTextContent(/estimated/i);
-    expect(field('figure-memory')).toHaveTextContent(`${formatGrouped(40)} MB`);
-    expect(field('figure-cpu')).toHaveTextContent('Not measured');
+    // "~" before the estimate and "-" for what is not measured, the reason in the title (FR-107).
+    expect(field('figure-memory')).toHaveTextContent(`~${formatGrouped(40)} MB`);
+    expect(field('figure-memory')).not.toHaveTextContent(/estimated/i);
+    expect(field('figure-memory').getAttribute('title')).toContain('Estimated');
+    expect(field('figure-cpu')).toHaveTextContent(/^-$/);
+    expect(field('figure-cpu').getAttribute('title')).toContain('Not measured');
     expect(within(pane()).queryByTestId('detail-pid')).toBeNull();
     expect(field('owner')).toHaveTextContent('Alpha');
     expect(field('owner')).toHaveTextContent('Build');

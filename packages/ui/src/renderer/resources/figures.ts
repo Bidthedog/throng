@@ -61,7 +61,10 @@ export const FIGURE_HINT: Readonly<Record<FigureId, string>> = {
  */
 export function networkUnavailableTitle(m: Metrics): string | null {
   const v = m.network;
-  if (typeof v === 'number') return null;
+  return typeof v === 'number' ? null : networkReason(v);
+}
+
+function networkReason(v: Exclude<MetricValue, number>): string {
   return isUnavailable(v) && v.reason === NETWORK_ELEVATION_REQUIRED ? 'Elevate to show' : 'Network unavailable';
 }
 
@@ -80,6 +83,37 @@ export interface Figure {
   readonly band: UsageBand | undefined;
   /** Why the total is missing a part (FR-044), if it is. */
   readonly partial: string | undefined;
+  /**
+   * The monitor's hover title for the figure (FR-107): its column, and why it reads "-" or "~". Set by
+   * {@link monitorFigure}; never the figure itself (FR-095).
+   */
+  readonly title?: string;
+  /** Why it reads "-" (the reason) or "~" ("Estimated"), for a surface that words its own title. */
+  readonly note?: string;
+}
+
+/** What the monitor writes for a figure that is not a number (FR-107): the reason is the title's. */
+export const NOT_SHOWN_TEXT = '-';
+/** What the monitor writes before an estimate (FR-107). */
+export const ESTIMATE_MARK = '~';
+
+/**
+ * A figure as the monitor writes it (FR-107): "-" for one that is not measured or unavailable, its reason
+ * in the title; "~" before an estimate — a node's estimate is its memory (R9) — with "Estimated" in the
+ * title. Network's reasons are FR-113's words. The status bar keeps its own wording.
+ */
+export function monitorFigure(f: Figure, estimated: boolean): Figure {
+  const label = FIGURE_LABEL[f.id];
+  if (typeof f.value !== 'number') {
+    if (f.id === 'network') {
+      const note = networkReason(f.value);
+      return { ...f, text: NOT_SHOWN_TEXT, title: note, note };
+    }
+    const note = isUnavailable(f.value) ? f.value.reason : 'Not measured';
+    return { ...f, text: NOT_SHOWN_TEXT, title: `${label}: ${note}`, note };
+  }
+  if (estimated && f.id === 'memory') return { ...f, text: `${ESTIMATE_MARK}${f.text}`, title: `${label}: Estimated`, note: 'Estimated' };
+  return { ...f, title: f.partial !== undefined ? `${label} — partial: ${f.partial}` : label };
 }
 
 /** A metric of `m` as the monitor charts and orders it: I/O is read plus write. */

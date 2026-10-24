@@ -36,8 +36,9 @@
  *
  * ══ WORDS, NEVER BARE NUMBERS ══
  *
- * A figure that is not a number reads `Not measured` or `Unavailable`; an ended process reads `ended`;
- * an estimate says `estimated`; a partial total carries its reason (FR-012, FR-024, FR-044, FR-065a).
+ * A figure that is not a number reads "-" with its reason in its title, and an estimate reads "~" before
+ * its figure (FR-107); an ended process reads `ended`; a partial total carries its reason (FR-012, FR-024,
+ * FR-044, FR-065a).
  */
 import {
   memo,
@@ -93,13 +94,9 @@ const ROW_HEIGHT_FALLBACK_PX = 24;
  */
 function rowTitle(node: ResourceNode, ended: boolean): string {
   if (node.kind === 'limitation') return `${node.label}: ${node.reason ?? 'not measured'}`;
-  return `${node.label}${node.estimated ? ' (estimated)' : ''}${ended ? ' — ended' : ''}`;
+  return `${node.label}${ended ? ' — ended' : ''}`;
 }
 
-/** A cell's title names its column, and says why a total is partial; the figure itself is already the cell's text. */
-function columnTitle(id: FigureId, f: Figure | undefined): string {
-  return f?.partial !== undefined ? `${FIGURE_LABEL[id]} — partial: ${f.partial}` : FIGURE_LABEL[id];
-}
 
 interface RowProps {
   readonly row: BreakdownRow;
@@ -149,10 +146,9 @@ function RowView({ row, ctx, metric, columns, active, selected, onSelect, onOpen
         data-band={f?.band}
         data-partial={f?.partial !== undefined ? 'true' : undefined}
         data-unavailable={f && typeof f.value === 'object' && f.value.kind === 'unavailable' ? 'true' : undefined}
-        title={ended ? undefined : columnTitle(id, f)}
+        title={ended ? undefined : f?.title}
       >
         {ended ? (i === 0 ? 'ended' : '') : f?.text}
-        {!ended && id === 'memory' && node.estimated ? <span className="breakdown-row__tag"> estimated</span> : null}
       </span>
     );
   };
@@ -180,7 +176,6 @@ function RowView({ row, ctx, metric, columns, active, selected, onSelect, onOpen
     >
       <span className="breakdown-row__name">
         {node.label}
-        {node.estimated ? <span className="breakdown-row__tag"> estimated</span> : null}
         {ended ? <span className="breakdown-row__tag"> ended</span> : null}
         {node.sharedWith ? <span className="breakdown-row__tag"> shares another panel’s document</span> : null}
       </span>
@@ -328,7 +323,7 @@ function TotalRow({
       </span>
       {columns.includes('trend') ? <span className="breakdown-total__spark" /> : null}
       {figures.map((f) => (
-        <span key={f.id} className="breakdown-row__cell" data-testid={`${testId}-${f.id}`} data-metric={f.id} title={columnTitle(f.id, f)}>
+        <span key={f.id} className="breakdown-row__cell" data-testid={`${testId}-${f.id}`} data-metric={f.id} title={f.title}>
           {f.text}
         </span>
       ))}

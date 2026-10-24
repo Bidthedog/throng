@@ -216,25 +216,32 @@ describe('the rows', () => {
     expect(row('b:n1')).toHaveAttribute('aria-level', '1');
   });
 
-  it('marks an estimated figure as estimated, on the row', () => {
+  it('writes an estimate with "~" and a not-measured figure as "-", each explained by its title (FR-107, US2 scenario 27)', () => {
     feed(sampleHierarchy());
     mount();
     act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1'] }));
 
     expect(row('n:n2')).toHaveAttribute('data-estimated', 'true');
-    expect(within(row('n:n2')).getByTestId('breakdown-row-n:n2-memory')).toHaveTextContent(/estimated/i);
+    const memory = within(row('n:n2')).getByTestId('breakdown-row-n:n2-memory');
+    expect(memory).toHaveTextContent(/^~40 MB$/);
+    expect(memory).toHaveAttribute('title', 'Memory: Estimated');
+    // No "estimated" tag anywhere on the row: the "~" is the mark.
+    expect(row('n:n2')).not.toHaveTextContent(/estimated/i);
     // An editor panel’s CPU is not measured, and says so rather than 0 (FR-024).
-    expect(within(row('n:n2')).getByTestId('breakdown-row-n:n2-cpu')).toHaveTextContent('Not measured');
+    const cpu = within(row('n:n2')).getByTestId('breakdown-row-n:n2-cpu');
+    expect(cpu).toHaveTextContent(/^-$/);
+    expect(cpu).toHaveAttribute('title', 'CPU: Not measured');
   });
 
-  it('says an unavailable figure is unavailable, never as a bare number', () => {
+  it('writes an unavailable figure as "-" with its reason in the title, never as a bare number', () => {
     const tree = sampleHierarchy();
     const dead = unavailable('The daemon is not running');
     const daemon = node({ id: 'c:daemon', kind: 'component', label: 'Daemon', own: metrics({ cpu: dead, memory: dead }), owner: { component: 'daemon' } });
     feed({ ...tree, children: tree.children.map((c) => (c.id === 'c:daemon' ? daemon : c)), rolled: { ...tree.rolled, partial: { cpu: 'The daemon is not running' } } });
     mount();
 
-    expect(within(row('c:daemon')).getByTestId('breakdown-row-c:daemon-cpu')).toHaveTextContent('Unavailable');
+    expect(within(row('c:daemon')).getByTestId('breakdown-row-c:daemon-cpu')).toHaveTextContent(/^-$/);
+    expect(within(row('c:daemon')).getByTestId('breakdown-row-c:daemon-cpu')).toHaveAttribute('title', 'CPU: The daemon is not running');
     expect(within(row('c:daemon')).getByTestId('breakdown-row-c:daemon-cpu')).toHaveAttribute('data-unavailable', 'true');
     // Root is the focus, not a row: its partial total, and the reason, are the right column's (`detail-pane.test.ts`).
     expect(screen.queryByTestId('breakdown-row-root')).toBeNull();
@@ -323,7 +330,8 @@ describe('the rows', () => {
     mount();
     act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1'] }));
     const gpu = within(row('n:n2')).getByTestId('breakdown-row-n:n2-gpu');
-    expect(gpu).toHaveTextContent('Not measured');
+    expect(gpu).toHaveTextContent(/^-$/);
+    expect(gpu).toHaveAttribute('title', 'GPU: Not measured');
     expect(NOT_MEASURED).toBeDefined();
   });
 });

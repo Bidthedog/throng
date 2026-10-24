@@ -15,7 +15,7 @@ import {
   type ResourceNode,
   type UsageThresholds,
 } from '@throng/core';
-import { FIGURE_ORDER, figureOf, metricNumber, type Figure, type FigureId } from './figures.js';
+import { FIGURE_ORDER, figureOf, metricNumber, monitorFigure, type Figure, type FigureId } from './figures.js';
 import { resolveFocusPath, type ViewState } from './monitor-session.js';
 
 export interface BreakdownRow {
@@ -291,7 +291,8 @@ const figuresCache = new WeakMap<ResourceNode, CachedFigures>();
 export function figuresOf(node: ResourceNode, ctx: FigureContext): Figure[] {
   const hit = figuresCache.get(node);
   if (hit !== undefined && hit.thresholds === ctx.thresholds && hit.installedRamBytes === ctx.machine.installedRamBytes) return hit.figures;
-  const figures = FIGURE_ORDER.map((id) => figureOf(id, node.rolled, ctx.thresholds, ctx.machine));
+  // Written as the monitor writes them (FR-107): "-" with the reason in the title, "~" before an estimate.
+  const figures = FIGURE_ORDER.map((id) => monitorFigure(figureOf(id, node.rolled, ctx.thresholds, ctx.machine), node.estimated === true));
   figuresCache.set(node, { thresholds: ctx.thresholds, installedRamBytes: ctx.machine.installedRamBytes, figures });
   return figures;
 }
