@@ -161,4 +161,20 @@ describe('motion (FR-090, FR-091)', () => {
   it('has no pulse under reduced motion', () => {
     expect(reduced).toMatch(/\.monitor-liveness__pulse[^{]*\{[^}]*animation:\s*none/);
   });
+
+  it('spins the loading spinner in the theme’s accent, and holds it still under reduced motion (FR-114)', () => {
+    expect(bodyOf('.monitor-spinner')).toMatch(/animation:[^;]*throng-spin/);
+    expect(bodyOf('.monitor-spinner')).toMatch(/var\(--throng-colour-accent\)/);
+    expect(reduced).toMatch(/\.monitor-spinner[^{]*\{[^}]*animation:\s*none/);
+  });
+
+  it('keeps a loading graph in the graph’s own box, centred, so nothing overlaps its neighbours (FR-114)', () => {
+    const box = bodyOf('.line-graph__building');
+    expect(box).toMatch(/width:\s*220px/);
+    expect(box).toMatch(/height:\s*44px/);
+    expect(box).toMatch(/place-items:\s*center/);
+    const spark = bodyOf('.sparkline--building');
+    expect(spark).toMatch(/place-items:\s*center/);
+    expect(spark).toMatch(/overflow:\s*hidden/);
+  });
 });

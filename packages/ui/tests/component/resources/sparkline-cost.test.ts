@@ -145,11 +145,16 @@ describe('a sparkline is drawn only while it is on screen (D5)', () => {
   });
 });
 
-describe('a sparkline with too little history says so (FR-091)', () => {
-  it('reads “Building history…” until the second point, then draws the line', () => {
+describe('a sparkline with too little history shows a spinner (FR-091, FR-114)', () => {
+  it('spins, wordless, in the sparkline’s own box until the second point, then draws the line', () => {
     mount(scene(3), 1);
     const building = screen.getByTestId('sparkline-building-x:100:1');
-    expect(building).toHaveTextContent('Building history…');
+    expect(building).toHaveTextContent('');
+    expect(building).not.toHaveAttribute('title');
+    expect(building).toHaveClass('sparkline');
+    const spinner = building.querySelector('[role="progressbar"]');
+    expect(spinner).not.toBeNull();
+    expect(spinner).toHaveAttribute('aria-label', 'Loading');
     expect(screen.queryByTestId('sparkline-x:100:1')).toBeNull();
 
     feed(scene(3));

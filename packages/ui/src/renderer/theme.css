@@ -3750,6 +3750,10 @@ textarea,
   .monitor-liveness__pulse {
     animation: none;
   }
+  /* Still, but still a spinner: a quarter arc on its ring says it is waiting (FR-114). */
+  .monitor-spinner {
+    animation: none;
+  }
 }
 
 /* The left column: breadcrumb, rows (FR-060, FR-096). */
@@ -4461,8 +4465,30 @@ textarea,
   margin: 0;
   border: 1px dashed var(--throng-colour-border);
   border-radius: 3px;
-  color: var(--throng-colour-textMuted);
-  font-size: 11px;
+}
+
+/* A row's sparkline before its second point: the same 90 by 18 box, the spinner centred in it (FR-114). */
+.sparkline--building {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* The loading spinner (FR-114): a ring in the border colour with one accent arc, sized to the box it sits in. */
+.monitor-spinner {
+  box-sizing: border-box;
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--throng-colour-border);
+  border-top-color: var(--throng-colour-accent);
+  border-radius: 50%;
+  animation: throng-spin 0.9s linear infinite;
+}
+
+.sparkline--building .monitor-spinner {
+  width: 12px;
+  height: 12px;
 }
 
 .detail-pane {

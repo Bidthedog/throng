@@ -5,12 +5,12 @@
  *
  * It is drawn the way the rows' sparklines are (`sparkline.tsx`): one canvas, redrawn by the session's single
  * listener, in the theme's accent, with no axes — the current value beside it is the scale's other end. One
- * point is not a trend, so with fewer than two it says it is building its history (FR-091).
+ * point is not a trend, so with fewer than two it shows a spinner in the graph's box (FR-091, FR-114).
  */
 import { type ReactElement } from 'react';
 import { FIGURE_LABEL, FIGURE_ORDER, type FigureId } from './figures.js';
 import { figuresOf } from './monitor-model.js';
-import { PlotCanvas, useHasLine } from './sparkline.js';
+import { LoadingSpinner, PlotCanvas, useHasLine } from './sparkline.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
 import type { Subject } from './use-subject.js';
 
@@ -40,9 +40,9 @@ function LineGraph({ subject, metric }: { subject: Subject; metric: FigureId }):
       ) : hasLine ? (
         <PlotCanvas nodeId={node.id} metric={metric} width={WIDTH} height={HEIGHT} className="line-graph__plot" testId={`line-graph-plot-${metric}`} />
       ) : (
-        <p className="line-graph__building" data-testid={`line-graph-${metric}-building`}>
-          Building history…
-        </p>
+        <div className="line-graph__building" data-testid={`line-graph-${metric}-building`}>
+          <LoadingSpinner />
+        </div>
       )}
     </figure>
   );

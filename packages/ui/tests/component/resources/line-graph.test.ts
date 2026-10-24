@@ -107,11 +107,13 @@ describe('a graph per metric (FR-097)', () => {
   });
 });
 
-describe('with too little history (FR-091)', () => {
-  it('says “Building history…” for each metric until the second point, and draws nothing', () => {
+describe('with too little history (FR-091, FR-114)', () => {
+  it('shows a centred spinner in each graph’s own box until the second point, no words, and draws nothing (FR-114)', () => {
     mount(1);
     for (const metric of METRICS) {
-      expect(within(screen.getByTestId(`line-graph-${metric}`)).getByTestId(`line-graph-${metric}-building`)).toHaveTextContent('Building history…');
+      const box = within(screen.getByTestId(`line-graph-${metric}`)).getByTestId(`line-graph-${metric}-building`);
+      expect(box).toHaveTextContent('');
+      expect(within(box).getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument();
       expect(screen.queryByTestId(`line-graph-plot-${metric}`)).toBeNull();
     }
     expect(strokes).toBe(0);

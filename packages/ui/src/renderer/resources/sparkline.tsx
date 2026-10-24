@@ -1,7 +1,7 @@
 /**
  * A row's sparkline (055 FR-060): one metric's recent history as a tiny canvas polyline — no library, and
- * no inline artwork (SC-002). One point is not a trend, so with fewer than two it says it is building its
- * history (FR-091) rather than show nothing.
+ * no inline artwork (SC-002). One point is not a trend, so with fewer than two it shows a spinner in its own
+ * box (FR-091, FR-114) rather than nothing.
  *
  * ══ WHAT IT COSTS, PER CAPTURE ══
  *
@@ -192,12 +192,20 @@ export function PlotCanvas({
   return <canvas ref={ref} className={className} data-testid={testId} width={width} height={height} aria-hidden="true" />;
 }
 
+/**
+ * What a graph shows before it has two points (FR-114): a small spinner, centred in the graph's own box —
+ * no words, so nothing wraps into its neighbours. Drawn by CSS in the theme's accent, still under reduced motion.
+ */
+export function LoadingSpinner(): ReactElement {
+  return <span className="monitor-spinner" role="progressbar" aria-label="Loading" />;
+}
+
 function SparklineView({ nodeId, metric }: { nodeId: string; metric: FigureId }): ReactElement {
   const hasLine = useHasLine(nodeId);
   if (!hasLine) {
     return (
-      <span className="sparkline sparkline--building" data-testid={`sparkline-building-${nodeId}`} title="Building history…">
-        Building history…
+      <span className="sparkline sparkline--building" data-testid={`sparkline-building-${nodeId}`}>
+        <LoadingSpinner />
       </span>
     );
   }
