@@ -314,6 +314,9 @@ import { setAtPath } from './metadata.js';
 //
 // 057 round 12 retires `goToPanel` (FR-124). No bump: `migrateTheme` drops the stray key the 24 seed
 // wrote (theme-ops.ts), as for `diagramFullSize`.
+//
+// 057 round 13 retires `attention`, `attentionFailed` and `attentionFailedMark` (FR-139). No bump, for
+// the same reason: `migrateTheme` drops what the 24 seed wrote.
 export const SHIPPED_DEFAULTS_VERSION = 24;
 
 /**

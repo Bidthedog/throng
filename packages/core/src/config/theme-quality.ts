@@ -13,66 +13,15 @@
  *   themes only; out-of-scope shortfalls are reported, not thrown.
  */
 import { THRONG_THEME, type Theme } from './theme.js';
+import { channelToLinear, contrastRatio, hexToRgb, readableTextOn, relativeLuminance, type Rgb } from './colour-math.js';
 
-export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
-}
+// The WCAG maths lives in colour-math.ts (a leaf, so theme.ts can use it too); re-exported unchanged.
+export { contrastRatio, hexToRgb, readableTextOn, relativeLuminance, type Rgb };
 
 export interface Lab {
   L: number;
   a: number;
   b: number;
-}
-
-/** Parse an `#rrggbb` string (case-insensitive) into 0–255 channels. */
-export function hexToRgb(hex: string): Rgb {
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
-  if (!m) throw new Error(`not a #rrggbb colour: ${hex}`);
-  return {
-    r: parseInt(m[1], 16),
-    g: parseInt(m[2], 16),
-    b: parseInt(m[3], 16),
-  };
-}
-
-/** sRGB channel (0–255) → linear-light component (WCAG 2.1). */
-function channelToLinear(c: number): number {
-  const s = c / 255;
-  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-}
-
-/** WCAG 2.1 relative luminance in [0,1]. */
-export function relativeLuminance(rgb: Rgb): number {
-  const r = channelToLinear(rgb.r);
-  const g = channelToLinear(rgb.g);
-  const b = channelToLinear(rgb.b);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** WCAG 2.1 contrast ratio in [1,21]. Symmetric in its arguments. */
-export function contrastRatio(hexA: string, hexB: string): number {
-  const la = relativeLuminance(hexToRgb(hexA));
-  const lb = relativeLuminance(hexToRgb(hexB));
-  const lighter = Math.max(la, lb);
-  const darker = Math.min(la, lb);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-/**
- * Black or white, whichever has more contrast against `fill` — or `null` when `fill` is not a 3- or
- * 6-digit hex colour (#489).
- *
- * For a fill a USER picked, a project's colour, so no theme pair was ever checked against it. One of
- * the two always clears WCAG AA 4.5:1: the worst case is a fill of luminance ~0.18, where both give
- * ~4.58.
- */
-export function readableTextOn(fill: string): '#000000' | '#ffffff' | null {
-  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(fill.trim());
-  const hex = short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : fill.trim();
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return null;
-  return contrastRatio(hex, '#000000') >= contrastRatio(hex, '#ffffff') ? '#000000' : '#ffffff';
 }
 
 /** sRGB (0–255) → CIE XYZ (D65). */
@@ -284,8 +233,11 @@ export function closestPair(themes: readonly Theme[]): ClosestPair {
  * (its danger colour, or the shared red where that equals the accent) to every theme: 6.093435722242142
  * → 6.061137717854353. Both are copies of colours the theme already carries, so the mean drops by
  * construction with no theme becoming more alike in character. The threshold is untouched at 4.3.
+ *
+ * Re-measured by 057 round 13 (FR-139), which retired `attentionFailedMark`: 6.061137717854353 →
+ * 6.137860980105675. One shared token fewer, so the mean moves back up by construction; no hue changed.
  */
-export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.061137717854353;
+export const CLOSEST_LEGITIMATE_PAIR_DELTA = 6.137860980105675;
 
 /**
  * Hard distinctness gate: no two bundled themes may be closer than this mean ΔE00. A

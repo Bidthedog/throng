@@ -3,6 +3,7 @@
  * resolve from a Theme; the default is "throng". Pure — the renderer turns the
  * resolved tokens into CSS custom properties (`--throng-*`). No OS/DOM here.
  */
+import { readableTextOn } from './colour-math.js';
 
 export interface ThemeFonts {
   family: string;
@@ -213,11 +214,11 @@ export const THRONG_THEME: Theme = {
        Distinct from `danger` on purpose: a warning is not a failure, and colouring it red would
        teach users to read a red card as "something you can ignore". */
     warning: '#d29922',
-    /* 057 (R11). The attention mark on a panel, project or category and the count on the taskbar badge,
-       and its Failed variant. Two colours so a failure reads as one at a glance; both distinct from
-       047 FR-083's attention FLASH — a flash is a moment, a mark is a state. */
+    /* 057 (R11). The attention mark — one circle on a panel, tab, project or category — and the count on
+       the taskbar badge; distinct from 047 FR-083's attention FLASH — a flash is a moment, a mark is a
+       state. Round 13 (FR-135, FR-139) retired its Failed twin, `attentionFailedMark`: a failure's mark
+       looks the same, and says what failed in words. */
     attentionMark: '#6aa3ff',
-    attentionFailedMark: '#e5534b',
     /* Scrollbars (018, FR-009). Before this, the ONLY styled scrollbar in the app was the
        terminal's, which borrowed `border` for its thumb and `textMuted` for the hover, and
        hard-coded `transparent` for the track. Everything else rendered the browser engine's default
@@ -622,14 +623,9 @@ export const THRONG_THEME: Theme = {
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
     warning: '⚠',
-    /* 057 (R11). `attention` is the mark that says a panel wants you and the cog menu's Go to Next
-       Marked Panel row; `attentionFailed` is its Failed variant, so a failure is not told apart by
-       colour alone. (`goToPanel`, the toast's link control, was retired in round 12: FR-124.) None reuses `warning` (a folded-heading
-       cue) or `notification`-style glyphs: retheming one must never retheme another. Both are text
-       glyphs, not emoji, so they take the attentionMark / attentionFailedMark colours; a flag rather
-       than a bell, because most marks are not raised by a bell. */
-    attention: '⚑',
-    attentionFailed: '✖',
+    /* 057 added `attention`, `attentionFailed` and `goToPanel` (R11). All three are retired: `goToPanel`
+       by round 12 (FR-124, the toast card is the link), the two flag glyphs by round 13 (FR-135,
+       FR-139), when the mark became a numbered circle drawn in CSS. */
   },
 };
 
@@ -801,6 +797,10 @@ export function toCssVariables(theme: Theme): Record<string, string> {
     const own = theme.colours?.[token];
     if (typeof own !== 'string' || own.trim() === '') delete vars[`--throng-colour-${token}`];
   }
+  // 057 FR-136 — the number inside the attention circle, DERIVED from its fill by 046 FR-072a's
+  // black-or-white rule rather than given a token of its own, so a user's own `attentionMark` gets a
+  // readable number too. Black when the fill is not a hex colour the rule can read.
+  vars['--throng-attention-mark-text'] = readableTextOn(vars['--throng-colour-attentionMark'] ?? '') ?? '#000000';
   const caseToTransform: Record<TextCase, string> = {
     original: 'none',
     title: 'capitalize',
