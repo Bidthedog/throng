@@ -168,7 +168,7 @@ Paths: `packages/ui/src/renderer/resources/**`, `packages/ui/src/renderer/theme.
 ## MT-11: Selecting, ordering and reading the left list
 
 Covers: FR-098, FR-099, FR-100, FR-101, FR-102, FR-103, FR-104, FR-105, FR-106, FR-107
-Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/monitor-model.ts`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/resources/format.ts`, `packages/ui/src/renderer/resources/use-breakdown-keys.ts`, `packages/ui/src/renderer/resources/help-panel.tsx`, `packages/ui/src/renderer/theme.css`, `packages/core/src/resources/**`
+Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/monitor-model.ts`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/resources/format.ts`, `packages/ui/src/renderer/resources/use-breakdown-keys.ts`, `packages/ui/src/renderer/resources/help-panel.tsx`, `packages/ui/src/renderer/resources/figures.ts`, `packages/ui/src/renderer/resources/use-column-fit.ts`, `packages/ui/src/renderer/resources/sparkline.tsx`, `packages/ui/src/renderer/resources/estimates-sources.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/resources/**`
 
 ### Steps
 1. Open the monitor. The left column lists UI, Daemon, Helpers and Projects only, with a **Total** row at the bottom showing each column's figure for throng.
@@ -191,7 +191,7 @@ Paths: `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/rend
 ## MT-12: The right column and Activate
 
 Covers: FR-108, FR-109, FR-110
-Paths: `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/share-bars.tsx`, `packages/ui/src/renderer/resources/node-actions.tsx`, `packages/ui/src/renderer/resources/route-action.ts`, `packages/ui/src/renderer/resources/use-subject.ts`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/preload/preload.cts`, `packages/ui/src/renderer/app.tsx`, `packages/ui/src/renderer/subworkspace-app.tsx`
+Paths: `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/share-bars.tsx`, `packages/ui/src/renderer/resources/node-actions.tsx`, `packages/ui/src/renderer/resources/route-action.ts`, `packages/ui/src/renderer/resources/use-subject.ts`, `packages/ui/src/main/resources-ipc.ts`, `packages/ui/src/preload/preload.cts`, `packages/ui/src/renderer/app.tsx`, `packages/ui/src/renderer/subworkspace-app.tsx`, `packages/ui/src/renderer/resources/figures.ts`, `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/renderer/resources/use-estimates-reporter.ts`, `packages/ui/src/renderer/attention/attention-navigation.ts`, `packages/ui/src/renderer/global.d.ts`, `packages/core/src/config/theme.ts`
 
 ### Steps
 1. Select a project on the left. The right column lists its tabs; each shows CPU, Memory, GPU, I/O and Network figures, with a bar sized by the Order by metric. Change Order by: the bars re-rank, and every figure stays shown.
@@ -210,7 +210,7 @@ Paths: `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/re
 ## MT-13: The monitor's layout: full-width header and movable divider
 
 Covers: FR-111, FR-112
-Paths: `packages/ui/src/renderer/resources/monitor-body.tsx`, `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/breadcrumb.tsx`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/main/resource-monitor-window.ts`
+Paths: `packages/ui/src/renderer/resources/monitor-body.tsx`, `packages/ui/src/renderer/resources/monitor-app.tsx`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/breadcrumb.tsx`, `packages/ui/src/renderer/resources/column-divider.tsx`, `packages/ui/src/renderer/resources/monitor-location.tsx`, `packages/ui/src/renderer/resources/monitor-session.ts`, `packages/ui/src/renderer/theme.css`, `packages/ui/src/main/resource-monitor-window.ts`
 
 ### Steps
 1. Open the monitor. The filter, the toolbar (Order by, Hide idle, Hide ended processes, Capture every, the Updated line, ?) and the breadcrumb with Back run across the full width of the window, above both columns, with a rule beneath them.
@@ -227,7 +227,7 @@ Paths: `packages/ui/src/renderer/resources/monitor-body.tsx`, `packages/ui/src/r
 ## MT-14: Network figures
 
 Covers: FR-113, SC-011
-Paths: `packages/platform-windows/src/**`, `packages/ui/src/collector/**`, `packages/core/src/resources/**`, `packages/ipc-contract/src/resources.ts`, `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/renderer/resources/format.ts`
+Paths: `packages/platform-windows/src/**`, `packages/ui/src/collector/**`, `packages/core/src/resources/**`, `packages/ipc-contract/src/resources.ts`, `packages/ui/src/renderer/resources/breakdown.tsx`, `packages/ui/src/renderer/resources/detail-pane.tsx`, `packages/ui/src/renderer/resources/line-graph.tsx`, `packages/ui/src/renderer/resources/format.ts`, `packages/ui/src/renderer/resources/figures.ts`, `packages/ui/src/renderer/resources/toolbar.tsx`, `packages/ui/src/renderer/resources/share-bars.tsx`, `packages/ui/src/main/resource-monitor-host.ts`, `packages/core/src/config/theme.ts`
 
 ### Steps
 1. Run throng normally (not as administrator) and open the monitor. Every row has a **Network** column reading "-", and hovering one says "Elevate to show". Network in Order by is disabled with the same reason.
