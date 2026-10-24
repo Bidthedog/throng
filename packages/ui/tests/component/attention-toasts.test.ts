@@ -85,6 +85,19 @@ describe('raise', () => {
     expect(goTo).toHaveBeenCalledWith('p2');
   });
 
+  it('the focused card goes to the panel on Enter or Space; Enter on Dismiss does not (FR-124, keyboard parity)', async () => {
+    raise('p1');
+    const user = userEvent.setup();
+    card('p1').focus();
+    await user.keyboard('{Enter}');
+    expect(goTo).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(goTo).toHaveBeenCalledTimes(2);
+    within(card('p1')).getByTestId('attention-toast-p1-dismiss').focus();
+    await user.keyboard('{Enter}');
+    expect(goTo).toHaveBeenCalledTimes(2);
+  });
+
   it('Copy and Dismiss do not navigate (FR-124)', async () => {
     raise('p1');
     Reflect.set(window.throng, 'clipboard', { write: vi.fn(() => Promise.resolve()) });
