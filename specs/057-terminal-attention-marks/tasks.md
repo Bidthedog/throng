@@ -312,3 +312,37 @@ From hand-testing (spec Session 2026-10-19, round 4). One defect against FR-092,
 
 - [x] T115 [US2] Test first, then drop the mark's native `title` on every holder, in `packages/ui/src/renderer/attention/attention-mark.tsx` and `holder-marks.tsx`; MT-02 (FR-123)
 - [x] T116 [US3] Document Claude Code's `messageIdleNotifThresholdMs` for a notification as Claude finishes, in `docs/quick-start.md`
+
+---
+
+## Phase 23: Iterate 2026-10-24, round 12 — manual Flag, numbered marks, toast body link, announce once (FR-124 – FR-134)
+
+From issues #522, #523, #524, #525 (spec Session 2026-10-24, round 12; plan *Round 12 addendum*; research R18 – R22). One defect (#524, against FR-112 / FR-134), eleven additions. Boundaries: [CORE] core + main, [DAEMON] persistence + daemon + ipc-contract, [UI] renderer.
+
+### Defect
+
+- [ ] T117 [US3] [CORE] Defect #524 against FR-112 / FR-134: test first in `packages/ui/tests/unit/attention-service.test.ts` — a mark restored from the ledger, then raised again while unattended, raises no toast and no `notifier.show`; same for a startup-command mark (red today), and for a terminal raise on a manually flagged panel — then announce only when the raise created the mark and drop the `announced` set, in `packages/ui/src/main/attention-service.ts` (R21)
+
+### Core and main
+
+- [ ] T118 [CORE] Test first, then widen `AttentionMark.producer` to `'terminal' | 'user'` and add `heldSinceRaise`; `AttentionModel.flag()` (no-op on a marked panel), `restoreFlags()` (unheld), the held dwell in `settle()`, and `ledgerEntries()` returning terminal marks only, in `packages/core/src/attention/attention-types.ts` and `attention-model.ts`, with `packages/core/tests/unit/attention-model.test.ts` (FR-125, FR-127, R20)
+- [ ] T119 [P] [CORE] Test first, then holder state carries `count` (marked panels beneath; `9+` is the renderer's), in `packages/core/src/attention/attention-holders.ts` with its unit test (FR-131)
+- [ ] T120 [CORE] Test first, then `AttentionService.flag()`: raise a user mark, persist it with `attention.flagSet`, announce nothing; call `attention.flagClear` whenever a user mark clears by any route; restore with `attention.flagList` on every daemon (re)connect; the terminal master switch leaves user marks; plus the `throng:attention:flag` channel and preload `attention.flag`, in `packages/ui/src/main/attention-service.ts`, `packages/ui/src/main/main.ts` and `packages/ui/src/preload/preload.cts` (FR-125, FR-126, FR-128; depends on T118, T122)
+
+### Persistence and daemon
+
+- [ ] T121 [P] [DAEMON] Test first, then migration v11 `attention_flag` (idempotent; fixture proving an old store upgrades and a re-run is a no-op) and `AttentionFlagRepository`, in `packages/persistence/src/migrations/v11-attention-flags.ts`, `migration-runner.ts` and `packages/persistence/src/attention-flag-repository.ts` (FR-128, R19)
+- [ ] T122 [DAEMON] Test first, then `attention.flagList` / `flagSet` / `flagClear` in `packages/ipc-contract/src/terminal.ts` (or a new `attention.ts` exported from its index), routed in the daemon's composition root, with project deletion dropping its rows, and the contract test in `packages/ui/tests/contract/` (contracts/daemon-attention.md; depends on T121)
+
+### Renderer
+
+- [ ] T123 [P] [UI] Test first (component), then the toast card body goes to the panel and Copy / Dismiss do not navigate; remove the go-to control, keeping Copy and Dismiss where they are; retire the `goToPanel` icon token if nothing else uses it, in `packages/ui/src/renderer/attention/attention-toasts.tsx`, `packages/ui/src/renderer/common/notification.tsx` and `theme.css` (FR-124, R18)
+- [ ] T124 [UI] Test first (component), then **Flag** in every panel's header context menu, in the **View & state** section, as command `panel.flag` listed in the Key Bindings editor with no default chord (and its row in `docs/key-bindings.md`) *[derived]*, sending `attention.flag` with the panel's project, tab and title, in `packages/ui/src/renderer/workspace/panel-header-menu.ts` and `packages/core/src/config/keybindings.ts` (FR-125; depends on T120)
+- [ ] T125 [UI] Test first (component + CSS), then the numbered flag on project rows and minimised category headers (digits inside, `9+`, blinking, Failed style), legible at the default UI scale, in the reserved slot, still drawn from the registry's `attention` / `attentionFailed` icon in theme-token colours with the digits laid over it (no inline SVG, no hardcoded colour), in `packages/ui/src/renderer/attention/attention-mark.tsx`, `holder-marks.tsx`, `packages/ui/src/renderer/sidebar/projects-panel.tsx` and `theme.css` (FR-131, FR-133; depends on T119)
+- [ ] T126 [UI] Test first, then every category header shows a pill with its total project count, replacing 046 FR-051a's "shown of total" (its existing tests updated to the new rule), and a minimised header is paler than an expanded one in every bundled theme, with the theme-quality contrast check kept green, in `projects-panel.tsx` and `theme.css` (FR-129, FR-130, FR-133)
+- [ ] T127 [UI] Test first, then tab chips: the numbered flag (the same registry icon and theme tokens as T125), and a panel-count pill only when the tab holds two or more panels, both in reserved width so the chip never resizes, in `packages/ui/src/renderer/workspace/tab-group.tsx` and `theme.css` (FR-131, FR-132, FR-133; depends on T119)
+
+### Close
+
+- [ ] T128 Docs: `docs/preferences.md` / `docs/quick-start.md` mention Flag and the numbered marks where the attention feature is described; `docs-currency.test.ts` green
+- [ ] T129 Widen the round-12 manual test plan groups' `Paths:` to the files that implement them

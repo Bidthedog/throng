@@ -134,3 +134,10 @@ has read them once. Dropped on throng-initiated kill and project delete.
 | `terminals.attention.signals.unseenOutput` | boolean | false | |
 | `terminals.attention.signals.outputQuiet` | boolean | false | |
 | `terminals.attention.quietSeconds` | integer | 10 | 10–600, step 10 |
+
+## Round 12 (2026-10-24)
+
+- `AttentionMark.producer`: `'terminal' | 'user'` (FR-125). A user mark keeps `'user'` whatever raises on it later (R20).
+- `AttentionMark.heldSinceRaise: boolean` — true from a manual flag until its panel is first unattended; no clear dwell while true (FR-127). Restored flags are unheld.
+- `AttentionFlagEntry` = `{ panelId, projectId, panelTitle, tabTitle, projectName, raisedAt }`, one row per flagged panel in SQLite `attention_flag` (migration v11), keyed by `panelId`; deleted when the mark clears, the panel is destroyed or the project is deleted (FR-128, R19).
+- Holder state gains `count`: the number of marked panels beneath it (FR-131).

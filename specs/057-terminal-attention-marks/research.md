@@ -288,3 +288,25 @@ Everything else sits lower. `e2e-budget.json` is re-seeded in the same commit.
 `terminal.attention` notification and main's attention service), `docs/quick-start.md` (a tour line),
 `README.md` (one feature line), and a short section on making Claude Code ring the bell or notify,
 pointing at Claude Code's own documentation rather than copying it.
+
+## R18 — Round 12: the toast body is the link (FR-124)
+
+The card's `onClick` calls `attention.goTo(panelId)`; Copy and Dismiss stop propagation. The `goToPanel` control and its `controls` slot use (T114) go; the `goToPanel` icon token stays registered only if something else uses it, otherwise it is retired with its theme row. A Windows notification click already routes through `ISystemNotifier.onClick` → `goTo` (FR-034); MT-01 checks it lands on the panel, and a miss is a defect against FR-034.
+
+## R19 — Round 12: where a manual flag lives (FR-125, FR-128)
+
+Decision: a SQLite table, `attention_flag`, owned by the daemon, written through `attention.flagSet` / `attention.flagClear` and read with `attention.flagList` on every (re)connect. Rejected: the ledger (in memory, so a reboot loses an editor's flag; and `restore()` stamps every entry `producer: 'terminal'`, so a flag would come back as a terminal mark the master switch then withdraws); the saved layout (a panel field would need every project's layout read at start-up to draw holders for unloaded projects). Terminal marks stay out of SQLite for the reason the Complexity table gives.
+
+## R20 — Round 12: the held clear delay (FR-127)
+
+A manual flag is raised with `heldSinceRaise: true`. `settle()` starts no dwell for a held mark; the first settle that finds its panel unattended clears the hold, after which FR-095's dwell applies unchanged. A restored flag comes back unheld: the focus it was raised under is gone. Flag on a panel already marked changes nothing (FR-125), so the hold is never added to a terminal mark.
+
+## R21 — Round 12: announce on creation only (FR-134)
+
+`onSignal` reads whether the panel was marked **before** `model.raise`; a raise that only updated an existing mark refreshes its toast (FR-112) and announces nothing. This replaces the `announced` set, whose absence of restored and startup marks was the leading hypothesis for #524. A unit test in `attention-service.test.ts` restores a mark from the ledger, raises on it, and expects no toast and no `notifier.show` — red today.
+
+## R22 — Round 12: numbers and pills without reflow (FR-129 – FR-133)
+
+`holderState` returns `count` (marked panels beneath). The numbered flag is drawn in the same reserved slot FR-114 gives the project-row glyph (16 × 16 over the dot's box), with the digits inside; `9+` above nine. Tab chips and category headers reserve the flag's and the pill's width whether or not they show (`visibility: hidden`), so a mark appearing moves nothing. The minimised header's paler surface is a `color-mix` of the header surface toward the sidebar background, so every theme gets it with no new token; `theme-quality` keeps the header text's contrast. The category pill shows the total project count in every state, replacing FR-051a's "shown of total".
+
+*(round 12)* A terminal signal on a manually flagged panel updates its reason and kind (FR-002) but keeps `producer: 'user'`, so the flag stays persisted and the terminal master switch does not withdraw it *[derived]*.
