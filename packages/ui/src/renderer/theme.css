@@ -1376,9 +1376,10 @@ textarea,
 }
 
 /* On the selected row, filled with its project's colour, the circle is ringed in the row's contrast colour
- * exactly as the colour dot is (FR-094), so it reads even on a fill close to the attention colour. */
+ * exactly as the colour dot is (FR-094), so it reads even on a fill close to the attention colour. Named
+ * rather than `currentColor`: the circle's own colour is its number's, not the row's. */
 .project-item--active .throng-attention-mark {
-  box-shadow: 0 0 0 2px currentColor;
+  box-shadow: 0 0 0 2px var(--project-fill-text, var(--throng-colour-accentText));
 }
 
 /* FR-105 — a project row's or category header's mark goes to the next marked panel when clicked. */

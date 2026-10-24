@@ -115,7 +115,8 @@ describe('the mark is one circle, the colour dot’s size (FR-092, FR-135, FR-13
   // (FR-094) it is ringed in the row's contrast colour, so it reads on a fill close to the attention colour.
   it('keeps its fill on the selected row, ringed in the row’s contrast colour as the dot is (FR-094, FR-135)', () => {
     const rule = blockOf(css, '.project-item--active .throng-attention-mark');
-    expect(rule).toMatch(/box-shadow:\s*0\s+0\s+0\s+2px\s+currentColor/);
+    // Not `currentColor`: the circle's own colour is its number's, not the row's (review, round 13).
+    expect(rule).toMatch(/box-shadow:\s*0\s+0\s+0\s+2px\s+var\(--project-fill-text\b/);
     expect(rule).not.toMatch(/background|color:/);
   });
 
