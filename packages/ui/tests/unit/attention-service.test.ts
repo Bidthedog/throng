@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_APP_SETTINGS,
   type AppSettings,
+  type AttentionFlagEntry,
   type AttentionLedgerEntry,
   type AttentionSignal,
   type FocusReport,
@@ -15,6 +16,9 @@ import {
   type ITaskbarBadge,
 } from '@throng/core';
 import {
+  ATTENTION_FLAG_CLEAR_METHOD,
+  ATTENTION_FLAG_LIST_METHOD,
+  ATTENTION_FLAG_SET_METHOD,
   TERMINAL_ATTENTION_CONFIG_METHOD,
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
@@ -54,7 +58,7 @@ function settingsFromDefaults(): AttentionSettingsSource {
   return { attention: s.attention, notifications: s.notifications, terminals: { attention: s.terminals.attention } };
 }
 
-function rig(ledger: AttentionLedgerEntry[] = []): Rig {
+function rig(ledger: AttentionLedgerEntry[] = [], flags: AttentionFlagEntry[] = []): Rig {
   const sent: Sent[] = [];
   const daemonCalls: Rig['daemonCalls'] = [];
   const shown: any[] = [];
@@ -93,6 +97,7 @@ function rig(ledger: AttentionLedgerEntry[] = []): Rig {
     call: async <T>(method: string, params: unknown) => {
       daemonCalls.push({ method, params });
       if (method === TERMINAL_ATTENTION_LEDGER_METHOD) return { entries: ledger } as T;
+      if (method === ATTENTION_FLAG_LIST_METHOD) return { flags } as T;
       return { ok: true } as T;
     },
   };
@@ -953,5 +958,89 @@ describe('AttentionService — attended-set pushes stay in order (FR-099, review
     expect(focusCalls(r)).toEqual([['p1'], []]);
     await settle();
     expect(focusCalls(r)).toEqual([['p1'], []]);
+  });
+});
+
+describe('AttentionService — manual Flag (057 round 12: FR-125, FR-126, FR-128, FR-134)', () => {
+  const req = { panelId: 'p1', projectId: 'proj-a', panelTitle: 'Notes', tabTitle: 'Docs', projectName: 'Alpha' };
+  const calls = (r: Rig, method: string) => r.daemonCalls.filter((c) => c.method === method);
+
+  it('flag raises a user mark, persists it, and announces nothing (FR-125, FR-126)', async () => {
+    const r = rig();
+    r.service.flag(req);
+    await settle();
+    expect(lastMarks(r)[0]).toMatchObject({ panelId: 'p1', producer: 'user', reason: { signal: 'flagged' } });
+    expect(r.toasts()).toHaveLength(0);
+    expect(r.notifier.shown).toHaveLength(0);
+    expect(calls(r, ATTENTION_FLAG_SET_METHOD)[0]!.params).toMatchObject({ ...req });
+    expect(r.badge.calls.at(-1)).toMatchObject({ op: 'set' });
+  });
+
+  it('a flag on a panel already marked changes nothing and persists nothing (FR-125)', () => {
+    const r = rig();
+    r.service.onSignal(signal());
+    r.service.flag(req);
+    expect(calls(r, ATTENTION_FLAG_SET_METHOD)).toHaveLength(0);
+  });
+
+  it('a terminal signal on a flagged panel announces nothing (FR-134)', () => {
+    const r = rig();
+    r.service.flag(req);
+    r.service.onSignal(signal({ signal: 'bell' }));
+    expect(r.toasts()).toHaveLength(0);
+    expect(r.notifier.shown).toHaveLength(0);
+  });
+
+  it('clearing a flag by any route removes it from the store (FR-128)', async () => {
+    const r = rig();
+    r.service.flag(req);
+    r.service.onPanelDestroyed('p1');
+    await settle();
+    expect(calls(r, ATTENTION_FLAG_CLEAR_METHOD).map((c) => c.params)).toEqual([{ panelId: 'p1' }]);
+  });
+
+  it('clearing a terminal mark does not touch the flag store', async () => {
+    const r = rig();
+    r.service.onSignal(signal());
+    r.service.onPanelDestroyed('p1');
+    await settle();
+    expect(calls(r, ATTENTION_FLAG_CLEAR_METHOD)).toHaveLength(0);
+  });
+
+  it('on connect restores stored flags without announcing them (FR-128, FR-038)', async () => {
+    const r = rig([], [{ ...req, raisedAt: 7 }]);
+    await r.service.onDaemonConnected();
+    expect(calls(r, ATTENTION_FLAG_LIST_METHOD)).toHaveLength(1);
+    expect(lastMarks(r)[0]).toMatchObject({ panelId: 'p1', producer: 'user', raisedAt: 7 });
+    expect(r.toasts()).toHaveLength(0);
+    expect(r.notifier.shown).toHaveLength(0);
+  });
+
+  it('switching terminal attention off leaves flags (FR-128)', () => {
+    const r = rig();
+    r.service.flag(req);
+    r.setSettings((s) => {
+      s.terminals.attention.enabled = false;
+    });
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+  });
+
+  it('restores flags even while terminal attention is off (FR-128)', async () => {
+    const r = rig([], [{ ...req, raisedAt: 7 }]);
+    r.setSettings((s) => {
+      s.terminals.attention.enabled = false;
+    });
+    await r.service.onDaemonConnected();
+    expect(lastMarks(r).map((m: any) => m.panelId)).toEqual(['p1']);
+  });
+
+  it('a click on a mark\'s Windows notification raises its window and focuses the panel (FR-124, FR-034)', () => {
+    const r = rig();
+    r.service.onSignal(signal({ panelId: 'p1', projectId: 'proj-a' }));
+    r.notifier.click('p1');
+    expect(r.raised).toEqual([1]);
+    expect(r.sent.filter((s) => s.channel === 'throng:attention:focusPanel').map((s) => s.payload)).toEqual([
+      { panelId: 'p1', projectId: 'proj-a' },
+    ]);
   });
 });

@@ -202,3 +202,15 @@ export type {
   PanelNameClaimResult,
   PanelNameReconcileResult,
 } from './panel-name.js';
+
+export {
+  ATTENTION_FLAG_LIST_METHOD,
+  ATTENTION_FLAG_SET_METHOD,
+  ATTENTION_FLAG_CLEAR_METHOD,
+} from './attention.js';
+export type {
+  AttentionFlagListResult,
+  AttentionFlagSetParams,
+  AttentionFlagClearParams,
+  AttentionFlagOkResult,
+} from './attention.js';
