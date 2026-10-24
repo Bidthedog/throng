@@ -70,7 +70,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 80;
 // an invalid entry — no warning glyph existed, only the `warning` colour.
 // 85 since 057 (R11): `attention`, `attentionFailed` and `goToPanel` — the mark, its Failed variant and
 // the toast's link control.
-const EXPECTED_ICON_TOKEN_COUNT = 85;
+// 84 since 057 round 12 (FR-124): `goToPanel` retired — the toast's whole card is the link.
+const EXPECTED_ICON_TOKEN_COUNT = 84;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
