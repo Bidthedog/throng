@@ -1407,15 +1407,21 @@ textarea,
   font-size: 20px;
 }
 
-/* The digits lie over the glyph, taking no layout space and no pointer events, in the glyph's own
- * colour (the theme token already on the mark). Over the flag's pennant, whose middle sits a little above
- * the glyph's; over a Failed ring, the ring's middle with the surface behind so the cross does not cut
- * through them. */
+/* The digits lie over the glyph, taking no layout space and no pointer events. They carry the count
+ * pill's own pair (`.throng-count-pill`: text on the active surface), never the glyph's colour: the flag
+ * is SOLID, and digits in its colour vanished into it (MT-03, MT-04). The same pair for both kinds and
+ * on a project-coloured row, so they read whatever colour the flag is drawn in. Over the flag's
+ * pennant, whose middle sits a little above the glyph's; over a Failed ring, the ring's middle, so the
+ * cross does not cut through them. */
 .throng-attention-mark__count {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, calc(-50% - 3px));
+  padding: 0 1px;
+  border-radius: 3px;
+  background: var(--surface-active);
+  color: var(--text);
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
@@ -1427,10 +1433,6 @@ textarea,
 
 .throng-attention-mark--failed .throng-attention-mark__count {
   transform: translate(-50%, -50%);
-  padding: 0 1px;
-  border-radius: 3px;
-  /* The count pill's own backing (`.throng-count-pill`), not the pane token. */
-  background: var(--surface-active);
 }
 
 /* FR-133 — an unmarked chip or header holds the flag's footprint: the mark's 14px and its 6px margin. */

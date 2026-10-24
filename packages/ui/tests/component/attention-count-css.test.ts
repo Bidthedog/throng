@@ -26,12 +26,24 @@ function cssRule(selector: string): Map<string, string> {
 }
 
 describe('the number inside a flag (FR-131, FR-133)', () => {
-  it('is laid over the glyph without taking layout space or a colour of its own', () => {
+  it('is laid over the glyph without taking layout space', () => {
     const count = cssRule('.throng-attention-mark__count');
     expect(count.get('position')).toBe('absolute');
     expect(count.get('pointer-events')).toBe('none');
-    expect(count.get('color')).toBeUndefined();
     expect(count.get('font-size')).toMatch(/^\d+px$/);
+  });
+
+  /*
+   * MT-03 / MT-04 failed at 1575753e: "I can just see the flag". The glyph is a SOLID flag (⚑), and digits
+   * inheriting its colour were painted in that colour on top of it — invisible. So the digits carry the
+   * count pill's own pair (`.throng-count-pill`: text on the active surface), the same for both kinds and
+   * on a project-coloured row, legible whatever colour the flag is drawn in.
+   */
+  it('is drawn in the count pill’s own text-on-surface pair, never in the flag’s colour', () => {
+    const count = cssRule('.throng-attention-mark__count');
+    expect(count.get('background')).toBe('var(--surface-active)');
+    expect(count.get('color')).toBe('var(--text)');
+    expect(cssRule('.throng-attention-mark--failed .throng-attention-mark__count').get('background')).toBeUndefined();
   });
 
   it('a numbered glyph is larger than the plain 16px one so the digit fits (FR-131)', () => {
