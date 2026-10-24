@@ -30,7 +30,7 @@ Paths: `packages/ui/src/renderer/attention/attention-toasts.tsx`, `packages/ui/s
 ## MT-02: Flag a panel by hand
 
 Covers: FR-125, FR-126, FR-127, FR-128, FR-063, #522
-Paths: `packages/core/src/attention/**`, `packages/ui/src/main/attention-service.ts`, `packages/ui/src/renderer/attention/**`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`
+Paths: `packages/core/src/attention/**`, `packages/ui/src/main/attention-service.ts`, `packages/ui/src/main/main.ts`, `packages/ui/src/preload/preload.cts`, `packages/ui/src/renderer/attention/**`, `packages/ui/src/renderer/workspace/panel-placeholder.tsx`, `packages/ui/src/renderer/workspace/panel-header-menu.ts`, `packages/daemon/src/attention-flag-service.ts`, `packages/daemon/src/project-service.ts`, `packages/persistence/src/attention-flag-repository.ts`, `packages/persistence/src/migrations/v11-attention-flags.ts`
 
 ### Steps
 1. Click into a terminal panel. Right-click it. The menu offers **Flag**. Choose it. The panel header, its tab chip and the project row show the Attention flag; the taskbar badge counts it.
@@ -47,7 +47,7 @@ Paths: `packages/core/src/attention/**`, `packages/ui/src/main/attention-service
 ## MT-03: Project list: counts, pills and paler minimised categories
 
 Covers: FR-129, FR-130, FR-131, FR-133, 046 FR-051a, #523
-Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
+Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
 
 ### Steps
 1. Have two categories, one minimised and one expanded. The minimised header is visibly paler than the expanded one. Switch to a light theme, then a dark one: still paler in both.
@@ -63,7 +63,7 @@ Paths: `packages/ui/src/renderer/sidebar/projects-panel.tsx`, `packages/ui/src/r
 ## MT-04: Tab chips: numbered flags and panel-count pills
 
 Covers: FR-131, FR-132, FR-133, #523
-Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/theme.css`
+Paths: `packages/ui/src/renderer/workspace/tab-group.tsx`, `packages/ui/src/renderer/attention/holder-marks.tsx`, `packages/ui/src/renderer/attention/attention-mark.tsx`, `packages/ui/src/renderer/attention/use-attention.ts`, `packages/ui/src/renderer/theme.css`, `packages/core/src/attention/attention-holders.ts`
 
 ### Steps
 1. Make a tab with three panels and a tab with one. The first chip shows a pill reading 3; the second shows no pill.
