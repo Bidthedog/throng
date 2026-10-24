@@ -179,7 +179,11 @@ export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-h
 // 057 — panel attention marks: the shared vocabulary and the two OS seams (notifications, taskbar badge).
 export type {
   AttentionKind,
+  AttentionFlagEntry,
+  AttentionFlagRequest,
   AttentionLedgerEntry,
+  AttentionProducer,
+  AttentionReasonSignal,
   AttentionMark,
   AttentionProducerConfig,
   AttentionReason,
