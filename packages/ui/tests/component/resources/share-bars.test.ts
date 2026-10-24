@@ -10,12 +10,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { Fragment, createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ResourceNode } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, unavailable, type ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { ShareBars } from '../../../src/renderer/resources/share-bars.js';
 import { __resetSession, focusOn, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { useSubject } from '../../../src/renderer/resources/use-subject.js';
-import { GIB, MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { GIB, MIB, frame, metrics, node, proc, sampleHierarchy, withNetwork } from '../helpers/resource-fixtures.js';
 
 const PANEL = ['root', 'c:projects', 'p:p1', 't:big', 'n:big'];
 
@@ -159,6 +159,36 @@ describe('the colour is how much of the machine it takes (FR-094)', () => {
     act(() => setView({ metric: 'memory' }));
     expect(heatOf('x:11:1')).toBeLessThan(0.05);
     expect(heatOf('x:12:1')).toBe(1);
+  });
+
+  it('ordered by Network, colours by the session’s peak rate, as I/O does (FR-113, T175)', () => {
+    const withRates = (rates: Record<number, number>): ResourceNode => {
+      const root = scene({ 11: 1, 12: 1 });
+      const set = (n: ResourceNode): ResourceNode => {
+        const pid = n.process?.key !== undefined ? Number(String(n.process.key).split(':')[0]) : NaN;
+        const own = Number.isNaN(pid) ? n.own : { ...n.own, network: rates[pid] ?? 0 };
+        const children = n.children.map(set);
+        const rolled = { ...n.rolled, network: (typeof own.network === 'number' ? own.network : 0) + children.reduce((s, c) => s + (typeof c.rolled.network === 'number' ? c.rolled.network : 0), 0) };
+        return { ...n, own, rolled, children };
+      };
+      return set(root);
+    };
+    mountOn(withRates({ 11: 100, 12: 10_000 }));
+    act(() => setView({ metric: 'network' }));
+    expect(bars()).toEqual(['x:12:1', 'x:11:1']);
+    expect(heatOf('x:12:1')).not.toBeNull();
+    expect(heatOf('x:11:1')!).toBeLessThan(heatOf('x:12:1')!);
+    expect(screen.getByTestId('share-bar-figure-x:12:1-network')).toHaveAttribute('data-chosen', 'true');
+  });
+
+  it('unelevated: each Network figure reads “-” titled “Elevate to show”, and the bars order by CPU', () => {
+    mountOn(withNetwork(scene({ 11: 10, 12: 60 }), unavailable(NETWORK_ELEVATION_REQUIRED)));
+    act(() => setView({ metric: 'network' }));
+    expect(bars()).toEqual(['x:12:1', 'x:11:1']);
+    const cell = screen.getByTestId('share-bar-figure-x:12:1-network');
+    expect(cell).toHaveTextContent(/^-$/);
+    expect(cell).toHaveAttribute('title', 'Elevate to show');
+    expect(screen.getByTestId('share-bar-figure-x:12:1-cpu')).toHaveAttribute('data-chosen', 'true');
   });
 
   it('names the thresholds the colours turn at, in a key beside the bars', () => {

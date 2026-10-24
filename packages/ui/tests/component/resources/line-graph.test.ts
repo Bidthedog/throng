@@ -9,11 +9,11 @@
 import { act, render, screen, within } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResourceNode } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, unavailable, type ResourceNode } from '@throng/core';
 import { LineGraphs } from '../../../src/renderer/resources/line-graph.js';
 import { __resetSession, focusOn, ingestFrame, setSelection, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { useSubject } from '../../../src/renderer/resources/use-subject.js';
-import { MIB, frame, metrics, node, proc } from '../helpers/resource-fixtures.js';
+import { MIB, frame, metrics, node, proc, withNetwork } from '../helpers/resource-fixtures.js';
 
 const PANEL = ['root', 'c:projects', 'p:p1', 't:big', 'n:big'];
 
@@ -69,10 +69,10 @@ function mount(frames: number): void {
   act(() => focusOn(PANEL));
 }
 
-const METRICS = ['cpu', 'memory', 'gpu', 'io'] as const;
+const METRICS = ['cpu', 'memory', 'gpu', 'io', 'network'] as const;
 
 describe('a graph per metric (FR-097)', () => {
-  it('has one for CPU, Memory, GPU and I/O, each named for the item it plots', () => {
+  it('has one for CPU, Memory, GPU, I/O and Network, each named for the item it plots', () => {
     mount(3);
     for (const metric of METRICS) {
       expect(screen.getByTestId(`line-graph-${metric}`)).toBeInTheDocument();
@@ -136,6 +136,28 @@ describe('an item that has ended', () => {
     act(() => focusOn(PANEL));
     act(() => setSelection('x:12:1'));
     expect(screen.getByTestId('line-graph-cpu-value')).toHaveTextContent('ended');
+    expect(screen.getByTestId('line-graph-plot-cpu')).toBeInTheDocument();
+  });
+});
+
+describe('Network (FR-113, T175)', () => {
+  it('plots the network rate like the other figures, its value a rate', () => {
+    for (let i = 0; i < 3; i += 1) feed(withNetwork(scene({ 11: 20 }), 2048 * (i + 1)));
+    render(createElement(Graphs));
+    act(() => focusOn(PANEL));
+    expect(screen.getByTestId('line-graph-plot-network')).toBeInTheDocument();
+    expect(screen.getByTestId('line-graph-network-value')).toHaveTextContent(/\/s/);
+  });
+
+  it('unelevated: reads “-” titled “Elevate to show”, and draws no line of zeros', () => {
+    for (let i = 0; i < 3; i += 1) feed(withNetwork(scene({ 11: 20 }), unavailable(NETWORK_ELEVATION_REQUIRED)));
+    render(createElement(Graphs));
+    act(() => focusOn(PANEL));
+    const value = screen.getByTestId('line-graph-network-value');
+    expect(value).toHaveTextContent(/^-$/);
+    expect(value).toHaveAttribute('title', 'Elevate to show');
+    expect(screen.queryByTestId('line-graph-plot-network')).toBeNull();
+    // The others are unaffected.
     expect(screen.getByTestId('line-graph-plot-cpu')).toBeInTheDocument();
   });
 });

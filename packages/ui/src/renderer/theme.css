@@ -4443,6 +4443,13 @@ textarea,
   color: var(--throng-colour-accent);
 }
 
+/* A figure that is not measured keeps the graph's box, empty and ruled, so the grid does not shift (FR-113). */
+.line-graph__plot--none {
+  box-sizing: border-box;
+  border: 1px dashed var(--throng-colour-border);
+  border-radius: 3px;
+}
+
 /* A graph with fewer than two points says so, in the place the line will be (FR-091). */
 .line-graph__building {
   display: grid;

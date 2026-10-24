@@ -1,6 +1,6 @@
 /**
  * A small line graph per metric of the selected item's own usage over the time the window has been open
- * (055 FR-097, research R16) — CPU, Memory, GPU and I/O, each with its current value. This replaces the
+ * (055 FR-097, research R16) — CPU, Memory, GPU, I/O and Network, each with its current value. This replaces the
  * large stacked area charts, which took the room of the whole column to say what a line and a number say.
  *
  * It is drawn the way the rows' sparklines are (`sparkline.tsx`): one canvas, redrawn by the session's single
@@ -22,16 +22,22 @@ function LineGraph({ subject, metric }: { subject: Subject; metric: FigureId }):
   const { node, ended, frame } = subject;
   const { thresholds } = useResourceMonitorSettings();
   const hasLine = useHasLine(node.id);
-  const current = ended ? 'ended' : (figuresOf(node, { thresholds, machine: frame.machine }).find((f) => f.id === metric)?.text ?? '');
+  const figure = figuresOf(node, { thresholds, machine: frame.machine }).find((f) => f.id === metric);
+  const current = ended ? 'ended' : (figure?.text ?? '');
+  // A figure that is not measured (Network unelevated, FR-113) has no line to draw: a line of zeros would
+  // claim a reading. Its "-" carries the reason in its title, as the list's cell does (FR-107).
+  const measured = ended || typeof figure?.value === 'number';
   return (
     <figure className="line-graph" data-testid={`line-graph-${metric}`} aria-label={`${FIGURE_LABEL[metric]} of ${node.label} over time`}>
       <figcaption className="line-graph__caption">
         <span className="line-graph__name">{FIGURE_LABEL[metric]}</span>
-        <span className="line-graph__value" data-testid={`line-graph-${metric}-value`}>
+        <span className="line-graph__value" data-testid={`line-graph-${metric}-value`} title={measured ? undefined : figure?.title}>
           {current}
         </span>
       </figcaption>
-      {hasLine ? (
+      {!measured ? (
+        <div className="line-graph__plot line-graph__plot--none" data-testid={`line-graph-${metric}-none`} aria-hidden="true" />
+      ) : hasLine ? (
         <PlotCanvas nodeId={node.id} metric={metric} width={WIDTH} height={HEIGHT} className="line-graph__plot" testId={`line-graph-plot-${metric}`} />
       ) : (
         <p className="line-graph__building" data-testid={`line-graph-${metric}-building`}>
@@ -42,7 +48,7 @@ function LineGraph({ subject, metric }: { subject: Subject; metric: FigureId }):
   );
 }
 
-/** The four graphs for the item the right column describes. */
+/** The five graphs for the item the right column describes. */
 export function LineGraphs({ subject }: { subject: Subject }): ReactElement {
   return (
     <section className="line-graphs" data-testid="line-graphs" aria-label={`Usage over time: ${subject.node.label}`}>
