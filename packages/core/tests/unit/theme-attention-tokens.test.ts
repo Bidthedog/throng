@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ALL_DEFAULT_THEMES } from '../../src/config/default-themes/index.js';
 import { THEME_TOKEN_COPY } from '../../src/config/theme-copy.js';
 import { SHIPPED_DEFAULTS_VERSION } from '../../src/config/shipped-defaults.js';
+import { THRONG_THEME } from '../../src/config/theme.js';
+import { migrateTheme } from '../../src/config/theme-ops.js';
 
 /**
  * 057 (research R11) — two colour tokens and three icon tokens for terminal attention marks.
@@ -11,7 +13,7 @@ import { SHIPPED_DEFAULTS_VERSION } from '../../src/config/shipped-defaults.js';
  * Layer: unit — pure data over the bundled themes.
  */
 const COLOURS = ['attentionMark', 'attentionFailedMark'] as const;
-const ICONS = ['attention', 'attentionFailed', 'goToPanel'] as const;
+const ICONS = ['attention', 'attentionFailed'] as const;
 
 describe('057 attention theme tokens', () => {
   const themes = Object.entries(ALL_DEFAULT_THEMES);
@@ -26,7 +28,7 @@ describe('057 attention theme tokens', () => {
     expect(colours.attentionMark!.toLowerCase()).not.toBe(colours.attentionFailedMark!.toLowerCase());
   });
 
-  it.each(themes)('%s carries the three icon tokens', (_name, theme) => {
+  it.each(themes)('%s carries the two icon tokens', (_name, theme) => {
     const icons = theme.icons as Record<string, string>;
     for (const token of ICONS) {
       expect(typeof icons[token]).toBe('string');
@@ -41,6 +43,13 @@ describe('057 attention theme tokens', () => {
     const copy = THEME_TOKEN_COPY[key];
     expect(copy?.label).toBeTruthy();
     expect(copy?.description).toBeTruthy();
+  });
+
+  it('retires goToPanel (FR-124: the toast card is the link): no glyph, no editor copy, a stray key dropped on load', () => {
+    expect((THRONG_THEME.icons as Record<string, string>).goToPanel).toBeUndefined();
+    expect(THEME_TOKEN_COPY['icons.goToPanel']).toBeUndefined();
+    const stray = { ...THRONG_THEME, icons: { ...THRONG_THEME.icons, goToPanel: '↗' } };
+    expect((migrateTheme(stray).icons as Record<string, string>).goToPanel).toBeUndefined();
   });
 
   it('bumps the shipped-defaults version so existing installs receive the tokens', () => {

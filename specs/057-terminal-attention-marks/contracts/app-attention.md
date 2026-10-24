@@ -60,4 +60,4 @@ next panel marked as needing you, across projects and tabs, and focus it."
 | `attentionFailedMark` | colour | Failed mark icon and badge |
 | `attention` | icon | Attention mark, the cog-menu row |
 | `attentionFailed` | icon | Failed mark |
-| `goToPanel` | icon | the toast's link control |
+| `goToPanel` | icon | *retired in round 12 (FR-124): the toast card is the link* |
