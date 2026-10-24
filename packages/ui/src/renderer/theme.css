@@ -3143,6 +3143,14 @@ textarea,
   pointer-events: auto;
 }
 
+/* FR-124: an attention toast's card is its own link. */
+.notice--activatable {
+  cursor: pointer;
+}
+.notice--activatable button {
+  cursor: default;
+}
+
 /* An ERROR gets its OWN CARD, not a stripe on the usual one.
  *
  * The left edge was the whole of it — three pixels of red against the card `surface`, the same colour as
