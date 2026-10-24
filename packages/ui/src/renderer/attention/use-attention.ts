@@ -1,11 +1,14 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import {
+  categoryCount,
   categoryKind,
+  holderCount,
   holderKind,
   holderLabel,
   marksForPanels,
   marksForProject,
   marksForProjects,
+  projectCount,
   projectKind,
   type AttentionKind,
   type AttentionMark,
@@ -19,6 +22,8 @@ import { getAttentionMarks, subscribeAttention } from './attention-store.js';
 export interface HolderMark {
   kind: AttentionKind;
   label: string;
+  /** The marked panels beneath the holder (FR-131): the number a counted flag shows. */
+  count: number;
 }
 
 /**
@@ -32,15 +37,20 @@ export interface HolderMark {
  */
 const SEP = '\n';
 
-function encode(kind: AttentionKind | null, marks: readonly AttentionMark[]): string {
+function encode(kind: AttentionKind | null, marks: readonly AttentionMark[], count: number): string {
   if (kind === null || marks.length === 0) return '';
-  return `${kind}${SEP}${holderLabel(marks)}`;
+  return `${kind}${SEP}${count}${SEP}${holderLabel(marks)}`;
 }
 
 function decode(key: string): HolderMark | null {
   if (key === '') return null;
-  const at = key.indexOf(SEP);
-  return { kind: key.slice(0, at) as AttentionKind, label: key.slice(at + 1) };
+  const first = key.indexOf(SEP);
+  const second = key.indexOf(SEP, first + 1);
+  return {
+    kind: key.slice(0, first) as AttentionKind,
+    count: Number(key.slice(first + 1, second)),
+    label: key.slice(second + 1),
+  };
 }
 
 function useKey(compute: (marks: readonly AttentionMark[]) => string): HolderMark | null {
@@ -56,7 +66,7 @@ function useKey(compute: (marks: readonly AttentionMark[]) => string): HolderMar
 export function usePanelMark(panelId: string): HolderMark | null {
   return useKey((marks) => {
     const mine = marksForPanels(marks, [panelId]);
-    return encode(holderKind(marks, [panelId]), mine);
+    return encode(holderKind(marks, [panelId]), mine, holderCount(marks, [panelId]));
   });
 }
 
@@ -65,12 +75,12 @@ export function usePanelMark(panelId: string): HolderMark | null {
  * Failed if any is failed (FR-014), one tooltip line per marked panel.
  */
 export function useMarkForPanels(panelIds: readonly string[]): HolderMark | null {
-  return useKey((marks) => encode(holderKind(marks, panelIds), marksForPanels(marks, panelIds)));
+  return useKey((marks) => encode(holderKind(marks, panelIds), marksForPanels(marks, panelIds), holderCount(marks, panelIds)));
 }
 
 /** The mark on a project row, for the active, loaded and unloaded alike (FR-012). */
 export function useProjectMarkKey(projectId: string): HolderMark | null {
-  return useKey((marks) => encode(projectKind(marks, projectId), marksForProject(marks, projectId)));
+  return useKey((marks) => encode(projectKind(marks, projectId), marksForProject(marks, projectId), projectCount(marks, projectId)));
 }
 
 /**
@@ -78,7 +88,7 @@ export function useProjectMarkKey(projectId: string): HolderMark | null {
  * is visible (FR-013).
  */
 export function useCategoryMark(projectIds: readonly string[]): HolderMark | null {
-  return useKey((marks) => encode(categoryKind(marks, projectIds), marksForProjects(marks, projectIds)));
+  return useKey((marks) => encode(categoryKind(marks, projectIds), marksForProjects(marks, projectIds), categoryCount(marks, projectIds)));
 }
 
 /** The whole set, for the few consumers that need it (the badge, Go to Next Marked Panel). */

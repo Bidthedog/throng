@@ -1199,9 +1199,6 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                 };
                 const headerOnContextMenu = (e: ReactMouseEvent<HTMLLIElement>): void =>
                   openCategoryMenu(e, row.category);
-                // FR-051a (#489) — a minimised category that hides projects says how many: its count
-                // reads "shown of total" rather than the bare total.
-                const hidden = row.category.minimised ? row.count - row.shown : 0;
                 const headerChildren = (
                   <>
                     {row.collapsible ? (
@@ -1260,14 +1257,13 @@ export function ProjectsPanel({ headerExtra }: { headerExtra?: ReactNode } = {})
                       projectIds={categoryMembers.get(row.category.id) ?? NO_PROJECTS}
                     />
 
+                    {/* 057 FR-129 — a pill holding the TOTAL, minimised or not (supersedes 046 FR-051a's
+                        "shown of total"). A quantity the user reads, so digit-grouped. */}
                     <span
-                      className="category-header__count"
+                      className="throng-count-pill category-header__count"
                       data-testid={`category-count-${row.category.id}`}
-                      title={hidden > 0 ? `${formatGrouped(row.shown)} shown, ${formatGrouped(hidden)} hidden` : undefined}
                     >
-                      {hidden > 0
-                        ? `${formatGrouped(row.shown)} of ${formatGrouped(row.count)}`
-                        : formatGrouped(row.count)}
+                      {formatGrouped(row.count)}
                     </span>
                   </>
                 );
