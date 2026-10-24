@@ -306,3 +306,89 @@ describe('AttentionModel — tab and activity (FR-100, FR-102)', () => {
     expect(restored.marks()[0]).toMatchObject({ tabTitle: 'Agents', doing: 'npm test' });
   });
 });
+
+describe('AttentionModel — manual flags (057 round 12: FR-125, FR-127, FR-128)', () => {
+  const flag = { panelId: 'p1', projectId: 'A', panelTitle: 'Notes', tabTitle: 'Docs', projectName: 'Alpha', at: 5 };
+
+  it('flag raises a user mark, Attention, reason Flagged (FR-125)', () => {
+    const { model } = harness();
+    expect(model.flag(flag)).toBe(true);
+    expect(model.marks()[0]).toMatchObject({
+      panelId: 'p1',
+      producer: 'user',
+      kind: 'attention',
+      reason: { signal: 'flagged', detail: null },
+      tabTitle: 'Docs',
+    });
+  });
+
+  it('flag on a panel already marked changes nothing (FR-125)', () => {
+    const { model } = harness();
+    model.raise(signal({ kind: 'failed', signal: 'processExited', detail: '1' }));
+    const before = model.marks();
+    expect(model.flag(flag)).toBe(false);
+    expect(model.marks()).toBe(before);
+  });
+
+  it('a flag raised on the focused panel does not clear while that focus holds, however long (FR-127)', () => {
+    const h = harness();
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.model.flag(flag);
+    h.advance(60_000);
+    expect(h.model.marks()).toHaveLength(1);
+    expect(h.model.nextTickAt()).toBeNull();
+  });
+
+  it('once focus has left and come back, the clear delay runs as usual (FR-127)', () => {
+    const h = harness();
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.model.flag(flag);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p2' }));
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.advance(999);
+    expect(h.model.marks()).toHaveLength(1);
+    h.advance(1);
+    expect(h.model.marks()).toHaveLength(0);
+    expect(h.cleared).toEqual(['p1']);
+  });
+
+  it('a flag raised on an unfocused panel is not held: focusing it clears it after the delay', () => {
+    const h = harness();
+    h.model.flag(flag);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.advance(1000);
+    expect(h.model.marks()).toHaveLength(0);
+  });
+
+  it('a terminal raise on a flagged panel updates its reason but keeps it the user\'s (R20)', () => {
+    const { model } = harness();
+    model.flag(flag);
+    model.raise(signal({ signal: 'bell' }));
+    expect(model.marks()[0]).toMatchObject({ producer: 'user', reason: { signal: 'bell' } });
+  });
+
+  it('withdrawing the terminal producer leaves user flags (FR-128)', () => {
+    const { model } = harness();
+    model.flag(flag);
+    model.raise(signal({ panelId: 'p2' }));
+    model.withdraw('terminal');
+    expect(model.marks().map((m) => m.panelId)).toEqual(['p1']);
+  });
+
+  it('the ledger carries terminal marks only (R19)', () => {
+    const { model } = harness();
+    model.flag(flag);
+    model.raise(signal({ panelId: 'p2' }));
+    expect(model.ledgerEntries().map((e) => e.panelId)).toEqual(['p2']);
+  });
+
+  it('restoreFlags reinstates user marks, unheld and without clear events (FR-128)', () => {
+    const h = harness();
+    h.model.restoreFlags([{ panelId: 'p1', projectId: 'A', panelTitle: 'Notes', tabTitle: 'Docs', projectName: 'Alpha', raisedAt: 5 }]);
+    expect(h.model.marks()[0]).toMatchObject({ producer: 'user', reason: { signal: 'flagged' }, raisedAt: 5 });
+    expect(h.cleared).toEqual([]);
+    h.model.applyFocusReport(report({ focusedPanelId: 'p1' }));
+    h.advance(1000);
+    expect(h.model.marks()).toHaveLength(0);
+  });
+});

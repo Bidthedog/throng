@@ -59,11 +59,17 @@ export interface AttentionSignal {
   activityAt?: number;
 }
 
+/** What a reason can name: a terminal signal, or the user's manual Flag (FR-125). */
+export type AttentionReasonSignal = AttentionSignalName | 'flagged';
+
 /** Why a mark was raised: the most recent raise. */
 export interface AttentionReason {
-  signal: AttentionSignalName;
+  signal: AttentionReasonSignal;
   detail: string | null;
 }
+
+/** Who raised a mark: the terminal signals, or the user's Flag (FR-125). Withdrawal is per producer (FR-008). */
+export type AttentionProducer = 'terminal' | 'user';
 
 /** Main's state for one panel (at most one per panel, FR-002). */
 export interface AttentionMark {
@@ -76,13 +82,38 @@ export interface AttentionMark {
   tabTitle: string;
   /** FR-102: what the terminal was doing at the most recent raise. */
   doing: string | null;
-  /** FR-008: withdrawal is per producer. */
-  producer: 'terminal';
+  /** FR-008: withdrawal is per producer. A user flag stays the user's whatever raises on it later (R20). */
+  producer: AttentionProducer;
   kind: AttentionKind;
   reason: AttentionReason;
   raisedAt: number;
   /** Set while the mark's panel holds focus in a focused window (FR-095); the mark clears once it has for the clear delay. */
   dwellStartedAt: number | null;
+  /**
+   * FR-127: a flag raised on the focused panel runs no clear delay until that focus has gone; the first time
+   * its panel is unattended this drops to false. Absent means false.
+   */
+  heldSinceRaise?: boolean;
+}
+
+/** A manual flag as the daemon stores it (R19, FR-128). */
+export interface AttentionFlagEntry {
+  panelId: string;
+  projectId: string;
+  panelTitle: string;
+  tabTitle: string;
+  projectName: string;
+  raisedAt: number;
+}
+
+/** The panel a manual Flag is raised on (FR-125). */
+export interface AttentionFlagRequest {
+  panelId: string;
+  projectId: string;
+  panelTitle: string;
+  tabTitle: string;
+  projectName: string;
+  at: number;
 }
 
 /** A panel a window currently hosts, with its live title. */

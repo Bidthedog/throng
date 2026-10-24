@@ -2,9 +2,10 @@
  * 057 — what each holder (panel header, tab chip, project row, category header, taskbar badge) shows,
  * derived from the mark set (data-model § Holder state). Never stored. Failed outranks Attention (FR-014).
  */
-import type { AttentionKind, AttentionMark, AttentionReason, AttentionSignalName } from './attention-types.js';
+import type { AttentionKind, AttentionMark, AttentionReason, AttentionReasonSignal } from './attention-types.js';
 
-const REASON_LABELS: Record<AttentionSignalName, string> = {
+const REASON_LABELS: Record<AttentionReasonSignal, string> = {
+  flagged: 'Flagged', // FR-125: the user's own Flag
   processExited: 'Process exited',
   commandFinished: 'Command finished',
   bell: 'Wants your attention', // FR-101: the user never sees a bell, only that something wants them
