@@ -94,24 +94,22 @@ describe('the focus ring (FR-089: throng’s 2px convention, from the keyboard)'
   });
 });
 
-describe('the body is two columns (FR-096, FR-097)', () => {
+describe('the body is a header over two columns (FR-096, FR-097, FR-111, FR-112)', () => {
   const body = bodyOf('.monitor-body');
+  const columns = bodyOf('.monitor-body__columns');
 
-  it('is a grid of a left column and a right one', () => {
-    expect(body).toMatch(/display:\s*grid/);
-    expect(body).toMatch(/grid-template-columns:[^;]*minmax\([^;]*\)[^;]*minmax\([^;]*\)/);
+  it('stacks a header that does not scroll over the columns, ruled off from them', () => {
+    expect(body).toMatch(/display:\s*(flex|grid)/);
+    const header = bodyOf('.monitor-body__header');
+    expect(header).toMatch(/border-bottom:[^;]*var\(--throng-colour-border\)/);
+    expect(header).toMatch(/flex:\s*none/);
+    expect(header).not.toMatch(/overflow(-y)?:\s*auto/);
   });
 
-  it('puts the detail down the whole right column, and the lists and their controls on the left', () => {
-    const areas = /grid-template-areas:([^;]*);/.exec(body)?.[1] ?? '';
-    const rowsOfAreas = [...areas.matchAll(/'([^']+)'/g)].map((m) => m[1]!.trim().split(/\s+/));
-    expect(rowsOfAreas.length).toBeGreaterThan(0);
-    for (const row of rowsOfAreas) {
-      expect(row, areas).toHaveLength(2);
-      expect(row[1], areas).toBe('detail');
-    }
-    const left = new Set(rowsOfAreas.map((r) => r[0]));
-    for (const area of ['filter', 'controls', 'notice', 'breakdown']) expect(left.has(area), area).toBe(true);
+  it('lays the columns out from the divider’s ratio, a divider track between them', () => {
+    expect(columns).toMatch(/display:\s*grid/);
+    expect(columns).toMatch(/grid-template-columns:[^;]*var\(--monitor-split-left[^;]*var\(--monitor-split-right/);
+    expect(bodyOf('.column-divider')).toMatch(/cursor:\s*col-resize/);
   });
 
   it('lets each column scroll on its own', () => {

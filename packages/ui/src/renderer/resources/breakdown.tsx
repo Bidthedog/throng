@@ -52,8 +52,7 @@ import {
   type ReactElement,
 } from 'react';
 import { IDLE_SAMPLES, describeNode, formatGrouped, type ResourceNode } from '@throng/core';
-import { IconButton } from '../common/icon-button.js';
-import { Breadcrumb } from './breadcrumb.js';
+import { publishShownPath } from './monitor-location.js';
 import { FIGURE_LABEL, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
 import { moveFrom } from './flip.js';
 import {
@@ -417,21 +416,13 @@ function Status({ model, filterText, hideIdle }: { model: BreakdownModel; filter
   );
 }
 
-/** Where the user is, how to go back, and what the rows are sorted by (FR-092). */
-function Header({ tree, model, metric }: { tree: ResourceNode; model: BreakdownModel; metric: FigureId }): ReactElement {
+/**
+ * What the rows are ordered by (FR-092). Back and the breadcrumb are in the window's header (FR-112,
+ * the Monitor location), which does not scroll with the list.
+ */
+function Header({ metric }: { metric: FigureId }): ReactElement {
   return (
     <header className="breakdown__header" data-testid="breakdown-header">
-      <IconButton
-        token="navigateBack"
-        title="Back"
-        testId="breakdown-back"
-        className="icon-button breakdown__back"
-        disabled={model.focusPath.length < 2}
-        // The breakdown is one Tab stop (FR-068); Left and Backspace go up from the keyboard.
-        tabIndex={-1}
-        onClick={() => focusOn(model.focusPath.slice(0, -1))}
-      />
-      <Breadcrumb tree={tree} path={model.focusPath} onGo={focusOn} />
       <span className="breakdown__sorted-by" data-testid="breakdown-sorted-by">
         Ordered by {FIGURE_LABEL[metric]}
       </span>
@@ -572,6 +563,10 @@ export function Breakdown(): ReactElement | null {
   }, [rows, selectedId]);
   const keys = useBreakdownKeys({ rows, activeId, focusPath: model?.focusPath ?? ['root'] });
   useRowMoves(model, keys.ref);
+  // The header's breadcrumb names the level this list resolved to, not merely the one asked for.
+  const shownPath = model?.focusPath ?? null;
+  useLayoutEffect(() => publishShownPath(shownPath), [shownPath]);
+  useEffect(() => () => publishShownPath(null), []);
   const fit = useColumnFit(keys.ref, view.metric, model !== null);
   // The sparklines hold with the figures beside them (FR-095).
   useEffect(() => {
@@ -596,7 +591,7 @@ export function Breakdown(): ReactElement | null {
         if (!(e.target as Element).closest(CLICKABLE)) setSelection(null);
       }}
     >
-      <Header tree={tree} model={model} metric={view.metric} />
+      <Header metric={view.metric} />
       <Status model={model} filterText={view.filterText} hideIdle={view.hideIdle} />
       {model.sections.map((section) => (
         <Section

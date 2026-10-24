@@ -165,7 +165,7 @@ describe('the view (FR-087)', () => {
     await act(async () => bridge.pushDetail(frame(1, sampleHierarchy())));
 
     await screen.findByTestId('monitor-body');
-    expect(getView()).toEqual({ metric: 'memory', filterText: 'node', hideIdle: true, hideEnded: true, focusPath: ['root', 'c:projects'] });
+    expect(getView()).toEqual({ metric: 'memory', filterText: 'node', hideIdle: true, hideEnded: true, focusPath: ['root', 'c:projects'], splitRatio: 0.45 });
   });
 
   it('starts from the defaults the first time (a stored view of null)', async () => {

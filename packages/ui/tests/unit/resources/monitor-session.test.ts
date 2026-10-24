@@ -240,6 +240,8 @@ describe('view state (FR-057)', () => {
       hideIdle: false,
       hideEnded: true,
       focusPath: ['root'],
+      // The divider starts with the left column at 45% (FR-111, data-model).
+      splitRatio: 0.45,
     });
   });
 

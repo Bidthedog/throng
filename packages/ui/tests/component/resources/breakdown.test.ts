@@ -9,10 +9,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { COMPONENT_DESCRIPTIONS, NOT_MEASURED, ROLE_DESCRIPTIONS, formatGrouped, unavailable, type ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
+import { MonitorLocation } from '../../../src/renderer/resources/monitor-location.js';
 import {
   __resetSession,
   getView,
@@ -35,7 +36,7 @@ function feed(root: ResourceNode, ticks = 1): void {
 }
 
 function mount(): void {
-  render(createElement(Breakdown));
+  render(createElement(Fragment, null, createElement(MonitorLocation), createElement(Breakdown)));
 }
 
 const row = (id: string): HTMLElement => screen.getByTestId(`breakdown-row-${id}`);

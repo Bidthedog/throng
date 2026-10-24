@@ -59,6 +59,20 @@ export interface ViewState {
   readonly hideEnded: boolean;
   /** Node ids from the root down to the node in focus. */
   readonly focusPath: readonly string[];
+  /** Where the divider sits (FR-111): the left column's share of the width, within SPLIT_MIN–SPLIT_MAX. */
+  readonly splitRatio: number;
+}
+
+/** Each column keeps at least a quarter of the width (FR-111, data-model). */
+export const SPLIT_MIN = 0.25;
+export const SPLIT_MAX = 0.75;
+export const SPLIT_DEFAULT = 0.45;
+/** The divider's keyboard step: 5% of the width per Left or Right. */
+export const SPLIT_STEP = 0.05;
+
+/** A ratio held to the columns' minimums, at two decimals so key steps do not drift. */
+export function clampSplit(ratio: number): number {
+  return Math.round(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, ratio)) * 100) / 100;
 }
 
 export const DEFAULT_VIEW: ViewState = Object.freeze({
@@ -67,6 +81,7 @@ export const DEFAULT_VIEW: ViewState = Object.freeze({
   hideIdle: false,
   hideEnded: true,
   focusPath: Object.freeze(['root']),
+  splitRatio: SPLIT_DEFAULT,
 });
 
 /** An ended node's figures: nothing to sum, nothing to size, and never a zero that reads as live. */
@@ -288,6 +303,7 @@ export function restoreView(raw: unknown): void {
   // A view saved before FR-100 may still carry `narrowTo`: there is no narrowing, so it is not read.
   if (typeof r.hideIdle === 'boolean') patch.hideIdle = r.hideIdle;
   if (typeof r.hideEnded === 'boolean') patch.hideEnded = r.hideEnded;
+  if (typeof r.splitRatio === 'number' && Number.isFinite(r.splitRatio)) patch.splitRatio = clampSplit(r.splitRatio);
   if (Array.isArray(r.focusPath) && r.focusPath.length > 0 && r.focusPath.every((s) => typeof s === 'string')) {
     patch.focusPath = r.focusPath as string[];
   }

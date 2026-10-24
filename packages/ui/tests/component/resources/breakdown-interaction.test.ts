@@ -9,10 +9,11 @@
  * WHICH elements are asked to move and for how long, never how it looks.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResourceNode } from '@throng/core';
 import { Breakdown, __onRowDrawn } from '../../../src/renderer/resources/breakdown.js';
+import { MonitorLocation } from '../../../src/renderer/resources/monitor-location.js';
 import { __resetSession, getSelection, getView, ingestFrame, requestCatchUp, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
 
@@ -63,7 +64,7 @@ const feed = (root: ResourceNode): void => {
 function mountOn(root: ResourceNode, path: readonly string[] = PANEL): void {
   tick = 0;
   feed(root);
-  render(createElement(Breakdown));
+  render(createElement(Fragment, null, createElement(MonitorLocation), createElement(Breakdown)));
   act(() => setView({ focusPath: path }));
 }
 
@@ -443,7 +444,7 @@ describe('the sample hierarchy still opens at the root (guard for the first view
   it('lists each component once, and no project (FR-103)', () => {
     tick = 0;
     feed(sampleHierarchy());
-    render(createElement(Breakdown));
+    render(createElement(Fragment, null, createElement(MonitorLocation), createElement(Breakdown)));
     expect(screen.getAllByTestId('breakdown-row-c:projects')).toHaveLength(1);
     expect(screen.queryByTestId('breakdown-row-p:p1')).toBeNull();
   });

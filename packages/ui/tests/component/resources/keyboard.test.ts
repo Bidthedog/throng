@@ -209,21 +209,22 @@ describe('in the filter field the arrows edit text (FR-068)', () => {
 });
 
 describe('Tab moves between the window’s regions (FR-068)', () => {
-  it('goes filter → breakdown → detail → controls (the two columns, left then right)', async () => {
+  it('goes filter → toolbar → breadcrumb → left list → divider → right column (FR-112)', async () => {
     await openModal();
+    act(() => setView({ focusPath: ['root', 'c:projects'] }));
     const user = userEvent.setup();
     const regionOf = (el: Element | null): string | null => el?.closest('[data-region]')?.getAttribute('data-region') ?? null;
 
     screen.getByTestId('monitor-filter').focus();
     const order: string[] = [regionOf(document.activeElement) ?? '?'];
-    for (let i = 0; i < 40 && order.at(-1) !== 'controls'; i += 1) {
+    for (let i = 0; i < 60 && order.at(-1) !== 'detail'; i += 1) {
       await user.tab();
       const region = regionOf(document.activeElement) ?? '?';
       if (region !== order.at(-1)) order.push(region);
     }
 
     // The window's own controls are the Preferences title bar's, ahead of the body in the Tab order.
-    expect(order).toEqual(['filter', 'breakdown', 'detail', 'controls']);
+    expect(order).toEqual(['filter', 'controls', 'breadcrumb', 'breakdown', 'divider', 'detail']);
   });
 
   it('puts a single stop in the rows, whatever their number; the only others are the column headers that order them (FR-099)', async () => {

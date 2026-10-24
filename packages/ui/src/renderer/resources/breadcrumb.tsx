@@ -26,8 +26,8 @@ export function Breadcrumb({ tree, path, onGo }: BreadcrumbProps): ReactElement 
                 className="breadcrumb__segment"
                 data-testid={`breadcrumb-segment-${id}`}
                 aria-current={here ? 'location' : undefined}
-                // Not a Tab stop: the breakdown is one (FR-068), and Left / Backspace go up from it.
-                tabIndex={-1}
+                // A Tab stop in the header (FR-112) — except the level already shown, which goes nowhere.
+                tabIndex={here ? -1 : undefined}
                 onClick={() => onGo(upTo)}
               >
                 {label}

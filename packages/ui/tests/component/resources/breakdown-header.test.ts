@@ -12,6 +12,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
+import { MonitorLocation } from '../../../src/renderer/resources/monitor-location.js';
 import { __resetSession, getSelection, getView, ingestFrame, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
 import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, unavailable } from '@throng/core';
@@ -25,7 +26,8 @@ beforeEach(() => {
 });
 afterEach(() => __resetSession());
 
-const mount = (): void => void render(createElement(Fragment, null, createElement(Breakdown), createElement(ToolbarControls)));
+const mount = (): void =>
+  void render(createElement(Fragment, null, createElement(MonitorLocation), createElement(Breakdown), createElement(ToolbarControls)));
 
 describe('the header (FR-092, FR-099)', () => {
   it('has a Back button, disabled at the top, and says what the rows are ordered by', () => {
@@ -59,9 +61,19 @@ describe('the header (FR-092, FR-099)', () => {
     expect(getSelection()).toBeNull();
   });
 
-  it('is one Tab stop with the rest of the breakdown: Back is reached with the mouse', () => {
+  it('is a Tab stop of the header’s breadcrumb, not of the list (FR-112)', () => {
     mount();
-    expect(screen.getByTestId('breakdown-back')).toHaveAttribute('tabindex', '-1');
+    act(() => setView({ focusPath: ['root', 'c:projects'] }));
+    const back = screen.getByTestId('breakdown-back');
+    expect(back).not.toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('breakdown').contains(back)).toBe(false);
+  });
+
+  it('names the level the list shows when a filter has taken the focused node away', () => {
+    mount();
+    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1'], filterText: 'no-such-thing' }));
+    const labels = within(screen.getByTestId('breadcrumb')).getAllByRole('button').map((b) => b.textContent);
+    expect(labels).not.toContain('Alpha');
   });
 
   it('keeps the breadcrumb (a segment is still a way back to that level)', () => {

@@ -4214,46 +4214,72 @@ textarea,
   color: var(--throng-colour-accent);
 }
 
-/* The body's layout: two columns (FR-096, FR-097). DOM order is the Tab order (filter, breakdown, detail,
-   controls — FR-068); the grid areas put the filter, the list controls, the notice and the rows down the LEFT
-   column and the detail down the whole of the RIGHT. Each column scrolls on its own. */
+/* The body's layout (FR-112): a full-width header — filter, toolbar, Back and the breadcrumb — ruled off over
+   two columns (FR-096, FR-097). The header never scrolls; each column scrolls on its own. DOM order is the Tab
+   order: filter, toolbar, breadcrumb, list, divider, detail. */
 .monitor-body {
-  display: grid;
-  grid-template-columns: minmax(360px, 9fr) minmax(300px, 11fr);
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-  grid-template-areas:
-    'filter    detail'
-    'controls  detail'
-    'notice    detail'
-    'breakdown detail';
-  gap: 8px 12px;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-.monitor-body__filter {
-  grid-area: filter;
+.monitor-body__header {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--throng-colour-border);
 }
-.monitor-body__notice {
-  grid-area: notice;
+
+.monitor-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
+
+/* The left column's share comes from the divider (FR-111, monitor-session's splitRatio); each keeps a minimum. */
+.monitor-body__columns {
+  display: grid;
+  grid-template-columns: minmax(240px, var(--monitor-split-left, 45fr)) 8px minmax(240px, var(--monitor-split-right, 55fr));
+  flex: 1;
+  min-height: 0;
+  padding-top: 8px;
+}
+
 .monitor-body__breakdown {
-  grid-area: breakdown;
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
 }
 .monitor-body__detail {
-  grid-area: detail;
   min-height: 0;
   min-width: 0;
   overflow: auto;
-  padding-left: 12px;
-  border-left: 1px solid var(--throng-colour-border);
+  padding-left: 8px;
 }
-.monitor-body__controls {
-  grid-area: controls;
+
+.monitor-body__divider {
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+}
+
+.column-divider {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 2px;
+  background: var(--throng-colour-border);
+}
+
+/* Focused, it takes the section's 2px ring like every other stop; hovered, it shows it can be dragged. */
+:where(body:not([data-window-blurred])) .column-divider:hover {
+  background: var(--throng-colour-accent);
 }
 
 .monitor-filter {
