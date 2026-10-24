@@ -590,11 +590,11 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * 057 FR-125 — Flag: raise an Attention mark on this panel from the user, whatever kind it is. A plain
    * item with no command id and no chord (the failure banner's items above are the precedent), in View &
    * state because it sets the panel's state. On a panel already marked main changes nothing, so it is
-   * never disabled: the user is not told "no", the mark is simply already there.
+   * never disabled: the user is not told "no", the mark is simply already there. No glyph: the flag icon
+   * was retired by round 13 (FR-139).
    */
   items.push({
     label: 'Flag',
-    icon: 'attention',
     section: 'viewState',
     onClick: () => actions.flag(),
   });

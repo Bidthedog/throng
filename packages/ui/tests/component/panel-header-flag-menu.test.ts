@@ -37,10 +37,11 @@ describe.each([
   ['an editor', panel({ kind: 'editor' })],
   ['a preview', panel({ kind: PREVIEW_KIND, config: { filePath: 'D:/proj/README.md' } })],
 ])('%s', (_name, p) => {
-  it('offers Flag in View & state, with the attention icon and no chord', () => {
+  it('offers Flag in View & state, with no glyph (FR-139) and no chord', () => {
     const flag = menu(p).filter((i) => i.label === 'Flag');
     expect(flag).toHaveLength(1);
-    expect(flag[0]).toMatchObject({ section: 'viewState', icon: 'attention' });
+    expect(flag[0]).toMatchObject({ section: 'viewState' });
+    expect(flag[0]!.icon).toBeUndefined();
     expect(flag[0]!.shortcut).toBeUndefined();
     expect(flag[0]!.disabled).not.toBe(true);
   });

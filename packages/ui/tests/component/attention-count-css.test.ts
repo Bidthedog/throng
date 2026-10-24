@@ -25,36 +25,36 @@ function cssRule(selector: string): Map<string, string> {
   return declarations;
 }
 
-describe('the number inside a flag (FR-131, FR-133)', () => {
-  it('is laid over the glyph without taking layout space', () => {
+/*
+ * Round 13 (FR-135, FR-136): the flag is gone. MT-03 / MT-04 failed twice on the number — first invisible on
+ * the solid flag, then "does not look good" on a backing laid over it — and the answer is a solid circle with
+ * the number as its own text, in the black or white derived from its fill (`--throng-attention-mark-text`).
+ */
+describe('the number inside the circle (FR-131, FR-133, FR-136)', () => {
+  it('is the circle’s own text, centred, in the colour derived for its fill, with no backing of its own', () => {
+    const mark = cssRule('.throng-attention-mark');
+    expect(mark.get('color')).toMatch(/^var\(--throng-attention-mark-text\b/);
+    expect(mark.get('align-items')).toBe('center');
+    expect(mark.get('justify-content')).toBe('center');
     const count = cssRule('.throng-attention-mark__count');
-    expect(count.get('position')).toBe('absolute');
-    expect(count.get('pointer-events')).toBe('none');
+    expect(count.get('background')).toBeUndefined();
+    expect(count.get('color')).toBeUndefined();
+    expect(count.get('position')).toBeUndefined();
+    expect(count.get('font-weight')).toBe('700');
     expect(count.get('font-size')).toMatch(/^\d+px$/);
   });
 
-  /*
-   * MT-03 / MT-04 failed at 1575753e: "I can just see the flag". The glyph is a SOLID flag (⚑), and digits
-   * inheriting its colour were painted in that colour on top of it — invisible. So the digits carry the
-   * count pill's own pair (`.throng-count-pill`: text on the active surface), the same for both kinds and
-   * on a project-coloured row, legible whatever colour the flag is drawn in.
-   */
-  it('is drawn in the count pill’s own text-on-surface pair, never in the flag’s colour', () => {
-    const count = cssRule('.throng-attention-mark__count');
-    expect(count.get('background')).toBe('var(--surface-active)');
-    expect(count.get('color')).toBe('var(--text)');
-    expect(cssRule('.throng-attention-mark--failed .throng-attention-mark__count').get('background')).toBeUndefined();
+  it('“9+” fits inside the circle: a smaller size for two characters (FR-136)', () => {
+    const one = parseInt(cssRule('.throng-attention-mark__count').get('font-size') ?? '0', 10);
+    const two = parseInt(cssRule(".throng-attention-mark__count[data-wide='true']").get('font-size') ?? '0', 10);
+    expect(two).toBeGreaterThan(0);
+    expect(two).toBeLessThan(one);
   });
 
-  it('a numbered glyph is larger than the plain 16px one so the digit fits (FR-131)', () => {
-    const glyph = cssRule('.throng-attention-mark[data-numbered] .icon');
-    expect(parseInt(glyph.get('width') ?? '0', 10)).toBeGreaterThan(16);
-  });
-
-  it('a project row slot keeps its 10px size whether or not a number is drawn (FR-114, FR-133)', () => {
+  it('a project row slot is the 14px colour dot’s size whether or not a number is drawn (FR-133, FR-137)', () => {
     const slot = cssRule('.project-item__switch > .throng-attention-mark');
-    expect(slot.get('width')).toBe('10px');
-    expect(slot.get('height')).toBe('10px');
+    expect(slot.get('width')).toBe('14px');
+    expect(slot.get('height')).toBe('14px');
   });
 
   it('an empty flag slot keeps the flag’s size, hidden rather than removed (FR-133)', () => {

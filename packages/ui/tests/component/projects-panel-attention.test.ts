@@ -145,12 +145,14 @@ describe('a project row (FR-012)', () => {
     expect(mark('a')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('9+');
   });
 
-  it('keeps blinking and Failed styling with a number: Failed wins when any is Failed (FR-131, FR-014)', async () => {
+  // FR-014 is superseded by FR-135 (round 13): a holder with a Failed panel beneath it draws the same circle.
+  it('counts a Failed panel like any other, in the same circle, its name saying what failed (FR-131, FR-135)', async () => {
     mountPanel();
     await ready();
     act(() => setAttentionMarks([makeMark('p1', 'a'), makeMark('p2', 'a', { kind: 'failed', signal: 'processExited', detail: '1' })]));
-    expect(mark('a')).toHaveClass('throng-attention-mark--failed');
+    expect(mark('a')!.className).toBe('throng-attention-mark');
     expect(mark('a')!.querySelector('.throng-attention-mark__count')).toHaveTextContent('2');
+    expect(mark('a')!.getAttribute('aria-label')).toMatch(/1/);
   });
 
   it('leaves an unmarked row’s dot alone while another row is marked (FR-092)', async () => {

@@ -2157,7 +2157,8 @@ describe('046 T120 — the project row menu draws TWO Unload rows, following the
     const row = marked.find((i) => i.label === 'Go to Next Marked Panel');
     expect(row, 'the row is present for a marked project').toBeDefined();
     expect(row?.section).toBe('navigate');
-    expect(row?.icon).toBe('attention');
+    // FR-139 (round 13): the flag glyph is retired; the row is its label alone.
+    expect(row?.icon).toBeUndefined();
     // No chord: the row walks this project's cycle, the chord every project's (review of FR-106).
     expect(row?.shortcut).toBeUndefined();
     expect(row?.disabled ?? false).toBe(false);

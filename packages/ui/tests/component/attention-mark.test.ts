@@ -31,42 +31,42 @@ describe('AttentionMark', () => {
     expect(el).toHaveAttribute('role', 'img');
   });
 
-  it('draws an Attention mark with the attention icon and its own colour class', () => {
+  // FR-135 (round 13) — one solid circle, drawn by CSS: no glyph, and the same whatever the kind.
+  it('draws a plain circle: no icon, no inline svg, no inline style', () => {
     const el = mount(ATTENTION);
-    expect(el).toHaveClass('throng-attention-mark', 'throng-attention-mark--attention');
-    expect(el).not.toHaveClass('throng-attention-mark--failed');
+    expect(el).toHaveClass('throng-attention-mark');
     expect(el).toHaveAttribute('data-kind', 'attention');
-    expect(el.querySelector('.icon')).not.toBeNull();
+    expect(el.querySelector('.icon')).toBeNull();
+    expect(el.querySelector('svg')).toBeNull();
+    expect(el.querySelector('[style]')).toBeNull();
   });
 
-  it('draws a Failed mark in the failed colour class', () => {
-    const el = mount(FAILED);
-    expect(el).toHaveClass('throng-attention-mark--failed');
-    expect(el).toHaveAttribute('data-kind', 'failed');
-  });
-
-  it('is not colour alone: the two kinds draw different icons (FR-016)', () => {
-    const a = mount(ATTENTION).innerHTML;
+  it('draws a Failed mark exactly as an Attention one; only its name says it failed (FR-135)', () => {
+    const a = mount(ATTENTION);
+    const attentionHtml = a.innerHTML;
+    const attentionClass = a.className;
     document.body.innerHTML = '';
-    const f = mount(FAILED).innerHTML;
-    expect(f).not.toBe(a);
+    const f = mount(FAILED);
+    expect(f.className).toBe(attentionClass);
+    expect(f.innerHTML).toBe(attentionHtml);
+    expect(f).toHaveAttribute('aria-label', FAILED.label);
   });
 
-  // FR-131 — a numbered mark shows how many marked panels sit beneath its holder, inside its flag.
-  describe('the number (FR-131)', () => {
+  // FR-131 / FR-136 — a numbered circle shows how many marked panels sit beneath its holder.
+  describe('the number (FR-131, FR-136)', () => {
     const numbered = (count: number, kind: 'attention' | 'failed' = 'attention') => {
       render(createElement(AttentionMark, { mark: { kind, label: 'x', count }, testId: 'm', showCount: true }));
       return screen.getByTestId('m');
     };
 
-    it('draws the count laid over the registry icon, with no inline svg or colour of its own', () => {
+    it('draws the count inside the circle, hidden from assistive tech, with no svg or style of its own', () => {
       const el = numbered(3);
       const digits = el.querySelector('.throng-attention-mark__count');
       expect(digits).toHaveTextContent('3');
-      expect(el.querySelector('.icon')).not.toBeNull();
       expect(digits).toHaveAttribute('aria-hidden', 'true');
+      expect(el.querySelector('.icon')).toBeNull();
       expect(el.querySelector('[style]')).toBeNull();
-      expect(el.querySelector('.throng-attention-mark__count svg')).toBeNull();
+      expect(el.querySelector('svg')).toBeNull();
     });
 
     it('shows 1 through 9 as they are and anything above as 9+', () => {
@@ -79,10 +79,12 @@ describe('AttentionMark', () => {
       expect(numbered(250).querySelector('.throng-attention-mark__count')).toHaveTextContent('9+');
     });
 
-    it('keeps the Failed style when numbered', () => {
-      const el = numbered(2, 'failed');
-      expect(el).toHaveClass('throng-attention-mark--failed');
-      expect(el.querySelector('.throng-attention-mark__count')).toHaveTextContent('2');
+    it('a numbered Failed circle looks like a numbered Attention one (FR-135)', () => {
+      const f = numbered(2, 'failed');
+      const failedHtml = f.outerHTML.replace('data-kind="failed"', '');
+      document.body.innerHTML = '';
+      const a = numbered(2, 'attention');
+      expect(a.outerHTML.replace('data-kind="attention"', '')).toBe(failedHtml);
     });
 
     it('a panel header mark carries no number (it is not asked to)', () => {

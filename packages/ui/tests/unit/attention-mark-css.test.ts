@@ -77,69 +77,54 @@ describe('the attention mark blinks slowly (FR-093)', () => {
   });
 });
 
-describe('the mark on a project row takes exactly the colour dot’s box (FR-092)', () => {
+describe('the mark is one circle, the colour dot’s size (FR-092, FR-135, FR-137, FR-138)', () => {
   // The leading newline keeps `.project-item--active .project-item__dot {` from matching first.
   const dot = (): string => blockOf(css, '\n.project-item__dot');
   const slot = (): string => blockOf(css, '.project-item__switch > .throng-attention-mark');
+  const mark = (): string => blockOf(css, '.throng-attention-mark');
   const px = (rule: string, prop: string): number | null => {
     const m = new RegExp(`(?:^|[\\s;])${prop}:\\s*(-?[\\d.]+)px`).exec(rule);
     return m ? Number(m[1]) : null;
   };
 
-  it('is as wide and as tall as the dot, so marking a row never moves its name', () => {
-    expect(px(slot(), 'width')).toBe(px(dot(), 'width'));
-    expect(px(slot(), 'height')).toBe(px(dot(), 'height'));
-    expect(px(dot(), 'width')).toBe(10);
+  it('the colour dot and the circle are both 14px, so marking a row never moves its name (FR-137)', () => {
+    for (const rule of [dot(), mark(), slot()]) {
+      expect(px(rule, 'width')).toBe(14);
+      expect(px(rule, 'height')).toBe(14);
+    }
   });
 
-  it('carries no margin of its own and does not shrink or grow in the flex row', () => {
+  it('carries no margin of its own on a row and does not shrink or grow in the flex row', () => {
     expect(slot()).toMatch(/margin:\s*0\s*;/);
     expect(slot()).toMatch(/flex:\s*0\s+0\s+auto/);
   });
 
-  // FR-114: the slot reserves only the dot's square; the glyph is drawn at 16px over it, centred, so it is
-  // easy to see and still moves nothing. A text glyph (the ⚑ pack) is as big as its font, so font-size too.
-  it('draws the glyph at 16px, centred over a slot that stays the dot’s square (FR-114)', () => {
-    const glyph = blockOf(css, '.project-item__switch > .throng-attention-mark .icon');
-    expect(px(glyph, 'width')).toBe(16);
-    expect(px(glyph, 'height')).toBe(16);
-    expect(px(glyph, 'font-size')).toBe(16);
-    expect(glyph).toMatch(/line-height:\s*1\s*;/);
-    expect(glyph).toMatch(/flex:\s*none/); // overflows the slot rather than stretching it
-    const markRule = blockOf(css, '.throng-attention-mark');
-    expect(markRule).toMatch(/align-items:\s*center/); // so the overflow is even on every side
-    expect(markRule).toMatch(/justify-content:\s*center/);
-    expect(px(dot(), 'width')).toBe(10);
+  it('is a solid disc in the attention colour, its number in the colour derived for it (FR-135, FR-136)', () => {
+    expect(mark()).toMatch(/border-radius:\s*50%/);
+    expect(mark()).toMatch(/background:\s*var\(--throng-colour-attentionMark\)/);
+    expect(mark()).toMatch(/color:\s*var\(--throng-attention-mark-text\b/);
   });
 
-  // T098 / FR-107: the dot is round and the flag was being cut off by that rounding. The flag takes the
-  // dot's SPACE, not its shape: square-edged, unclipped, with nothing behind it.
-  it('is square-edged, unclipped and has nothing behind it (T098)', () => {
-    expect(slot()).toMatch(/border-radius:\s*0\s*;/);
-    for (const rule of [slot(), blockOf(css, '.project-item--active .throng-attention-mark')]) {
-      expect(rule).not.toMatch(/overflow\s*:/);
-      expect(rule).not.toMatch(/clip/);
-      expect(rule).not.toMatch(/box-shadow/);
-      expect(rule).not.toMatch(/outline/);
-      expect(rule).not.toMatch(/background/);
-    }
+  it('has no kind variant and no glyph rule: one look everywhere (FR-135)', () => {
+    expect(css).not.toMatch(/\.throng-attention-mark--(?:attention|failed)/);
+    expect(css).not.toMatch(/\.throng-attention-mark[^{]*\.icon/);
+    expect(css).not.toMatch(/attentionFailedMark/);
+  });
+
+  // FR-107 is superseded: the selected row's circle keeps the attention fill; like the colour dot there
+  // (FR-094) it is ringed in the row's contrast colour, so it reads on a fill close to the attention colour.
+  it('keeps its fill on the selected row, ringed in the row’s contrast colour as the dot is (FR-094, FR-135)', () => {
+    const rule = blockOf(css, '.project-item--active .throng-attention-mark');
+    expect(rule).toMatch(/box-shadow:\s*0\s+0\s+0\s+2px\s+currentColor/);
+    expect(rule).not.toMatch(/background|color:/);
+  });
+
+  it('is larger than the unsaved dot, which it may sit beside (FR-138)', () => {
+    expect(px(mark(), 'width')!).toBeGreaterThan(px(blockOf(css, '.throng-unsaved-dot'), 'width')!);
   });
 
   it('shows a pointer over a mark that can be clicked (FR-105)', () => {
     expect(blockOf(css, ".throng-attention-mark[data-clickable='true']")).toMatch(/cursor:\s*pointer/);
-  });
-
-  it('is drawn in the row’s contrast colour on the highlighted row, with nothing behind it (FR-107)', () => {
-    const rule = blockOf(css, '.project-item--active .throng-attention-mark');
-    // The row sets its text colour to the black or white 046 FR-072a picks for the fill; inheriting it
-    // is what `currentColor` on the dot's ring does too.
-    expect(rule).toMatch(/color:\s*inherit/);
-    expect(rule).not.toMatch(/(?:^|[\s;])(?:width|height|padding|margin)\s*:/);
-  });
-
-  it('keeps its kind colour on a row that is not highlighted', () => {
-    expect(blockOf(css, '.throng-attention-mark--attention')).toMatch(/color:\s*var\(--throng-colour-attentionMark\)/);
-    expect(blockOf(css, '.throng-attention-mark--failed')).toMatch(/color:\s*var\(--throng-colour-attentionFailedMark\)/);
   });
 });
 
@@ -155,13 +140,12 @@ describe('the highlighted row’s colour dot (FR-094)', () => {
 // FR-118 — the header of a marked panel is filled with its kind's colour, mixed into the header surface so
 // the title stays legible; it outranks the active panel's header fill, since a marked panel can be active.
 describe('a marked panel’s header (FR-118)', () => {
-  const rule = (kind: string): string => blockOf(css, `.panel-box[data-attention='${kind}'] .panel-box__header`);
+  const rule = (): string => blockOf(css, '.panel-box[data-attention] .panel-box__header');
 
-  it.each([
-    ['attention', '--throng-colour-attentionMark'],
-    ['failed', '--throng-colour-attentionFailedMark'],
-  ])('fills a %s panel’s header with its mark colour mixed into the surface', (kind, token) => {
-    const r = rule(kind);
+  // FR-135: a failed panel's header is tinted exactly as any marked panel's.
+  it('fills a marked panel’s header, of either kind, with the attention colour mixed into the surface', () => {
+    const r = rule();
+    const token = '--throng-colour-attentionMark';
     expect(r).toMatch(new RegExp(`background:\\s*color-mix\\(in srgb, var\\(${token}\\) \\d+%, var\\(--bg-raised\\)\\)`));
     const pct = Number(/color-mix\(in srgb, var\([^)]*\) (\d+)%/.exec(r)![1]);
     expect(pct).toBeGreaterThanOrEqual(20); // obvious at a glance
@@ -169,7 +153,7 @@ describe('a marked panel’s header (FR-118)', () => {
   });
 
   it('comes after the active panel’s header fill, so a marked active panel still shows it', () => {
-    expect(css.indexOf(".panel-box[data-attention='attention'] .panel-box__header")).toBeGreaterThan(
+    expect(css.indexOf('.panel-box[data-attention] .panel-box__header')).toBeGreaterThan(
       css.indexOf('.panel-box--active .panel-box__header'),
     );
   });

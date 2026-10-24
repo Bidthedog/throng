@@ -30,7 +30,6 @@ import { useMemo, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 import { notificationText, type AttentionMark } from '@throng/core';
 import { groupMarksByProject } from './mark-order.js';
-import { Icon } from '../common/icon.js';
 import { useAnchoredPosition } from '../common/use-anchored-position.js';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
 import { useAttentionMarks } from './use-attention.js';
@@ -67,9 +66,8 @@ function AttentionLine({ mark }: { mark: AttentionMark }): ReactElement {
     >
       {/* FR-119: the icon and name on one row, the description on its own row, indented beneath. */}
       <span className="attention-popover__head" data-testid="attention-popover-head">
-        <span className={`attention-popover__icon attention-popover__icon--${mark.kind}`}>
-          <Icon token={mark.kind === 'failed' ? 'attentionFailed' : 'attention'} />
-        </span>
+        {/* FR-135 (round 13): the mark's own circle, the same for both kinds; the reason below names a failure. */}
+        <span className="attention-popover__icon" aria-hidden="true" />
         <span className="attention-popover__name" data-testid="attention-popover-name">
           {lineName(mark)}
         </span>
