@@ -76,6 +76,7 @@ const panelActions: PanelHeaderMenuActions = {
   openInEditor: noop,
   goToEditor: noop,
   toggleSyncScroll: noop,
+  flag: noop,
 };
 
 const panel = (over: Partial<Panel> = {}): Panel => ({
