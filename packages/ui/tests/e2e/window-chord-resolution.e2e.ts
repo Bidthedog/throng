@@ -500,37 +500,39 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
   await expect(textarea).toBeFocused();
   const beforeSwitch = (await inputWrites(win, pid)) ?? [];
   /*
-   * The switch takes this view away, and its log with it (`forgetDiagnostics` on unmount), so the log
-   * is copied in the page in a task queued from the chord's KEYDOWN: that task runs once the keydown
-   * has been fully dispatched — when a leaked key would have been written — and before the new
-   * project's layout can arrive, since that needs an IPC round trip queued behind it. A copy that is
-   * missing fails below rather than passing as "nothing written".
+   * The switch takes this view away, and its live log with it (`forgetDiagnostics` on unmount). So the
+   * log is read AFTER the view has gone, from the copy `forgetDiagnostics` keeps of the view's final
+   * state (`__throngRetiredTerminalDiagnostics`): everything the view ever put on the wire, up to the
+   * moment it went, with no timing in it at all.
    *
-   * It used to copy on the KEYUP. Playwright sends keyup as a separate CDP message, and on a runner
-   * the layout reply sometimes landed between the two: the view was gone by the keyup, and the copy
-   * read null (release.yml run 39514654648, flaky on first attempt).
+   * #465 — the two probes before this one both raced the unmount. One copied the live log on the
+   * KEYUP (release.yml run 39514654648); the next copied it in a task queued from the KEYDOWN, on the
+   * premise that the new project's layout was queued behind that task. It was not: the window
+   * dispatcher's capture listener is registered first, so `switchProject` has already sent the layout
+   * request before any listener the test adds can queue anything — and on a slow runner the reply
+   * won (nightly gate run 39883310554, red on two attempts of three).
    */
-  await win.evaluate((id) => {
-    const w = window as unknown as {
-      __throngTerminalDiagnostics?: () => Record<string, { writes: string[] }>;
-      __t049Writes?: string[] | null;
-    };
-    w.__t049Writes = undefined;
-    const onChordKey = (e: KeyboardEvent): void => {
-      if (['Control', 'Shift', 'Alt'].includes(e.key)) return; // the modifiers arrive first
-      window.removeEventListener('keydown', onChordKey, true);
-      setTimeout(() => {
-        w.__t049Writes = w.__throngTerminalDiagnostics?.()[id]?.writes ?? null;
-      }, 0);
-    };
-    window.addEventListener('keydown', onChordKey, true);
-  }, pid);
   // Held 500 ms between keydown and keyup, so the new project's layout arrives BEFORE the keyup —
   // the order that broke the old keyup probe 5/5 (gate run 39552994036). The probe must hold either way.
   await win.keyboard.press(chordFor('project.next'), { delay: 500 });
   await expect(win.locator('.project-item', { hasText: 'ChordNext' })).toHaveAttribute('data-active', 'true');
-  const atChord = await win.evaluate(() => (window as unknown as { __t049Writes?: string[] | null }).__t049Writes ?? null);
-  expect(atChord, 'the terminal view was gone before the chord’s keydown had been dispatched — the probe read nothing').not.toBeNull();
+  await expect(term).toHaveCount(0);
+  // The LIVE entry gone means this view's own `forgetDiagnostics` has run, so the retired copy is its
+  // final state and not one left by an earlier view of the same panel.
+  await expect
+    .poll(() => win.evaluate((id) => {
+      const live = (window as unknown as { __throngTerminalDiagnostics?: () => Record<string, unknown> })
+        .__throngTerminalDiagnostics?.();
+      return live !== undefined && !(id in live);
+    }, pid), { message: 'the switched-away terminal view never let go of its live diagnostics' })
+    .toBe(true);
+  const atChord = await win.evaluate((id) => {
+    const retired = (
+      window as unknown as { __throngRetiredTerminalDiagnostics?: () => Record<string, { writes: string[] }> }
+    ).__throngRetiredTerminalDiagnostics;
+    return retired?.()[id]?.writes ?? null;
+  }, pid);
+  expect(atChord, 'the terminal view kept no final write log — the probe read nothing').not.toBeNull();
   expect(
     (atChord ?? []).slice(beforeSwitch.length).filter((chunk) => !FOCUS_REPORTS.has(chunk)),
     'Ctrl+Shift+Alt+PageDown reached the shell',

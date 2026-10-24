@@ -10,6 +10,7 @@ import {
   recordModeEvent,
   recordWrite,
   snapshotDiagnostics,
+  snapshotRetiredDiagnostics,
 } from '../../src/renderer/terminal/diagnostics.js';
 
 /**
@@ -157,5 +158,39 @@ describe('terminal diagnostics', () => {
     countReconcile(PANEL, 'attach');
     forgetDiagnostics(PANEL);
     expect(diagnosticsFor(PANEL).reconcile.attach).toBe(0);
+  });
+
+  it('keeps a gone view’s FINAL log readable, apart from the live ones (#465)', () => {
+    /*
+     * A chord that takes its own view away (a project switch) can only be judged by what that view
+     * wrote up to the moment it went. Reading the live log races the unmount, and a race is what
+     * #465 was; the retired copy has no timing to lose.
+     */
+    recordWrite(PANEL, 'x');
+    recordWrite(PANEL, 'y');
+    forgetDiagnostics(PANEL);
+    expect(snapshotDiagnostics()[PANEL]).toBeUndefined();
+    expect(snapshotRetiredDiagnostics()[PANEL]?.writes).toEqual(['x', 'y']);
+    // A copy, like the live snapshot.
+    snapshotRetiredDiagnostics()[PANEL]?.writes.push('z');
+    expect(snapshotRetiredDiagnostics()[PANEL]?.writes).toEqual(['x', 'y']);
+  });
+
+  it('retires only the latest view of a panel, and keeps the retired set bounded (#465)', () => {
+    recordWrite(PANEL, 'first view');
+    forgetDiagnostics(PANEL);
+    recordWrite(PANEL, 'second view');
+    forgetDiagnostics(PANEL);
+    expect(snapshotRetiredDiagnostics()[PANEL]?.writes).toEqual(['second view']);
+
+    for (let i = 0; i < 20; i += 1) {
+      recordWrite(`gone-${i}`, 'w');
+      forgetDiagnostics(`gone-${i}`);
+    }
+    const retired = snapshotRetiredDiagnostics();
+    expect(Object.keys(retired)).toHaveLength(8);
+    expect(retired['gone-19']).toBeDefined();
+    expect(retired['gone-12']).toBeDefined();
+    expect(retired['gone-11']).toBeUndefined(); // the oldest go first
   });
 });

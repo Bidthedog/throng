@@ -168,32 +168,65 @@ export function countInputAcked(panelId: string, ok: boolean): void {
   else input.failed += 1;
 }
 
-/** Drop a panel's counters when its view goes for good. */
+/**
+ * The FINAL counters of views that have gone, oldest first — bounded, and never read by the UI (#465).
+ *
+ * A chord that takes its own view away (Ctrl+Shift+Alt+PageDown switching project) can only be judged
+ * by what that view wrote up to the moment it went. Reading the live entry for that has to beat the
+ * unmount, and nothing orders the two: the dispatcher has already sent the new project's layout
+ * request before any later listener runs, so a probe reading "soon after the keydown" raced the
+ * reply, and lost on a slow runner. This copy is taken AT the unmount, so there is no race to lose.
+ */
+const MAX_RETIRED = 8;
+const retired = new Map<string, TerminalDiagnostics>();
+
+/** Drop a panel's counters when its view goes for good — keeping the last state as the view left it. */
 export function forgetDiagnostics(panelId: string): void {
+  const entry = store.get(panelId);
   store.delete(panelId);
+  if (!entry) return;
+  retired.delete(panelId); // re-inserted below, so the newest retirement is the last to be evicted
+  retired.set(panelId, entry);
+  if (retired.size > MAX_RETIRED) {
+    const oldest = retired.keys().next().value;
+    if (oldest !== undefined) retired.delete(oldest);
+  }
 }
 
-/** Test seam: a snapshot of every panel's counters. Never used by the UI. */
-export function snapshotDiagnostics(): Record<string, TerminalDiagnostics> {
+function copyOf(entry: TerminalDiagnostics): TerminalDiagnostics {
+  return {
+    reconcile: { ...entry.reconcile },
+    input: { ...entry.input },
+    keys: entry.keys.map((k) => ({ ...k })),
+    modes: entry.modes.map((m) => ({ ...m, modes: [...m.modes] })),
+    writes: [...entry.writes],
+  };
+}
+
+function snapshotOf(from: Map<string, TerminalDiagnostics>): Record<string, TerminalDiagnostics> {
   const out: Record<string, TerminalDiagnostics> = {};
-  for (const [panelId, entry] of store) {
-    out[panelId] = {
-      reconcile: { ...entry.reconcile },
-      input: { ...entry.input },
-      keys: entry.keys.map((k) => ({ ...k })),
-      modes: entry.modes.map((m) => ({ ...m, modes: [...m.modes] })),
-      writes: [...entry.writes],
-    };
-  }
+  for (const [panelId, entry] of from) out[panelId] = copyOf(entry);
   return out;
+}
+
+/** Test seam: a snapshot of every LIVE view's counters. Never used by the UI. */
+export function snapshotDiagnostics(): Record<string, TerminalDiagnostics> {
+  return snapshotOf(store);
+}
+
+/** Test seam: the final counters of the most recent views to go (#465). Never used by the UI. */
+export function snapshotRetiredDiagnostics(): Record<string, TerminalDiagnostics> {
+  return snapshotOf(retired);
 }
 
 declare global {
   interface Window {
     __throngTerminalDiagnostics?: () => Record<string, TerminalDiagnostics>;
+    __throngRetiredTerminalDiagnostics?: () => Record<string, TerminalDiagnostics>;
   }
 }
 
 if (typeof window !== 'undefined') {
   window.__throngTerminalDiagnostics = snapshotDiagnostics;
+  window.__throngRetiredTerminalDiagnostics = snapshotRetiredDiagnostics;
 }
