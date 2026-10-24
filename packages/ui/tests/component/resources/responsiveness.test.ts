@@ -287,4 +287,66 @@ describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes 
     report.captureWithDetail = Math.round(ms);
     expect(ms).toBeLessThan(BUDGET_MS);
   });
+
+  // The body as finalised (T176): every level has a Total row (FR-104) re-summed per capture, and the list
+  // refits its columns when its width changes (FR-106) — a window resize, or the divider dragged (FR-111).
+  it('a capture arriving at a drilled level, its Total row re-drawn with the rows', () => {
+    tick = 0;
+    for (let i = 0; i < 3; i += 1) capture();
+    render(createElement(Breakdown));
+    act(() => setView({ focusPath: ['root', 'c:projects'] }));
+    const total = (): HTMLElement => screen.getByTestId('breakdown-total-children');
+    const before = total().textContent;
+    let arriving = frame(0, hierarchy(0));
+    const ms = medianMs(
+      () => {
+        act(() => ingestFrame(arriving));
+      },
+      () => {
+        tick += 1;
+        arriving = frame(tick, hierarchy(tick));
+      },
+    );
+    report.captureWithTotal = Math.round(ms);
+    // Anti-vacuity: the Total really is drawn, and really follows the captures.
+    expect(total().textContent).not.toBe(before);
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it('the list narrowing past a column and widening again, with every row on screen', () => {
+    const observed: { el: Element; cb: ResizeObserverCallback }[] = [];
+    const real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(private readonly cb: ResizeObserverCallback) {}
+      observe(el: Element): void {
+        observed.push({ el, cb: this.cb });
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+    try {
+      mountFiltered();
+      const resizeTo = (width: number): void =>
+        act(() => {
+          for (const { el, cb } of observed) {
+            Object.defineProperty(el, 'clientWidth', { configurable: true, value: width });
+            cb([{ target: el, contentRect: { width } } as unknown as ResizeObserverEntry], {} as ResizeObserver);
+          }
+        });
+      resizeTo(900);
+      const widths = [300, 900];
+      let w = 900;
+      let n = 0;
+      const ms = medianMs(() => resizeTo(w), () => {
+        w = widths[n++ % 2]!;
+      });
+      report.columnRefit = Math.round(ms);
+      // Anti-vacuity: the narrow width really dropped a column off every row.
+      resizeTo(300);
+      expect(screen.getByTestId('breakdown').querySelector('[data-metric="network"]')).toBeNull();
+      expect(ms).toBeLessThan(BUDGET_MS);
+    } finally {
+      globalThis.ResizeObserver = real;
+    }
+  });
 });
