@@ -150,6 +150,34 @@ describe('throng:resources:* (055 contracts/resources-ipc-055.md)', () => {
     expect(await wire({ mainWindowId: null }).ipc.handles.get('throng:resources:action:route')!(from(9), req)).toBe(false);
   });
 
+  it('routes Activate to the window holding the tab, which comes forward (FR-110)', async () => {
+    const w = wire({ mainWindowId: 2 });
+    const route = w.ipc.handles.get('throng:resources:action:route')!;
+    const req = { action: 'activate', projectId: 'p1', tabId: 't-sub', panelId: 'n1' };
+    expect(await route(from(9), req)).toBe(true);
+    expect(w.sent).toEqual([{ windowId: 4, channel: 'throng:resources:action', payload: req }]);
+  });
+
+  it('routes Activate to the main window when no window holds the tab, or for a project: it switches project first (FR-110)', async () => {
+    const w = wire({ mainWindowId: 2 });
+    const route = w.ipc.handles.get('throng:resources:action:route')!;
+    expect(await route(from(9), { action: 'activate', projectId: 'p2', tabId: 't-other' })).toBe(true);
+    expect(await route(from(9), { action: 'activate', projectId: 'p2' })).toBe(true);
+    expect(w.sent).toEqual([
+      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2', tabId: 't-other' } },
+      { windowId: 2, channel: 'throng:resources:action', payload: { action: 'activate', projectId: 'p2' } },
+    ]);
+  });
+
+  it('answers false for a malformed Activate, or with no main window to take it', async () => {
+    const route = wire({ mainWindowId: 2 }).ipc.handles.get('throng:resources:action:route')!;
+    expect(await route(from(9), { action: 'activate' })).toBe(false);
+    expect(await route(from(9), { action: 'activate', projectId: 'p1', tabId: 5 })).toBe(false);
+    expect(await route(from(9), { action: 'activate', projectId: 'p1', panelId: 'n1' })).toBe(false);
+    const none = wire({ mainWindowId: null }).ipc.handles.get('throng:resources:action:route')!;
+    expect(await none(from(9), { action: 'activate', projectId: 'p1' })).toBe(false);
+  });
+
   it('opens the monitor window from any window (R14, FR-086)', () => {
     const w = wire();
     w.ipc.ons.get('throng:resources:open')!(from(5));

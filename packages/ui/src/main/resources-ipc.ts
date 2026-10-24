@@ -74,6 +74,29 @@ function isKillRequest(v: unknown): v is KillRequest {
  */
 export function registerResourcesIpc(ipcMain: ResourcesIpcMain, deps: ResourcesIpcDeps): ResourcesIpcSurface {
   const { host } = deps;
+
+  /*
+   * FR-110 — Activate goes to the window holding the tab (a sub-workspace, or the main window for the
+   * active project), which comes forward and selects the tab and focuses the panel. A tab no window holds,
+   * or a project alone, goes to the main window: it switches project first, then selects. The monitor
+   * window stays open; its focus-scoped layering keeps it above throng's windows (R14).
+   */
+  const routeActivate = (r: Record<string, unknown>): boolean => {
+    const { projectId, tabId, panelId } = r;
+    if (typeof projectId !== 'string' || projectId === '') return false;
+    if (tabId !== undefined && typeof tabId !== 'string') return false;
+    if (panelId !== undefined && (typeof panelId !== 'string' || tabId === undefined)) return false;
+    const payload = {
+      action: 'activate',
+      projectId,
+      ...(tabId !== undefined ? { tabId } : {}),
+      ...(panelId !== undefined ? { panelId } : {}),
+    };
+    const holder = typeof tabId === 'string' ? host.windowHolding('tab', tabId) : null;
+    const target = holder ?? deps.mainWindowId();
+    return target === null ? false : deps.sendTo(target, 'throng:resources:action', payload);
+  };
+
   ipcMain.handle('throng:resources:summary:get', () => host.latestSummary());
   ipcMain.handle('throng:resources:detail-demand:get', () => host.detailDemand());
   ipcMain.handle('throng:resources:detail:subscribe', (event) => {
@@ -109,6 +132,7 @@ export function registerResourcesIpc(ipcMain: ResourcesIpcMain, deps: ResourcesI
    */
   ipcMain.handle('throng:resources:action:route', (_event, req: unknown) => {
     if (typeof req !== 'object' || req === null) return false;
+    if ((req as { action?: unknown }).action === 'activate') return routeActivate(req as Record<string, unknown>);
     const { action, id, name, variant } = req as { action?: unknown; id?: unknown; name?: unknown; variant?: unknown };
     if (typeof id !== 'string') return false;
     if (action === 'unloadProject') {

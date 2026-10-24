@@ -178,8 +178,8 @@ export function useNodeActions(): {
 
   /**
    * Activate (FR-110): go to a project, a tab, a panel — or a process's panel — in the window holding it.
-   * Absent on throng's own nodes (FR-062), on an ended process and on the "No project" group; disabled,
-   * with FR-086's wording, for a tab or panel no window holds (its project is not the active one).
+   * Absent on throng's own nodes (FR-062), on an ended process, on the "No project" group and on a process
+   * outside any panel. Enabled everywhere else: the receiving window switches project first.
    */
   const activateRow = (node: ResourceNode): ActionRow | null => {
     if (node.owner.component !== 'projects' || isEnded(node.id)) return null;
@@ -190,8 +190,6 @@ export function useNodeActions(): {
     const panelId = node.kind === 'panel' ? (node.owner.panelId ?? bare(node.id)) : node.owner.panelId;
     // A process outside any panel (a lock helper, say) has nowhere to go.
     if (what === 'panel' && (tabId === undefined || panelId === undefined)) return null;
-    const held = what === 'project' || projectOf(node)?.projectState === 'active';
-    const project = projectOf(node)?.label;
     const req: RoutedAction = {
       action: 'activate',
       projectId,
@@ -203,8 +201,9 @@ export function useNodeActions(): {
       label: `Go to ${what}`,
       icon: 'activate',
       section: 'navigate',
-      enabled: held,
-      ...(held ? {} : { reason: project === undefined ? 'It is not open in any window' : `Switch to ${project} to go to this ${what}` }),
+      // Always offered: Activate switches project FIRST, so a tab of a project that is not the active one is
+      // reached too. Only a route no window takes fails, and says so in the monitor's notice (FR-086).
+      enabled: true,
       run: () =>
         void route(req, { heading: `Couldn't go to ${node.label}`, lines: ['It is not open in any window.'] }),
     };

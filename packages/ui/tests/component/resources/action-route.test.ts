@@ -14,6 +14,13 @@ import { __resetMonitorStore, setStatusItemElement } from '../../../src/renderer
 import { __resetPanelDestroy, registerPanelDestroy } from '../../../src/renderer/workspace/panel-destroy.js';
 import { __resetTabDestroy, registerTabDestroy } from '../../../src/renderer/workspace/tab-destroy.js';
 import { installResourcesBridge, type ResourcesBridge } from '../helpers/resource-bridge.js';
+import type { WorkspaceLayout } from '@throng/core';
+import {
+  navigateToPlace,
+  registerAttentionNavigation,
+  registerPlaceNavigation,
+  type NavigationHost,
+} from '../../../src/renderer/attention/attention-navigation.js';
 
 const unload = vi.hoisted(() => vi.fn());
 vi.mock('../../../src/renderer/sidebar/use-unload-project.js', () => ({ useUnloadProject: () => unload }));
@@ -136,5 +143,91 @@ describe('where the monitor should shrink to (FR-085)', () => {
     view.unmount();
 
     expect(bridge.askStatusRect()).toBeUndefined();
+  });
+});
+
+describe('Activate routed here (FR-110, US2 scenario 30)', () => {
+  afterEach(() => {
+    registerAttentionNavigation(null);
+    registerPlaceNavigation(null);
+  });
+
+  it('a panel: this window goes to it — project, tab and the panel focused — as a toast’s link does', () => {
+    const toPanel = vi.fn(() => Promise.resolve(true));
+    registerAttentionNavigation(toPanel);
+    render(createElement(EstimatesReporterMount));
+
+    bridge.fireAction({ action: 'activate', projectId: 'p1', tabId: 't1', panelId: 'n1' });
+
+    expect(toPanel).toHaveBeenCalledWith({ projectId: 'p1', panelId: 'n1' });
+  });
+
+  it('a tab or a project: this window switches project and selects the tab', () => {
+    const toPlace = vi.fn(() => Promise.resolve(true));
+    registerPlaceNavigation(toPlace);
+    render(createElement(EstimatesReporterMount));
+
+    bridge.fireAction({ action: 'activate', projectId: 'p1', tabId: 't1' });
+    bridge.fireAction({ action: 'activate', projectId: 'p2' });
+
+    expect(toPlace.mock.calls).toEqual([[{ projectId: 'p1', tabId: 't1' }], [{ projectId: 'p2' }]]);
+  });
+});
+
+describe('going to a tab or a project (navigateToPlace, FR-110)', () => {
+  const layout = (projectId: string, tabIds: string[]): WorkspaceLayout => ({
+    projectId,
+    schemaVersion: 1,
+    activeTabId: tabIds[0]!,
+    tabs: tabIds.map((id) => ({ id, title: id, root: { type: 'panel', id: `n-${id}`, originProjectId: projectId, title: 'P' } })),
+  });
+
+  function host(start: WorkspaceLayout | null, opts: { canSwitch?: boolean; after?: WorkspaceLayout | null } = {}) {
+    const calls: string[] = [];
+    let current = start;
+    const h: NavigationHost = {
+      layout: () => current,
+      ws: () => ({ setActiveTab: (id: string) => void calls.push(`tab:${id}`) }) as unknown as ReturnType<NavigationHost['ws']>,
+      switchProject:
+        opts.canSwitch === false
+          ? null
+          : (id) => {
+              calls.push(`switch:${id}`);
+              current = opts.after === undefined ? current : opts.after;
+              return Promise.resolve();
+            },
+      awaitLayout: (match) => Promise.resolve(current !== null && match(current) ? current : null),
+    };
+    return { h, calls };
+  }
+
+  it('selects a tab this window holds, with no project switch', async () => {
+    const { h, calls } = host(layout('p1', ['t1', 't2']));
+    expect(await navigateToPlace(h, { projectId: 'p1', tabId: 't2' })).toBe(true);
+    expect(calls).toEqual(['tab:t2']);
+  });
+
+  it('switches project FIRST for a tab of another project, then selects it once it is there', async () => {
+    const { h, calls } = host(layout('p1', ['t1']), { after: layout('p2', ['t8', 't9']) });
+    expect(await navigateToPlace(h, { projectId: 'p2', tabId: 't9' })).toBe(true);
+    expect(calls).toEqual(['switch:p2', 'tab:t9']);
+  });
+
+  it('switches to a project alone', async () => {
+    const { h, calls } = host(layout('p1', ['t1']), { after: layout('p2', ['t8']) });
+    expect(await navigateToPlace(h, { projectId: 'p2' })).toBe(true);
+    expect(calls).toEqual(['switch:p2']);
+  });
+
+  it('a sub-workspace window selects its tab without a project switch, and cannot switch for one it lacks', async () => {
+    const { h, calls } = host(layout('sub', ['t1', 't2']), { canSwitch: false });
+    expect(await navigateToPlace(h, { projectId: 'p1', tabId: 't2' })).toBe(true);
+    expect(await navigateToPlace(h, { projectId: 'p1', tabId: 'gone' })).toBe(false);
+    expect(calls).toEqual(['tab:t2']);
+  });
+
+  it('answers false when the tab never appears', async () => {
+    const { h } = host(layout('p1', ['t1']), { after: layout('p2', ['t8']) });
+    expect(await navigateToPlace(h, { projectId: 'p2', tabId: 'missing' })).toBe(false);
   });
 });

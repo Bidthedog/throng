@@ -317,9 +317,9 @@ describe('the detail pane’s action row', () => {
     const [destroyButton, goButton] = within(screen.getByTestId('detail-actions')).getAllByRole('button');
     expect(destroyButton).toBeDisabled();
     expect(destroyButton!.getAttribute('title')).toBe('Switch to Beta to destroy this tab');
-    // Activate too: no window holds the tab (FR-110, FR-086's wording).
-    expect(goButton).toBeDisabled();
-    expect(goButton!.getAttribute('title')).toBe('Switch to Beta to go to this tab');
+    // Activate is not: it switches to Beta first, then selects the tab (FR-110).
+    expect(goButton).toBeEnabled();
+    expect(goButton!.getAttribute('title')).toBe('Go to tab');
   });
 });
 

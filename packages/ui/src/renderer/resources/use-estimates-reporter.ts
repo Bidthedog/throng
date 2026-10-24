@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef, type ReactElement } from 'react';
 import type { WorkspaceLayout } from '@throng/core';
+import { requestAttentionNavigation, requestPlaceNavigation } from '../attention/attention-navigation.js';
 import { useServicesOptional } from '../composition-root.js';
 import { useProjectsOptional } from '../state/projects-store.js';
 import { useWorkspaceOptional } from '../state/workspace-store.js';
@@ -138,6 +139,12 @@ export function useResourceActionRoute(): void {
       // Unload Project is the main window's alone (`UnloadRouteMount`); it is not a panel.
       if (req.action === 'destroyTab') requestTabDestroy(req.id);
       else if (req.action === 'destroyPanel') requestPanelDestroy(req.id);
+      // FR-110 — Activate: a panel is gone to as a toast's link goes to one (project, tab, the panel
+      // focused); a tab or a project switches project first, then selects. Main brought this window forward.
+      else if (req.action === 'activate') {
+        if (req.panelId !== undefined) void requestAttentionNavigation({ projectId: req.projectId, panelId: req.panelId });
+        else void requestPlaceNavigation({ projectId: req.projectId, ...(req.tabId !== undefined ? { tabId: req.tabId } : {}) });
+      }
     });
   }, []);
 }
