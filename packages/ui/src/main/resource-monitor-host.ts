@@ -23,10 +23,18 @@ export interface CollectorChild {
   readonly connected: boolean;
   send(msg: MainToCollector): boolean;
   kill(): boolean;
+  disconnect(): void;
   on(event: 'message', cb: (msg: unknown) => void): this;
   on(event: 'exit', cb: (code: number | null) => void): this;
   on(event: 'error', cb: (error: Error) => void): this;
 }
+
+/**
+ * How long a disconnected collector has to exit before it is killed. It exits the moment it is
+ * disconnected, running its exit handlers — which stop its network trace session (055 R20); a kill is
+ * TerminateProcess on Windows and runs none, leaving the session behind.
+ */
+export const COLLECTOR_EXIT_GRACE_MS = 2_000;
 
 export interface DocumentEstimate {
   readonly panelId: string;
@@ -112,7 +120,16 @@ export class ResourceMonitorHost {
     clearTimeout(this.restartTimer);
     const c = this.child;
     this.child = null;
-    if (c?.connected) c.kill();
+    if (c?.connected) {
+      let exited = false;
+      c.on('exit', () => {
+        exited = true;
+      });
+      c.disconnect();
+      setTimeout(() => {
+        if (!exited) c.kill();
+      }, COLLECTOR_EXIT_GRACE_MS).unref?.();
+    }
     for (const [id, k] of this.kills) {
       clearTimeout(k.timer);
       this.kills.delete(id);

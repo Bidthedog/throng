@@ -3,7 +3,7 @@ import process from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { Worker } from 'node:worker_threads';
 import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, type Unavailable } from '@throng/core';
-import { NetworkByteCounter } from './etw-network-events.js';
+import { KERNEL_NETWORK_PAYLOAD, NetworkByteCounter, SEND_RECEIVE_EVENT_IDS } from './etw-network-events.js';
 import type { NetworkReader } from './windows-process-metrics.js';
 
 /**
@@ -43,8 +43,6 @@ const KERNEL_NETWORK_DATA1 = 0x7dd4_2a49;
 const KERNEL_NETWORK_GUID = Buffer.from([
   0x49, 0x2a, 0xd4, 0x7d, 0x29, 0x53, 0x32, 0x48, 0x8d, 0xfd, 0x43, 0xd9, 0x79, 0x15, 0x3a, 0x88,
 ]);
-/** The send and receive event ids (see etw-network-events.ts). */
-const EVENT_IDS = [10, 11, 26, 27, 42, 43, 58, 59];
 
 type KoffiFn = ((...args: unknown[]) => unknown) & { async: (...args: unknown[]) => void };
 function callAsync<T>(fn: KoffiFn, ...args: unknown[]): Promise<T> {
@@ -344,10 +342,10 @@ const onRecord = koffi.register((rec) => {
   try {
     if (koffi.decode(rec, d.offProvider, 'uint32') !== d.providerData1) return;
     if (!ids.has(koffi.decode(rec, d.offId, 'uint16'))) return;
-    if (koffi.decode(rec, d.offUserDataLength, 'uint16') < 8) return;
+    if (koffi.decode(rec, d.offUserDataLength, 'uint16') < d.payload.minLength) return;
     const data = koffi.decode(rec, d.offUserData, 'void *');
-    const pid = koffi.decode(data, 0, 'uint32');
-    counts.set(pid, (counts.get(pid) || 0) + koffi.decode(data, 4, 'uint32'));
+    const pid = koffi.decode(data, d.payload.pid, 'uint32');
+    counts.set(pid, (counts.get(pid) || 0) + koffi.decode(data, d.payload.size, 'uint32'));
   } catch {}
 }, koffi.pointer(RecordCallback));
 const onBuffer = koffi.register(() => {
@@ -373,8 +371,52 @@ if (handle === 0xFFFFFFFFFFFFFFFFn) {
 }
 `;
 
+/** What {@link lazyNetworkReader} needs of a started trace. */
+export interface NetworkTraceHandle {
+  read(): Promise<ReadonlyMap<number, number> | Unavailable>;
+  dispose(): Promise<void>;
+}
+
+/** Longest the monitor goes between reads while open: several capture intervals at the slowest setting. */
+export const NETWORK_IDLE_MS = 30_000;
+
+/**
+ * A reader that starts the trace on its first read — the monitor's first detail tick, so a collector whose
+ * monitor never opens never traces — and stops it once nothing has read it for `idleMs`, so a closed monitor
+ * costs no per-event work; the next read starts it again. A refusal (`elevation-required`) is kept, not
+ * retried every tick.
+ */
+export function lazyNetworkReader({
+  start,
+  idleMs = NETWORK_IDLE_MS,
+}: {
+  start: () => Promise<NetworkTraceHandle | Unavailable>;
+  idleMs?: number;
+}): NetworkReader {
+  let started: Promise<NetworkTraceHandle | Unavailable> | undefined;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const isTrace = (t: NetworkTraceHandle | Unavailable): t is NetworkTraceHandle => 'dispose' in t;
+  const stopWhenIdle = (trace: NetworkTraceHandle): void => {
+    clearTimeout(idle);
+    idle = setTimeout(() => {
+      started = undefined;
+      void trace.dispose();
+    }, idleMs);
+    idle.unref?.();
+  };
+  return {
+    read: async () => {
+      started ??= start();
+      const trace = await started;
+      if (!isTrace(trace)) return trace;
+      stopWhenIdle(trace);
+      return trace.read();
+    },
+  };
+}
+
 /** A running network trace: {@link NetworkReader} over one ETW session. */
-export class WindowsNetworkTrace implements NetworkReader {
+export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
   private readonly counter = new NetworkByteCounter();
   private lastRead = performance.now();
   private failed = false;
@@ -431,19 +473,11 @@ export class WindowsNetworkTrace implements NetworkReader {
     }
   }
 
-  /**
-   * A reader that starts the trace on its first read — the monitor's first detail tick, so a collector whose
-   * monitor never opens never traces — and keeps whatever that start gave, a trace or its reason.
-   */
+  /** The collector's reader: see {@link lazyNetworkReader}. Sessions a crashed collector left are stopped now. */
   static lazyReader(): NetworkReader {
-    let started: Promise<WindowsNetworkTrace | Unavailable> | undefined;
-    return {
-      read: async () => {
-        started ??= WindowsNetworkTrace.start();
-        const trace = await started;
-        return trace instanceof WindowsNetworkTrace ? trace.read() : trace;
-      },
-    };
+    const api = process.arch === 'x64' ? loadFfi() : null;
+    if (api !== null) void stopStaleSessions(api).catch(() => undefined);
+    return lazyNetworkReader({ start: () => WindowsNetworkTrace.start() });
   }
 
   private static consume(api: TraceFfi, name: string): WindowsNetworkTrace {
@@ -455,7 +489,8 @@ export class WindowsNetworkTrace implements NetworkReader {
         name,
         mode: PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD,
         providerData1: KERNEL_NETWORK_DATA1,
-        eventIds: EVENT_IDS,
+        eventIds: [...SEND_RECEIVE_EVENT_IDS],
+        payload: KERNEL_NETWORK_PAYLOAD,
       },
     });
     return new WindowsNetworkTrace(api, name, worker);

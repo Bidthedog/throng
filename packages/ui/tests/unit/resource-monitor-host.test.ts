@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_APP_SETTINGS, editorMainBytes, terminalDaemonBytes } from '@throng/core';
 import type { CollectorToMain, DaemonRoster, MainToCollector, ResourceSummary } from '@throng/ipc-contract';
-import { ResourceMonitorHost, type CollectorChild, type ResourceMonitorHostDeps } from '../../src/main/resource-monitor-host.js';
+import { COLLECTOR_EXIT_GRACE_MS, ResourceMonitorHost, type CollectorChild, type ResourceMonitorHostDeps } from '../../src/main/resource-monitor-host.js';
 
 /** 055 T033 — UI main's side of the collector: fork, roster, relays, subscriptions, estimates. */
 
@@ -13,9 +13,16 @@ class FakeChild extends EventEmitter implements CollectorChild {
     this.sent.push(msg);
     return true;
   }
+  killed = false;
+  disconnected = false;
   kill(): boolean {
     this.connected = false;
+    this.killed = true;
     return true;
+  }
+  disconnect(): void {
+    this.connected = false;
+    this.disconnected = true;
   }
   /** The collector speaks. */
   say(msg: CollectorToMain): void {
@@ -85,6 +92,29 @@ function make(over: Partial<ResourceMonitorHostDeps> = {}) {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('ResourceMonitorHost (055 T033, R1, R7)', () => {
+  it('stops the collector by disconnecting, so it exits normally and stops its network trace; kills only one that does not exit (FR-113, R20)', () => {
+    vi.useFakeTimers();
+    try {
+      const s = make();
+      s.host.start();
+      const c = s.child();
+      s.host.stop();
+      expect(c.disconnected).toBe(true);
+      expect(c.killed, 'a kill is TerminateProcess: no exit handler runs').toBe(false);
+      vi.advanceTimersByTime(COLLECTOR_EXIT_GRACE_MS);
+      expect(c.killed, 'a collector that never exited is killed').toBe(true);
+
+      s.host.start();
+      const d = s.child();
+      s.host.stop();
+      d.emit('exit', 0);
+      vi.advanceTimersByTime(COLLECTOR_EXIT_GRACE_MS);
+      expect(d.killed, 'one that exited is left alone').toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('forks the collector with the bundled runtime and configures it with resolved settings', () => {
     const s = make();
     s.host.start();

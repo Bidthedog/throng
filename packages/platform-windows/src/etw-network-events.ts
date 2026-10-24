@@ -3,7 +3,7 @@
  * opens its payload with `PID` (UInt32) then `size` (UInt32); the addresses after them differ in width
  * between IPv4 and IPv6 and are not read.
  */
-const SEND_RECEIVE_EVENT_IDS: ReadonlySet<number> = new Set([
+export const SEND_RECEIVE_EVENT_IDS: ReadonlySet<number> = new Set([
   10, // TCP send, IPv4
   11, // TCP receive, IPv4
   26, // TCP send, IPv6
@@ -14,10 +14,14 @@ const SEND_RECEIVE_EVENT_IDS: ReadonlySet<number> = new Set([
   59, // UDP receive, IPv6
 ]);
 
+/** Where the two fields sit in every send and receive payload. The trace's worker reads by these too. */
+export const KERNEL_NETWORK_PAYLOAD = Object.freeze({ pid: 0, size: 4, minLength: 8 });
+
 /** The pid and byte count of a send or receive event; `null` for any other event. */
 export function parseKernelNetworkEvent(eventId: number, userData: Buffer): { pid: number; bytes: number } | null {
-  if (!SEND_RECEIVE_EVENT_IDS.has(eventId) || userData.length < 8) return null;
-  return { pid: userData.readUInt32LE(0), bytes: userData.readUInt32LE(4) };
+  const p = KERNEL_NETWORK_PAYLOAD;
+  if (!SEND_RECEIVE_EVENT_IDS.has(eventId) || userData.length < p.minLength) return null;
+  return { pid: userData.readUInt32LE(p.pid), bytes: userData.readUInt32LE(p.size) };
 }
 
 /** Bytes per pid since the last {@link take}, fed by the trace's callback. */
