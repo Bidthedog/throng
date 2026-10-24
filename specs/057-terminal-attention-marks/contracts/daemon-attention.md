@@ -46,6 +46,19 @@ that turns 1004 on is assumed to believe it is focused, so if its panel is not a
 `CSI O` at once. When the last events socket goes, the set is treated as empty. These writes go
 straight to the PTY and never clear `startupPending`.
 
+## Requests `attention.flagList`, `attention.flagSet`, `attention.flagClear` *(round 12, R19)*
+
+Manual flags (FR-125, FR-128), held in SQLite table `attention_flag` (migration v11), never in the
+ledger.
+
+- `attention.flagList` — no params. Result `{ flags: AttentionFlagEntry[] }`, where
+  `AttentionFlagEntry = { panelId, projectId, panelTitle, tabTitle, projectName, raisedAt }`.
+- `attention.flagSet` — params `AttentionFlagEntry`. Upserts by `panelId`. Result `{ ok: true }`.
+- `attention.flagClear` — params `{ panelId }`. Deletes; a missing row is not an error. Result
+  `{ ok: true }`.
+- Deleting a project deletes its rows. A malformed entry is refused with the RPC's ordinary error,
+  which main logs.
+
 ## Behaviour on existing calls
 
 - `terminal.kill`, `terminal.killAll` and `killForProject` drop the affected panels' ledger entries.
