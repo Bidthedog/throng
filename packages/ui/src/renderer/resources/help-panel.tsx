@@ -18,7 +18,7 @@
  * closes the window, leaves it alone (`monitor-app.tsx`).
  */
 import { useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type RefObject } from 'react';
-import { formatGrouped, type UsageThresholds } from '@throng/core';
+import { COMPONENT_DESCRIPTIONS, formatGrouped, type ComponentId, type UsageThresholds } from '@throng/core';
 import { clampToViewport } from '../common/clamp-to-viewport.js';
 import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
@@ -39,6 +39,14 @@ const SHARE_OF: Readonly<Record<FigureId, string>> = {
 };
 
 const pct = (n: number): string => `${formatGrouped(n)}%`;
+
+/** The four components, in the order the top level lists them when nothing is ordered (FR-103). */
+const COMPONENTS: readonly (readonly [ComponentId, string])[] = [
+  ['ui', 'UI'],
+  ['daemon', 'Daemon'],
+  ['helpers', 'Helpers'],
+  ['projects', 'Projects'],
+];
 
 export interface HelpButtonProps {
   readonly open: boolean;
@@ -133,10 +141,18 @@ function HelpBody({ thresholds, metric }: { thresholds: UsageThresholds; metric:
     <>
       <h4 className="monitor-help__heading">Components and Projects</h4>
       <p>
-        <strong>Components</strong> are throng itself, by part: the user interface, the daemon that keeps terminals alive, and the
-        helper processes it starts. <strong>Projects</strong> are your work — what each project is running, down through its tabs and
-        panels to the processes in its terminals.
+        <strong>Components</strong> are throng itself, by part; <strong>Projects</strong> are your work — what each project is running,
+        down through its tabs and panels to the processes in its terminals. Rest the pointer on a component, or on one of throng’s own
+        processes, to read what it is for.
       </p>
+      {/* The same words as each component row's hover title (FR-102): one source, `descriptions.ts`. */}
+      <ul data-testid="monitor-help-components">
+        {COMPONENTS.map(([id, name]) => (
+          <li key={id}>
+            <strong>{name}</strong> — {COMPONENT_DESCRIPTIONS[id]}
+          </li>
+        ))}
+      </ul>
 
       <h4 className="monitor-help__heading">Two columns</h4>
       <p>

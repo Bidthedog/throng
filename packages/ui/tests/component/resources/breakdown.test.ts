@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NOT_MEASURED, formatGrouped, unavailable, type ResourceNode } from '@throng/core';
+import { COMPONENT_DESCRIPTIONS, NOT_MEASURED, ROLE_DESCRIPTIONS, formatGrouped, unavailable, type ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import {
   __resetSession,
@@ -333,6 +333,29 @@ describe('the rows', () => {
     expect(gpu).toHaveTextContent(/^-$/);
     expect(gpu).toHaveAttribute('title', 'GPU: Not measured');
     expect(NOT_MEASURED).toBeDefined();
+  });
+});
+
+describe('what throng’s own rows are for (FR-102, US2 scenario 22)', () => {
+  it('titles each component row with why it exists, and no figure', () => {
+    feed(sampleHierarchy());
+    mount();
+    for (const id of ['ui', 'daemon', 'helpers', 'projects'] as const) {
+      expect(row(`c:${id}`)).toHaveAttribute('title', COMPONENT_DESCRIPTIONS[id]);
+    }
+    expect(row('c:daemon').getAttribute('title')).toMatch(/keeps your terminals running when throng's windows close/);
+  });
+
+  it('titles a row for one of throng’s own processes with its role, and a user’s process with its name', () => {
+    const tree = sampleHierarchy();
+    const withRole = (n: ResourceNode): ResourceNode => (n.id === 'x:30:1' ? { ...n, role: 'conhost' } : { ...n, children: n.children.map(withRole) });
+    feed(withRole(tree));
+    mount();
+    act(() => setView({ focusPath: ['root', 'c:helpers'] }));
+    expect(row('x:30:1')).toHaveAttribute('title', ROLE_DESCRIPTIONS.conhost);
+
+    act(() => setView({ focusPath: ['root', 'c:projects', 'p:p1', 't:t1', 'n:n1'] }));
+    expect(row('x:200:1')).toHaveAttribute('title', 'pwsh.exe');
   });
 });
 

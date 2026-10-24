@@ -51,7 +51,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
-import { IDLE_SAMPLES, formatGrouped, type ResourceNode } from '@throng/core';
+import { IDLE_SAMPLES, describeNode, formatGrouped, type ResourceNode } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
 import { Breadcrumb } from './breadcrumb.js';
 import { FIGURE_LABEL, networkUnavailableTitle, orderMetric, type Figure, type FigureId } from './figures.js';
@@ -94,6 +94,9 @@ const ROW_HEIGHT_FALLBACK_PX = 24;
  */
 function rowTitle(node: ResourceNode, ended: boolean): string {
   if (node.kind === 'limitation') return `${node.label}: ${node.reason ?? 'not measured'}`;
+  // A component, or one of throng's own processes, says why it exists (FR-102) — the same words as the help.
+  const description = describeNode(node);
+  if (description !== undefined) return ended ? `${description} — ended` : description;
   return `${node.label}${ended ? ' — ended' : ''}`;
 }
 
@@ -226,7 +229,7 @@ function sameRow(a: RowProps, b: RowProps): boolean {
   const m = y.node;
   if (x.depth !== y.depth || x.ended !== y.ended || x.path.join('/') !== y.path.join('/')) return false;
   if (n.id !== m.id || n.kind !== m.kind || n.label !== m.label || n.projectState !== m.projectState) return false;
-  if (n.estimated !== m.estimated || n.sharedWith !== m.sharedWith || n.reason !== m.reason) return false;
+  if (n.estimated !== m.estimated || n.sharedWith !== m.sharedWith || n.reason !== m.reason || n.role !== m.role) return false;
   if (n.children.length > 0 !== m.children.length > 0) return false;
   // A limitation or an ended row draws no figures.
   if (n.kind === 'limitation' || x.ended) return true;

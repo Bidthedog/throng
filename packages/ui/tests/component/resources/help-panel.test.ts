@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
+import { COMPONENT_DESCRIPTIONS, THRONG_THEME } from '@throng/core';
 import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { __resetSession, ingestFrame, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { ToolbarControls } from '../../../src/renderer/resources/toolbar.js';
@@ -83,6 +83,15 @@ describe('the panel (FR-093)', () => {
     expect(text).toMatch(/Enter or Right/);
     expect(text).toMatch(/Left or Backspace/);
     expect(text).toMatch(/Esc/);
+  });
+
+  it('describes each component in the words its row’s hover title uses (FR-102)', async () => {
+    await mount();
+    fireEvent.click(button());
+    const section = within(panel()).getByTestId('monitor-help-components');
+    for (const id of ['ui', 'daemon', 'helpers', 'projects'] as const) {
+      expect(section.textContent, id).toContain(COMPONENT_DESCRIPTIONS[id]);
+    }
   });
 
   it('names the metric the rows are sorted by now, and what the bar colour is a share of', async () => {
