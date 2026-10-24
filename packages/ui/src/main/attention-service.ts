@@ -5,6 +5,7 @@ import {
   notificationText,
   formatSubject,
   type AppSettings,
+  type AttentionFlagEntry,
   type AttentionKind,
   type AttentionMark,
   type AttentionProducerConfig,
@@ -15,6 +16,10 @@ import {
 } from '@throng/core';
 import { NOTICE_OS_ID_PREFIX } from './notice-os.js';
 import {
+  ATTENTION_FLAG_CLEAR_METHOD,
+  ATTENTION_FLAG_LIST_METHOD,
+  ATTENTION_FLAG_SET_METHOD,
+  type AttentionFlagListResult,
   TERMINAL_ATTENTION_CONFIG_METHOD,
   TERMINAL_ATTENTION_LEDGER_METHOD,
   TERMINAL_ATTENTION_SYNC_METHOD,
@@ -84,6 +89,8 @@ export class AttentionService {
   private readonly reports = new Map<number, FocusReport>();
   /** Which window holds each panel's toast, so an update and a dismiss reach the same one. */
   private readonly toastWindow = new Map<string, number>();
+  /** FR-128: panels holding a user flag the daemon has stored, so a clear by any route removes it there too. */
+  private readonly storedFlags = new Set<string>();
   private tickTimer: ReturnType<typeof setTimeout> | null = null;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private badgeSeq = 0;
@@ -104,7 +111,10 @@ export class AttentionService {
       now: () => Date.now(),
     });
     this.model.onChange((marks) => this.marksChanged(marks));
-    this.model.onCleared((panelId) => this.dismiss(panelId));
+    this.model.onCleared((panelId) => {
+      this.dismiss(panelId);
+      this.forgetFlag(panelId);
+    });
     // A notice's Windows notification (FR-110) shares the notifier but is not a mark.
     deps.notifier.onClick((id) => {
       if (!id.startsWith(NOTICE_OS_ID_PREFIX)) this.goTo(id);
@@ -135,6 +145,22 @@ export class AttentionService {
     if (wasMarked) this.refresh(mark);
     // FR-038a: a startup command's completion marks the panel but does not announce it.
     else if (!signal.startup) this.notify(mark);
+  }
+
+  /**
+   * FR-125, FR-126: the panel menu's Flag. A user mark, stored by the daemon so it survives a restart
+   * (FR-128), and never announced. A panel already marked is left as it is.
+   */
+  flag(request: Omit<AttentionFlagEntry, 'raisedAt'>): void {
+    // Judge whether the panel holds focus by main's own view of window focus, as a signal is (FR-127).
+    this.applyWindowFocus();
+    const at = Date.now();
+    if (!this.model.flag({ ...request, at })) return;
+    this.storedFlags.add(request.panelId);
+    const entry: AttentionFlagEntry = { ...request, raisedAt: at };
+    this.deps.daemon
+      .call(ATTENTION_FLAG_SET_METHOD, entry)
+      .catch((err: unknown) => this.log('[attention] storing a flag failed:', err));
   }
 
   /** A window's renderer reported what it shows and where focus is. */
@@ -246,6 +272,8 @@ export class AttentionService {
     // FR-099: a daemon that restarted believes nothing is attended. Sent whatever the attention settings
     // say: telling a program the truth about focus is the terminal's job, not an attention feature.
     this.sendFocus();
+    // FR-128: the user's flags come back whatever the terminal attention settings say.
+    await this.restoreFlags();
     if (!this.deps.settings().terminals.attention.enabled) return;
     try {
       const { entries } = await this.deps.daemon.call<TerminalAttentionLedgerResult>(
@@ -263,6 +291,24 @@ export class AttentionService {
       this.syncTimer = null;
       await this.sendSync();
     }
+  }
+
+  private async restoreFlags(): Promise<void> {
+    try {
+      const { flags } = await this.deps.daemon.call<AttentionFlagListResult>(ATTENTION_FLAG_LIST_METHOD, {});
+      for (const f of flags) this.storedFlags.add(f.panelId);
+      this.model.restoreFlags(flags);
+    } catch (err) {
+      this.log('[attention] reading the stored flags failed:', err);
+    }
+  }
+
+  /** FR-128: a user flag that cleared, by any route, leaves the daemon's store. */
+  private forgetFlag(panelId: string): void {
+    if (!this.storedFlags.delete(panelId)) return;
+    this.deps.daemon
+      .call(ATTENTION_FLAG_CLEAR_METHOD, { panelId })
+      .catch((err: unknown) => this.log('[attention] removing a stored flag failed:', err));
   }
 
   onSettingsChanged(previous: AttentionSettingsSource, next: AttentionSettingsSource): void {
