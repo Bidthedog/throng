@@ -4,11 +4,11 @@ Spec: `specs/057-terminal-attention-marks/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Click a notification to reach its panel | untested | | | |
-| MT-02 | Flag a panel by hand | untested | | | |
-| MT-03 | Project list: counts, pills and paler minimised categories | untested | | | |
-| MT-04 | Tab chips: numbered flags and panel-count pills | untested | | | |
-| MT-05 | A marked panel announces once, whatever marked it | untested | | | |
+| MT-01 | Click a notification to reach its panel | signed off | 1575753e50ca | 2026-10-24 | |
+| MT-02 | Flag a panel by hand | signed off | 1575753e50ca | 2026-10-24 | |
+| MT-03 | Project list: counts, pills and paler minimised categories | needs retest | | | failed: I don't see a number for the count of flags within a tab or project — I can just see the flag |
+| MT-04 | Tab chips: numbered flags and panel-count pills | needs retest | | | failed: don't see the number on the flag |
+| MT-05 | A marked panel announces once, whatever marked it | signed off | 1575753e50ca | 2026-10-24 | |
 
 A delayed bell, used below: in a PowerShell terminal, `Start-Sleep 15; Write-Host "`a"`.
 
