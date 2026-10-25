@@ -1,6 +1,6 @@
 /**
- * 057 — a bell in a terminal the user is not looking at marks it, announces it once, and the toast's
- * link takes the user there (US1, US2, US3; SC-002).
+ * 057 — a bell in a terminal the user is not looking at marks it, announces it once, and clicking the
+ * toast takes the user there (US1, US2, US3; SC-002).
  *
  * ══ WHAT ONLY THIS LAYER CAN SEE ══
  *
@@ -124,8 +124,8 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   await expect(toasts).toHaveCount(1);
   await expect(win.getByTestId(`attention-toast-${panelA}`)).toBeVisible();
 
-  // ── The link crosses the project switch and lands the keyboard in A's terminal ────────────────
-  await win.getByTestId(`attention-toast-goto-${panelA}`).click();
+  // ── The card is the link (FR-124): it crosses the project switch and lands the keyboard in A's terminal
+  await win.getByTestId(`attention-toast-${panelA}`).getByTestId('notice-body').click();
   await expect(win.getByTestId('workspace-pane')).toHaveAttribute('data-project', idA);
   await expect(termA.locator('textarea')).toBeFocused();
 
