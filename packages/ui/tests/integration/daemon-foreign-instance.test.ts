@@ -165,7 +165,7 @@ describe('ensureDaemon and another instance (#192)', () => {
     const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
 
     expect(kill).not.toHaveBeenCalled();
-    expect(res).toEqual({ spawned: false, foreign: true });
+    expect(res).toEqual({ spawned: false, foreign: true, foreignEntry: theirs });
   }, 30_000);
 
   it('a development build never retires a packaged copy’s daemon (058 FR-018a)', async () => {
@@ -184,7 +184,7 @@ describe('ensureDaemon and another instance (#192)', () => {
     const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
 
     expect(kill).not.toHaveBeenCalled();
-    expect(res).toEqual({ spawned: false, foreign: true });
+    expect(res).toEqual({ spawned: false, foreign: true, foreignEntry: theirs });
   }, 30_000);
 
   it('reuses a SAME-build daemon started by another packaged copy, so its terminals reattach (058 FR-021)', async () => {
@@ -245,6 +245,79 @@ describe('ensureDaemon and another instance (#192)', () => {
     }).catch(() => undefined);
 
     expect(kill).toHaveBeenCalledWith(999_999);
+  }, 30_000);
+
+  /*
+   * #533 — a dev build that leaves another checkout's daemon alone must still be able to SAY whose it
+   * is, and replace it when the user asks. Left silent, the first call the older daemon does not know
+   * reaches the user as "Method not found".
+   */
+  it('names the other checkout’s daemon entry when it leaves it alone (#533)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-dev-build');
+    const theirs = entryFile('other-checkout-build');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_991,
+      buildId: 'other-checkout-build',
+      daemonEntry: theirs,
+      packaged: false,
+    });
+    vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
+
+    expect(res).toEqual({ spawned: false, foreign: true, foreignEntry: theirs });
+  }, 30_000);
+
+  it('replaces another dev checkout’s daemon when asked to (#533)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-dev-build');
+    const theirs = entryFile('other-checkout-build');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_990,
+      buildId: 'other-checkout-build',
+      daemonEntry: theirs,
+      packaged: false,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    // The fake never leaves the pipe, so the spawn that follows fails; only the retirement matters.
+    await ensureDaemon({
+      pipeName,
+      daemonEntry: ours,
+      pingTimeoutMs: 500,
+      readyTimeoutMs: 500,
+      replaceForeign: true,
+    }).catch(() => undefined);
+
+    expect(kill).toHaveBeenCalledWith(999_990);
+  }, 30_000);
+
+  it('never replaces a packaged copy’s daemon from a dev build, even when asked (#533, 058 FR-018a)', async () => {
+    const pipeName = pipe();
+    const ours = entryFile('our-dev-build');
+    const theirs = entryFile('installed-build', 'packaged');
+    await fakeDaemon(pipeName, {
+      status: 'ok',
+      pid: 999_989,
+      buildId: 'installed-build',
+      daemonEntry: theirs,
+      packaged: true,
+    });
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const res = await ensureDaemon({
+      pipeName,
+      daemonEntry: ours,
+      pingTimeoutMs: 2000,
+      readyTimeoutMs: 2000,
+      replaceForeign: true,
+    });
+
+    expect(kill).not.toHaveBeenCalled();
+    expect(res.foreign).toBe(true);
   }, 30_000);
 
   it('recognises its own entry through a different spelling of the same path', async () => {

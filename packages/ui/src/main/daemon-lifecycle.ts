@@ -80,6 +80,14 @@ export interface EnsureDaemonOptions {
    * load, a native crash, an unhandled throw during startup. Omitted → the old behaviour.
    */
   logDir?: string;
+  /**
+   * #533 — the user asked to replace another DEVELOPMENT checkout's daemon with this build's.
+   *
+   * Only ever a dev daemon beside a dev build: a packaged copy's daemon is still never retired from a
+   * development tree (058 FR-018a), whatever is asked. Replacing ends that daemon's terminals, which is
+   * why this is the user's call and never the default.
+   */
+  replaceForeign?: boolean;
 }
 
 export interface EnsureDaemonResult {
@@ -96,6 +104,8 @@ export interface EnsureDaemonResult {
    * down with it.
    */
   foreign?: boolean;
+  /** #533 — the entry the foreign daemon is running, so the caller can say whose it is. */
+  foreignEntry?: string;
   /** The spawned child (only when `spawned`), so a caller/test can manage it. */
   child?: ChildProcess;
 }
@@ -193,6 +203,15 @@ function sameEntry(a: string, b: string): boolean {
   return key(a) === key(b);
 }
 
+/**
+ * #533 — the checkout a daemon entry belongs to: the folder above `packages/daemon/dist/main.js`, in
+ * the entry's own spelling. An entry laid out any other way is returned whole.
+ */
+export function checkoutOfDaemonEntry(entry: string): string {
+  const match = /[\\/]packages[\\/]daemon[\\/]dist[\\/]main\.js$/i.exec(entry);
+  return match ? entry.slice(0, match.index) : entry;
+}
+
 export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDaemonResult> {
   const pingTimeout = opts.pingTimeoutMs ?? 800;
   const readyTimeout = opts.readyTimeoutMs ?? 15_000;
@@ -253,13 +272,17 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
      */
     const theirsIsDev = info.daemonEntry ? !isPackagedEntry(info.daemonEntry) : info.packaged === false;
     const oursIsDev = !isPackagedEntry(opts.daemonEntry);
+    // #533 — the one exception, and only on the user's say-so: a dev build may replace another dev
+    // checkout's daemon. Never an installed one.
+    const replaceAsked = opts.replaceForeign === true && theirsIsDev && oursIsDev;
     if (
       !orphaned &&
+      !replaceAsked &&
       info.daemonEntry &&
       !sameEntry(info.daemonEntry, opts.daemonEntry) &&
       (theirsIsDev || oursIsDev)
     ) {
-      return { spawned: false, foreign: true };
+      return { spawned: false, foreign: true, foreignEntry: info.daemonEntry };
     }
 
     // The running daemon is outdated (or must be replaced to gain elevation): stop it,

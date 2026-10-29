@@ -27,8 +27,16 @@ const LABEL: Record<Exclude<DaemonStatus, 'running'>, string> = {
   restarting: 'Restarting daemon…',
 };
 
+/** #533 — the folder name a checkout is known by, for the notice; the hover title carries the full path. */
+const checkoutName = (checkout: string): string => checkout.split(/[\\/]/).filter(Boolean).pop() ?? checkout;
+
 export function DaemonIndicator(): ReactElement | null {
   const [state, setState] = useState<DaemonState | null>(null);
+  /*
+   * #533 — another development checkout's daemon is serving this build. Not a DaemonStatus: that
+   * daemon is perfectly alive, it is just not this build's, so the two facts are held apart.
+   */
+  const [foreign, setForeign] = useState<{ checkout: string } | null>(null);
   const { notify } = useNotify();
 
   useEffect(() => {
@@ -37,6 +45,31 @@ export function DaemonIndicator(): ReactElement | null {
     void api.state().then((s) => setState(s as DaemonState));
     return api.onState((s) => setState(s as DaemonState));
   }, []);
+
+  useEffect(() => {
+    const api = window.throng?.daemon;
+    if (!api?.foreign) return;
+    void api.foreign().then(setForeign);
+    return api.onForeign?.(setForeign);
+  }, []);
+
+  /*
+   * #533 — said ONCE per checkout, like the stopped notice. It reports; the indicator acts, for the
+   * reason in this file's header.
+   */
+  const foreignCheckout = foreign?.checkout;
+  useEffect(() => {
+    if (foreignCheckout === undefined) return;
+    notify({
+      severity: 'warning',
+      // No subject, for the reason the stopped notice gives: the title names the daemon.
+      subject: { kind: 'none' },
+      title: 'This build is running on another checkout’s daemon',
+      message: `The daemon from “${checkoutName(foreignCheckout)}” is serving this window, so anything this build added to the daemon will fail. Use the daemon indicator in the status bar to replace it with this build’s — that ends its terminals.`,
+      testId: 'daemon-foreign',
+      causeKey: `daemon-foreign:${foreignCheckout}`,
+    });
+  }, [foreignCheckout, notify]);
 
   /*
    * FR-007 — say it ONCE, when it becomes true.
@@ -82,21 +115,41 @@ export function DaemonIndicator(): ReactElement | null {
     }
   }, [notify]);
 
-  if (!state || state.status === SILENT) return null;
-  // Narrowed by the guard above — `running` is the one status with no label, by design.
-  const label = LABEL[state.status as Exclude<DaemonStatus, 'running'>];
+  // #533 — replacing another checkout's daemon is a restart that may retire it; the result is told
+  // the same way.
+  const onReplace = useCallback(async () => {
+    const res = await window.throng?.daemon?.replaceForeign?.();
+    if (res && !res.ok) {
+      notify({
+        severity: 'error',
+        subject: { kind: 'none' },
+        title: 'Could not replace the other checkout’s daemon',
+        message: res.error ?? 'throng could not start this build’s daemon.',
+        testId: 'daemon-error',
+      });
+    }
+  }, [notify]);
+
+  // A daemon that is down outranks whose it is: restarting is what the user needs first.
+  const showForeign = foreign !== null && (!state || state.status === SILENT);
+  if (!showForeign && (!state || state.status === SILENT)) return null;
+  const label = showForeign
+    ? `Running on the daemon from ${foreign.checkout} — click to replace it with this build’s (ends its terminals)`
+    : // Narrowed by the guard above — `running` is the one status with no label, by design.
+      LABEL[state!.status as Exclude<DaemonStatus, 'running'>];
+  const shown = showForeign ? 'foreign' : state!.status;
 
   return (
     <button
       type="button"
       className="throng-status-bar__daemon"
       data-testid="status-daemon"
-      data-status={state.status}
+      data-status={shown}
       title={label}
       aria-label={label}
       // FR-009b: a restart already in flight cannot be triggered a second time.
-      disabled={state.status === 'restarting'}
-      onClick={() => void onRestart()}
+      disabled={shown === 'restarting'}
+      onClick={() => void (showForeign ? onReplace() : onRestart())}
     >
       {/*
         Always the RETRY glyph, in every state, because that is what this control DOES: restart the
