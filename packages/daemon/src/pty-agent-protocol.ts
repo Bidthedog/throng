@@ -34,8 +34,11 @@ export type AgentCommand =
 
 /** Agent → daemon events. */
 export type AgentEvent =
-  | { ev: 'ready' }
+  // 055 R5: `pid` is the agent's own, so the resource monitor can name it.
+  | { ev: 'ready'; pid?: number }
   | { ev: 'started'; key: number; pid: number }
+  // 055 T101: the terminal's console host, once the agent has attributed it — after `started`, or never.
+  | { ev: 'conhost'; key: number; pid: number }
   | { ev: 'error'; key: number; message: string }
   | { ev: 'data'; key: number; data: string }
   | { ev: 'exit'; key: number; code: number | null; signal?: string }

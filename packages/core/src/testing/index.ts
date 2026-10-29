@@ -34,3 +34,6 @@ export { runPathFormsContract } from './path-forms-contract.js';
 export type { PathFormsGitFixture } from './path-forms-contract.js';
 export { runExecutableExtensionsContract } from './executable-extensions-contract.js';
 export { runRefusedUriSchemesContract } from './refused-uri-schemes-contract.js';
+// 055 — the resource monitor's process seam.
+export { runProcessMetricsContract, type ProcessMetricsContractEnv } from './process-metrics-contract.js';
+export { FakeProcessMetrics } from './fake-process-metrics.js';

@@ -8,6 +8,7 @@ import {
   getAtPath,
   isSettingOverridden,
   LANGUAGES,
+  raisedIntervalFor,
   settingDiffersFromEntry,
   type FieldDescriptor,
 } from '@throng/core';
@@ -19,7 +20,7 @@ import { useConfirm, type ConfirmOptions } from '../confirm-dialog.js';
 import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
-import { SettingControl } from './form-controls.js';
+import { FieldNote, SettingControl } from './form-controls.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
@@ -265,6 +266,12 @@ export function SettingsTab({
      * (`editor.indentByLanguage`), never a path through it, so no segment here contains a dot.
      */
     void apply.applyChange(d.key.split('.'), value);
+    // FR-004b: a longer history window raises the capture interval to its new minimum AT ONCE, in the same
+    // gesture — not left stored below the minimum (resolved around at read time) until the interval is touched.
+    if (d.key === 'resourceMonitor.historyMinutes' && typeof value === 'number') {
+      const raised = raisedIntervalFor(value, settings.resourceMonitor.captureIntervalSeconds);
+      if (raised !== undefined) void apply.applyChange(['resourceMonitor', 'captureIntervalSeconds'], raised);
+    }
   };
 
   /**
@@ -597,7 +604,8 @@ export function SettingsTab({
         title={inertReason(d) ?? undefined}
       >
         <SettingControl
-          descriptor={d}
+          // 055 FR-004 — a minimum that follows another setting replaces the static one in the control.
+          descriptor={d.minFor ? { ...d, min: d.minFor(settings) } : d}
           value={shownValue(d)}
           options={dynamicOptions(d, themes, detected)}
           optionLabels={dynamicOptionLabels(d, detected)}
@@ -611,6 +619,8 @@ export function SettingsTab({
               <div className="settings-row__meta">
                 <label className="settings-row__label">{d.label}</label>
                 <p className="settings-row__desc">{d.description}</p>
+                {/* 055 R11 — a rule between fields that changes what is in force says so beside the field. */}
+                <FieldNote descriptor={d} settings={settings} />
                 {/* 039 FR-008a — DISABLED WITH A REASON, never hidden. A control that vanishes
                     takes its explanation with it; a grey one with nothing beside it is a control
                     the user is entitled to think is broken. It sits with the description rather

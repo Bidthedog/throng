@@ -546,6 +546,18 @@ export const THRONG_THEME: Theme = {
        names rather than as a second vocabulary for it. An eye, because "these are visible to me"
        is what the flipped state means — and deliberately not `search` 🔍, which is the find bar's. */
     showHidden: '👁',
+    /* 055. The resource monitor: its status-bar item and cog-menu row, one glyph per metric (the
+       status bar's figures and the modal's "show by" choice), the hide-idle filter, and the two
+       kill rows. A gauge for the monitor itself; a chip, a stack of memory, a screen and arrows for
+       the four metrics; a sleeping face for idle; a cross and a cross over a branch for the kills. */
+    resourceMonitor: '📊',
+    resourceCpu: '🖥',
+    resourceMemory: '🧠',
+    resourceGpu: '🎮',
+    resourceIo: '⇅',
+    resourceHideIdle: '💤',
+    resourceKill: '✖',
+    resourceKillBelow: '⨯',
     /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
        the strip is a themeable icon carrying a hover title — never a text label, never an inline
        vector (SC-002).
@@ -648,6 +660,17 @@ export const THRONG_THEME: Theme = {
     projectSettings: '⌂',
     /* 060 #532 (FR-038). The Find in Files panel's exclusions toggle. Not `cancel`/`hide`'s ⊘. */
     searchExclusions: '⊝',
+    /* 055 (FR-093, research R15). The Resource Monitor's help button, which explains what the monitor
+       shows and how to use it. No question glyph existed. */
+    help: '?',
+    /* 055, Session 2026-10-23 (FR-110, FR-105). The Resource Monitor's Activate — go to the project, tab
+       or panel a row names — and its Hide ended processes toggle. A hooked arrow reads "take me there";
+       a stop square reads "has ended", distinct from Hide idle's 💤. */
+    activate: '↪',
+    resourceHideEnded: '⏹',
+    /* 055, Session 2026-10-23 (FR-113, FR-099). Network as an Order-by choice in the toolbar, beside the
+       four metrics' glyphs: a globe for traffic leaving and reaching the machine, distinct from I/O's ⇅. */
+    resourceNetwork: '🌐',
   },
 };
 

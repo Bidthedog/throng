@@ -149,3 +149,14 @@
   background: var(--danger, #e14b4b);
   color: var(--throng-colour-dangerText);
 }
+
+/*
+ * While a "?" helper is open (055 FR-119, sixth feedback) the window says so on <html>, and the bar gives its drag
+ * region up: the OS takes a press on a drag region and the page sees none, and it does not blur the window, so
+ * a click on the title bar could never dismiss the helper. Drag comes back the moment the helper closes.
+ */
+html[data-helper-open] .title-bar,
+html[data-helper-open] .title-bar__drag-zone,
+html[data-helper-open] .throng-mark {
+  -webkit-app-region: no-drag;
+}

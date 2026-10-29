@@ -337,7 +337,13 @@ import { setAtPath } from './metadata.js';
 // Bumped by 059 round 2 (27 → 28): one icon token, `whitespace`, the editor status bar's View
 // Whitespace toggle (FR-059). The additive case again: the payload arrives, no existing value moves.
 // `editor.defaultShowWhitespace` needs no bump (044's 7 → 8 reasoning).
-export const SHIPPED_DEFAULTS_VERSION = 28;
+//
+// Bumped by 055 (28 → 29), rebased onto 060's 25–27 and 059's 28: twelve icon tokens for the resource monitor —
+// `resourceMonitor`, `resourceCpu`, `resourceMemory`, `resourceGpu`, `resourceIo`, `resourceHideIdle`,
+// `resourceKill`, `resourceKillBelow`, `help`, `activate`, `resourceHideEnded` and `resourceNetwork`
+// (FR-093, FR-105, FR-110, FR-113). The additive case: every payload arrives, no existing value moves.
+// On the 055 branch these were its own 24 → 27; one bump covers them now they land after 060 and 059.
+export const SHIPPED_DEFAULTS_VERSION = 29;
 
 /**
  * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the

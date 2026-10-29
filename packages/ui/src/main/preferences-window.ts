@@ -11,13 +11,14 @@
  * throng (FR-013a). Re-invoking the cog focuses the one window and switches its tab
  * (FR-010).
  */
-import { app, BrowserWindow } from 'electron';
+import { BrowserWindow } from 'electron';
 import type { IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
 import { revealWhenPainted } from './reveal-when-painted.js';
 import { placeOverParent } from './window-placement.js';
+import { wireFloatingLayering } from './floating-window-layering.js';
 
 export type PreferencesTab = 'settings' | 'keybindings' | 'themes';
 
@@ -173,7 +174,8 @@ export function openPreferences(tab: PreferencesTab, deps: PreferencesWindowDeps
   // `parent` relationship: a parented child hides when its parent is minimised and
   // returns when the parent is restored — no explicit wiring needed.
 
-  const unwireLayering = wirePreferencesLayering(win);
+  // Above throng's windows while throng has focus, never above other apps (shared with 055's monitor).
+  const unwireLayering = wireFloatingLayering(win);
   const unwireCloseGate = wireCloseGate(win);
 
   win.on('closed', () => {
@@ -306,60 +308,3 @@ export function raisePreferencesAbove(): void {
   if (prefsWindow && !prefsWindow.isDestroyed()) prefsWindow.moveTop();
 }
 
-/**
- * Keep Preferences above throng's windows and below everyone else's, by scoping `alwaysOnTop` to
- * throng having focus.
- *
- * ══ WHY moveTop() ON FOCUS WAS NOT ENOUGH ══
- *
- * The first attempt raised Preferences whenever another throng window was shown or focused. It does
- * not hold, and the reason is structural rather than a tuning problem: the OS raises the window the
- * user clicked as part of the same interaction, and it does so AFTER the focus handler has run. The
- * fix was racing the very event it was hooked to, and lost.
- *
- * ══ WHY THIS SHAPE ══
- *
- * `setAlwaysOnTop` is the only thing Electron offers that genuinely wins a z-order fight, and its
- * problem has always been that it is OS-global: it would put Preferences over the user's browser
- * too, which 007 explicitly reversed once already.
- *
- * So the flag is held only while THRONG has focus. Click a sub-workspace and Preferences stays
- * above it; alt-tab to a browser and every throng window drops behind, Preferences included. That is
- * the stated rule — "always on top of throng windows, but not on top of other app windows" —
- * expressed directly rather than approximated.
- *
- * `getFocusedWindow()` is read on the next tick because during an alt-tab or a click between two
- * throng windows there is a moment when nothing is focused yet; acting on that instant would drop
- * the flag and re-raise it on every click, which flickers.
- */
-function syncTopmost(): void {
-  setImmediate(() => {
-    if (!prefsWindow || prefsWindow.isDestroyed()) return;
-    const throngHasFocus = BrowserWindow.getFocusedWindow() !== null;
-    if (prefsWindow.isAlwaysOnTop() !== throngHasFocus) {
-      prefsWindow.setAlwaysOnTop(throngHasFocus);
-    }
-  });
-}
-
-/**
- * Wire the app-level focus tracking that keeps Preferences correctly layered, and hand back the
- * teardown.
- *
- * Deliberately app-level rather than per-window: a window created after Preferences opened would
- * otherwise need wiring of its own, which is exactly the omission that produced #263 in the first
- * place — behaviour attached to individual windows at creation time, and missed for the ones created
- * later.
- */
-function wirePreferencesLayering(win: BrowserWindow): () => void {
-  const onFocusChange = (): void => syncTopmost();
-  app.on('browser-window-focus', onFocusChange);
-  app.on('browser-window-blur', onFocusChange);
-  syncTopmost();
-
-  return () => {
-    app.off('browser-window-focus', onFocusChange);
-    app.off('browser-window-blur', onFocusChange);
-    if (!win.isDestroyed()) win.setAlwaysOnTop(false);
-  };
-}

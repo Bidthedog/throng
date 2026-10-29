@@ -81,6 +81,8 @@ import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
 const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
 import { isFocusReport } from './focus-reports.js';
+import { registerTerminalBuffer, unregisterTerminalBuffer } from './buffer-registry.js';
+import { styledLineCount } from './styled-lines.js';
 import { getActivePane } from '../workspace/active-pane.js';
 
 /*
@@ -684,6 +686,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
      */
     const unregisterRefresh = registerTerminalRefresh(panelId, () => {
       term.refresh(0, term.rows - 1);
+    });
+    // 055 FR-024b — what the Resource Monitor asks when it estimates this view's buffer.
+    // One reused cell for the styled-line sample: `getCell` would otherwise allocate one per cell read.
+    const sampleCell = term.buffer.normal.getNullCell();
+    registerTerminalBuffer(panelId, () => {
+      const buffer = term.buffer.normal;
+      const styledLines = styledLineCount({
+        length: buffer.length,
+        getLine: (y) => {
+          const line = buffer.getLine(y);
+          return line === undefined ? undefined : { length: line.length, getCell: (x) => line.getCell(x, sampleCell) };
+        },
+      });
+      return { lines: buffer.length, cols: term.cols, styledLines };
     });
 
     // xterm 6.0 binds its own `paste` handler to BOTH the hidden textarea and its parent element
@@ -1851,6 +1867,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // It is dropped when the program actually exits, in the `onExit` handler.
       forgetDiagnostics(panelId); // 028 FR-009 — counters are per live view, not a growing ledger
       unregisterTerminalFocus(panelId);
+      unregisterTerminalBuffer(panelId);
       unregisterRefresh();
           term.dispose();
       termRef.current = null;

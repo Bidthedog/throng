@@ -3,6 +3,7 @@ import { useRef, type ReactElement } from 'react';
 import { Icon } from '../common/icon.js';
 import { useContextMenu } from '../context-menu-provider.js';
 import { useKeybindings } from '../config/config-store.js';
+import { openResourceMonitor } from '../resources/monitor-store.js';
 import { cogMenuItems } from './cog-menu-items.js';
 
 /**
@@ -40,6 +41,7 @@ export function CogMenu(): ReactElement {
     cogMenuItems({
       openPreferences: (tab) => window.throng?.openPreferences?.(tab),
       openLogs: () => void window.throng?.diagnostics?.openLogs?.(),
+      openResourceMonitor: openResourceMonitor,
       openAbout: () => window.throng?.about?.open?.(),
       keybindings,
     });

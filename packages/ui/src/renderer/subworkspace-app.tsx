@@ -6,6 +6,7 @@ import { WorkspaceProvider, useWorkspace } from './state/workspace-store.js';
 import { useServices } from './composition-root.js';
 import { TabGroup } from './workspace/tab-group.js';
 import { ThemeProvider } from './theme/theme-provider.js';
+import { EstimatesReporterMount } from './resources/use-estimates-reporter.js';
 import { useActiveTheme } from './config/config-store.js';
 import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 import { SubWorkspaceWorkspaceClient } from './state/subworkspace-window-client.js';
@@ -183,6 +184,8 @@ export function SubWorkspaceApp({ subWorkspaceId }: { subWorkspaceId: string }):
           <FocusReporter />
           {/* …and its navigation: panels here are focused in place; there is no project to switch to. */}
           <AttentionNavigation switchProjects={false} />
+          {/* 055 — this window's panel estimates, reported while any window's monitor is open. */}
+          <EstimatesReporterMount subWorkspaceName={identity?.name ?? 'Sub-workspace'} />
           {/* 046 iterate round 1 (T118/T119, FR-106) — the second of this registration's two mounts:
               a sub-workspace window is its own renderer realm, so the gesture would be dead here
               otherwise (Assumption 6). */}

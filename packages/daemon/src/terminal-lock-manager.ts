@@ -17,7 +17,7 @@ export class TerminalLockManager {
    * `ready` is the lock being taken or held (051 R7: taking one waits on the OS). Kept as a promise
    * so terminals of one project that start together share ONE lock rather than racing for two.
    */
-  private readonly locks = new Map<string, { ready: Promise<LockHandle>; count: number }>();
+  private readonly locks = new Map<string, { ready: Promise<LockHandle>; count: number; held?: LockHandle }>();
 
   constructor(
     private readonly directoryLock: IDirectoryLock,
@@ -35,7 +35,15 @@ export class TerminalLockManager {
     if (entry) {
       entry.count += 1;
     } else {
-      entry = { ready: this.directoryLock.acquire(this.rootOf?.(projectId) ?? cwd), count: 1 };
+      const created: { ready: Promise<LockHandle>; count: number; held?: LockHandle } = {
+        ready: this.directoryLock.acquire(this.rootOf?.(projectId) ?? cwd),
+        count: 1,
+      };
+      created.ready.then(
+        (h) => (created.held = h),
+        () => {},
+      );
+      entry = created;
       this.locks.set(projectId, entry);
     }
     try {
@@ -64,6 +72,17 @@ export class TerminalLockManager {
   }
 
   /** Whether `projectId` currently has any open terminal. */
+  /**
+   * 055 R5 — every folder held right now, by project, with the pid of the process holding it where
+   * the lock can name one. A read of memory: no OS query.
+   */
+  heldLocks(): { projectId: string; path: string; pid: number | null }[] {
+    const pids = new Map((this.directoryLock.heldPids?.() ?? []).map((e) => [e.path, e.pid]));
+    return [...this.locks].flatMap(([projectId, e]) =>
+      e.held === undefined ? [] : [{ projectId, path: e.held.path, pid: pids.get(e.held.path) ?? null }],
+    );
+  }
+
   hasOpenTerminals(projectId: string): boolean {
     return this.locks.has(projectId);
   }
