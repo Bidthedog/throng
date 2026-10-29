@@ -7,20 +7,29 @@ import { utf16, concat, BOM_UTF16LE } from '../fixtures/text-formats.js';
  *
  * Measured over the whole read path a file open runs (`readText`: detection plus the decode), as a
  * RATIO to UTF-8 on the same machine in the same run, so a slow CI runner moves both sides and the
- * assertion stays about the encodings rather than the hardware. Best of five, to keep a GC pause in
- * one sample from deciding it.
+ * assertion stays about the encodings rather than the hardware. The two sides are timed INTERLEAVED,
+ * one of each per round, and each keeps its best of nine: timed one after the other, a burst of load
+ * from a neighbouring worker lands on one side only and decides the ratio by itself.
  */
 const LINE = 'The quick brown fox jumps over the lazy dog, 0123456789 — café £5.\n';
 const TEXT = LINE.repeat(Math.ceil((5 * 1024 * 1024) / LINE.length));
+const ROUNDS = 9;
 
-function bestOf(n: number, fn: () => void): number {
-  let best = Infinity;
-  for (let i = 0; i < n; i++) {
-    const t = performance.now();
-    fn();
-    best = Math.min(best, performance.now() - t);
+function time(fn: () => void): number {
+  const t = performance.now();
+  fn();
+  return performance.now() - t;
+}
+
+/** Best time of each side over `rounds` rounds, each round timing `a` then `b`. */
+function bestInterleaved(rounds: number, a: () => void, b: () => void): [number, number] {
+  let bestA = Infinity;
+  let bestB = Infinity;
+  for (let i = 0; i < rounds; i++) {
+    bestA = Math.min(bestA, time(a));
+    bestB = Math.min(bestB, time(b));
   }
-  return best;
+  return [bestA, bestB];
 }
 
 describe('5 MB read cost by encoding (059 SC-005)', () => {
@@ -39,8 +48,11 @@ describe('5 MB read cost by encoding (059 SC-005)', () => {
     it(`${name} is within 1.5× of UTF-8`, () => {
       const r = readText(bytes);
       expect(r.ok && r.file.text.length).toBe(TEXT.length);
-      const base = bestOf(5, () => readText(utf8Bytes));
-      const cost = bestOf(5, () => readText(bytes));
+      const [base, cost] = bestInterleaved(
+        ROUNDS,
+        () => readText(utf8Bytes),
+        () => readText(bytes),
+      );
       expect(cost).toBeLessThanOrEqual(base * 1.5);
     });
   }
