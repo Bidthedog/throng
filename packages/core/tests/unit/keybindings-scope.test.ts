@@ -273,11 +273,23 @@ describe('registered commands (FR-017c — the absence is the requirement)', () 
     // 024 US1 (#152): a genuine new editor command — NOT one of the banned clipboard/undo commands
     // FR-017c guards against (those still keep their native OS bindings; see the ABSENCE test below).
     'editor.toggleWordWrap',
+    // 059 FR-041 (#517, #71): the document's own format, read again, written in another, or converted.
+    'editor.reopenWithEncoding',
+    'editor.changeEncoding',
+    'editor.convertLineEndingsToCr',
+    'editor.insertLineBreakLf',
+    'editor.insertLineBreakCr',
+    'editor.insertLineBreakCrlf',
+    'editor.toggleWhitespace',
+    'editor.convertLineEndingsToLf',
+    'editor.convertLineEndingsToCrlf',
   ];
 
-  it('registers EXACTLY the expected editor commands (the seven from 016 + word-wrap), no more', () => {
+  it('registers EXACTLY the expected editor commands (016, word-wrap, 059’s four), no more', () => {
     const editorCommands = ACTION_IDS.filter(
-      (a) => a.startsWith('editor.') && !a.startsWith('editor.save'),
+      // The save commands are counted elsewhere — but by name, not by prefix, now that
+      // `editor.changeEncoding` (059) is one of the commands this list exists to pin.
+      (a) => a.startsWith('editor.') && !['editor.save', 'editor.saveAs', 'editor.saveAll'].includes(a),
     );
     expect(editorCommands.sort()).toEqual([...NEW_COMMANDS].sort());
   });

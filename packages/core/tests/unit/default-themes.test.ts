@@ -75,7 +75,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 79;
 // 84 since 057 round 12 (FR-124): `goToPanel` retired — the toast's whole card is the link.
 // 82 since 057 round 13 (FR-139): `attention` and `attentionFailed` retired — the mark is a CSS circle.
 // 84 since 060 (FR-001, FR-018): `busy` and `groupFolderTree`, two Find in Files controls.
-const EXPECTED_ICON_TOKEN_COUNT = 86;
+// 87 since 059 round 2 (FR-059): `whitespace`, the View Whitespace toggle.
+const EXPECTED_ICON_TOKEN_COUNT = 87;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */

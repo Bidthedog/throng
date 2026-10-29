@@ -146,7 +146,7 @@ describe('the replaced state is persisted (052 T024)', () => {
     expect(screen.getByTestId(`panel-failure-${PANEL}`)).toHaveTextContent(HEADLINE);
     // Registered as replaced, with the surviving text — and the path, which another document holds, never loaded.
     expect(h.calls.register).toHaveBeenCalledWith(expect.objectContaining({ replaced: true, absPath: PATH }));
-    expect(h.calls.restoreRecovered).toHaveBeenCalledWith(PANEL, 'MY UNSAVED WORK\n', undefined);
+    expect(h.calls.restoreRecovered).toHaveBeenCalledWith(PANEL, 'MY UNSAVED WORK\n', undefined, undefined);
     expect(h.calls.load).not.toHaveBeenCalled();
     await waitFor(() => expect(h.view().state.doc.toString()).toBe('MY UNSAVED WORK\n'));
 

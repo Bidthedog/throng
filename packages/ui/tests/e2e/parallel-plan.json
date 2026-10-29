@@ -16,6 +16,7 @@
     "destroy.e2e.ts": "FOCUS",
     "diagnostics-logging.e2e.ts": "FOCUS",
     "editor-content-menu.e2e.ts": "FOCUS",
+    "editor-encoding.e2e.ts": "FOCUS",
     "editor-cross-project-restore.e2e.ts": "UNATTRIBUTED",
     "editor-feedback.e2e.ts": "FOCUS",
     "editor-feedback2.e2e.ts": "FOCUS",

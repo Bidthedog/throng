@@ -77,7 +77,20 @@ const MEASURED: Record<string, number> = {
   'chars:short': 44,
   'words:full': 58,
   'words:short': 38,
+  // 059 FR-030 — the two format indicators, `UTF-8` and `LF`. No short form: measured once.
+  'encoding:full': 40,
+  'lineEnding:full': 30,
 };
+
+/**
+ * 059 — what the two indicators cost when both are drawn: each its width plus the gap that follows it
+ * (to the next indicator, or to the controls). 40 + 6 + 30 + 6 = 82.
+ *
+ * Every 040 ladder width below is handed to {@link strip} as the bar LESS this figure, and the helpers
+ * add it back — so the readouts' arithmetic reads exactly as it did, with the indicators outlasting every
+ * readout (FR-032) on top of it.
+ */
+const INDICATORS = 40 + BAR_GAP + 30 + BAR_GAP;
 
 /**
  * The bar's flex gap, in px — **imported, not re-typed**.
@@ -157,12 +170,28 @@ function readoutsWidth(strip: Element | null): number {
  *     was sized from the readouts: the bar settles at a stable wrong answer, the language
  *     ellipsised beneath readouts painting over it, and the next measurement confirms it.
  */
-function grantedControls(group: Element): number {
-  const intrinsic = intrinsicControls(group);
-  if (!shrinks(group)) return Math.min(intrinsic, stripWidth);
+function grantedControls(fixed: Element): number {
+  /*
+   * 059 — the measured element is the never-hidden block INSIDE the trailing group, after the two
+   * indicators. Whether it can be squeezed by the readouts is still the trailing GROUP's CSS (its
+   * `flex-shrink`); what the group's `max-width: 100%` clamp leaves it is the strip less the indicators
+   * drawn beside it.
+   */
+  const group = fixed.parentElement as Element;
+  const intrinsic = intrinsicControls(fixed);
+  const beside = indicatorsWidth(group.parentElement);
+  if (!shrinks(group)) return Math.max(0, Math.min(intrinsic, stripWidth - beside));
   const readouts = readoutsWidth(group.parentElement);
-  const spare = stripWidth - readouts - (readouts > 0 ? GAP : 0);
+  const spare = stripWidth - readouts - (readouts > 0 ? GAP : 0) - beside;
   return Math.max(0, Math.min(intrinsic, spare));
+}
+
+/** What the indicators drawn in the trailing group cost: each its width plus the gap after it (059). */
+function indicatorsWidth(strip: Element | null): number {
+  let sum = 0;
+  if (strip?.querySelector(`[data-testid="editor-encoding-${PANEL}"]`)) sum += MEASURED['encoding:full'] + GAP;
+  if (strip?.querySelector(`[data-testid="editor-line-ending-${PANEL}"]`)) sum += MEASURED['lineEnding:full'] + GAP;
+  return sum;
 }
 
 /**
@@ -174,11 +203,12 @@ function grantedControls(group: Element): number {
  */
 function overflowPx(): number {
   const strip = screen.getByTestId(`editor-status-strip-${PANEL}`);
-  const controls = strip.querySelector('.editor-status-strip__group--controls');
+  const controls = strip.querySelector('.editor-status-strip__fixed');
   const readouts = readoutsWidth(strip);
   return (
     readouts +
     (readouts > 0 ? GAP : 0) +
+    indicatorsWidth(strip) +
     (controls ? intrinsicControls(controls) : 0) -
     stripWidth
   );
@@ -271,7 +301,7 @@ beforeAll(() => {
      * out-of-flow copy reports what the controls cost, and the one on the flex line reports what it
      * was granted. A component that measures the second one is measuring its own output.
      */
-    if (this.classList.contains('editor-status-strip__group--controls')) {
+    if (this.classList.contains('editor-status-strip__fixed')) {
       const groupWidth = grantedControls(this);
       return {
         width: groupWidth,
@@ -350,7 +380,7 @@ afterEach(() => {
 
 /** Every readout present: a caret, a selection, and settled counts. */
 function strip(width: number) {
-  stripWidth = width;
+  stripWidth = width + INDICATORS;
   setPanelCaret(PANEL, { line: 412, column: 7 }, 63);
   scheduleDocumentMetrics(DOC_KEY, 'one two three four');
   act(() => {
@@ -364,7 +394,7 @@ function strip(width: number) {
 
 /** Report a new width to the live observers, exactly as dragging a splitter would. */
 function resizeTo(width: number): void {
-  stripWidth = width;
+  stripWidth = width + INDICATORS;
   act(() => {
     for (const entry of observers) report(entry);
   });
@@ -378,20 +408,34 @@ const visible = (): string[] =>
 const labelForm = (id: string): string | null =>
   screen.queryByTestId(`editor-status-${id}-${PANEL}`)?.getAttribute('data-label') ?? null;
 
-/** What the pure decider says for this strip width, given the same measurements. */
+/** What the pure decider says for this ladder width, given the same measurements — readouts only. */
 function expected(width: number) {
+  return expectedSegments(width).filter((s) => s.id !== 'encoding' && s.id !== 'lineEnding');
+}
+
+/** …and every segment the decider keeps, the two 059 indicators included. */
+function expectedSegments(width: number) {
   return fitReadouts({
-    available: width - CONTROLS_DEFAULT - GAP,
+    available: width + INDICATORS - CONTROLS_DEFAULT - GAP,
     widths: {
       line: { full: MEASURED['line:full'], short: MEASURED['line:short'] },
       column: { full: MEASURED['column:full'], short: MEASURED['column:short'] },
       selected: { full: MEASURED['selected:full'], short: MEASURED['selected:short'] },
       chars: { full: MEASURED['chars:full'], short: MEASURED['chars:short'] },
       words: { full: MEASURED['words:full'], short: MEASURED['words:short'] },
+      encoding: { full: MEASURED['encoding:full'], short: MEASURED['encoding:full'] },
+      lineEnding: { full: MEASURED['lineEnding:full'], short: MEASURED['lineEnding:full'] },
     },
     gap: GAP,
   }).segments;
 }
+
+/** Which of the two indicators the bar is drawing. */
+const indicatorsShown = (): string[] =>
+  [
+    screen.queryByTestId(`editor-encoding-${PANEL}`) ? 'encoding' : null,
+    screen.queryByTestId(`editor-line-ending-${PANEL}`) ? 'lineEnding' : null,
+  ].filter((x): x is string => x !== null);
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * The bar renders what the decider decided
@@ -435,6 +479,47 @@ describe('the bar applies the fit result', () => {
     expect(screen.getByTestId(`editor-word-wrap-${PANEL}`)).toBeVisible();
   });
 
+  it('keeps both format indicators after the last readout has gone (059 FR-032)', () => {
+    // 120 on the ladder: no readout fits, and both indicators (82) still do.
+    strip(120);
+    expect(visible()).toEqual([]);
+    expect(indicatorsShown()).toEqual(['encoding', 'lineEnding']);
+  });
+
+  it('then drops the line ending, then the encoding — and never the language or the wrap toggle (059 FR-032)', () => {
+    // available = ladder − 24. The line ending goes below 82 of it, the encoding below 46.
+    strip(100);
+    expect(indicatorsShown()).toEqual(['encoding']);
+    resizeTo(60);
+    expect(indicatorsShown()).toEqual([]);
+    expect(screen.getByTestId(`editor-language-${PANEL}`)).toBeVisible();
+    expect(screen.getByTestId(`editor-word-wrap-${PANEL}`)).toBeVisible();
+    expect(overflowPx()).toBeLessThanOrEqual(0);
+
+    // …and widening brings them back in the reverse order (FR-026).
+    resizeTo(100);
+    expect(indicatorsShown()).toEqual(['encoding']);
+    resizeTo(500);
+    expect(indicatorsShown()).toEqual(['encoding', 'lineEnding']);
+  });
+
+  it('measures the indicators as segments of their own, outside the never-hidden block (059 T036)', () => {
+    strip(500);
+    const fixed = screen.getByTestId(`editor-status-fixed-${PANEL}`);
+    expect(fixed).toHaveAttribute('data-measure', 'controls');
+    expect(fixed).not.toContainElement(screen.getByTestId(`editor-encoding-${PANEL}`));
+    expect(fixed).not.toContainElement(screen.getByTestId(`editor-line-ending-${PANEL}`));
+    expect(fixed).toContainElement(screen.getByTestId(`editor-language-${PANEL}`));
+    expect(fixed).toContainElement(screen.getByTestId(`editor-word-wrap-${PANEL}`));
+    // Both indicators in the trailing group, before the language label (FR-030).
+    const controls = screen.getByTestId(`editor-status-controls-${PANEL}`);
+    expect([...controls.children].map((el) => el.getAttribute('data-testid'))).toEqual([
+      `editor-encoding-${PANEL}`,
+      `editor-line-ending-${PANEL}`,
+      `editor-status-fixed-${PANEL}`,
+    ]);
+  });
+
   it('renders exactly what the pure decider answers, at every width on the ladder', () => {
     /*
      * The wiring claim itself, stated once against the function rather than restated as five more
@@ -451,6 +536,11 @@ describe('the bar applies the fit result', () => {
       for (const segment of expected(width)) {
         expect(labelForm(segment.id), `${segment.id} at ${width}px`).toBe(segment.label);
       }
+      expect(indicatorsShown(), `the indicators at ${width}px`).toEqual(
+        expectedSegments(width)
+          .map((s) => s.id)
+          .filter((id) => id === 'encoding' || id === 'lineEnding'),
+      );
       expect(
         overflowPx(),
         `at ${width}px the readouts claimed space the controls need (FR-014)`,
@@ -626,12 +716,12 @@ describe('the scroll-sync toggle at the narrowest width (044 FR-122c, 040 FR-024
 
   it('is inside the measured controls group, and still there when no readout fits', () => {
     setEditorState(PANEL, { filePath: FILE, ownerProjectId: 'proj-1' });
-    stripWidth = 120;
+    stripWidth = 120 + INDICATORS;
     setPanelCaret(PANEL, { line: 412, column: 7 }, 63);
     render(createElement(StatusStrip, { panelId: PANEL, projectId: 'proj-1', relPath: null, projectRoot: 'D:/proj' }));
 
     expect(visible()).toEqual([]);
-    const controls = screen.getByTestId(`editor-status-controls-${PANEL}`);
+    const controls = screen.getByTestId(`editor-status-fixed-${PANEL}`);
     expect(controls).toHaveAttribute('data-measure', 'controls');
     const syncButton = screen.getByTestId(`editor-sync-scroll-${PANEL}`);
     expect(controls).toContainElement(syncButton);

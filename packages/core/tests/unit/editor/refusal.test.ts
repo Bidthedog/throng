@@ -23,16 +23,23 @@ import { describe, expect, it } from 'vitest';
 import { NOT_A_MISSING_FILE, isMissingReason } from '../../../src/index.js';
 
 describe('NOT_A_MISSING_FILE', () => {
-  it('holds exactly the four reasons that are refusals', () => {
+  it('holds exactly the six reasons that are refusals', () => {
     // Enumerated, and asserted as a whole rather than member by member: the defect this set replaced
     // was a rule that silently classified every reason it had not heard of as a missing file, so what
-    // matters is the boundary, not the members.
-    expect([...NOT_A_MISSING_FILE].sort()).toEqual(['binary', 'folder', 'out-of-tree', 'too-large']);
+    // matters is the boundary, not the members. 059 adds `utf32` and `not-decodable` (FR-006, FR-014).
+    expect([...NOT_A_MISSING_FILE].sort()).toEqual([
+      'binary',
+      'folder',
+      'not-decodable',
+      'out-of-tree',
+      'too-large',
+      'utf32',
+    ]);
   });
 });
 
 describe('isMissingReason', () => {
-  it.each(['binary', 'too-large', 'out-of-tree', 'folder'])('says %s is NOT a missing file', (reason) => {
+  it.each(['binary', 'too-large', 'out-of-tree', 'folder', 'utf32', 'not-decodable'])('says %s is NOT a missing file', (reason) => {
     expect(isMissingReason(reason)).toBe(false);
   });
 

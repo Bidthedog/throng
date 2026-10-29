@@ -215,7 +215,7 @@ describe('mounted with movedOut in its config (R19)', () => {
     expect(h.view().state.readOnly).toBe(true);
     expect(h.calls.load, 'the file is not read').not.toHaveBeenCalled();
     expect(h.calls.register).toHaveBeenCalledWith(expect.objectContaining({ movedOut: true, absPath: NEW }));
-    expect(h.calls.restoreRecovered).toHaveBeenCalledWith(PANEL, 'survived the restart\n', undefined);
+    expect(h.calls.restoreRecovered).toHaveBeenCalledWith(PANEL, 'survived the restart\n', undefined, undefined);
     await waitFor(() => expect(getEditorState(PANEL)?.dirty).toBe(true));
   });
 

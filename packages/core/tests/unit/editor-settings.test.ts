@@ -13,6 +13,8 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       autoSaveDebounceMs: 300,
       saveAllScope: 'project',
       defaultLineEnding: 'lf',
+      // 059 FR-069 — a file no detection step claims is read as Windows-1252.
+      fallbackEncoding: 'windows1252',
       maxOpenFileBytes: 10485760,
       projectPathDisplay: 'full',
       subWorkspacePathDisplay: 'full',
@@ -24,6 +26,10 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       openTarget: 'lastActive',
       saveDocumentScroll: false,
       defaultWordWrap: true,
+      // 059 FR-060 — whitespace hidden by default.
+      defaultShowWhitespace: false,
+      // 059 FR-067 — a marker names its character on hover, shipped ON.
+      whitespaceHoverNames: true,
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,
@@ -93,6 +99,27 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
         knownFileExtensions: [...KNOWN_FILE_EXTENSIONS],
       },
     });
+  });
+
+  it('parses defaultShowWhitespace (059 FR-060; default false, honour true, reject non-boolean)', () => {
+    expect(parseAppSettings({}).editor.defaultShowWhitespace).toBe(false);
+    expect(parseAppSettings({ editor: { defaultShowWhitespace: true } }).editor.defaultShowWhitespace).toBe(true);
+    expect(parseAppSettings({ editor: { defaultShowWhitespace: 'yes' } }).editor.defaultShowWhitespace).toBe(false);
+  });
+
+  it('parses fallbackEncoding (059 FR-069; default windows1252, honour each code page, reject anything else)', () => {
+    expect(parseAppSettings({}).editor.fallbackEncoding).toBe('windows1252');
+    expect(parseAppSettings({ editor: { fallbackEncoding: 'windows1251' } }).editor.fallbackEncoding).toBe('windows1251');
+    expect(parseAppSettings({ editor: { fallbackEncoding: 'windows1258' } }).editor.fallbackEncoding).toBe('windows1258');
+    for (const bad of ['utf8', 'utf16le', 'windows-1251', 'shiftjis', 7]) {
+      expect(parseAppSettings({ editor: { fallbackEncoding: bad } }).editor.fallbackEncoding).toBe('windows1252');
+    }
+  });
+
+  it('parses whitespaceHoverNames (059 FR-067; default true, honour false, reject non-boolean)', () => {
+    expect(parseAppSettings({}).editor.whitespaceHoverNames).toBe(true);
+    expect(parseAppSettings({ editor: { whitespaceHoverNames: false } }).editor.whitespaceHoverNames).toBe(false);
+    expect(parseAppSettings({ editor: { whitespaceHoverNames: 'no' } }).editor.whitespaceHoverNames).toBe(true);
   });
 
   it('parses defaultWordWrap and showStatusBar (024 US1; default true, honour false, reject non-boolean)', () => {
@@ -233,6 +260,7 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       autoSaveDebounceMs: 250,
       saveAllScope: 'all',
       defaultLineEnding: 'crlf',
+      fallbackEncoding: 'windows1252',
       maxOpenFileBytes: 2048,
       projectPathDisplay: 'name',
       subWorkspacePathDisplay: 'name',
@@ -246,6 +274,10 @@ describe('editorSettings parser (006, contracts/config-additions.md)', () => {
       openTarget: 'lastActive',
       saveDocumentScroll: false,
       defaultWordWrap: true,
+      // 059 FR-060 — whitespace hidden by default.
+      defaultShowWhitespace: false,
+      // 059 FR-067 — a marker names its character on hover, shipped ON.
+      whitespaceHoverNames: true,
       showStatusBar: true,
       // 040 FR-040 — the gutter, shipped ON. Exhaustive assertion, same reason as the blocks below.
       showGutter: true,

@@ -46,8 +46,11 @@ function walk(dir: string): string[] {
  * A computed token cannot be resolved without running the app, and demanding they be literals would
  * be a real constraint imposed for a test's convenience. Static usages are the overwhelming majority
  * and are where typos live.
+ *
+ * `IconButton` takes the same `token` and resolves it the same way, so it is checked too: 059's View
+ * Whitespace button named a token no theme defined and rendered empty while this walk saw only `<Icon`.
  */
-const STATIC_TOKEN = /<Icon\b[^>]*?\btoken="([^"]+)"/g;
+const STATIC_TOKEN = /<(?:Icon|IconButton)\b[^>]*?\btoken="([^"]+)"/g;
 
 /**
  * The file's CODE, with its comments removed (#379).

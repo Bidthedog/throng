@@ -57,22 +57,23 @@ describe('groupKey — a classified cause (FR-029)', () => {
     expect(groupKey({ cause: c })).toBe(groupKey({ cause: c, projectId: undefined }));
   });
 
-  it('ignores an operation id ONLY when there is none — the operation is the stronger key (FR-029a)', () => {
+  it('groups one operation’s casualties by their cause — two different causes are two notices (059 FR-054)', () => {
     /*
-     * The natural reading is the opposite one, and it is the one this used to assert: the cause is
-     * the more specific statement, so let it win. Measured against the real classification it is
-     * wrong, and wrongly in the direction of the storm FR-029 removes.
+     * 030 FR-029a grouped every casualty of one operation together, whatever its cause. 059 FR-054
+     * partially supersedes it: the user hand-tested a binary file and a UTF-32 file landing in one
+     * notice headed "That file is not valid UTF-8 text.", and asked that a different error raise a
+     * new notice. The operation still bounds the group; within it, the cause decides.
      *
-     * `causeKey` is `kind + subject`, and a PANEL's subject is its own file. Six editors defeated by
-     * one missing project root are therefore six DIFFERENT causes: cause-first, they are six
-     * notices. FR-029a says panel casualties group by the operation, ALWAYS, and this is that
-     * sentence as an assertion — two casualties of one action share a key even when their causes
-     * differ, which is the whole property the consolidated notice rests on.
+     * FR-029's storm protection survives because the casualties of one missing ROOT share a cause:
+     * `useReportPanelFailure` keys a `path-missing` report to the root folder's name, not the
+     * panel's own file (see the next test).
      */
     const held = cause('held', 'notes.txt');
     const missing = cause('path-missing', 'server.ts');
-    expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).toBe('op:op-1::p1');
     expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).toBe(
+      `op:op-1::${causeKey(held)}::p1`,
+    );
+    expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).not.toBe(
       groupKey({ cause: missing, operationId: 'op-1', projectId: 'p1' }),
     );
     // …and it is NOT the key the same cause gets with no action behind it, or the operation
@@ -80,6 +81,13 @@ describe('groupKey — a classified cause (FR-029)', () => {
     expect(groupKey({ cause: held, operationId: 'op-1', projectId: 'p1' })).not.toBe(
       groupKey({ cause: held, projectId: 'p1' }),
     );
+  });
+
+  it('keeps one missing root in one notice even when its reporters word it differently (FR-029, FR-054)', () => {
+    const root = cause('path-missing', 'my-project');
+    expect(
+      groupKey({ cause: root, message: 'The file may have been moved.', operationId: 'op-1', projectId: 'p1' }),
+    ).toBe(groupKey({ cause: root, message: 'The folder could not be found.', operationId: 'op-1', projectId: 'p1' }));
   });
 
   it('still groups by the cause when no action produced the failure', () => {
@@ -93,6 +101,14 @@ describe('groupKey — a classified cause (FR-029)', () => {
 describe('groupKey — unclassified, with an operation (FR-029a)', () => {
   it('groups by the operation and the project', () => {
     expect(groupKey({ cause: null, operationId: 'open-42', projectId: 'p1' })).toBe('op:open-42::p1');
+  });
+
+  it('splits unclassified failures by their message, and joins those that say the same (059 FR-054)', () => {
+    const notText = { operationId: 'open-42', projectId: 'p1', message: 'That file is not text.' };
+    const utf32 = { operationId: 'open-42', projectId: 'p1', message: 'This file is UTF-32.' };
+    expect(groupKey(notText)).not.toBe(groupKey(utf32));
+    expect(groupKey(notText)).toBe(groupKey({ ...notText }));
+    expect(groupKey(notText)).toBe('op:open-42::msg:That file is not text.::p1');
   });
 
   it('treats an absent cause the same as an explicit null', () => {

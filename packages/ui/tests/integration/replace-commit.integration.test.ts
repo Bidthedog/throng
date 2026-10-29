@@ -493,8 +493,16 @@ describe('T087 — every match is re-verified immediately before its write (FR-0
       'exactly one of the two paths is taken — never neither',
     ).toBe(true);
     // Whichever side of the race it landed on, the ONE thing that may never happen is a disk write
-    // behind a live buffer.
-    expect(onDisk).toBe(inBuffer ? 'needle racing\n' : 'thread racing\n');
+    // behind a live buffer. On the buffer side the document was clean, so FR-086 SAVES it — through the
+    // authority — and the disk then holds exactly what the buffer holds. This arm used to expect the
+    // old text on disk, which predates FR-086 and failed whenever the load won the race (059 found it
+    // under a two-worker run).
+    if (inBuffer) {
+      const doc = coordinator.getContent('p-racy');
+      expect(doc?.dirty, 'FR-086: a clean document is saved after the edit lands').toBe(false);
+      expect(onDisk).toBe(doc?.text);
+    }
+    expect(onDisk).toBe('thread racing\n');
   });
 
   it('a file OPENED between the read and the write takes the BUFFER path, not an I/O failure', async () => {
@@ -914,58 +922,54 @@ describe('T098 — a partially-failing commit reports everything, once (FR-058)'
 // The direct write's two ways of destroying bytes it was never asked to touch
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('a file that is not UTF-8 is refused, not transcoded (FR-053, FR-058)', () => {
+describe('a legacy-encoded file is rewritten in its OWN encoding, never transcoded (FR-053, FR-058, 059 FR-051)', () => {
   /** `café\ncolour\n` in Windows-1252 — no NULs anywhere, so the binary scan calls it text. */
   const WINDOWS_1252 = new Uint8Array([
     0x63, 0x61, 0x66, 0xe9, 0x0a, 0x63, 0x6f, 0x6c, 0x6f, 0x75, 0x72, 0x0a,
   ]);
+  /** A UTF-8 BOM over a byte that is not UTF-8 — no supported encoding reads it losslessly (059 FR-014). */
+  const NOT_DECODABLE = new Uint8Array([0xef, 0xbb, 0xbf, 0x63, 0x61, 0x66, 0xe9, 0x0a, 0x63, 0x6f, 0x6c, 0x6f, 0x75, 0x72, 0x0a]);
 
-  it('leaves every byte of a legacy-encoded file exactly as it found them', async () => {
+  const replaceColour = (targets: { relPath: string; edits: Match[] }[]): Promise<CommitResult> =>
+    commits.commit({
+      panelId: PANEL,
+      projectRoot: root,
+      term: 'colour',
+      modes: NO_MODES,
+      replacement: 'color',
+      targets,
+      confirmedIrreversible: true,
+    });
+
+  it('changes only the match, and every other byte of the file is the one it found', async () => {
     /*
-     * The user's sequence, and it costs them the file: `notes.txt` is Windows-1252 and holds `café`
-     * and `colour`; no editor is open on it. Replace `colour` → `color`, confirm the warning. The
-     * non-fatal decode turns the `E9` into `U+FFFD` and the encode writes `EF BF BD` — so `café`
-     * comes back `caf?`, along with every other non-ASCII byte in the file, none of them near the
-     * match. There is no in-app undo for a disk write (FR-057a), and the user never opened the file.
+     * The user's sequence, and before 043 it cost them the file: `notes.txt` is Windows-1252 and holds
+     * `café` and `colour`; no editor is open on it. Replace `colour` → `color`. A non-fatal UTF-8
+     * decode turned the `E9` into `U+FFFD` and the encode wrote `EF BF BD`. 043 answered by refusing
+     * the file; 059 FR-051 reads it as Windows-1252 and writes it back as Windows-1252, so `café`'s
+     * byte survives and only the match changes.
      */
     await writeFile(join(root, 'notes.txt'), WINDOWS_1252);
-    const outcome = outcomeOf(
-      await commits.commit({
-        panelId: PANEL,
-        projectRoot: root,
-        term: 'colour',
-        modes: NO_MODES,
-        replacement: 'color',
-        targets: [{ relPath: 'notes.txt', edits: [{ from: 5, to: 11 }] }],
-        confirmedIrreversible: true,
-      }),
-    );
+    const outcome = outcomeOf(await replaceColour([{ relPath: 'notes.txt', edits: [{ from: 5, to: 11 }] }]));
 
-    expect(outcome.failed).toEqual([{ relPath: 'notes.txt', reason: 'encoding' }]);
-    expect(outcome.changedOnDisk).toEqual([]);
-    expect([...(await readFile(join(root, 'notes.txt')))]).toEqual([...WINDOWS_1252]);
+    expect(outcome.failed).toEqual([]);
+    expect(outcome.changedOnDisk).toEqual(['notes.txt']);
+    expect([...(await readFile(join(root, 'notes.txt')))]).toEqual([...WINDOWS_1252.subarray(0, 9), 0x72, 0x0a]);
   });
 
-  it('still writes the UTF-8 files in the same commit (FR-058)', async () => {
+  it('a file no encoding reads is refused, untouched, and the rest of the commit still writes (FR-058)', async () => {
     // A refusal is per file. The point of four arrays is that one bad file does not stop the rest.
-    await writeFile(join(root, 'notes.txt'), WINDOWS_1252);
+    await writeFile(join(root, 'notes.txt'), NOT_DECODABLE);
     await writeFile(join(root, 'plain.txt'), 'colour\n');
     const outcome = outcomeOf(
-      await commits.commit({
-        panelId: PANEL,
-        projectRoot: root,
-        term: 'colour',
-        modes: NO_MODES,
-        replacement: 'color',
-        targets: [
-          { relPath: 'notes.txt', edits: [{ from: 5, to: 11 }] },
-          { relPath: 'plain.txt', edits: [{ from: 0, to: 6 }] },
-        ],
-        confirmedIrreversible: true,
-      }),
+      await replaceColour([
+        { relPath: 'notes.txt', edits: [{ from: 5, to: 11 }] },
+        { relPath: 'plain.txt', edits: [{ from: 0, to: 6 }] },
+      ]),
     );
 
-    expect(outcome.failed).toEqual([{ relPath: 'notes.txt', reason: 'encoding' }]);
+    expect(outcome.failed).toEqual([{ relPath: 'notes.txt', reason: 'not-decodable', encoding: 'utf8' }]);
+    expect([...(await readFile(join(root, 'notes.txt')))]).toEqual([...NOT_DECODABLE]);
     expect(outcome.changedOnDisk).toEqual(['plain.txt']);
     expect(await diskText('plain.txt')).toBe('color\n');
   });

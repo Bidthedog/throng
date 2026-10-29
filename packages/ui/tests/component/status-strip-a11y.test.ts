@@ -257,6 +257,9 @@ describe('everything this feature adds arrives named (FR-018)', () => {
       'chars:short',
       'words:full',
       'words:short',
+      // 059 FR-032 — the two format indicators are fitted segments too, measured once (no short form).
+      'encoding:full',
+      'lineEnding:full',
     ]);
   });
 
@@ -268,9 +271,18 @@ describe('everything this feature adds arrives named (FR-018)', () => {
     const bar = screen.getByTestId(`editor-status-strip-${PANEL}`);
 
     const controls = [...bar.querySelectorAll('button, input, select, textarea, a[href]')];
+    // 059 FR-030 added the encoding and line-ending indicators before the language label — each a
+    // NAMED button (FR-031), so #282's list of glyph-named controls is still unchanged.
     expect(controls.map((el) => el.getAttribute('data-testid'))).toEqual([
+      `editor-encoding-${PANEL}`,
+      `editor-line-ending-${PANEL}`,
       `editor-language-${PANEL}`,
       `editor-word-wrap-${PANEL}`,
+      // 059 FR-059 — View Whitespace, an icon toggle named for its action.
+      `editor-whitespace-${PANEL}`,
     ]);
+    expect(screen.getByTestId(`editor-whitespace-${PANEL}`)).toHaveAccessibleName('View Whitespace');
+    expect(screen.getByTestId(`editor-encoding-${PANEL}`)).toHaveAccessibleName('encoding: UTF-8');
+    expect(screen.getByTestId(`editor-line-ending-${PANEL}`)).toHaveAccessibleName(/^line endings: /);
   });
 });
