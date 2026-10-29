@@ -137,11 +137,14 @@ when it writes the file; a retired key it once used is dropped.
 | Auto-save delay | `editor.autoSaveDebounceMs` | 300 | 0 – 10,000 ms, step 100 | How long after typing stops an auto-save writes. |
 | Save-All scope | `editor.saveAllScope` | `project` | `tab` · `project` · `all` | What a `Ctrl+Shift+S` Save All covers. |
 | New-file line ending | `editor.defaultLineEnding` | `lf` | `lf` · `crlf` · `cr` | The line ending for brand-new documents. An existing file keeps its own. |
+| Fallback encoding | `editor.fallbackEncoding` | `windows1252` | `windows1250` … `windows1258` | The code page a file is read in when it has no BOM and is not valid UTF-8 or UTF-16 (what other editors call ANSI). Set it to your own code page and legacy files in it open without a notice. |
 | Max open file size | `editor.maxOpenFileBytes` | 10,485,760 (10 MB) | 5,242,880 – 262,144,000 bytes in 5 MB steps; down to 1,024 by hand | Files larger than this report "too large" instead of opening. |
 | Project editor path display | `editor.projectPathDisplay` | `full` | `full` · `name` | Show a project-owned editor's pill as the full path or just the file name. |
 | Sub-workspace editor path display | `editor.subWorkspacePathDisplay` | `full` | `full` · `name` | The same, for an editor owned by a sub-workspace. |
 | Warn on missing file | `editor.warnOnMissingFile` | on | on · off | Report an editor whose file is missing or deleted. |
 | Editor default word wrap | `editor.defaultWordWrap` | on | on · off | Wrap long lines by default in new editors. Each editor toggles its own from its status bar, its content menu or [`Ctrl+E,W`](key-bindings.md#editor). |
+| Editor default view whitespace | `editor.defaultShowWhitespace` | off | on · off | Show a symbol for every space, tab, line break and invisible character by default in new editors. Each editor keeps its own toggle, from its status bar, its content menu or [View Whitespace](key-bindings.md#editor). |
+| Editor whitespace hover names | `editor.whitespaceHoverNames` | on | on · off | With View Whitespace on, resting the pointer on a marker for half a second names its character in a popover above the pointer, and the pointer becomes the help cursor. Off, neither. |
 | Show the editor gutter | `editor.showGutter` | on | on · off | The strip of line numbers down each editor's left side. Hiding it gives that width back to the document. |
 | Highlight other occurrences of the selection | `editor.highlightOccurrences` | on | on · off | Softly tints every other instance of the text selected in an editor or Markdown preview. A whole-word selection tints whole words only; matching is case-sensitive. |
 | Keep undo history after a crash | `editor.persistUndoHistory` | on | on · off | Restore the undo history along with unsaved changes when throng reopens after a crash. Removed text lives in the recovery file until then. |
@@ -150,9 +153,18 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Show editor status bar | `editor.showStatusBar` | on | on · off | The bar along the bottom of each editor: the language control, the word-wrap toggle, the cursor position and the character and word counts. Hiding it hides all of them, whatever the two settings below say; wrap and language stay reachable from the content menu and the key binding. |
+| Show editor status bar | `editor.showStatusBar` | on | on · off | The bar along the bottom of each editor: the language control, the word-wrap and View Whitespace toggles, the encoding and line-ending indicators, the cursor position and the character and word counts. Hiding it hides all of them, whatever the two settings below say; wrap, language, encoding and line endings stay reachable from the content menu and the [key bindings](key-bindings.md#editor). |
 | Show cursor position | `editor.statusBar.showCursorPosition` | on | on · off | The caret's line and column. |
 | Show character and word counts | `editor.statusBar.showCounts` | on | on · off | Characters selected, and the characters and words the document holds. |
+
+The encoding indicator (`UTF-8`, `UTF-8 with BOM`, `UTF-16 LE`, `UTF-16 BE`, `Windows-1250 (Central European)` … `Windows-1258 (Vietnamese)`) and the
+line-ending indicator (`LF`, `CRLF`, `CR`, or `Mixed (…)` naming the dominant one) have no setting of
+their own: they show whenever the status bar does. The encoding menu lists the Unicode encodings, then a **Windows Code Pages** submenu (ticked when
+the document is in one of them) holding the nine code pages: choosing one changes the document's encoding, marked as an unsaved change you can undo, and its last item
+reopens the file in another encoding. The line-ending menu lists LF, CR, CRLF and Mixed: choosing one
+converts every line, and Mixed is marked when the document mixes them but cannot be chosen. When the
+bar is too narrow they hide after the line number, line ending first; the wrap and View Whitespace
+toggles never hide.
 
 ### Previews
 

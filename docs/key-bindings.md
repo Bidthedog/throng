@@ -169,6 +169,15 @@ Live only while the File Explorer pane has focus.
 | Column select right | `editor.columnSelectRight` | `Shift+Alt+ArrowRight` | Editor | Extend a rectangular selection one column to the right. |
 | Toggle word wrap | `editor.toggleWordWrap` | `Ctrl+E,W` | Editor | Wrap or unwrap long lines in the focused editor's document — hold Ctrl, press **E**, then **W**. |
 | Synchronise Scrolling | `preview.toggleSyncScroll` | *(unbound)* | Editor · Preview | Turn synchronised scrolling between editors and their previews on or off, everywhere — the [same setting](preferences.md#previews) the menus and status-bar buttons switch. |
+| Reopen with Encoding… | `editor.reopenWithEncoding` | *(unbound)* | Editor | Read the focused editor's file again in an encoding you choose, when it was detected wrongly. Unsaved changes are asked about first. |
+| Change Encoding… | `editor.changeEncoding` | *(unbound)* | Editor | Choose the encoding the focused editor's document is saved in. The document is marked changed and you can undo it; nothing is written until you save. |
+| Convert to LF | `editor.convertLineEndingsToLf` | *(unbound)* | Editor | Change every line ending in the focused editor's document to LF, as one step you can undo. |
+| Convert to CR | `editor.convertLineEndingsToCr` | *(unbound)* | Editor | Change every line ending in the focused editor's document to CR, as one step you can undo. |
+| Convert to CRLF | `editor.convertLineEndingsToCrlf` | *(unbound)* | Editor | Change every line ending in the focused editor's document to CRLF, as one step you can undo. |
+| Insert Line Break (LF) | `editor.insertLineBreakLf` | *(unbound)* | Editor | Start a new line ending in LF at the cursor, whatever the document's other lines end in. |
+| Insert Line Break (CR) | `editor.insertLineBreakCr` | *(unbound)* | Editor | Start a new line ending in CR at the cursor, whatever the document's other lines end in. |
+| Insert Line Break (CRLF) | `editor.insertLineBreakCrlf` | *(unbound)* | Editor | Start a new line ending in CRLF at the cursor, whatever the document's other lines end in. |
+| View Whitespace | `editor.toggleWhitespace` | *(unbound)* | Editor | Show or hide a symbol for every space, tab, line break and invisible character in the focused editor. |
 
 Cut, Copy, Paste, Select All, Undo and Redo inside an editor keep their native bindings
 (`Ctrl+X`/`C`/`V`/`A`/`Z`/`Y`) and are not listed in the editor. A rectangular selection can also be

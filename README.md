@@ -35,7 +35,7 @@ goes away.
 - **Sub-workspaces** — tear tabs or panels off into their own windows that move as one group.
 - **Terminal panels** — your real installed shells, owned by a background service so they survive a restart and reattach.
 - **Attention marks** — a panel, tab or project that needs you says so, with an optional notification and taskbar count, and one chord jumps to the next.
-- **Editor panels** — a fast code editor with syntax highlighting for 55 languages, crash recovery and one buffer per file across every window.
+- **Editor panels** — a fast code editor with syntax highlighting for 55 languages, crash recovery, one buffer per file across every window, and every file kept in its own encoding and line endings.
 - **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete, and cut, copy and paste between projects.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
