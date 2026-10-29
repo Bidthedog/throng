@@ -143,8 +143,9 @@ can keep browsing or press **F2** to rename the file.
   typing and scrolls with the editor. With **Default open action** set to Preview, clicking notes in
   the tree reuses the preview you already have ([Open previews in](preferences.md#previews)), and you
   can drop a `.md` file onto a preview to show it there — or onto an empty panel, which opens it the
-  way **Default open action** says. Right-click a note and choose **Open In › Last Preview Panel** to
-  show it in the preview named beside the item, or **New Preview Panel** for a fresh one.
+  way **Default open action** says. Right-click a note — in the tree or in Find in Files' results — and
+  choose **Open In › Last Preview Panel** to show it in the preview named beside the item, or **New
+  Preview Panel** for a fresh one; once the note has its preview open, **Current Preview** goes to it.
 - **Fold** a Markdown document's sections from the gutter beside each heading, the right-click menu's
   **Outlining** submenu, or **Ctrl+M** chords ([Markdown bindings](key-bindings.md#markdown)); an editor
   and its preview fold together. **Collapse All Inside This Section** folds just one branch.
