@@ -397,6 +397,7 @@ const cogMenu = (): MenuAction[] =>
   cogMenuItems({
     openPreferences: noop,
     openLogs: noop,
+    openResourceMonitor: noop,
     openAbout: noop,
     keybindings: DEFAULT_KEYBINDINGS,
   });
@@ -1608,11 +1609,14 @@ describe('the cog menu’s Application section is one group, therefore no divide
   const cog = (): MenuAction[] => cogMenu();
 
   // 057 FR-082 made the pinned five six (Go to Next Marked Panel); FR-106 (round 3, which supersedes
-  // FR-082) takes it back out to a marked project's context menu, so the pinned shape is five again.
-  it('draws five Application items and nothing between them', () => {
+  // FR-082) takes it back out to a marked project's context menu. 055 (FR-056) adds Resource Monitor,
+  // so the pinned shape is six.
+  it('draws six Application items and nothing between them', () => {
     const application = cog().filter((i) => i.section === 'application');
-    expect(application.map((i) => i.section)).toEqual(['application', 'application', 'application', 'application', 'application']);
+    expect(application.map((i) => i.section)).toEqual(Array(6).fill('application'));
     expect(separatorIndices(application)).toEqual([]);
+    // Still ONE section for the whole menu: the new row adds no boundary.
+    expect(separatorIndices(cog())).toEqual([]);
   });
 
   it('keeps the test identifiers roughly ten preferences suites depend on (FR-053)', () => {
@@ -1621,6 +1625,8 @@ describe('the cog menu’s Application section is one group, therefore no divide
       'cog-menu-keybindings',
       'cog-menu-themes',
       'cog-menu-logs',
+      // 055 FR-056 — after Open Logs Folder and before About.
+      'cog-resource-monitor',
       'cog-menu-about',
     ]);
   });

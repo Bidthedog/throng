@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { descendantsOf } from '../../src/process-tree.js';
+import { descendantsOf } from '../../src/process/process-tree.js';
 
 /**
  * The descendant walk behind command memory (`listChildProcesses`) and the close-time busy check

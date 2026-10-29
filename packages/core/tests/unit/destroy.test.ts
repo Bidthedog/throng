@@ -44,6 +44,14 @@ describe('destroy confirmation plan (FR-019–025)', () => {
     expect(planConfirmations('project', { ...settings, destroyProject: 'single' })).toEqual({ dialogs: 1, wryFinal: false });
     expect(planConfirmations('project', { ...settings, destroyProject: 'none' })).toEqual({ dialogs: 0, wryFinal: false });
   });
+
+  it('killProcesses (055 FR-063): none/single/double map exactly as an active panel does', () => {
+    for (const level of ['none', 'single', 'double'] as const) {
+      expect(planConfirmations('killProcesses', { ...settings, killProcesses: level })).toEqual(
+        planConfirmations('panel', { ...settings, destroyPanel: level }, { panelActive: true }),
+      );
+    }
+  });
 });
 
 describe('project destroy block (FR-025a)', () => {

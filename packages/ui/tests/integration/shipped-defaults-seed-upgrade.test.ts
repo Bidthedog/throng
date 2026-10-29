@@ -608,9 +608,10 @@ describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (04
     // and 054 to 21 (the maximise and diagram icon tokens), then 054 MT-04 to 22 (diagramZoomReset),
     // and 056 to 23 (the `warning` icon token), and 057 to 24 (the attention mark tokens),
     // and 060 to 25 (`busy`, `groupFolderTree`), then 060's hand-test round to 26 (the plain glyphs),
-    // then 060 #532 to 27 (`projectSettings`, `searchExclusions`), and 059 to 28 (the `whitespace` icon token).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(28);
-    expect(await service.readAppliedVersion()).toBe(28);
+    // then 060 #532 to 27 (`projectSettings`, `searchExclusions`), and 059 to 28 (the `whitespace` icon token),
+    // and 055 to 29 (its twelve resource monitor icon tokens).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(29);
+    expect(await service.readAppliedVersion()).toBe(29);
   });
 
   it('a second upgrade writes nothing', async () => {
