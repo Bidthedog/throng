@@ -8,10 +8,10 @@ Spec: `specs/059-native-encodings-line-endings/spec.md`
 | MT-02 | Open and save UTF-16 files; refuse UTF-32 and binary | signed off | 98664a0f7190 | 2026-10-29 | |
 | MT-03 | Encoding indicator: Change Encoding and Reopen with Encoding | signed off | 98664a0f7190 | 2026-10-29 | |
 | MT-04 | Line endings: switch between LF, CR, CRLF, Mixed, and insert each | signed off | 98664a0f7190 | 2026-10-29 | |
-| MT-05 | Find in Files, replace, preview and task toggle on these files | needs retest | 98664a0f7190 | 2026-10-29 | ae325530 touched packages/ui/src/main/file-search-service.ts |
+| MT-05 | Find in Files, replace, preview and task toggle on these files | signed off | da0ef8357dd3 | 2026-10-29 | |
 | MT-06 | Open failures share a notice only when the error is the same | signed off | 98664a0f7190 | 2026-10-29 | |
-| MT-07 | View Whitespace | needs retest | 98664a0f7190 | 2026-10-29 | ae325530 touched packages/core/src/config/settings-metadata.ts |
-| MT-08 | Windows code pages, the fallback encoding and the misread warning | needs retest | 98664a0f7190 | 2026-10-29 | ae325530 touched packages/core/src/config/app-settings.ts |
+| MT-07 | View Whitespace | signed off | da0ef8357dd3 | 2026-10-29 | |
+| MT-08 | Windows code pages, the fallback encoding and the misread warning | signed off | da0ef8357dd3 | 2026-10-29 | |
 
 Setup for every group: a project on `D:/git/throng_tests/encodings/`, which holds the 059 fixture files (restore them after a run with `bash "D:/git/throng_tests/encodings/.claude/skills/reset-encodings/reset.sh"`) — `codepage-western-1252.txt`
 (Windows-1252, `café costs £5 or 5€`, CRLF), `utf16le-bom-powershell.txt` (UTF-16 LE with BOM, CRLF),
