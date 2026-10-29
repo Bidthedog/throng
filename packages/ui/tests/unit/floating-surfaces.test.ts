@@ -63,6 +63,12 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
   '.cm-ws-hover-name':
     'editor/view-whitespace.ts (059 FR-067) — the whitespace marker name: opens above the pointer and FLIPS below it when there is no room above; CLAMPS its left edge between the window edges',
+  '.status-popover':
+    'resources/status-popover.tsx (055 FR-115) — the status-bar item\'s popover. ANCHORED to the item at the bottom of the window, so it has edges to run off and flips: placed by useAnchoredPosition (clampToViewport — the positioner the tab and attention popovers share), which flips it above the bar and clamps whatever remains; measured in a layout effect and held `visibility: hidden` until placed. Its width is fixed, its max-width the viewport\'s',
+  '.info-helper-popover':
+    'resources/info-helper.tsx (055 FR-119) — the sentences a "?" helper opens. ANCHORED to its helper, so it has edges to run off and flips: placed by useAnchoredPosition (clampToViewport — the positioner the tab and attention popovers share), measured in a layout effect and held `visibility: hidden` until placed; portaled to the body so no scroll container clips it; its max-width keeps it narrower than the window',
+  '.monitor-help':
+    'resources/help-panel.tsx (055 FR-093) — the Resource Monitor\'s help popover. ANCHORED to its "?" button, so it has edges to run off and really does flip: it opens below the button by default and clampToViewport (the positioner the context menu, colour picker and tab popover share) right-aligns it to the button when it would overflow the window, flips it above near the bottom, and clamps whatever remains. Measured in a layout effect and held `visibility: hidden` until placed, so it never paints in the wrong place first; its own max-height and scroll clamp it when the window is shorter than the text',
 
   // Everything below is CHROME, not a popup: fixed furniture with a z-index, anchored to nothing, so
   // there is no edge for it to flip away from. Registered rather than pattern-matched away, because the

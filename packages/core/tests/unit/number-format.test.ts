@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { formatGrouped, parseGrouped } from '../../src/index.js';
 
@@ -13,6 +13,24 @@ import { formatGrouped, parseGrouped } from '../../src/index.js';
  * locale that groups with a full stop — and it would do so silently, in a file, which is the worst
  * place for a bug to live.
  */
+describe('formatGrouped is cheap enough to call per figure (055 SC-010)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('builds one formatter per locale, not one per call', () => {
+    const spy = vi.spyOn(Intl, 'NumberFormat');
+    for (let i = 0; i < 50; i += 1) formatGrouped(i * 1_000, 'de-DE');
+    for (let i = 0; i < 50; i += 1) formatGrouped(i * 1_000, 'fr-FR');
+    expect(spy.mock.calls.filter(([locale]) => locale === 'de-DE').length).toBeLessThanOrEqual(1);
+    expect(spy.mock.calls.filter(([locale]) => locale === 'fr-FR').length).toBeLessThanOrEqual(1);
+  });
+
+  it('still formats each locale its own way when the formatters are cached', () => {
+    expect(formatGrouped(1234567, 'en-GB')).toBe('1,234,567');
+    expect(formatGrouped(1234567, 'de-DE')).toBe('1.234.567');
+    expect(formatGrouped(1234567, 'en-GB')).toBe('1,234,567');
+  });
+});
+
 describe('formatGrouped (FR-037)', () => {
   it('groups a large number so it can be read at a glance', () => {
     expect(formatGrouped(10485760, 'en-GB')).toBe('10,485,760');

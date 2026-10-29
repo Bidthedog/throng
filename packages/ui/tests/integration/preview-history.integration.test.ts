@@ -548,3 +548,12 @@ describe('fix round 1', () => {
     expect(isolated.isOpen(renamed)).toBe(false);
   });
 });
+
+describe('what a preview holds in main, for the Resource Monitor (055 FR-024)', () => {
+  it('each run reports the length of the text it last sent, and a destroyed run reports nothing', async () => {
+    await attach('v1', readme);
+    expect(previews.previewEstimates()).toEqual([{ panelId: 'v1', chars: '# Readme\n'.length }]);
+    previews.destroyed('v1');
+    expect(previews.previewEstimates()).toEqual([]);
+  });
+});
