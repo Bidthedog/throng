@@ -4,23 +4,23 @@ Spec: `specs/055-resource-monitor/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Status bar usage figures | signed off | a1fb677f81e0 | 2026-10-29 | |
+| MT-01 | Status bar usage figures | signed off | 86a18fed22fc | 2026-10-29 | |
 | MT-02 | Opening, closing and resizing the monitor | retired → MT-08 | | | |
-| MT-03 | Drilling into the breakdown | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-04 | Graphs, filter and idle hiding | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-05 | Unload, destroy and kill from the monitor | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-06 | Held folders | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-07 | Resource Monitor preferences | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-08 | The monitor window | signed off | a1fb677f81e0 | 2026-10-29 | |
+| MT-03 | Drilling into the breakdown | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-04 | Graphs, filter and idle hiding | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-05 | Unload, destroy and kill from the monitor | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-06 | Held folders | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-07 | Resource Monitor preferences | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-08 | The monitor window | signed off | 86a18fed22fc | 2026-10-29 | |
 | MT-09 | Finding your way around the monitor | retired → MT-10 | | | |
-| MT-10 | Finding your way around the two-column monitor | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-11 | Selecting, ordering and reading the left list | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-12 | The right column and Activate | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-13 | The monitor's layout: full-width header and movable divider | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-14 | Network figures | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-15 | The status bar popover | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-16 | Opening width, Held folders and less text | signed off | a1fb677f81e0 | 2026-10-29 | |
-| MT-17 | Help, helpers and the right column's graphs | signed off | a1fb677f81e0 | 2026-10-29 | |
+| MT-10 | Finding your way around the two-column monitor | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-11 | Selecting, ordering and reading the left list | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-12 | The right column and Activate | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-13 | The monitor's layout: full-width header and movable divider | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-14 | Network figures | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-15 | The status bar popover | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-16 | Opening width, Held folders and less text | signed off | 86a18fed22fc | 2026-10-29 | |
+| MT-17 | Help, helpers and the right column's graphs | signed off | 86a18fed22fc | 2026-10-29 | |
 
 ## MT-01: Status bar usage figures
 
