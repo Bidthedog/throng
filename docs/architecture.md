@@ -552,6 +552,27 @@ flowchart LR
   AU --> REC["editor-recovery<br/>(400 ms debounced snapshot)"]
 ```
 
+**Encodings and line endings.** One function, `detectTextFormat` in `core/src/editor/text-fidelity.ts`,
+decides how every file throng reads is decoded: by BOM (UTF-8, UTF-16 LE/BE; UTF-32 refused), then
+BOM-less UTF-16 by its zero pattern, then binary by a NUL scan, then UTF-8, and the fallback code page
+(`editor.fallbackEncoding`, Windows-1252 unless set; Windows-1252 again for a byte it leaves undefined) for
+anything else. The nine single-byte Windows code pages are codecs derived from the platform decoder, and
+bytes alone never choose between them. The editor, Find in Files, its replace commit, the preview and the task toggle all read
+through it, and every write goes back in the file's own encoding and BOM state. `encode` refuses a
+character the encoding cannot hold rather than substituting one, so nothing is written. The document's
+**line format** — its dominant line ending and any mixed per-line endings — is authority state beside
+the text: a conversion is one undo entry that changes only the format, every edit maps the per-line
+record so each line keeps its own ending (`core/src/editor/line-ending-map.ts`), and a save writes the
+authority's format, never a renderer's. The **encoding** is authority state too: Change Encoding is an
+undo entry that changes only the encoding and writes nothing until a save. A chosen encoding lives on
+the open document only, so the coordinator tells the user so: a Reopen with Encoding, or a UTF-8 read that
+`misreadSuspect` (`core/src/editor/misread-hint.ts`) says looks like the fallback read as UTF-8, or a
+code-page read that `looksMisreadAs` or jschardet (`ui/src/main/code-page-guess.ts`, main only, so the
+renderer never ships it) says may be another code page, sets the document's **read notice**, relayed to every
+view and cleared by a save in another encoding or a dismiss. A byte a code page leaves undefined decodes to the
+private-use placeholder U+F700 + byte and encodes back to that byte, so a code page reads every file and still
+round-trips it exactly; the guess blanks such bytes before jschardet sees them.
+
 **Recovery.** In-progress edits and their undo history are snapshotted on a 400 ms debounce and
 restored after an abnormal exit. A file that moves, is deleted or changes on disk under an open
 editor raises a notice rather than silently diverging.
@@ -786,7 +807,9 @@ de-duplication key, and it lives in core because every process takes part: the d
 main classifies and reports, and the renderer renders. Across the pipe, a cause travels in the
 JSON-RPC error's `data` payload. An error that matches no kind keeps its original message exactly.
 One condition raises one notice, owned by whatever owns the state. For example, a stopped daemon is
-reported once, from the supervisor's state, not once for every call that failed. Each process writes
+reported once, from the supervisor's state, not once for every call that failed. Panels that one
+action defeated share a notice when their error is the same: the same cause, or with no cause, the
+same message. A different error raises a notice of its own (`core/src/notice/grouping.ts`). Each process writes
 its own durable log (`daemon.log`, the agent's log, main's log) into one log folder, which main
 passes down as `THRONG_LOG_DIR`. The daemon's output from before its logger starts goes to
 `daemon-startup.log`.

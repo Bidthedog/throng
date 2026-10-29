@@ -134,6 +134,16 @@ can keep browsing or press **F2** to rename the file.
   beside a language you picked, or **Reset Language** in the editor's right-click menu, hands the file
   back to detection.
 - The status bar shows the caret's position, the selection and the document's size.
+- UTF-16 files and the Windows code pages (1250–1258) open and save in their own encoding; a file that is
+  not Unicode is read in the [fallback encoding](preferences.md#editor). The status bar's encoding and
+  line-ending indicators change a document's encoding or reopen it in another, and
+  [switch its line endings](key-bindings.md#editor) between LF, CR and CRLF — each an edit you can undo.
+  A reopen lasts for that editor session only: to fix a misread file, change its encoding and save. A
+  notice above the editor says so, and also flags a file that looks misread when it opens, suggesting the
+  code page it is probably in. After a reopen it offers **Convert to UTF-8**, or for a code page names the
+  [fallback encoding](preferences.md#editor) to set, so the file opens that way every time. A byte a code page leaves undefined
+  is kept as a placeholder character and saved back unchanged.
+  **View Whitespace** in the status bar shows every space, tab, line break and invisible character.
 - **Column select** with **Alt+drag** or **Shift+Alt+Arrow**; **Ctrl+X** with nothing selected cuts
   the whole line.
 - **Word wrap** is the held chord **Ctrl+E,W** — hold Ctrl, press E, then W.
