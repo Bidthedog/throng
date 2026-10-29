@@ -13,6 +13,10 @@
   padding: 2px 0 0 4px;
   overflow: hidden;
   background: var(--throng-colour-terminalBg);
+  /* xterm stacks its own layers inside this element — link underlines at 6–7, the scrollbar at 11 —
+     and without a stacking context of its own they competed with the find bar (a sibling, at 5) and
+     drew a link's underline over it. Isolated, everything xterm draws stays beneath its siblings. */
+  isolation: isolate;
 }
 
 .terminal-panel .xterm {
