@@ -192,6 +192,9 @@ function chunkFor(rawId: string): string | null {
   // The terminal panel and its stores — the next largest self-contained area, split for the same
   // reason (053's title templates took the app chunk to 501 kB).
   if (/\/src\/renderer\/terminal\//.test(id)) return 'app-terminal';
+  // The editor panel — split for the same reason again (059's encoding menus and View Whitespace took
+  // the app chunk to 502 kB).
+  if (/\/src\/renderer\/editor\//.test(id)) return 'app-editor';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
   if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
