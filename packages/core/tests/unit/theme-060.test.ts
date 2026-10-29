@@ -31,6 +31,6 @@ describe('060 icon tokens', () => {
   });
 
   it('bumps the shipped-defaults version so existing installs receive them', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(28);
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(29);
   });
 });
