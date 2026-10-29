@@ -890,6 +890,26 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The marker on a folded Preferences section or subsection that hides a setting holding an invalid entry.',
   },
+  'icons.busy': {
+    label: 'Search in progress icon',
+    description:
+      'The glyph on the Find in Files cancel control while a search is running. It turns while the search runs; clicking it cancels.',
+  },
+  'icons.groupFolderTree': {
+    label: 'Folder structure grouping icon',
+    description:
+      'The glyph on the Find in Files control that arranges results in the File Explorer’s folder tree.',
+  },
+  'icons.projectSettings': {
+    label: 'Project settings icon',
+    description:
+      'The glyph on the File Explorer control that opens the active project’s settings — what it hides from the tree and from Find in Files.',
+  },
+  'icons.searchExclusions': {
+    label: 'Search exclusions icon',
+    description:
+      'The glyph on the Find in Files toggle that switches the search exclusion list on or off for that panel.',
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

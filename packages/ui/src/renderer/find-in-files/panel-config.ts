@@ -41,10 +41,21 @@ export interface FindInFilesQuery {
   scopeSubPath: string;
   replaceEnabled: boolean;
   replacement: string;
+  /** 060 FR-031 — the exclusion toggle and the box's raw text. */
+  useExcludeGlobs: boolean;
+  extraExcludes: string;
 }
 
-/** A restored panel's query, read defensively: `config` is `Record<string, unknown>` on disk. */
-export function findInFilesQueryFrom(config: PanelConfig | undefined): FindInFilesQuery {
+/**
+ * A restored panel's query, read defensively: `config` is `Record<string, unknown>` on disk.
+ *
+ * `defaultUseExcludeGlobs` is what a panel with no persisted toggle takes — a new panel, or one saved
+ * before 060 (FR-028, FR-031): the `search.inFiles.useExcludeGlobs` preference.
+ */
+export function findInFilesQueryFrom(
+  config: PanelConfig | undefined,
+  defaultUseExcludeGlobs = true,
+): FindInFilesQuery {
   const c = (config ?? {}) as FindInFilesPanelConfig;
   return {
     term: typeof c.term === 'string' ? c.term : '',
@@ -55,6 +66,9 @@ export function findInFilesQueryFrom(config: PanelConfig | undefined): FindInFil
     scopeSubPath: typeof c.scopeSubPath === 'string' ? c.scopeSubPath : '',
     replaceEnabled: c.replaceShown === true,
     replacement: typeof c.replacement === 'string' ? c.replacement : '',
+    useExcludeGlobs:
+      typeof c.useExcludeGlobs === 'boolean' ? c.useExcludeGlobs : defaultUseExcludeGlobs,
+    extraExcludes: typeof c.extraExcludes === 'string' ? c.extraExcludes : '',
   };
 }
 
@@ -73,6 +87,8 @@ export function findInFilesConfigOf(query: FindInFilesQuery): FindInFilesPanelCo
     scopeSubPath: query.scopeSubPath === '' ? null : query.scopeSubPath,
     replaceShown: query.replaceEnabled,
     replacement: query.replacement,
+    useExcludeGlobs: query.useExcludeGlobs,
+    extraExcludes: query.extraExcludes,
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { useChoose } from './confirm-dialog.js';
+import { BusyGlyph } from './common/busy-glyph.js';
 import { markAppTerminating } from './terminal/app-terminating.js';
 import type { AppCloseTerminal } from './global.js';
 
@@ -125,7 +126,7 @@ export function AppClosePrompt(): ReactElement | null {
   return (
     <div className="modal-overlay app-closing" data-testid="app-closing-overlay">
       <div className="app-closing__card" role="status" aria-live="polite" data-testid="app-closing">
-        <div className="app-closing__spinner" aria-hidden />
+        <BusyGlyph />
         <p className="app-closing__message" data-testid="app-closing-message">
           {state.message}
         </p>

@@ -106,6 +106,14 @@ contextBridge.exposeInMainWorld('throng', {
   daemon: {
     state: () => ipcRenderer.invoke('throng:daemon:state'),
     restart: () => ipcRenderer.invoke('throng:daemon:restart'),
+    // #533 — another development checkout's daemon is serving this build, and the way to replace it.
+    foreign: () => ipcRenderer.invoke('throng:daemon:foreign'),
+    onForeign: (cb: (foreign: { checkout: string } | null) => void) => {
+      const h = (_e: unknown, foreign: { checkout: string } | null): void => cb(foreign);
+      ipcRenderer.on('throng:daemon:foreign', h);
+      return () => ipcRenderer.removeListener('throng:daemon:foreign', h);
+    },
+    replaceForeign: () => ipcRenderer.invoke('throng:daemon:replaceForeign'),
     onState: (cb: (s: unknown) => void) => {
       const h = (_e: unknown, s: unknown): void => cb(s);
       ipcRenderer.on('throng:daemon:state', h);
@@ -665,6 +673,9 @@ contextBridge.exposeInMainWorld('throng', {
       scopeSubPath: string | null;
       term: string;
       modes: { caseSensitive: boolean; wholeWord: boolean };
+      // 060 #532 — the panel's exclusions toggle and its box's parsed globs.
+      useExcludeGlobs: boolean;
+      extraExcludes: string[];
     }) => ipcRenderer.invoke('throng:fileSearch:start', req),
     // 043 FR-078 — this window is displaying the panel too. Starting was the only way to subscribe,
     // so a panel synced into a sub-workspace showed an empty list (#380); attaching joins the run

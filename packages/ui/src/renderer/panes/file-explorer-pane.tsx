@@ -8,6 +8,7 @@ import {
 } from 'react';
 import './panes.css';
 import '../explorer/explorer.css';
+import { pathToSearchGlob } from '@throng/core';
 import { useProjects } from '../state/projects-store.js';
 import { FileTree } from '../explorer/file-tree.js';
 import { ExplorerToolbar } from '../explorer/toolbar.js';
@@ -32,7 +33,7 @@ export function FileExplorerPane({
   onResizeStart: (e: ReactPointerEvent) => void;
   resizing: boolean;
 }): ReactElement {
-  const { activeProject, projects, setProjectHidden } = useProjects();
+  const { activeProject, projects, setProjectHidden, setSearchExcludes } = useProjects();
   const keybindings = useKeybindings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The File Explorer pane becomes the active pane on click, gating panel
@@ -96,7 +97,7 @@ export function FileExplorerPane({
                   but a control that vanishes teaches the user nothing, while one that is visibly
                   unavailable explains itself in its hover title. */}
               <IconButton
-                token="settings"
+                token="projectSettings"
                 className="panel__action panel__action--icon panel__action--neutral"
                 testId="project-settings-open"
                 title={
@@ -122,6 +123,14 @@ export function FileExplorerPane({
                 onHide={(relPath) =>
                   void setProjectHidden(activeProject.id, [...activeProject.hiddenPaths, relPath])
                 }
+                // 060 FR-033 — the same per-project idea for the search. The store REPLACES the list,
+                // so the existing entries go with the new one; a path already there is not added twice.
+                onExcludeFromSearch={(relPath) => {
+                  const existing = activeProject.searchExcludeGlobs ?? [];
+                  const glob = pathToSearchGlob(relPath);
+                  if (existing.includes(glob)) return;
+                  void setSearchExcludes(activeProject.id, [...existing, glob]);
+                }}
               />
             </TreeErrorBoundary>
           ) : (

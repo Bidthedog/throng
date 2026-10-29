@@ -97,6 +97,9 @@ export function openFileLinkMenu(args: {
     folderByGrammar,
   };
   let resolvedLink: ResolvedLink | null = null;
+  // 060 FR-045 — whether the resolved file is open in an editor anywhere (main's one-buffer answer),
+  // folded into the same resolution so the Open In rows are right when the menu settles.
+  let fileOpen = false;
   const stub = (path: string): ResolvedLink => ({
     path,
     kind: 'file',
@@ -150,6 +153,7 @@ export function openFileLinkMenu(args: {
         // FR-170 row 2 — one Open In row per open editor, read at each build so main's answer removes
         // the editor that turns out to hold the target.
         openEditors: currentLinkOpenInEditors(ws, resolvedLink?.path),
+        fileOpen,
         ...(args.chord !== undefined ? { chord: args.chord } : {}),
         openLink: args.openLink,
         // FR-032 — the resolved absolute path once known; the text as written until then, which is the
@@ -183,6 +187,13 @@ export function openFileLinkMenu(args: {
       const answer = await resolveLinkForMenu(request);
       if (answer.ok) {
         resolvedLink = answer.link;
+        if (answer.link.kind === 'file') {
+          try {
+            fileOpen = (await window.throng?.editor?.isOpen?.(answer.link.path)) ?? false;
+          } catch {
+            fileOpen = false;
+          }
+        }
         return {
           kind: answer.link.kind,
           inProject: answer.link.inProject,

@@ -131,6 +131,13 @@ const ADDITIVE_COLUMNS: readonly AdditiveColumn[] = [
     column: 'position',
     ddl: `ALTER TABLE project_categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0`,
   },
+  // v12 — a project's own Find in Files exclusions (060 #532), a JSON string array. A healed column
+  // reads `[]`, which is a project with no exclusions of its own: the global list still applies.
+  {
+    table: 'projects',
+    column: 'search_exclude_globs',
+    ddl: `ALTER TABLE projects ADD COLUMN search_exclude_globs TEXT NOT NULL DEFAULT '[]'`,
+  },
 ];
 
 function tableExists(db: ThrongDatabase, table: string): boolean {

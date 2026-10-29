@@ -43,26 +43,16 @@ import { useActiveEditorFilePath } from '../editor/active-editor-file.js';
 import { PanelSkeleton } from '../common/loading.js';
 import {
   buildTreeDragPayload,
-  collectPanels,
-  panelDisplayTitle,
-  previewTitleParts,
-  truncateGraphemes,
-  wasTruncated,
-  previewAffordance,
   relPathUnderRoot,
   resolveDragEffect,
   resolveTarget,
-  PREVIEW_KIND,
-  previewPathOf,
   type FlavourOption,
   type PreviewAffordance,
-  type PreviewPanelConfig,
   type TargetNode,
   type TerminalPanelConfig,
 } from '@throng/core';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
-import { candidateFor } from '../preview/last-active-preview.js';
-import { getPreviewState } from '../preview/preview-store.js';
+import { readPreviewOpenIn } from '../preview/preview-open-in.js';
 import { useFlavours } from '../panel-type/use-flavours.js';
 import { requestFindInFiles } from '../find-in-files/open-find-in-files.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
@@ -71,12 +61,6 @@ import type { MenuAction } from '../workspace/context-menu.js';
 import { guardVisibleRowScroll } from './visible-row-scroll.js';
 
 const ROW_HEIGHT = 24;
-
-/**
- * 047 FR-080 — Last Preview Panel's name: the panel's name without the header's " - Preview" (the item already
- * says it), cut to this many characters whatever the tab limit.
- */
-const LAST_PREVIEW_NAME_MAX = 16;
 
 /** Leaf folder name of an absolute root path (handles `/` and `\`). */
 function rootName(rootFolder: string): string {
@@ -107,12 +91,15 @@ export function FileTree({
   projectId,
   hiddenPaths,
   onHide,
+  onExcludeFromSearch,
   projectNameOf,
 }: {
   rootFolder: string;
   projectId: string;
   hiddenPaths: string[];
   onHide: (relPath: string) => void;
+  /** 060 FR-033 — add an entry to the project's Find in Files exclusions. Omitted: no menu row. */
+  onExcludeFromSearch?: (relPath: string) => void;
   /**
    * The name of a project by id — for Paste's `from <project>` suffix (050 FR-025a). A prop rather
    * than a read of the projects store because the tree is mounted without one in places, and an
@@ -517,70 +504,21 @@ export function FileTree({
         );
         // 044 FR-003, FR-004, FR-062 — core decides; the menu draws. The live settings and the injected
         // registry are read through refs, so the answer is this moment's rather than the last render's.
-        //
-        // 047 US2 (FR-014) — whether there is a preview standing in the VISIBLE tab this window could
-        // reuse, for *Last Preview Panel*'s own extra disable. Read now, not memoised: a panel closing
-        // between renders must not leave the row offering a reuse that no longer exists.
-        const layout = ws.layout;
-        const tabId = layout?.activeTabId;
-        const activeTab = tabId !== undefined ? layout?.tabs.find((t) => t.id === tabId) : undefined;
-        //
-        // 047 FR-076 — and that panel's NAME, as its header shows it: `panelDisplayTitle` over the same
-        // sources the header hands it (the live path a followed link moved, or the parent editor's title).
-        const candidatePanel =
-          tabId !== undefined && activeTab !== undefined
-            ? (() => {
-                const panels = collectPanels(activeTab.root);
-                // 054 FR-007 — per type: only a preview showing a file of THIS file's provider is reused, the
-                // same rule `openPreview` applies (the run's current file, else the persisted one).
-                const registry = previewRegistryRef.current;
-                const providerId = registry.forPath(absPath)?.id;
-                const shownProvider = (pid: string): string | undefined => {
-                  const config = panels.find((p) => p.id === pid)?.config as PreviewPanelConfig | undefined;
-                  const shown = getPreviewState(pid)?.filePath ?? previewPathOf(config);
-                  return shown === undefined ? undefined : registry.forPath(shown)?.id;
-                };
-                const id = candidateFor(
-                  tabId,
-                  (pid) => panels.some((p) => p.id === pid && p.kind === PREVIEW_KIND),
-                  providerId === undefined ? undefined : { id: providerId, of: shownProvider },
-                );
-                return id === null ? undefined : panels.find((p) => p.id === id);
-              })()
-            : undefined;
-        const candidateState = candidatePanel !== undefined ? getPreviewState(candidatePanel.id) : undefined;
-        const titleSources = {
-          previewFilePath: candidateState?.filePath,
-          previewParentTitle: candidateState?.parent?.title,
-        };
-        // FR-080 — the NAME only: the item already says "Preview Panel", so the header's " - Preview" goes; a cut
-        // name ends in an ellipsis.
-        const lastPreviewName =
-          candidatePanel === undefined
-            ? null
-            : (previewTitleParts(candidatePanel, titleSources)?.name ?? panelDisplayTitle(candidatePanel, titleSources));
-        const lastPreviewTitle =
-          lastPreviewName === null
-            ? null
-            : wasTruncated(lastPreviewName, LAST_PREVIEW_NAME_MAX)
-              ? `${truncateGraphemes(lastPreviewName, LAST_PREVIEW_NAME_MAX)}…`
-              : lastPreviewName;
+        // The reuse candidate and its name are read in `preview-open-in.ts`, shared with Find in Files (060 FR-048).
         preview = {
-          affordance: previewAffordance({
+          ...readPreviewOpenIn({
+            layout: ws.layout,
             registry: previewRegistryRef.current,
             settings: previewSettingsRef.current,
             absPath,
             projectRoot: rootFolder,
-            isFolder: false,
             previewOpen,
-            surface: 'explorer',
           }),
           // 047 US2 — the two explicit overrides (T037): the `preview.open` request with an EXPLICIT
           // target. The plain, setting-driven Preview row is gone (FR-075). The preview flashes (FR-083).
           openLastActive: () =>
             void requestPreviewOpen({ absPath, projectId, target: { mode: 'lastActive' }, flash: true }),
           openNew: () => void requestPreviewOpen({ absPath, projectId, target: { mode: 'new' }, flash: true }),
-          lastPreviewTitle,
         };
       }
       const items = buildContextMenuItems({
@@ -590,7 +528,7 @@ export function FileTree({
         pasteLabel: pasteLabelText,
         // 033 US4 (T091) — both act on the RIGHT-CLICKED node's relative path, which
         // `buildContextMenuItems` closes over from `node`, never on the selection.
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, excludeFromSearch: onExcludeFromSearch, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         openIn,
         preview,
@@ -600,7 +538,7 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [selectedRelPaths, clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, openMenu, ws, rootFolder, projectId, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
+    [selectedRelPaths, clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, onExcludeFromSearch, openMenu, ws, rootFolder, projectId, createFolder, createFile, keybindings, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
 
   // Right-clicking empty space (below the rows) opens a menu targeting the ROOT —
@@ -615,7 +553,7 @@ export function FileTree({
         selectedRelPaths: [],
         clipboard,
         pasteLabel: pasteLabelText,
-        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
+        ops: { beginRename, cut, copy, paste, remove, reveal, hide: onHide, excludeFromSearch: onExcludeFromSearch, newFolder: createFolder, newFile: createFile, undoFileOp, redoFileOp, openInTerminal, expandChildren, collapseChildren, findInFiles: searchFromTree },
         undoState: { canUndo: canUndoFileOp, canRedo: canRedoFileOp },
         keybindings,
         projectRoot: rootFolder,
@@ -623,7 +561,7 @@ export function FileTree({
       });
       openMenu(event.clientX, event.clientY, items);
     },
-    [clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
+    [clipboard, pasteLabelText, beginRename, cut, copy, paste, remove, reveal, onHide, onExcludeFromSearch, createFolder, createFile, openMenu, keybindings, rootFolder, undoFileOp, redoFileOp, canUndoFileOp, canRedoFileOp, flavours, openInTerminal, expandChildren, collapseChildren, searchFromTree],
   );
   /*
    * GREYED ROWS (004 FR-017, 050 FR-004): the clipboard holds ABSOLUTE paths from any project, so the

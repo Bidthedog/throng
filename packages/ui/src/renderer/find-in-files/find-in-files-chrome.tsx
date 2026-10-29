@@ -14,10 +14,10 @@ import { useEffect, type ReactElement } from 'react';
 import { defaultOpenActionFor, normaliseForCompare } from '@throng/core';
 import { useAppSettings } from '../config/config-store.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
+import { readPreviewOpenIn } from '../preview/preview-open-in.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { useProjects } from '../state/projects-store.js';
 import { useWorkspace } from '../state/workspace-store.js';
-import { initialFindInFilesGrouping } from './find-in-files-store.js';
 import {
   openFindInFiles,
   registerFindInFilesOpener,
@@ -28,6 +28,7 @@ import {
   openResultRow,
   registerResultOpener,
   registerResultOpenTargets,
+  registerResultPreviewOpenIn,
   resolveResultPath,
   type ResultOpenRequest,
 } from './result-open.js';
@@ -47,7 +48,6 @@ export function FindInFilesChrome(): ReactElement | null {
   const inFiles = useAppSettings().search.inFiles;
   const openTarget = inFiles.openTarget;
   const defaultGrouping = inFiles.defaultGrouping;
-  const rememberGrouping = inFiles.rememberGrouping;
 
   /*
    * The project the panel will search — this window's ACTIVE project.
@@ -105,6 +105,20 @@ export function FindInFilesChrome(): ReactElement | null {
        */
       const absPath = resolveResultPath(root, request.relPath);
       const owner = projects.find((p) => normaliseForCompare(p.rootFolder) === normaliseForCompare(root))?.id;
+      // 060 FR-048 — an Open In preview row names its preview, which wins; a row's match travels with it.
+      if (request.previewTarget !== undefined) {
+        if (owner === undefined) return;
+        void requestPreviewOpen({
+          absPath,
+          projectId: owner,
+          target: { mode: request.previewTarget },
+          flash: true,
+          ...(request.text === undefined
+            ? {}
+            : { reveal: { from: request.from, to: request.to, text: request.text, line: request.line ?? null, fallback: inEditor } }),
+        });
+        return;
+      }
       if (
         request.target === undefined &&
         owner !== undefined &&
@@ -129,9 +143,24 @@ export function FindInFilesChrome(): ReactElement | null {
       if (root === null || root === '') return Promise.resolve([]);
       return listResultOpenTargets({ ws, projectRoot: root, relPath });
     });
+    registerResultPreviewOpenIn(async (relPath, panelRoot) => {
+      const root = panelRoot ?? projectRoot;
+      if (root === null || root === '') return null;
+      const absPath = resolveResultPath(root, relPath);
+      const previewOpen = (await window.throng?.preview?.isOpen?.(absPath)) ?? false;
+      return readPreviewOpenIn({
+        layout: ws.layout,
+        registry: previewProviders.registry,
+        settings: previewSettings,
+        absPath,
+        projectRoot: root,
+        previewOpen,
+      });
+    });
     return () => {
       registerResultOpener(null);
       registerResultOpenTargets(null);
+      registerResultPreviewOpenIn(null);
     };
   }, [ws, projectRoot, projects, editorOpenTarget, previewProviders, previewSettings]);
 
@@ -143,14 +172,13 @@ export function FindInFilesChrome(): ReactElement | null {
         projectId,
         projectRoot,
         openTarget,
-        // Resolved here, at the moment of opening, so a new panel's grouping honours both
-        // preferences and the per-project memory without the panel opening in one grouping and
-        // correcting itself in an effect.
-        grouping: initialFindInFilesGrouping(projectId, { defaultGrouping, rememberGrouping }),
+        // Resolved here, at the moment of opening, so a new panel opens in the grouping preference
+        // (060 FR-046) rather than correcting itself in an effect.
+        grouping: defaultGrouping,
       }) !== null;
     registerFindInFilesOpener(open);
     return () => registerFindInFilesOpener(null);
-  }, [ws, projectId, projectRoot, openTarget, defaultGrouping, rememberGrouping]);
+  }, [ws, projectId, projectRoot, openTarget, defaultGrouping]);
 
   return null;
 }

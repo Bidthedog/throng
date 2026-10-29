@@ -54,6 +54,11 @@ export interface LinkMenuBuildArgs {
   readonly applicable: LinkMenuApplicable;
   /** One row per open editor, by name (FR-170's row 2). Empty: New Editor / Active Editor only. */
   readonly openEditors?: readonly { readonly id: string; readonly name: string }[];
+  /**
+   * 060 FR-045 — the file the link names is already open in an editor somewhere: Open In ▸ offers one
+   * Current Editor row in place of New / Active Editor, and the named-editor rows are drawn disabled.
+   */
+  readonly fileOpen?: boolean;
   /** The Open Link chord, only where the surface binds one (FR-169's note, FR-046). */
   readonly chord?: string;
   /** The surface's own Ctrl+click (§16.11) — Open Link runs exactly this. */
@@ -63,19 +68,23 @@ export interface LinkMenuBuildArgs {
   readonly performers?: LinkMenuPerformers;
 }
 
-const ICONS: Partial<Record<LinkMenuItem['id'], string>> = {
+const ICONS: Partial<Record<LinkRow['id'], string>> = {
   // Open Link and Open in OS Default Program carry no icon: no open/link token exists (023's rule,
   // #127) — an icon only where a real token exists, never a lookalike.
   openInNew: 'editorPanel',
   openInActive: 'editorPanel',
   openInEditor: 'editorPanel',
+  openInCurrent: 'editorPanel',
   openPreview: 'preview',
   osExplorer: 'folderOpen',
   copyLink: 'copy',
 };
 
+/** `buildLinkMenu`'s item, or the one row this module substitutes for an already-open file. */
+type LinkRow = Omit<LinkMenuItem, 'id'> & { readonly id: LinkMenuItem['id'] | 'openInCurrent' };
+
 function performerFor(
-  id: LinkMenuItem['id'],
+  id: LinkRow['id'],
   editorId: string | undefined,
   performers: LinkMenuPerformers | undefined,
 ): (() => void) | undefined {
@@ -85,6 +94,8 @@ function performerFor(
       return () => void performers.openInEditor({ kind: 'new' });
     case 'openInActive':
       return () => void performers.openInEditor({ kind: 'active' });
+    case 'openInCurrent':
+      return () => void performers.openInEditor({ kind: 'current' });
     case 'openInEditor':
       return editorId === undefined
         ? undefined
@@ -119,7 +130,7 @@ export function linkMenuActions(
     ...(args.chord !== undefined && args.chord.length > 0 ? { chord: args.chord } : {}),
   };
 
-  const toAction = (item: LinkMenuItem): MenuAction => ({
+  const toAction = (item: LinkRow): MenuAction => ({
     label: item.label,
     section: item.section,
     disabled: item.disabled,
@@ -139,7 +150,18 @@ export function linkMenuActions(
 
   const rows: MenuAction[] = [];
   let openIn: MenuAction[] | null = null;
-  for (const item of buildLinkMenu(ctx)) {
+  const built = buildLinkMenu(ctx);
+  // FR-045 — only when the Open In rows are actually enabled; a pending/unresolved menu keeps its own
+  // disabled rows (the open answer arrives with the resolution).
+  const fileOpen = args.fileOpen === true;
+  for (const base of built) {
+    let item: LinkRow = base;
+    if (fileOpen && base.submenu === 'Open In') {
+      if (base.id === 'openInActive') continue;
+      if (base.id === 'openInNew') item = { ...base, id: 'openInCurrent', label: 'Current Editor' };
+      // A file is never moved between editors: the named rows stay, disabled.
+      else if (base.id === 'openInEditor') item = { ...base, disabled: true };
+    }
     if (item.submenu === 'Open In') {
       if (openIn === null) {
         openIn = [];

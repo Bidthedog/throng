@@ -5,6 +5,7 @@
  * so more items can be added as the feature grows.
  */
 import type { MenuAction } from '../workspace/context-menu.js';
+import { previewOpenInRows } from '../preview/preview-open-in.js';
 import type { FileClipboard } from '@throng/core';
 import {
   firstBinding,
@@ -53,6 +54,11 @@ export interface ContextMenuOps {
   remove: (relPaths: string[]) => void;
   reveal: (relPath: string) => void;
   hide: (relPath: string) => void;
+  /**
+   * 060 FR-033 — add the right-clicked entry to the project's Hidden to Find & Replace list.
+   * Optional so a caller with no project to write to simply omits the row.
+   */
+  excludeFromSearch?: (relPath: string) => void;
   /** Create a new folder under the target (a folder → itself; a file → its parent). */
   newFolder: (target: TargetNode) => void;
   /** Create a new file under the target (a folder → itself; a file → its parent). */
@@ -212,31 +218,9 @@ export function buildContextMenuItems(args: {
    * setting, or closing that preview, makes it work. Absent where it could never mean anything (a
    * folder, a type no provider claims, outside the project — FR-003, FR-004).
    */
-  if (preview !== undefined && node.kind === 'file' && preview.affordance.state !== 'absent') {
-    const previewDisabled = preview.affordance.state === 'disabled';
-    /*
-     * 047 US2 (FR-014, R8) — the two explicit reuse targets. 047 FR-075 removed the plain *Preview* row
-     * they used to sit beside: these replace it. *Last Preview Panel* carries the affordance's own
-     * disable PLUS its own — nothing standing in the visible tab to reuse — and names the panel it would
-     * reuse, as that panel's header shows it (FR-076); unnamed while there is none. *New Preview Panel*
-     * carries only the affordance's.
-     */
-    openInItems.push({
-      label: preview.lastPreviewTitle === null ? 'Last Preview Panel' : `Last Preview Panel (${preview.lastPreviewTitle})`,
-      icon: 'preview',
-      section: 'navigate',
-      group: 'preview',
-      disabled: previewDisabled || preview.lastPreviewTitle === null,
-      onClick: () => preview.openLastActive(),
-    });
-    openInItems.push({
-      label: 'New Preview Panel',
-      icon: 'preview',
-      section: 'navigate',
-      group: 'preview',
-      disabled: previewDisabled,
-      onClick: () => preview.openNew(),
-    });
+  // 047 US2 (FR-014, R8) — the two explicit reuse targets, described once for every surface (060 FR-048).
+  if (preview !== undefined && node.kind === 'file') {
+    openInItems.push(...previewOpenInRows(preview, { lastActive: preview.openLastActive, new: preview.openNew }));
   }
   /*
    * 033 US3 (FR-029/FR-030/FR-035) — Terminal, a THIRD level nested inside Open In, for folders and
@@ -371,6 +355,16 @@ export function buildContextMenuItems(args: {
   // this project's view".
   if (!isRoot) {
     items.push({ label: 'Hide in this project', icon: 'hide', section: 'viewState', onClick: () => ops.hide(node.relPath) });
+    // 060 FR-033 — beside Hide: the same per-project visibility idea, for the search rather than the tree.
+    const excludeFromSearch = ops.excludeFromSearch;
+    if (excludeFromSearch) {
+      items.push({
+        label: 'Exclude from Find in Files in this project',
+        icon: 'searchExclusions',
+        section: 'viewState',
+        onClick: () => excludeFromSearch(node.relPath),
+      });
+    }
   }
   return items;
 }

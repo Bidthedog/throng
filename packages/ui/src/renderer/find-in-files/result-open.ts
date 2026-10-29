@@ -24,6 +24,7 @@ import type { EditorOpenTarget, ResultRow } from '@throng/core';
 import { openFileInTab } from '../editor/editor-open.js';
 import { performOpenIn, readOpenInFacts } from '../editor/open-in-perform.js';
 import { describeOpenInTargets, type OpenInTarget } from '../editor/open-in-targets.js';
+import type { PreviewOpenInFacts } from '../preview/preview-open-in.js';
 
 /** One row, resolved to something the editor can open. */
 export interface ResultOpenRequest {
@@ -59,6 +60,11 @@ export interface ResultOpenRequest {
    */
   text?: string;
   line?: number;
+  /**
+   * 060 FR-048 — Open In's preview row the user chose: the file opens in a preview, reusing the last one
+   * or a new one, rather than through the default open action. Exclusive with `target`.
+   */
+  previewTarget?: 'lastActive' | 'new';
 }
 
 /** A row as the panel hands it over, with the root it belongs to. */
@@ -189,6 +195,27 @@ export async function queryResultOpenTargets(
 ): Promise<OpenInTarget[]> {
   if (!targetLister) return [];
   return targetLister(relPath, projectRoot);
+}
+
+/**
+ * 060 FR-048 — the preview rows' facts for one row's file, a third registration in the same effect and for
+ * the same reason: the affordance and the reuse candidate live in stores the panel does not hold. `null`
+ * (and no chrome mounted) draws no preview rows.
+ */
+type PreviewOpenInLister = (relPath: string, projectRoot: string | null) => Promise<PreviewOpenInFacts | null>;
+
+let previewLister: PreviewOpenInLister | null = null;
+
+export function registerResultPreviewOpenIn(list: PreviewOpenInLister | null): void {
+  previewLister = list;
+}
+
+export async function queryResultPreviewOpenIn(
+  relPath: string,
+  projectRoot: string | null = null,
+): Promise<PreviewOpenInFacts | null> {
+  if (!previewLister) return null;
+  return previewLister(relPath, projectRoot);
 }
 
 /**

@@ -4,6 +4,7 @@
  * document resolves to defaults rather than throwing (research D1). No OS/DOM.
  */
 import { DEFAULT_EXCLUDE_GLOBS } from '../explorer/exclude.js';
+import { DEFAULT_SEARCH_EXCLUDE_GLOBS } from '../search/search-exclude.js';
 import type { DragModifierKey } from '../explorer/drag.js';
 import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
 import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/log-level.js';
@@ -683,11 +684,21 @@ export const FIND_IN_FILES_TRIGGERS: readonly FindInFilesTrigger[] = ['run', 'as
  * is what the descriptor's `allowedValues` points at, and `bounds-guard.ts`'s `correctScalar`
  * substitutes the default for anything outside it on EVERY read — so the deletion above IS the
  * migration. `settings-grouping-retired.test.ts` is what holds that claim up.
+ *
+ * 060 FR-012/FR-017 ADDED `'folderTree'` — Folder structure, the File Explorer's tree with file headings
+ * as leaves. It is not the retired `'folder'` under a new name: every row in it still sits under a
+ * heading naming its file. Additive, so an older build reading it substitutes its default as above.
  */
-export type FindInFilesGrouping = 'file' | 'fileAndFolder';
+export type FindInFilesGrouping = 'file' | 'fileAndFolder' | 'folderTree';
 
 /** The values `search.inFiles.defaultGrouping` accepts, shared by the parser and the descriptor. */
-export const FIND_IN_FILES_GROUPINGS: readonly FindInFilesGrouping[] = ['file', 'fileAndFolder'];
+export const FIND_IN_FILES_GROUPINGS: readonly FindInFilesGrouping[] = ['file', 'fileAndFolder', 'folderTree'];
+
+/** 060 FR-043 — how Find in Files shows its result groups: every heading collapsed, or expanded. */
+export type FindInFilesShowResults = 'collapsed' | 'expanded';
+
+/** The values `search.inFiles.showResults` accepts, shared by the parser and the descriptor. */
+export const FIND_IN_FILES_SHOW_RESULTS: readonly FindInFilesShowResults[] = ['collapsed', 'expanded'];
 
 /** Find in Files preferences (043, FR-059 — six leaves, and two more at FR-082). */
 export interface FindInFilesSettings {
@@ -704,10 +715,12 @@ export interface FindInFilesSettings {
    * key would mean a user who wanted a snappier find bar paid for it in disk churn.
    */
   settleMs: number;
-  /** How a freshly-opened results panel groups its rows (FR-033a). */
+  /**
+   * How results panels group their rows (FR-033a). 060 FR-046 links it to the panels: choosing a
+   * grouping in one writes it, and every open panel follows it. `rememberGrouping` (FR-033b) is
+   * RETIRED with that — a persisted value is dropped by the parse below (019 FR-023's mechanism).
+   */
   defaultGrouping: FindInFilesGrouping;
-  /** Whether a panel's grouping choice outlives the search that set it (FR-033b). */
-  rememberGrouping: boolean;
   /**
    * Whether a replace that cannot be undone asks first (FR-057c).
    *
@@ -715,6 +728,19 @@ export interface FindInFilesSettings {
    * keystroke, and the cost of its absence is edits across many files with no undo to reach for.
    */
   warnIrreversibleCommit: boolean;
+  /**
+   * 060 #532 (FR-026) — the globs Find in Files skips, its OWN list. The File Explorer's
+   * `explorer.excludeGlobs` decides what the tree draws and no longer reaches search (FR-025). An
+   * explicit empty list is honoured, as the explorer's is.
+   */
+  excludeGlobs: string[];
+  /** 060 #532 (FR-028) — whether a NEW panel's exclusions toggle starts on, applying the list above. */
+  useExcludeGlobs: boolean;
+  /**
+   * 060 FR-043 — whether result headings start collapsed or expanded. Every panel follows it, and the
+   * panel's own toolbar toggle writes it; a heading the user flips stays flipped until it changes.
+   */
+  showResults: FindInFilesShowResults;
   /**
    * How the replace summary notice (FR-058) is displayed — ITS OWN mode, not its severity's
    * (043, FR-082).
@@ -927,10 +953,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       // By file. Grouping by folder AND file is useful once results are broad, and a user who has
       // just typed a term is usually looking for the file it is in (FR-033a).
       defaultGrouping: 'file',
-      // A grouping the user chose is a decision about how they are reading these results, and it
-      // survives the next search in the same panel (FR-033b).
-      rememberGrouping: true,
       warnIrreversibleCommit: true,
+      // 060 #532 — the explorer's shipped globs plus build, cache, log, editor and lock files, and
+      // switched on for new panels: noise is what a search most often has to wade through.
+      excludeGlobs: [...DEFAULT_SEARCH_EXCLUDE_GLOBS],
+      useExcludeGlobs: true,
+      // 060 FR-043 — expanded, as results have always opened (043 FR-034a, 060 FR-016).
+      showResults: 'expanded',
       // Dismiss only, with a 5000 ms duration stored beside it (FR-082) — the same pair `error` and
       // `warning` already ship, and for the same reason: a summary naming which files changed and
       // which did not is read, not glanced at, and one that vanished before it was read is
@@ -1039,7 +1068,7 @@ function searchSettings(raw: unknown, d: SearchSettings): SearchSettings {
  * so the parser and the form cannot disagree about the set.
  */
 function findInFilesSettings(raw: unknown, d: FindInFilesSettings): FindInFilesSettings {
-  if (!isRecord(raw)) return { ...d };
+  if (!isRecord(raw)) return { ...d, excludeGlobs: [...d.excludeGlobs] };
   return {
     openTarget:
       typeof raw.openTarget === 'string'
@@ -1052,12 +1081,20 @@ function findInFilesSettings(raw: unknown, d: FindInFilesSettings): FindInFilesS
       typeof raw.defaultGrouping === 'string'
         ? (raw.defaultGrouping as FindInFilesGrouping)
         : d.defaultGrouping,
-    rememberGrouping:
-      typeof raw.rememberGrouping === 'boolean' ? raw.rememberGrouping : d.rememberGrouping,
     warnIrreversibleCommit:
       typeof raw.warnIrreversibleCommit === 'boolean'
         ? raw.warnIrreversibleCommit
         : d.warnIrreversibleCommit,
+    // 060 #532 — `explorer.excludeGlobs`' rule: an explicit array (even empty) is honoured, anything
+    // else is the default.
+    excludeGlobs: Array.isArray(raw.excludeGlobs)
+      ? raw.excludeGlobs.filter((g): g is string => typeof g === 'string')
+      : [...d.excludeGlobs],
+    useExcludeGlobs:
+      typeof raw.useExcludeGlobs === 'boolean' ? raw.useExcludeGlobs : d.useExcludeGlobs,
+    showResults: FIND_IN_FILES_SHOW_RESULTS.includes(raw.showResults as FindInFilesShowResults)
+      ? (raw.showResults as FindInFilesShowResults)
+      : d.showResults,
     // FR-082. Type tolerance only, as above: an unrecognised mode is handed on as a string and
     // `bounds-guard.ts` substitutes the default for anything outside the descriptor's
     // `allowedValues` — which IS `DISPLAY_MODES`. A closed-set check here would be the second copy
@@ -1739,7 +1776,11 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     // `cloneEditor` above spells out at length. Without this line every caller of
     // `structuredCloneSettings` shares one `inFiles`, and for the defaults path that object is
     // `DEFAULT_APP_SETTINGS.search.inFiles` itself.
-    search: { ...s.search, inFiles: { ...s.search.inFiles } },
+    // 060 #532: `excludeGlobs` is the first array in `inFiles`, so it is copied under the spread.
+    search: {
+      ...s.search,
+      inFiles: { ...s.search.inFiles, excludeGlobs: [...s.search.inFiles.excludeGlobs] },
+    },
     diagnostics: { ...s.diagnostics },
     // Deep-cloned for the same reason as the indent maps above: `DEFAULT_APP_SETTINGS.notifications`
     // IS the notice module's shipped table, so a shallow spread would hand every caller the same

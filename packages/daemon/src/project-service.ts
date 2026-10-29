@@ -6,6 +6,7 @@ import {
   PROJECTS_SET_ACTIVE_METHOD,
   PROJECTS_REORDER_METHOD,
   PROJECTS_SET_HIDDEN_METHOD,
+  PROJECTS_SET_SEARCH_EXCLUDES_METHOD,
   PROJECTS_CATEGORIES_LIST_METHOD,
   PROJECTS_CATEGORIES_CREATE_METHOD,
   PROJECTS_CATEGORIES_RENAME_METHOD,
@@ -28,6 +29,7 @@ function toDto(project: Project): ProjectDto {
     rootFolder: project.rootFolder,
     isActive: project.isActive,
     hiddenPaths: project.hiddenPaths,
+    searchExcludeGlobs: project.searchExcludeGlobs,
     categoryId: project.categoryId,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -156,6 +158,16 @@ export class ProjectIpcService {
         throw new RpcError('"hiddenPaths" must be an array of strings', JSON_RPC_INVALID_PARAMS);
       }
       return { project: toDto(this.service.setHidden(id, hiddenPaths as string[])) };
+    });
+
+    // 060 #532 — the project's own Find in Files exclusions, replaced whole as `setHidden` does.
+    router.register(PROJECTS_SET_SEARCH_EXCLUDES_METHOD, (params) => {
+      const id = requireId(params);
+      const globs = asObject(params).searchExcludeGlobs;
+      if (!Array.isArray(globs) || !globs.every((g) => typeof g === 'string')) {
+        throw new RpcError('"searchExcludeGlobs" must be an array of strings', JSON_RPC_INVALID_PARAMS);
+      }
+      return { project: toDto(this.service.setSearchExcludes(id, globs as string[])) };
     });
 
     // 046 FR-055. orderedIds and an unknown project or category are refused by core, as

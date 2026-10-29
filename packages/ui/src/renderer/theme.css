@@ -1859,21 +1859,6 @@ textarea,
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
 }
 
-.app-closing__spinner {
-  width: 26px;
-  height: 26px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent, #6aa3ff);
-  border-radius: 50%;
-  animation: throng-spin 0.8s linear infinite;
-}
-
-@keyframes throng-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .app-closing__message {
   margin: 0;
   color: var(--text);

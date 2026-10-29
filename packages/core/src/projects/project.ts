@@ -28,6 +28,11 @@ export interface Project {
    *  excludeGlobs (004). Project-scoped; editable later. */
   hiddenPaths: string[];
   /**
+   * 060 #532 (FR-030) — glob patterns Find in Files skips in THIS project, whatever a panel's
+   * exclusions toggle says. Independent of `hiddenPaths`, which govern the tree only (FR-025).
+   */
+  searchExcludeGlobs: string[];
+  /**
    * The category the project is listed under (046 FR-059). A store resolves `''` or an id naming no
    * category of the owner to the default category before handing the project out, so a project read
    * back is never uncategorised (R9 heal rule).
@@ -195,6 +200,7 @@ export function createProject(input: ProjectInput, ctx: ProjectCreationContext):
     rootFolder: normalised.rootFolder,
     isActive: ctx.isActive ?? false,
     hiddenPaths: [],
+    searchExcludeGlobs: [],
     categoryId: ctx.categoryId ?? '',
     createdAt: ctx.now,
     updatedAt: ctx.now,
@@ -213,6 +219,22 @@ export function sanitiseHiddenPaths(paths: readonly unknown[]): string[] {
 /** Set a project's hidden-paths list (004), bumping `updatedAt`. Pure. */
 export function applyHiddenPaths(existing: Project, hiddenPaths: readonly string[], now: string): Project {
   return { ...existing, hiddenPaths: sanitiseHiddenPaths(hiddenPaths), updatedAt: now };
+}
+
+/** Sanitise a search-exclusion list (060 #532): strings only, trimmed, de-duplicated, no empties. */
+export function sanitiseSearchExcludeGlobs(globs: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  for (const g of globs) {
+    if (typeof g !== 'string') continue;
+    const glob = g.trim();
+    if (glob.length > 0) seen.add(glob);
+  }
+  return [...seen];
+}
+
+/** Set a project's own Find in Files exclusions (060 #532, FR-030), bumping `updatedAt`. Pure. */
+export function applySearchExcludeGlobs(existing: Project, globs: readonly string[], now: string): Project {
+  return { ...existing, searchExcludeGlobs: sanitiseSearchExcludeGlobs(globs), updatedAt: now };
 }
 
 /**

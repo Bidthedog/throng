@@ -38,7 +38,7 @@ import type { MenuAction } from '../workspace/context-menu.js';
  * kind rather than a bare tab id with two sentinel values, because "the active tab" and "some named
  * tab" are opened differently and a sentinel would make them the same type.
  */
-export type OpenInTargetKind = 'lastActive' | 'new' | 'tab';
+export type OpenInTargetKind = 'lastActive' | 'new' | 'tab' | 'current';
 
 /** One target, fully described: what it is, what it says, and whether it can be chosen. */
 export interface OpenInTarget {
@@ -100,6 +100,20 @@ export function describeOpenInTargets(facts: OpenInFacts): OpenInTarget[] {
   const { activeTabId, otherTabs, lastActiveEditorTitle, lastActiveHoldsFile, alreadyOpen } = facts;
   const noTab = activeTabId === undefined;
 
+  /*
+   * 060 FR-045 — a file already open in an editor ANYWHERE has exactly one place to go: that editor.
+   * Last Active and New Editor give way to one Current Editor row, which focuses it, and every other
+   * tab is drawn disabled — a file is never moved between editors (006 FR-011a). Either flag saying
+   * so is enough: `lastActiveHoldsFile` is this window's state, `alreadyOpen` main's, and they can
+   * disagree for a moment.
+   */
+  if (alreadyOpen || lastActiveHoldsFile) {
+    return [
+      { kind: 'current', label: 'Current Editor', disabled: noTab },
+      ...otherTabs.map((tab) => ({ kind: 'tab' as const, tabId: tab.id, label: tab.title, disabled: true })),
+    ];
+  }
+
   const targets: OpenInTarget[] = [
     {
       kind: 'lastActive',
@@ -110,16 +124,9 @@ export function describeOpenInTargets(facts: OpenInFacts): OpenInTarget[] {
       label: lastActiveEditorTitle
         ? `Last Active Editor (${lastActiveEditorTitle})`
         : 'Last Active Editor',
-      // 006 FR-082 — a no-op, NOT the app-wide rule. Deliberately not `alreadyOpen`.
-      disabled: noTab || lastActiveHoldsFile,
+      disabled: noTab,
     },
-    {
-      kind: 'new',
-      label: 'New Editor',
-      // 006 FR-072 with 006 FR-011a — disabled when the file is open ANYWHERE, because opening it
-      // here would be the second buffer the one-buffer rule forbids.
-      disabled: noTab || alreadyOpen,
-    },
+    { kind: 'new', label: 'New Editor', disabled: noTab },
   ];
 
   // No other tabs → nothing is pushed, so `openInMenuActions` draws no parent at all. This is the
@@ -127,7 +134,7 @@ export function describeOpenInTargets(facts: OpenInFacts): OpenInTarget[] {
   // Constitution VI draws a temporarily-unavailable control and omits a structurally meaningless
   // one, and a flyout over an empty set is the second, not the first.
   for (const tab of otherTabs) {
-    targets.push({ kind: 'tab', tabId: tab.id, label: tab.title, disabled: noTab || alreadyOpen });
+    targets.push({ kind: 'tab', tabId: tab.id, label: tab.title, disabled: noTab });
   }
 
   return targets;

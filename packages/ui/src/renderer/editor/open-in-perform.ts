@@ -98,5 +98,7 @@ export async function performOpenIn(args: {
 
   const activeTabId = ws.layout?.activeTabId;
   if (!activeTabId) return false;
+  // 060 FR-045 — Current Editor takes the Last Active route on purpose: `openFileInTab`'s one-buffer
+  // check finds the editor that already holds the file, focuses it and reveals `range` there.
   return openFileInTab(ws, activeTabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range, ...extra);
 }

@@ -8,6 +8,7 @@ import {
 } from './categories.js';
 import {
   applyHiddenPaths,
+  applySearchExcludeGlobs,
   applyProjectUpdate,
   assertFolderExclusive,
   assertOrderedIds,
@@ -104,6 +105,15 @@ export class ProjectService {
     const owner = this.owner;
     const existing = this.requireProject(owner, id);
     const updated = applyHiddenPaths(existing, hiddenPaths, this.deps.now());
+    this.deps.store.update(updated);
+    return updated;
+  }
+
+  /** Replace a project's own Find in Files exclusions (060 #532, FR-030). */
+  setSearchExcludes(id: string, globs: readonly string[]): Project {
+    const owner = this.owner;
+    const existing = this.requireProject(owner, id);
+    const updated = applySearchExcludeGlobs(existing, globs, this.deps.now());
     this.deps.store.update(updated);
     return updated;
   }

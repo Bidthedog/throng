@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactElement } from 'react';
+import { BusyGlyph } from './busy-glyph.js';
 import './loading.css';
 
 /**
@@ -19,7 +20,7 @@ export function useDelayedFlag(ms: number): boolean {
 export function Spinner({ label = 'Loading' }: { label?: string }): ReactElement {
   return (
     <span className="throng-spinner" role="status" aria-label={label}>
-      <span className="throng-spinner__ring" aria-hidden />
+      <BusyGlyph />
     </span>
   );
 }

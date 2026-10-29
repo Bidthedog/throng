@@ -1,0 +1,32 @@
+/* The busy glyph (060 FR-001a, FR-001b) — a square box that turns about its own centre.
+ *
+ * The glyph is centred INSIDE a box whose width and height are both the icon size, and the box is what
+ * rotates, so the glyph does not wobble however a theme's font positions it. `transform` is the only
+ * animated property: a running spinner costs the compositor and nothing in layout. */
+.busy-glyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--throng-size-icon);
+  height: var(--throng-size-icon);
+  line-height: 1;
+  transform-origin: 50% 50%;
+  animation: busy-glyph-spin 1s linear infinite;
+}
+
+@keyframes busy-glyph-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A reader who asked for less motion gets a steady glyph. */
+@media (prefers-reduced-motion: reduce) {
+  .busy-glyph {
+    animation: none;
+  }
+}

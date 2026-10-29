@@ -47,8 +47,11 @@ import {
   markStale,
   orderGroups,
   panelZoomLevel,
+  parseExcludeBox,
+  pathToSearchGlob,
   readScopeInput,
   relPathUnderRoot,
+  SETTINGS_METADATA,
   zoomFactor,
   type FindInFilesPanelConfig,
   type Grouping,
@@ -56,20 +59,22 @@ import {
   type ResultGroup,
   type ResultRow,
 } from '@throng/core';
-import { useAppSettings, useKeybindings } from '../config/config-store.js';
+import { useAppSettings } from '../config/config-store.js';
+import { writeConfigPatch } from '../config/write-config.js';
 import { useContextMenu } from '../context-menu-provider.js';
+import { useProjectsOptional } from '../state/projects-store.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
 import { Icon } from '../common/icon.js';
+import { BusyGlyph } from '../common/busy-glyph.js';
 import { IconButton } from '../common/icon-button.js';
 import { RESULT_ROW_CLASS, ResultsList, resultRowHeightPx } from './results-list.js';
 import { commitReplace } from './commit-replace.js';
 import { findInFilesContentMenu } from './content-menu.js';
-import { queryResultOpenTargets, requestFromRow, requestOpenResult } from './result-open.js';
+import { queryResultOpenTargets, queryResultPreviewOpenIn, requestFromRow, requestOpenResult } from './result-open.js';
 import {
   attachFindInFilesPanel,
   ensureFindInFilesPanel,
-  initialFindInFilesGrouping,
   isCommitted,
   runFindInFiles,
   cancelFindInFiles,
@@ -82,6 +87,8 @@ import {
   toggleFindInFilesGroup,
   toggleFindInFilesMode,
   toggleFindInFilesReplace,
+  toggleFindInFilesUseExcludes,
+  setFindInFilesExtraExcludes,
   useFindInFilesPanel,
   type FindInFilesPanelState,
 } from './find-in-files-store.js';
@@ -176,6 +183,19 @@ const SETTLE_CEILING_FACTOR = 4;
 const ENTER_AFTER_EDIT_IGNORED_MS = 1000;
 
 /**
+ * 060 FR-027 — the Preferences label of the global search exclusion list, which the toggle's hover
+ * title names. Read from the descriptor, so a renamed preference cannot leave the title pointing at
+ * a name the editor no longer shows.
+ */
+const EXCLUDE_GLOBS_LABEL =
+  SETTINGS_METADATA.find((d) => d.key === 'search.inFiles.excludeGlobs')?.label ?? 'Excluded from search';
+
+/** 060 FR-043 — the Show results preference the toolbar toggle writes, and the label it names it by. */
+const SHOW_RESULTS_PATH = ['search', 'inFiles', 'showResults'] as const;
+const SHOW_RESULTS_LABEL =
+  SETTINGS_METADATA.find((d) => d.key === 'search.inFiles.showResults')?.label ?? 'Show results';
+
+/**
  * The two groupings, in the order their controls are drawn (FR-033, narrowed by FR-073).
  *
  * The icon token is NOT carried here. Each control below writes its own `<Icon token="…" />`
@@ -187,6 +207,7 @@ const ENTER_AFTER_EDIT_IGNORED_MS = 1000;
 const GROUPINGS: readonly { id: Grouping; title: string }[] = [
   { id: 'file', title: 'Group by file' },
   { id: 'fileAndFolder', title: 'Group by folder and file' },
+  { id: 'folderTree', title: 'Group by folder structure' },
 ];
 
 /**
@@ -253,18 +274,26 @@ export function FindInFilesPanel({
   } as CSSProperties;
 
   /*
-   * The two grouping preferences, read by NAME here rather than by handing the whole section down
-   * (043 T064, FR-033a/FR-033b).
+   * The grouping preference, read by NAME here rather than by handing the whole section down
+   * (043 T064, FR-033a) — `settings-inertness-043.test.ts` needs the leaf and `inFiles` in one file.
    *
-   * That is deliberate and it is what `settings-inertness-043.test.ts` can see: a reader must both
-   * read the leaf and name `inFiles` in the same file, because `defaultGrouping` passed along
-   * inside an opaque object is indistinguishable from a setting nothing reads — which is #95's
-   * `explorer.openMode` exactly.
+   * 060 FR-046 — the panel and the preference are one setting: choosing a grouping writes it, and
+   * a change to it (from here, another panel or Preferences) regroups this panel.
    */
-  const groupingPrefs = {
-    defaultGrouping: prefs.defaultGrouping,
-    rememberGrouping: prefs.rememberGrouping,
+  const defaultGrouping = prefs.defaultGrouping;
+  const chooseGrouping = (grouping: Grouping): void => {
+    setFindInFilesGrouping(panelId, grouping);
+    if (grouping === defaultGrouping) return;
+    void writeConfigPatch({ kind: 'settings' }, [
+      { path: ['search', 'inFiles', 'defaultGrouping'], value: grouping },
+    ]);
   };
+  const shownGrouping = useRef(defaultGrouping);
+  useEffect(() => {
+    if (shownGrouping.current === defaultGrouping) return;
+    shownGrouping.current = defaultGrouping;
+    setFindInFilesGrouping(panelId, defaultGrouping);
+  }, [defaultGrouping, panelId]);
 
   /*
    * Created before the first read rather than in an effect.
@@ -283,13 +312,13 @@ export function FindInFilesPanel({
    * its own query from the moment it exists, and re-reading `panel.config` on every render would
    * let a debounced layout save race the user's next keystroke back out of the box.
    */
-  const [restored] = useState(() => findInFilesQueryFrom(panel.config));
+  const [restored] = useState(() => findInFilesQueryFrom(panel.config, prefs.useExcludeGlobs));
 
   useState(() => {
     ensureFindInFilesPanel(panelId, {
       projectId,
       projectRoot,
-      grouping: initialFindInFilesGrouping(projectId, groupingPrefs),
+      grouping: defaultGrouping,
       ...restored,
     });
     return null;
@@ -301,7 +330,7 @@ export function FindInFilesPanel({
     ensureFindInFilesPanel(panelId, {
       projectId,
       projectRoot,
-      grouping: initialFindInFilesGrouping(projectId, groupingPrefs),
+      grouping: defaultGrouping,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelId, projectId, projectRoot]);
@@ -326,18 +355,16 @@ export function FindInFilesPanel({
   const state = useFindInFilesPanel(panelId);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const replacementRef = useRef<HTMLInputElement | null>(null);
-  /** FR-030 — the menu's Change scope row is this field's route; it has no command of its own. */
+  /** The scope input — the field IS the scope command (FR-030); the menu has no row for it (060 FR-022). */
   const scopeRef = useRef<HTMLInputElement | null>(null);
   /** 046 FR-125 — the panel's focus target: the control last focused in it, else the search box. */
   const panelFocusTarget = usePanelFocusTarget(panelId);
 
   /*
-   * FR-025a — the panel's own menu. Read LIVE, both of them: `openMenu` because the app hosts one
-   * menu at a time, and the bindings because a rebound chord must show on the NEXT right-click
-   * rather than the next restart.
+   * FR-025a — the panel's own menu, read LIVE because the app hosts one menu at a time. It carries no
+   * chord any more (060 FR-042 took the Replace toggle out of it), so the bindings are not read here.
    */
   const { openMenu } = useContextMenu();
-  const keybindings = useKeybindings();
   /*
    * FR-057b and FR-058 — the question a commit may have to ask, and the ONE report it makes.
    *
@@ -350,6 +377,8 @@ export function FindInFilesPanel({
   const { notify } = useNotify();
   /** The row the reading position is on — what "this match" and "this file" mean (FR-049). */
   const currentRow = useRef<ResultRow | null>(null);
+  /** The pointer or focus is on the busy cancel control, so it shows the ✕ a click will perform. */
+  const [cancelHot, setCancelHot] = useState(false);
 
   /*
    * The settle scheduler (FR-043b). A quiet timer AND the moment the current burst began — the
@@ -366,6 +395,18 @@ export function FindInFilesPanel({
 
   const settleMs = prefs.settleMs;
   const asYouType = prefs.trigger === 'asYouType';
+  /*
+   * 060 FR-032 — the global list and the project's list are part of the query. They are read by NAME
+   * here (`settings-inertness-043`) and folded into the key the settle effect compares, so a change to
+   * either re-runs under as-you-type exactly as a term edit does.
+   *
+   * The project is THIS panel's (`projectId`), never "whichever is active": a panel never crosses
+   * into another project (FR-018), and another project's list changing says nothing about its search.
+   */
+  const globalExcludes = prefs.excludeGlobs;
+  const projects = useProjectsOptional();
+  const projectExcludes = projects?.projects.find((p) => p.id === projectId)?.searchExcludeGlobs;
+  const projectGlobs = projectExcludes ?? [];
   const queryKey =
     state === null
       ? null
@@ -374,6 +415,10 @@ export function FindInFilesPanel({
           state.modes.caseSensitive,
           state.modes.wholeWord,
           state.scopeSubPath,
+          state.useExcludeGlobs,
+          state.extraExcludes,
+          globalExcludes,
+          projectExcludes ?? [],
         ]);
 
   const scheduleScan = useCallback((): void => {
@@ -529,6 +574,19 @@ export function FindInFilesPanel({
   const version = results?.version ?? 0;
   const generation = results?.generation ?? 0;
   const grouping = state?.grouping ?? 'file';
+  // The scope the listed rows were searched under — NOT the scope box, which may hold an absolute
+  // path, backslashes, or an edit that has not been run (060 R3; see `FileSearchResults.scopeRel`).
+  const scopeRel = results?.scopeRel ?? '';
+
+  /*
+   * The ✕ is shown only while the pointer or focus is ON the busy control, and that control unmounts
+   * the moment the scan ends — without a mouse-leave. Left alone the flag would outlive the scan and
+   * the NEXT one would open showing a static ✕ instead of the spinning busy icon. So it is put away
+   * in the same render that sees the scan stop.
+   */
+  if (cancelHot && results?.status !== 'running') setCancelHot(false);
+  // Read by NAME (`settings-inertness-043`): the explorer's order is what Folder structure mirrors.
+  const explorerSortOrder = useAppSettings().explorer.sortOrder;
 
   /*
    * A re-run ABANDONS the reading position (FR-049's three granularities all read it).
@@ -551,7 +609,20 @@ export function FindInFilesPanel({
      * `rows` on every switch, so a flag stored on a group object would be thrown away the moment
      * the user switched grouping. The set is the file's, and the file is what changed.
      */
-    return markStale(orderGroups(groupRows(results.rows, grouping)), results.staleFiles);
+    /*
+     * 060 FR-013 / FR-014 — Folder structure is the one grouping that needs more than the rows.
+     *
+     * The tree starts BELOW the search scope (`scopeRel`), and it is ordered the way the File Explorer
+     * orders its own tree, by the user's `explorer.sortOrder` (folders before files). Both are handed
+     * over for `folderTree` ONLY: the two shipped groupings keep 043 FR-035's order unchanged, and
+     * `orderGroups` selects the explorer rule by whether an order is passed at all.
+     */
+    const treeOptions = grouping === 'folderTree' ? { scopeRel } : {};
+    const ordered = orderGroups(
+      groupRows(results.rows, grouping, treeOptions),
+      grouping === 'folderTree' ? explorerSortOrder : undefined,
+    );
+    return markStale(ordered, results.staleFiles);
     /*
      * `version`, not `rows`. The store appends a batch IN PLACE — `rows` is the same array across
      * every batch of one run, deliberately, because the immutable fold is quadratic in the match
@@ -559,7 +630,29 @@ export function FindInFilesPanel({
      * a memo compares.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, grouping]);
+  }, [version, grouping, scopeRel, explorerSortOrder]);
+
+  /*
+   * 060 FR-043 — Show results. The preference is every heading's STARTING state, and the panel's
+   * `collapsed` set holds only the headings the user flipped away from it — so a heading opened by
+   * hand under Collapsed stays open, a double-click still flips one, and Collapse all / Expand all
+   * still mean what they say.
+   *
+   * A change of preference applies to the results on screen too, and starts every heading over from
+   * it: the user asked for everything collapsed (or expanded), not for the opposite of their flips.
+   */
+  const showCollapsed = prefs.showResults === 'collapsed';
+  const flipped = state?.collapsed;
+  const collapsedKeys = useMemo<ReadonlySet<string>>(() => {
+    const own = flipped ?? new Set<string>();
+    return showCollapsed ? new Set(allGroupKeys(groups).filter((key) => !own.has(key))) : own;
+  }, [showCollapsed, flipped, groups]);
+  const shownCollapsed = useRef(showCollapsed);
+  useEffect(() => {
+    if (shownCollapsed.current === showCollapsed) return;
+    shownCollapsed.current = showCollapsed;
+    setAllFindInFilesGroupsCollapsed(panelId, []);
+  }, [showCollapsed, panelId]);
 
   if (state === null || results === null) {
     // Unreachable: the initialiser above created this panel before the snapshot was read. Handled
@@ -666,7 +759,9 @@ export function FindInFilesPanel({
   };
 
   /*
-   * Right-click → the panel's own menu (FR-025a, Constitution VI).
+   * Right-click → the panel's own menu (FR-025a). Since Constitution v6.0.0 a panel action only has to
+   * be REACHABLE — a menu row is one route, not a mandatory one — so run, cancel and scope (060
+   * FR-022) are reached through the toolbar, the search input and the chord instead of the menu.
    *
    * Every item below calls the SAME store mutator the icon beside it calls — two routes to one
    * action, never two implementations. The items and their sections live in `content-menu.ts`, and
@@ -709,6 +804,15 @@ export function FindInFilesPanel({
      */
     const fromRow = (event.target as Element | null)?.closest?.(`.${RESULT_ROW_CLASS}`) ?? null;
     if (fromRow === null) currentRow.current = null;
+    /*
+     * 060 FR-034 — the file or folder HEADING the menu was opened on, by the same rule as the row
+     * above: the origin of the click decides, read from the event's target before the await. The
+     * root heading (`''`) names the whole project and is not a path anyone can exclude.
+     */
+    const heading = (event.target as Element | null)?.closest?.<HTMLElement>('[data-group-key]') ?? null;
+    const headingKey = heading?.dataset.groupKey ?? '';
+    // 060 FR-041 — a FILE heading names a file, so Open In is offered over it (at the file's start).
+    const headingFile = fromRow === null && heading?.dataset.groupKind === 'file' ? headingKey : null;
 
     /*
      * FR-087 — the targets for the row this menu is about, or none.
@@ -720,9 +824,13 @@ export function FindInFilesPanel({
      * exists to prevent for the commit rows.
      */
     const openInRow = currentRow.current;
-    const openInTargets = openInRow
-      ? await queryResultOpenTargets(openInRow.relPath, state.projectRoot)
-      : [];
+    const openInPath = openInRow?.relPath ?? headingFile;
+    const [openInTargets, openInPreview] = openInPath
+      ? await Promise.all([
+          queryResultOpenTargets(openInPath, state.projectRoot),
+          queryResultPreviewOpenIn(openInPath, state.projectRoot),
+        ])
+      : [[], null];
 
     // T233 — what the two narrow commit rows would actually send, read after the await so a commit
     // that landed while main was answering is already reflected.
@@ -734,22 +842,20 @@ export function FindInFilesPanel({
       clientX,
       clientY,
       findInFilesContentMenu({
-        running,
-        split: { panelId, keybindings },
         replaceEnabled: state.replaceEnabled,
-        grouping: state.grouping,
-        keybindings,
         actions: {
-          run: runNow,
-          cancel: () => cancelFindInFiles(panelId),
-          toggleReplace: () => toggleFindInFilesReplace(panelId),
-          setGrouping: (next) => setFindInFilesGrouping(panelId, next, prefs.rememberGrouping),
-          focusScope: () => {
-            scopeRef.current?.focus();
-            scopeRef.current?.select();
-          },
+          excludeFromSearch:
+            headingKey !== '' && projectId !== null && projects !== null && !projectGlobs.includes(pathToSearchGlob(headingKey))
+              ? () =>
+                  void projects.setSearchExcludes(projectId, [
+                    ...projectGlobs,
+                    pathToSearchGlob(headingKey),
+                  ])
+              : undefined,
+          // 060 FR-043 — the store holds flips from the Show results default, so "all" in the
+          // default's direction clears them and "all" against it flips every heading.
           setAllCollapsed: (collapsed) =>
-            setAllFindInFilesGroupsCollapsed(panelId, collapsed ? allGroupKeys(groups) : []),
+            setAllFindInFilesGroupsCollapsed(panelId, collapsed === showCollapsed ? [] : allGroupKeys(groups)),
         },
         /*
          * FR-049 — the three granularities, wired to the same operation with three row selections.
@@ -787,8 +893,17 @@ export function FindInFilesPanel({
            * The rows are computed ONCE here, from the same list the handlers then send, so what the
            * menu says is available and what a click commits cannot disagree.
            */
-          replaceInFile: filePending.length > 0 ? () => commitRows(filePending) : undefined,
-          replaceMatch: matchPending && pointedAt ? () => commitRows([pointedAt]) : undefined,
+          /*
+           * 060 FR-003 — and never while the scan runs. The rows are live now (the #391 row lock is
+           * withdrawn), so a menu CAN be opened over a row that is still in a list being filled in;
+           * what it must not offer is the writing. Withheld here, which `content-menu.ts` draws
+           * disabled, so the menu and the toolbar's Replace All agree. The menu is built once, at
+           * open: one opened mid-scan stays disabled after the scan ends, until it is reopened.
+           */
+          replaceInFile:
+            !running && filePending.length > 0 ? () => commitRows(filePending) : undefined,
+          replaceMatch:
+            !running && matchPending && pointedAt ? () => commitRows([pointedAt]) : undefined,
           target: pointedAt ? { relPath: pointedAt.relPath } : undefined,
         },
         /*
@@ -803,6 +918,18 @@ export function FindInFilesPanel({
           pick: (target) => {
             if (openInRow) {
               requestOpenResult({ ...requestFromRow(openInRow), projectRoot: state.projectRoot, target });
+            } else if (headingFile !== null) {
+              // 060 FR-041 — a heading is the file, not a match: it opens at its first line.
+              requestOpenResult({ relPath: headingFile, from: 0, to: 0, line: 0, projectRoot: state.projectRoot, target });
+            }
+          },
+          // 060 FR-048 — a row's preview opens at its match; a heading's at the top (no match to reveal).
+          preview: openInPreview,
+          pickPreview: (previewTarget) => {
+            if (openInRow) {
+              requestOpenResult({ ...requestFromRow(openInRow), projectRoot: state.projectRoot, previewTarget });
+            } else if (headingFile !== null) {
+              requestOpenResult({ relPath: headingFile, from: 0, to: 0, projectRoot: state.projectRoot, previewTarget });
             }
           },
         },
@@ -856,7 +983,8 @@ export function FindInFilesPanel({
         {/*
           FR-046 / FR-025a — the replace DISCLOSURE, and the panel-level action FR-029d points at.
           Replace in files adds no toolbar control and no context-menu item of its own; this toggle
-          is how replace is discovered, and it is what carries the every-panel-action menu item.
+          is how replace is discovered, and the menu's Replace row is its keyboard-and-pointer twin:
+          the action is reachable either way (Constitution v6.0.0, Principle VI).
         */}
         <div className="fif-controls">
           <button
@@ -894,6 +1022,18 @@ export function FindInFilesPanel({
           >
             <Icon token="wholeWord" />
           </button>
+          {/* 060 FR-027 / FR-038 — the search exclusion list, on or off for THIS panel. Beside the
+              match modes because it is the same kind of thing: a switch on what the query matches. */}
+          <button
+            type="button"
+            className={`fif-btn${state.useExcludeGlobs ? ' fif-btn--on' : ''}`}
+            data-testid={`fif-use-excludes-${panelId}`}
+            aria-pressed={state.useExcludeGlobs}
+            title={`Global search exclusions ${state.useExcludeGlobs ? 'enabled' : 'disabled'}. Edit ‘${EXCLUDE_GLOBS_LABEL}’ in Preferences to change.`}
+            onClick={() => toggleFindInFilesUseExcludes(panelId)}
+          >
+            <Icon token="searchExclusions" />
+          </button>
         </div>
 
         {/* Grouping — a shape over results already found; switching never re-runs (FR-033). */}
@@ -906,13 +1046,30 @@ export function FindInFilesPanel({
               data-testid={`fif-grouping-${option.id}-${panelId}`}
               aria-pressed={state.grouping === option.id}
               title={option.title}
-              onClick={() => setFindInFilesGrouping(panelId, option.id, prefs.rememberGrouping)}
+              onClick={() => chooseGrouping(option.id)}
             >
               {/* A literal token per control: a computed one renders nothing when it is wrong. */}
               {option.id === 'file' ? <Icon token="file" /> : null}
               {option.id === 'fileAndFolder' ? <Icon token="folderOpen" /> : null}
+              {option.id === 'folderTree' ? <Icon token="groupFolderTree" /> : null}
             </button>
           ))}
+          {/* 060 FR-043 — Show results, beside the other ways of shaping the list. It writes the
+              preference itself, so every panel follows; pressed while results show collapsed. */}
+          <button
+            type="button"
+            className={`fif-btn${showCollapsed ? ' fif-btn--on' : ''}`}
+            data-testid={`fif-show-results-${panelId}`}
+            aria-pressed={showCollapsed}
+            title={`${SHOW_RESULTS_LABEL}: ${showCollapsed ? 'Collapsed' : 'Expanded'} — click to show them ${showCollapsed ? 'expanded' : 'collapsed'}. Changes the ‘${SHOW_RESULTS_LABEL}’ preference.`}
+            onClick={() =>
+              void writeConfigPatch({ kind: 'settings' }, [
+                { path: SHOW_RESULTS_PATH, value: showCollapsed ? 'expanded' : 'collapsed' },
+              ])
+            }
+          >
+            <Icon token="collapseAll" />
+          </button>
         </div>
       </div>
 
@@ -961,15 +1118,53 @@ export function FindInFilesPanel({
       */}
       <div className="fif-scope-row">
         <ScopeControl panelId={panelId} state={state} inputRef={scopeRef} />
+        {/* 060 FR-029 — the panel's own exclusions, applied whatever the toggle says. Parsed when a
+            scan starts; what is typed here is never rewritten. The invalid-entry notice is the
+            notice bar's, below. */}
+        <div className="fif-input-wrap fif-excludes">
+          <input
+            className="fif-input"
+            data-testid={`fif-excludes-${panelId}`}
+            type="text"
+            value={state.extraExcludes}
+            placeholder="Exclude, e.g. **/fixtures;*.snap"
+            aria-label="Also exclude (semicolon-separated globs)"
+            onChange={(e) => setFindInFilesExtraExcludes(panelId, e.target.value)}
+          />
+        </div>
         {running ? (
           <button
             type="button"
             className="fif-btn"
             data-testid={`fif-cancel-${panelId}`}
             title="Cancel search"
+            /*
+             * 060 FR-001 — the control that stops the scan is also what shows it is running. Both
+             * attributes: `data-busy` is what the stylesheet rotates, `aria-busy` is what a screen
+             * reader is told.
+             */
+            data-busy="true"
+            aria-busy="true"
             onClick={() => cancelFindInFiles(panelId)}
+            onMouseEnter={() => setCancelHot(true)}
+            onMouseLeave={() => setCancelHot(false)}
+            onFocus={() => setCancelHot(true)}
+            onBlur={() => setCancelHot(false)}
           >
-            <Icon token="dismiss" />
+            {/*
+              The busy glyph spins; the dismiss glyph replaces it on hover or focus so what a click
+              will DO stays visible (R10). Swapped in React rather than stacked and hidden by CSS:
+              every toolbar button holds exactly ONE icon (`find-in-files-panel-controls.test.ts`),
+              and two literal `<Icon>`s in separate branches keep `icon-tokens-exist` able to check
+              both tokens.
+            */}
+            {cancelHot ? (
+              <span className="fif-cancel-x" aria-hidden="true">
+                <Icon token="dismiss" />
+              </span>
+            ) : (
+              <BusyGlyph />
+            )}
           </button>
         ) : (
           <button
@@ -1006,11 +1201,13 @@ export function FindInFilesPanel({
       <ResultsList
         panelId={panelId}
         groups={groups}
+        /* A heading's label depends on the grouping it was built under (060 FR-004). */
+        grouping={state.grouping}
         /* FR-062 — the panel's own zoom, as ONE rounded integer for both the maths and the sheet. */
         rowHeightPx={rowHeightPx}
         /* A new run is a new list: the list's reading position and scroll offset start over. */
         generation={results.generation}
-        collapsed={state.collapsed}
+        collapsed={collapsedKeys}
         /*
          * FR-045a / SC-012 needs no `staleFiles` here. `markStale` above puts the flag on the
          * file-shaped GROUP, and every grouping that survives FR-073 gives each row such a heading —
@@ -1033,8 +1230,8 @@ export function FindInFilesPanel({
         onCurrentChange={(row) => {
           currentRow.current = row;
         }}
-        /* #391 — for exactly as long as the cancel ✕ shows. */
-        locked={running}
+        /* 060 FR-001 — the list is still filling in for exactly as long as the cancel control shows. */
+        busy={running}
       />
     </div>
   );
@@ -1059,7 +1256,7 @@ function ScopeControl({
 }: {
   panelId: string;
   state: FindInFilesPanelState;
-  /** The menu's Change scope row hands the caret here — the field IS the scope command (FR-030). */
+  /** The scope input's element — the field IS the scope command (FR-030). */
   inputRef: MutableRefObject<HTMLInputElement | null>;
 }): ReactElement {
   const projectRoot = state.projectRoot;
@@ -1201,13 +1398,40 @@ function NoticeBar({
       text: 'Folder is outside the project',
     });
   }
-  if (state.results.capped) {
+  /*
+   * ══ ONE PARTIAL NOTICE FOR TWO CAUSES (060 FR-003b, research R7) ══
+   *
+   * A list is partial when the scan stopped at the cap (043 FR-094) or was cancelled with rows
+   * already listed. They are one condition — "what is listed is not everything" — so they raise one
+   * notice naming whichever cause(s) apply, with the one consequence that matters: Replace All acts
+   * only on what is listed. A cancel that also hit the cap does not get a second bar.
+   *
+   * A cancel with nothing listed is not partial, it is empty: the status line already says Cancelled.
+   */
+  const { capped, status, rows } = state.results;
+  const cancelledWithRows = status === 'cancelled' && rows.length > 0;
+  /*
+   * 060 FR-029 — ONE notice for the exclusion box, naming every entry that cannot be compiled. The
+   * valid entries beside them are still applied, so the wording says what is wrong with the box and
+   * not what the user may not do.
+   */
+  const { invalid } = parseExcludeBox(state.extraExcludes);
+  if (invalid.length > 0) {
     notices.push({
-      key: 'capped',
-      testId: `fif-capped-notice-${panelId}`,
-      text:
-        `Showing the first ${formatGrouped(MAX_LISTED_MATCHES)} matches — the results are partial. ` +
-        'Replace All acts only on the results listed below.',
+      key: 'exclude-invalid',
+      testId: `fif-exclude-notice-${panelId}`,
+      text: `Not a valid exclusion pattern: ${invalid.join(', ')}`,
+    });
+  }
+  if (capped || cancelledWithRows) {
+    const cause = capped
+      ? `Showing the first ${formatGrouped(MAX_LISTED_MATCHES)} matches` +
+        (cancelledWithRows ? ', and the search was cancelled' : '')
+      : 'The search was cancelled';
+    notices.push({
+      key: 'partial',
+      testId: `fif-partial-notice-${panelId}`,
+      text: `${cause} — the results are partial. Replace All acts only on the results listed below.`,
     });
   }
   if (notices.length === 0) return null;
@@ -1247,7 +1471,9 @@ function StatusLine({
   state: FindInFilesPanelState;
 }): ReactElement {
   const { status, totalMatches, filesScanned, skipped } = state.results;
-  const showCounts = status === 'running' || (status === 'complete' && totalMatches > 0);
+  // A cancelled scan keeps what it listed (060 FR-003a), so it reports that count like a finished one.
+  const showCounts =
+    status === 'running' || ((status === 'complete' || status === 'cancelled') && totalMatches > 0);
   const label =
     status === 'notRun'
       ? 'Not run'

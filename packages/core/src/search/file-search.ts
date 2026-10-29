@@ -8,6 +8,8 @@
  * things a user reads a results list for, and all four are decisions about data. Putting them in
  * the service would have made each of them cost a temp tree and a real walk to assert.
  */
+import type { ExplorerSortOrder } from '../config/app-settings.js';
+import { sortNodes } from '../explorer/node.js';
 
 /** Where a search looks. */
 export interface SearchScope {
@@ -53,8 +55,23 @@ export interface ResultRow {
  * showed a position and a snippet and nothing else, so the file a line came from was unreadable.
  * `'fileAndFolder'` keeps the folder heading and puts a file heading under it, which is the shape
  * that answers the same question.
+ *
+ * 060 FR-012 added `'folderTree'`: the File Explorer's shape — one folder heading per LEVEL below the
+ * search scope, file headings as leaves — and the explorer's order, which `orderGroups` applies only
+ * when it is handed one (see there).
  */
-export type Grouping = 'file' | 'fileAndFolder';
+export type Grouping = 'file' | 'fileAndFolder' | 'folderTree';
+
+/** What only the `'folderTree'` shape needs to know (060 R3). */
+export interface GroupRowsOptions {
+  /**
+   * The search scope, root-relative (`''` for the project root). The tree starts BELOW it, so a search
+   * scoped to `packages/ui` opens on that folder's children with no empty ancestor levels above them.
+   * Keys stay root-relative either way, so collapse state and staleness name the same things in every
+   * grouping.
+   */
+  readonly scopeRel?: string;
+}
 
 /**
  * A heading rows sit under. Nests one level deep, and only under `fileAndFolder`.
@@ -281,10 +298,16 @@ function bucket(rows: readonly ResultRow[], keyOf: (r: ResultRow) => string): Ma
  * path. A row has no file name of its own, so a heading that is not the row's file is a row whose
  * origin the reader cannot recover.
  */
-export function groupRows(rows: readonly ResultRow[], grouping: Grouping): ResultGroup[] {
+export function groupRows(
+  rows: readonly ResultRow[],
+  grouping: Grouping,
+  options: GroupRowsOptions = {},
+): ResultGroup[] {
   if (grouping === 'file') {
     return [...bucket(rows, (r) => r.relPath)].map(([key, held]) => fileGroup(key, held));
   }
+
+  if (grouping === 'folderTree') return folderTree(rows, options.scopeRel ?? '');
 
   return [...bucket(rows, (r) => dirOf(r.relPath))].map(([key, held]) => {
     const children = [...bucket(held, (r) => r.relPath)].map(([path, own]) => fileGroup(path, own));
@@ -301,6 +324,78 @@ export function groupRows(rows: readonly ResultRow[], grouping: Grouping): Resul
   });
 }
 
+/**
+ * The `'folderTree'` shape (060 FR-013): a folder heading per directory level between `scopeRel` and
+ * each file, files as leaves, nothing merged.
+ *
+ * ══ WHY A SINGLE-CHILD CHAIN IS NOT FOLDED ══
+ *
+ * `deep/er/est/x.ts` draws three folder headings, not one reading `deep/er/est`. Folding is a "compact
+ * folders" view, and the requirement is the explorer's tree, which shows every level — a mirror that
+ * silently differs from the thing it mirrors is the confusion this grouping exists to remove.
+ *
+ * Every row is bucketed once by file, then each file is hung from its folder chain, created on first
+ * use, so a 20,000-row result set (FR-094) costs one pass plus one map lookup per directory segment.
+ */
+function folderTree(rows: readonly ResultRow[], scopeRel: string): ResultGroup[] {
+  interface Folder {
+    readonly key: string;
+    readonly folders: Map<string, Folder>;
+    readonly files: ResultGroup[];
+    count: number;
+  }
+  const root: Folder = { key: scopeRel, folders: new Map(), files: [], count: 0 };
+  const prefix = scopeRel === '' ? '' : `${scopeRel}/`;
+
+  for (const [relPath, held] of bucket(rows, (r) => r.relPath)) {
+    // A row outside the scope cannot occur (the walk is scoped), but it is hung from the scope rather
+    // than dropped: losing a match silently is the one outcome worse than drawing it one level high.
+    // A FILE scope (043 FR-092) is its own only match: it sits at the top level, under no heading.
+    const below =
+      relPath === scopeRel
+        ? nameOf(relPath)
+        : relPath.startsWith(prefix)
+          ? relPath.slice(prefix.length)
+          : relPath;
+    const segments = below.split('/').slice(0, -1);
+    let at = root;
+    at.count += held.length;
+    for (const segment of segments) {
+      const key = at.key === '' ? segment : `${at.key}/${segment}`;
+      let next = at.folders.get(segment);
+      if (!next) {
+        next = { key, folders: new Map(), files: [], count: 0 };
+        at.folders.set(segment, next);
+      }
+      next.count += held.length;
+      at = next;
+    }
+    at.files.push(fileGroup(relPath, held));
+  }
+
+  const toGroups = (folder: Folder): ResultGroup[] => [
+    ...[...folder.folders.values()].map(
+      (f): ResultGroup => ({
+        key: f.key,
+        kind: 'folder',
+        matchCount: f.count,
+        stale: false,
+        // As under `fileAndFolder`: a folder holds no rows of its own, or every match would be
+        // reachable twice and any count over the tree would double.
+        rows: [],
+        children: toGroups(f),
+      }),
+    ),
+    ...folder.files,
+  ];
+  return toGroups(root);
+}
+
+/** The last path segment — what the explorer sorts a node by. */
+function nameOf(key: string): string {
+  return key.slice(key.lastIndexOf('/') + 1);
+}
+
 /** Rows within a group: by file, then by position — FR-035's rule applied inside a heading. */
 function orderRows(rows: readonly ResultRow[]): readonly ResultRow[] {
   // Every row under a file heading shares its path, so the path comparison is skipped when the
@@ -313,13 +408,32 @@ function orderRows(rows: readonly ResultRow[]): readonly ResultRow[] {
 /**
  * FR-035, at every level. Files before sub-directories, each set alphanumerically with digits
  * before letters, and the same rule applied again to whatever nests below.
+ *
+ * ══ UNLESS AN EXPLORER ORDER IS PASSED (060 FR-014) ══
+ *
+ * The Folder structure grouping mirrors the File Explorer, and the explorer orders the opposite way —
+ * folders BEFORE files, by the user's `explorer.sortOrder`. That is `sortNodes`, reused rather than
+ * restated, over each heading's last segment. The two shipped groupings never pass an order, so FR-035
+ * still governs them unchanged (060 FR-024): one comparator could not serve both rules.
  */
-export function orderGroups(groups: readonly ResultGroup[]): ResultGroup[] {
-  return [...groups]
-    .sort((a, b) =>
-      a.kind === b.kind ? comparePaths(a.key, b.key, a.kind === 'file') : a.kind === 'file' ? -1 : 1,
-    )
-    .map((g) => ({ ...g, rows: orderRows(g.rows), children: orderGroups(g.children) }));
+export function orderGroups(
+  groups: readonly ResultGroup[],
+  explorerOrder?: ExplorerSortOrder,
+): ResultGroup[] {
+  const sorted =
+    explorerOrder === undefined
+      ? [...groups].sort((a, b) =>
+          a.kind === b.kind ? comparePaths(a.key, b.key, a.kind === 'file') : a.kind === 'file' ? -1 : 1,
+        )
+      : sortNodes(
+          groups.map((g) => ({ group: g, kind: g.kind, name: nameOf(g.key) })),
+          explorerOrder,
+        ).map((n) => n.group);
+  return sorted.map((g) => ({
+    ...g,
+    rows: orderRows(g.rows),
+    children: orderGroups(g.children, explorerOrder),
+  }));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

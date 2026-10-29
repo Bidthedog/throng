@@ -34,6 +34,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   NO_MODES,
+  parseExcludeBox,
   readScopeInput,
   type Grouping,
   type MatchModes,
@@ -65,6 +66,11 @@ export interface FileSearchUpdateEvent {
    */
   snapshot?: true;
   rows?: readonly ResultRow[];
+  /**
+   * 060 — the scope the run searched, root-relative POSIX. Authoritative when present: it is the only
+   * way a MIRRORED view, which never started the run, learns where its Folder structure tree starts.
+   */
+  scopeRel?: string;
   totalMatches?: number;
   filesScanned?: number;
   skipped?: number;
@@ -87,7 +93,13 @@ export interface FileSearchUpdateEvent {
    * query it is being given rather than one of its own. The window being typed into never receives
    * it, which is what keeps a debounced re-run from overwriting a half-typed word.
    */
-  adoptQuery?: { term: string; modes: MatchModes };
+  adoptQuery?: {
+    term: string;
+    modes: MatchModes;
+    /** 060 FR-032 — the exclusion toggle and the panel's own (already parsed) patterns. */
+    useExcludeGlobs: boolean;
+    extraExcludes: string[];
+  };
 }
 
 export interface FileSearchResults {
@@ -110,6 +122,25 @@ export interface FileSearchResults {
    * reads when it draws a HEADING cannot hide, disable or reorder a row.
    */
   readonly staleFiles: readonly string[];
+  /**
+   * The NORMALISED scope these rows were searched under — root-relative, forward slashes, no
+   * trailing slash, `''` for the whole project (060 R3).
+   *
+   * What the Folder structure grouping roots its tree at. It cannot be the scope BOX's text: that is
+   * whatever the user typed (an absolute path, backslashes — FR-092b) and may have been edited since
+   * without a run, and a tree drawn from it would show ancestor levels, or shift under results that
+   * came from another scope.
+   *
+   * FR-072 removed `ranScope` because nothing READ it for display. This is read — by grouping — so
+   * it is not the inert state that deletion was about, and it is never rendered as text.
+   */
+  readonly scopeRel: string;
+  /**
+   * The scope of the run that has been STARTED but whose first batch has not landed. Adopted into
+   * `scopeRel` when that run's generation replaces the rows, so the rows on screen and the root of
+   * their tree always change together.
+   */
+  readonly pendingScopeRel: string;
   /** Bumped on every accepted update. What a consumer compares; never array identity. */
   readonly version: number;
 }
@@ -132,6 +163,8 @@ export const NO_FILE_SEARCH_RESULTS: FileSearchResults = {
   skipped: 0,
   capped: false,
   staleFiles: Object.freeze([]),
+  scopeRel: '',
+  pendingScopeRel: '',
   version: 0,
 };
 
@@ -203,6 +236,10 @@ export function applyFileSearchUpdate(
      * list no longer shows.
      */
     staleFiles: update.staleFiles ?? (replace ? [] : state.staleFiles),
+    // The run's own word wins. Without it, a new generation adopts the scope this window STARTED it
+    // with, and the same run keeps its own.
+    scopeRel: update.scopeRel ?? (fresh ? state.pendingScopeRel : state.scopeRel),
+    pendingScopeRel: state.pendingScopeRel,
     version: state.version + 1,
   };
 }
@@ -210,12 +247,6 @@ export function applyFileSearchUpdate(
 // ────────────────────────────────────────────────────────────────────────────
 // One panel's search (043 T058)
 // ────────────────────────────────────────────────────────────────────────────
-
-/** What a scan asks a panel about the FR-033 preferences, resolved by the panel that reads them. */
-export interface GroupingPreference {
-  readonly defaultGrouping: Grouping;
-  readonly rememberGrouping: boolean;
-}
 
 /** The alternatives the scope control's single notice slot can hold (FR-030a, FR-070, R27). */
 export type ScopeNotice = 'missing' | 'outsideProject' | null;
@@ -236,6 +267,14 @@ export interface FindInFilesPanelState {
    * that starts a scan, so an empty control cannot reach the service as the sub-directory `""`.
    */
   readonly scopeSubPath: string;
+  /** 060 FR-027 — whether the search exclusion list applies to THIS panel's scans. */
+  readonly useExcludeGlobs: boolean;
+  /**
+   * 060 FR-029 — the box's RAW text (semicolon-separated globs). Raw, not parsed: the box is a text
+   * field the user is typing into, and rewriting it to its canonical form under their caret is the
+   * mistake `scopeSubPath` already avoids. It is parsed at the one place that starts a scan.
+   */
+  readonly extraExcludes: string;
   /*
    * There is no `ranScope` here, and its absence is a decision (FR-072).
    *
@@ -431,16 +470,6 @@ export function rebase(
   return { from: row.from + shift, to: row.to + shift };
 }
 
-/**
- * The grouping each project was last searched in (FR-033b).
- *
- * A module-level Map, and that IS the requirement rather than a shortcut: what is remembered lives
- * in memory for the running application only and must not survive a restart. The preference that
- * decides whether to remember is the only part of this that reaches disk. 033 FR-062 settles the
- * same question the same way for Quick Open's remembered query.
- */
-const rememberedGrouping = new Map<string, Grouping>();
-
 /** The live subscription to the update channel — one for the window, not one per panel. */
 let channel: (() => void) | null = null;
 
@@ -509,7 +538,22 @@ function receive(update: FileSearchUpdateEvent): void {
   const adopt = update.adoptQuery;
   const term = adopt ? adopt.term : panel.term;
   const modes = adopt ? adopt.modes : panel.modes;
-  const queryMoved = term !== panel.term || modes !== panel.modes;
+  // 060 FR-032 — the exclusions are part of the query, so a follower takes them from the run too. The
+  // box keeps its own text when the adopted list is what that text already parses to: main only has
+  // the parsed globs, and replacing ` **/gen ; *.snap ` with `**/gen;*.snap` would rewrite a field
+  // under its typist for no change in meaning.
+  const useExcludeGlobs = adopt ? adopt.useExcludeGlobs : panel.useExcludeGlobs;
+  const sameGlobs = (a: readonly string[], b: readonly string[]): boolean =>
+    a.length === b.length && a.every((g, i) => g === b[i]);
+  const extraExcludes =
+    adopt && !sameGlobs(parseExcludeBox(panel.extraExcludes).globs, adopt.extraExcludes)
+      ? adopt.extraExcludes.join(';')
+      : panel.extraExcludes;
+  const queryMoved =
+    term !== panel.term ||
+    modes !== panel.modes ||
+    useExcludeGlobs !== panel.useExcludeGlobs ||
+    extraExcludes !== panel.extraExcludes;
   /*
    * The `queryMoved` clause is not belt-and-braces. A supersession delivers an update whose rows
    * and totals can be identical to what this window already held — a re-run of the same search over
@@ -520,7 +564,17 @@ function receive(update: FileSearchUpdateEvent): void {
   const committed = fromANewRun ? EMPTY_COMMITTED : panel.committed;
   // T235 — an adopted query that MOVED the box is counted, so the panel can tell it from typing.
   const adoptSeq = adopt && queryMoved ? panel.adoptSeq + 1 : panel.adoptSeq;
-  panels.set(update.panelId, { ...panel, results, scopeNotice, committed, term, modes, adoptSeq });
+  panels.set(update.panelId, {
+    ...panel,
+    results,
+    scopeNotice,
+    committed,
+    term,
+    modes,
+    useExcludeGlobs,
+    extraExcludes,
+    adoptSeq,
+  });
   emit();
 }
 
@@ -544,20 +598,6 @@ function update(
   emit();
 }
 
-/**
- * Which grouping a panel opens in (FR-033c).
- *
- * Pure over the two preferences and the per-project memory, so the panel can call it while it is
- * being created rather than opening in one grouping and correcting itself in an effect.
- */
-export function initialFindInFilesGrouping(
-  projectId: string | null,
-  prefs: GroupingPreference,
-): Grouping {
-  if (!prefs.rememberGrouping || projectId === null) return prefs.defaultGrouping;
-  return rememberedGrouping.get(projectId) ?? prefs.defaultGrouping;
-}
-
 export interface FindInFilesPanelInit {
   projectId: string | null;
   projectRoot: string | null;
@@ -565,6 +605,9 @@ export interface FindInFilesPanelInit {
   term?: string;
   modes?: MatchModes;
   scopeSubPath?: string;
+  /** 060 FR-031 — the toggle and the box a panel opens holding (a new panel: the preference, `''`). */
+  useExcludeGlobs?: boolean;
+  extraExcludes?: string;
   /** FR-027a — a restored panel reopens with its replacement row as the user left it. */
   replaceEnabled?: boolean;
   replacement?: string;
@@ -589,6 +632,8 @@ export function ensureFindInFilesPanel(panelId: string, init: FindInFilesPanelIn
     term: init.term ?? '',
     modes: init.modes ?? NO_MODES,
     scopeSubPath: init.scopeSubPath ?? '',
+    useExcludeGlobs: init.useExcludeGlobs ?? true,
+    extraExcludes: init.extraExcludes ?? '',
     scopeNotice: null,
     grouping: init.grouping,
     collapsed: new Set(),
@@ -700,6 +745,16 @@ export function setFindInFilesReplacement(panelId: string, replacement: string):
   update(panelId, (p) => (p.replacement === replacement ? p : { ...p, replacement }));
 }
 
+/** 060 FR-027 — switch the search exclusion list on or off for this panel. */
+export function toggleFindInFilesUseExcludes(panelId: string): void {
+  update(panelId, (p) => ({ ...p, useExcludeGlobs: !p.useExcludeGlobs }));
+}
+
+/** 060 FR-029 — the box's raw text. Starts nothing here; the panel's settle path decides that. */
+export function setFindInFilesExtraExcludes(panelId: string, extraExcludes: string): void {
+  update(panelId, (p) => (p.extraExcludes === extraExcludes ? p : { ...p, extraExcludes }));
+}
+
 export function toggleFindInFilesMode(panelId: string, mode: keyof MatchModes): void {
   update(panelId, (p) => ({ ...p, modes: { ...p.modes, [mode]: !p.modes[mode] } }));
 }
@@ -736,16 +791,14 @@ export function markFindInFilesScopeOutsideProject(panelId: string): void {
 }
 
 /**
- * Switch the grouping (FR-033) — and remember it for this project when the preference says so.
+ * Switch the grouping (FR-033). 060 FR-046: the panel also writes it to the grouping preference,
+ * and follows that preference when it changes, so there is no per-project memory here any more.
  *
  * Nothing is re-run: both shapes FR-073 left are derivable from the rows one scan already produced, which
  * is what `groupRows` being a pure function of them buys.
  */
-export function setFindInFilesGrouping(panelId: string, grouping: Grouping, remember: boolean): void {
-  update(panelId, (p) => {
-    if (remember && p.projectId !== null) rememberedGrouping.set(p.projectId, grouping);
-    return p.grouping === grouping ? p : { ...p, grouping };
-  });
+export function setFindInFilesGrouping(panelId: string, grouping: Grouping): void {
+  update(panelId, (p) => (p.grouping === grouping ? p : { ...p, grouping }));
 }
 
 /** Collapse or expand one group (FR-034). The set survives a regrouping and a re-run. */
@@ -795,7 +848,7 @@ export function runFindInFiles(panelId: string): void {
 
   panels.set(panelId, {
     ...panel,
-    results: { ...panel.results, status: 'running' },
+    results: { ...panel.results, status: 'running', pendingScopeRel: read.subPath },
     // A run started here is wanted: only generations already seen stay dropped.
     dropThrough: panel.dropThrough === Infinity ? panel.seenGeneration : panel.dropThrough,
   });
@@ -811,6 +864,9 @@ export function runFindInFiles(panelId: string): void {
     scopeSubPath,
     term: panel.term,
     modes: panel.modes,
+    // 060 FR-027 / FR-029 — parsed HERE, where the scan is started, so the box keeps what was typed.
+    useExcludeGlobs: panel.useExcludeGlobs,
+    extraExcludes: parseExcludeBox(panel.extraExcludes).globs,
   })
     .then((result) => {
       /*
@@ -851,8 +907,15 @@ export function runFindInFiles(panelId: string): void {
 export function cancelFindInFiles(panelId: string): void {
   /*
    * The panel stops NOW, whatever main has already sent — see `dropThrough`. It reads Cancelled and
-   * lists nothing, which is what main's own cancel shows (FR-043: a cancelled walk yields nothing,
-   * not a truncated set). Fresh arrays: the fold appends in place.
+   * KEEPS what is already listed (060 FR-003a): the rows, the stale marks and the counts stay, and
+   * only the status changes. This supersedes 043's reading of FR-043, under which a cancelled walk
+   * yielded nothing and this function emptied the list; the partial notice now says the list is
+   * partial instead (FR-003b), and Replace All acts on exactly the rows listed.
+   *
+   * What makes keeping them safe is `dropThrough: Infinity`, unchanged: nothing from this run that
+   * arrives after the cancel is folded in, so "what is listed at the moment of cancel is what stays"
+   * (FR-003d). Fresh arrays: the fold appends in place, and the cancelled list must not share its
+   * backing array with a run that could still reach it.
    */
   update(panelId, (p) =>
     p.results.status !== 'running'
@@ -861,11 +924,10 @@ export function cancelFindInFiles(panelId: string): void {
           ...p,
           dropThrough: Infinity,
           results: {
-            ...NO_FILE_SEARCH_RESULTS,
-            rows: [],
-            staleFiles: [],
+            ...p.results,
+            rows: [...p.results.rows],
+            staleFiles: [...p.results.staleFiles],
             status: 'cancelled',
-            generation: p.results.generation,
             version: p.results.version + 1,
           },
         },
@@ -987,10 +1049,9 @@ export function destroyFindInFilesPanel(panelId: string): void {
   emit();
 }
 
-/** Test seam: drop every panel, every remembered grouping, and the channel subscription. */
+/** Test seam: drop every panel and the channel subscription. */
 export function __resetFindInFilesState(): void {
   panels.clear();
-  rememberedGrouping.clear();
   channel?.();
   channel = null;
   emit();

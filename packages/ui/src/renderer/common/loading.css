@@ -12,19 +12,6 @@
   align-items: center;
   justify-content: center;
 }
-.throng-spinner__ring {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  animation: throng-spin 0.7s linear infinite;
-}
-@keyframes throng-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 /* A themed placeholder block. Shimmers between two surface tones so it reads as
    "content is arriving here" rather than a blank gap. */
@@ -98,9 +85,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .throng-spinner__ring {
-    animation-duration: 1.8s;
-  }
   .throng-skeleton {
     animation: none;
   }

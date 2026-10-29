@@ -145,6 +145,12 @@ export interface PreviewSearchController extends BaseSearchController {
    * this to leave a range that is a find match to find's own highlight.
    */
   matchRanges(): readonly Match[];
+  /**
+   * 060 FR-047 — paint `range` (a Find in Files match the preview was opened for) as find paints its current
+   * match: the current fill and the current frame, repainted on scroll and resize like any other. It replaces
+   * any find session's matches, and the next query or `close` replaces it in turn.
+   */
+  markRevealed(range: Range): void;
 }
 
 export interface PreviewSearchDeps {
@@ -355,6 +361,18 @@ export function createPreviewSearchController(deps: PreviewSearchDeps): PreviewS
 
     matchRanges(): readonly Match[] {
       return matches;
+    },
+
+    markRevealed(range: Range): void {
+      term = '';
+      matches = [];
+      lastFrom = null;
+      current = 0;
+      ranges = [range];
+      cancelPendingFrame();
+      painter.paint(ranges, current);
+      paintFrames();
+      deps.onPaint?.();
     },
 
     scrollToCurrent(): void {
