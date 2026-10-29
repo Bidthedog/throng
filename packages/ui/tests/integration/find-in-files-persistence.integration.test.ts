@@ -80,6 +80,9 @@ const LIVE_PANEL = {
   },
   replaceEnabled: true,
   replacement: 'pin',
+  // 060 #532 — the panel's own exclusion toggle and box travel with it; non-default, so a lost value shows.
+  useExcludeGlobs: false,
+  extraExcludes: '**/generated',
   committed: new Set<string>(['src/renderer/app.tsx:40']),
   seedSeq: 2,
   focusTarget: 'search' as const,
@@ -142,6 +145,8 @@ describe('the panel’s query crosses a restart (FR-027a, FR-027b)', () => {
       scopeSubPath: 'src/renderer',
       replaceEnabled: true,
       replacement: 'pin',
+      useExcludeGlobs: false,
+      extraExcludes: '**/generated',
     });
   });
 
@@ -182,10 +187,12 @@ describe('what the blob must NOT be carrying (FR-027b, FR-027c, FR-027d)', () =>
 
     expect(Object.keys(panel.config ?? {}).sort()).toEqual([
       'caseSensitive',
+      'extraExcludes',
       'replaceShown',
       'replacement',
       'scopeSubPath',
       'term',
+      'useExcludeGlobs',
       'wholeWord',
     ]);
     // Said again as a substring search over the stored JSON, because the key list above would pass
@@ -232,6 +239,9 @@ describe('what the blob must NOT be carrying (FR-027b, FR-027c, FR-027d)', () =>
       scopeSubPath: '',
       replaceEnabled: false,
       replacement: '',
+      // 060 #532 — an older panel takes the shipped default for the toggle and an empty box.
+      useExcludeGlobs: true,
+      extraExcludes: '',
     });
   });
 });
