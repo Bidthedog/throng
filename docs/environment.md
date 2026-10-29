@@ -127,9 +127,11 @@ launches.
 | `THRONG_TEST_RUN_OWNED_DIR` | Set by Playwright's global setup when it created the run folder, so teardown removes it. | set internally |
 | `THRONG_NON_REFERENCE_HARDWARE` | Marks a machine whose timings are not representative, so wall-clock SLA ceilings are recorded rather than asserted. See [performance SLAs](../.claude/skills/throng-testing/references/performance-sla.md). | unset |
 | `THRONG_NO_REENCODED_KEY_DELIVERY` | Declares the host cannot deliver CSI-u key sequences into a program, so those specs skip. | unset |
+| `THRONG_CALIBRATE` | Which parts of the Resource Monitor's memory-estimate calibration spec run. Unset, it runs the gate: editors and previews at 1 and 10 MB and terminals filled to their scrollback limit, each within 10% of live heap, then the three benchmark runs, each ranking its panels at a Spearman ρ of at least 0.85 with each panel kind's share of the total within 5 points; shapes the estimates are known to miss are logged, not asserted. `full` runs the whole sweep, 50 MB included, and the benchmarks. A comma list of `editor`, `preview` and `terminal` runs those sections' full case lists alone; `bench-a`, `bench-b` or `bench-c` runs that benchmark alone. | unset (the gate) |
 | `THRONG_CLAUDE_E2E` | `1` runs the specs that drive the real `claude` binary. Never on CI. | unset |
 | `THRONG_CLAUDE_E2E_ROOT` | An existing project, with real Claude sessions, for those specs to use. | a temp folder |
 | `THRONG_CLAUDE_PROJECT` | The project whose Claude session history the resume spec reads. | this repository |
+| `THRONG_COLLECTOR_FAKE` | `1` makes the resource collector read a fake process table its integration test drives, instead of Windows'. | unset |
 | `THRONG_INPUT_SOAK` | `1` runs the keystroke soak. | unset |
 | `THRONG_INPUT_SOAK_REPS` | Repetitions per shell in the soak. | `50` |
 | `CI` / `GITHUB_ACTIONS` | Mark a CI run: skips the Claude and SLA specs, warms Electron once in global setup. | set by GitHub Actions |
