@@ -52,6 +52,12 @@ const asStartRequest = (value: unknown): StartScanRequest => {
     scopeSubPath: typeof scope === 'string' && scope.length > 0 ? scope : null,
     term: asString(payload.term),
     modes: asModes(payload),
+    // 060 #532 — anything but a literal `false` keeps the search exclusion list on, the shipped
+    // default; the box's globs are taken as strings only.
+    useExcludeGlobs: payload.useExcludeGlobs !== false,
+    extraExcludes: Array.isArray(payload.extraExcludes)
+      ? payload.extraExcludes.filter((g): g is string => typeof g === 'string')
+      : [],
   };
 };
 

@@ -15,6 +15,7 @@ import type {
   ProjectsReorderResult,
   ProjectsSetActiveResult,
   ProjectsSetHiddenResult,
+  ProjectsSetSearchExcludesResult,
   ProjectsUpdateParams,
   ProjectsUpdateResult,
 } from '@throng/ipc-contract';
@@ -61,6 +62,15 @@ export class ProjectsClient {
       id,
       hiddenPaths,
     });
+    return result.project;
+  }
+
+  /** 060 #532 — REPLACE a project's Find in Files exclusion list (FR-033, FR-035). */
+  async setSearchExcludes(id: string, searchExcludeGlobs: string[]): Promise<ProjectDto> {
+    const result = await this.bridge.invoke<ProjectsSetSearchExcludesResult>(
+      'projects.setSearchExcludes',
+      { id, searchExcludeGlobs },
+    );
     return result.project;
   }
 

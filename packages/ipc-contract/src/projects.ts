@@ -15,6 +15,8 @@ export const PROJECTS_DELETE_METHOD = 'projects.delete';
 export const PROJECTS_SET_ACTIVE_METHOD = 'projects.setActive';
 export const PROJECTS_REORDER_METHOD = 'projects.reorder';
 export const PROJECTS_SET_HIDDEN_METHOD = 'projects.setHidden';
+/** 060 #532 — replace a project's own Find in Files exclusions, as `setHidden` replaces its hidden paths. */
+export const PROJECTS_SET_SEARCH_EXCLUDES_METHOD = 'projects.setSearchExcludes';
 // Project categories (046, contracts/project-categories.md §1). Every refusal, an unknown id
 // included, is JSON_RPC_INVALID_PARAMS.
 export const PROJECTS_CATEGORIES_LIST_METHOD = 'projects.categories.list';
@@ -37,6 +39,12 @@ export interface ProjectDto {
   updatedAt: string;
   /** Root-relative paths hidden from the file tree, on top of excludeGlobs (004). */
   hiddenPaths: string[];
+  /**
+   * 060 #532 — glob patterns Find in Files skips in this project (FR-030), independent of
+   * `hiddenPaths`. Always sent by the daemon; optional on the type so a renderer fixture that
+   * predates it still describes a project with none.
+   */
+  searchExcludeGlobs?: string[];
   /**
    * The category the project is listed under (046 FR-059). Always resolved by the daemon: `''` or an
    * id naming no category reads back as the owner's default category, so this is never `''`.
@@ -99,6 +107,14 @@ export interface ProjectsSetHiddenParams {
   hiddenPaths: string[];
 }
 export interface ProjectsSetHiddenResult {
+  project: ProjectDto;
+}
+
+export interface ProjectsSetSearchExcludesParams {
+  id: string;
+  searchExcludeGlobs: string[];
+}
+export interface ProjectsSetSearchExcludesResult {
   project: ProjectDto;
 }
 

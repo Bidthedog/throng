@@ -437,31 +437,31 @@ export const THRONG_THEME: Theme = {
     // File Explorer tree (004, FR-005/FR-031). Folder/file glyphs, a symlink
     // indicator, by-type file icons, and toolbar actions — all themeable and
     // rendered in a fixed-size box so dimensions stay uniform.
-    folder: '📁',
-    folderOpen: '📂',
+    folder: '▰',
+    folderOpen: '▱',
     chevron: '▸',
-    file: '📄',
-    fileCode: '🗎',
-    fileJson: '🗎',
-    fileMarkdown: '📝',
-    fileImage: '🖼',
-    fileText: '📄',
+    file: '▯',
+    fileCode: '⟨⟩',
+    fileJson: '{}',
+    fileMarkdown: '¶',
+    fileImage: '◩',
+    fileText: '≡',
     symlink: '↳',
     // Panel-type markers shown at the head of each panel's title (012). Terminal
     // reuses the terminal glyph below; the editor gets its own themeable token.
     editorPanel: '🖉',
     expandAll: '⊞',
     collapseAll: '⊟',
-    newFolder: '📁',
+    newFolder: '▰⁺',
     // 033 US1 (#219, FR-018b) — the File Explorer toolbar's Quick Open control. A magnifier over a
     // document: the gesture is "find a FILE", which the bare magnifier (`search`, the find bar) does
     // not say. Two tokens because they are two actions, not one action drawn twice.
-    quickOpen: '🔎',
+    quickOpen: '⊳',
     terminal: '▣',
     // Find-bar action controls (013, FR-018). Every control in the find bar is a
     // themeable icon carrying a hover title — never a text label. Closing the bar
     // reuses the shared `dismiss` glyph above.
-    search: '🔍',
+    search: '⌕',
     findNext: '↓',
     findPrevious: '↑',
     /* 043 (FR-029a/FR-029b, FR-030). Two more tokens for two more ACTIONS, on the same rule that
@@ -489,8 +489,14 @@ export const THRONG_THEME: Theme = {
        `searchScope` is its neighbour in the same block, and a crosshair rather than a folder: the
        panel's scope control answers "where does this search look", which is aiming rather than
        finding, and the answer may be a file or a glob as easily as a folder — so `newFolder` 📁's
-       vocabulary would be wrong as well as borrowed. */
-    findInFiles: '📚',
+       vocabulary would be wrong as well as borrowed.
+
+       060 FR-011c SUPERSEDES the FR-065 weight fix above, at the maintainer's direction: every icon
+       Find in Files and the File Explorer toolbar draw is a PLAIN glyph (no Extended_Pictographic,
+       no Emoji_Presentation), so `quickOpen` and `newFolder` went plain with this one and the toolbar
+       is one weight again — the intent FR-065 served, reached from the other side. The three searches
+       stay three glyphs, none of them a lens emoji. `theme-plain-glyphs.test.ts` holds it. */
+    findInFiles: '⧈',
     searchScope: '⌖',
     // The two match-mode toggles read as the thing they match on: "Aa" for letter case,
     // "ab" for a whole word. Both are two characters, so the pair reads as a set.
@@ -626,6 +632,19 @@ export const THRONG_THEME: Theme = {
     /* 057 added `attention`, `attentionFailed` and `goToPanel` (R11). All three are retired: `goToPanel`
        by round 12 (FR-124, the toast card is the link), the two flag glyphs by round 13 (FR-135,
        FR-139), when the mark became a numbered circle drawn in CSS. */
+    /* 060 (FR-001, FR-001a, FR-001b). The app's ONE busy glyph — the Find in Files cancel control while
+       a scan runs, the loading spinner and the closing overlay all draw it through `BusyGlyph`, which
+       turns it about its centre and holds it still under reduced motion. Not `refresh`: that means
+       "re-read now". */
+    busy: '◜',
+    /* 060 (FR-018, FR-011b). The Folder structure grouping control: a fork, for a tree. Its two
+       siblings draw `file` and `folderOpen`, so a third grouping takes a glyph of its own. */
+    groupFolderTree: '⋔',
+    /* 060 #532 (FR-037). The File Explorer's project settings control. It drew `settings` ⚙, the
+       app's Preferences glyph — two different dialogs behind one picture. A house: THIS project's. */
+    projectSettings: '⌂',
+    /* 060 #532 (FR-038). The Find in Files panel's exclusions toggle. Not `cancel`/`hide`'s ⊘. */
+    searchExclusions: '⊝',
   },
 };
 

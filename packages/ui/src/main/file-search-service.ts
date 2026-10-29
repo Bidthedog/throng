@@ -17,8 +17,8 @@
  *
  *   walk        `walkFiles` — sorted root-relative POSIX paths, an excluded FOLDER never descended
  *               into, an abandoned walk producing NOTHING rather than a truncated set
- *   exclusions  `compileExcluder` over `explorer.excludeGlobs` PLUS the project's own hidden set,
- *               composed exactly as `project-file-index.ts` composes it, both read at SCAN TIME
+ *   exclusions  `compileExcluder` over Find in Files' OWN lists (060 #532) — the search exclusion list,
+ *               the project's own list and the panel's box, composed by `searchExcludeGlobs`, read at SCAN TIME
  *   refusals    `isProbablyBinary` and `editor.maxOpenFileBytes` — the editor's own detection and
  *               the editor's own limit, rather than a second notion of what is searchable
  *   matching    `editorMatches` — the find bar's semantics, so a file search and a buffer search
@@ -67,10 +67,10 @@ import {
   compileExcluder,
   decode,
   editorMatches,
-  hiddenPathGlobs,
   isProbablyBinary,
   isUnderPath,
   normaliseForCompare,
+  searchExcludeGlobs,
   snippetFor,
   toAbsPath,
   walkFiles,
@@ -134,7 +134,27 @@ export interface FileSearchUpdate {
    * `find-in-files-panel.tsx` read `panel.config` once and never again. So the query travels one way
    * — from whichever window last started or retargeted the run, to every other viewer.
    */
-  adoptQuery?: { term: string; modes: MatchModes };
+  adoptQuery?: AdoptedQuery;
+  /**
+   * 060 — the scope this run searched, root-relative POSIX, `''` for the whole project.
+   *
+   * What Folder structure roots its tree at. Sent with the rows rather than remembered by the window
+   * that started the run, because a mirrored view of the same panel never started it: without this
+   * a sub-workspace showing a scoped search would draw the scope's ancestor levels above it.
+   */
+  scopeRel?: string;
+}
+
+/**
+ * FR-078b's query, handed to a FOLLOWING window — and since 060 #532 that includes what the run
+ * skips, which is as much a part of the question as the term: a follower that kept its own toggle
+ * would describe the shared rows with exclusions they were not produced under.
+ */
+export interface AdoptedQuery {
+  term: string;
+  modes: MatchModes;
+  useExcludeGlobs: boolean;
+  extraExcludes: string[];
 }
 
 /** What a file looked like when the scan read it (FR-045a). Both halves — see `IFileSystem`. */
@@ -151,6 +171,13 @@ export interface StartScanRequest {
   scopeSubPath: string | null;
   term: string;
   modes: MatchModes;
+  /**
+   * 060 #532 (FR-027) — the panel's exclusions toggle: whether `search.inFiles.excludeGlobs` applies
+   * to this run. Absent reads as on, the shipped default for a new panel.
+   */
+  useExcludeGlobs?: boolean;
+  /** 060 #532 (FR-029) — the panel's own extra exclusions, already parsed from its box. */
+  extraExcludes?: string[];
 }
 
 export type StartScanResult =
@@ -213,6 +240,10 @@ interface ScanRun {
   scope: SearchScope;
   term: string;
   modes: MatchModes;
+  /** 060 #532 — whether the search exclusion list applies to this run (the panel's toggle). */
+  useExcludeGlobs: boolean;
+  /** 060 #532 — the panel's own extra exclusions for this run. */
+  extraExcludes: string[];
   /** FR-045f — binary, too large, or its read failed. One number for the whole run. */
   skipped: number;
   filesScanned: number;
@@ -276,14 +307,15 @@ export class FileSearchService {
   constructor(
     private readonly fs: IFileSystem,
     /**
-     * Read AT SCAN TIME and never captured, exactly as the file index reads it.
+     * `search.inFiles.excludeGlobs` (060 #532) — Find in Files' own list, not the explorer's. Read AT SCAN TIME
+     * and never captured, exactly as the file index reads its own.
      *
      * Capturing it at construction is the habit that disqualified the daemon from owning a walk
      * (research R2); importing it here would reproduce the bug one layer up.
      */
-    private readonly excludeGlobs: () => readonly string[],
-    /** The project's own "Hide in this project" set, keyed by root — read at scan time too. */
-    private readonly hiddenPaths: (root: string) => readonly string[],
+    private readonly searchList: () => readonly string[],
+    /** 060 #532 — the project's own Find in Files exclusions, keyed by root — read at scan time too. */
+    private readonly projectSearchExcludes: (root: string) => readonly string[],
     /** `editor.maxOpenFileBytes`. The editor's limit, not a second one (FR-045e). */
     private readonly maxFileBytes: () => number,
     /**
@@ -733,6 +765,7 @@ export class FileSearchService {
       skipped: run.skipped,
       ...(run.capped ? { capped: true as const } : {}),
       staleFiles: [...run.staleFiles],
+      scopeRel: run.scope.subPath ?? '',
       ...this.queryFor(webContentsId, run),
     });
   }
@@ -748,9 +781,16 @@ export class FileSearchService {
   private queryFor(
     webContentsId: number,
     run: ScanRun,
-  ): { adoptQuery: { term: string; modes: MatchModes } } | Record<string, never> {
+  ): { adoptQuery: AdoptedQuery } | Record<string, never> {
     if (webContentsId === run.originator) return {};
-    return { adoptQuery: { term: run.term, modes: run.modes } };
+    return {
+      adoptQuery: {
+        term: run.term,
+        modes: run.modes,
+        useExcludeGlobs: run.useExcludeGlobs,
+        extraExcludes: [...run.extraExcludes],
+      },
+    };
   }
 
   /**
@@ -847,6 +887,8 @@ export class FileSearchService {
       existing.scope = scope;
       existing.term = request.term;
       existing.modes = request.modes;
+      existing.useExcludeGlobs = request.useExcludeGlobs ?? true;
+      existing.extraExcludes = [...(request.extraExcludes ?? [])];
       existing.skipped = 0;
       existing.filesScanned = 0;
       existing.totalMatches = 0;
@@ -876,6 +918,8 @@ export class FileSearchService {
       scope,
       term: request.term,
       modes: request.modes,
+      useExcludeGlobs: request.useExcludeGlobs ?? true,
+      extraExcludes: [...(request.extraExcludes ?? [])],
       skipped: 0,
       filesScanned: 0,
       totalMatches: 0,
@@ -895,21 +939,28 @@ export class FileSearchService {
   }
 
   /**
-   * The ONE exclusion predicate this scan walks with (FR-045).
+   * The ONE exclusion predicate this scan walks with (060 #532, FR-025–FR-030).
    *
-   * Composed exactly as `project-file-index.ts` composes it — the setting plus the project's hidden
-   * set — because "the project's existing exclusion rules" means the rules the TREE obeys, and a
-   * second rule set here would be a second answer to the same question.
+   * It USED to be composed exactly as `project-file-index.ts` composes the tree's — the explorer's
+   * globs plus the project's hidden set — on 043 FR-045's reading that search follows "the
+   * project's existing exclusion rules". #532 supersedes that: the tree's lists decide what the TREE
+   * draws, and search has its own, composed by `searchExcludeGlobs` from the search exclusion list
+   * (only while this run's toggle is on), the project's own list and the panel's box.
    *
    * The predicate is stated over ROOT-relative paths while the walk hands out paths relative to the
    * SCOPE, so a sub-directory scan re-prefixes before asking. Without that, `node_modules` inside a
    * scoped directory would be excluded and `pkg/node_modules` would not.
    */
-  private excluderFor(scope: SearchScope): (relPath: string) => boolean {
-    const excluded = compileExcluder([
-      ...this.excludeGlobs(),
-      ...hiddenPathGlobs(this.hiddenPaths(scope.projectRoot)),
-    ]);
+  private excluderFor(run: ScanRun): (relPath: string) => boolean {
+    const scope = run.scope;
+    const excluded = compileExcluder(
+      searchExcludeGlobs({
+        global: this.searchList(),
+        useGlobal: run.useExcludeGlobs,
+        project: this.projectSearchExcludes(scope.projectRoot),
+        extra: run.extraExcludes,
+      }),
+    );
     const prefix = scope.subPath ? `${scope.subPath}/` : '';
     return prefix === '' ? excluded : (relPath) => excluded(`${prefix}${relPath}`);
   }
@@ -952,7 +1003,7 @@ export class FileSearchService {
     const prefix = scope.subPath ? `${scope.subPath}/` : '';
     const paths = await walkFiles(this.fs, base, {
       cancelled: () => this.stale(run, generation),
-      excluded: this.excluderFor(scope),
+      excluded: this.excluderFor(run),
     });
     return paths.map((rel) => ({ relPath: `${prefix}${rel}`, abs: toAbsPath(base, rel) }));
   }
@@ -1087,6 +1138,7 @@ export class FileSearchService {
       totalMatches: run.totalMatches,
       filesScanned: run.filesScanned,
       skipped: run.skipped,
+      scopeRel: run.scope.subPath ?? '',
     };
     if (run.capped) payload.capped = true;
     if (rows && rows.length > 0) {

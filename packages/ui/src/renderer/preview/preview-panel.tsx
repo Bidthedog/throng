@@ -1429,12 +1429,19 @@ export function PreviewPanel({
       setTimeout(() => diagram.classList.remove(DIAGRAM_REVEALED_CLASS), DIAGRAM_REVEALED_MS);
       return;
     }
-    const painter = createCssHighlightPainter(panelId);
-    painter.paint([range], 0);
     const target = range.startContainer.parentElement ?? host;
     // A match in a collapsed section: unfold it first; the scroll follows the redraw the fold causes.
     const unfolding = revealBeforeScrollRef.current(range.startContainer) === true;
-    const scroll = (): void => target.scrollIntoView({ block: 'center' });
+    // 060 FR-047 — painted as find paints its current match (fill AND frame), once it has a place on screen.
+    const mark = (): void => {
+      const controller = searchControllerRef.current;
+      if (controller) controller.markRevealed(range);
+      else createCssHighlightPainter(panelId).paint([range], 0);
+    };
+    const scroll = (): void => {
+      target.scrollIntoView({ block: 'center' });
+      mark();
+    };
     if (unfolding) requestAnimationFrame(scroll);
     else scroll();
   };

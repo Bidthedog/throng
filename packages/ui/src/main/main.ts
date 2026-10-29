@@ -107,7 +107,7 @@ import {
   instanceDatabasePath,
   instanceUserDataDir,
 } from './instance-paths.js';
-import { ensureDaemon, pingDaemon } from './daemon-lifecycle.js';
+import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon } from './daemon-lifecycle.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -852,8 +852,23 @@ if (isPrimaryInstance)
     },
   });
 
+  /*
+   * #533 — the other development checkout whose daemon this build is running on, or null.
+   *
+   * #192 leaves such a daemon alone, which is right, and said nothing, which was not: its older code
+   * answered the first new method with "Method not found". Reported to the renderer, which raises one
+   * notice and turns the status bar's daemon indicator into the control that replaces it.
+   */
+  let foreignDaemon: { checkout: string } | null = null;
+  const noteDaemonResult = (res: { foreign?: boolean; foreignEntry?: string }): void => {
+    const next = res.foreign && res.foreignEntry ? { checkout: checkoutOfDaemonEntry(res.foreignEntry) } : null;
+    if (next?.checkout === foreignDaemon?.checkout) return;
+    foreignDaemon = next;
+    broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:daemon:foreign', foreignDaemon);
+  };
+
   try {
-    await ensureDaemon(daemonOptions());
+    noteDaemonResult(await ensureDaemon(daemonOptions()));
   } catch (error) {
     console.error('[throng-ui] daemon did not start:', (error as Error).message);
   }
@@ -1318,16 +1333,21 @@ if (isPrimaryInstance)
    * paths are keyed by project ID and the index by ROOT, and the two line up only because no two
    * projects may share a root — the constraint that makes the id→root map total and unambiguous.
    */
-  const projectsByRoot = new Map<string, { id: string; rootFolder: string; hiddenPaths: string[] }>();
+  const projectsByRoot = new Map<
+    string,
+    // 060 #532 — `searchExcludeGlobs` rides the same list call: Find in Files reads it at scan time.
+    { id: string; rootFolder: string; hiddenPaths: string[]; searchExcludeGlobs: string[] }
+  >();
   let attentionOnProjectsListed: ((projectIds: ReadonlySet<string>) => void) | null = null;
   const sameHidden = (a: readonly string[], b: readonly string[]): boolean =>
     a.length === b.length && a.every((v, i) => v === b[i]);
   /** Re-list from the daemon; answer with the roots whose hidden set ACTUALLY changed. */
   const refreshProjectsCache = async (): Promise<string[]> => {
-    let projects: { id: string; rootFolder: string; hiddenPaths?: string[] }[];
+    type ListedProject = { id: string; rootFolder: string; hiddenPaths?: string[]; searchExcludeGlobs?: string[] };
+    let projects: ListedProject[];
     try {
       const result = await daemonClient.call<{
-        projects: { id: string; rootFolder: string; hiddenPaths?: string[] }[];
+        projects: ListedProject[];
       }>('projects.list', {});
       projects = result.projects;
     } catch {
@@ -1343,7 +1363,12 @@ if (isPrimaryInstance)
       const hiddenPaths = [...(p.hiddenPaths ?? [])];
       const before = projectsByRoot.get(key);
       if (!before || !sameHidden(before.hiddenPaths, hiddenPaths)) changed.push(p.rootFolder);
-      projectsByRoot.set(key, { id: p.id, rootFolder: p.rootFolder, hiddenPaths });
+      projectsByRoot.set(key, {
+        id: p.id,
+        rootFolder: p.rootFolder,
+        hiddenPaths,
+        searchExcludeGlobs: [...(p.searchExcludeGlobs ?? [])],
+      });
     }
     for (const [key, gone] of [...projectsByRoot]) {
       if (seen.has(key)) continue;
@@ -1435,10 +1460,10 @@ if (isPrimaryInstance)
    * 043 US3 — the Find in Files scan (contracts/file-search-ipc.md, research R2).
    *
    * Beside the file index and for the same reasons: UI main is where a walk belongs, and this is
-   * the one place it is ever constructed (Principle IX). It shares the index's two live inputs
-   * READ AS FUNCTIONS rather than captured — the glob setting and the project's own hidden set — so
-   * "the project's existing exclusion rules" (FR-045) means the rules the tree obeys, and there is
-   * no second rule set to drift from the first.
+   * the one place it is ever constructed (Principle IX). Its exclusions are READ AS FUNCTIONS rather
+   * than captured, as the index reads its own — but since 060 #532 they are Find in Files' OWN lists
+   * (the search exclusion setting and each project's search exclusions), superseding 043 FR-045's
+   * "the rules the tree obeys". The tree and search now answer different questions.
    *
    * `editor.maxOpenFileBytes` joins them for the same reason: the scan skips what the EDITOR would
    * refuse to open, at the editor's limit, rather than declaring a second notion of searchable
@@ -1446,8 +1471,10 @@ if (isPrimaryInstance)
    */
   const fileSearch = new FileSearchService(
     fileSystem,
-    () => currentSettings.explorer.excludeGlobs,
-    (root) => projectsByRoot.get(normaliseForCompare(root))?.hiddenPaths ?? [],
+    // 060 #532 (FR-025) — Find in Files' OWN lists, never the File Explorer's excluded globs or its
+    // hidden set: those decide what the tree draws, and search no longer follows them.
+    () => currentSettings.search.inFiles.excludeGlobs,
+    (root) => projectsByRoot.get(normaliseForCompare(root))?.searchExcludeGlobs ?? [],
     () => currentSettings.editor.maxOpenFileBytes,
     pushFileSearchUpdate,
   );
@@ -1990,14 +2017,27 @@ if (isPrimaryInstance)
    * the supervisor stays ignorant of daemon lifecycle details.
    */
   const daemonSupervisor = new DaemonSupervisor();
+  // #533 — set for the one restart that replaces another checkout's daemon, at the user's request.
+  let replaceForeignOnRestart = false;
   daemonSupervisor.setRestartHandler(async () => {
     // The SAME options the app started with — see `daemonOptions`. A restart that reconfigured the
     // daemon behind the user's back would be a stranger bug than the one the control fixes.
-    const res = await ensureDaemon(daemonOptions());
+    const replaceForeign = replaceForeignOnRestart;
+    replaceForeignOnRestart = false;
+    const res = await ensureDaemon({ ...daemonOptions(), replaceForeign });
+    noteDaemonResult(res);
+    if (res.foreign) return false; // still someone else's: nothing of ours is serving
     return res.spawned || (await pingDaemon(settings.pipeName, settings.pingTimeoutMs));
   });
   ipcMain.handle('throng:daemon:restart', () => daemonSupervisor.requestRestart());
   ipcMain.handle('throng:daemon:state', () => daemonSupervisor.current());
+  // #533 — whose daemon this is, and the user's way to make it this build's. Through the supervisor's
+  // restart, so the swap reads as "restarting" rather than as the daemon dying under the user.
+  ipcMain.handle('throng:daemon:foreign', () => foreignDaemon);
+  ipcMain.handle('throng:daemon:replaceForeign', () => {
+    replaceForeignOnRestart = true;
+    return daemonSupervisor.requestRestart();
+  });
   /*
    * 057 — panel attention marks. Main owns the mark state (contracts/app-attention.md); the renderer
    * never sees the daemon. Built by hand like its neighbours here: its windows port needs the live

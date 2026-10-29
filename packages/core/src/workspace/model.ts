@@ -175,6 +175,10 @@ export type FindInFilesPanelConfig = {
   replaceShown?: boolean;
   /** The replacement text — restored, but never applied: a pending preview does not survive. */
   replacement?: string;
+  /** 060 #532 (FR-027, FR-031) — the panel's exclusions toggle; absent on a pre-#532 panel = on. */
+  useExcludeGlobs?: boolean;
+  /** 060 #532 (FR-029, FR-031) — the panel's exclusions box, as the user typed it (semicolon-separated). */
+  extraExcludes?: string;
 };
 
 /** A leaf node: one Panel (the atomic, draggable content unit). */

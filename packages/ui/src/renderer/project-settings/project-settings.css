@@ -3,9 +3,88 @@
    that way. It reuses the shared `.modal` / `.modal-overlay` chrome, so it inherits the dialog
    surface, radius and shadow rather than inventing a second dialog look. */
 
+/* FR-036 — the dialog is capped to the viewport and is a column: the title and Close keep their size,
+   the sections share the rest, and each LIST scrolls inside its own box. Nothing a long list does can
+   push Close out of reach. */
 .project-settings {
   min-width: 30rem;
   max-width: 44rem;
+  max-height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.project-settings__sections {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Sized by its CONTENT and allowed only to shrink. A zero basis (`flex: 1 1 0`) let Chromium size the
+   uncapped column from zero, and the sections' `overflow: hidden` then hid both sections whole. */
+.project-settings__group {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+/* 060 FR-044 — the title and its dismiss ✕ on one row. */
+.project-settings__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.project-settings__header .modal__title {
+  margin: 0;
+}
+
+/* A section heading and its shortcut to the global list in Preferences, on one row. */
+.project-settings__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 1rem 0 0.35rem;
+}
+
+.project-settings__section-head .project-settings__section {
+  margin: 0;
+}
+
+/* The same inline padding as a list row (`.hidden-path`), so a row's remove ✕ sits under the ＋. */
+.project-settings__add {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  padding: 0 0.4rem;
+}
+
+.project-settings__add-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--text);
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.project-settings__notice {
+  margin: 0 0 0.35rem;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--throng-colour-surfaceActive);
+  border-left: 3px solid var(--throng-colour-warning);
+  border-radius: 2px;
 }
 
 .project-settings__section {
@@ -26,10 +105,15 @@
   margin: 0;
   padding: 0;
   max-height: 18rem;
+  /* The part of a section that gives way when the dialog meets its cap: the list shrinks and scrolls,
+     its heading, add row and note keep their size. */
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.hidden-path {
+.hidden-path,
+.search-exclude {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
@@ -38,7 +122,8 @@
   border-radius: 4px;
 }
 
-:where(body:not([data-window-blurred])) .hidden-path:hover {
+:where(body:not([data-window-blurred])) .hidden-path:hover,
+:where(body:not([data-window-blurred])) .search-exclude:hover {
   background: var(--throng-colour-hoverSurface);
 }
 

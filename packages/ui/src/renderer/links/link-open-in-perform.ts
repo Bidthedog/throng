@@ -52,5 +52,7 @@ export async function performLinkOpenIn(
   }
   const tabId = layout.activeTabId;
   if (!tabId) return;
+  // `current` rides the same one-buffer check as `active`: the editor holding an open file is focused
+  // and the range revealed there (060 FR-045), never a second buffer.
   await openFileInTab(ws, tabId, absPath, target.kind === 'new' ? 'new' : 'lastActive', range);
 }

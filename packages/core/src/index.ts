@@ -329,6 +329,7 @@ export type {
   FindInFilesOpenTarget,
   FindInFilesTrigger,
   FindInFilesGrouping,
+  FindInFilesShowResults,
 } from './config/app-settings.js';
 export {
   DEFAULT_APP_SETTINGS,
@@ -340,6 +341,8 @@ export {
   FIND_IN_FILES_OPEN_TARGETS,
   FIND_IN_FILES_TRIGGERS,
   FIND_IN_FILES_GROUPINGS,
+  // 060 FR-043 — and the fourth, Show results.
+  FIND_IN_FILES_SHOW_RESULTS,
 } from './config/app-settings.js';
 // 031 (#227) — the declared-bounds guard, and the guarded read every settings reader should use.
 export {
@@ -542,6 +545,7 @@ export {
   V6_SEARCH_MATCH_COLOURS,
   V6_FIND_IN_FILES_ICON,
   V19_MOVED_COLOURS,
+  V25_MOVED_ICONS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,
@@ -643,6 +647,8 @@ export {
   assertFolderExclusive,
   sanitiseHiddenPaths,
   applyHiddenPaths,
+  applySearchExcludeGlobs,
+  sanitiseSearchExcludeGlobs,
   assertOrderedIds,
 } from './projects/project.js';
 export { ProjectService } from './projects/project-service.js';
@@ -1126,9 +1132,19 @@ export type {
   ResultRow,
   SnippetView,
   Grouping,
+  GroupRowsOptions,
   ResultGroup,
   ScanStatus,
 } from './search/file-search.js';
+// 060 FR-023 — a path label that stays bounded in a menu, cut from the left on segment boundaries.
+export { leftTruncatePath } from './search/path-label.js';
+// 060 #532 — what a Find in Files scan skips, independent of the File Explorer's lists.
+export {
+  DEFAULT_SEARCH_EXCLUDE_GLOBS,
+  parseExcludeBox,
+  pathToSearchGlob,
+  searchExcludeGlobs,
+} from './search/search-exclude.js';
 // 043 US4 — the pure replace model. `verifyEdits` is FR-054's re-check and `applyReplacements` is
 // FR-055's single backwards pass; both are true over a buffer and over a file, which is why they
 // live here rather than inside the commit service that calls them.

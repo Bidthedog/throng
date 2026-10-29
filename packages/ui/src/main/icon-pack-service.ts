@@ -89,6 +89,12 @@ const SVG_SHAPES: Record<string, string> = {
   cancel: '<circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/>',
   // 056 (FR-007): a triangle with an exclamation mark — the folded-heading invalid-entry marker.
   warning: '<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.5"/>',
+  // 060 (FR-001a, FR-011b): the quarter arc the theme's ◜ draws, and the fork its ⋔ draws.
+  busy: '<path d="M4 12a8 8 0 0 1 8-8"/>',
+  groupFolderTree: '<path d="M12 21V12"/><path d="M12 12C12 8 7 8 7 3"/><path d="M12 12c0-4 5-4 5-9"/>',
+  // 060 #532 (FR-037, FR-038): a house for this project's settings, a circled bar for the exclusions.
+  projectSettings: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
+  searchExclusions: '<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>',
   collapse: '<path d="M15 6l-6 6 6 6"/>',
   expand: '<path d="M9 6l6 6-6 6"/>',
   rename: '<path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 5l4 4"/>',

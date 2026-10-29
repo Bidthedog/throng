@@ -1,50 +1,54 @@
 /**
  * The Find in Files panel's CONTENT context menu (043 T076, FR-025a).
  *
- * Constitution VI: every discrete command and state toggle a panel offers appears in that panel's
- * own menu, in the correct section, showing its chord where one is bound and its state where it is
- * a toggle. This feature introduces nine such commands at once, which is why the rule binds it
- * immediately rather than adding a tenth entry to the constitution's list of known gaps.
+ * Constitution v6.0.0, Principle VI: every action a panel offers MUST be reachable — by a mouse click
+ * or by a keyboard command. A menu item is one such route and no longer a mandatory one (the
+ * v5.10.0 wording demanded an item for every discrete command and toggle). 060 FR-022 takes the
+ * latitude where it is earned: **Run search**, **Cancel search** and **Change scope** are not in this
+ * menu, because each already has a route a click or a key away —
  *
- * The panel's toolbar icons and this menu are TWO ROUTES TO ONE ACTION, never two implementations:
- * every item below calls the same store mutator the icon beside it calls. Scrolling and moving
- * between rows stay exempt as navigational input.
+ *   - run: the run control, `Enter` in the search input, and the find-in-files chord (043 FR-043a);
+ *   - cancel: the cancel control, which is also the busy indicator while a scan runs (060 FR-001);
+ *   - scope: the scope input, which IS the command (043 FR-030).
+ *
+ * 060 FR-042 takes it further: the Replace toggle, the exclusions toggle, the grouping rows and the
+ * Split submenu left this menu too — the toolbar, the replace chord and the panel header's Split
+ * reach each of them. What stays is what is about the pointer, plus the list-wide collapse.
+ *
+ * Scrolling and moving between rows stay exempt as navigational input.
  *
  * ══ WHERE EACH ITEM SITS, AND WHY (R20) ══
  *
  * Adjudicated once against the closed vocabulary in `@throng/core`:
  *
- *   - **Run / Cancel → `viewState`.** They act on the PANEL's run state. The earlier reading — that
- *     they map to nothing — dissolves once `content` is read as the RESULT ROW's content, which is
- *     a file's text. Starting a search changes no text anywhere.
- *   - **Toggle replace, grouping, collapse/expand all → `viewState`.** Toggles and presentation
- *     over results already found; the same family as the explorer's Collapse All Children.
- *   - **Change scope → `navigate`.** It names WHERE something is, which is the test that puts Copy
- *     Path there rather than the one that would make it a view toggle.
+ *   - **Exclude a heading, collapse/expand all → `viewState`.** Visibility and presentation over
+ *     results already found; the same family as the explorer's Collapse All Children.
  *   - **Replace All / in file / one match → `content`.** The only items here that change text.
+ *     `content` means the RESULT ROW's content, which is a file's text; starting a search changes
+ *     no text anywhere.
  *
  * ══ WHY THE COMMIT ITEMS ARE DRAWN WHILE REPLACE IS OFF ══
  *
  * Principle VI's own test is "would any future state enable it?", and the enabling state is one
- * click away — the replace toggle is two rows above them in this same menu. Hiding them would make
- * the menu change shape under a user who can flip that state from inside it. They are also disabled
+ * click away — the replace toggle on the panel's toolbar. Hiding them would make the menu change
+ * shape under a user who can flip that state without leaving the panel. They are also disabled
  * whenever no commit handler is supplied — which now means the command has nothing to do: Replace
  * All with nothing pending (FR-084), and the two narrow rows over a row or file already committed
  * (T233). A row that called nothing would be worse than a row that says it cannot.
  */
-import { firstBinding, type Grouping, type Keybindings } from '@throng/core';
+import { leftTruncatePath } from '@throng/core';
 import { openInMenuActions, type OpenInTarget } from '../editor/open-in-targets.js';
+import { previewOpenInRows, type PreviewOpenInFacts } from '../preview/preview-open-in.js';
 import type { MenuAction } from '../workspace/context-menu.js';
-import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 
-/** The panel's own commands — the same mutators its toolbar controls call. */
+/** The panel's own commands this menu offers — the same mutators the panel calls elsewhere. */
 export interface FindInFilesMenuActions {
-  run: () => void;
-  cancel: () => void;
-  toggleReplace: () => void;
-  setGrouping: (grouping: Grouping) => void;
-  /** FR-030 — put the caret in the scope control, which is where the scope is changed. */
-  focusScope: () => void;
+  /**
+   * 060 FR-034 — add the file or folder HEADING the menu was opened on to the project's Hidden to
+   * Find & Replace list. Absent exactly when it has nothing to do (the menu names no heading, or the
+   * project already excludes it), and the row is then drawn disabled, like the commit rows.
+   */
+  excludeFromSearch?: () => void;
   /** FR-025a's collapse/expand ALL, as one action with a direction (FR-034). */
   setAllCollapsed: (collapsed: boolean) => void;
 }
@@ -83,14 +87,8 @@ export interface FindInFilesCommitActions {
 }
 
 export interface FindInFilesMenuArgs {
-  /** 048 FR-015 — the panel this menu belongs to and the live chords; draws the shared Split submenu. */
-  split?: SplitMenuArgs;
-  /** Whether a scan is running RIGHT NOW — Run and Cancel are one row, as in the toolbar. */
-  running: boolean;
+  /** Whether replace is disclosed: the commit rows are live only while it is. */
   replaceEnabled: boolean;
-  grouping: Grouping;
-  /** Read LIVE, so a rebound chord shows on the next right-click rather than the next restart. */
-  keybindings: Keybindings;
   actions: FindInFilesMenuActions;
   commit?: FindInFilesCommitActions;
   openIn?: FindInFilesOpenIn;
@@ -121,13 +119,14 @@ export interface FindInFilesOpenIn {
    */
   targets: readonly OpenInTarget[];
   pick: (target: OpenInTarget) => void;
+  /** 060 FR-048 — the File Explorer's preview rows for the file, from the shared builder; absent draws none. */
+  preview?: PreviewOpenInFacts | null;
+  pickPreview?: (mode: 'lastActive' | 'new') => void;
 }
 
-/** A toggle's label states what it currently IS — the editor's Word Wrap idiom, unchanged. */
-const checked = (label: string, on: boolean): string => (on ? `${label} ✓` : label);
 
 export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] {
-  const { running, replaceEnabled, grouping, keybindings, actions, commit, openIn } = args;
+  const { replaceEnabled, actions, commit, openIn } = args;
 
   /*
    * ── Navigate: Open In (FR-087) ────────────────────────────────────────────────────────────────
@@ -146,7 +145,17 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
    *
    * Recorded because the Contextual test genuinely does fire here, and the next reader will ask.
    */
-  const openInRows = openIn ? openInMenuActions(openIn.targets, openIn.pick) : [];
+  const editorRows = openIn ? openInMenuActions(openIn.targets, openIn.pick) : [];
+  // 060 FR-048 — the explorer's preview rows after the editor targets, divided from them as the explorer does.
+  const previewRows =
+    editorRows.length > 0 && openIn?.preview && openIn.pickPreview
+      ? previewOpenInRows(openIn.preview, {
+          lastActive: () => openIn.pickPreview?.('lastActive'),
+          new: () => openIn.pickPreview?.('new'),
+        })
+      : [];
+  const openInRows =
+    previewRows.length > 0 ? [...editorRows.map((row) => ({ ...row, group: 'editor' })), ...previewRows] : editorRows;
   const openInItem: MenuAction = {
     label: 'Open In',
     testId: 'menu-item-Open In',
@@ -186,14 +195,16 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
 
   const target = commit?.target;
 
-  return withSplit([
+  return [
     // ── Content: the only items that change a file's text (FR-049) ────────────────────────────
     commitItem('Replace All', 'Replace All', commit?.replaceAll),
     commitItem(
       'Replace in File',
       // The generic wording survives only where there is no file to name, which is exactly when the
       // row is disabled — so a live row never says "File" and means one in particular.
-      target ? `Replace in ${target.relPath}` : 'Replace in File',
+      // 060 FR-023 — left-truncated, so the end that identifies the file survives a deep path and
+      // the label stays a bounded width in a menu whose font is fixed.
+      target ? `Replace in ${leftTruncatePath(target.relPath)}` : 'Replace in File',
       commit?.replaceInFile,
     ),
     commitItem(
@@ -208,86 +219,32 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
        * and has no figure to show. Which match is already answered on screen — the row the menu was
        * opened from is the one carrying `aria-current` — and the file is the part that was invisible.
        */
-      target ? `Replace Match in ${target.relPath}` : 'Replace Match',
+      target ? `Replace Match in ${leftTruncatePath(target.relPath)}` : 'Replace Match',
       commit?.replaceMatch,
     ),
 
-    // ── Navigate: where a result goes (FR-087), then where the search looks (FR-030) ──────────
-    /*
-     * Open In LEADS the group. The section's position is fixed by the vocabulary; the order within
-     * it is this builder's, and it goes first because it is the only item here scoped to the row the
-     * user just right-clicked. "Change scope" is a panel-wide field, and burying the row's own
-     * action under it would put the reason the menu was opened second.
-     */
+    // ── Navigate: where a result goes (FR-087) ────────────────────────────────────────────────
+    // Open In is the only item here: it is scoped to the row the user just right-clicked. Where the
+    // SEARCH looks is the scope input's business, not this menu's (060 FR-022).
     openInItem,
-    {
-      // No chord: the scope control has no command of its own — it is a field, and this row is the
-      // menu's route to it. Advertising `search.findInFiles`' chord here would name a keystroke
-      // that starts a search instead.
-      label: 'Change scope',
-      testId: 'menu-item-Change scope',
-      icon: 'searchScope',
-      section: 'navigate',
-      onClick: () => actions.focusScope(),
-    },
 
-    // ── View & state: the panel's run state, its toggles and its presentation ─────────────────
+    // ── View & state: what the pointer is over, and the list's presentation ───────────────────
     /*
-     * Run and Cancel are ONE row, and it leads the group.
-     *
-     * One row because they are one control in the toolbar and one fact about the panel: a menu
-     * offering both would say the search can be started and stopped in the same moment. Leading
-     * because it is the panel's primary command — the section's ORDER is fixed by the vocabulary,
-     * the order within it is the builder's, and burying Run under three grouping toggles would put
-     * the least-used items first.
-     */
-    running
-      ? {
-          label: 'Cancel search',
-          testId: 'menu-item-Cancel search',
-          icon: 'dismiss',
-          section: 'viewState',
-          onClick: () => actions.cancel(),
-        }
-      : {
-          label: 'Run search',
-          testId: 'menu-item-Run search',
-          icon: 'search',
-          section: 'viewState',
-          // The chord that INVOKES find in files, which is the rebindable route to the same thing
-          // (FR-043a names the run command and the chord as the two explicit runs).
-          shortcut: firstBinding(keybindings, 'search.findInFiles'),
-          onClick: () => actions.run(),
-        },
-    {
-      // FR-046 — the panel-level action FR-029d points at. Replace in files has no menu item of its
-      // own; this toggle is the item that satisfies the every-panel-action rule for it.
-      label: checked('Replace', replaceEnabled),
-      testId: 'menu-item-Replace',
-      icon: 'replace',
-      section: 'viewState',
-      shortcut: firstBinding(keybindings, 'search.replaceInFiles'),
-      onClick: () => actions.toggleReplace(),
-    },
-    {
-      label: checked('Group by file', grouping === 'file'),
-      testId: 'menu-item-Group by file',
-      icon: 'file',
-      section: 'viewState',
-      onClick: () => actions.setGrouping('file'),
-    },
-    /*
-     * There were three grouping rows. FR-073 withdrew "Group by folder", and no `formatGrouped` call
-     * arrived with the edit — `find-in-files-grouping-view-only.test.ts` lists this module among
-     * those forbidden to call it, and removing a row is exactly the kind of edit that would slip one
-     * past. Nothing here shows a figure; the two rows below are toggles.
+     * 060 FR-042 — no Replace toggle, no exclusions toggle, no grouping rows and no Split submenu
+     * here. Each has its own route already: the toolbar's controls, the replace chord, and the panel
+     * header's Split (Constitution VI, v6.0.0: every action reachable, not every action in every
+     * menu). This menu keeps what is about the pointer — the commit rows, Open In, the exclusion of
+     * a heading — and the list-wide Collapse all / Expand all, which have no other route.
      */
     {
-      label: checked('Group by folder and file', grouping === 'fileAndFolder'),
-      testId: 'menu-item-Group by folder and file',
-      icon: 'folderOpen',
+      // 060 FR-034 — beside the explorer's "Hide in this project" in spirit: a per-project
+      // visibility command, worded as the explorer's twin (FR-033).
+      label: 'Exclude from Find in Files in this project',
+      testId: 'menu-item-Exclude from Find in Files in this project',
+      icon: 'searchExclusions',
       section: 'viewState',
-      onClick: () => actions.setGrouping('fileAndFolder'),
+      disabled: actions.excludeFromSearch === undefined,
+      onClick: () => actions.excludeFromSearch?.(),
     },
     {
       label: 'Collapse all',
@@ -303,5 +260,5 @@ export function findInFilesContentMenu(args: FindInFilesMenuArgs): MenuAction[] 
       section: 'viewState',
       onClick: () => actions.setAllCollapsed(false),
     },
-  ], args.split);
+  ];
 }

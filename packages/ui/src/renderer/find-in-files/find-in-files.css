@@ -278,6 +278,12 @@
   border-bottom: 1px solid var(--throng-colour-border);
 }
 
+/* 060 FR-029 — the panel's own exclusion patterns share the scope row; the scope keeps the larger
+   share because a path is the longer thing to read. */
+.fif-excludes {
+  flex: 0 1 30%;
+}
+
 /* ── The scope control (FR-030, FR-030a) ─────────────────────────────────── */
 
 .fif-scope {
@@ -335,6 +341,17 @@
 
 .fif-status[data-state='scopeMissing'] .fif-status__label {
   color: var(--throng-colour-danger);
+}
+
+/* ── The busy cancel control (060 FR-001, FR-002) ─────────────────────────── */
+
+/* While a scan runs the cancel control IS the progress indicator: the shared `BusyGlyph` turns
+   (`common/busy-glyph.css` owns the rotation and the reduced-motion stop), and on hover or keyboard
+   focus the panel swaps in the `dismiss` glyph so what a click will do stays visible. */
+.fif-cancel-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── The windowed list ───────────────────────────────────────────────────── */
@@ -403,9 +420,25 @@
    it is meant to stand out from. A literal `600` would be the same class of mistake as a hex colour —
    021 made weight themeable, and this sheet hardcodes neither. */
 .fif-group__key {
+  flex-shrink: 1;
+  min-width: 0;
   overflow: hidden;
   font-weight: var(--throng-font-weight-bold);
   color: var(--throng-colour-text);
+  text-overflow: ellipsis;
+}
+
+/* FR-004 — Per file grouping's folder, after the name. Muted, smaller, normal weight, and it gives
+   way first: its shrink factor outweighs the name's, so a narrow panel truncates the directory
+   before it touches the file name. */
+.fif-group__dir {
+  flex-shrink: 100;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.85em;
+  /* The Pane Text role's own weight — regular, and never the bold token — rather than a literal. */
+  font-weight: var(--throng-font-paneText-weight);
+  color: var(--throng-colour-textMuted);
   text-overflow: ellipsis;
 }
 
@@ -437,21 +470,31 @@
   color: var(--throng-colour-textMuted);
 }
 
-/* FR-044 — 013's tokens, on a third surface. */
+/* FR-009 — a match's background and frame come from `.throng-search-match` (and `--current` on the
+   row the reader is on), the find bar's own rule, widened to `.fif-results` in `find-bar.css`. This
+   sheet declares NONE of it: a second copy is what 060 removed. `mark` needs only its UA text colour
+   put back, which would otherwise be black on every theme. */
 .fif-match {
   color: inherit;
-  background: var(--throng-colour-searchMatch);
 }
 
-/* The row the reader is on. `searchMatchCurrent` is what makes "this one" different from "one of
-   these", exactly as it does in the editor and the terminal. */
+/* FR-009 (hand test) — the frame must fit INSIDE the row. The shared rule frames a mark with an
+   `outline`, painted outside its box; the mark fills the snippet's line box, and both the snippet and
+   the row clip (`overflow: hidden`, fixed height — the list is windowed on it), so the top and bottom
+   of the frame were cut. The row cannot grow, so the frame is drawn inward instead: the offset is the
+   outline's own width (1px, and 2px for the current match). The editor keeps the shared rule as is. */
+.fif-results .throng-search-match {
+  outline-offset: -1px;
+}
+
+.fif-results .throng-search-match--current {
+  outline-offset: -2px;
+}
+
+/* The item the reader is on — a heading or a row. */
+.fif-group[data-current='true'],
 .fif-row[data-current='true'] {
   background: var(--throng-colour-surfaceActive);
-}
-
-.fif-row[data-current='true'] .fif-match {
-  background: var(--throng-colour-searchMatchCurrent);
-  outline: 1px solid var(--throng-colour-searchMatchCurrentBorder);
 }
 
 /* ── The replace preview (FR-047, FR-046a, FR-051) ───────────────────────────────────────────── */

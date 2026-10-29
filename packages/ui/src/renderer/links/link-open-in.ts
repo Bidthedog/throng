@@ -16,6 +16,8 @@ import { collectPanels, type WorkspaceLayout } from '@throng/core';
 export type LinkOpenInTarget =
   | { readonly kind: 'new' }
   | { readonly kind: 'active' }
+  /** 060 FR-045 — the file is already open: focus the editor that holds it and reveal the position. */
+  | { readonly kind: 'current' }
   | { readonly kind: 'editor'; readonly editorId: string };
 
 /** One named Open In row: the editor panel's id and the name its header shows. */

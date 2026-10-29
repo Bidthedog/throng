@@ -52,6 +52,11 @@ declare global {
         state: () => Promise<import('@throng/core').DaemonState>;
         restart: () => Promise<{ ok: boolean; error?: string }>;
         onState: (cb: (s: import('@throng/core').DaemonState) => void) => () => void;
+        /** #533 — the other development checkout whose daemon serves this build, or null. */
+        foreign?: () => Promise<{ checkout: string } | null>;
+        onForeign?: (cb: (foreign: { checkout: string } | null) => void) => () => void;
+        /** #533 — replace that daemon with this build's (ends its terminals). */
+        replaceForeign?: () => Promise<{ ok: boolean; error?: string }>;
       };
       invoke?: (method: string, params: unknown) => Promise<ThrongRpcEnvelope>;
       pickFolder?: (opts?: { defaultPath?: string | string[] }) => Promise<string | null>;
@@ -462,6 +467,10 @@ declare global {
           scopeSubPath: string | null;
           term: string;
           modes: import('@throng/core').MatchModes;
+          /** 060 #532 (FR-027) — the panel's exclusions toggle. */
+          useExcludeGlobs: boolean;
+          /** 060 #532 (FR-029) — the panel box's globs, already parsed. */
+          extraExcludes: string[];
         }) => Promise<
           | { started: true }
           | { started: false; reason: 'emptyTerm' | 'noProject' | 'scopeMissing' }
@@ -522,7 +531,12 @@ declare global {
             adoptQuery?: {
               term: string;
               modes: import('@throng/core').MatchModes;
+              /** 060 #532 — the run's exclusions are part of the query a follower adopts. */
+              useExcludeGlobs: boolean;
+              extraExcludes: string[];
             };
+            /** 060 — the run's own scope, root-relative POSIX; see `FileSearchUpdateEvent`. */
+            scopeRel?: string;
           }) => void,
         ) => () => void;
       };

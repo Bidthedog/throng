@@ -317,7 +317,45 @@ import { setAtPath } from './metadata.js';
 //
 // 057 round 13 retires `attention`, `attentionFailed` and `attentionFailedMark` (FR-139). No bump, for
 // the same reason: `migrateTheme` drops what the 24 seed wrote.
-export const SHIPPED_DEFAULTS_VERSION = 24;
+//
+// Bumped by 060 (24 → 25): two icon tokens, `busy` and `groupFolderTree`, the Find in Files cancel
+// control's in-progress state and the Folder structure grouping control (FR-001, FR-018). The additive
+// case again: every payload arrives, no existing value moves. The new `folderTree` grouping value needs
+// no bump (044's 7 → 8 reasoning).
+//
+// Bumped by 060's hand-test round (25 → 26): existing icon VALUES move — the glyphs Find in Files and
+// the File Explorer toolbar draw become plain (FR-011a, FR-011c), `busy` becomes ◜ (FR-001a) and
+// `groupFolderTree` ⋔ (FR-011b). Every version up to 25 wrote the old glyphs into each built-in theme
+// file, so this is 049 round 2's guarded value rewrite again: {@link V25_MOVED_ICONS} records what 25
+// wrote and {@link planThemeValueUpgrade} moves a glyph only where the file still holds exactly that.
+// 26 rather than editing 25: the maintainer's hand-testing install already holds a 25 marker.
+//
+// Bumped by 060 #532 (26 → 27): two icon tokens, `projectSettings` and `searchExclusions` (FR-037,
+// FR-038). The additive case again: every payload arrives, no existing value moves. The two new
+// `search.inFiles` settings need no bump (044's 7 → 8 reasoning).
+export const SHIPPED_DEFAULTS_VERSION = 27;
+
+/**
+ * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the
+ * same in every built-in theme. A frozen literal copy for {@link V19_MOVED_COLOURS}' reason: the live
+ * values are the NEW ones, and a guard reading them would match nothing and pass every test.
+ */
+export const V25_MOVED_ICONS: Readonly<Record<string, string>> = Object.freeze({
+  folder: '📁',
+  folderOpen: '📂',
+  file: '📄',
+  fileCode: '🗎',
+  fileJson: '🗎',
+  fileMarkdown: '📝',
+  fileImage: '🖼',
+  fileText: '📄',
+  newFolder: '📁',
+  quickOpen: '🔎',
+  search: '🔍',
+  findInFiles: '📚',
+  busy: '◌',
+  groupFolderTree: '🗂',
+});
 
 /**
  * The colours shipped-defaults version 19 wrote for the tokens 049's second manual-test round moved
@@ -521,8 +559,11 @@ export const V6_FIND_IN_FILES_ICON = '⌕';
  */
 type V6FindInFilesLeaves = Pick<
   FindInFilesSettings,
-  'openTarget' | 'trigger' | 'settleMs' | 'defaultGrouping' | 'rememberGrouping' | 'warnIrreversibleCommit'
->;
+  'openTarget' | 'trigger' | 'settleMs' | 'defaultGrouping' | 'warnIrreversibleCommit'
+> & {
+  /** Retired by 060 FR-046, but version 6 wrote it, so the record of what was on disk keeps it. */
+  rememberGrouping: boolean;
+};
 
 export const V6_SEARCH_IN_FILES_SETTINGS: Readonly<V6FindInFilesLeaves> = deepFreeze({
   openTarget: 'lastActive',
@@ -1220,7 +1261,7 @@ export function planThemeValueUpgrade(args: {
     const v6 = V6_SEARCH_MATCH_COLOURS[name];
     const v19 = V19_MOVED_COLOURS[name];
     const shippedTheme = shipped.themes[name];
-    if ((!v6 && !v19) || !shippedTheme) continue;
+    if (!shippedTheme) continue;
 
     const leaves: SettingsLeafUpgrade[] = [];
     const moveIfStill = (path: string, was: string, next: string | undefined): void => {
@@ -1237,6 +1278,10 @@ export function planThemeValueUpgrade(args: {
       for (const [token, was] of Object.entries(v19)) {
         moveIfStill(`colours.${token}`, was, (shippedTheme.colours as Record<string, string>)[token]);
       }
+    }
+    // 060 hand-test round (25 → 26): the same guard against version 25's icons, in every built-in.
+    for (const [token, was] of Object.entries(V25_MOVED_ICONS)) {
+      moveIfStill(`icons.${token}`, was, shippedTheme.icons[token]);
     }
 
     if (leaves.length > 0) plans.push({ name, leaves });

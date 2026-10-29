@@ -135,13 +135,16 @@
 /* In-content match highlights (FR-019). Shared by the editor; the terminal feeds the
  * same tokens to its own decorations. Body text must stay readable through these —
  * the bundled themes derive them to guarantee it (SC-005). */
-.cm-editor .throng-search-match {
+/* 060 FR-009 — ONE definition for the editor and the Find in Files results list. `:where()` keeps the
+ * specificity at a single class, which is all the list's own sheet needs to compose on top (the
+ * struck-through preview); the class would otherwise match anywhere it was used. */
+:where(.cm-editor, .fif-results) .throng-search-match {
   background: var(--throng-colour-searchMatch, #1c2f4d);
   /* 047 FR-074 — every match is framed, not only the current one, so each stands clear of the page. */
   outline: 1px solid var(--throng-colour-searchMatchBorder, #6f747e);
 }
 
-.cm-editor .throng-search-match--current {
+:where(.cm-editor, .fif-results) .throng-search-match--current {
   background: var(--throng-colour-searchMatchCurrent, #2c4a7a);
   /* 049 FR-009b — the current match is outlined 2 px; an outline is drawn outside the box and takes no layout space. */
   outline: 2px solid var(--throng-colour-searchMatchCurrentBorder, #6aa3ff);

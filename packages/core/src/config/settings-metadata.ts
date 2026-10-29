@@ -8,6 +8,7 @@
 import {
   DEFAULT_APP_SETTINGS,
   FIND_IN_FILES_GROUPINGS,
+  FIND_IN_FILES_SHOW_RESULTS,
   FIND_IN_FILES_OPEN_TARGETS,
   FIND_IN_FILES_TRIGGERS,
   TERMINAL_RELOAD_MODES,
@@ -1277,20 +1278,49 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'search.inFiles.defaultGrouping',
     label: 'Find in Files groups results by',
     description:
-      'How a freshly opened Find in Files panel arranges its rows before you change the grouping yourself.',
+      'How Find in Files panels arrange their rows. Choosing a grouping in a panel changes this setting, and every open panel follows it.',
     group: 'Search · Find in Files',
     control: 'select',
     allowedValues: FIND_IN_FILES_GROUPINGS,
     optionLabels: {
       file: 'File',
       fileAndFolder: 'Folder, then file',
+      folderTree: 'Folder structure',
     },
   },
   {
-    key: 'search.inFiles.rememberGrouping',
-    label: 'Keep the grouping you chose',
+    // 060 FR-043 — also written by the panel's own toolbar toggle.
+    key: 'search.inFiles.showResults',
+    label: 'Show results',
     description:
-      'Whether a grouping you switch to in a Find in Files panel stays in force for the next search you run in it, or the panel returns to the grouping above.',
+      'Whether Find in Files shows its result headings collapsed or expanded. The panel’s collapse toggle changes this setting too.',
+    group: 'Search · Find in Files',
+    control: 'select',
+    allowedValues: FIND_IN_FILES_SHOW_RESULTS,
+    optionLabels: { collapsed: 'Collapsed', expanded: 'Expanded' },
+  },
+  // 060 FR-046 — `search.inFiles.rememberGrouping` was DELETED here and in app-settings.ts, on the
+  // `explorer.openMode` pattern: a panel's grouping choice now writes the grouping preference above.
+  /*
+   * 060 #532 — Find in Files' OWN exclusions (FR-026, FR-028). Edited exactly as the File Explorer's
+   * list is, and deliberately a separate list: the explorer's decides what the tree draws, this one
+   * what a search skips, and neither reaches the other (FR-025).
+   */
+  {
+    key: 'search.inFiles.excludeGlobs',
+    label: 'Excluded from search',
+    description:
+      'Glob patterns Find in Files skips. Separate from the File Explorer’s excluded globs, which only decide what the tree shows. A panel’s exclusions toggle switches this list off for that panel.',
+    group: 'Search · Find in Files',
+    control: 'array',
+    itemControl: 'text',
+    clearable: true, // empty = exclude nothing; the parser honours an explicit empty list
+  },
+  {
+    key: 'search.inFiles.useExcludeGlobs',
+    label: 'New panels use the exclusions',
+    description:
+      'Whether a new Find in Files panel starts with its exclusions toggle on, applying the list above. Each panel can switch it for itself.',
     group: 'Search · Find in Files',
     control: 'toggle',
   },

@@ -57,6 +57,8 @@ export interface ProjectsContextValue {
   reorderProjects(orderedIds: string[]): Promise<void>;
   /** Replace a project's hidden-paths list (004 file-tree hide). */
   setProjectHidden(id: string, hiddenPaths: string[]): Promise<void>;
+  /** Replace a project's Find in Files exclusion list (060 #532, FR-033/FR-035). */
+  setSearchExcludes(id: string, searchExcludeGlobs: string[]): Promise<void>;
   /**
    * Release the main window's view of a project without forgetting anything (046 US4, FR-032,
    * FR-036). Removes `id` from `loadedIds` and, only when it is the ACTIVE project, clears
@@ -404,6 +406,11 @@ export function ProjectsProvider({
       },
       setProjectHidden: async (id, hiddenPaths) => {
         await run('change what is hidden in', projectSubject(id), () => client.setHidden(id, hiddenPaths));
+      },
+      setSearchExcludes: async (id, searchExcludeGlobs) => {
+        await run('change what Find in Files skips in', projectSubject(id), () =>
+          client.setSearchExcludes(id, searchExcludeGlobs),
+        );
       },
       unloadProject: (id) => {
         unmarkLoaded(id);
