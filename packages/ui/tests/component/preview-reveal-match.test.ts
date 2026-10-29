@@ -117,6 +117,25 @@ describe('a match the preview shows (FR-031)', () => {
     expect(fallback).not.toHaveBeenCalled();
   });
 
+  // 060 FR-047 — framed as find frames its current match, not a fill alone.
+  it('draws the current-match frame around the revealed match', async () => {
+    const proto = Range.prototype as unknown as { getClientRects?: () => unknown };
+    const had = 'getClientRects' in proto;
+    const original = proto.getClientRects;
+    // At the origin: jsdom gives the body a zero-size viewport, and a frame outside its band is not drawn.
+    proto.getClientRects = () => [{ left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }];
+    try {
+      const { id } = await mount();
+      act(() => setPendingReveal(id, reveal('needle', offsetOf('needle', 1), 5)));
+      await waitFor(() => expect(currentPaint()).toEqual(['needle']));
+      const layer = screen.getByTestId(`preview-match-frames-${id}`);
+      expect(layer.querySelectorAll('.preview-match-frame--current')).toHaveLength(1);
+    } finally {
+      if (had) proto.getClientRects = original;
+      else delete proto.getClientRects;
+    }
+  });
+
   it('picks the right occurrence when the block holds several', async () => {
     const { id } = await mount();
     const from = offsetOf('needle', 3); // the one inside **another needle**

@@ -288,6 +288,7 @@ const ALLOWED: readonly Allowed[] = [
 
   /* The file-type icon, in the theme, its editor copy, the tree and the icon-pack generator. */
   { file: `${CORE_SRC}/config/theme.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — the theme token` },
+  { file: `${CORE_SRC}/config/shipped-defaults.ts`, kind: 'identifier', token: 'fileMarkdown', reason: `${FILE_ICON} — 060's frozen record of the glyph version 25 shipped (V25_MOVED_ICONS)` },
   { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'icons.fileMarkdown', reason: `${FILE_ICON} — the token's editor copy` },
   { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'Markdown file icon', reason: `${FILE_ICON} — the token's editor copy` },
   { file: `${CORE_SRC}/config/theme-copy.ts`, kind: 'literal', token: 'The glyph shown beside a Markdown document in the tree.', reason: `${FILE_ICON} — the token's editor copy` },

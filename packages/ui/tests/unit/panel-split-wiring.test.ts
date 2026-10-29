@@ -38,10 +38,14 @@ describe('panel content menus are handed the Split argument (048 FR-015)', () =>
     ['editor/use-editor.ts', 'editorContentMenu'],
     ['terminal/terminal-panel.tsx', 'terminalContentMenu'],
     ['preview/preview-panel.tsx', 'previewContentMenu'],
-    ['find-in-files/find-in-files-panel.tsx', 'findInFilesContentMenu'],
   ] as const)('%s passes `split: { panelId… }` to %s', (file, builder) => {
     const call = callOf(file, builder);
     expect(call).toMatch(/\bsplit:\s*\{[^}]*panelId/);
     expect(call).toMatch(/keybindings/);
+  });
+
+  // 060 FR-042 supersedes 048 FR-015 for the Find in Files body menu: Split is the panel header's there.
+  it('find-in-files/find-in-files-panel.tsx hands findInFilesContentMenu no `split` (060 FR-042)', () => {
+    expect(callOf('find-in-files/find-in-files-panel.tsx', 'findInFilesContentMenu')).not.toMatch(/\bsplit:/);
   });
 });

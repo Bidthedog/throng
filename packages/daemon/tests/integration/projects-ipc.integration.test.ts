@@ -110,6 +110,31 @@ describe('projects.* IPC', () => {
     ]);
   });
 
+  it('defaults searchExcludeGlobs to empty and round-trips projects.setSearchExcludes (060 #532)', async () => {
+    const created = (await call('projects.create', validInput)).result.project;
+    expect(created.searchExcludeGlobs).toEqual([]);
+
+    const set = await call('projects.setSearchExcludes', {
+      id: created.id,
+      searchExcludeGlobs: ['**/gen', ' **/gen ', '**/fixtures'], // trimmed and de-duplicated by core
+    });
+    expect(set.result.project.searchExcludeGlobs).toEqual(['**/gen', '**/fixtures']);
+    // Independent of the hidden paths, which it leaves alone.
+    expect(set.result.project.hiddenPaths).toEqual([]);
+
+    const listed = (await call('projects.list', {})).result.projects as Array<{
+      id: string;
+      searchExcludeGlobs: string[];
+    }>;
+    expect(listed.find((p) => p.id === created.id)?.searchExcludeGlobs).toEqual(['**/gen', '**/fixtures']);
+  });
+
+  it('refuses projects.setSearchExcludes without an array of strings', async () => {
+    const created = (await call('projects.create', validInput)).result.project;
+    const bad = await call('projects.setSearchExcludes', { id: created.id, searchExcludeGlobs: [1] });
+    expect(bad.error?.code).toBe(-32602);
+  });
+
   it('updates only the provided fields and bumps updatedAt', async () => {
     const created = (await call('projects.create', validInput)).result.project;
     // Ensure a distinct timestamp.

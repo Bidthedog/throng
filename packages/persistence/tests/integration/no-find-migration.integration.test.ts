@@ -97,8 +97,15 @@ describe('043 adds a panel type and no schema (research R11)', () => {
     const at = (version: number): string[] => files.filter((f) => f.startsWith(`v${version}-`));
     expect(at(8)).toEqual(['v8-fileop-undo.ts']);
     expect(at(9)).toEqual(['v9-project-categories.ts']);
-    // And no migration anywhere in the chain is a search's.
-    expect(files.filter((f) => /find|search/i.test(f))).toEqual([]);
+    /*
+     * And no migration in the chain is a search's — with ONE exception, made in the open as this
+     * file's header asks (060 #532, research R21). A project's own Find in Files exclusions are
+     * looked up by the PROJECT, by every panel in it and across sessions; they are project state of
+     * exactly the kind `hidden_paths` already is, not a panel's query. They take a column beside
+     * `hidden_paths`. Everything a panel persists — its toggle and its exclusions box included —
+     * still rides `workspace_layout`, which the tests below keep holding.
+     */
+    expect(files.filter((f) => /find|search/i.test(f))).toEqual(['v12-project-search-excludes.ts']);
   });
 
   it('creates no table of its own — a search is not a stored thing', () => {

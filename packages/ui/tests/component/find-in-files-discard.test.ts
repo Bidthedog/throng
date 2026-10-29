@@ -207,6 +207,10 @@ describe('a restored panel comes back with its query and nothing else (FR-027aâ€
       scopeSubPath: 'src/renderer',
       replaceShown: true,
       replacement: 'pin',
+      // 060 FR-031 â€” a panel saved before #532 reopens with the preference's toggle and an empty box,
+      // and the write states both always (`updatePanelConfig` merges).
+      useExcludeGlobs: true,
+      extraExcludes: '',
     });
   });
 
@@ -223,10 +227,12 @@ describe('a restored panel comes back with its query and nothing else (FR-027aâ€
     for (const [written] of onConfigChange.mock.calls as [FindInFilesPanelConfig][]) {
       expect(Object.keys(written).sort()).toEqual([
         'caseSensitive',
+        'extraExcludes',
         'replaceShown',
         'replacement',
         'scopeSubPath',
         'term',
+        'useExcludeGlobs',
         'wholeWord',
       ]);
     }

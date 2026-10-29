@@ -31,6 +31,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
+import { registerResultOpenTargets } from '../../src/renderer/find-in-files/result-open.js';
 import {
   PANEL_ID,
   committedEverything,
@@ -183,6 +184,66 @@ describe('the label names the file the write is aimed at', () => {
     await rightClick(user, `fif-term-${PANEL_ID}`);
     expect(labelOf('Replace in File')).toBe('Replace in File');
     expect(labelOf('Replace Match')).toBe('Replace Match');
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 1b — 060 FR-003: while a scan RUNS the menu opens, and only the writing is withheld
+ *
+ * 043 FR-095 / #391 locked the rows (no menu at all) for as long as the scan ran. 060 withdraws the
+ * lock: the menu opens and Open In works, but Replace All, Replace in File and Replace Match stay
+ * disabled until the scan completes or is cancelled — the reason #391 gave was rows being replaced
+ * while the list filled in, and the replace lock alone answers it.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('the menu while a scan is running (060 FR-003)', () => {
+  beforeEach(() => {
+    registerResultOpenTargets(async () => [{ kind: 'lastActive', label: 'Last Active Editor', disabled: false }]);
+  });
+
+  afterEach(() => {
+    registerResultOpenTargets(null);
+  });
+
+  /** Like `ready()`, but the scan has delivered rows and is still going. */
+  async function readyRunning(): Promise<ReturnType<typeof userEvent.setup>> {
+    const user = userEvent.setup();
+    renderFindInFilesPanel();
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+    await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
+    await user.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
+    await user.type(screen.getByTestId(`fif-replacement-${PANEL_ID}`), 'thread');
+    stub.emit({ panelId: PANEL_ID, generation: 1, status: 'running', rows: ROWS, totalMatches: 3 });
+    return user;
+  }
+
+  it('opens over a row, with Open In available and every replace item disabled', async () => {
+    const user = await readyRunning();
+
+    await rightClick(user, 'fif-row-src/a.ts-6');
+
+    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
+    for (const item of ['Replace All', 'Replace in File', 'Replace Match']) {
+      expect(screen.getByTestId(`menu-item-${item}`)).toHaveAttribute('aria-disabled', 'true');
+    }
+    await user.click(screen.getByTestId('menu-item-Replace in File'));
+    expect(stub.commit).not.toHaveBeenCalled();
+  });
+
+  it('keeps the replace items disabled in a menu opened before the cancel, until it is reopened', async () => {
+    const user = await readyRunning();
+    await rightClick(user, 'fif-row-src/a.ts-6');
+
+    // The scan ends while the menu is still open: the menu was built for a running scan.
+    stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: [], totalMatches: 3 });
+
+    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'true');
+
+    await user.keyboard('{Escape}');
+    await rightClick(user, 'fif-row-src/a.ts-6');
+
+    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
+    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'false');
   });
 });
 

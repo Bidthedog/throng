@@ -400,7 +400,7 @@ describe('a following window never re-runs a query it adopted (T235)', () => {
       status: 'complete',
       rows: [resultRow('src/a.ts', 1, 0)],
       totalMatches: 1,
-      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false } },
+      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
     // The box follows — that half of FR-078b already worked.
     expect(input().value).toBe('haystack');
@@ -418,7 +418,7 @@ describe('a following window never re-runs a query it adopted (T235)', () => {
       status: 'complete',
       rows: [],
       totalMatches: 0,
-      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false } },
+      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
     tick(SETTLE_MS * 20);
 
@@ -440,7 +440,7 @@ describe('a following window never re-runs a query it adopted (T235)', () => {
       status: 'complete',
       rows: [],
       totalMatches: 0,
-      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false } },
+      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
     tick(SETTLE_MS * 20);
 

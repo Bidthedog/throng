@@ -159,9 +159,8 @@ describe('the frozen version-6 record (R28, D4 step 1)', () => {
     expect(V6_SEARCH_IN_FILES_SETTINGS.defaultGrouping).toBe(
       DEFAULT_APP_SETTINGS.search.inFiles.defaultGrouping,
     );
-    expect(V6_SEARCH_IN_FILES_SETTINGS.rememberGrouping).toBe(
-      DEFAULT_APP_SETTINGS.search.inFiles.rememberGrouping,
-    );
+    // 060 FR-046 retired `rememberGrouping`; the record keeps what version 6 wrote.
+    expect(V6_SEARCH_IN_FILES_SETTINGS.rememberGrouping).toBe(true);
     expect(V6_SEARCH_IN_FILES_SETTINGS.warnIrreversibleCommit).toBe(
       DEFAULT_APP_SETTINGS.search.inFiles.warnIrreversibleCommit,
     );

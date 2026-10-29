@@ -248,7 +248,8 @@ describe('the reading position stays inside the list it is reading', () => {
 
     fireEvent.keyDown(list(), { key: 'Enter' });
 
-    // The last row of the group that is still expanded — the one the clamped position lands on. It
+    // The last row of the group that is still expanded — End selected it, and collapsing the OTHER
+    // group leaves it where it was (060 R4: the selection is the row's key, not its index). It
     // carries the PANEL's root as well (043 T236), which a sub-workspace window has none of its own.
     expect(opened).toEqual([
       // 054 FR-031 — with the match's line and text, for a preview to reveal it.
@@ -283,11 +284,11 @@ describe('the reading position stays inside the list it is reading', () => {
     emit(2, ...matchesIn('src/small.ts', 3));
     fireEvent.keyDown(list(), { key: 'Enter' });
 
-    // Index 0 of a fresh list is the group HEADING, so Enter collapses it and opens nothing.
+    // The fresh list has nothing selected (060 R4), so Enter opens nothing and toggles nothing.
     expect(opened).toEqual([]);
     expect(screen.getByTestId('fif-group-toggle-src/small.ts')).toHaveAttribute(
       'aria-expanded',
-      'false',
+      'true',
     );
   });
 });

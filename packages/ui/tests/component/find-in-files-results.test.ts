@@ -234,9 +234,17 @@ describe('the match highlight resolves from the shipped search-match tokens (FR-
     expect(THRONG_THEME.colours.searchMatch).toBeDefined();
     expect(THRONG_THEME.colours.searchMatchCurrent).toBeDefined();
 
-    const sheet = css();
-    expect(sheet).toContain('var(--throng-colour-searchMatch)');
-    expect(sheet).toContain('var(--throng-colour-searchMatchCurrent)');
+    // 060 FR-009 — the list's matches take the find bar's own rule (`.throng-search-match`, widened
+    // to `.fif-results`), so the tokens are read THERE; this sheet names none of them.
+    const findBar = readFileSync(
+      resolve(process.cwd(), 'packages/ui/src/renderer/search/find-bar.css'),
+      'utf8',
+    );
+    expect(findBar).toContain(':where(.cm-editor, .fif-results) .throng-search-match');
+    expect(findBar).toContain('var(--throng-colour-searchMatch,');
+    expect(findBar).toContain('var(--throng-colour-searchMatchCurrent,');
+    const sheet = css().replace(/\/\*[\s\S]*?\*\//g, ' ');
+    expect(sheet).not.toMatch(/--throng-colour-searchMatch(?:Current)?\b(?!Border)/);
   });
 
   it('introduces no colour token of its own', () => {

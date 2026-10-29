@@ -111,7 +111,7 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
     expect(opened).toEqual([{ relPath: 'src/app.ts', from: 400, to: 406, line: 8, text: 'needle', projectRoot: PROJECT_ROOT }]);
   });
 
-  it('a single click opens nothing — stepping through a list is not a decision', () => {
+  it('a single click selects the row and opens nothing — selecting is not a decision (060 FR-020)', () => {
     const opened: ResultOpenRequest[] = [];
     registerResultOpener((r) => opened.push(r));
     mountPanel();
@@ -119,6 +119,7 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
 
     fireEvent.click(row(400));
 
+    expect(row(400)).toHaveAttribute('data-current', 'true');
     expect(opened).toEqual([]);
   });
 
@@ -128,13 +129,15 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
      * that is what the issue specified; the spec's Assumptions say it is not meant to be the only
      * way in, and a second path would be a second thing to keep in step.
      *
-     * Two ArrowDowns: index 0 is the file's group HEADING, 1 and 2 are its rows.
+     * Three ArrowDowns: with nothing selected the first lands on index 0, the file's group HEADING;
+     * 1 and 2 are its rows.
      */
     const opened: ResultOpenRequest[] = [];
     registerResultOpener((r) => opened.push(r));
     mountPanel();
     seedTwoRows();
 
+    fireEvent.keyDown(list(), { key: 'ArrowDown' });
     fireEvent.keyDown(list(), { key: 'ArrowDown' });
     fireEvent.keyDown(list(), { key: 'ArrowDown' });
     fireEvent.keyDown(list(), { key: 'Enter' });
@@ -152,6 +155,8 @@ describe('the list decides which row (FR-037, Assumptions)', () => {
     mountPanel();
     seedTwoRows();
 
+    // ArrowDown from nothing selects the heading; Enter then toggles it.
+    fireEvent.keyDown(list(), { key: 'ArrowDown' });
     fireEvent.keyDown(list(), { key: 'Enter' });
 
     expect(opened).toEqual([]);

@@ -236,7 +236,7 @@ describe('a following window shows the query its rows came from (FR-078b)', () =
       snapshot: true,
       rows: [resultRow('src/a.ts', 1, 0)],
       totalMatches: 1,
-      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false } },
+      adoptQuery: { term: 'haystack', modes: { caseSensitive: false, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
 
     expect(termBox().value, 'the box must describe the list beneath it').toBe('haystack');
@@ -254,7 +254,7 @@ describe('a following window shows the query its rows came from (FR-078b)', () =
       snapshot: true,
       rows: [resultRow('src/a.ts', 1, 0)],
       totalMatches: 1,
-      adoptQuery: { term: 'needle', modes: { caseSensitive: false, wholeWord: false } },
+      adoptQuery: { term: 'needle', modes: { caseSensitive: false, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
     expect(termBox().value).toBe('needle');
 
@@ -264,7 +264,7 @@ describe('a following window shows the query its rows came from (FR-078b)', () =
       status: 'complete',
       rows: [resultRow('src/b.ts', 2, 20)],
       totalMatches: 1,
-      adoptQuery: { term: 'haystack', modes: { caseSensitive: true, wholeWord: false } },
+      adoptQuery: { term: 'haystack', modes: { caseSensitive: true, wholeWord: false }, useExcludeGlobs: true, extraExcludes: [] },
     });
 
     expect(termBox().value).toBe('haystack');

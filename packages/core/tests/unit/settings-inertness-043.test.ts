@@ -78,10 +78,6 @@ const NEW_KEYS = [
     governs: 'how a fresh results panel groups its rows (FR-033a)',
   },
   {
-    key: 'search.inFiles.rememberGrouping',
-    governs: "whether a panel's grouping choice outlives the search that set it (FR-033b)",
-  },
-  {
     key: 'search.inFiles.warnIrreversibleCommit',
     governs: 'the confirmation before a replace that cannot be undone (FR-057c)',
   },

@@ -303,14 +303,20 @@ describe('drawn DISABLED, never hidden, while unavailable', () => {
     expect(opened).toEqual([]);
   });
 
-  it('while main says the file already has its preview — awaited at right-click (FR-012)', async () => {
+  /*
+   * 060 FR-049 (supersedes the disabled pair 044 FR-012 / 047 FR-014 drew here): a file whose one preview
+   * is already open has one place to go — that preview — so one live Current Preview row replaces both.
+   */
+  it('gives way to one live Current Preview row once main says the file has its preview — awaited at right-click', async () => {
     const { user, tree } = await mount({ previewOpen: true });
     const flyout = await openInFlyout(user, tree, 'README.md');
     expect(isOpenAsked).toEqual([`${ROOT_FOLDER}/README.md`]);
-    const row = within(flyout).getByTestId('menu-item-New Preview Panel');
-    expect(isDisabled(row)).toBe(true);
+    expect(within(flyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
+    expect(within(flyout).queryByText(/^Last Preview Panel/)).toBeNull();
+    const row = within(flyout).getByTestId('menu-item-Current Preview');
+    expect(isDisabled(row)).toBe(false);
     await user.click(row);
-    expect(opened).toEqual([]);
+    expect(opened).toEqual([expect.objectContaining({ absPath: `${ROOT_FOLDER}/README.md`, target: { mode: 'lastActive' } })]);
   });
 });
 
@@ -345,14 +351,10 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(within(unclaimedFlyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
   });
 
-  it('New Preview Panel is disabled exactly when Preview is (provider off, already previewed)', async () => {
+  it('New Preview Panel is disabled while the provider is off (already previewed: 060 FR-049, above)', async () => {
     const off = await mount({ settings: MARKDOWN_OFF });
     const offFlyout = await openInFlyout(off.user, off.tree, 'README.md');
     expect(isDisabled(within(offFlyout).getByTestId('menu-item-New Preview Panel'))).toBe(true);
-
-    const already = await mount({ previewOpen: true });
-    const alreadyFlyout = await openInFlyout(already.user, already.tree, 'README.md');
-    expect(isDisabled(within(alreadyFlyout).getByTestId('menu-item-New Preview Panel'))).toBe(true);
   });
 
   it('Last Preview Panel is ALSO disabled, and unnamed, while the visible tab holds no preview to reuse (FR-076)', async () => {

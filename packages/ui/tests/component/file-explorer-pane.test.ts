@@ -38,7 +38,8 @@
  * never mounts, and `findByRole('tree')` in `mountWithProject()` throws — failing its 4 tests
  * without any of them reaching an assertion.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { THRONG_THEME } from '@throng/core';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -246,6 +247,9 @@ const listing: FileTreeEntry[] = [
   { name: 'b.txt', kind: 'file', isSymlink: false, hasChildren: false },
 ];
 
+/** Every `projects.setSearchExcludes` the fake daemon received (060 #532). */
+const searchExcludeCalls: { id: string; searchExcludeGlobs: string[] }[] = [];
+
 /** A daemon holding one project, which `switchProject` can make active. */
 function oneProjectClient(): ProjectsClient {
   let active: string | null = null;
@@ -258,6 +262,9 @@ function oneProjectClient(): ProjectsClient {
           active = (params as { id: string }).id;
           return Promise.resolve({ activeId: active } as unknown as TResult);
         case 'projects.setHidden':
+          return Promise.resolve({ project: { ...DEMO } } as unknown as TResult);
+        case 'projects.setSearchExcludes':
+          searchExcludeCalls.push(params as { id: string; searchExcludeGlobs: string[] });
           return Promise.resolve({ project: { ...DEMO } } as unknown as TResult);
         default:
           return Promise.reject(new Error(`unexpected projects RPC from the pane: ${method}`));
@@ -419,6 +426,36 @@ describe('the project-settings control WITH a project open (US8, FR-041, FR-043a
     const options = screen.getByTestId('project-settings-open');
     expect(options.querySelectorAll('.icon')).toHaveLength(1);
     expect(options.textContent ?? '').not.toMatch(/settings|project/i);
+  });
+
+  it('draws the project-settings glyph, not the application Preferences cog (060 FR-037)', async () => {
+    await mountWithProject();
+
+    const options = screen.getByTestId('project-settings-open');
+    expect(options).toHaveTextContent(THRONG_THEME.icons.projectSettings);
+    expect(options).not.toHaveTextContent(THRONG_THEME.icons.settings);
+  });
+
+  it('writes the right-clicked entry to the project’s search exclusions (060 FR-033)', async () => {
+    searchExcludeCalls.length = 0;
+    const { user } = await mountWithProject();
+    const row = within(await screen.findByRole('tree'))
+      .getAllByRole('treeitem')
+      .find((r) => r.querySelector('.tree-label')?.textContent === 'b.txt');
+
+    // The handler is on the `.tree-row` inside react-arborist's treeitem, which is where a real
+    // right-click lands; the file's menu is built after an async open-in lookup, hence the `find`.
+    await user.pointer({
+      keys: '[MouseRight]',
+      target: row?.querySelector('.tree-row') as HTMLElement,
+    });
+    await user.click(
+      await screen.findByTestId('menu-item-Exclude from Find in Files in this project'),
+    );
+
+    await waitFor(() =>
+      expect(searchExcludeCalls).toEqual([{ id: 'p1', searchExcludeGlobs: ['b.txt'] }]),
+    );
   });
 
   it('opens the project settings dialog when it is clicked', async () => {

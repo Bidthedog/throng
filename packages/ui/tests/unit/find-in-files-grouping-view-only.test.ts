@@ -92,6 +92,8 @@ const QUERY: FindInFilesQuery = {
   scopeSubPath: 'src/renderer',
   replaceEnabled: true,
   replacement: 'thread',
+  useExcludeGlobs: true,
+  extraExcludes: '**/fixtures;*.snap',
 };
 
 describe('a persisted FindInFilesPanelConfig carries no grouped figure (FR-014, FR-027a)', () => {
@@ -113,16 +115,18 @@ describe('a persisted FindInFilesPanelConfig carries no grouped figure (FR-014, 
     ).toEqual([]);
   });
 
-  it('writes exactly the six fields FR-027a names, so a seventh has to be argued for', () => {
+  it('writes exactly the eight fields FR-027a and FR-031 name, so a ninth has to be argued for', () => {
     // `updatePanelConfig` MERGES, so the write states every field always. The key set is therefore
     // a closed list, and pinning it is what makes the assertion above exhaustive rather than
     // incidental.
     expect(Object.keys(findInFilesConfigOf(QUERY)).sort()).toEqual([
       'caseSensitive',
+      'extraExcludes',
       'replaceShown',
       'replacement',
       'scopeSubPath',
       'term',
+      'useExcludeGlobs',
       'wholeWord',
     ]);
   });

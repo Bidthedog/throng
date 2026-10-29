@@ -606,9 +606,11 @@ describe('ShippedDefaultsService.upgrade — the v13 to v14 keybindings rows (04
     // And 047 bumps it to 17 (the Markdown fold chords, Ctrl+M,*, and Go to Heading's Ctrl+G), then
     // to 18 (`searchMatchBorder`, FR-074), and 049 to 19 (the occurrence and inactive-selection colours), then 20 (their floors),
     // and 054 to 21 (the maximise and diagram icon tokens), then 054 MT-04 to 22 (diagramZoomReset),
-    // and 056 to 23 (the `warning` icon token), and 057 to 24 (the attention mark tokens).
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(24);
-    expect(await service.readAppliedVersion()).toBe(24);
+    // and 056 to 23 (the `warning` icon token), and 057 to 24 (the attention mark tokens),
+    // and 060 to 25 (`busy`, `groupFolderTree`), then 060's hand-test round to 26 (the plain glyphs),
+    // then 060 #532 to 27 (`projectSettings`, `searchExclusions`).
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(27);
+    expect(await service.readAppliedVersion()).toBe(27);
   });
 
   it('a second upgrade writes nothing', async () => {

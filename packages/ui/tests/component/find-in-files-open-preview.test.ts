@@ -93,6 +93,25 @@ describe('Markdown set to open as a Preview (FR-030)', () => {
   });
 });
 
+describe('an Open In preview row (060 FR-048)', () => {
+  it('opens a preview with the target it names, whatever the default open action, carrying the match', async () => {
+    // Shipped Editor default: the row, not the default, decides.
+    const m = await mount();
+    m.preview.open.mockResolvedValue({ kind: 'focused', panelId: m.id });
+
+    act(() => {
+      requestOpenResult({ ...row('README.md'), previewTarget: 'new' });
+    });
+
+    await waitFor(() => expect(m.preview.open).toHaveBeenCalledTimes(1));
+    const request = m.preview.open.mock.calls[0]![0] as { absPath: string; target: { mode: string } };
+    expect(request.absPath).toBe(`${ROOT}/README.md`);
+    expect(request.target.mode).toBe('new');
+    await act(() => Promise.resolve());
+    expect(m.openInto).not.toHaveBeenCalled();
+  });
+});
+
 describe('a file whose default is Editor (FR-030, unchanged)', () => {
   it('Markdown left at its shipped Editor default opens an editor at the match', async () => {
     const m = await mount();
