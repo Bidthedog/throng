@@ -4,14 +4,14 @@ Spec: `specs/059-native-encodings-line-endings/spec.md`
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Edit and save a Windows-1252 file | untested | | | |
-| MT-02 | Open and save UTF-16 files; refuse UTF-32 and binary | needs retest | | | failed: Opening utf8-bom-invalid.txt, binary-picture.png and utf32le-bom.txt one after another added all three to one 'Couldn't open UPPER TEST' notice headed 'That file is not valid UTF-8 text.' Each alone is correct. If the error is different, a new toast must show; if the same, the file can join the same toast (any error type). |
-| MT-03 | Encoding indicator: Change Encoding and Reopen with Encoding | untested | | | |
-| MT-04 | Line endings: switch between LF, CR, CRLF, Mixed, and insert each | untested | | | |
-| MT-05 | Find in Files, replace, preview and task toggle on these files | untested | | | |
-| MT-06 | Open failures share a notice only when the error is the same | untested | | | |
-| MT-07 | View Whitespace | needs retest | | | failed: Markers must take a single space and not move the text; every marker but space boxed in a contrasting colour with legible text |
-| MT-08 | Windows code pages, the fallback encoding and the misread warning | untested | | | |
+| MT-01 | Edit and save a Windows-1252 file | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-02 | Open and save UTF-16 files; refuse UTF-32 and binary | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-03 | Encoding indicator: Change Encoding and Reopen with Encoding | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-04 | Line endings: switch between LF, CR, CRLF, Mixed, and insert each | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-05 | Find in Files, replace, preview and task toggle on these files | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-06 | Open failures share a notice only when the error is the same | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-07 | View Whitespace | signed off | 98664a0f7190 | 2026-10-29 | |
+| MT-08 | Windows code pages, the fallback encoding and the misread warning | signed off | 98664a0f7190 | 2026-10-29 | |
 
 Setup for every group: a project on `D:/git/throng_tests/encodings/`, which holds the 059 fixture files (restore them after a run with `bash "D:/git/throng_tests/encodings/.claude/skills/reset-encodings/reset.sh"`) — `codepage-western-1252.txt`
 (Windows-1252, `café costs £5 or 5€`, CRLF), `utf16le-bom-powershell.txt` (UTF-16 LE with BOM, CRLF),
