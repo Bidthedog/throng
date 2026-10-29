@@ -1,0 +1,329 @@
+# Implementation Plan: Resource Monitor — throng's Own Task Manager
+
+**Branch**: `feature/S055-I5-I133-resource-monitor` | **Date**: 2026-10-14 | **Spec**: [spec.md](./spec.md)
+
+**Input**: `specs/055-resource-monitor/spec.md` — 5 user stories, one clarification session (27 answers).
+Refs #5, #133.
+
+## Summary
+
+A throng-specific task manager in four parts:
+
+- **A resource collector process** (R1) that reads every process's CPU, private memory and I/O counters in
+  one native call per tick (R2, R3) and GPU from the GPU Engine counters (R4), learns which processes are
+  throng's from a new daemon roster RPC and UI main's own facts (R5), attributes them to component,
+  project, tab and panel with lineage memory (R6), and caches summary and detail frames for the UI (R7).
+- **Kills** in the collector, guarded by process identity and by the Projects-only rule (R8).
+- **Estimates** for editors, previews and terminal buffers, calibrated against measured process memory and
+  moved — not copied — out of the processes that hold them (R9).
+- **The UI**: an always-present status-bar item, a monitor window built like Preferences (R14; it was an
+  exclusive maximisable modal until Session 2026-10-15; where this plan says "modal" below, read the
+  monitor window — new files `main/floating-window-layering.ts`, `main/resource-monitor-window.ts` and
+  `renderer/resources/monitor-app.tsx`; the second feedback round adds core's `heatFor` in
+  `resources/bands.ts`, `renderer/resources/help-panel.tsx` and the liveness line, and moves shipped
+  defaults to 25 for the `help` icon — research R15) with time-series charts
+  (uPlot), a treemap (d3-hierarchy layout, React SVG), sparklines, filters and keyboard navigation, the
+  standard Unload/Destroy actions and Kill Process / Kill All Below (R10, R12); seven settings with a
+  cross-field resolution (R11); one command, one cog-menu item, eight icon tokens.
+
+## Technical Context
+
+**Language/Version**: TypeScript (repo toolchain, ES2022), Node 24 (host runtime for daemon and collector),
+Electron 44.
+
+**Primary Dependencies**: React 18, InversifyJS, koffi (existing), node-pty (existing), Vitest, Playwright.
+**New runtime dependencies: `uplot` 1.6.x and `d3-hierarchy` 3.x (MIT)** in `packages/ui`, loaded in the
+modal's lazy chunk (R10). *Superseded by R16 (Session 2026-10-15, third feedback): the stacked charts and the
+treemap are gone, the line graphs and share bars are canvas and HTML, and both dependencies are removed —
+this feature adds no runtime dependency. The monitor is two columns (FR-096, FR-097), and a list holds its
+order and figures while pointed at (FR-095).*
+
+**Storage**: none new. Settings — six `resourceMonitor.*` leaves and `confirmations.killProcesses`.
+`SHIPPED_DEFAULTS_VERSION` 22 → 23 for eight icon tokens. Modal view state is module state until restart
+(FR-057); chart history is renderer memory for the modal session (FR-033).
+
+**Testing**: unit (core resources), integration (real Windows calls, daemon roster, collector), contract
+(roster, collector protocol, resources IPC), component (status bar, modal), **three new E2E specs and one extended** (R13).
+
+**Target Platform**: Windows 11 desktop. Linux/macOS get the `IProcessMetrics` seam only (FR-010).
+
+**Project Type**: Desktop application, npm-workspaces monorepo.
+
+**Performance Goals**: SC-004 — collector < 1% of one core in summary mode (benchmarked over 60 s).
+SC-002 — modal visible in < 100 ms, first full hierarchy < 2 s at 10 terminals × 20 processes. SC-003 —
+≤ 5% keystroke/frame regression with the modal open, no input delayed > 50 ms (long-task measurement on a
+200-process hierarchy).
+
+**Constraints**: no OS query on any UI process or the daemon's loop for this feature (the roster is a
+memory read); every native call through koffi `.async`; a kill only by (pid, create time); nothing
+persisted; every figure validated against the OS or shown as "not measured" (FR-012).
+
+**Scale/Scope**: `packages/core`, `platform-windows`, `ipc-contract`, `daemon`, `ui` (main, preload,
+renderer, new collector entry). `persistence` untouched.
+
+## Constitution Check
+
+*GATE: evaluated before Phase 0 and re-evaluated after Phase 1.* Constitution v5.10.0. No amendment.
+
+| Principle | Assessment |
+|---|---|
+| **I. Project-First Context Isolation** | **Engaged, satisfied.** The breakdown is organised by project; actions run against the node's own project, through the same commands the project's own surfaces use (R12). No cross-project leakage: a node's action never acts on another project's state. |
+| **II. Platform-Abstracted Core** | **Engaged, satisfied.** `IProcessMetrics` (snapshot, GPU, describe, terminate, machine) in `packages/core/src/abstractions/`; the Windows implementation in `platform-windows`; hierarchy, roll-up, lineage, bands and estimates are pure core. A platform lacking a metric reports `Unavailable` (FR-011). |
+| **III. Detached, Tagged & Persistent Terminals** | **Engaged — high-risk row.** *No orphaned OS processes*: the collector exits on IPC disconnect and the startup sweep recognises it; the process-level E2E is extended to assert no collector survives the app (R1). Kill All Below ends processes only; panels stay (FR-063a), and a killed shell takes the ordinary shell-exit path (FR-066). The daemon's roster read adds no OS work. |
+| **IV. Native Terminal Support** | **Engaged lightly.** `Ctrl+Shift+Alt+R` is Tier 1, physical key, collision-free; terminals keep every key they had. |
+| **V. Test-First (NON-NEGOTIABLE)** | **Engaged, satisfied.** Every task test-first at the lowest layer (R13). Three new E2E specs and one extended, each justified (real process tree or real window under test); `e2e-budget.json` re-seeded. Privilege: the GPU and I/O counters need no elevation; nothing here is `skipIfElevated`. |
+| **VI. Simple, Modern, Discoverable UX** | **Engaged; see the rules table.** |
+| **VII. Change Review & Approval** | **Not engaged** — no file edits. |
+| **VIII. SOLID, DRY & YAGNI** | **Engaged.** DRY: one confirmation planner (`planConfirmations`) for kills; Destroy Tab/Panel and Unload Project extracted, not duplicated (R12); one reuse guard (`descendantsOf`) moved to core and shared. YAGNI: no persisted history, no network, no per-panel CPU attribution. |
+| **IX. DI & Composition Root** | **Engaged.** `WindowsProcessMetrics` is constructed in the collector's own composition root; `ResourceRosterService` in the daemon's; `ResourceMonitorHost` in UI main's. |
+| **X. Externalised Configuration** | **Engaged.** Seven settings with descriptors. Constants recorded in Complexity Tracking: tick overrun policy, collector restart back-off, calibration constants. |
+| **XI. Dockable Workspace** | **Engaged.** Read-only over layout; the standard actions go through the existing Destroy/Unload flows unchanged. |
+| **XII. Responsive UI (NON-NEGOTIABLE)** | **Engaged — high-risk row.** All collection off every UI process (R1); the modal renders from pushed frames with charts updating at the capture interval, never per input; treemap layout recomputed only when a frame's hierarchy changes; the charts' lazy chunk keeps startup unchanged; measured per SC-003. |
+
+### Principle VI — its named rules
+
+| Rule | Assessment |
+|---|---|
+| **Every panel action has a menu item** | The command is in the cog menu; the status bar is an accelerator. Node actions appear in the node's context menu and the detail pane's action row. |
+| **A chord MAY stand without a menu item** | Not needed — the command has both. |
+| **One section vocabulary for every menu** | Node menus: standard actions, divider, kill rows. |
+| **Disabled when unavailable, absent when meaningless** | throng's own nodes: actions **absent**. Unmounted panel/tab: Destroy **disabled** with reason. Kill All Below **absent** with no live process below. |
+| **Themeable icon controls (NON-NEGOTIABLE)** | Eight new tokens plus existing `dismiss`, `windowMinimise`, `panelMaximise`, `panelRestore`, `unload`, `destroy`; confirmation buttons keep text. |
+| **One condition, one notice** | A kill failure raises one inline notice in the modal; a failed tick marks figures stale without a notice; a stopped collector is stale figures, not a second daemon-style notice. |
+
+### Development Workflow & Quality Gates
+
+| Gate | Assessment |
+|---|---|
+| **Incremental delivery** | Engaged: editor/preview CPU is "not measured" with a follow-up issue (FR-024); Linux/macOS implementations deferred behind the seam (FR-010) — both in Complexity Tracking and as issues. |
+| **Static analysis** | Standing; `npm run gate` on the hosted runner. `eslint` already bans sync child-process calls in daemon/platform-windows; the collector entry is added to that rule's scope. |
+| **Particular-scrutiny review** | Engaged: process termination (identity guard, Projects-only authorisation), a new long-lived process (orphan hygiene). |
+| **Documentation currency** | Engaged: `docs/preferences.md` (Resource Monitor group, Kill processes), `docs/key-bindings.md` (`view.resourceMonitor`), `docs/quick-start.md` (status bar and monitor), `docs/architecture.md` (the collector process), `README.md` (one Highlights line), `CHANGELOG.md`. |
+| **Configuration-editor completeness** | Engaged: one descriptor per leaf, `settings-inertness-055.test.ts`, slider step rule, confirmation label vocabulary, eight icon tokens with copy. |
+| **Displayed quantities digit-grouped** | **Engaged**: every figure through `formatGrouped` with units (FR-032). |
+
+**Result: PASS.**
+
+### Re-evaluation after Phase 1
+
+Re-checked against the data model and contracts; verdict unchanged. Four spec corrections fell out of
+research and were applied at the analyze pass (spec last, smallest edit): FR-030's metric is labelled
+**I/O** (R3); FR-033a and FR-046 clamp out-of-range values as every bounded setting does (R11); SC-009's
+terminal case fills scrollback to its 1,000-line limit (R9); and FR-063a's Claude Code example is
+narrowed to processes an ordinary end leaves behind (R6).
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/055-resource-monitor/
+├── spec.md
+├── plan.md
+├── research.md          # R1–R13
+├── data-model.md
+├── quickstart.md
+├── contracts/
+│   ├── collector-protocol.md
+│   ├── resources-ipc-055.md
+│   └── menus-commands-controls-055.md
+├── checklists/requirements.md
+└── tasks.md             # /speckit-tasks
+```
+
+### Source Code
+
+```text
+packages/core/src/
+├── abstractions/process-metrics.ts          # NEW IProcessMetrics
+├── resources/                                # NEW: types, hierarchy, roll-up, attribution (lineage, reuse guard),
+│                                             #   estimates, bands, idle, settings resolution, friendly names,
+│                                             #   actions-for, kill-order, ordering
+├── process/process-tree.ts                   # descendantsOf moved here from platform-windows
+├── config/app-settings.ts, settings-metadata.ts, metadata.ts (note slot), keybindings.ts,
+│   keybindings-metadata.ts, theme.ts, theme-copy.ts, shipped-defaults.ts (23)
+└── workspace/destroy.ts                      # + killProcesses target
+
+packages/platform-windows/src/
+├── windows-process-metrics.ts               # NEW NtQuerySystemInformation, describe, terminate
+├── windows-gpu-counters.ts                  # NEW PDH GPU Engine
+├── node-pty-host.ts                          # rosterEntries()
+├── windows-directory-lock.ts                 # heldPids()
+└── process-tree.ts                           # re-exports core
+
+packages/ipc-contract/src/resources.ts        # NEW roster method + types, collector protocol types
+
+packages/daemon/src/
+├── resource-roster-service.ts               # NEW resources.roster
+├── pty-agent-host.ts, pty-agent-entry.ts     # keep shell OS pid; agent reports its pid
+├── terminal-service.ts                       # keep last attached pids per panel
+├── terminal-lock-manager.ts                  # held locks with panels
+├── reap-orphans.ts                           # recognise the collector
+└── composition-root.ts
+
+packages/ui/src/
+├── collector/                                # NEW collector-entry.ts, collector.ts, composition-root.ts
+├── main/resource-monitor-host.ts             # NEW spawn, roster merge, relay, restart
+├── main/resources-ipc.ts                     # NEW
+├── main/editor-coordinator.ts                # per-document estimate
+├── preload/preload.cts                       # window.throng.resources
+└── renderer/
+    ├── resources/                            # NEW status item, modal shell, charts (lazy), treemap, breakdown,
+    │                                         #   sparklines, detail, filters, keyboard, actions, session store,
+    │                                         #   estimates reporter
+    ├── statusbar/status-bar.tsx              # mount the item
+    ├── title-bar/cog-menu-items.ts, cog-menu.tsx
+    ├── keybindings/window-dispatcher.tsx     # command + exclusive-modal gate
+    ├── workspace/tab-group.tsx, panel-destroy.ts   # requestTabDestroy extracted
+    ├── sidebar/use-unload-project.ts         # NEW, extracted from projects-panel.tsx
+    ├── preferences/form-controls.tsx         # note beside a field
+    └── theme.css
+
+docs/ preferences, key-bindings, quick-start, architecture; README; CHANGELOG
+```
+
+**Structure Decision**: the existing package layout plus one new entry point (`packages/ui/src/collector/`)
+compiled with the UI main build and launched with the bundled Node runtime; no new package.
+
+## Complexity Tracking
+
+| Item | Why needed | Simpler alternative rejected because |
+|---|---|---|
+| A new long-lived helper process | FR-001 (outside every UI and terminal-input process) and the daemon-down scenario | Daemon or UI main hosting collection violates FR-001 / dies with the daemon (R1) |
+| Two new dependencies (`uplot`, `d3-hierarchy`) | FR-060's visual requirement; streaming charts and treemap layout | ECharts too large; Recharts re-renders per point (XII); hand-written is a library's worth of code (R10) |
+| Constants not settings: tick overrun = skip, collector restart ≤ 1/min, calibration constants `k_doc`/`k_view`/`k_dom`, 150-point history cap | Safety bounds and measured constants | Exposing them would be tunables nobody asked for (X allows limits) |
+| Deferred: editor/preview CPU ("not measured") | No method meets FR-012 | A guessed figure is forbidden by FR-012; follow-up [#498](https://github.com/Bidthedog/throng/issues/498) |
+| Deferred: Linux/macOS `IProcessMetrics` | FR-010 asks for the seam only | Out of scope; follow-up [#499](https://github.com/Bidthedog/throng/issues/499) |
+| Three new E2E specs and one extended | A real process tree (kill, orphans), a real window (status bar), real process memory (calibration) | Component and integration tests cover everything else |
+
+## Session 2026-10-23 — finalising the monitor (FR-098 – FR-113, SC-011)
+
+**Input**: the fourth hand-test round — sixteen requirements, SC-011, two defects (D1 the selected row's
+hover, FR-089/FR-098; D2 panel names, FR-020/FR-082). Research R17 – R20.
+
+### Summary of the increment
+
+- **Left list (R17)**: components only at the top level (`monitor-model.ts` drops the Projects section;
+  `share-bars.tsx` and `toolbar.tsx`'s `pathTo` lose their dependency on it); a Total row; clickable metric
+  headers and the "Order by" label; no narrowing control and no readout block; ended processes hidden by
+  default; one selected row or none, its look kept under hover (D1), Up/Down moving the selection;
+  columns that drop off the right, measured by a `ResizeObserver`, with a header marker; "-" and "~"
+  from `format.ts`; a description per component and role from a new core copy table
+  (`packages/core/src/resources/descriptions.ts`).
+- **Right column (R18)**: read-only children each showing every figure; the header's action bar with the
+  item's standard action, its kills and a new **Activate** routed like Destroy (R14); the monitor stays
+  above throng through the existing floating layering.
+- **Layout (R18)**: a full-width header (filter, toolbar, breadcrumb) over a two-column grid split by a
+  draggable, keyboard-movable divider whose ratio is kept with the view.
+- **Panel names (R19, D2)**: the reporter resolves titles with `panelTitleSources`, as panel headers do,
+  and re-reports when a title, command or folder changes.
+- **Network (R20)**: `IProcessMetrics.network()` beside `gpu()`; the Windows implementation runs an ETW
+  real-time session on Microsoft-Windows-Kernel-Network in a worker thread of the collector, only when
+  elevated; unelevated it is `Unavailable` with reason `elevation-required` ("Elevate to show").
+
+### Technical context, delta
+
+- **Storage**: `SHIPPED_DEFAULTS_VERSION` 26 → 27 for three icon tokens, `activate` (Activate's control),
+  `resourceHideEnded` (the Hide ended toggle, built as Hide idle is) and `resourceNetwork` (Order by's
+  Network choice); `EXPECTED_ICON_TOKEN_COUNT` 94 → 97. The monitor's view state (FR-057/FR-087) loses `narrowTo` and gains
+  `hideEnded` (default true) and `splitRatio`.
+- **Dependencies**: none new. ETW is reached through koffi against `advapi32` (`StartTraceW`,
+  `EnableTraceEx2`, `OpenTraceW`, `ProcessTrace`, `ControlTraceW`, `CloseTrace`), as the rest of
+  `platform-windows` reaches Win32.
+- **Constraints**: `ProcessTrace` blocks its caller and calls back on the same thread, so it runs in a
+  `worker_thread` of the collector — never on a UI process, the daemon, or the collector's main loop.
+  This is the one synchronous koffi call in the feature, and it is off every event loop (Complexity
+  Tracking).
+- **Testing**: unit (core: column fitting, totals, ended hiding, descriptions, formatting, network
+  roll-up, ETW event parsing); component (left list, right column, layout, divider, header buttons,
+  Activate routing in the renderer); contract (`network()` against the fake); **integration, elevated
+  only** (a real ETW session counting a known loopback transfer, `skipIf(!isElevated())`); E2E: the
+  existing `resource-monitor.e2e.ts` adjusted to the components-only top level, plus Activate across a
+  real window — one test, `@extended`, because only a real second window shows the route landing.
+
+### Constitution Check — the increment
+
+| Principle / rule | Assessment |
+|---|---|
+| **II. Platform-Abstracted Core** | `network()` joins `IProcessMetrics`; ETW lives only in `platform-windows`; a platform without it reports `Unavailable`. Column fitting, totals and descriptions are pure core or renderer. |
+| **III. Detached, Tagged & Persistent Terminals** | *No orphaned OS resources* extends to the ETW session: it is named per collector (`throng-net-<pid>`), stopped on collector exit, and any `throng-net-*` session whose owner pid is gone is stopped when a collector starts (R20). |
+| **V. Test-First** | Every task test-first at the lowest layer; the only elevated test is the ETW integration test, which skips unelevated and is reported by `admin-reminder`. |
+| **VI. Every panel action has a menu item** | Activate is in the row's context menu and the right column's action bar. |
+| **VI. Disabled when unavailable, absent when meaningless** | Activate **absent** on UI/Daemon/Helpers; otherwise **enabled**: the hierarchy is built from the contexts windows report, so every tab it lists is held by a window, and FR-110's "disabled … where no window holds it" never applies to a listed node. A route that does not land is FR-086's one notice ("Couldn't go to …"), answered by the receiving window (T172, review #9). Network as an Order-by choice **disabled** unelevated, with "Elevate to show". |
+| **VI. Themeable icon controls** | New tokens `activate`, `resourceHideEnded` and `resourceNetwork`; the column headers are text buttons — a column header names its column, so its label is the control (the toolbar's Order by keeps its icon buttons). |
+| **VI. One condition, one notice** | An ETW session that fails to start is "Network unavailable" in each figure's title, never a notice. |
+| **X. Externalised Configuration** | No new setting: Hide ended and the divider are view state like the metric and filter (FR-057). |
+| **XII. Responsive UI** | Column fitting runs on resize only; the Total is a roll-up the model already computes; ETW aggregation is in the collector's worker, summed per tick. |
+| **Accuracy over coverage (FR-012)** | Network is shown only from ETW and validated against Resource Monitor (SC-011); otherwise "-". |
+| **Displayed quantities digit-grouped** | Network rates through `formatGrouped` with KB/s, MB/s. |
+
+**Result: PASS.** Complexity Tracking gains one row: the synchronous `ProcessTrace` in a worker thread
+(the API has no asynchronous form; the worker is the off-loop boundary).
+
+## Session 2026-10-29 — popover, layout, wording, help and graphs (FR-115 – FR-120, SC-009 gate)
+
+**Input**: the fifth hand-test round — six requirements and SC-009's gating shape. No defects. Research R22.
+
+### Summary of the increment
+
+- **Status bar popover (FR-115)**: `status-resources.tsx` drops its `title` attributes for a popover in
+  `.attention-popover`'s style (the app's reference popover: surfaceActive fill, border, 6 px radius, one
+  soft shadow — no glow), anchored above the item, opened on pointer enter or focus and closed on leaving
+  both the item and the popover or on Esc. Its content is a component fed by the same summary stream the
+  item already reads, so a capture re-renders it in place; a small ring of the main window's totals since
+  it opened feeds four mini line graphs (`line-graph.tsx`'s sparkline mode). CPU, Memory and GPU plot as a
+  percentage of the machine — the summary's per-component figures over the machine capacity FR-094
+  already uses; I/O plots bytes per second on a scale fitted to the ring's peak. The ring keeps the same
+  number of points as the monitor's graphs (so "since the main window opened" up to that cap); a graph
+  with fewer than two points shows FR-114's spinner; a figure whose machine capacity is unknown shows its
+  number with no graph. The popover reserves its lines, so stale or unavailable text never moves it. Its
+  first line names the click action and the item's `aria-label` is "Open Resource Monitor" — no native
+  `title` (FR-115's interpretation of the hover-title rule).
+- **Opening width (FR-116)**: `use-column-fit.ts` exports the width every figure column needs beside the
+  name column's minimum; `monitor-body.tsx` uses it for the initial split when the view has no restored
+  `splitRatio`, clamped so the right column keeps its minimum. Figure columns have fixed widths, so the
+  width does not depend on what a cell reads (Network's "-" included).
+- **Wording (FR-117)**: `breakdown.tsx` loses its "Ordered by" header; `toolbar.tsx`'s Hide idle and Hide
+  ended become icon-only toggles (their `title` and `aria-label` keep the names); `detail-pane.tsx` loses
+  the root's "Everything throng runs" kind line; `share-bars.tsx` loses its "Made up of" heading.
+- **Held folders (FR-118)**: the left column becomes a flex column — the list's body (`flex: 1 1 auto`,
+  `min-height` of min(its rows, 10) rows, so a short list reserves no blank space and a fixed list keeps
+  every row) above Held folders (`flex: 0 1 auto`, its own scroll, a minimum of its heading so it never
+  vanishes *(derived)*); the Total row leaves the list's scroll region so it is always shown and does not
+  count toward the 10 *(derived)*. jsdom has no layout, so T193's component test asserts the rules, the
+  row counts and the Total row's place outside the scroll container; MT-16 is the visual proof.
+- **Help (FR-119)**: `help-panel.tsx` is rewritten to the disclaimer and five short sections in the
+  `.attention-popover` style; a small `InfoHelper` ("?", themeable, the existing `help` token at a small
+  size — no new token, no shipped-defaults bump) opens one or two sentences beside Order by, Hide idle,
+  Hide ended, the interval, Held folders, the Total row and the "-"/"~" markers. Helper copy lives in one
+  table (`resources/helper-copy.ts`) so the help panel and the helpers cannot drift.
+- **Graphs (FR-120)**: `line-graph.tsx` gains a Y scale (0 and the plotted maximum, in the figure's unit,
+  through `format.ts`), and its value line reads "<band> <value>"; `detail-pane.tsx`'s figure list goes,
+  keeping FR-012's process facts.
+- **Calibration gate (SC-009)**: `resource-estimates-calibration.e2e.ts` defaults to the trimmed case
+  set — editor, preview and terminal at 1 and 10 MB (asserted, ±10% of live heap) and the three benchmark
+  layouts (asserted: Spearman ρ ≥ 0.85, each kind's share within 5 points); known-miss shapes logged;
+  `THRONG_CALIBRATE=full` for the full sweep and 50 MB. Its one `waitForTimeout` gives way to waiting for
+  a frame whose figures stopped changing (the sleep ratchet).
+
+### Technical context, delta
+
+- **Storage**: none — no setting, no icon token, no shipped-defaults bump; view state unchanged.
+- **Testing**: component tests for every visible change (popover open/stay/close/update-in-place and its
+  graphs, icon-only toggles, absent copy, opening split, the left column's height sharing as computed
+  styles and row counts, help panel content and helpers, graph Y scale and band order); unit tests for the
+  popover's percentage and I/O-scale arithmetic and the opening width; the calibration E2E as above.
+  Height sharing is checked in a component test through the layout's rules; MT-16 is its visual proof.
+
+### Constitution Check — the increment
+
+| Principle / rule | Assessment |
+|---|---|
+| **VI. Themeable icon controls** | Hide idle and Hide ended stay icon controls with titles; the "?" helpers reuse the `help` token, each with a title and accessible name. The status-bar item's hover title is its popover, whose first line names the click action (FR-115's recorded interpretation), with `aria-label` "Open Resource Monitor". |
+| **Displayed quantities digit-grouped** | Popover figures and Y-scale labels go through `format.ts`. |
+| **VI. One condition, one notice** | Unchanged: an unavailable total says so in the popover as it did in the title (FR-044). |
+| **VI. Accessibility** | The popover is reachable by focus and closed by Esc; icon-only toggles keep their accessible names. |
+| **XII. Responsive UI** | The popover re-renders only what the summary already carries; the ring is bounded; the opening width is computed once per open. |
+| **Accuracy over coverage (FR-012)** | Percentages use FR-094's machine measures; an unknown capacity leaves a figure as a number with no graph. |
+
+**Result: PASS.**
