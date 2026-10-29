@@ -64,11 +64,11 @@ export function EditorOpenListener(): null {
   const projectRoot = projects.find((p) => p.id === projectId)?.rootFolder;
   useEffect(() => {
     if (refused.length === 0) return;
-    for (const { absPath, reason } of drainRefusedOpens()) {
+    for (const { absPath, reason, encoding } of drainRefusedOpens()) {
       reportSubject({
         subject: absPath,
         reason,
-        message: missingFileMessage(reason),
+        message: missingFileMessage(reason, encoding),
         // FR-018 — the row renders the path RELATIVE to the project root, because the notice's
         // heading already names the project. The absolute form stays in `detail` (FR-018c).
         displayPath: relativeToRoot(absPath, projectRoot),
@@ -240,7 +240,11 @@ export async function openFileInTab(
   // FR-013a binds every entry point, and a reason each caller must remember to forward is a rule the
   // next entry point will forget — which is how `openFileInNewEditor` came to bypass this check.
   if (decision?.action === 'refuse') {
-    publishRefusedOpen({ absPath, reason: decision.reason });
+    publishRefusedOpen({
+      absPath,
+      reason: decision.reason,
+      ...(decision.encoding ? { encoding: decision.encoding } : {}),
+    });
     return false;
   }
 

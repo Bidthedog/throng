@@ -30,8 +30,8 @@
  * outside this feature's scope and unaffected. Removing the store to remove the batch would have
  * been a change to two behaviours in order to change one.
  */
-import { toDisplayPath } from '@throng/core';
-import type { OsName } from '@throng/core';
+import { refusalMessage, toDisplayPath } from '@throng/core';
+import type { EncodingId, OsName } from '@throng/core';
 
 /**
  * One file that could not be opened. It carries no panel name: the row naming the panel is built by
@@ -40,8 +40,10 @@ import type { OsName } from '@throng/core';
  */
 export interface LoadErrorEntry {
   filePath: string | null;
-  /** A `LoadResult` reason: 'binary' | 'too-large' | 'out-of-tree' | 'folder' | 'io'. */
+  /** A `LoadResult` reason: 'binary' | 'too-large' | 'out-of-tree' | 'folder' | 'io' | 'utf32' | 'not-decodable'. */
   reason: string;
+  /** 059 — the encoding a `not-decodable` file was read as, so the sentence can name it. */
+  encoding?: EncodingId;
 }
 
 /**
@@ -65,8 +67,13 @@ export { NOT_A_MISSING_FILE, isMissingReason } from '@throng/core';
  * The path is deliberately absent: FR-034 keeps raw paths out of a notice, and the panel's own
  * banner already shows the one it could not read (FR-040a). What this adds is why.
  */
-export function missingFileMessage(reason: string): string {
-  if (reason === 'binary') return 'That file is not text, so it cannot be opened in an editor.';
+export function missingFileMessage(reason: string, encoding?: EncodingId): string {
+  // 059 FR-053 — a file that is not text, is UTF-32, or does not decode: core's one wording, which the
+  // preview, the replace report and the task toggle say too. A file that does not decode is named in the
+  // encoding it was read as, which the refusal carries (review R2).
+  if (reason === 'binary' || reason === 'utf32' || reason === 'not-decodable') {
+    return refusalMessage(reason, encoding);
+  }
   if (reason === 'too-large') return 'That file is too large to open in an editor.';
   // The file EXISTS. Saying "missing" here would send the user looking for a file that is sitting
   // exactly where they left it.

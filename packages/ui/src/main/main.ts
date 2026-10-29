@@ -1477,6 +1477,7 @@ if (isPrimaryInstance)
     (root) => projectsByRoot.get(normaliseForCompare(root))?.searchExcludeGlobs ?? [],
     () => currentSettings.editor.maxOpenFileBytes,
     pushFileSearchUpdate,
+    () => currentSettings.editor.fallbackEncoding,
   );
   /*
    * The commit half is registered LOWER DOWN, once the editor coordinator exists (043 T094).
@@ -1667,7 +1668,9 @@ if (isPrimaryInstance)
        */
       const ownerUnknown = (ownership?.ownerKind ?? 'project') === 'project' && !ownership?.ownerRoot;
       if (result.reason === 'out-of-tree' && ownerUnknown) return undefined;
-      return result.reason;
+      return result.reason === 'not-decodable'
+        ? { reason: result.reason, encoding: result.encoding }
+        : { reason: result.reason };
     },
     // Raise the window that already owns an open file and focus its Panel (FR-011a).
     focusEditor: (windowId, panelId) => {
@@ -1725,7 +1728,12 @@ if (isPrimaryInstance)
   registerPreviewIpc(
     ipcMain,
     previews,
-    new TaskToggleService(fileSystem, editorCoordinator, (panelId) => previews.run(panelId)),
+    new TaskToggleService(
+      fileSystem,
+      editorCoordinator,
+      (panelId) => previews.run(panelId),
+      () => currentSettings.editor.fallbackEncoding,
+    ),
   );
   // A window that has gone views no preview any more; the runs themselves live until `destroyed`.
   app.on('web-contents-created', (_event, contents) => {

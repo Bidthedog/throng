@@ -29,6 +29,9 @@ export const NOT_A_MISSING_FILE: ReadonlySet<string> = new Set([
   'too-large',
   'out-of-tree',
   'folder',
+  // 059 FR-006 / FR-014 — a file throng recognises and will not open, never one that is absent.
+  'utf32',
+  'not-decodable',
 ]);
 
 /**

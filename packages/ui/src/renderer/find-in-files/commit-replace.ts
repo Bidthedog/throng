@@ -17,7 +17,10 @@
  * called.
  */
 import {
+  encodingLabel,
   formatGrouped,
+  refusalMessage,
+  type EncodingId,
   type MatchModes,
   type ResultRow,
   type SeverityNotificationSettings,
@@ -47,6 +50,8 @@ interface RefusedCommit {
 interface FailedCommit {
   relPath: string;
   reason: string;
+  /** 059 — the file's encoding, where the reason is about it (`unrepresentable`, `not-decodable`). */
+  encoding?: EncodingId;
 }
 
 /** 043 FR-086 — the replacement landed in this document's buffer and the save that owed it did not. */
@@ -404,7 +409,15 @@ function noticeFor(outcome: CommitOutcome, display: SeverityNotificationSettings
   }
   for (const p of outcome.changedOnDisk) details.push(`${p} — changed on disk`);
   for (const r of outcome.refused) details.push(`${r.relPath} — not changed: the match had gone`);
-  for (const f of outcome.failed) details.push(`${f.relPath} — not changed: ${failureWording(f.reason)}`);
+  for (const f of outcome.failed) {
+    // 059 FR-053 — a file refused for what it IS (not text, UTF-32, not decodable) is said in core's one
+    // sentence, the one the editor and the preview say; every other reason is a clause.
+    details.push(
+      isTextRefusal(f.reason)
+        ? `${f.relPath} — not changed. ${refusalMessage(f.reason, f.encoding)}`
+        : `${f.relPath} — not changed: ${failureWording(f.reason, f.encoding)}`,
+    );
+  }
 
   return {
     severity,
@@ -448,9 +461,20 @@ function noticeFor(outcome: CommitOutcome, display: SeverityNotificationSettings
   };
 }
 
+/** 059 FR-053 — the reasons core words as one sentence for every surface that refuses a file. */
+export function isTextRefusal(reason: string): reason is 'binary' | 'utf32' | 'not-decodable' {
+  return reason === 'binary' || reason === 'utf32' || reason === 'not-decodable';
+}
+
 /** Why a file could not be written, as a clause. Shared with the preview's task toggle (054 R4). */
-export function failureWording(reason: string): string {
+export function failureWording(reason: string, encoding?: EncodingId): string {
   switch (reason) {
+    // 059 FR-021 — the edit would put a character into the file that its own encoding cannot hold, so the
+    // file was left as it was rather than written in some other encoding.
+    case 'unrepresentable':
+      return encoding
+        ? `the replacement adds a character ${encodingLabel(encoding, false)} cannot represent`
+        : 'the change adds a character the file’s encoding cannot represent';
     case 'missing':
       return 'the file is no longer there';
     case 'readOnly':
@@ -466,10 +490,8 @@ export function failureWording(reason: string): string {
       return 'the editor has nowhere to save it yet';
     case 'binary':
       return 'it is not a text file';
-    case 'encoding':
-      // Named rather than folded into "it could not be written", because the user CAN act on it:
-      // opening the file in an editor that can read its encoding is the way to replace in it.
-      return 'it is not UTF-8 text, so replacing in it would destroy characters';
+    // (059 retired `encoding`: a file is now written in its own encoding, and one that does not decode is
+    // refused as `not-decodable`, which `isTextRefusal` words in core's sentence.)
     default:
       return 'it could not be written';
   }

@@ -25,7 +25,47 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { boundHistory, type SerialisedHistory } from '@throng/core';
+import {
+  boundHistory,
+  isCodePageId,
+  isEncodingId,
+  type EncodingId,
+  type LineEndingId,
+  type LineFormat,
+  type SerialisedHistory,
+} from '@throng/core';
+
+/** What a recovery snapshot remembers of a document's format (059 FR-015). */
+export interface RecoveredFormat {
+  encoding: EncodingId;
+  hasBom: boolean;
+  encodingChosen: boolean;
+  lineFormat: LineFormat;
+}
+
+const isEnding = (x: unknown): x is LineEndingId => x === 'lf' || x === 'crlf' || x === 'cr';
+
+/**
+ * Validate a snapshot's format. Anything malformed is dropped — the restore then keeps the file's own
+ * format, which is what a pre-059 snapshot does — rather than trusted into a save.
+ */
+export function parseFormat(raw: unknown): RecoveredFormat | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const f = raw as Record<string, unknown>;
+  const line = f.lineFormat as Record<string, unknown> | undefined;
+  if (!isEncodingId(f.encoding) || typeof f.hasBom !== 'boolean' || !line || !isEnding(line.lineEnding)) {
+    return undefined;
+  }
+  const mixed = Array.isArray(line.mixedLineEndings) && line.mixedLineEndings.every(isEnding)
+    ? (line.mixedLineEndings as LineEndingId[])
+    : undefined;
+  return {
+    encoding: f.encoding,
+    hasBom: isCodePageId(f.encoding) ? false : f.hasBom,
+    encodingChosen: f.encodingChosen === true,
+    lineFormat: mixed && mixed.length > 0 ? { lineEnding: line.lineEnding, mixedLineEndings: mixed } : { lineEnding: line.lineEnding },
+  };
+}
 
 /** Encode a panelId into a safe flat filename (panelIds are opaque tokens). */
 function safeName(panelId: string): string {
@@ -56,6 +96,11 @@ export interface RecoverySnapshot {
   text: string;
   /** Absent when `editor.persistUndoHistory` is off, or when the snapshot predates 016. */
   history?: SerialisedHistory;
+  /**
+   * The format the buffer was being edited in (059 FR-015), so a recovered buffer saves as what the
+   * user was editing. Absent on a snapshot written before 059 — restore then keeps the file's own.
+   */
+  format?: RecoveredFormat;
 }
 
 export interface RecoveredDoc extends RecoverySnapshot {
@@ -109,10 +154,12 @@ function parseSnapshot(raw: string): RecoverySnapshot | null {
     // would blank the user's buffer and mark it dirty.
     if (snap[MARKER] !== FORMAT || typeof snap.text !== 'string') return null;
 
+    const format = parseFormat(snap.format);
     return {
       version: typeof snap.version === 'number' ? snap.version : 0,
       text: snap.text,
       history: (snap.history as SerialisedHistory | undefined) ?? undefined,
+      ...(format ? { format } : {}),
     };
   }
 
@@ -182,6 +229,7 @@ export class EditorRecovery {
       version: snapshot.version,
       text: snapshot.text,
       ...(snapshot.history ? { history: boundHistory(snapshot.history) } : {}),
+      ...(snapshot.format ? { format: snapshot.format } : {}),
     };
 
     // ATOMIC: written to a temp file, then RENAMED over the real one.

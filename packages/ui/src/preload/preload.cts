@@ -859,8 +859,16 @@ contextBridge.exposeInMainWorld('throng', {
     link: (panelId: string, ownerId: string, tabId?: string | null) =>
       ipcRenderer.invoke('throng:editor:link', { panelId, ownerId, tabId }),
     /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
-    restoreRecovered: (panelId: string, text: string, history?: unknown) =>
-      ipcRenderer.invoke('throng:editor:restoreRecovered', { panelId, text, history }),
+    restoreRecovered: (panelId: string, text: string, history?: unknown, format?: unknown) =>
+      ipcRenderer.invoke('throng:editor:restoreRecovered', { panelId, text, history, format }),
+    /** 059 FR-024 — re-read the document's file in a chosen encoding. */
+    reopenWithEncoding: (req: unknown) => ipcRenderer.invoke('throng:editor:reopenWithEncoding', req),
+    /** 059 FR-068 — dismiss the document's read notice. */
+    dismissReadNotice: (req: unknown) => ipcRenderer.invoke('throng:editor:dismissReadNotice', req),
+    /** 059 FR-027 — save the document in a chosen encoding. */
+    /** 059 FR-035 — Convert to LF / CRLF, one undoable step. */
+    changeEncoding: (req: unknown) => ipcRenderer.invoke('throng:editor:changeEncoding', req),
+    convertLineEndings: (req: unknown) => ipcRenderer.invoke('throng:editor:convertLineEndings', req),
     /** THIS panel's crash snapshot — never the whole recovery directory (FR-027b). */
     recoverOne: (panelId: string) => ipcRenderer.invoke('throng:editor:recoverOne', panelId),
     /** Current UI-main content for a panel (moved panel / mirror / restore). */

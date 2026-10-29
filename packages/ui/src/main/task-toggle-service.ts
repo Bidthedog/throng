@@ -23,6 +23,7 @@ import {
   type TaskToggleRefusal,
   type TaskToggleRequest,
   type TaskToggleResponse,
+  type CodePageId,
 } from '@throng/core';
 import { textFileRewrite } from './text-file-rewrite.js';
 
@@ -60,6 +61,8 @@ export class TaskToggleService {
     private readonly fs: IFileSystem,
     private readonly editors: TaskToggleEditors,
     private readonly runOf: TaskToggleRunLookup,
+    /** `editor.fallbackEncoding`, read at toggle time (059 FR-069). */
+    private readonly fallbackEncoding: () => CodePageId = () => 'windows1252',
   ) {}
 
   async toggle(req: TaskToggleRequest): Promise<TaskToggleResponse> {
@@ -79,7 +82,7 @@ export class TaskToggleService {
     const outcome = await textFileRewrite(
       this.fs,
       absPath,
-      { allowed: confinement.allowed, isOpen: (p) => this.editors.isOpen(p) },
+      { allowed: confinement.allowed, isOpen: (p) => this.editors.isOpen(p), fallbackEncoding: this.fallbackEncoding() },
       (text) => {
         const located = locateTaskToggle(text, req.line, req.expectChecked, req.itemText, req.occurrence);
         return located.ok
@@ -89,7 +92,7 @@ export class TaskToggleService {
     );
     switch (outcome.kind) {
       case 'failed':
-        return { ok: false, reason: outcome.reason };
+        return { ok: false, reason: outcome.reason, ...(outcome.encoding ? { encoding: outcome.encoding } : {}) };
       case 'becameOpen':
         return this.inBuffer(req, absPath);
       case 'unchanged':

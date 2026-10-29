@@ -20,9 +20,15 @@ export { effectiveIndent, indentUnitOf } from './editor/effective-indent.js';
 export type {
   CanonicalChangeMsg,
   DispatchChangeMsg,
+  DocEncoding,
+  LineFormat,
   MergeClass,
   ResetDocumentMsg,
+  WireLineFormat,
 } from './editor/document-sync.js';
+export { docEncodingEq, lineFormatEq, toWireLineFormat } from './editor/document-sync.js';
+// Each line's ending follows it through an edit (059 FR-061).
+export { mapLineEndings } from './editor/line-ending-map.js';
 // The undo history, as it survives a crash (016, FR-027a) — bounded, and carried INSIDE the
 // recovery snapshot so it can never outlive it.
 export { MAX_HISTORY_BYTES, boundHistory } from './editor/undo-persistence.js';
@@ -691,6 +697,7 @@ export type {
   PreviewPanelConfig,
   PersistedHistory,
   EncodingId,
+  CodePageId,
   LineEndingId,
   SplitNode,
   LayoutNode,
@@ -699,7 +706,14 @@ export type {
   SubWorkspace,
   SubWorkspaceBounds,
 } from './workspace/model.js';
-export { LAYOUT_SCHEMA_VERSION, isPanel, isSplit } from './workspace/model.js';
+export {
+  LAYOUT_SCHEMA_VERSION,
+  isPanel,
+  isSplit,
+  isEncodingId,
+  isCodePageId,
+  CODE_PAGE_IDS,
+} from './workspace/model.js';
 // Move-focus geometry (012) — directional + cyclic keyboard focus over the tree.
 export { panelRects, moveFocus, cycleOrder, nextInCycle } from './workspace/focus-move.js';
 export type { Rect, Direction } from './workspace/focus-move.js';
@@ -716,13 +730,26 @@ export {
   isPathed,
   type DecodedFile,
   type EncodeOptions,
-  detectEncoding,
+  type TextFormatVerdict,
+  type TextReadResult,
+  type TextRefusalReason,
+  type Unrepresentable,
+  detectTextFormat,
   detectLineEnding,
+  misreadSuspect,
+  looksMisreadAs,
+  codePageName,
+  readText,
   decode,
   encode,
+  findUnrepresentable,
+  encodingLabel,
+  lineEndingLabel,
+  refusalMessage,
+  ENCODING_CHOICES,
+  TextRefusedError,
+  UnrepresentableTextError,
   newDocumentDefaults,
-  isProbablyBinary,
-  isDecodableUtf8,
   type SaveConfinementKind,
   type SaveConfinement,
   isWithinTree,

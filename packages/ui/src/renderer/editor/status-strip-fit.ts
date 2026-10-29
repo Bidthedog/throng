@@ -21,8 +21,9 @@
  * hidden. Losing a figure costs the user information; `words` → `w` costs them nothing.
  *
  * **Then hide, in a fixed order (FR-023).** `words → chars → selected → column → line`. The line
- * survives longest because it is the figure an error message names, which is the reason #256 asks
- * for these readouts at all.
+ * survives longest of the readouts because it is the figure an error message names, which is the
+ * reason #256 asks for these readouts at all. 059 FR-032 continues the order with the two format
+ * indicators — `lineEnding → encoding` — and it terminates there.
  *
  * ══ WHAT THIS MODULE DELIBERATELY CANNOT EXPRESS ══
  *
@@ -37,6 +38,16 @@
 /** The five figures the bar reports. */
 export type ReadoutId = 'line' | 'column' | 'selected' | 'chars' | 'words';
 
+/**
+ * 059 FR-030 — the document's encoding and line-ending indicators. They live in the TRAILING group,
+ * beside the language label and the wrap toggle, but unlike those two they may be hidden by width —
+ * after every readout (FR-032) — so they are segments this module decides about.
+ */
+export type IndicatorId = 'encoding' | 'lineEnding';
+
+/** Anything the fit decides about: a readout or a format indicator. Never a control (FR-024). */
+export type SegmentId = ReadoutId | IndicatorId;
+
 /** There are exactly two label forms and no third (FR-022a). */
 export type LabelForm = 'full' | 'short';
 
@@ -46,9 +57,9 @@ export interface SegmentWidth {
   short: number;
 }
 
-/** A readout that renders, and the label form it renders with. */
+/** A segment that renders, and the label form it renders with. */
 export interface FitSegment {
-  id: ReadoutId;
+  id: SegmentId;
   label: LabelForm;
 }
 
@@ -60,14 +71,25 @@ export interface FitResult {
 /** Left-to-right on screen. Not the hide order — conflating the two renders the bar backwards. */
 export const READOUT_ORDER = ['line', 'column', 'selected', 'chars', 'words'] as const;
 
+/** The indicators left to right in the trailing group, before the language label (059 FR-030). */
+export const INDICATOR_ORDER = ['encoding', 'lineEnding'] as const;
+
+/** Every segment, in display order: the readouts lead, the indicators trail. */
+export const SEGMENT_ORDER = [...READOUT_ORDER, ...INDICATOR_ORDER] as const;
+
 /**
- * The order segments are given up in (FR-023). `line` is last on purpose.
+ * The order segments are given up in (FR-023, continued by 059 FR-032). Among the readouts `line` is
+ * last on purpose; the two format indicators outlast every readout — line ending first, then
+ * encoding — and the order TERMINATES there: the language label and the wrap toggle are not in it.
  *
  * It is also the order labels SHORTEN in, which is a derivation rather than a second rule: the
  * segment closest to being dropped is the one that should give ground first. Inventing a separate
- * shortening order would be a rule with nothing in the spec behind it, free to drift.
+ * shortening order would be a rule with nothing in the spec behind it, free to drift. (The indicators
+ * have no short form, so they take no part in shortening.)
  */
-export const HIDE_ORDER = ['words', 'chars', 'selected', 'column', 'line'] as const;
+export const HIDE_ORDER = ['words', 'chars', 'selected', 'column', 'line', 'lineEnding', 'encoding'] as const;
+
+const isIndicator = (id: SegmentId): id is IndicatorId => id === 'encoding' || id === 'lineEnding';
 
 /**
  * The declared forms, transcribed from FR-022a's table.
@@ -92,7 +114,9 @@ export const READOUT_LABELS: Record<ReadoutId, { full: string; short: string }> 
  * identical copies of every visible readout into the document for no width the bar did not already
  * know). One predicate, so the decision to shorten and the decision to measure cannot disagree.
  */
-export function labelShortens(id: ReadoutId): boolean {
+export function labelShortens(id: SegmentId): boolean {
+  // An indicator's label is data — `UTF-16 LE`, `CRLF` — and has no abbreviation to take.
+  if (isIndicator(id)) return false;
   return READOUT_LABELS[id].short !== READOUT_LABELS[id].full;
 }
 
@@ -109,25 +133,35 @@ export function labelShortens(id: ReadoutId): boolean {
  * fewer segments and never lengthens a label back, so the bar only ever gets terser as it narrows.
  */
 export function fitReadouts(input: {
-  /** Space the readouts may occupy, in px. */
+  /**
+   * Space the segments may occupy, in px: the bar less the never-hidden controls and the one gap
+   * between the two groups.
+   */
   available: number;
-  /** Measured width per PRESENT readout, in each label form. */
-  widths: Partial<Record<ReadoutId, SegmentWidth>>;
-  /** Space between adjacent readouts, in px. */
+  /** Measured width per PRESENT segment, in each label form. */
+  widths: Partial<Record<SegmentId, SegmentWidth>>;
+  /** Space between adjacent segments, in px. */
   gap?: number;
 }): FitResult {
   const gap = input.gap ?? 0;
-  const forms = new Map<ReadoutId, LabelForm>();
-  let present: ReadoutId[] = READOUT_ORDER.filter((id) => input.widths[id] !== undefined);
+  const forms = new Map<SegmentId, LabelForm>();
+  let present: SegmentId[] = SEGMENT_ORDER.filter((id) => input.widths[id] !== undefined);
   for (const id of present) forms.set(id, 'full');
 
+  /*
+   * The gaps follow where each kind of segment SITS. Readouts are separated from one another, and the
+   * last one from the trailing group by the gap `available` already excludes. An indicator sits in the
+   * trailing group and is always followed by something — the next indicator, or the controls — so each
+   * present indicator costs one gap of its own, whether or not any readout survives.
+   */
   const total = (): number => {
-    if (present.length === 0) return 0;
     const sum = present.reduce(
       (acc, id) => acc + (input.widths[id]?.[forms.get(id) ?? 'full'] ?? 0),
       0,
     );
-    return sum + gap * (present.length - 1);
+    const readouts = present.filter((id) => !isIndicator(id)).length;
+    const indicators = present.length - readouts;
+    return sum + gap * Math.max(0, readouts - 1) + gap * indicators;
   };
 
   const fits = (): boolean => total() <= input.available;
@@ -138,8 +172,8 @@ export function fitReadouts(input: {
     if (present.includes(id) && labelShortens(id)) forms.set(id, 'short');
   }
 
-  // FR-023 — then give up whole segments, in the declared order. FR-024: the order ends at `line`,
-  // and there is nothing after it this loop could reach.
+  // FR-023 — then give up whole segments, in the declared order. FR-024 / 059 FR-032: the order ends
+  // at the encoding indicator, and there is nothing after it this loop could reach.
   for (const victim of HIDE_ORDER) {
     if (fits()) break;
     present = present.filter((id) => id !== victim);
@@ -148,6 +182,6 @@ export function fitReadouts(input: {
   return result(present, forms);
 }
 
-function result(present: readonly ReadoutId[], forms: ReadonlyMap<ReadoutId, LabelForm>): FitResult {
+function result(present: readonly SegmentId[], forms: ReadonlyMap<SegmentId, LabelForm>): FitResult {
   return { segments: present.map((id) => ({ id, label: forms.get(id) ?? 'full' })) };
 }

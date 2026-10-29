@@ -19,7 +19,7 @@
  *               into, an abandoned walk producing NOTHING rather than a truncated set
  *   exclusions  `compileExcluder` over Find in Files' OWN lists (060 #532) — the search exclusion list,
  *               the project's own list and the panel's box, composed by `searchExcludeGlobs`, read at SCAN TIME
- *   refusals    `isProbablyBinary` and `editor.maxOpenFileBytes` — the editor's own detection and
+ *   refusals    `readText` (059 FR-050) and `editor.maxOpenFileBytes` — the editor's own detection and
  *               the editor's own limit, rather than a second notion of what is searchable
  *   matching    `editorMatches` — the find bar's semantics, so a file search and a buffer search
  *               cannot disagree about what a match is (FR-039)
@@ -65,11 +65,10 @@ import {
   MAX_LISTED_MATCHES,
   MAX_ROWS_PER_BATCH,
   compileExcluder,
-  decode,
   editorMatches,
-  isProbablyBinary,
   isUnderPath,
   normaliseForCompare,
+  readText,
   searchExcludeGlobs,
   snippetFor,
   toAbsPath,
@@ -79,6 +78,7 @@ import {
   type ResultRow,
   type ScanStatus,
   type SearchScope,
+  type CodePageId,
 } from '@throng/core';
 import { Text } from '@codemirror/state';
 
@@ -328,6 +328,8 @@ export class FileSearchService {
      * late. So the recipients are named, and they are named by the set the panel registered.
      */
     private readonly push: (webContentsId: number, payload: FileSearchUpdate) => void,
+    /** `editor.fallbackEncoding` (059 FR-069) — the editor's detection, read at scan time like the rest. */
+    private readonly fallbackEncoding: () => CodePageId = () => 'windows1252',
   ) {}
 
   /**
@@ -1045,7 +1047,10 @@ export class FileSearchService {
         run.skipped += 1;
         continue;
       }
-      if (isProbablyBinary(bytes)) {
+      // 059 FR-050 — the editor's own detection: UTF-16 and Windows-1252 are searched, binary,
+      // UTF-32 and undecodable files are skipped.
+      const read = readText(bytes, undefined, this.fallbackEncoding());
+      if (!read.ok) {
         run.skipped += 1;
         continue;
       }
@@ -1058,7 +1063,7 @@ export class FileSearchService {
        * re-decodes immediately before each write, because a value recorded at scan time is exactly
        * the stale answer FR-054's re-check exists to refuse.
        */
-      const doc = Text.of(decode(bytes).text.split('\n'));
+      const doc = Text.of(read.file.text.split('\n'));
       run.filesScanned += 1;
       const before = run.totalMatches;
       for (const match of editorMatches(doc, run.term, run.modes)) {

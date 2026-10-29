@@ -32,7 +32,7 @@
  * effects, timers and IPC callbacks scattered across the tree, and threading a provider through all
  * of them would be a lot of plumbing for one string. `terminal/exit-store.ts` sets the precedent.
  */
-import { groupKey } from '@throng/core';
+import { groupKey, type FailureCause } from '@throng/core';
 
 interface Operation {
   id: string;
@@ -66,13 +66,19 @@ export function currentOperation(): Readonly<Operation> | undefined {
  * the notice then does not consolidate and behaves exactly as it does today. A key minted for the
  * wrong project would be far worse than none, because it would merge one project's casualties into
  * another project's notice, and FR-029's "one notice per project" is a property of this key.
+ *
+ * `error` is the failure's cause and message: one operation's DIFFERENT errors are different notices
+ * (059 FR-054), with the cause deciding where there is one.
  */
-export function operationGroupKey(projectId?: string): string | undefined {
+export function operationGroupKey(
+  projectId?: string,
+  error: { cause?: FailureCause; message?: string } = {},
+): string | undefined {
   if (!current) return undefined;
   if (projectId !== undefined && current.projectId !== undefined && current.projectId !== projectId) {
     return undefined;
   }
-  return groupKey({ operationId: current.id, projectId: projectId ?? current.projectId });
+  return groupKey({ operationId: current.id, projectId: projectId ?? current.projectId, ...error });
 }
 
 /** Test seam: forget the current operation. Not called by the application. */

@@ -5,8 +5,9 @@
  * EditorCoordinator}; the renderer never touches the filesystem or the lock.
  */
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import type { FoldState, SaveAllScope, SerialisedHistory } from '@throng/core';
+import { isCodePageId, isEncodingId, type FoldState, type SaveAllScope, type SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
+import { parseFormat } from './editor-recovery.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
 import { editorLoadHistoryFields } from './navigation-history-ipc.js';
 
@@ -90,10 +91,24 @@ function toMeta(event: IpcMainInvokeEvent | IpcMainEvent, raw: Record<string, un
       : [],
     tabId: typeof raw.tabId === 'string' ? raw.tabId : null,
     absPath: typeof raw.absPath === 'string' ? raw.absPath : null,
-    encoding: 'utf8',
-    hasBom: raw.hasBom === true,
+    // 059: validated, no longer hard-coded. Only a document main has not read takes these as its start.
+    encoding: isEncodingId(raw.encoding) ? raw.encoding : 'utf8',
+    hasBom: raw.hasBom === true && !isCodePageId(raw.encoding),
     lineEnding: raw.lineEnding === 'crlf' ? 'crlf' : raw.lineEnding === 'cr' ? 'cr' : 'lf',
+    encodingChosen: raw.encodingChosen === true,
   };
+}
+
+/** A save's optional new location and owner, from a renderer payload — one parse for Save and Save with Encoding. */
+function saveLocation(raw: Record<string, unknown>) {
+  return {
+    absPath: typeof raw.absPath === 'string' ? raw.absPath : undefined,
+    ownerKind: raw.ownerKind === 'subworkspace' ? 'subworkspace' : raw.ownerKind === 'project' ? 'project' : undefined,
+    ownerRoot: typeof raw.ownerRoot === 'string' ? raw.ownerRoot : raw.ownerRoot === null ? null : undefined,
+    allProjectRoots: Array.isArray(raw.allProjectRoots)
+      ? raw.allProjectRoots.filter((r): r is string => typeof r === 'string')
+      : undefined,
+  } as const;
 }
 
 export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIpcDeps): void {
@@ -200,6 +215,10 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
       selectionBefore: raw.selectionBefore ?? null,
       mergeClass:
         raw.mergeClass === 'type' || raw.mergeClass === 'delete' ? raw.mergeClass : null,
+      // 059 FR-061 — Insert Line Break names the ending its break takes.
+      ...(raw.insertedLineEnding === 'lf' || raw.insertedLineEnding === 'cr' || raw.insertedLineEnding === 'crlf'
+        ? { insertedLineEnding: raw.insertedLineEnding }
+        : {}),
     });
   });
 
@@ -316,21 +335,39 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
       raw.panelId,
       raw.text,
       (raw.history as SerialisedHistory | undefined) ?? undefined,
+      parseFormat(raw.format),
     );
   });
 
+  // 059 FR-024 — read the file again in a chosen encoding. The renderer asked about unsaved work first.
+  ipcMain.handle('throng:editor:reopenWithEncoding', (_event, raw: Record<string, unknown> | null) => {
+    if (typeof raw?.panelId !== 'string' || !isEncodingId(raw.encoding)) {
+      return { ok: false, reason: 'io', error: 'No such open document.' };
+    }
+    return coordinator.reopenWithEncoding(raw.panelId, raw.encoding);
+  });
+
+  // 059 FR-068 — the user dismissed the document's read notice; every view of it loses the notice.
+  ipcMain.handle('throng:editor:dismissReadNotice', (_event, raw: Record<string, unknown> | null) => {
+    if (typeof raw?.panelId === 'string') coordinator.dismissReadNotice(raw.panelId);
+  });
+
+  // 059 FR-055 — Change Encoding: dirty, one undo step, nothing written until a save.
+  ipcMain.handle('throng:editor:changeEncoding', (_event, raw: Record<string, unknown> | null) => {
+    if (typeof raw?.panelId !== 'string' || !isEncodingId(raw.encoding)) return { ok: true, changed: false };
+    return coordinator.changeEncoding(raw.panelId, raw.encoding, raw.hasBom === true);
+  });
+
+  // 059 FR-035, FR-057 — Convert to LF / CR / CRLF: one undoable step, on the canonical stream.
+  ipcMain.handle('throng:editor:convertLineEndings', (_event, raw: Record<string, unknown> | null) => {
+    if (typeof raw?.panelId !== 'string' || !(raw.target === 'lf' || raw.target === 'cr' || raw.target === 'crlf')) {
+      return { ok: true, changed: false };
+    }
+    return coordinator.convertLineEndings(raw.panelId, raw.target);
+  });
+
   ipcMain.handle('throng:editor:save', (_event, raw: Record<string, unknown>) =>
-    coordinator.save({
-      panelId: String(raw.panelId),
-      absPath: typeof raw.absPath === 'string' ? raw.absPath : undefined,
-      lineEnding:
-        raw.lineEnding === 'crlf' ? 'crlf' : raw.lineEnding === 'cr' ? 'cr' : raw.lineEnding === 'lf' ? 'lf' : undefined,
-      ownerKind: raw.ownerKind === 'subworkspace' ? 'subworkspace' : raw.ownerKind === 'project' ? 'project' : undefined,
-      ownerRoot: typeof raw.ownerRoot === 'string' ? raw.ownerRoot : raw.ownerRoot === null ? null : undefined,
-      allProjectRoots: Array.isArray(raw.allProjectRoots)
-        ? raw.allProjectRoots.filter((r): r is string => typeof r === 'string')
-        : undefined,
-    }),
+    coordinator.save({ panelId: String(raw.panelId), ...saveLocation(raw) }),
   );
 
   ipcMain.handle('throng:editor:saveAll', (_event, raw: Record<string, unknown>) => {

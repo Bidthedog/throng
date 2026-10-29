@@ -629,6 +629,9 @@ export const THRONG_THEME: Theme = {
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
     warning: '⚠',
+    /* 059 (FR-059). The editor status bar's View Whitespace toggle: the pilcrow, the mark every editor
+       draws for an invisible line break. */
+    whitespace: '¶',
     /* 057 added `attention`, `attentionFailed` and `goToPanel` (R11). All three are retired: `goToPanel`
        by round 12 (FR-124, the toast card is the link), the two flag glyphs by round 13 (FR-135,
        FR-139), when the mark became a numbered circle drawn in CSS. */

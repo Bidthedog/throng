@@ -4,7 +4,7 @@ import { useEditor } from './use-editor.js';
 import { FindBar } from '../search/find-bar.js';
 import { StatusStrip } from './status-strip.js';
 import { EditorFailureBanner } from './editor-failure-banner.js';
-import { registerPickerReveal, unregisterPickerReveal } from './picker-request.js';
+import { registerPickerReveal, unregisterPickerReveal, type PickerRequest } from './picker-request.js';
 import { toRelPath } from './language-override.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
 import { useAppSettings } from '../config/config-store.js';
@@ -52,9 +52,12 @@ export function EditorPanel({
   // Asking for the picker now REVEALS the strip for as long as the picker is up, then puts it away
   // again. The preference still decides whether the bar is normally on screen; it does not decide
   // whether the user can reach their own language setting.
-  const [revealedForPicker, setRevealedForPicker] = useState(false);
+  // 059 — and the same for the encoding picker (Reopen with Encoding / Change Encoding), so a hidden bar strands
+  // neither command (FR-033, SC-006). The request names WHICH picker the strip is revealed for.
+  const [revealedFor, setRevealedFor] = useState<PickerRequest | null>(null);
+  const revealedForPicker = revealedFor !== null;
   useEffect(() => {
-    registerPickerReveal(panel.id, () => setRevealedForPicker(true));
+    registerPickerReveal(panel.id, (request) => setRevealedFor(request));
     return () => unregisterPickerReveal(panel.id);
   }, [panel.id]);
   return (
@@ -84,8 +87,9 @@ export function EditorPanel({
           // 044 FR-001/FR-004 — the preview button is decided against this editor's own root; a
           // sub-workspace-owned (rootless) editor has none, and is offered no preview.
           projectRoot={rootless ? null : projectRoot}
-          autoOpenPicker={revealedForPicker}
-          onPickerClosed={() => setRevealedForPicker(false)}
+          autoOpenPicker={revealedFor?.kind === 'language'}
+          autoOpenEncodingPicker={revealedFor?.kind === 'encoding' ? revealedFor.mode : undefined}
+          onPickerClosed={() => setRevealedFor(null)}
         />
       )}
     </div>

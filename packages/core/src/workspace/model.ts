@@ -35,11 +35,48 @@ export type PanelKind = 'terminal' | (string & {});
 export type PanelConfig = Record<string, unknown>;
 
 /**
- * Text encoding of an editor document (006). Extensible; this pass ships UTF-8
- * (with or without a BOM). The id is persisted in {@link EditorPanelConfig} so a
- * reopened document re-emits its original encoding on save.
+ * Text encoding of an editor document (006, widened by 059 FR-010 and FR-069). With `hasBom` it names
+ * UTF-8 with and without a BOM, UTF-16 LE and BE (each with or without one), and the single-byte
+ * Windows code pages (never a BOM). The id is persisted in {@link EditorPanelConfig} so a reopened
+ * document re-emits its original encoding on save.
  */
-export type EncodingId = 'utf8';
+export type EncodingId = 'utf8' | 'utf16le' | 'utf16be' | CodePageId;
+
+/** 059 FR-069 — the single-byte Windows code pages, in number order. */
+export type CodePageId =
+  | 'windows1250'
+  | 'windows1251'
+  | 'windows1252'
+  | 'windows1253'
+  | 'windows1254'
+  | 'windows1255'
+  | 'windows1256'
+  | 'windows1257'
+  | 'windows1258';
+
+export const CODE_PAGE_IDS: readonly CodePageId[] = [
+  'windows1250',
+  'windows1251',
+  'windows1252',
+  'windows1253',
+  'windows1254',
+  'windows1255',
+  'windows1256',
+  'windows1257',
+  'windows1258',
+];
+
+const ENCODING_IDS: readonly string[] = ['utf8', 'utf16le', 'utf16be', ...CODE_PAGE_IDS];
+
+/** Guard for a code page id (the `editor.fallbackEncoding` values, 059 FR-069). */
+export function isCodePageId(x: unknown): x is CodePageId {
+  return typeof x === 'string' && (CODE_PAGE_IDS as readonly string[]).includes(x);
+}
+
+/** Guard for an encoding id arriving over IPC or out of a persisted blob. */
+export function isEncodingId(x: unknown): x is EncodingId {
+  return typeof x === 'string' && ENCODING_IDS.includes(x);
+}
 
 /** Line-ending style of an editor document (006): LF, CRLF, or CR-only. */
 export type LineEndingId = 'lf' | 'crlf' | 'cr';
@@ -55,10 +92,20 @@ export type EditorPanelConfig = {
   filePath?: string;
   /** Detected/last-saved encoding (default `'utf8'`). */
   encoding?: EncodingId;
-  /** BOM presence for utf8 (default `false` for new docs). */
+  /** BOM presence for utf8 or utf16 (default `false` for new docs). */
   hasBom?: boolean;
+  /**
+   * The user chose `encoding` by Reopen or Save with Encoding (059 FR-028), so a session restore reads
+   * the file in it rather than detecting. A display and restore copy of main's value, never the truth.
+   */
+  encodingChosen?: boolean;
   /** Line-ending style (new-doc default from `settings.editor.defaultLineEnding`). */
   lineEnding?: LineEndingId;
+  /**
+   * 059 FR-059 — this panel's View Whitespace toggle. Absent until the user toggles it: the panel then
+   * follows `settings.editor.defaultShowWhitespace`. Per panel, so two views of one document differ.
+   */
+  showWhitespace?: boolean;
   /**
    * The panel's navigation history (044 FR-109), mirrored from main's authority by the window that
    * holds the panel. Absent on a layout written before 044 — the editor's first load then records its

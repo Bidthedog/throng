@@ -910,6 +910,11 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the Find in Files toggle that switches the search exclusion list on or off for that panel.',
   },
+  'icons.whitespace': {
+    label: 'View whitespace icon',
+    description:
+      'The glyph on the editor status bar toggle that shows or hides a symbol for every space, tab, line break and invisible character.',
+  },
   // ── Sizes ─────────────────────────────────────────────────────────────────────────────────────
   'sizes.iconPx': {
     label: 'Icon Size',

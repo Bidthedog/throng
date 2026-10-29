@@ -7,8 +7,16 @@
  * A success needs nothing here — main's content relay re-renders the preview, and the body's update path
  * keeps the scroll position (FR-026).
  */
-import { taskItemText, taskOccurrence, type TaskToggleRefusal, type TaskToggleRequest, type TaskToggleResponse } from '@throng/core';
-import { failureWording } from '../find-in-files/commit-replace.js';
+import {
+  refusalMessage,
+  taskItemText,
+  taskOccurrence,
+  type EncodingId,
+  type TaskToggleRefusal,
+  type TaskToggleRequest,
+  type TaskToggleResponse,
+} from '@throng/core';
+import { failureWording, isTextRefusal } from '../find-in-files/commit-replace.js';
 
 export type { TaskToggleRefusal, TaskToggleRequest, TaskToggleResponse };
 
@@ -50,18 +58,19 @@ export const TASK_NOTICE_ACTION = 'change the task in';
 
 /**
  * What a refusal says (030 FR-040: never a raw reason). The file-level reasons are the replace path's own
- * wording — one condition, one sentence — except encoding, whose wording there is about replacing.
+ * wording — one condition, one sentence. `encoding` is the file's, where the refusal carries it, so a file
+ * that does not decode is named in the encoding it was read as (059 review R2).
  */
-export function taskNoticeMessage(reason: TaskToggleRefusal): string {
+export function taskNoticeMessage(reason: TaskToggleRefusal, encoding?: EncodingId): string {
   switch (reason) {
     case 'not-found':
     case 'ambiguous':
     case 'changed':
       return 'The task is no longer where the preview shows it — the file changed. Try again once the preview updates.';
-    case 'encoding':
-      return 'The file is not UTF-8 text, so it was left unchanged.';
     default: {
-      const why = failureWording(reason);
+      // 059 FR-053 — a file refused for what it IS: core's one sentence, the one every surface says.
+      if (isTextRefusal(reason)) return `The file was left unchanged. ${refusalMessage(reason, encoding)}`;
+      const why = failureWording(reason, encoding);
       return `The file was left unchanged: ${why}.`;
     }
   }

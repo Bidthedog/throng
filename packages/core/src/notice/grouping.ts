@@ -35,6 +35,11 @@ export interface GroupInput {
    */
   operationId?: string;
   projectId?: string;
+  /**
+   * What the notice will SAY — the second half of "the same error" when there is no cause (059
+   * FR-054). Two unclassified failures of one operation share a notice only when this matches.
+   */
+  message?: string;
 }
 
 /** The project dimension, spelled so a project-less failure still has one stable key. */
@@ -64,12 +69,25 @@ function projectPart(projectId: string | undefined): string {
  * This also means a caller cannot get it wrong by supplying both. A panel casualty passes its
  * operation id and whatever cause it happens to have, and the operation wins without the raise site
  * having to know that it should.
+ *
+ * ══ …BUT ONE OPERATION'S DIFFERENT ERRORS ARE DIFFERENT NOTICES (059 FR-054) ══
+ *
+ * Partially superseding the paragraph above. An operation outlives the action that minted it (FR-029c),
+ * so a binary file and a UTF-32 file opened minutes apart joined one notice headed by whichever was
+ * first — a sentence false for the other. Inside the operation the key now carries the ERROR: the cause
+ * key when there is one, else the message. The storm stays fixed because the casualties of one missing
+ * root are reported with ONE cause (`path-missing:<root folder>`), whatever each reporter says.
  */
 export function groupKey(input: GroupInput): string | undefined {
   // Trimmed, because an operation id that is present but blank is an absent one that would otherwise
   // mint the key `op:::p1` and silently merge every unclassified failure in the project.
   const operationId = input.operationId?.trim();
-  if (operationId) return `op:${operationId}::${projectPart(input.projectId)}`;
+  if (operationId) {
+    const error = input.cause ? causeKey(input.cause) : input.message ? `msg:${input.message}` : undefined;
+    return error
+      ? `op:${operationId}::${error}::${projectPart(input.projectId)}`
+      : `op:${operationId}::${projectPart(input.projectId)}`;
+  }
   if (input.cause) return `${causeKey(input.cause)}::${projectPart(input.projectId)}`;
   return undefined;
 }

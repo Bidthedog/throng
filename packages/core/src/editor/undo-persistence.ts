@@ -1,4 +1,4 @@
-import type { MergeClass } from './document-sync.js';
+import type { DocEncoding, LineFormat, MergeClass } from './document-sync.js';
 
 /**
  * The undo history, as it survives a crash (016, FR-027a/FR-027b · T089).
@@ -20,6 +20,10 @@ export interface SerialisedUndoEntry {
   version: number;
   mergeClass: MergeClass;
   at: number;
+  /** A line-ending conversion (059 FR-036). Absent on text edits and on histories written before 059. */
+  format?: { before: LineFormat; after: LineFormat };
+  /** A Change Encoding (059 FR-055). Absent on every other entry. */
+  encoding?: { before: DocEncoding; after: DocEncoding };
 }
 
 export interface SerialisedHistory {

@@ -27,7 +27,11 @@ import { dirname } from 'node:path';
 import {
   createOpenRegistry,
   editorsInScope,
+  findUnrepresentable,
   initialFold,
+  toWireLineFormat,
+  lineFormatEq,
+  isCodePageId,
   isMissingReason,
   isOpenAnywhere,
   isUnderPath,
@@ -46,6 +50,7 @@ import {
   type FoldState,
   type IFileWatcher,
   type LineEndingId,
+  type LineFormat,
   type Match,
   type MatchModes,
   type OpenDecision,
@@ -54,14 +59,18 @@ import {
   type SaveAllScope,
   type ScopeEditor,
   type SerialisedHistory,
+  type Unrepresentable,
+  type WireLineFormat,
 } from '@throng/core';
 import { ChangeSet, type Text } from '@codemirror/state';
 import { DocumentAuthority } from './document-authority.js';
 import { namesPath } from './shared-file-watcher.js';
 import type { DropDecision } from '@throng/core';
-import type { EditorService, LoadResult, SaveResult } from './editor-service.js';
+import type { EditorService, LoadResult, ReadNotice, SaveResult } from './editor-service.js';
+
+export type { ReadNotice } from './editor-service.js';
 import type { MovePair } from './files-service.js';
-import type { EditorRecovery, RecoveredDoc, RecoverySnapshot } from './editor-recovery.js';
+import type { EditorRecovery, RecoveredDoc, RecoveredFormat, RecoverySnapshot } from './editor-recovery.js';
 
 /**
  * The view a bulk edit claims to come from (043 T085, research R7).
@@ -170,11 +179,19 @@ interface CoordDoc {
   allProjectRoots: string[];
   tabId: string | null;
   absPath: string | null;
-  encoding: EncodingId;
-  hasBom: boolean;
-  lineEnding: LineEndingId;
-  /** THE document. Its text and its dirty state are read from here, never stored
-   *  beside it — a second copy would be a second owner (constitution XI). */
+  /**
+   * The user chose the encoding by Reopen or Save with Encoding (059 FR-028). For the document's open
+   * lifetime a reload reads in it rather than detecting; nothing about it outlives the document.
+   */
+  encodingChosen: boolean;
+  /** The last save was refused for a character the encoding cannot hold (059 FR-022), or `null`. */
+  saveRefused: Unrepresentable | null;
+  /** The debounced re-check of {@link saveRefused} (059 FR-022). */
+  refusalTimer?: ReturnType<typeof setTimeout>;
+  /** How the document was read, when the user should be told (059 FR-068), or `null`. */
+  readNotice: ReadNotice | null;
+  /** THE document. Its text, its LINE FORMAT (059 R6) and its dirty state are read from here, never
+   *  stored beside it — a second copy would be a second owner (constitution XI). */
   authority: DocumentAuthority;
   /** The backing file was deleted while open (FR-099): the buffer is kept + marked
    *  dirty so a save re-creates it, and re-selecting the tab surfaces the error. */
@@ -280,6 +297,8 @@ export interface DocMeta {
   encoding: EncodingId;
   hasBom: boolean;
   lineEnding: LineEndingId;
+  /** The layout's restore copy of 059 FR-028's flag; consulted only when main registers the document. */
+  encodingChosen?: boolean;
 }
 
 /**
@@ -300,6 +319,22 @@ export interface EditorSyncMsg {
   dirty?: boolean;
   /** The backing file was deleted while open (FR-099). */
   deleted?: boolean;
+  /**
+   * 059 FR-034 — the document's format changed: a load, Reopen or Save with Encoding, a conversion, or
+   * a recovery. Views render the status-bar indicators from these and never send them back as truth.
+   */
+  encoding?: EncodingId;
+  hasBom?: boolean;
+  encodingChosen?: boolean;
+  lineFormat?: WireLineFormat;
+  /**
+   * 059 FR-022 — the document's save was refused for a character its encoding cannot hold. Re-sent on a
+   * repeat refusal (a view already showing it flashes); `null` once a save succeeds or the character is
+   * gone. One condition, owned by the document, so every view of it shows the one notice.
+   */
+  saveRefused?: Unrepresentable | null;
+  /** 059 FR-068 — how the document was read (see {@link ReadNotice}); `null` once it no longer applies. */
+  readNotice?: ReadNotice | null;
   /**
    * The document's path could not be read (true), or has become readable again (false) —
    * 027 / #161. Drives the editor's unloadable banner, and nothing else; it is NOT the
@@ -395,7 +430,10 @@ export interface CoordinatorDeps {
    *
    * Omitted in tests that do not exercise it, which is what keeps the existing suite unchanged.
    */
-  refusalFor?: (absPath: string, ownership?: OpenOwnership) => Promise<string | undefined>;
+  refusalFor?: (
+    absPath: string,
+    ownership?: OpenOwnership,
+  ) => Promise<{ reason: string; encoding?: EncodingId } | undefined>;
   /**
    * 044 u4/u7 — `PreviewService`'s observer. Optional (a suite that does not exercise it omits it).
    * `main.ts` always passes one: a relay built before the coordinator and pointed at `PreviewService` the
@@ -555,9 +593,9 @@ export class EditorCoordinator {
             meta,
             {
               text: '',
-              encoding: previous?.encoding ?? 'utf8',
-              hasBom: previous?.hasBom ?? false,
-              lineEnding: previous?.lineEnding ?? 'lf',
+              encoding: previous?.authority.encoding.encoding ?? 'utf8',
+              hasBom: previous?.authority.encoding.hasBom ?? false,
+              lineEnding: previous?.authority.lineFormat.lineEnding ?? 'lf',
             },
             { readable: false },
           );
@@ -588,15 +626,15 @@ export class EditorCoordinator {
       return {
         ...result,
         text: holder.authority.text,
-        encoding: holder.encoding,
-        hasBom: holder.hasBom,
-        lineEnding: holder.lineEnding,
+        encoding: holder.authority.encoding.encoding,
+        hasBom: holder.authority.encoding.hasBom,
+        ...toWireLineFormat(holder.authority.lineFormat),
         linkedTo: holder.panelId,
       };
     }
     await this.replaceDoc(meta, result, { readable: true });
     this.recordNavigation(meta.panelId, meta.absPath, meta.navigation, meta.history);
-    return result;
+    return { ...result, ...toWireLineFormat(formatOf(result)) };
   }
 
   /** Another panel's live document holding `absPath`'s claim, if any (052 R1). */
@@ -631,8 +669,15 @@ export class EditorCoordinator {
    */
   private async replaceDoc(
     meta: Omit<DocMeta, 'encoding' | 'hasBom' | 'lineEnding' | 'absPath'> & { absPath: string },
-    content: { text: string; encoding: EncodingId; hasBom: boolean; lineEnding: LineEndingId },
-    opts: { readable: boolean },
+    content: {
+      text: string;
+      encoding: EncodingId;
+      hasBom: boolean;
+      lineEnding: LineEndingId;
+      mixedLineEndings?: readonly LineEndingId[];
+      readNotice?: ReadNotice;
+    },
+    opts: { readable: boolean; encodingChosen?: boolean },
   ): Promise<void> {
     // Re-pointing an editor at a new file: drop its previous registry entry so the
     // old path is no longer considered open (and free of a stale one-buffer claim),
@@ -672,10 +717,13 @@ export class EditorCoordinator {
       allProjectRoots: [...meta.allProjectRoots],
       tabId: meta.tabId,
       absPath: meta.absPath,
-      encoding: content.encoding,
-      hasBom: content.hasBom,
-      lineEnding: content.lineEnding,
-      authority: new DocumentAuthority(meta.panelId, content.text),
+      encodingChosen: opts.encodingChosen ?? false,
+      saveRefused: null,
+      readNotice: opts.readable ? suspectNotice(content) : null,
+      authority: new DocumentAuthority(meta.panelId, content.text, undefined, formatOf(content), {
+        encoding: content.encoding,
+        hasBom: content.hasBom,
+      }),
       reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
     };
     // A successful load means the path could be read (027 / #161), which is what draws the editor's
@@ -710,6 +758,8 @@ export class EditorCoordinator {
     } else if (previous?.unloadable) {
       this.relay({ panelId: doc.panelId, unloadable: false });
     }
+    // 059 FR-068 — a new document decides its notice afresh; a view still showing the previous one's clears it.
+    if (doc.readNotice !== null || previous?.readNotice) this.relay({ panelId: doc.panelId, readNotice: doc.readNotice });
     this.announceReplacement(doc, previous);
   }
 
@@ -720,11 +770,24 @@ export class EditorCoordinator {
    * it is a replica of, from its very first frame — and the disagreement would be invisible until
    * the user's next keystroke landed at an offset computed against text nobody else had.
    */
-  restoreRecovered(panelId: string, text: string, history?: SerialisedHistory): void {
+  restoreRecovered(
+    panelId: string,
+    text: string,
+    history?: SerialisedHistory,
+    /** The format the user was editing in (059 FR-015) — absent on a snapshot written before 059. */
+    format?: RecoveredFormat,
+  ): void {
     const doc = this.docs.get(panelId);
     if (!doc) return;
     const before = doc.authority.doc;
-    doc.authority.reset(text, false); // NOT clean: it is precisely what the file does NOT hold
+    // NOT clean: it is precisely what the file does NOT hold
+    doc.authority.reset(
+      text,
+      false,
+      format?.lineFormat,
+      format ? { encoding: format.encoding, hasBom: format.hasBom } : undefined,
+    );
+    if (format) doc.encodingChosen = format.encodingChosen;
     // The history is adopted AFTER the reset, because `reset` clears it — the entries it holds
     // describe a document that has just been replaced. Here they describe the document we are
     // replacing it WITH, so they are exactly the past the user is entitled to (FR-027a).
@@ -733,6 +796,7 @@ export class EditorCoordinator {
     // preview shows it (FR-022, fix round 1 ruling) and a folder event keeps it as FR-099 keeps any buffer.
     doc.neverRead = false;
     this.broadcastReset(doc);
+    if (format) this.relayFormat(doc);
     this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
   }
 
@@ -808,26 +872,20 @@ export class EditorCoordinator {
       restoredAbsPaths.some((back) => isUnderPath(file, back));
     for (const doc of this.docs.values()) {
       if (!doc.absPath || !doc.fileMissing || doc.movedOut || !isUnder(doc.absPath)) continue;
-      const res = await this.service.load({
-        absPath: doc.absPath,
-        ownerRoot: doc.ownerRoot,
-        ownerKind: doc.ownerKind,
-        allProjectRoots: doc.allProjectRoots,
-      });
+      const res = await this.readFor(doc, doc.absPath);
       if (!res.ok) continue; // it did not actually come back — leave the editor exactly as it was
       doc.fileMissing = false;
       doc.unloadable = false; // it reads again, so the banner's claim has stopped being true
       doc.missingSince = undefined;
-      doc.encoding = res.encoding;
-      doc.hasBom = res.hasBom;
-      doc.lineEnding = res.lineEnding;
+      doc.authority.adoptEncoding({ encoding: res.encoding, hasBom: res.hasBom });
       const before = doc.authority.doc;
       if (res.text === doc.authority.text) {
         // The file is what the buffer holds: the delete was the only thing making this dirty, and
         // it has been undone. `reset` re-establishes savedText, which is what clears the flag.
-        doc.authority.reset(res.text);
+        doc.authority.reset(res.text, true, formatOf(res));
         this.broadcastReset(doc);
       }
+      this.relayFormat(doc);
       // -1: broadcast to ALL windows — no editing renderer to exclude, exactly as markDeleted does.
       this.relay({
         panelId: doc.panelId,
@@ -1101,14 +1159,11 @@ export class EditorCoordinator {
       tabId: doc.tabId,
       absPath: abs,
     };
-    const res = await this.service.load({
-      absPath: abs,
-      ownerRoot: doc.ownerRoot,
-      ownerKind: doc.ownerKind,
-      allProjectRoots: doc.allProjectRoots,
-    });
+    const res = await this.readFor(doc, abs);
     if (this.docs.get(panelId) !== doc) return { ok: false, error: 'This document was closed.' };
-    const content = res.ok ? res : { text: '', encoding: doc.encoding, hasBom: doc.hasBom, lineEnding: doc.lineEnding };
+    const content = res.ok
+      ? res
+      : { text: '', encoding: doc.authority.encoding.encoding, hasBom: doc.authority.encoding.hasBom, lineEnding: doc.authority.lineFormat.lineEnding };
     await this.replaceDoc(meta, content, { readable: res.ok });
     this.relay({ panelId, replaced: false });
     return { ok: true, linkedTo: null };
@@ -1186,10 +1241,15 @@ export class EditorCoordinator {
       allProjectRoots: [...meta.allProjectRoots],
       tabId: meta.tabId,
       absPath: meta.absPath,
-      encoding: meta.encoding,
-      hasBom: meta.hasBom,
-      lineEnding: meta.lineEnding,
-      authority: new DocumentAuthority(meta.panelId, text),
+      encodingChosen: meta.encodingChosen === true,
+      saveRefused: null,
+      readNotice: null,
+      // A registered document is one main has not read — a new document, or a mount whose read failed —
+      // so the meta's ending is the only one there is to start from.
+      authority: new DocumentAuthority(meta.panelId, text, undefined, { lineEnding: meta.lineEnding }, {
+        encoding: meta.encoding,
+        hasBom: meta.hasBom,
+      }),
       reported: previous?.reported ?? { path: null, dirty: false, contentless: false },
     };
     doc.unloadable = opts.unloadable === true;
@@ -1263,8 +1323,8 @@ export class EditorCoordinator {
     const decision = openOrFocus(this.registry, absPath);
     if (decision.action !== 'open') return decision;
 
-    const reason = await this.deps.refusalFor?.(absPath, ownership);
-    return reason ? { action: 'refuse', reason } : decision;
+    const refusal = await this.deps.refusalFor?.(absPath, ownership);
+    return refusal ? { action: 'refuse', ...refusal } : decision;
   }
 
   isOpen(absPath: string): boolean {
@@ -1326,6 +1386,7 @@ export class EditorCoordinator {
     if (!doc.authority.dirty) doc.diskChanged = false; // clean again → clear any pending notice
     this.scheduleRecovery(doc); // (debounced; independent of dirty — FR-041/053)
     this.relay({ panelId: doc.panelId, change: canonical });
+    if (canonical.lineFormat || canonical.encoding) this.relayFormat(doc); // 059 FR-055, FR-061
     this.notifyAfterMutation(doc, true);
   }
 
@@ -1563,8 +1624,11 @@ export class EditorCoordinator {
     if (!doc || saved === null || saved === undefined) return false;
 
     const before = doc.authority.doc;
-    doc.authority.reset(saved);
+    // The file's own line format and encoding too: a conversion and a Change Encoding are unsaved
+    // changes like any other (059 FR-035, FR-055).
+    doc.authority.reset(saved, true, doc.authority.savedLineFormat, doc.authority.savedEncoding);
     this.broadcastReset(doc);
+    this.relayFormat(doc);
     if (doc.recoveryTimer) {
       clearTimeout(doc.recoveryTimer);
       doc.recoveryTimer = undefined;
@@ -1598,7 +1662,11 @@ export class EditorCoordinator {
    * looking at, and popping the tab-open dialog for it is how the first attempt at #161 reddened
    * `editor-missing-aggregate`. The caller gets the reason and decides.
    */
-  async reload(panelId: string): Promise<LoadResult | { ok: false; reason: 'no-location'; error: string }> {
+  async reload(
+    panelId: string,
+    /** 059 FR-024 — Reopen with Encoding: read in this encoding instead, and from then on keep it. */
+    opts: { encoding?: EncodingId } = {},
+  ): Promise<LoadResult | { ok: false; reason: 'no-location'; error: string }> {
     const doc = this.docFor(panelId);
     if (!doc) return { ok: false, reason: 'io', error: 'No such open document.' };
     if (!doc.absPath) {
@@ -1613,15 +1681,67 @@ export class EditorCoordinator {
       // Discard is the explicit, one-way route to that outcome.
       return { ok: false, reason: 'io', error: 'This file was replaced. Discard your changes to show it.' };
     }
-    const res = await this.service.load({
-      absPath: doc.absPath,
+    const res = await this.readFor(doc, doc.absPath, opts.encoding);
+    // Still unreadable — or not readable in the encoding asked for (FR-014): the buffer stands.
+    if (!res.ok) return res;
+    if (opts.encoding !== undefined) doc.encodingChosen = true;
+    this.adoptFromDisk(doc, res);
+    // 059 FR-068 — a reopen says it lasts for this session only; a reload in that same chosen encoding keeps
+    // saying so; any other read decides afresh.
+    const keepsReopen = doc.encodingChosen && doc.readNotice?.kind === 'reopened' && doc.readNotice.readAs === res.encoding;
+    this.setReadNotice(
+      doc,
+      opts.encoding !== undefined
+        ? { kind: 'reopened', readAs: res.encoding, ...(res.fallbackHelps ? { fallbackHelps: true } : {}) }
+        : keepsReopen
+          ? doc.readNotice
+          : suspectNotice(res),
+    );
+    return res;
+  }
+
+  /** 059 FR-068 — the user dismissed the read notice: gone for this document, in every view. */
+  dismissReadNotice(panelId: string): void {
+    const doc = this.docFor(panelId);
+    if (doc) this.setReadNotice(doc, null);
+  }
+
+  private setReadNotice(doc: CoordDoc, next: ReadNotice | null): void {
+    const prev = doc.readNotice;
+    if (prev?.kind === next?.kind && prev?.readAs === next?.readAs) return;
+    doc.readNotice = next;
+    this.relay({ panelId: doc.panelId, readNotice: next });
+  }
+
+  /**
+   * Read `absPath` for `doc` — in `forced` when given, else in the encoding the user chose for this
+   * document (059 FR-028), else by detection. A chosen encoding the file can no longer be read in
+   * gives way to detection, and stops being chosen: the bytes have changed under it.
+   */
+  private async readFor(doc: CoordDoc, absPath: string, forced?: EncodingId): Promise<LoadResult> {
+    const base = {
+      absPath,
       ownerRoot: doc.ownerRoot,
       ownerKind: doc.ownerKind,
       allProjectRoots: doc.allProjectRoots,
+    };
+    if (forced !== undefined) return this.service.load({ ...base, forcedEncoding: forced });
+    if (!doc.encodingChosen) return this.service.load(base);
+    const chosen = await this.service.load({ ...base, forcedEncoding: doc.authority.encoding.encoding });
+    if (chosen.ok || chosen.reason !== 'not-decodable') return chosen;
+    doc.encodingChosen = false;
+    return this.service.load(base);
+  }
+
+  /** Every view of `doc` re-reads its format — the status-bar indicators (059 FR-034). */
+  private relayFormat(doc: CoordDoc): void {
+    this.relay({
+      panelId: doc.panelId,
+      encoding: doc.authority.encoding.encoding,
+      hasBom: doc.authority.encoding.hasBom,
+      encodingChosen: doc.encodingChosen,
+      lineFormat: toWireLineFormat(doc.authority.lineFormat),
     });
-    if (!res.ok) return res; // still unreadable — the buffer, and the banner, stand
-    this.adoptFromDisk(doc, res);
-    return res;
   }
 
   /**
@@ -1636,15 +1756,13 @@ export class EditorCoordinator {
    * file at the next launch.
    */
   private adoptFromDisk(doc: CoordDoc, res: LoadResult & { ok: true }): void {
-    doc.encoding = res.encoding;
-    doc.hasBom = res.hasBom;
-    doc.lineEnding = res.lineEnding;
+    doc.authority.adoptEncoding({ encoding: res.encoding, hasBom: res.hasBom });
     doc.fileMissing = false;
     doc.unloadable = false;
     doc.neverRead = false;
     doc.diskChanged = false;
     const before = doc.authority.doc;
-    doc.authority.reset(res.text);
+    doc.authority.reset(res.text, true, formatOf(res));
     if (doc.recoveryTimer) {
       clearTimeout(doc.recoveryTimer);
       doc.recoveryTimer = undefined;
@@ -1658,6 +1776,7 @@ export class EditorCoordinator {
       deleted: false,
       dirty: doc.authority.dirty,
     });
+    this.relayFormat(doc);
     this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
   }
 
@@ -1696,9 +1815,10 @@ export class EditorCoordinator {
     doc.fileMissing = false;
     doc.unloadable = false;
     doc.neverRead = false;
-    doc.encoding = res.encoding;
-    doc.hasBom = res.hasBom;
-    doc.lineEnding = res.lineEnding;
+    // The buffer is kept, and with it the line format it is being edited in; the file's encoding is
+    // what a save of it will write.
+    doc.authority.adoptEncoding({ encoding: res.encoding, hasBom: res.hasBom });
+    this.relayFormat(doc);
     this.relay({
       panelId: doc.panelId,
       unloadable: false,
@@ -1773,7 +1893,7 @@ export class EditorCoordinator {
         return;
       }
       if (!doc.unloadable && !doc.fileMissing) return; // nothing was wrong; nothing to do
-      const res = await this.service.load(req);
+      const res = await this.readFor(doc, abs);
       if (this.docFor(panelId) !== doc || doc.absPath !== abs) return;
       if (res.ok) this.pathCameBack(doc, res);
     } finally {
@@ -1798,6 +1918,7 @@ export class EditorCoordinator {
     if (!canonical) return; // nothing left to undo/redo — not an error
     this.scheduleRecovery(doc);
     this.relay({ panelId: doc.panelId, change: canonical });
+    if (canonical.lineFormat || canonical.encoding) this.relayFormat(doc); // 059 FR-055, FR-061
     this.notifyAfterMutation(doc, true);
   }
 
@@ -2075,6 +2196,7 @@ export class EditorCoordinator {
    * this the preview kept the notice for a file the editor had just adopted.
    */
   private notifyAfterMutation(doc: CoordDoc, textChanged: boolean, dirtyWithheld = false): void {
+    if (textChanged && doc.saveRefused !== null) this.scheduleRefusalCheck(doc);
     const contentless = isContentless(doc);
     const contentFlipped = contentless !== doc.reported.contentless;
     doc.reported.contentless = contentless;
@@ -2122,11 +2244,141 @@ export class EditorCoordinator {
     if (newPath !== null) this.tell('registered', (l) => l.registered(newPath, doc.panelId));
   }
 
+  /**
+   * What a save writes in: the document's encoding (or Save with Encoding's choice) and the
+   * AUTHORITY's line format — never a view's (059 R6).
+   */
+  private writeFormat(
+    doc: CoordDoc,
+    override?: { encoding: EncodingId; hasBom: boolean },
+  ): {
+    encoding: EncodingId;
+    hasBom: boolean;
+    lineEnding: LineEndingId;
+    mixedLineEndings?: readonly LineEndingId[];
+  } {
+    const f = doc.authority.lineFormat;
+    return {
+      encoding: override?.encoding ?? doc.authority.encoding.encoding,
+      hasBom: override?.hasBom ?? doc.authority.encoding.hasBom,
+      lineEnding: f.lineEnding,
+      ...(f.mixedLineEndings ? { mixedLineEndings: f.mixedLineEndings } : {}),
+    };
+  }
+
+  /**
+   * 059 FR-022 — the save wrote nothing. The refusal is the DOCUMENT's state, so it is relayed to every
+   * view; a repeat refusal re-sends it, which a view already showing it takes as its cue to flash.
+   */
+  private refuseSave(doc: CoordDoc, detail: Unrepresentable): void {
+    doc.saveRefused = detail;
+    this.relay({ panelId: doc.panelId, saveRefused: detail });
+  }
+
+  /** A save succeeded: a Save with Encoding's format is the document's now, and any refusal is over. */
+  /**
+   * 059 FR-022 — a save refusal stands only while the document still holds a character the REFUSED
+   * encoding cannot — which is not the document's encoding after a refused Save with Encoding. The scan reads the
+   * whole text, so it runs on a debounce after typing stops rather than once per keystroke.
+   */
+  private scheduleRefusalCheck(doc: CoordDoc): void {
+    if (doc.refusalTimer) clearTimeout(doc.refusalTimer);
+    doc.refusalTimer = setTimeout(() => {
+      doc.refusalTimer = undefined;
+      const refused = doc.saveRefused;
+      if (this.docFor(doc.panelId) !== doc || refused === null) return;
+      if (findUnrepresentable(doc.authority.text, refused.encoding) !== null) return;
+      doc.saveRefused = null;
+      this.relay({ panelId: doc.panelId, saveRefused: null });
+    }, this.deps.recoveryDebounceMs ?? 400);
+  }
+
+  private adoptSavedFormat(doc: CoordDoc, override?: { encoding: EncodingId; hasBom: boolean }): void {
+    if (doc.saveRefused !== null) {
+      doc.saveRefused = null;
+      this.relay({ panelId: doc.panelId, saveRefused: null });
+    }
+    if (override) {
+      doc.authority.adoptEncoding({ encoding: override.encoding, hasBom: override.hasBom });
+      doc.encodingChosen = true;
+      this.relayFormat(doc);
+    }
+    // 059 FR-068 — saved in another encoding, the file no longer reads the way the notice describes.
+    if (doc.readNotice !== null && doc.authority.encoding.encoding !== doc.readNotice.readAs) {
+      this.setReadNotice(doc, null);
+    }
+  }
+
+  /**
+   * 059 FR-024 — Reopen with Encoding: re-read the file in `encoding`, replacing the buffer and its
+   * history. The renderer has already asked the user to discard unsaved changes (FR-025).
+   */
+  async reopenWithEncoding(
+    panelId: string,
+    encoding: EncodingId,
+  ): Promise<{ ok: true } | { ok: false; reason: 'no-file' | 'not-decodable' | 'io'; encoding?: EncodingId; error: string }> {
+    const doc = this.docFor(panelId);
+    if (!doc?.absPath) {
+      return { ok: false, reason: 'no-file', error: 'This document has no file to reopen.' };
+    }
+    const res = await this.reload(panelId, { encoding });
+    if (res.ok) return { ok: true };
+    if (res.reason === 'not-decodable') {
+      return { ok: false, reason: 'not-decodable', encoding: res.encoding, error: res.error };
+    }
+    return { ok: false, reason: res.reason === 'no-location' ? 'no-file' : 'io', error: res.error };
+  }
+
+  /**
+   * 059 FR-035, FR-057 — Convert to LF / CR / CRLF: one undoable step through the authority, broadcast to every view
+   * on the canonical stream. `changed: false` when the document already was `target` (FR-038).
+   */
+  convertLineEndings(panelId: string, target: LineEndingId): { ok: true; changed: boolean } {
+    const doc = this.docFor(panelId);
+    if (!doc) return { ok: true, changed: false };
+    // Named as the bulk-edit view, which no replica answers to: a conversion comes from main, so no view
+    // may take it for the acknowledgement of a keystroke it has in flight.
+    const canonical = doc.authority.convertLineEndings(target, BULK_EDIT_VIEW_ID);
+    if (!canonical) return { ok: true, changed: false };
+    this.relay({ panelId: doc.panelId, change: canonical });
+    this.relayFormat(doc);
+    this.scheduleRecovery(doc);
+    this.notifyAfterMutation(doc, false);
+    return { ok: true, changed: true };
+  }
+
+  /**
+   * 059 FR-055 — Change Encoding: one undoable step through the authority that writes nothing; the next
+   * save writes the chosen encoding. `changed: false` when the document already was in it. A code page
+   * has no BOM, whatever was asked.
+   */
+  changeEncoding(panelId: string, encoding: EncodingId, hasBom: boolean): { ok: true; changed: boolean } {
+    const doc = this.docFor(panelId);
+    if (!doc || doc.movedOut) return { ok: true, changed: false };
+    const canonical = doc.authority.changeEncoding(
+      { encoding, hasBom: isCodePageId(encoding) ? false : hasBom },
+      BULK_EDIT_VIEW_ID,
+    );
+    if (!canonical) return { ok: true, changed: false };
+    // A user-chosen encoding (FR-028): a reload reads in it rather than detecting.
+    doc.encodingChosen = true;
+    this.relay({ panelId: doc.panelId, change: canonical });
+    this.relayFormat(doc);
+    this.scheduleRecovery(doc);
+    this.notifyAfterMutation(doc, false);
+    return { ok: true, changed: true };
+  }
+
   /** Save one document's stored content (Ctrl+S). `absPath` sets a new location. */
   async save(payload: {
     panelId: string;
     absPath?: string;
-    lineEnding?: LineEndingId;
+    /**
+     * 059 FR-027 — Save with Encoding: write in this format, and from then on it is the document's.
+     * There is deliberately no `lineEnding` here any more: the authority owns the line format (R6), and a
+     * view's copy of it is display only — a panel that did not convert must not write the old ending.
+     */
+    encoding?: { encoding: EncodingId; hasBom: boolean };
     ownerKind?: EditorOwnerKind;
     ownerRoot?: string | null;
     allProjectRoots?: readonly string[];
@@ -2151,7 +2403,6 @@ export class EditorCoordinator {
         return { ok: false, reason: 'io', error: 'That file is already open in another editor.' };
       }
     }
-    if (payload.lineEnding) doc.lineEnding = payload.lineEnding;
     if (payload.ownerKind) doc.ownerKind = payload.ownerKind;
     if (payload.ownerRoot !== undefined) doc.ownerRoot = payload.ownerRoot;
     if (payload.allProjectRoots) doc.allProjectRoots = [...payload.allProjectRoots];
@@ -2165,15 +2416,17 @@ export class EditorCoordinator {
     const result = await this.service.save({
       absPath: target,
       text: doc.authority.text,
-      encoding: doc.encoding,
-      hasBom: doc.hasBom,
-      lineEnding: doc.lineEnding,
+      ...this.writeFormat(doc, payload.encoding),
       ownerKind: doc.ownerKind,
       ownerRoot: doc.ownerRoot,
       allProjectRoots: doc.allProjectRoots,
     });
 
-    if (!result.ok) return result; // keep the buffer unsaved
+    if (!result.ok) {
+      if (result.reason === 'unrepresentable') this.refuseSave(doc, result.unrepresentable);
+      return result; // keep the buffer unsaved
+    }
+    this.adoptSavedFormat(doc, payload.encoding);
 
     // Success: record the (possibly new) path, mark clean, drop the recovery temp.
     const pathChanged = doc.absPath !== target;
@@ -2252,18 +2505,18 @@ export class EditorCoordinator {
     const result = await this.service.save({
       absPath: target,
       text: doc.authority.text,
-      encoding: doc.encoding,
-      hasBom: doc.hasBom,
-      lineEnding: doc.lineEnding,
+      ...this.writeFormat(doc),
       ownerKind: 'project',
       ownerRoot: destinationRoot,
       allProjectRoots: doc.allProjectRoots,
     });
     if (!result.ok) {
+      if (result.reason === 'unrepresentable') this.refuseSave(doc, result.unrepresentable);
       return result.reason === 'out-of-tree'
         ? refused('This file can only be saved inside the project it moved to.')
         : result;
     }
+    this.adoptSavedFormat(doc);
     const pathChanged = doc.absPath !== target;
     doc.absPath = target;
     doc.authority.markSaved();
@@ -2332,6 +2585,7 @@ export class EditorCoordinator {
     }
     const wrapKey = this.wrapKey(doc);
     if (doc.recoveryTimer) clearTimeout(doc.recoveryTimer);
+    if (doc.refusalTimer) clearTimeout(doc.refusalTimer);
     this.disposeWatch(doc);
     unregisterPanel(this.registry, panelId);
     this.docs.delete(panelId);
@@ -2420,7 +2674,11 @@ export class EditorCoordinator {
     contentless: boolean;
     encoding: EncodingId;
     hasBom: boolean;
+    encodingChosen: boolean;
     lineEnding: LineEndingId;
+    mixed: boolean;
+    saveRefused: Unrepresentable | null;
+    readNotice: ReadNotice | null;
   } | null {
     const doc = this.docFor(panelId);
     if (!doc) return null;
@@ -2441,9 +2699,13 @@ export class EditorCoordinator {
       // The FILE's, learnt from its bytes. A mounting view adopts them rather than assuming the app
       // defaults — a mirrored view that assumed LF would show the wrong line ending in its status
       // bar, and offer the wrong one in a Save-As (FR-023).
-      encoding: doc.encoding,
-      hasBom: doc.hasBom,
-      lineEnding: doc.lineEnding,
+      encoding: doc.authority.encoding.encoding,
+      hasBom: doc.authority.encoding.hasBom,
+      encodingChosen: doc.encodingChosen,
+      ...toWireLineFormat(doc.authority.lineFormat),
+      saveRefused: doc.saveRefused,
+      // 059 FR-068 — a remount shows the read notice from this, without a relay.
+      readNotice: doc.readNotice,
     };
   }
 
@@ -2544,12 +2806,8 @@ export class EditorCoordinator {
   private async onDiskChange(panelId: string, watchedPath: string): Promise<void> {
     const doc = this.docs.get(panelId);
     if (!doc || doc.absPath !== watchedPath) return; // stale watch after a re-point
-    const res = await this.service.load({
-      absPath: doc.absPath,
-      ownerRoot: doc.ownerRoot,
-      ownerKind: doc.ownerKind,
-      allProjectRoots: doc.allProjectRoots,
-    });
+    // In the encoding the user chose, while it still reads (059 FR-028); detected otherwise.
+    const res = await this.readFor(doc, doc.absPath);
     // Re-check, because the READ is an await and the document can be re-pointed inside it (019).
     // The guard above answers "is this watch stale?" at a moment when it cannot yet be — a move
     // announced while this load was in flight lands here with `res` describing a path the document
@@ -2597,11 +2855,17 @@ export class EditorCoordinator {
      * "Changed on disk" is a claim about the disk. This is what makes it true.
      */
     const believedOnDisk = doc.authority.savedText;
-    if (believedOnDisk !== null && res.text === believedOnDisk) {
+    // 059 — the FORMAT is part of what is on disk: a re-encode or a dos2unix with identical text is a
+    // change, or the next save would quietly write the old encoding and endings back.
+    const sameFormat =
+      res.encoding === doc.authority.encoding.encoding &&
+      res.hasBom === doc.authority.encoding.hasBom &&
+      lineFormatEq(formatOf(res), doc.authority.savedLineFormat);
+    if (believedOnDisk !== null && res.text === believedOnDisk && sameFormat) {
       doc.diskChanged = false; // the file is exactly what we last read/wrote — nothing happened
       return;
     }
-    if (res.text === doc.authority.text) {
+    if (res.text === doc.authority.text && sameFormat) {
       doc.diskChanged = false; // matches our buffer (incl. our own save) — no diff
       return;
     }
@@ -2611,12 +2875,11 @@ export class EditorCoordinator {
       // A REPLACEMENT, not a change: the new content has no relationship to the old, so
       // there is nothing to express as a rebasable edit — and the undo history, which
       // described the file as it was, is cleared with it (FR-026d).
-      doc.encoding = res.encoding;
-      doc.hasBom = res.hasBom;
-      doc.lineEnding = res.lineEnding;
+      doc.authority.adoptEncoding({ encoding: res.encoding, hasBom: res.hasBom });
       const before = doc.authority.doc;
-      doc.authority.reset(res.text);
+      doc.authority.reset(res.text, true, formatOf(res));
       this.broadcastReset(doc);
+      this.relayFormat(doc);
       this.notifyAfterMutation(doc, !doc.authority.doc.eq(before));
     } else if (!doc.diskChanged) {
       // Dirty editor: warn ONCE that the on-disk file diverged (save will overwrite).
@@ -2641,6 +2904,12 @@ export class EditorCoordinator {
         version: doc.authority.version,
         text: doc.authority.text,
         ...(withHistory ? { history: doc.authority.serialiseHistory() } : {}),
+        format: {
+          encoding: doc.authority.encoding.encoding,
+          hasBom: doc.authority.encoding.hasBom,
+          encodingChosen: doc.encodingChosen,
+          lineFormat: doc.authority.lineFormat,
+        },
       });
     } catch (err) {
       /*
@@ -2712,6 +2981,18 @@ export function movedPathOf(absPath: string, moves: readonly MovePair[]): string
  */
 export function fileKey(absPath: string): string {
   return `file:${absPath.replace(/\\/g, '/').toLowerCase()}`;
+}
+
+/** The line format a read found (059 R6) — what the authority is opened, reset or restored with. */
+function formatOf(res: { lineEnding: LineEndingId; mixedLineEndings?: readonly LineEndingId[] }): LineFormat {
+  return res.mixedLineEndings && res.mixedLineEndings.length > 0
+    ? { lineEnding: res.lineEnding, mixedLineEndings: res.mixedLineEndings }
+    : { lineEnding: res.lineEnding };
+}
+
+/** 059 FR-068 / FR-069 — the notice a detected read raised (the service decides it: it has the bytes). */
+function suspectNotice(res: { readNotice?: ReadNotice }): ReadNotice | null {
+  return res.readNotice ?? null;
 }
 
 /** Value equality for `FoldState`: `flipped` is kept sorted and de-duplicated by its caller. */

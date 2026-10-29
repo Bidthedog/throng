@@ -4,6 +4,7 @@
  * (Ctrl+S / Ctrl+Shift+S, gated on the active pane) can drive the active editor
  * without prop-drilling. Non-reactive by design — actions are stable callbacks.
  */
+import type { EncodingId } from '@throng/core';
 
 /** A history step's intent on `throng:editor:load` — the entry's index and the file it names. */
 export interface EditorLoadNavigation {
@@ -42,6 +43,23 @@ export interface EditorActions {
    * to handle. Resolves false when the path still cannot be read.
    */
   reloadFromDisk: () => Promise<boolean>;
+  /**
+   * 059 FR-055 — Change Encoding: the document takes this encoding and BOM, dirty and as one undo step,
+   * writing nothing; the next ordinary save writes it. Choosing the current one is a no-op. Resolves whether
+   * the document changed.
+   */
+  changeEncoding?: (encoding: EncodingId, hasBom: boolean) => Promise<boolean>;
+  /**
+   * 059 FR-024 … FR-026 — re-read the file in a chosen encoding. Asks first on a dirty document (discard or
+   * cancel). Resolves true when the document was replaced.
+   */
+  reopenWithEncoding?: (encoding: EncodingId) => Promise<boolean>;
+  /** 059 FR-035, FR-057 — convert every line ending to `target`, as one undoable step. */
+  convertLineEndings?: (target: 'lf' | 'cr' | 'crlf') => Promise<void>;
+  /** 059 FR-061 — a line break with this ending at each caret, as an ordinary undoable edit. */
+  insertLineBreak?: (ending: 'lf' | 'cr' | 'crlf') => Promise<void>;
+  /** 059 FR-059 — flip this PANEL's View Whitespace (per panel, persisted with it). */
+  toggleWhitespace?: () => void;
 }
 
 const registry = new Map<string, EditorActions>();

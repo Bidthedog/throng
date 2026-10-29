@@ -11,6 +11,10 @@ import { NOT_THE_FILE, useEditorFailure } from './editor-failure.js';
 import { useEditorState } from './editor-state.js';
 import { MovedOutNotice } from './moved-out-notice.js';
 import { ReplacedNotice } from './replaced-notice.js';
+import { EncodingSaveBanner } from './encoding-save-banner.js';
+import { useSaveRefusal } from './encoding-refusal-store.js';
+import { ReadNoticeBanner } from './read-notice-banner.js';
+import { useReadNotice } from './read-notice-store.js';
 
 /**
  * "This is not your file" — the standing statement an editor makes while its path cannot be read
@@ -49,6 +53,9 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
   // The headline, subject and detail — shared with the panel menu's copy of these commands so the
   // two surfaces cannot disagree about what this failure is (030 FR-042c/FR-052).
   const failure = useEditorFailure(panelId);
+  // 059 FR-022 — the document refused a save for a character its encoding cannot hold (relayed by the authority).
+  const saveRefusal = useSaveRefusal(panelId);
+  const readNotice = useReadNotice(panelId);
   const ws = useWorkspace();
   const confirm = useConfirm();
   const subWin = useSubWorkspaceWindow();
@@ -91,7 +98,11 @@ export function EditorFailureBanner({ panelId }: { panelId: string }): ReactElem
   // 052 FR-012 — a Replace landed on this dirty document's path: its own notice, with Save As and Discard.
   if (state?.replaced) return <ReplacedNotice panelId={panelId} />;
 
-  if (!failure) return null;
+  // 059 FR-022 — the one notice for a refused save, with Save as UTF-8 on it.
+  if (saveRefusal !== null) return <EncodingSaveBanner panelId={panelId} />;
+
+  // 059 FR-068 — how the document was read, when nothing more pressing is being said.
+  if (!failure) return readNotice !== null ? <ReadNoticeBanner panelId={panelId} /> : null;
 
   return (
     <PanelFailureBanner

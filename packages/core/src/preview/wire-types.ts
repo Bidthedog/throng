@@ -5,7 +5,7 @@
  * them — main's service and registrar, the preload, and the renderer's stores — and core is the one
  * package all three already import. Types only: no OS, no DOM.
  */
-import type { PersistedHistory } from '../workspace/model.js';
+import type { EncodingId, PersistedHistory } from '../workspace/model.js';
 
 /** What a preview shows. `null` on an update means "unchanged since the last revision". */
 export type PreviewContent =
@@ -21,7 +21,10 @@ export type PreviewContent =
  * already shows rather than raising another (*one condition, one notice*).
  */
 export type PreviewNotice = (
-  | { kind: 'unreadable' | 'deleted' | 'too-large' | 'not-text' }
+  // `utf32` — 059 FR-006: named, rather than called not text.
+  | { kind: 'unreadable' | 'deleted' | 'too-large' | 'not-text' | 'utf32' }
+  // 059 FR-014, FR-053 — the editor's wording, which names the encoding the file claims.
+  | { kind: 'not-decodable'; encoding: EncodingId }
   | { kind: 'no-provider' }
   | { kind: 'link-missing-file' | 'link-outside'; target: string }
   /** Raised by the RENDERER, never by main: main does not parse headings. */
@@ -229,8 +232,15 @@ export type TaskToggleRefusal =
   | 'missing'
   | 'outOfTree'
   | 'binary'
-  | 'encoding'
+  // 059: UTF-32 (FR-006); not lossless in the encoding it claims (FR-014); a character the file's
+  // encoding cannot hold (FR-021).
+  | 'utf32'
+  | 'not-decodable'
+  | 'unrepresentable'
   | 'io';
 
 /** `savedToDisk: false` — applied to a document with unsaved edits, and left unsaved (FR-025). */
-export type TaskToggleResponse = { ok: true; savedToDisk: boolean } | { ok: false; reason: TaskToggleRefusal };
+/** `encoding` names the file's encoding for `not-decodable` and `unrepresentable` (059 FR-053). */
+export type TaskToggleResponse =
+  | { ok: true; savedToDisk: boolean }
+  | { ok: false; reason: TaskToggleRefusal; encoding?: EncodingId };

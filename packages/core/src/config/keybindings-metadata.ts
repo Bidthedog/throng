@@ -351,6 +351,61 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
     'Synchronise Scrolling',
     'Turn synchronised scrolling between editors and their previews on or off, everywhere. Live in an editor or a preview. Unbound by default.',
   ),
+  // 059 FR-041 — the document's own format, in the menu items' own words (FR-040).
+  chord(
+    'editor.reopenWithEncoding',
+    'Editor',
+    'Reopen with Encoding…',
+    "Read the focused editor's file again in an encoding you choose, when it was detected wrongly. Unsaved changes are asked about first. Unbound by default.",
+  ),
+  chord(
+    'editor.changeEncoding',
+    'Editor',
+    'Change Encoding…',
+    "Choose the encoding the focused editor's document is saved in. The document is marked changed, and you can undo it; nothing is written until you save. Unbound by default.",
+  ),
+  chord(
+    'editor.convertLineEndingsToCr',
+    'Editor',
+    'Convert to CR',
+    "Change every line ending in the focused editor's document to CR, as one step you can undo. Unbound by default.",
+  ),
+  chord(
+    'editor.insertLineBreakLf',
+    'Editor',
+    'Insert Line Break (LF)',
+    "Start a new line ending in LF at the cursor, whatever the document's other lines end in. Unbound by default.",
+  ),
+  chord(
+    'editor.insertLineBreakCr',
+    'Editor',
+    'Insert Line Break (CR)',
+    "Start a new line ending in CR at the cursor, whatever the document's other lines end in. Unbound by default.",
+  ),
+  chord(
+    'editor.insertLineBreakCrlf',
+    'Editor',
+    'Insert Line Break (CRLF)',
+    "Start a new line ending in CRLF at the cursor, whatever the document's other lines end in. Unbound by default.",
+  ),
+  chord(
+    'editor.toggleWhitespace',
+    'Editor',
+    'View Whitespace',
+    "Show or hide a symbol for every space, tab, line break and invisible character in the focused editor. Unbound by default.",
+  ),
+  chord(
+    'editor.convertLineEndingsToLf',
+    'Editor',
+    'Convert to LF',
+    "Change every line ending in the focused editor's document to LF, as one step you can undo. Unbound by default.",
+  ),
+  chord(
+    'editor.convertLineEndingsToCrlf',
+    'Editor',
+    'Convert to CRLF',
+    "Change every line ending in the focused editor's document to CRLF, as one step you can undo. Unbound by default.",
+  ),
 
   // Markdown (047, research R5) — section folding, live in a Markdown editor and a preview, on the
   // same chord and id in both. Toggle This Section and Toggle All have no menu item of their own

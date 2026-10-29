@@ -14,6 +14,8 @@ import {
   TERMINAL_RELOAD_MODES,
 } from './app-settings.js';
 import { LOG_LEVELS } from '../diagnostics/log-level.js';
+import { CODE_PAGE_IDS } from '../workspace/model.js';
+import { codePageName } from '../editor/text-fidelity.js';
 import {
   DISPLAY_MODES,
   DISPLAY_MODE_LABELS,
@@ -550,6 +552,17 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     allowedValues: ['lf', 'crlf', 'cr'],
   },
   {
+    // 059 FR-069 — the last step of detection, in every reader.
+    key: 'editor.fallbackEncoding',
+    label: 'Fallback encoding',
+    description:
+      'The code page a file is read in when it has no BOM and is not valid UTF-8 or UTF-16 (what other editors call ANSI).',
+    group: 'Editor',
+    control: 'select',
+    allowedValues: [...CODE_PAGE_IDS],
+    optionLabels: Object.fromEntries(CODE_PAGE_IDS.map((id) => [id, codePageName(id)])),
+  },
+  {
     key: 'editor.maxOpenFileBytes',
     // A SLIDER, in 5 MiB steps.
     //
@@ -614,6 +627,24 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     label: 'Editor default word wrap',
     description:
       'Wrap long lines by default in new editors. Toggle per editor from its status bar, its content menu, or the Toggle Word Wrap key binding.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  // 059 FR-060 — beside the wrap default: both say how a new editor draws its document.
+  {
+    key: 'editor.defaultShowWhitespace',
+    label: 'Editor default view whitespace',
+    description:
+      'Show a symbol for every space, tab, line break and invisible character by default in new editors. Toggle per editor from its status bar, its content menu, or the View Whitespace key binding.',
+    group: 'Editor',
+    control: 'toggle',
+  },
+  // 059 FR-067 — beside the View Whitespace default: both are about how the view draws its markers.
+  {
+    key: 'editor.whitespaceHoverNames',
+    label: 'Editor whitespace hover names',
+    description:
+      'With View Whitespace on, resting the pointer on a marker for half a second names its character in a popover above the pointer, and the pointer becomes the help cursor. Off, neither.',
     group: 'Editor',
     control: 'toggle',
   },
