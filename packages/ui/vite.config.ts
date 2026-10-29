@@ -195,6 +195,9 @@ function chunkFor(rawId: string): string | null {
   // The editor panel — split for the same reason again (059's encoding menus and View Whitespace took
   // the app chunk to 502 kB).
   if (/\/src\/renderer\/editor\//.test(id)) return 'app-editor';
+  // The Resource Monitor's renderer — its window, and the status bar figures and popover it shares them
+  // with. Split for the same reason (055 on top of 060 and 059 took the app chunk to 501 kB).
+  if (/\/src\/renderer\/resources\//.test(id)) return 'app-resources';
   if (!id.includes('node_modules')) return null;
   if (id.includes('@xterm')) return 'xterm';
   if (/\/(react|react-dom|scheduler)\//.test(id)) return 'react';
