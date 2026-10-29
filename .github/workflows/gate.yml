@@ -80,11 +80,15 @@ concurrency:
   # Keyed by EVENT, so the nightly and an on-demand dispatch do not cancel each other. A developer
   # asking for a gate should not silently kill the nightly, and vice versa.
   #
-  # Within a group a newer request still wins: a second dispatch would otherwise queue behind a run
-  # that is already obsolete.
+  # And by BRANCH: each hosted run gets a VM of its own, so gates on different branches share nothing
+  # and must not cancel each other. Without the ref, every dispatch in the repo was one group, and
+  # three branches dispatching in an afternoon cancelled each other's runs over and over.
+  #
+  # Within a branch's group a newer request still wins: a second dispatch would otherwise queue
+  # behind a run that is already obsolete.
   # Every stress run is its own group, so stress runs never cancel a gate, each other, or a parallel
   # stress of the same spec (several at once is how a 1-in-400 flake gets sampled in an afternoon).
-  group: gate-${{ github.event_name }}-${{ inputs.stress_spec && github.run_id || 'gate' }}
+  group: gate-${{ github.event_name }}-${{ github.ref }}-${{ inputs.stress_spec && github.run_id || 'gate' }}
   cancel-in-progress: true
 
 env:
