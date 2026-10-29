@@ -1,6 +1,46 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 5.10.0 → 6.0.0
+Bump rationale: MAJOR — a previously-stated guarantee is withdrawn: "every panel action has a menu
+                item" no longer holds. Principle VI now requires every panel action to be REACHABLE by
+                a mouse-click or a keyboard command, the route chosen per command. Maintainer's wording
+                and intent, 2026-10-25 (spec 060 clarification, FR-022): "Every discrete command or
+                state toggle that acts on a Panel or its content MUST be accessible via a mouse-click
+                or keyboard command… Some commands need to be reachable via a menu item, status bar
+                AND a shortcut, or any combination of those things. Most commands need to be reachable
+                via a keyboard shortcut, but not all." Considered and rejected: a narrow MINOR-shaped
+                exemption for form controls (run, cancel, focus a field) — offered first, replaced by
+                the maintainer with this broader rule.
+Modified principles: VI — "Every panel action has a menu item" → "Every panel action is reachable
+                (v6.0.0)"; its Exempt bullet and the v4.3.0 gap list are removed (every listed gap has
+                a chord, so none is a gap under the new rule); "A chord MAY stand without a menu item
+                (v5.6.0)" is absorbed into it, keeping its Key Bindings editor listing requirement;
+                rationale paragraph rewritten. A hideable route still may not be a command's only route.
+                IV — the `panel.destroy`, `panel.toggleMaximise` and `Ctrl+F5` notes no longer call the
+                menu "canonical"; a v6.0.0 reading is appended to the `Ctrl+F5` record (v5.6.0's kept).
+Added sections: none. Removed sections: "A chord MAY stand without a menu item" as a separate block
+                (content absorbed into VI's new rule; historical references to it in earlier reports
+                and records are left as written).
+Shipped specs: requirements naming a menu item (e.g. 043 FR-025a) stay binding until a later spec
+                supersedes them — stated in the rule. Spec 060 FR-022 is the first such supersession.
+Process: `resolve-template.ps1` could not run — the session's worktree-isolation guard refuses every
+                pwsh command. The constitution is fully populated and no template placeholder was in
+                play; the edit was made directly on the maintainer's instruction (2026-10-25).
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+Follow-up (outside this command's scope — comments and docs citing the old rule by name):
+           ⚠ .claude/skills/throng-renderer-ui/SKILL.md (description and body)
+           ⚠ packages/ui/src/renderer/workspace/panel-header-menu.ts, editor/content-menu.ts,
+             preview/preview-status-bar.tsx — comments
+           ⚠ packages/ui/tests: find-in-files-menu, editor-content-menu-reset, panel-header-zoom-menu,
+             panel-header-flag-menu, explorer-open-in-target — comments; the menu items they assert
+             remain required by their own specs.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.9.0 → 5.10.0
 Bump rationale: MINOR — Principle IV's exhaustive recorded-exceptions lists gain one entry,
                 `panel.toggleMaximise` `Alt+Shift+Enter` (spec 054 FR-071a, issue #467), chosen by the
@@ -2062,7 +2102,7 @@ not the flavour a given user happens to run.
   close family lives on `F4`, and `Alt+F4` and `Ctrl+F4` belong to the window manager and to
   hosted programs respectively, so the four-modifier form is the one that keeps that meaning
   without taking a chord anything else owns. The panel menu's Destroy item and the header ✕
-  remain the canonical routes; the chord is an accelerator over them (Principle VI).
+  remain mouse routes beside the chord (Principle VI).
 - **`Alt+Shift+Enter` (`panel.toggleMaximise`), v5.10.0, spec 054 FR-071a (#467).** What it
   displaces: in a terminal, a modified Enter the program would otherwise receive — `CSI 13;4 u`
   under the kitty keyboard protocol, a line feed otherwise — whose end, a line break without
@@ -2072,7 +2112,7 @@ not the flavour a given user happens to run.
   the chord Visual Studio users already know as its full-screen toggle. Why no free chord serves:
   the tier-2 forms are taken or worse — `Ctrl+Alt+Enter` is `search.replaceAll`, and
   `Ctrl+Shift+Enter` is bound by terminal programs more often. The title-menu row and the header
-  control remain the canonical routes; the chord is an accelerator over them (Principle VI).
+  control remain mouse routes beside the chord (Principle VI).
 - **`Ctrl+F5`, the first exception taken under this rule rather than inherited by it.**
   What it displaces: a full-screen program can receive `Ctrl+F5` as a function-key
   sequence, and terminal file managers bind the function keys heavily. What justifies
@@ -2082,12 +2122,15 @@ not the flavour a given user happens to run.
   free chord serves: the unmodified function keys are exactly what a file manager binds,
   so bare `F5` was rejected outright; every `Ctrl`+letter alternative is either reserved
   (`Ctrl+R`, `Ctrl+L`) or already an exception. It is scoped `terminal` only, so it is
-  inert in an editor or the file tree, and the two menu items remain the canonical route
-  — the chord is an accelerator over them, never a substitute (Principle VI).
+  inert in an editor or the file tree, and the two menu items remain mouse routes beside
+  it (Principle VI).
   *(Read at v5.6.0: this still holds, because `terminal.redraw` is a PANEL action and
   Principle VI keeps a panel action's menu item canonical. It is no longer a general
   statement that every chord needs a menu item beneath it — see VI, "A chord MAY stand
-  without a menu item".)*
+  without a menu item".)* *(Read at v6.0.0: Principle VI no longer makes any route
+  canonical — a mouse-click or keyboard route satisfies it — so the two menu items stay
+  because the users this chord serves were reaching for the mouse, not because a rule
+  demands them.)*
 - **Retired at v4.3.1**: `Ctrl+B` (`view.toggleProjects`) and `Ctrl+N`
   (`view.toggleExplorer`), which moved to `Ctrl+Alt+B` / `Ctrl+Alt+N` in feature 026
   (issue #165). "Open to revisiting" was not decoration — these two were revisited and
@@ -2448,51 +2491,32 @@ The interface MUST be simple to understand and modern in feel.
 - The interface SHOULD provide modern affordances such as resize handles,
   drag-and-drop panels, and themes, but these MUST NOT obscure core flows.
 
-**Every panel action has a menu item.** A chord is invisible and a status-bar glyph
-is unlabelled; a menu is the one surface a user can browse to learn what a panel can
-do. A panel's menu is therefore the CANONICAL index of its actions, not one route
-among several.
+**Every panel action is reachable (v6.0.0).** A command the user cannot reach is a
+command they do not have. What matters is that every action has a route, not that every
+route is a menu: a menu item, a control, a status bar and a chord are each the right
+answer for some commands, and most commands want more than one.
 
 - Every **discrete command** or **state toggle** that acts on a Panel or its content
-  MUST appear in that Panel's menu — its content menu, or its header menu where the
-  action belongs to the Panel rather than to the content — **even when the same
-  action is already reachable** from a status bar, a toolbar, or a chord. A status
-  bar is an accelerator for an action the menu already offers, never the only way to
-  reach it, and hiding a status bar MUST NOT remove the user's last route to a
-  command.
-- A menu item MUST show its command's current chord where one is bound, and a toggle
-  MUST render its state (checked when on).
-- **Exempt**: continuous or navigational input whose home is the keyboard or mouse —
-  scrolling, caret and selection movement, stepping through search matches, and
-  closing a transient bar. These MUST still be rebindable and documented, but a menu
-  item for "move selection up one line" serves no one.
-- This is an **end-state requirement** delivered incrementally under the Incremental
-  Delivery rule (Development Workflow & Quality Gates). It binds new work
-  immediately: a feature that adds a panel action MUST add its menu item in the same
-  increment. Pre-existing gaps — per the v4.3.0 audit, per-panel zoom
-  (`panel.zoomIn`/`Out`/`Reset`), save (`editor.save`/`saveAll`/`saveAs`), find and
-  replace (`search.find`/`replace`/`replaceAll`), and the editor's line commands
-  (`editor.cutLine`/`indentLines`/`outdentLines`) reach no menu — MUST be closed by
-  tracked work, not silently tolerated.
-
-**A chord MAY stand without a menu item (v5.6.0).** Keyboard shortcuts can exist
-without a corresponding menu item. A command that is **not** a panel action — one that
-moves the user between surfaces or acts on the window, the workspace or the project,
-such as stepping to the next project or putting focus on a side pane — MAY be reachable
-by its chord alone, and no menu is obliged to carry it.
-
-- It MUST still be listed in the Key Bindings editor with a label and a description,
-  and documented, so it stays rebindable and discoverable there
-  (configuration-editor completeness).
-- **Panel actions are not affected.** "Every panel action has a menu item" above stands
-  unchanged: a discrete command or state toggle that acts on a Panel or its content keeps
-  its menu item as the canonical route, with the chord as an accelerator over it.
-- This supersedes, for non-panel commands only, the older reading that a chord is always
-  "an accelerator over a menu item, never a substitute" — a reading carried by this
-  principle's rationale and by Principle IV's `Ctrl+F5` paragraph. Both remain true of the
-  panel actions they describe.
-- A feature MAY still add a menu item for such a command where one helps; this rule
-  removes the obligation, not the option.
+  MUST be accessible via a **mouse-click** or a **keyboard command**. A mouse-click
+  route is a menu item, a toolbar or in-panel control, a header control, or a
+  status-bar control. A keyboard command is a command listed in the Key Bindings
+  editor, with or without a default chord.
+- Which routes a command gets — menu item, status bar, chord, or any combination — is
+  decided per command by the feature that adds it. Most commands SHOULD be reachable by
+  a keyboard shortcut; not every command needs one.
+- A route the user can hide — a status bar, a collapsible section, a hover-only
+  control — MUST NOT be a command's only route: hiding it would remove the user's last
+  way to reach the command.
+- Where a menu item exists, it MUST show its command's current chord where one is
+  bound, and a toggle MUST render its state (checked when on).
+- A command reachable by keyboard alone MUST be listed in the Key Bindings editor with
+  a label and a description, and documented, so it stays rebindable and discoverable
+  there (configuration-editor completeness). This carries forward v5.6.0's "A chord MAY
+  stand without a menu item", which this rule absorbs: that rule's freedom for
+  non-panel commands is now the general case.
+- A feature MAY add a menu item for any command where one helps the user browse what a
+  panel can do; this rule removes the obligation, not the option. A requirement in a
+  shipped spec that names a menu item stays binding until a later spec supersedes it.
 **One section vocabulary for every menu.** A menu is only browsable if its items are
 grouped, and grouping is only learnable if every menu groups the same way. Each menu
 inventing its own order teaches the user nothing transferable, so the vocabulary is the
@@ -2622,13 +2646,12 @@ Rationale: The user has rejected tools that are too cumbersome. Configurable
 tabbed, tiled layouts are a primary workflow requirement, and clear context
 signalling via the project colour keeps a busy multi-terminal workspace legible.
 Discoverability is the same requirement applied to commands: an action reachable
-only by a chord the user has not memorised, or only by a glyph on a bar they can
-hide, is an action they do not have. Making the menu the canonical index — and
-letting the status bar and the keyboard be accelerators over it — is what keeps
-"reachable without instruction" true as the number of panel actions grows. A command
-that is not a panel action has no panel menu to be indexed in, and forcing it into a
-whole-app menu buys a row nobody browses for; the Key Bindings editor is its index
-instead (v5.6.0). The section
+only by a glyph on a bar the user can hide is an action they do not have. Every action
+therefore needs a route that cannot be hidden, and the Key Bindings editor indexes every
+keyboard command. Requiring a menu row for every action as well (v4.3.0 – v5.10.0)
+turned out to cost more than it bought: it duplicated controls that already sit in plain
+view — a search form's own run and cancel buttons, its scope field — and lengthened
+menus with rows nobody browses for. So the route is chosen per command (v6.0.0). The section
 vocabulary is the same requirement one level down: a menu the user must read end to end
 is not browsable, and grouping only pays if the grouping is the same everywhere, so
 where an item sits is a property of the application rather than a choice each menu makes
@@ -3088,7 +3111,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 5.10.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-10
+**Version**: 6.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-25
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
