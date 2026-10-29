@@ -23,8 +23,8 @@ function v25Theme(name: string): Theme {
 }
 
 describe('the version-25 icons 060’s hand-test round moved', () => {
-  it('is shipped-defaults version 26 or later (re-pinned: 060 #532 bumps it to 27)', () => {
-    expect(SHIPPED_DEFAULTS_VERSION).toBe(27);
+  it('is shipped-defaults version 26 or later (re-pinned: 060 #532 bumps it to 27, 059 to 28)', () => {
+    expect(SHIPPED_DEFAULTS_VERSION).toBe(28);
   });
 
   it('records only glyphs whose shipped value really moved, and is frozen', () => {
