@@ -425,7 +425,21 @@ describe('T164 — the preview tells before from after (FR-066)', () => {
 
     // "Distinct from the original": the original is a match, in either of the two states a match
     // has. "Distinct from the surrounding row": the row and the panel behind it, in all of theirs.
-    const original = backgroundTokensUnder('.fif-match');
+    // 060 FR-009 — a match is no longer painted by this sheet: it takes the find bar's shared
+    // `.throng-search-match` rule, so THAT is the surface the replacement has to differ from.
+    const sharedMatchCss = readFileSync(
+      resolve(process.cwd(), 'packages/ui/src/renderer/search/find-bar.css'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const original = [
+      ...new Set(
+        [...sharedMatchCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+          .filter((m) => m[1].includes('.throng-search-match'))
+          .flatMap((m) =>
+            [...m[2].matchAll(/background:\s*var\(\s*--throng-colour-([a-zA-Z0-9-]+)/g)].map((t) => t[1]),
+          ),
+      ),
+    ];
     const surrounding = [...backgroundTokensUnder('.fif-row'), ...backgroundTokensUnder('.fif-panel')];
     expect(original.length, 'no match rule paints a background — this guard would be vacuous')
       .toBeGreaterThan(0);

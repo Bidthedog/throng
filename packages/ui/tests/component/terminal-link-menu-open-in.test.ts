@@ -49,7 +49,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-async function mountBoth() {
+async function mountBoth(fooIsOpen = false) {
   const notifyTyped = vi.fn();
   const resolve = vi.fn(
     async (request: LinkResolutionRequest): Promise<LinkResolution> =>
@@ -77,6 +77,10 @@ async function mountBoth() {
     extras: [createElement(TerminalPanel, { key: 'term', panel: terminalPanel, tabId: 't1', projectRoot: ROOT })],
   });
   harness = h;
+  // 060 FR-045 — main's app-wide one-buffer answer for the resolved path, added to the harness's own
+  // editor bridge rather than replacing it.
+  const bridge = (window as unknown as { throng: { editor: Record<string, unknown> } }).throng.editor;
+  bridge.isOpen = async (p: string) => fooIsOpen && p === FOO;
   h.serve({ absPath: FOO, text: 'export const foo = 1;\n', version: 2 });
   await waitFor(() => expect(h.view().state.doc.toString()).toBe('unrelated notes\n'));
   await waitFor(() => expect(captured.apiRef, 'the TerminalPanel rendered').not.toBeNull());
@@ -130,6 +134,18 @@ describe('the terminal Link menu — Open In ▸ names every open editor (FR-170
     menuItem('Panel 1').click();
 
     await waitFor(() => expect(m.h.view().state.doc.toString()).toBe('export const foo = 1;\n'));
+    expect(m.notifyTyped).not.toHaveBeenCalled();
+  });
+
+  it('a file already open anywhere: one Current Editor row, the named editor disabled (060 FR-045)', async () => {
+    const m = await mountBoth(true);
+    rightClickTerminal();
+    expect(await openInRows()).toEqual(['Current Editor', 'Panel 1']);
+    expect(menuItem('Panel 1').getAttribute('aria-disabled')).toBe('true');
+    menuItem('Current Editor').click();
+    // It takes the active-editor route (main's one-buffer check focuses the holder of an open file —
+    // the fake main here does not model that), so no new editor panel is created.
+    await waitFor(() => expect(m.h.calls.load).toHaveBeenCalled());
     expect(m.notifyTyped).not.toHaveBeenCalled();
   });
 

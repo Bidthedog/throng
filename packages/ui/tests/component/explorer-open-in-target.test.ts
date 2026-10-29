@@ -387,41 +387,22 @@ describe('New Editor is refused once the file is open (FR-011a)', () => {
     expect(isDisabled(item), 'a closed file must be openable in a new editor').toBe(false);
   });
 
-  it('is still OFFERED but disabled once the file is open — not removed', async () => {
-    /*
-     * Both halves in one assertion pair, deliberately. "Disabled" alone would pass against an item
-     * that had disappeared (`getByTestId` would throw, but a `queryByTestId`-shaped test would not),
-     * and "present" alone is what the broken build did.
-     */
-    const { user, tree } = await mountWithOpenState(true);
-
-    const flyout = await openInFlyout(user, tree);
-
-    const item = within(flyout).getByTestId('menu-item-New Editor');
-    expect(item, 'the row must stay on the menu — a vanished row teaches nobody why').toBeVisible();
-    expect(isDisabled(item)).toBe(true);
-  });
-
-  it('leaves the OTHER Open In targets alone in both states', async () => {
-    /*
-     * The scope of the refusal. FR-011a is about a SECOND buffer, so "Last Active Editor" — which
-     * reuses the buffer that already exists — must stay available exactly when it otherwise would.
-     * A fix that disabled the whole submenu would satisfy the test above and take away the one
-     * target that still makes sense.
-     */
+  /*
+   * 060 FR-045 (supersedes the disabled New Editor row 006 FR-072 / FR-011a drew for an open file):
+   * once the file is open anywhere, New Editor and Last Active Editor give way to ONE live Current
+   * Editor row — the one place the file can go.
+   */
+  it('gives way, with Last Active Editor, to one live Current Editor row once the file is open', async () => {
     setLastActiveEditor(TAB_ID, 'p1');
     const { user, tree } = await mountWithOpenState(true);
 
     const flyout = await openInFlyout(user, tree);
 
-    /*
-     * Enabled, not merely present — and the two flags really are independent: `alreadyOpen` is
-     * app-wide, while this target is disabled only by `lastActiveHoldsFile`, which asks whether THIS
-     * panel already holds THIS file. It does not, so the target stands.
-     */
-    const lastActive = within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)');
-    expect(lastActive).toBeVisible();
-    expect(isDisabled(lastActive)).toBe(false);
+    expect(within(flyout).queryByTestId('menu-item-New Editor')).toBeNull();
+    expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Scratch)')).toBeNull();
+    const current = within(flyout).getByTestId('menu-item-Current Editor');
+    expect(current).toBeVisible();
+    expect(isDisabled(current)).toBe(false);
   });
 });
 
@@ -474,28 +455,31 @@ describe('Last Active Editor goes quiet when that editor holds the file (FR-082)
     expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(false);
   });
 
-  it('is DISABLED once that editor holds THIS file — opening it again would do nothing', async () => {
+  // 060 FR-045 — that editor holding THIS file is the file being open: Current Editor replaces the row.
+  const current = (flyout: HTMLElement): HTMLElement => within(flyout).getByTestId('menu-item-Current Editor');
+
+  it('gives way to Current Editor once that editor holds THIS file (060 FR-045)', async () => {
     setLastActiveEditor(TAB_ID, 'p1');
     setEditorState('p1', { filePath: 'C:/projects/demo/note.txt' });
     const { user, tree } = await mount(oneNamedPanel('Scratch'));
 
-    const item = target(await openInFlyout(user, tree));
-    expect(item, 'the row stays on the menu — a vanished row teaches nobody why').toBeVisible();
-    expect(isDisabled(item)).toBe(true);
+    const flyout = await openInFlyout(user, tree);
+    expect(within(flyout).queryByTestId('menu-item-Last Active Editor (Scratch)')).toBeNull();
+    expect(isDisabled(current(flyout))).toBe(false);
   });
 
   it('compares the PATHS, not the spellings — Windows calls those the same file', async () => {
     /*
      * `readOpenInFacts` normalises both sides before comparing, and it has to: the tree composes
      * its path from the project root while the editor store holds whatever spelling the file was
-     * opened with. A raw comparison leaves the row enabled, the user clicks it, and nothing happens —
-     * the exact no-op the disabling exists to prevent.
+     * opened with. A raw comparison would offer Last Active Editor for a file this editor already
+     * shows, as though it were somewhere else.
      */
     setLastActiveEditor(TAB_ID, 'p1');
     setEditorState('p1', { filePath: 'C:\\Projects\\Demo\\Note.txt' });
     const { user, tree } = await mount(oneNamedPanel('Scratch'));
 
-    expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(true);
+    expect(current(await openInFlyout(user, tree))).toBeVisible();
   });
 
   it('is ENABLED when the editor holds NO file at all', async () => {

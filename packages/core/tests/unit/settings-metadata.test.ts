@@ -391,7 +391,6 @@ describe('Find in Files ships as-you-type at 500 ms, in its own section (FR-074/
     'search.inFiles.trigger',
     'search.inFiles.settleMs',
     'search.inFiles.defaultGrouping',
-    'search.inFiles.rememberGrouping',
     'search.inFiles.warnIrreversibleCommit',
     // The two FR-082 adds. Listed HERE rather than only in their own describe below, because this
     // array is what holds the section membership for the whole family: a ninth key added to

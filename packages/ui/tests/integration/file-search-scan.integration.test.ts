@@ -180,8 +180,10 @@ function linesWithTerm(n: number): string {
 class Harness {
   readonly sent: Sent[] = [];
 
+  /** The search exclusion list — `search.inFiles.excludeGlobs` (060 #532), not the explorer's. */
   globs: string[] = [];
 
+  /** Each project's own Find in Files exclusions, by root (060 #532 FR-030). */
   hidden = new Map<string, string[]>();
 
   maxFileBytes = 10 * 1024 * 1024;
@@ -215,13 +217,21 @@ class Harness {
     return this.updates(panelId).flatMap((u) => u.rows ?? []);
   }
 
-  start(request: { projectRoot: string; scopeSubPath?: string | null; term?: string }): Promise<StartScanResult> {
+  start(request: {
+    projectRoot: string;
+    scopeSubPath?: string | null;
+    term?: string;
+    useExcludeGlobs?: boolean;
+    extraExcludes?: string[];
+  }): Promise<StartScanResult> {
     return this.service.start(WINDOW, {
       panelId: PANEL,
       projectRoot: request.projectRoot,
       scopeSubPath: request.scopeSubPath ?? null,
       term: request.term ?? TERM,
       modes: NO_MODES,
+      useExcludeGlobs: request.useExcludeGlobs ?? true,
+      extraExcludes: request.extraExcludes ?? [],
     });
   }
 }
@@ -940,5 +950,70 @@ describe('a scan stops listing at 20,000 matches (#391)', () => {
     expect(harness.rows()).toHaveLength(1_500);
     expect(harness.settled()?.totalMatches).toBe(1_500);
     expect(harness.settled()?.capped).toBeUndefined();
+  });
+});
+
+
+/*
+ * 060 #532 (FR-025–FR-030, SC-010–SC-012) — what a scan skips comes from Find in Files' OWN lists.
+ *
+ * Layer: integration — the walk, the exclusion predicate and the request are composed only here;
+ * the composition itself is unit-tested in core's search-exclude.test.ts.
+ */
+describe('Find in Files exclusions of its own (060 #532)', () => {
+  const FILES = {
+    'src/a.ts': `${TERM}\n`,
+    'dist/b.js': `${TERM}\n`,
+    'generated/g.ts': `${TERM}\n`,
+    'fixtures/d.txt': `${TERM}\n`,
+  };
+
+  async function scan(
+    setup: (h: Harness, root: string) => void,
+    request: { useExcludeGlobs?: boolean; extraExcludes?: string[]; scopeSubPath?: string | null } = {},
+  ): Promise<string[]> {
+    const root = await makeRoot();
+    await seed(root, FILES);
+    const harness = new Harness();
+    setup(harness, root);
+    await harness.start({ projectRoot: root, ...request });
+    await waitFor('the scan to settle', () => harness.settled());
+    return [...new Set(harness.rows().map((r) => r.relPath))].sort();
+  }
+
+  it('applies the search exclusion list while the panel toggle is on (FR-027, SC-011)', async () => {
+    expect(await scan((h) => (h.globs = ['**/dist']))).toEqual(['fixtures/d.txt', 'generated/g.ts', 'src/a.ts']);
+  });
+
+  it('ignores the search exclusion list while the panel toggle is off (FR-027, SC-011)', async () => {
+    expect(await scan((h) => (h.globs = ['**/dist']), { useExcludeGlobs: false })).toEqual([
+      'dist/b.js',
+      'fixtures/d.txt',
+      'generated/g.ts',
+      'src/a.ts',
+    ]);
+  });
+
+  it('applies the project list whatever the toggle says, and only in its own project (FR-030, SC-012)', async () => {
+    const only = (h: Harness, root: string): void => void h.hidden.set(root, ['**/generated']);
+    expect(await scan(only, { useExcludeGlobs: false })).not.toContain('generated/g.ts');
+    expect(await scan((h) => h.hidden.set('D:/some/other/project', ['**/generated']))).toContain('generated/g.ts');
+  });
+
+  it('applies the panel box whatever the toggle says (FR-029)', async () => {
+    expect(await scan(() => undefined, { useExcludeGlobs: false, extraExcludes: ['**/fixtures'] })).not.toContain(
+      'fixtures/d.txt',
+    );
+  });
+
+  it('searches a file the scope names explicitly whatever any list says (043 FR-092)', async () => {
+    const rows = await scan(
+      (h, root) => {
+        h.globs = ['**/dist'];
+        h.hidden.set(root, ['**/dist']);
+      },
+      { scopeSubPath: 'dist/b.js', extraExcludes: ['**/dist'] },
+    );
+    expect(rows).toEqual(['dist/b.js']);
   });
 });

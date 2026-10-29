@@ -18,7 +18,10 @@
  * one boolean, and the collapse is an easy edit to make while "simplifying". Two tests below set
  * each without the other, on purpose.
  *
- * ANTI-VACUITY CONTROL, run rather than asserted: in `describeOpenInTargets`, change the
+ * 060 FR-045 retired the two-rule split described above for an OPEN file: once it is open anywhere,
+ * one Current Editor row replaces both. The control below is kept as history of why the rows were split.
+ *
+ * ANTI-VACUITY CONTROL (pre-FR-045), run rather than asserted:
  * `New Editor` row's `disabled` from `noTab || alreadyOpen` to `noTab || lastActiveHoldsFile` — the
  * collapse described above, in its most plausible form. **Four tests fail**, and they were counted
  * by doing it: "New Editor is disabled once the file is open anywhere", both halves of "the two
@@ -75,44 +78,44 @@ describe('describeOpenInTargets — the label (006 FR-098)', () => {
   });
 });
 
-describe('describeOpenInTargets — the two disable rules, and that they are two (006 FR-082 / FR-011a)', () => {
-  it('Last Active Editor is available when that editor holds a different file', () => {
-    expect(one(describeOpenInTargets(facts()), 'lastActive').disabled).toBe(false);
-  });
-
-  it('Last Active Editor is disabled when that editor already holds THIS file — opening is a no-op', () => {
-    const targets = describeOpenInTargets(facts({ lastActiveHoldsFile: true }));
-    expect(one(targets, 'lastActive').disabled).toBe(true);
-  });
-
-  it('New Editor is available while the file is open nowhere', () => {
-    expect(one(describeOpenInTargets(facts()), 'new').disabled).toBe(false);
-  });
-
-  it('New Editor is disabled once the file is open anywhere — a second buffer is never created', () => {
-    expect(one(describeOpenInTargets(facts({ alreadyOpen: true })), 'new').disabled).toBe(true);
-  });
-
-  it('the two disable flags are independent — open elsewhere disables New Editor only', () => {
-    // The file is open in SOME editor, but not in the tab's last active one. FR-082's no-op does not
-    // apply, so Last Active Editor stays live and takes the user to the buffer that already exists.
-    const targets = describeOpenInTargets(facts({ alreadyOpen: true, lastActiveHoldsFile: false }));
+/*
+ * 060 FR-045 (supersedes 006 FR-072's and FR-082's disabled rows for an open file): once the file is
+ * open in an editor anywhere, Last Active Editor and New Editor give way to ONE Current Editor row,
+ * which focuses that editor. A file is never moved between editors.
+ */
+describe('describeOpenInTargets — a file that is not open (006 FR-072)', () => {
+  it('offers Last Active Editor and New Editor, both available, and no Current Editor', () => {
+    const targets = describeOpenInTargets(facts());
     expect(one(targets, 'lastActive').disabled).toBe(false);
-    expect(one(targets, 'new').disabled).toBe(true);
-  });
-
-  it('the two disable flags are independent — held here disables Last Active Editor only', () => {
-    /*
-     * The inverse, and it is a real state rather than a contrived one: `lastActiveHoldsFile` is read
-     * from this window's editor state while `alreadyOpen` is answered by main. They disagree for a
-     * moment after a file is closed, and a module that had collapsed them would disable the wrong
-     * row for that moment.
-     */
-    const targets = describeOpenInTargets(facts({ alreadyOpen: false, lastActiveHoldsFile: true }));
-    expect(one(targets, 'lastActive').disabled).toBe(true);
     expect(one(targets, 'new').disabled).toBe(false);
+    expect(byKind(targets, 'current')).toHaveLength(0);
+  });
+});
+
+describe('describeOpenInTargets — a file already open (060 FR-045)', () => {
+  it.each([
+    ['open in another editor', { alreadyOpen: true, lastActiveHoldsFile: false }],
+    ['open in the last active editor', { alreadyOpen: true, lastActiveHoldsFile: true }],
+    // `lastActiveHoldsFile` is this window's editor state and `alreadyOpen` main's answer; they can
+    // disagree for a moment, and either one saying the file is open is enough.
+    ['held here before main has said so', { alreadyOpen: false, lastActiveHoldsFile: true }],
+  ] as const)('%s: one available Current Editor row in place of Last Active and New', (_name, over) => {
+    const targets = describeOpenInTargets(facts(over));
+    expect(one(targets, 'current')).toMatchObject({ label: 'Current Editor', disabled: false });
+    expect(byKind(targets, 'lastActive')).toHaveLength(0);
+    expect(byKind(targets, 'new')).toHaveLength(0);
   });
 
+  it('draws Current Editor first, and keeps every other tab drawn but disabled', () => {
+    const targets = describeOpenInTargets(
+      facts({ alreadyOpen: true, otherTabs: [{ id: 'tab-2', title: 'Docs' }] }),
+    );
+    expect(targets.map((t) => t.kind)).toEqual(['current', 'tab']);
+    expect(byKind(targets, 'tab').map((t) => t.disabled)).toEqual([true]);
+  });
+});
+
+describe('describeOpenInTargets — no active tab', () => {
   it('every target is unavailable with no active tab', () => {
     const targets = describeOpenInTargets(
       facts({ activeTabId: undefined, otherTabs: [{ id: 'tab-2', title: 'Docs' }] }),
@@ -207,7 +210,14 @@ describe('openInMenuActions — the rows the two menus share', () => {
       describeOpenInTargets(facts({ alreadyOpen: true, otherTabs: [{ id: 'tab-2', title: 'Docs' }] })),
       () => undefined,
     );
-    expect(rows.find((r) => r.label === 'New Editor')?.disabled).toBe(true);
+    expect(rows.map((r) => r.label)).toEqual(['Current Editor', 'Other Tab']);
+    expect(rows[0]?.disabled).toBe(false);
     expect(rows.at(-1)?.submenu?.[0]?.disabled).toBe(true);
+  });
+
+  it('hands Current Editor back as its own kind (060 FR-045)', () => {
+    const pick = vi.fn();
+    openInMenuActions(describeOpenInTargets(facts({ alreadyOpen: true })), pick)[0]?.onClick?.();
+    expect(pick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'current' }));
   });
 });

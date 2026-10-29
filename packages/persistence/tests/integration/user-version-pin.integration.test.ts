@@ -32,8 +32,8 @@ afterEach(() => {
 });
 
 describe('the schema version and the migration chain agree', () => {
-  it('LATEST_VERSION is 11 — 057 round 12 adds the manual attention flag table', () => {
-    expect(LATEST_VERSION).toBe(11);
+  it('LATEST_VERSION is 12 — 060 #532 adds a project\'s own Find in Files exclusions', () => {
+    expect(LATEST_VERSION).toBe(12);
   });
 
   it('a freshly migrated store actually REACHES LATEST_VERSION', () => {

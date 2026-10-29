@@ -42,11 +42,23 @@ const storedFolder = (): Record<string, unknown> => ({
 });
 
 describe('FR-073 — `folder` is no longer one of the groupings', () => {
-  it('leaves exactly two values in FIND_IN_FILES_GROUPINGS', () => {
-    expect([...FIND_IN_FILES_GROUPINGS]).toEqual(['file', 'fileAndFolder']);
+  /*
+   * 060 FR-012 EXTENDS this set by `folderTree` (Folder structure) — a different shape from the retired
+   * `folder`, which hung rows straight off a folder heading. `folder` stays out; that is what this
+   * file is about.
+   */
+  it('leaves file, fileAndFolder and (060) folderTree in FIND_IN_FILES_GROUPINGS, and not folder', () => {
+    expect([...FIND_IN_FILES_GROUPINGS]).toEqual(['file', 'fileAndFolder', 'folderTree']);
+    expect(FIND_IN_FILES_GROUPINGS).not.toContain('folder');
   });
 
-  it('describes only those two on the preference, and names no value the guard would reject', () => {
+  it('labels 060’s Folder structure value, and keeps File as the shipped default (FR-017)', () => {
+    const d = SETTINGS_METADATA.find((x) => x.key === 'search.inFiles.defaultGrouping');
+    expect(d?.optionLabels?.folderTree).toBe('Folder structure');
+    expect(DEFAULT_APP_SETTINGS.search.inFiles.defaultGrouping).toBe('file');
+  });
+
+  it('describes only those values on the preference, and names no value the guard would reject', () => {
     const d = SETTINGS_METADATA.find((x) => x.key === 'search.inFiles.defaultGrouping');
     expect(d).toBeDefined();
     expect(d?.allowedValues).toEqual(FIND_IN_FILES_GROUPINGS);
@@ -87,13 +99,13 @@ describe('FR-033c — a stored `folder` is coerced, never rejected (R25)', () =>
     const raw = storedFolder();
     (raw.search as Record<string, unknown>).inFiles = {
       ...(raw.search as { inFiles: Record<string, unknown> }).inFiles,
-      rememberGrouping: false,
+      warnIrreversibleCommit: false,
       settleMs: 400,
     };
 
     const out = parseSettingsGuarded(raw);
     expect(out.unreadable).toBe(false);
-    expect(out.value.search.inFiles.rememberGrouping).toBe(false);
+    expect(out.value.search.inFiles.warnIrreversibleCommit).toBe(false);
     expect(out.value.search.inFiles.settleMs).toBe(400);
   });
 
@@ -106,19 +118,21 @@ describe('FR-033c — a stored `folder` is coerced, never rejected (R25)', () =>
   it('leaves a surviving grouping exactly as it found it', () => {
     // The guard substitutes only what falls OUTSIDE the set. If it moved `fileAndFolder` too, the
     // tests above would pass for the wrong reason.
-    const out = parseSettingsGuarded({ search: { inFiles: { defaultGrouping: 'fileAndFolder' } } });
-    expect(out.value.search.inFiles.defaultGrouping).toBe('fileAndFolder');
-    expect(out.corrections.some((c) => c.path === 'search.inFiles.defaultGrouping')).toBe(false);
+    for (const kept of ['fileAndFolder', 'folderTree'] as const) {
+      const out = parseSettingsGuarded({ search: { inFiles: { defaultGrouping: kept } } });
+      expect(out.value.search.inFiles.defaultGrouping).toBe(kept);
+      expect(out.corrections.some((c) => c.path === 'search.inFiles.defaultGrouping')).toBe(false);
+    }
   });
 });
 
 describe('plan D3 — the JSON editor reports the retired value, and that is accepted', () => {
-  it('says `must be one of: file, fileAndFolder` for a document still holding `folder`', () => {
+  it('says `must be one of: file, fileAndFolder, folderTree` for a document still holding `folder`', () => {
     const validity = checkSettingsText(JSON.stringify(storedFolder()));
     expect(validity.kind).toBe('checked');
     const problems = validity.kind === 'checked' ? validity.problems : [];
     const problem = problems.find((p) => p.key === 'search.inFiles.defaultGrouping');
-    expect(problem?.reason).toBe('must be one of: file, fileAndFolder');
+    expect(problem?.reason).toBe('must be one of: file, fileAndFolder, folderTree');
     expect(problem?.foundText).toBe('"folder"');
   });
 });

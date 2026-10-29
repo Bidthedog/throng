@@ -74,7 +74,8 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 79;
 // the toast's link control.
 // 84 since 057 round 12 (FR-124): `goToPanel` retired — the toast's whole card is the link.
 // 82 since 057 round 13 (FR-139): `attention` and `attentionFailed` retired — the mark is a CSS circle.
-const EXPECTED_ICON_TOKEN_COUNT = 82;
+// 84 since 060 (FR-001, FR-018): `busy` and `groupFolderTree`, two Find in Files controls.
+const EXPECTED_ICON_TOKEN_COUNT = 86;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */
 const PREVIEW_ICON_TOKENS = ['preview', 'refresh', 'navigateBack', 'navigateForward'] as const;
 /** The icon tokens 047 adds (research R10); named, for the same reason. */
@@ -268,16 +269,16 @@ describe('DEFAULT_THEMES (FR-044/046, SC-007)', () => {
    * magnifier: the pair 🔍/🔎 differ only in which way the handle tilts, and a third would be told
    * apart by nothing at 16 px.
    */
-  it('draws Find in Files at the same weight as the controls beside it (FR-065)', () => {
-    const glyph = THRONG_THEME.icons.findInFiles;
-    expect(
-      /\p{Emoji_Presentation}/u.test(glyph),
-      `icons.findInFiles is ${JSON.stringify(glyph)}, a text-presentation character: it is drawn ` +
-        `as a hairline outline beside quickOpen's ${JSON.stringify(THRONG_THEME.icons.quickOpen)}, ` +
-        `which fills its em box`,
-    ).toBe(true);
-    // The neighbour it is measured against, so this cannot pass by that one becoming thin too.
-    expect(/\p{Emoji_Presentation}/u.test(THRONG_THEME.icons.quickOpen)).toBe(true);
+  /*
+   * 060 FR-011c SUPERSEDES the FR-065 rule this test used to hold (Find in Files as an emoji, to match
+   * Quick Open's emoji weight). The intent is unchanged — one weight across the toolbar — but it is now
+   * reached by making the neighbours PLAIN as well, at the maintainer's direction. The "neighbour"
+   * half stays: this cannot pass by one of the two becoming an emoji again.
+   */
+  it('draws Find in Files at the same weight as the controls beside it (FR-065, as superseded by 060 FR-011c)', () => {
+    const plain = (glyph: string): boolean => !/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/u.test(glyph);
+    expect(plain(THRONG_THEME.icons.findInFiles), 'findInFiles').toBe(true);
+    expect(plain(THRONG_THEME.icons.quickOpen), 'quickOpen, the neighbour it is measured against').toBe(true);
   });
 
   it('keeps the three searches distinguishable from one another (FR-065)', () => {

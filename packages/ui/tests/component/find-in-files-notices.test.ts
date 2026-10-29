@@ -3,10 +3,10 @@
  *
  * Two changes to 043, both stated as supersessions in its spec:
  *
- *   - **Results are locked while a scan runs.** For as long as the run control shows the cancel ✕,
- *     the rows ignore double-click, Enter and right-click, and Replace All is disabled — the list is
- *     still streaming in under the pointer, and a row acted on then is a row from a list that has not
- *     finished arriving. The form, the cancel control and the panel's own menu stay live.
+ *   - **Results were locked while a scan ran** (#391, 043 FR-095) — and 060 FR-003 withdraws the row
+ *     lock. The rows, the keyboard and the menu stay live while the list streams in; what stays
+ *     disabled is the WRITING (Replace All, here; Replace in File and Replace Match in
+ *     `find-in-files-commit-target.test.ts`), which is what the lock was protecting.
  *   - **One notification bar**, between the form and the results list, is the only place the panel
  *     reports a condition. A missing scope reads *Could not find `<scope>`*, and neither the scope row
  *     nor the status line repeats it — one condition, one notice.
@@ -87,27 +87,31 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('the rows are locked while a scan runs (#391)', () => {
-  it('a double-click on a row opens nothing while the cancel ✕ shows', () => {
+describe('the rows stay live while a scan runs (060 FR-003, SC-008)', () => {
+  it('a double-click on a row opens it while the cancel control shows', () => {
     renderFindInFilesPanel();
     streaming();
 
     fireEvent.doubleClick(rows()[0]);
 
-    expect(opened).toEqual([]);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ relPath: 'src/a.ts' });
   });
 
-  it('Enter in the list opens nothing while the cancel ✕ shows', () => {
+  it('Enter in the list opens the row the arrow keys landed on', () => {
     renderFindInFilesPanel();
     streaming();
 
+    // Index 0 is a.ts's heading and the first press selects it, so a second lands on its row.
+    fireEvent.keyDown(results(), { key: 'ArrowDown' });
     fireEvent.keyDown(results(), { key: 'ArrowDown' });
     fireEvent.keyDown(results(), { key: 'Enter' });
 
-    expect(opened).toEqual([]);
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ relPath: 'src/a.ts' });
   });
 
-  it('a right-click on a row opens no menu while the cancel ✕ shows', async () => {
+  it('a right-click on a row opens the menu while the cancel control shows', async () => {
     renderFindInFilesPanel();
     streaming();
 
@@ -115,33 +119,22 @@ describe('the rows are locked while a scan runs (#391)', () => {
       fireEvent.contextMenu(rows()[0]);
     });
 
-    expect(menuItems()).toEqual([]);
+    expect(menuItems().length).toBeGreaterThan(0);
   });
 
-  it('every row is drawn disabled while the cancel ✕ shows', () => {
+  it('no row is drawn disabled while the cancel control shows', () => {
     renderFindInFilesPanel();
     streaming();
 
-    for (const row of rows()) expect(row.getAttribute('aria-disabled')).toBe('true');
+    for (const row of rows()) expect(row).not.toHaveAttribute('aria-disabled');
   });
 
-  it('Replace All is disabled while the cancel ✕ shows', () => {
+  it('Replace All is still disabled while the cancel control shows', () => {
     renderFindInFilesPanel();
     fireEvent.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
     streaming();
 
     expect(screen.getByTestId(`fif-replace-all-${PANEL_ID}`)).toBeDisabled();
-  });
-
-  it('the rows come back the moment the scan completes', () => {
-    renderFindInFilesPanel();
-    streaming();
-    bridge.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', totalMatches: 2 });
-
-    fireEvent.doubleClick(rows()[0]);
-
-    expect(opened).toHaveLength(1);
-    for (const row of rows()) expect(row.getAttribute('aria-disabled')).not.toBe('true');
   });
 });
 
@@ -176,7 +169,69 @@ describe('one notification bar reports every condition (#391)', () => {
     });
 
     expectOneNoticeInTheBar('Showing the first 20,000 matches');
-    expect(panel()).toHaveTextContent('Replace All acts only on the results listed below');
+    expect(screen.getByTestId(`fif-partial-notice-${PANEL_ID}`)).toHaveTextContent(
+      'Replace All acts only on the results listed below.',
+    );
+  });
+
+  it('a cancel that left rows listed says the list is partial, once (FR-003b)', () => {
+    renderFindInFilesPanel();
+    streaming();
+    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
+
+    expectOneNoticeInTheBar('Replace All acts only on the results listed below.');
+    const notice = screen.getByTestId(`fif-partial-notice-${PANEL_ID}`);
+    expect(notice).toHaveTextContent('cancelled');
+    expect(notice.textContent ?? '').toMatch(/partial/i);
+    // The cap's old id is gone: one notice with one id, whichever condition raised it.
+    expect(screen.queryByTestId(`fif-capped-notice-${PANEL_ID}`)).toBeNull();
+  });
+
+  it('a cancel with nothing listed raises no notice', () => {
+    renderFindInFilesPanel();
+    typeAndRun('needle');
+    bridge.emit({ panelId: PANEL_ID, generation: 1, status: 'running', rows: [], totalMatches: 0 });
+    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
+
+    expect(screen.queryByTestId(`fif-partial-notice-${PANEL_ID}`)).toBeNull();
+    expect(screen.queryByTestId(`fif-notices-${PANEL_ID}`)).toBeNull();
+  });
+
+  it('a cancel on a capped list is still ONE partial notice, naming both causes (FR-003b)', () => {
+    renderFindInFilesPanel();
+    typeAndRun('e');
+    bridge.emit({
+      panelId: PANEL_ID,
+      generation: 1,
+      status: 'running',
+      rows: [resultRow('src/a.ts', 1, 0)],
+      totalMatches: 20_000,
+      capped: true,
+    });
+    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
+
+    expect(screen.getAllByTestId(`fif-partial-notice-${PANEL_ID}`)).toHaveLength(1);
+    const text = screen.getByTestId(`fif-partial-notice-${PANEL_ID}`).textContent ?? '';
+    expect(text).toContain('20,000');
+    expect(text).toContain('cancelled');
+  });
+
+  it('running again clears the partial notice (FR-003c)', () => {
+    renderFindInFilesPanel();
+    streaming();
+    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
+    expect(screen.getByTestId(`fif-partial-notice-${PANEL_ID}`)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
+    bridge.emit({
+      panelId: PANEL_ID,
+      generation: 2,
+      status: 'complete',
+      rows: [resultRow('src/a.ts', 1, 0)],
+      totalMatches: 1,
+    });
+
+    expect(screen.queryByTestId(`fif-partial-notice-${PANEL_ID}`)).toBeNull();
   });
 
   it('below the cap there is no partial notice, and no bar at all', () => {

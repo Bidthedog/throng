@@ -304,7 +304,31 @@ describe('a synced panel sees the parent’s scan (FR-078, US5 scenario 6, #380)
     expect(
       snapshot.adoptQuery,
       'the child is shown rows it did not ask for; it must be told what they are',
-    ).toEqual({ term: TERM, modes: NO_MODES });
+      // 060 #532 — the exclusions are part of the query the follower adopts.
+    ).toEqual({ term: TERM, modes: NO_MODES, useExcludeGlobs: true, extraExcludes: [] });
+  });
+
+  it('hands a follower the run’s exclusions with its term (060 #532)', async () => {
+    const rig = new Rig();
+    const root = await makeRoot(FILES);
+    rig.service.attach(CHILD, PANEL);
+    await rig.service.start(PARENT, {
+      panelId: PANEL,
+      projectRoot: root,
+      scopeSubPath: null,
+      term: TERM,
+      modes: NO_MODES,
+      useExcludeGlobs: false,
+      extraExcludes: ['**/c.txt'],
+    });
+    await waitFor('the parent to settle', () => rig.settled(PARENT));
+    const childLast = await waitFor('the child to be told', () => rig.to(CHILD).at(-1));
+    expect(childLast.adoptQuery).toEqual({
+      term: TERM,
+      modes: NO_MODES,
+      useExcludeGlobs: false,
+      extraExcludes: ['**/c.txt'],
+    });
   });
 
   it('does not hand the query back to the window that is doing the typing', async () => {
@@ -339,6 +363,8 @@ describe('a synced panel sees the parent’s scan (FR-078, US5 scenario 6, #380)
     expect(parentLast?.adoptQuery, 'the parent is now the one following').toEqual({
       term: 'haystack',
       modes: NO_MODES,
+      useExcludeGlobs: true,
+      extraExcludes: [],
     });
     for (const update of rig.to(CHILD)) {
       expect(update.adoptQuery, 'and the child, now typing, is left alone').toBeUndefined();
@@ -434,6 +460,27 @@ describe('the run is released on the LAST detach, not the first (FR-023, FR-078a
     const snapshot = await waitFor('the child to be re-told', () => rig.to(CHILD).at(0));
     expect(snapshot.snapshot).toBe(true);
     expect((snapshot.rows ?? []).map((r) => r.relPath)).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('tells an attaching window the scope the run searched (060 — Folder structure’s root)', async () => {
+    // The mirror never started this run, so it cannot know the scope any other way.
+    const rig = new Rig();
+    const root = await makeRoot({ 'sub/a.txt': 'needle\n', 'b.txt': 'needle\n' });
+    await rig.service.start(PARENT, {
+      panelId: PANEL,
+      projectRoot: root,
+      scopeSubPath: 'sub',
+      term: TERM,
+      modes: NO_MODES,
+    });
+    const done = await waitFor('the parent to settle', () => rig.settled(PARENT));
+    expect(done.scopeRel).toBe('sub');
+    rig.sent.length = 0;
+
+    rig.service.attach(CHILD, PANEL);
+
+    const snapshot = await waitFor('the child to be told', () => rig.to(CHILD).at(0));
+    expect(snapshot.scopeRel).toBe('sub');
   });
 
   it('says nothing to a window that attaches to a panel with no run', async () => {

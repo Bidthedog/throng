@@ -285,6 +285,7 @@ async function mount(options: MountOptions = {}) {
   const { files, listed } = fakeFiles(options.listing);
   const projectId = `project-${(projectSeq += 1)}`;
   const onHide = vi.fn();
+  const onExcludeFromSearch = vi.fn();
 
   // The preload bridge, as a plain object on `window`. `FileTree` reaches it exclusively through
   // optional chaining (`window.throng?.files?.list?.(…)`), so only the members actually used need
@@ -350,7 +351,7 @@ async function mount(options: MountOptions = {}) {
   Reflect.set(window, 'throng', throng);
 
   const treeWith = (hiddenPaths: string[]): ReactElement =>
-    createElement(FileTree, { rootFolder: ROOT_FOLDER, projectId, hiddenPaths, onHide });
+    createElement(FileTree, { rootFolder: ROOT_FOLDER, projectId, hiddenPaths, onHide, onExcludeFromSearch });
   const subject = treeWith(options.hiddenPaths ?? []);
 
   // ONE services object, shared: `WorkspaceProvider` must be handed the SAME `WorkspaceClient` the
@@ -395,7 +396,7 @@ async function mount(options: MountOptions = {}) {
   // role rather than for a timeout means a regression that stops the tree mounting fails HERE,
   // with "unable to find role=tree", instead of silently satisfying every absence assertion below.
   const tree = await screen.findByRole('tree');
-  return { user, tree, files, listed, onHide, projectId, setHidden, pushSettings };
+  return { user, tree, files, listed, onHide, onExcludeFromSearch, projectId, setHidden, pushSettings };
 }
 
 /**
@@ -1310,5 +1311,40 @@ describe('a HIDDEN folder is never expanded into (FR-044, migrated from subtree-
     // assertion above while doing the work FR-044 forbids.
     expect(listed).not.toContain('branch/l1a');
     expect(openFolders(tree)).toEqual(['', 'branch', 'branch/l1b']);
+  });
+});
+
+describe('Exclude from Find in Files in this project (060 #532 T051, FR-033)', () => {
+  const EXCLUDE = 'menu-item-Exclude from Find in Files in this project';
+  const labelOf = (r: HTMLElement): string => r.querySelector('.tree-label')?.textContent ?? '';
+
+  it('is offered on a file row and hands the RIGHT-CLICKED path to the project', async () => {
+    const { tree, onExcludeFromSearch } = await mount();
+    const row = within(tree)
+      .getAllByRole('treeitem')
+      .find((r) => labelOf(r) === 'a.txt');
+
+    // A FILE's menu is built after an async open-in lookup, so it appears a tick after the click;
+    // awaited with `findBy` outside `act` so the lookup's promises are free to settle meanwhile.
+    fireEvent.contextMenu(row?.querySelector('.tree-row') as HTMLElement);
+    fireEvent.click(await screen.findByTestId(EXCLUDE, undefined, { timeout: 4000 }));
+
+    expect(onExcludeFromSearch).toHaveBeenCalledWith('a.txt');
+  });
+
+  it('is offered on a folder row too, and not on the project root', async () => {
+    const { tree, onExcludeFromSearch } = await mount();
+    const rows = within(tree).getAllByRole('treeitem');
+
+    fireEvent.contextMenu(rows.find((r) => labelOf(r) === 'demo')?.querySelector('.tree-row') as HTMLElement);
+    expect(await screen.findByTestId('context-menu')).toBeVisible();
+    expect(screen.queryByTestId(EXCLUDE)).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+
+    fireEvent.contextMenu(rows.find((r) => labelOf(r) === 'src')?.querySelector('.tree-row') as HTMLElement);
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId(EXCLUDE));
+    });
+    expect(onExcludeFromSearch).toHaveBeenCalledWith('src');
   });
 });

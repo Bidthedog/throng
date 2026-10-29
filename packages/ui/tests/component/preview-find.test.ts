@@ -430,6 +430,40 @@ describe('the match-frame layer (FR-074, R16)', () => {
     return { host, frames, controller };
   }
 
+  /*
+   * 060 FR-047 — a Find in Files match revealed in a preview is painted as find paints its CURRENT match:
+   * the current fill and the 2 px current frame, which stays with the text on scroll and resize.
+   */
+  it('marks a revealed range as the current match — fill and current frame — and repaints it later', () => {
+    const queued: (() => void)[] = [];
+    const painter = recordingPainter();
+    const host = buildHost('<p>alpha needle omega</p>');
+    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => viewport);
+    const frames = recordingFrames();
+    const controller = createPreviewSearchController({
+      host: () => host,
+      painter,
+      frames,
+      requestFrame: (cb) => queued.push(cb),
+      cancelFrame: () => {},
+    });
+    geometry.set('needle', [[rect(60, 20, 40)]]);
+    const text = host.querySelector('p')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 6);
+    range.setEnd(text, 12);
+
+    controller.markRevealed(range);
+
+    expect(painter.calls.at(-1)).toEqual({ texts: ['needle'], current: 0 });
+    expect(frames.paints.at(-1)).toEqual([{ left: 60, top: 20, width: 40, height: 10, current: true }]);
+
+    geometry.set('needle', [[rect(60, 90, 40)]]);
+    controller.repaintFrames();
+    queued[0]!();
+    expect(frames.paints.at(-1)).toEqual([{ left: 60, top: 90, width: 40, height: 10, current: true }]);
+  });
+
   it('frames each match, the current one flagged — one frame per client rect (a wrapped match has two)', () => {
     const { controller, frames } = over('<p>foo bar foo baz foo</p>');
     // ranges are created in match order: first foo (one rect), second foo wraps (two rects), third one rect.

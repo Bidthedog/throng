@@ -16,7 +16,7 @@
  * project that has no remembered choice falling back to the FR-033a default — never about anything
  * reaching disk, which is what `__resetFindInFilesState` standing in for "a restart" expresses.
  */
-import { cleanup, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -171,35 +171,8 @@ describe('the grouping a panel opens in (FR-033a, FR-033b, FR-033c)', () => {
     expect(screen.queryByTestId(`fif-grouping-folder-${PANEL_ID}`)).toBeNull();
   });
 
-  it('reuses the last choice made in THAT project, and only that project', async () => {
-    const user = userEvent.setup();
-    mount();
-    await user.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
-    cleanup();
-
-    // A second panel in the same project opens where the user left off (FR-033c).
-    mount('p2', PROJECT_ID);
-    expect(pressed('p2')).toBe('fileAndFolder');
-    cleanup();
-
-    // A project with no remembered choice opens in the FR-033a default — the half of FR-033c that
-    // a single-project test cannot see.
-    mount('p3', 'proj-2');
-    expect(pressed('p3')).toBe('file');
-  });
-
-  it('opens in the default every time when remembering is off (FR-033b)', async () => {
-    config.settings = settings({ rememberGrouping: false });
-    const user = userEvent.setup();
-    mount();
-    await user.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
-    // The user's choice still applies to the panel they made it in.
-    expect(pressed(PANEL_ID)).toBe('fileAndFolder');
-    cleanup();
-
-    mount('p2', PROJECT_ID);
-    expect(pressed('p2')).toBe('file');
-  });
+  // 060 FR-046 retired the per-project memory (FR-033b/c): a choice writes the preference instead,
+  // and that linking is pinned in find-in-files-grouping-linked.test.ts.
 
   it('keeps a collapsed group collapsed across a regrouping and back', async () => {
     const user = userEvent.setup();

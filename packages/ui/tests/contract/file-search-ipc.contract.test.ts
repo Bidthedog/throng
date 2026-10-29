@@ -251,6 +251,8 @@ describe('fileSearch IPC contract (043 contracts/file-search-ipc.md)', () => {
       // `FileSearchService.queryFor`, spread into every payload bound for a window that is not the
       // run's originator. A wire field nothing sends is exactly what this file exists to catch.
       'adoptQuery',
+      // 060 — produced by `FileSearchService.emit` and `snapshotTo`, from the run's own scope.
+      'scopeRel',
     ]) {
       expect(fileSearchBlock(), `the fileSearch update payload must declare ${field}`).toContain(
         field,
@@ -276,6 +278,15 @@ describe('fileSearch IPC contract (043 contracts/file-search-ipc.md)', () => {
     expect(mainWiring).toContain('new FileSearchService(');
     expect(mainWiring).toContain('registerFileSearchIpc(');
     expect(mainWiring).toMatch(/once\('destroyed',\s*\(\)\s*=>\s*\w+\.release\(\w+\.id\)/);
+  });
+
+  it('the service is fed Find in Files’ own exclusion lists, never the File Explorer’s (060 #532, FR-025, SC-010)', () => {
+    const construction = mainWiring.slice(mainWiring.indexOf('new FileSearchService('));
+    const args = construction.slice(0, construction.indexOf(');'));
+    expect(args).toContain('currentSettings.search.inFiles.excludeGlobs');
+    expect(args).toContain('searchExcludeGlobs');
+    expect(args).not.toContain('explorer.excludeGlobs');
+    expect(args).not.toContain('hiddenPaths');
   });
 
   it('the consumer DROPS an update from a superseded generation', () => {

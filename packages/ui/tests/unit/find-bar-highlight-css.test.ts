@@ -32,27 +32,27 @@ function declarationsOf(css: string, selector: string): Map<string, string> {
 
 describe('editor find-match outlines (047 FR-074)', () => {
   it('outlines every match in searchMatchBorder', () => {
-    const match = declarationsOf(FIND_BAR_CSS, '.cm-editor .throng-search-match');
+    const match = declarationsOf(FIND_BAR_CSS, ':where(.cm-editor, .fif-results) .throng-search-match');
     expect(match.get('outline')).toMatch(/^1px solid var\(--throng-colour-searchMatchBorder\b/);
   });
 
   it('keeps the current match on its own outline, declared after the ordinary one', () => {
-    const current = declarationsOf(FIND_BAR_CSS, '.cm-editor .throng-search-match--current');
+    const current = declarationsOf(FIND_BAR_CSS, ':where(.cm-editor, .fif-results) .throng-search-match--current');
     // 049 FR-009b: the current match's outline is 2 px; the ordinary one (above) stays 1 px.
     expect(current.get('outline')).toMatch(/^2px solid var\(--throng-colour-searchMatchCurrentBorder\b/);
     // An outline is painted outside the box and takes no layout space, so 2 px moves no text.
     expect(current.has('border')).toBe(false);
     expect(current.has('padding')).toBe(false);
-    expect(FIND_BAR_CSS.indexOf('.cm-editor .throng-search-match--current {')).toBeGreaterThan(
-      FIND_BAR_CSS.indexOf('.cm-editor .throng-search-match {'),
+    expect(FIND_BAR_CSS.indexOf(':where(.cm-editor, .fif-results) .throng-search-match--current {')).toBeGreaterThan(
+      FIND_BAR_CSS.indexOf(':where(.cm-editor, .fif-results) .throng-search-match {'),
     );
   });
 
   it('leaves the existing match rules exactly as they were (049 FR-009)', () => {
-    expect(declarationsOf(FIND_BAR_CSS, '.cm-editor .throng-search-match').get('background')).toMatch(
+    expect(declarationsOf(FIND_BAR_CSS, ':where(.cm-editor, .fif-results) .throng-search-match').get('background')).toMatch(
       /^var\(--throng-colour-searchMatch,/,
     );
-    expect(declarationsOf(FIND_BAR_CSS, '.cm-editor .throng-search-match--current').get('background')).toMatch(
+    expect(declarationsOf(FIND_BAR_CSS, ':where(.cm-editor, .fif-results) .throng-search-match--current').get('background')).toMatch(
       /^var\(--throng-colour-searchMatchCurrent,/,
     );
     expect(declarationsOf(FIND_BAR_CSS, '::highlight(throng-preview-match)').get('background-color')).toMatch(

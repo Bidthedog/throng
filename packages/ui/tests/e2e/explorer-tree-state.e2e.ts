@@ -127,7 +127,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
       // child is visible, chevron + glyph both read OPEN.
       await rowFor(tree, 'movable').locator('.tree-twisty').click();
       await expect(tree.getByText('child.txt', { exact: true })).toBeVisible();
-      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: '📂' });
+      expect(await folderState(tree, 'movable')).toEqual({ twistyOpen: true, icon: '▱' });
 
       // Drag the EXPANDED `movable` onto `box`.
       await tree
@@ -154,7 +154,7 @@ test('(1) dragging an EXPANDED folder into another folder keeps it expanded, ico
           { timeout: 5000 },
         )
         // REQUIRED: the folder stays open — children visible, chevron open, glyph open.
-        .toEqual({ twistyOpen: true, icon: '📂', childVisible: true });
+        .toEqual({ twistyOpen: true, icon: '▱', childVisible: true });
 
       expect(realErrors(errors), `renderer errors:\n${errors.join('\n')}`).toEqual([]);
     });
@@ -217,7 +217,7 @@ test('(1b) dragging a folder BACK to a previously-expanded path: icon open, no c
           { timeout: 5000 },
         )
         // REQUIRED: whatever the icon says, it must agree with the children.
-        .toEqual({ twistyOpen: true, icon: '📂', childVisible: true });
+        .toEqual({ twistyOpen: true, icon: '▱', childVisible: true });
     });
   } finally {
     // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would

@@ -221,7 +221,7 @@ describe('the code snippet keeps the editor family only (FR-064, R29)', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('secondary metadata stays relative to the corrected base (T161, R29)', () => {
-  it('shrinks exactly five selectors, over three rules', () => {
+  it('shrinks exactly six selectors', () => {
     /*
      * Metadata BESIDE the body text — counts, positions, the scan's state — not the body text
      * itself, so a relative secondary size is an ordinary typographic choice once the base is
@@ -234,9 +234,12 @@ describe('secondary metadata stays relative to the corrected base (T161, R29)', 
       .flatMap((r) => r.selectors);
     // #391 — `.fif-scope__missing` went with the notice it styled; the notice bar's `.fif-notice`
     // took its place, and its size, in the same slot of the sheet.
+    // 060 FR-004 — `.fif-group__dir`, the muted folder beside a file name under Per file grouping,
+    // is the sixth: metadata beside the name it qualifies, smaller by the same relative step.
     expect(shrunk).toEqual([
       '.fif-notice',
       '.fif-status',
+      '.fif-group__dir',
       '.fif-group__count',
       '.fif-group__stale',
       '.fif-row__pos',

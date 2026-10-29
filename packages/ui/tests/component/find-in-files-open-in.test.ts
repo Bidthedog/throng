@@ -33,14 +33,16 @@
  * restated three times.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   registerResultOpener,
   registerResultOpenTargets,
+  registerResultPreviewOpenIn,
   type ResultOpenRequest,
 } from '../../src/renderer/find-in-files/result-open.js';
+import type { PreviewOpenInFacts } from '../../src/renderer/preview/preview-open-in.js';
 import { describeOpenInTargets, type OpenInTarget } from '../../src/renderer/editor/open-in-targets.js';
 import {
   PANEL_ID,
@@ -199,15 +201,39 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
    * no context-menu handler of its own, the toolbar is outside the list entirely, and the status
    * line sits below it.
    */
-  it('over a group heading — which names a file on screen but never sets the reading position', async () => {
+  /*
+   * 060 FR-041 (supersedes this case of 043 FR-087d): a FILE heading names a file, so Open In is
+   * offered over it and opens that file at its first line — the heading's file, never the row an
+   * earlier click left the reading position on.
+   */
+  it('over a file heading: offered for THAT file, opening at its first line (060 FR-041)', async () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-group-header-src/b.ts');
 
+    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
+    expect(askedFor).toEqual(['src/a.ts', 'src/b.ts']);
+
+    const flyout = await openFlyout(user);
+    await user.click(within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)'));
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({
+      relPath: 'src/b.ts',
+      from: 0,
+      to: 0,
+      line: 0,
+      target: { kind: 'lastActive' },
+    });
+  });
+
+  it('over a folder heading, which names no file', async () => {
+    const user = await ready();
+    fireEvent.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
+    await rightClick(user, 'fif-group-header-src');
+
     expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
-    // And it asked about nothing — the b.ts heading must not resurrect a.ts's position.
-    expect(askedFor).toEqual(['src/a.ts']);
+    expect(askedFor).toEqual([]);
   });
 
   it('over the toolbar', async () => {
@@ -255,8 +281,84 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
  * over a Markdown row's facts — a file a preview provider claims — so a Preview added to the shared
  * builder would appear here and redden this.
  */
-describe('044 — a result row never offers Preview (FR-054, FR-055)', () => {
-  it('Open In on a Markdown row lists editor targets only, from the real shared builder', async () => {
+/*
+ * 060 FR-048 (supersedes the "never offers Preview" reading of 044 FR-054 below): a file a preview provider
+ * claims gets the File Explorer's two preview rows, from the shared builder.
+ */
+describe('the preview rows, for a file a provider claims (060 FR-048)', () => {
+  const FACTS: PreviewOpenInFacts = { affordance: { state: 'enabled' }, lastPreviewTitle: 'notes.md' };
+
+  async function markdownRow(): Promise<ReturnType<typeof userEvent.setup>> {
+    const user = userEvent.setup();
+    renderFindInFilesPanel();
+    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+    await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
+    stub.emit({
+      panelId: PANEL_ID,
+      generation: 1,
+      status: 'complete',
+      rows: [resultRow('docs/guide.md', 3, 12)],
+      totalMatches: 1,
+    });
+    return user;
+  }
+
+  afterEach(() => registerResultPreviewOpenIn(null));
+
+  it('a row offers Last Preview Panel and New Preview Panel, and each opens a preview at its match', async () => {
+    registerResultPreviewOpenIn(async () => FACTS);
+    const user = await markdownRow();
+    await rightClick(user, 'fif-row-docs/guide.md-12');
+    const flyout = await openFlyout(user);
+
+    expect(within(flyout).getByTestId('menu-item-Last Preview Panel (notes.md)')).toBeTruthy();
+    await user.click(within(flyout).getByTestId('menu-item-New Preview Panel'));
+
+    expect(opened).toEqual([
+      expect.objectContaining({ relPath: 'docs/guide.md', from: 12, previewTarget: 'new', text: expect.any(String) }),
+    ]);
+    expect(opened[0]?.target).toBeUndefined();
+  });
+
+  it('a file heading offers them too, opening the preview at its top', async () => {
+    registerResultPreviewOpenIn(async () => FACTS);
+    const user = await markdownRow();
+    await rightClick(user, 'fif-group-header-docs/guide.md');
+    const flyout = await openFlyout(user);
+    await user.click(within(flyout).getByTestId('menu-item-Last Preview Panel (notes.md)'));
+
+    expect(opened).toEqual([expect.objectContaining({ relPath: 'docs/guide.md', previewTarget: 'lastActive' })]);
+    expect(opened[0]?.text).toBeUndefined();
+  });
+
+  // 060 FR-049 — the file's one preview is open: one Current Preview row, which reveals the match there.
+  it('offers one Current Preview row in their place when the file already has its preview', async () => {
+    registerResultPreviewOpenIn(async () => ({
+      affordance: { state: 'disabled', reason: 'preview-open', provider: {} as never },
+      lastPreviewTitle: 'notes.md',
+    }));
+    const user = await markdownRow();
+    await rightClick(user, 'fif-row-docs/guide.md-12');
+    const flyout = await openFlyout(user);
+
+    expect(within(flyout).queryByText(/Preview Panel/)).toBeNull();
+    const row = within(flyout).getByTestId('menu-item-Current Preview');
+    expect(row).toHaveAttribute('aria-disabled', 'false');
+    await user.click(row);
+    expect(opened).toEqual([expect.objectContaining({ relPath: 'docs/guide.md', from: 12, previewTarget: 'lastActive' })]);
+  });
+
+  it('draws none for a file no provider claims', async () => {
+    registerResultPreviewOpenIn(async () => ({ affordance: { state: 'absent' }, lastPreviewTitle: null }));
+    const user = await markdownRow();
+    await rightClick(user, 'fif-row-docs/guide.md-12');
+    const flyout = await openFlyout(user);
+    expect(within(flyout).queryByText(/Preview Panel/)).toBeNull();
+  });
+});
+
+describe('044 — Open In’s editor targets are unchanged (FR-055)', () => {
+  it('Open In on a Markdown row still lists the editor targets, from the real shared builder', async () => {
     registerResultOpenTargets(async (relPath) => {
       askedFor.push(relPath);
       return describeOpenInTargets({
@@ -302,7 +404,7 @@ describe('the panel still needs no workspace store', () => {
     await rightClick(user, 'fif-row-src/a.ts-6');
 
     expect(screen.getByTestId('menu-item-Open In')).toBeTruthy();
-    expect(screen.getByTestId('menu-item-Run search')).toBeTruthy();
+    expect(screen.getByTestId('menu-item-Collapse all')).toBeTruthy();
     expect(vi.mocked(stub.start)).toHaveBeenCalled();
   });
 });

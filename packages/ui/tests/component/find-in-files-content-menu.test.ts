@@ -62,81 +62,98 @@ function emitResults(): void {
 }
 
 describe('the panel opens its own content menu (T075, FR-025a)', () => {
-  it('draws every discrete command and state toggle the panel offers', () => {
+  it('draws the commands that have no other route (060 FR-042)', () => {
     renderFindInFilesPanel();
 
     openPanelMenu();
 
     expect(labels()).toEqual(
       expect.arrayContaining([
-        'Run search',
-        'Replace',
-        'Group by file ✓',
-        'Group by folder and file',
         'Collapse all',
         'Expand all',
-        'Change scope',
         'Replace All',
         'Replace in File',
         'Replace Match',
+        'Open In',
+        'Exclude from Find in Files in this project',
       ]),
     );
-    // FR-073 — the withdrawn grouping has no row. `arrayContaining` above passes over an extra
-    // item, so the absence has to be its own assertion or the removal would go unnoticed here.
-    expect(labels()).not.toContain('Group by folder');
-    expect(screen.queryByTestId('menu-item-Group by folder')).toBeNull();
   });
 
-  it('offers Cancel search, and not Run, while a scan is running', () => {
+  it('carries no Replace, exclusions, Group by or Split row: each has its own route (060 FR-042)', () => {
+    renderFindInFilesPanel();
+
+    openPanelMenu();
+
+    for (const id of [
+      'Replace',
+      'Replace ✓',
+      'Use search exclusions',
+      'Use search exclusions ✓',
+      'Group by file',
+      'Group by file ✓',
+      'Group by folder and file',
+      'Group by folder structure',
+      'Group by folder',
+      'Split',
+    ]) {
+      expect(labels(), id).not.toContain(id);
+      expect(screen.queryByTestId(`menu-item-${id}`), id).toBeNull();
+    }
+    // The routes that replaced them are on the panel itself.
+    expect(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`fif-use-excludes-${PANEL_ID}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`)).toBeInTheDocument();
+  });
+
+  it('carries no Run search, Cancel search or Change scope — idle or running (060 FR-022)', () => {
+    // Each is reachable without the menu: the run/cancel control, Enter in the search input and the
+    // find-in-files chord, and the scope input (Constitution v6.0.0, Principle VI).
+    renderFindInFilesPanel();
+    fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
+
+    openPanelMenu();
+    for (const gone of ['Run search', 'Cancel search', 'Change scope']) {
+      expect(labels()).not.toContain(gone);
+      expect(screen.queryByTestId(`menu-item-${gone}`)).toBeNull();
+    }
+    cleanup();
+
     renderFindInFilesPanel();
     fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
     fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
-
     openPanelMenu();
-
-    expect(labels()).toContain('Cancel search');
-    expect(labels()).not.toContain('Run search');
+    for (const gone of ['Run search', 'Cancel search', 'Change scope']) {
+      expect(labels()).not.toContain(gone);
+    }
   });
 
-  it('runs the search from the menu — the same command the toolbar control invokes', () => {
+  it('still runs and cancels without the menu — through the toolbar control', () => {
     renderFindInFilesPanel();
     fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
 
-    openPanelMenu();
-    fireEvent.click(screen.getByTestId('menu-item-Run search'));
-
+    fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
     expect(bridge.start).toHaveBeenCalledTimes(1);
-  });
 
-  it('cancels from the menu', () => {
-    renderFindInFilesPanel();
-    fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
-    fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
-
-    openPanelMenu();
-    fireEvent.click(screen.getByTestId('menu-item-Cancel search'));
-
+    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
     expect(bridge.cancel).toHaveBeenCalledWith(PANEL_ID);
   });
 
-  it('toggles replace from the menu, and shows its state on the row', () => {
+  it('toggles replace from the toolbar, which enables the commit rows in the menu', () => {
     renderFindInFilesPanel();
 
-    openPanelMenu();
-    expect(labels()).toContain('Replace');
-    fireEvent.click(screen.getByTestId('menu-item-Replace'));
+    fireEvent.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
 
     expect(screen.getByTestId(`fif-replace-row-${PANEL_ID}`)).toBeInTheDocument();
     openPanelMenu();
-    expect(labels()).toContain('Replace ✓');
+    expect(labels()).not.toContain('Replace ✓');
   });
 
-  it('regroups from the menu without starting a second scan', () => {
+  it('regroups from the toolbar without starting a second scan', () => {
     renderFindInFilesPanel();
     emitResults();
 
-    openPanelMenu();
-    fireEvent.click(screen.getByTestId('menu-item-Group by folder and file'));
+    fireEvent.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
 
     // Folder headings, each with its file heading beneath it.
     expect(
@@ -158,15 +175,6 @@ describe('the panel opens its own content menu (T075, FR-025a)', () => {
     expect(screen.queryAllByTestId(/^fif-row-/)).toHaveLength(2);
   });
 
-  it('hands the caret to the scope control — the field where the scope is changed (FR-030)', () => {
-    renderFindInFilesPanel();
-
-    openPanelMenu();
-    fireEvent.click(screen.getByTestId('menu-item-Change scope'));
-
-    expect(document.activeElement).toBe(screen.getByTestId(`fif-scope-${PANEL_ID}`));
-  });
-
   it('draws the three commit granularities DISABLED rather than hiding them', () => {
     renderFindInFilesPanel();
 
@@ -175,7 +183,7 @@ describe('the panel opens its own content menu (T075, FR-025a)', () => {
     for (const label of ['Replace All', 'Replace in File', 'Replace Match']) {
       const row = screen.getByTestId(`menu-item-${label}`);
       // Constitution VI: a control whose action is temporarily unavailable is drawn and disabled.
-      // The enabling state — the replace toggle — is two rows above it in this same menu.
+      // The enabling state — the replace toggle — is on the panel's toolbar (060 FR-042).
       expect(row.className).toContain('context-menu__item--disabled');
     }
   });

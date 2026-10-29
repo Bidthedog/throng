@@ -23,10 +23,10 @@
  *
  * FR-011 governs ACTION CONTROLS, and the scope control is a text field: it is not an icon and
  * cannot carry a hover title naming an action, because typing in it performs none. What the
- * requirement binds on it is the icon beside it — themeable, resolved from `searchScope` — and its
- * ACTION lives in the panel's menu as *Change scope*, which is asserted with the other menu rows
- * below. The field itself is named to a screen reader instead, which is the accessible-name rule
- * the input controls elsewhere in the app follow.
+ * requirement binds on it is the icon beside it — themeable, resolved from `searchScope`. Its ACTION
+ * is the field itself: 060 FR-022 removed the *Change scope* menu row, since typing in the input is
+ * already a route (Constitution v6.0.0, Principle VI). The field is named to a screen reader
+ * instead, which is the accessible-name rule the input controls elsewhere in the app follow.
  */
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { existsSync, readFileSync } from 'node:fs';
@@ -361,7 +361,10 @@ describe('every panel action offered only in the menu carries a drawn icon (FR-0
     'Replace Match',
     'Collapse all',
     'Expand all',
-    'Change scope',
+    // 060 FR-042 — the grouping rows left the menu (the toolbar's grouping controls are covered
+    // above); the rows below are what remain, each with no toolbar twin.
+    'Open In',
+    'Exclude from Find in Files in this project',
   ];
 
   it('draws a non-empty icon in every one of their cells', () => {

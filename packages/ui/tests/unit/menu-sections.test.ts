@@ -402,8 +402,9 @@ const cogMenu = (): MenuAction[] =>
   });
 
 /**
- * The Find in Files panel's menu (043 FR-025a), in the three states that change its shape:
- * idle, scanning, and with replace disclosed and its commit granularities live.
+ * The Find in Files panel's menu (043 FR-025a), in the two states that change its shape:
+ * idle, and with replace disclosed and its commit granularities live. (A scanning state stopped
+ * mattering in 060 FR-022: the Run / Cancel row, the only one that varied with it, is gone.)
  *
  * `find-in-files-menu.test.ts` pins the labels, the sections and the state marks; what this
  * table adds is the GENERIC invariant every menu in the app is held to — that the dividers the
@@ -411,21 +412,12 @@ const cogMenu = (): MenuAction[] =>
  * import list is never checked for that at all, which is why the contract names the omission.
  */
 const findInFilesMenu = (over: {
-  running?: boolean;
   replaceEnabled?: boolean;
   commit?: boolean;
 }): MenuAction[] =>
   findInFilesContentMenu({
-    running: over.running ?? false,
     replaceEnabled: over.replaceEnabled ?? false,
-    grouping: 'file',
-    keybindings: DEFAULT_KEYBINDINGS,
     actions: {
-      run: noop,
-      cancel: noop,
-      toggleReplace: noop,
-      setGrouping: noop,
-      focusScope: noop,
       setAllCollapsed: noop,
     },
     ...(over.commit
@@ -646,7 +638,6 @@ const TABLE: { name: string; build: () => MenuAction[] }[] = [
   },
   { name: 'Cog menu', build: cogMenu },
   { name: 'Find in Files panel menu — idle', build: () => findInFilesMenu({}) },
-  { name: 'Find in Files panel menu — scanning', build: () => findInFilesMenu({ running: true }) },
   {
     name: 'Find in Files panel menu — replace disclosed, commit wired',
     build: () => findInFilesMenu({ replaceEnabled: true, commit: true }),
@@ -725,27 +716,19 @@ describe('Split sits in Create on every panel menu (048 FR-015)', () => {
           split: SPLIT,
         }),
     },
-    {
-      name: 'Find in Files content menu',
-      build: () =>
-        findInFilesContentMenu({
-          running: false,
-          replaceEnabled: false,
-          grouping: 'file',
-          keybindings: DEFAULT_KEYBINDINGS,
-          split: SPLIT,
-          actions: {
-            run: noop,
-            cancel: noop,
-            toggleReplace: noop,
-            setGrouping: noop,
-            focusScope: noop,
-            setAllCollapsed: noop,
-          },
-        }),
-    },
     { name: 'untyped placeholder content menu', build: () => placeholderContentMenu(SPLIT) },
   ];
+
+  it('the Find in Files content menu has NO Split row: its panel header carries it (060 FR-042)', () => {
+    // 060 FR-042 supersedes 048 FR-015 for this one menu; the header menu above still has Split.
+    const items = findInFilesContentMenu({
+      replaceEnabled: false,
+      actions: { setAllCollapsed: noop },
+    });
+    assertSectioned(items, 'Find in Files content menu');
+    expect(splitRow(items)).toBeUndefined();
+    expect(items.some((i) => (i.label ?? '').startsWith('Split'))).toBe(false);
+  });
 
   it.each(MENUS)('$name: one Split row in create, four children in order, each with its chord', ({ name, build }) => {
     const items = build();
@@ -910,7 +893,8 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
     expect(lastPreview(items)?.disabled).toBe(true);
   });
 
-  it('disabled `preview-open`: the same shape, both preview rows drawn disabled', () => {
+  // 060 FR-049 (supersedes the disabled pair here): one live Current Preview row in the preview group.
+  it('disabled `preview-open`: one live Current Preview row in place of the pair', () => {
     const affordance = explorerAffordance({ previewOpen: true });
     expect(affordance).toMatchObject({ state: 'disabled', reason: 'preview-open' });
     const items = explorerFileWithPreview(affordance);
@@ -920,15 +904,13 @@ describe('044/047 — Files & Folders Open In → the preview rows, in each of i
       'Last Active Editor',
       'New Editor',
       '—',
-      'Last Preview Panel',
-      'New Preview Panel',
+      'Current Preview',
       '—',
       'Terminal',
       '—',
       'Search',
     ]);
-    expect(lastPreview(items)?.disabled).toBe(true);
-    expect(newPreview(items)?.disabled).toBe(true);
+    expect(flyout(items).find((i) => i.label === 'Current Preview')?.disabled).toBeFalsy();
   });
 
   it('disabled `provider-disabled`: the same shape, both preview rows drawn disabled', () => {
