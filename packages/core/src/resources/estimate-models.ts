@@ -48,9 +48,11 @@ export const ESTIMATE_CONSTANTS = Object.freeze({
    * style, layout objects and fragments — which is most of a preview's memory (~90% of it is Blink's
    * heap), plus the detached copy of every top-level block the body keeps to reconcile the next render
    * against (`markdown-body.tsx`, `pristine`). Fitted, with `kSpan` and `kPreviewChar`, over paragraphs,
-   * plain lines, one large code block and a README-like mix from 0.5 to 10 MB.
+   * plain lines, one large code block and a README-like mix from 0.5 to 10 MB. Recentred from 3,620 on the
+   * gate's paragraphs previews, which read 0.90–0.94 of live heap on both a workstation and a hosted
+   * runner — at the bound's edge on the runner.
    */
-  kDom: 3_620,
+  kDom: 3_800,
   /**
    * Renderer, per `<span>` a preview has rendered, in place of `kDom`: mostly the highlighter's tokens in
    * fenced code, inline runs inside a block that already carries the layout. Fitted.

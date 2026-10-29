@@ -501,7 +501,11 @@ narrow editor reads 0.3–0.7×. A ~2 MB terminal reads 0.7–1.4× (its constan
 ~100 px wide costs ~2× (width is not modelled). A styled terminal at its scrollback limit moved 3.17–3.85 MB of
 live heap between four runs' medians of five against one fixed estimate (Session 2026-10-29): the spread is
 the bound's own size, so `kStyledLine` is centred on those runs (610 B a line) and the gate asserts the plain
-and the wide terminal at the limit, logging the styled ones.
+and the wide terminal at the limit, logging the styled ones. On a hosted runner the 1 MB paragraphs
+preview read 0.897 (0.909 locally, same 324 px width), so `kDom` is recentred 3,620 → 3,800; and bench-a's
+editor share missed by 5–6 points, all of it the narrow 1.5 MB "lines" editor already logged as a known
+miss, so the benchmark shares are taken over the asserted rows only — a known miss is logged, never
+asserted, in the shares as in the ratios.
 
 **Alternatives.** Process private bytes (the original SC-009): mostly heap headroom and parse churn — the
 same 1 MB file read 19 MB or 43 MB by shape alone, terminals 13× what they hold. A characters-only editor

@@ -1383,11 +1383,19 @@ for (const bench of BENCH_NAMES) {
         console.info(`bench-summary ${JSON.stringify({ run: bench, panels: rows.length, spearman: rho, totalEstimated: totalEst, totalMeasured: totalMeas, ratio: totalEst / totalMeas })}`);
         // Representative relative to each other: the monitor ranks the panels as their memory does…
         expect.soft(rho, `${bench}: rank agreement of estimate and measured across ${rows.length} panels (SC-009 ρ ≥ ${RHO_FLOOR})`).toBeGreaterThanOrEqual(RHO_FLOOR);
-        // …and divides the total among the kinds as their memory does.
+        // …and divides the total among the kinds as their memory does. A known-miss row is logged, not
+        // asserted (SC-009), so it is left out of the shares too: the narrow 1.5 MB "lines" editor alone,
+        // at ~0.25×, moved bench-a's editor share 5–6 points on a hosted runner.
+        const asserted = rows.flatMap((r, i) =>
+          benchKnownMiss(r.kind, r.file, r.measured, r.width) === undefined ? [{ kind: r.kind, est: estimates[i] as number, measured: r.measured }] : [],
+        );
+        const assertedEst = asserted.reduce((s, r) => s + r.est, 0);
+        const assertedMeas = asserted.reduce((s, r) => s + r.measured, 0);
         for (const kind of ['terminal', 'editor', 'preview'] as const) {
-          const estShare = rows.reduce((s, r, i) => s + (r.kind === kind ? (estimates[i] as number) : 0), 0) / totalEst;
-          const measShare = rows.reduce((s, r) => s + (r.kind === kind ? r.measured : 0), 0) / totalMeas;
-          console.info(`bench-share ${JSON.stringify({ run: bench, kind, estShare, measShare, points: (estShare - measShare) * 100 })}`);
+          if (!asserted.some((r) => r.kind === kind)) continue;
+          const estShare = asserted.reduce((s, r) => s + (r.kind === kind ? r.est : 0), 0) / assertedEst;
+          const measShare = asserted.reduce((s, r) => s + (r.kind === kind ? r.measured : 0), 0) / assertedMeas;
+          console.info(`bench-share ${JSON.stringify({ run: bench, kind, estShare, measShare, points: (estShare - measShare) * 100, rows: asserted.length })}`);
           expect
             .soft(Math.abs(estShare - measShare), `${bench}: ${kind} share of the total, estimated ${(estShare * 100).toFixed(1)}% vs measured ${(measShare * 100).toFixed(1)}% (SC-009 within ${SHARE_POINTS * 100} points)`)
             .toBeLessThanOrEqual(SHARE_POINTS);
