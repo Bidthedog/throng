@@ -38,7 +38,7 @@ import { cpSync, mkdtempSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import { openApp, runApp, createProject as newProject, firstPanelId, focusEditor, cleanupTemp, settle, type OpenApp } from './harness.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 import { openGotoLine } from './helpers/navigation.js';
@@ -54,6 +54,33 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await shared?.close();
 });
+
+/**
+ * Set the real window's content width, wait for the renderer to reach it, and return how to put it back. A
+ * maximized window ignores `setContentSize`, so it is unmaximized first and re-maximized on restore.
+ */
+async function setContentWidth(app: ElectronApplication, win: Page, width: number): Promise<() => Promise<void>> {
+  const was = await app.evaluate(({ BrowserWindow }, w) => {
+    const [bw] = BrowserWindow.getAllWindows();
+    if (!bw) return null;
+    const maximized = bw.isMaximized();
+    if (maximized) bw.unmaximize();
+    const [cw, ch] = bw.getContentSize();
+    bw.setContentSize(w, ch);
+    return { width: cw, maximized };
+  }, width);
+  await expect.poll(() => win.evaluate(() => window.innerWidth), { timeout: 10_000 }).toBe(width);
+  return async () => {
+    if (!was) return;
+    await app.evaluate(({ BrowserWindow }, prev) => {
+      const [bw] = BrowserWindow.getAllWindows();
+      if (!bw) return;
+      const [, ch] = bw.getContentSize();
+      bw.setContentSize(prev.width, ch);
+      if (prev.maximized) bw.maximize();
+    }, was);
+  };
+}
 
 let projectSeq = 0;
 const createProject = (win: Page, name: string, root: string): Promise<void> =>
@@ -607,9 +634,16 @@ const frames = (win: Page, n: number): Promise<void> =>
  * flip the one setting; the four menu items are component-tested. The shared app ends with sync on again.
  */
 test('scrolling either side of a parented preview moves the other, a caret move moves the preview, and Synchronise Scrolling off stops both (FR-121, FR-122)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const { win } = shared;
+  const { app, win } = shared;
   const root = mkdtempSync(join(tmpdir(), 'throng-preview-sync-'));
   cpSync(join(FIXTURES, 'sync-two-way.md'), join(root, 'sync-two-way.md'));
+  /*
+   * Wide enough that the editor's status bar keeps Ln and Col with the preview open beside it. The caret is
+   * read from those readouts, and since 059 the bar also carries the encoding and line-ending indicators and
+   * the whitespace toggle: at the app's opening width the editor's half of the split leaves no room for any
+   * readout, and the hide order (059 FR-032) rightly drops `line` before either indicator.
+   */
+  const restoreWidth = await setContentWidth(app, win, 1600);
   try {
     await settle(win);
     await createProject(win, 'PreviewSync', root);
@@ -794,6 +828,7 @@ test('scrolling either side of a parented preview moves the other, a caret move 
     await expect(previewToggle).toHaveAttribute('aria-pressed', 'true');
     await expect(editorToggle).toHaveAttribute('aria-pressed', 'true');
   } finally {
+    await restoreWidth();
     cleanupTemp(root);
   }
 });
