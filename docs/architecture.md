@@ -108,8 +108,11 @@ ends its terminals, when:
 A daemon from **another installed copy** (a different entry path, reporting `packaged: true` in
 `health.ping`) is retired like any stale build when its build differs, because every copy shares the
 user's one daemon. A daemon started from a **development tree**, or any daemon when this app is itself
-a dev build, is **foreign**, and is never retired: main carries on without a daemon rather than end
-another instance's terminals. Instance separation is the first line of defence: a dev run
+a dev build, is **foreign**, and is never retired on its own: main carries on without a daemon rather
+than end another instance's terminals. When the foreign daemon is another development checkout's, the
+window raises one notice naming that checkout, and the status bar's daemon indicator replaces it with
+this build's daemon on a click — the user's call, because it ends that daemon's terminals. An
+installed copy's daemon is never replaced from a dev build. Instance separation is the first line of defence: a dev run
 (`npm start`) takes its own pipe, config root and data folder, so a rebuild never retires the
 installed app's daemon (`instance-paths.ts`). The locations and their overrides are listed in
 [environment.md](environment.md).
