@@ -66,6 +66,8 @@ export interface EditorDoc {
   encoding?: string;
   hasBom?: boolean;
   lineEnding?: string;
+  /** 059 FR-068 — how the document was read: `getContent` says so, so a remount shows the notice. */
+  readNotice?: { kind: 'suspect' | 'reopened'; readAs: string } | null;
 }
 
 export interface EditorHarness {
@@ -281,6 +283,12 @@ export function mountEditor(opts: {
     destroy: vi.fn(),
     verifyPath: vi.fn(),
     save: vi.fn(() => Promise.resolve({ ok: true })),
+    // 059 — the encoding and line-format calls (contracts/editor-encoding.md). Succeed unless a test says otherwise.
+    // 059 FR-055 — Change Encoding: the document changes and nothing is written (round 2).
+    changeEncoding: vi.fn(() => Promise.resolve({ ok: true, changed: true })),
+    reopenWithEncoding: vi.fn(() => Promise.resolve({ ok: true })),
+    dismissReadNotice: vi.fn(() => Promise.resolve()),
+    convertLineEndings: vi.fn(() => Promise.resolve({ ok: true, changed: true })),
     revert: vi.fn(),
     reload: vi.fn(() => Promise.resolve({ ok: true })),
     undo: vi.fn(),
@@ -385,6 +393,7 @@ export function mountEditor(opts: {
           encoding: current.encoding ?? 'utf8',
           hasBom: current.hasBom ?? false,
           lineEnding: current.lineEnding ?? 'lf',
+          readNotice: current.readNotice ?? null,
         }),
       onSync: (fn: (msg: unknown) => void) => {
         listeners.push(fn);

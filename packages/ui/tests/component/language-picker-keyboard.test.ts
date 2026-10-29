@@ -323,9 +323,10 @@ describe('the list is ONE tab stop, not a hundred', () => {
     await user.tab();
 
     // The E2E could only say "not an option". The active option is the LAST member of the strip's
-    // focusable set, so the trap wraps to the first — which is the strip's own language button.
+    // focusable set, so the trap wraps to the first — which is the strip's first control, the encoding
+    // indicator since 059 FR-030 put it before the language button.
     expect(focused()).not.toMatch(/^language-option-/);
-    expect(focused()).toBe(`editor-language-${PANEL}`);
+    expect(focused()).toBe(`editor-encoding-${PANEL}`);
   });
 });
 
@@ -390,15 +391,18 @@ describe('Tab never leaves the strip', () => {
      * period of four. A trap that pinned focus to one control satisfies "still inside" eight times
      * and fails on the first entry here.
      */
+    // 059 FR-030 added the encoding and line-ending indicators before the language button, so the
+    // period is six: the active option, the two indicators, the language, the wrap toggle, the filter.
+    // FR-059 put the View Whitespace toggle after the wrap toggle, so it is seven.
     expect(seen).toEqual([
       'language-option-json',
+      `editor-encoding-${PANEL}`,
+      `editor-line-ending-${PANEL}`,
       `editor-language-${PANEL}`,
       `editor-word-wrap-${PANEL}`,
+      `editor-whitespace-${PANEL}`,
       `language-filter-${PANEL}`,
       'language-option-json',
-      `editor-language-${PANEL}`,
-      `editor-word-wrap-${PANEL}`,
-      `language-filter-${PANEL}`,
     ]);
     // Named explicitly as well as implied by the sequence: these are the two controls a leak would
     // have landed on, and their absence is the claim the E2E was making about the whole window.

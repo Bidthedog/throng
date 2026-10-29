@@ -125,6 +125,16 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   // Outside the tiers — unbound by default.
   'preview.open': 'outside',
   'preview.toggleSyncScroll': 'outside',
+  // 059 FR-041 — unbound by default.
+  'editor.reopenWithEncoding': 'outside',
+  'editor.changeEncoding': 'outside',
+  'editor.convertLineEndingsToCr': 'outside',
+  'editor.insertLineBreakLf': 'outside',
+  'editor.insertLineBreakCr': 'outside',
+  'editor.insertLineBreakCrlf': 'outside',
+  'editor.toggleWhitespace': 'outside',
+  'editor.convertLineEndingsToLf': 'outside',
+  'editor.convertLineEndingsToCrlf': 'outside',
 };
 
 /**
@@ -399,6 +409,16 @@ describe('the FR-101 tier guard', () => {
       'markdown.collapseAllInside': [],
       'markdown.expandAllInside': [],
       'preview.goToHeading': ['Ctrl+G'],
+      // 059 FR-041 — unbound.
+      'editor.reopenWithEncoding': [],
+      'editor.changeEncoding': [],
+      'editor.convertLineEndingsToCr': [],
+      'editor.insertLineBreakLf': [],
+      'editor.insertLineBreakCr': [],
+      'editor.insertLineBreakCrlf': [],
+      'editor.toggleWhitespace': [],
+      'editor.convertLineEndingsToLf': [],
+      'editor.convertLineEndingsToCrlf': [],
     };
     expect(DEFAULT_KEYBINDINGS.bindings).toEqual(EXPECTED);
   });

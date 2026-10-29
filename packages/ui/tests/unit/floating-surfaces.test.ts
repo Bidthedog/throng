@@ -61,6 +61,8 @@ const REGISTERED: Readonly<Record<string, string>> = {
   // HTML `title` on the panel, which the OS draws and positions — there is no element of ours left
   // for this guard to have an opinion about. The wording that tip carried moved to `.link-hint`.
   '.capture-overlay': 'a full-viewport scrim over the key-capture dialog — nothing to flip away from',
+  '.cm-ws-hover-name':
+    'editor/view-whitespace.ts (059 FR-067) — the whitespace marker name: opens above the pointer and FLIPS below it when there is no room above; CLAMPS its left edge between the window edges',
 
   // Everything below is CHROME, not a popup: fixed furniture with a z-index, anchored to nothing, so
   // there is no edge for it to flip away from. Registered rather than pattern-matched away, because the

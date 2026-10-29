@@ -286,13 +286,17 @@ describe('seeded from main when the window starts listening (FR-012, FR-014)', (
 describe('where it lives and what it is drawn with (FR-001, 040 FR-023/FR-024)', () => {
   it('sits inside the MEASURED controls group, after the wrap toggle, so width never hides it', async () => {
     await strip({ filePath: FILE });
-    const controls = screen.getByTestId(`editor-status-controls-${PANEL}`);
+    // 059 — the measured, never-hidden block inside the trailing group (the format indicators sit beside it).
+    const controls = screen.getByTestId(`editor-status-fixed-${PANEL}`);
     expect(controls).toHaveAttribute('data-measure', 'controls');
     const inGroup = within(controls).getByTestId(`editor-preview-${PANEL}`);
     const wrap = within(controls).getByTestId(`editor-word-wrap-${PANEL}`);
-    // 044 FR-122c — the scroll-sync toggle now sits between the two, immediately before this button.
+    // 044 FR-122c — the scroll-sync toggle now sits between the two, immediately before this button; 059
+    // FR-059 puts View Whitespace immediately after wrap, ahead of both.
     const syncButton = within(controls).getByTestId(`editor-sync-scroll-${PANEL}`);
-    expect(wrap.nextElementSibling).toBe(syncButton);
+    const whitespace = within(controls).getByTestId(`editor-whitespace-${PANEL}`);
+    expect(wrap.nextElementSibling).toBe(whitespace);
+    expect(whitespace.nextElementSibling).toBe(syncButton);
     expect(syncButton.nextElementSibling).toBe(inGroup);
   });
 

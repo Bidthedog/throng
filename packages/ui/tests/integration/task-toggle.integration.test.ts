@@ -154,10 +154,13 @@ describe('a file with no open document (FR-029)', () => {
     expect(await readFile(path, 'utf8')).toBe('new\n- [ ] dup\n- [ ] dup\n');
   });
 
-  it('refuses a file that is not valid UTF-8 rather than transcoding it', async () => {
+  // 059 FR-052 extends 054 FR-029: a file that is not UTF-8 is no longer refused, it is rewritten in its own
+  // encoding (replace-commit-encoding.integration.test.ts). What is still refused is a file no supported
+  // encoding reads losslessly — here, one whose UTF-8 BOM claims bytes that are not UTF-8.
+  it('refuses a file that is not lossless in the encoding it claims, rather than transcoding it', async () => {
     const path = join(root, 'd.md');
-    await writeFile(path, Buffer.from([0x2d, 0x20, 0x5b, 0x20, 0x5d, 0x20, 0xe9, 0x0a]));
-    expect(await service.toggle(request(path, 0, false, 'é'))).toEqual({ ok: false, reason: 'encoding' });
+    await writeFile(path, Buffer.from([0xef, 0xbb, 0xbf, 0x2d, 0x20, 0x5b, 0x20, 0x5d, 0x20, 0xe9, 0x0a]));
+    expect(await service.toggle(request(path, 0, false, 'é'))).toEqual({ ok: false, reason: 'not-decodable', encoding: 'utf8' });
   });
 });
 

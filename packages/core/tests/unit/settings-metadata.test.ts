@@ -106,6 +106,13 @@ describe('SETTINGS_METADATA control types (FR-028/029)', () => {
     // 024 US1 — three new boolean toggles, grouped by surface.
     expect(byKey.get('editor.defaultWordWrap')?.control).toBe('toggle');
     expect(byKey.get('editor.defaultWordWrap')?.group).toBe('Editor');
+    // 059 FR-060 — the View Whitespace default sits beside the wrap default.
+    expect(byKey.get('editor.defaultShowWhitespace')?.control).toBe('toggle');
+    expect(byKey.get('editor.defaultShowWhitespace')?.group).toBe('Editor');
+    expect(byKey.get('editor.defaultShowWhitespace')?.subgroup).toBeUndefined();
+    // 059 FR-067 — the hover names sit beside it.
+    expect(byKey.get('editor.whitespaceHoverNames')?.control).toBe('toggle');
+    expect(byKey.get('editor.whitespaceHoverNames')?.group).toBe('Editor');
     expect(byKey.get('editor.showStatusBar')?.control).toBe('toggle');
     expect(byKey.get('editor.showStatusBar')?.group).toBe('Editor');
     expect(byKey.get('terminals.showStatusBar')?.control).toBe('toggle');

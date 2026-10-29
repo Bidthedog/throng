@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { refusalMessage } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
@@ -277,6 +278,30 @@ describe('T098 — the outcome is reported ONCE (FR-058)', () => {
     for (const named of ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts']) {
       expect(text).toContain(named);
     }
+  });
+
+  it('a file refused for its encoding is reported in core’s one wording (059 T039, FR-053)', async () => {
+    stub.commit.mockResolvedValue({
+      committed: true,
+      outcome: {
+        changedInBuffer: [],
+        changedOnDisk: ['src/a.ts'],
+        refused: [],
+        failed: [
+          { relPath: 'src/u32.txt', reason: 'utf32' },
+          { relPath: 'src/blob.bin', reason: 'binary' },
+          { relPath: 'src/legacy.txt', reason: 'unrepresentable', encoding: 'windows1252' },
+        ],
+        applied: [],
+      },
+    });
+    const user = await ready();
+    await commitVia(user, 'fif-row-src/a.ts-6', 'Replace All');
+
+    const text = (await screen.findByTestId('fif-commit-outcome')).textContent ?? '';
+    expect(text).toContain(`src/u32.txt — not changed. ${refusalMessage('utf32')}`);
+    expect(text).toContain(`src/blob.bin — not changed. ${refusalMessage('binary')}`);
+    expect(text).toContain('src/legacy.txt — not changed: the replacement adds a character Windows-1252 cannot represent');
   });
 
   it('a wholly successful commit still says so, once', async () => {

@@ -25,6 +25,39 @@ describe('KEYBINDINGS_METADATA completeness (FR-047/030)', () => {
     }
   });
 
+  it('describes the format and whitespace commands in Editor, unbound by default (059 FR-041, FR-058)', () => {
+    const ids = [
+      'editor.reopenWithEncoding',
+      'editor.changeEncoding',
+      'editor.convertLineEndingsToCr',
+      'editor.insertLineBreakLf',
+      'editor.insertLineBreakCr',
+      'editor.insertLineBreakCrlf',
+      'editor.toggleWhitespace',
+      'editor.convertLineEndingsToLf',
+      'editor.convertLineEndingsToCrlf',
+    ];
+    const labels = ids.map((id) => {
+      const matches = KEYBINDINGS_METADATA.filter((d) => d.key === id);
+      expect(matches, id).toHaveLength(1);
+      expect(matches[0].group, id).toBe('Editor');
+      expect(DEFAULT_KEYBINDINGS.bindings[id], id).toEqual([]);
+      return matches[0].label;
+    });
+    // The menu items' own words (FR-040), so the key binder and the menus name each command once.
+    expect(labels).toEqual([
+      'Reopen with Encoding…',
+      'Change Encoding…',
+      'Convert to CR',
+      'Insert Line Break (LF)',
+      'Insert Line Break (CR)',
+      'Insert Line Break (CRLF)',
+      'View Whitespace',
+      'Convert to LF',
+      'Convert to CRLF',
+    ]);
+  });
+
   it('describes the scroll-sync toggle once, as "Synchronise Scrolling" in Editor (044 FR-122d)', () => {
     const matches = KEYBINDINGS_METADATA.filter((d) => d.key === 'preview.toggleSyncScroll');
     expect(matches).toHaveLength(1);

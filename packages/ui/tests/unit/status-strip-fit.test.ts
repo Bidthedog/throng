@@ -30,7 +30,9 @@ import {
   READOUT_LABELS,
   READOUT_ORDER,
   fitReadouts,
+  SEGMENT_ORDER,
   type ReadoutId,
+  type SegmentId,
   type SegmentWidth,
 } from '../../src/renderer/editor/status-strip-fit.js';
 
@@ -56,11 +58,11 @@ const WIDE: Record<ReadoutId, SegmentWidth> = {
 const GAP = 2;
 
 /** The fit at a given width, with every readout present. */
-function at(available: number, widths: Partial<Record<ReadoutId, SegmentWidth>> = WIDE) {
+function at(available: number, widths: Partial<Record<SegmentId, SegmentWidth>> = WIDE) {
   return fitReadouts({ available, widths, gap: GAP });
 }
 
-const ids = (available: number, widths?: Partial<Record<ReadoutId, SegmentWidth>>): ReadoutId[] =>
+const ids = (available: number, widths?: Partial<Record<SegmentId, SegmentWidth>>): SegmentId[] =>
   at(available, widths).segments.map((s) => s.id);
 
 const formOf = (available: number, id: ReadoutId): string | undefined =>
@@ -212,8 +214,8 @@ describe('a figure is hidden whole, never truncated (FR-022)', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('segments hide in the fixed order and the order terminates (FR-023, FR-024)', () => {
-  it('declares the order the requirement names', () => {
-    expect(HIDE_ORDER).toEqual(['words', 'chars', 'selected', 'column', 'line']);
+  it('declares the order the requirement names, continued past line by 059 FR-032', () => {
+    expect(HIDE_ORDER).toEqual(['words', 'chars', 'selected', 'column', 'line', 'lineEnding', 'encoding']);
   });
 
   it('loses them in exactly that order as the bar narrows', () => {
@@ -222,7 +224,7 @@ describe('segments hide in the fixed order and the order terminates (FR-023, FR-
      * zero and compared with the requirement in one assertion. A single wrong step anywhere on the
      * ladder shows up as a different sequence, and the diff names it.
      */
-    const lost: ReadoutId[] = [];
+    const lost: SegmentId[] = [];
     let previous = new Set(ids(60));
     for (let w = 59; w >= 0; w -= 1) {
       const now = new Set(ids(w));
@@ -239,17 +241,75 @@ describe('segments hide in the fixed order and the order terminates (FR-023, FR-
     expect(ids(10)).toEqual(['line']);
   });
 
-  it('stops after line, and models no control it could go on to hide (FR-024)', () => {
+  it('stops after the encoding indicator, and models no control it could go on to hide (FR-024, 059 FR-032)', () => {
     /*
      * FR-024 says the language indicator and the wrap toggle are never hidden by width — 016
      * FR-010c requires the indicator to be persistent, and Finding 1 exists to protect it. The
      * strongest way to honour that is for this function to have no vocabulary for them: it decides
-     * about READOUTS and nothing else, so there is no code path that could reach a control.
+     * about the readouts and 059's two format indicators and nothing else, so there is no code path
+     * that could reach a control.
      */
     expect(ids(0)).toEqual([]);
     expect(ids(-100)).toEqual([]);
-    for (const id of HIDE_ORDER) expect(READOUT_ORDER).toContain(id);
-    expect(HIDE_ORDER).toHaveLength(READOUT_ORDER.length);
+    for (const id of HIDE_ORDER) expect(SEGMENT_ORDER).toContain(id);
+    expect(HIDE_ORDER).toHaveLength(SEGMENT_ORDER.length);
+    expect(SEGMENT_ORDER).not.toContain('language');
+    expect(SEGMENT_ORDER).not.toContain('wrap');
+    // 059 FR-059 — the View Whitespace toggle is a control beside wrap, and like it is never hidden by width.
+    expect(SEGMENT_ORDER).not.toContain('whitespace');
+    expect(HIDE_ORDER.at(-1)).toBe('encoding');
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * 059 FR-032 — the two format indicators continue the order, then it ends
+ * ────────────────────────────────────────────────────────────────────────── */
+
+describe('the encoding and line-ending indicators hide after the line (059 FR-032)', () => {
+  /*
+   * The indicators sit in the trailing group, each followed by a gap (to the next indicator, or to the
+   * controls), so a present indicator costs its width plus one gap. Readouts keep their own gaps.
+   *
+   * Every readout + both indicators at full: 50 + 4·2 (readout gaps) + 2·(10 + 2) = 82.
+   */
+  const ALL: Partial<Record<SegmentId, SegmentWidth>> = {
+    ...WIDE,
+    encoding: { full: 10, short: 10 },
+    lineEnding: { full: 10, short: 10 },
+  };
+
+  it('keeps both indicators while any readout can still give way', () => {
+    expect(ids(82, ALL)).toEqual(['line', 'column', 'selected', 'chars', 'words', 'encoding', 'lineEnding']);
+    // 34px: line (10) + both indicators (24) — every other readout has gone, the indicators have not.
+    expect(ids(34, ALL)).toEqual(['line', 'encoding', 'lineEnding']);
+  });
+
+  it('loses the line ending, then the encoding, after the line — and nothing after that', () => {
+    const lost: SegmentId[] = [];
+    let previous = new Set(ids(100, ALL));
+    for (let w = 99; w >= -5; w -= 1) {
+      const now = new Set(ids(w, ALL));
+      for (const id of previous) if (!now.has(id)) lost.push(id);
+      previous = now;
+    }
+    expect(lost).toEqual(['words', 'chars', 'selected', 'column', 'line', 'lineEnding', 'encoding']);
+  });
+
+  it('charges each present indicator its gap, so the trailing group never overruns the controls', () => {
+    // Both indicators alone: 2·(10 + 2) = 24. At 23 one of them must go.
+    const indicators = { encoding: ALL.encoding, lineEnding: ALL.lineEnding };
+    expect(ids(24, indicators)).toEqual(['encoding', 'lineEnding']);
+    expect(ids(23, indicators)).toEqual(['encoding']);
+    expect(ids(12, indicators)).toEqual(['encoding']);
+    expect(ids(11, indicators)).toEqual([]);
+  });
+
+  it('never shortens an indicator — a label has no short form to take', () => {
+    for (let w = 0; w <= 90; w += 1) {
+      for (const s of at(w, ALL).segments) {
+        if (s.id === 'encoding' || s.id === 'lineEnding') expect(s.label).toBe('full');
+      }
+    }
   });
 });
 
