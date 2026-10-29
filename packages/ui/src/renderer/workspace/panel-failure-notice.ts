@@ -182,7 +182,7 @@ export function useReportSubjectFailure(): (report: SubjectFailureReport) => voi
         action: 'open',
         message: report.message,
         testId: PANEL_FAILURE_TEST_ID,
-        groupKey: operationGroupKey(projectId),
+        groupKey: operationGroupKey(projectId, { message: report.message }),
         affected: [
           {
             subject: report.subject,
@@ -271,7 +271,8 @@ export function useReportPanelFailure(): (report: PanelFailureReport) => void {
         message: report.message,
         testId: PANEL_FAILURE_TEST_ID,
         ...(cause ? { causeKey: causeKey(cause) } : {}),
-        groupKey: operationGroupKey(projectId),
+        // 059 FR-054 — one notice per ERROR within the operation: the cause where there is one.
+        groupKey: operationGroupKey(projectId, { ...(cause ? { cause } : {}), message: report.message }),
         affected: [affected],
       });
     },

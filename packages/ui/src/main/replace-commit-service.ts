@@ -36,12 +36,13 @@ import {
   toAbsPath,
   verifyEdits,
   type AppSettings,
+  type EncodingId,
   type IFileSystem,
   type Match,
   type MatchModes,
   type SnippetView,
 } from '@throng/core';
-import { rewriteFailureFor, textFileRewrite } from './text-file-rewrite.js';
+import { rewriteFailureFor, textFileRewrite, type RewriteFailure } from './text-file-rewrite.js';
 
 /** One file's worth of intended writes, as the panel listed them (data-model §6). */
 export interface CommitTarget {
@@ -94,15 +95,13 @@ export interface UnsavedCommit {
 export interface FailedCommit {
   readonly relPath: string;
   /**
-   * `encoding` — the file is not valid UTF-8, so this service will not write it.
-   *
-   * `isProbablyBinary` answers "is this a blob" with a NUL scan, and a single-byte legacy encoding
-   * (Windows-1252, Latin-1) has no NULs to find. Decoding one non-fatally replaces every byte it
-   * cannot read with `U+FFFD` and writing it back stores `EF BF BD` — the whole file's accented
-   * text destroyed, in a file the user never opened, with no undo. Refusing it is the only safe
-   * answer; transcoding would be a second guess at the same bytes.
+   * Read through the editor's own detection (059 FR-051): a UTF-16 or Windows-1252 file is rewritten in
+   * its own encoding, and the refusals are the editor's — `binary`, `utf32`, `not-decodable` — plus
+   * `unrepresentable`, a replacement the file's encoding cannot hold. Nothing is written for any of them.
    */
-  readonly reason: 'readOnly' | 'locked' | 'io' | 'missing' | 'outOfTree' | 'binary' | 'encoding';
+  readonly reason: RewriteFailure;
+  /** The file's encoding, for `not-decodable` and `unrepresentable`, so the report can name it. */
+  readonly encoding?: EncodingId;
 }
 
 /**
@@ -320,7 +319,11 @@ export class ReplaceCommitService {
        */
       const record = (outcome: PathOutcome): void => {
         if (outcome.kind === 'failed') {
-          failed.push({ relPath: target.relPath, reason: outcome.reason });
+          failed.push({
+            relPath: target.relPath,
+            reason: outcome.reason,
+            ...(outcome.encoding ? { encoding: outcome.encoding } : {}),
+          });
           return;
         }
         if (outcome.refusedAny) refused.push({ relPath: target.relPath, reason: 'matchGone' });
@@ -454,14 +457,14 @@ export class ReplaceCommitService {
     budget: number,
   ): Promise<PathOutcome | { kind: 'becameOpen' }> {
     /*
-     * Confinement on the RESOLVED path, the binary and not-UTF-8 refusals (FR-058), the file's own
+     * Confinement on the RESOLVED path, the detection refusals (FR-058, 059 FR-051), the file's own
      * encoding, BOM and endings (FR-056), and R8's last `isOpen` with nothing between it and the write —
      * all `textFileRewrite`'s, shared with 054's task toggle.
      */
     const outcome = await textFileRewrite(
       this.fs,
       absPath,
-      { allowed, isOpen: (p) => this.editors.isOpen(p) },
+      { allowed, isOpen: (p) => this.editors.isOpen(p), fallbackEncoding: this.settings().editor.fallbackEncoding },
       (text) => {
         // FR-054, unconditionally, against the text as it is NOW — which is why the bytes are read
         // here and the scan's own metadata was deliberately discarded rather than carried. The
@@ -521,7 +524,7 @@ export class ReplaceCommitService {
  * user is told about: `changedOnDisk` is irreversible (FR-057a), `changedInBuffer` is one undo away.
  */
 type PathOutcome =
-  | { kind: 'failed'; reason: FailedCommit['reason'] }
+  | { kind: 'failed'; reason: FailedCommit['reason']; encoding?: EncodingId }
   /** `applied` empty IS "nothing was written" — one fact, rather than a flag that can disagree. */
   | {
       kind: 'buffer' | 'disk';

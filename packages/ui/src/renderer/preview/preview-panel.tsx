@@ -847,7 +847,7 @@ export function PreviewPanel({
             severity: 'warning',
             subject: panelSubject(placeRef.current),
             action: TASK_NOTICE_ACTION,
-            message: taskNoticeMessage(answer.reason),
+            message: taskNoticeMessage(answer.reason, answer.encoding),
             testId: taskNoticeId,
           });
         });

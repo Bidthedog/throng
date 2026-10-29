@@ -1,9 +1,16 @@
 import { ChangeSet, Text } from '@codemirror/state';
-import type {
-  CanonicalChangeMsg,
-  DispatchChangeMsg,
-  SerialisedHistory,
-  SerialisedUndoEntry,
+import {
+  docEncodingEq,
+  lineFormatEq,
+  mapLineEndings,
+  toWireLineFormat,
+  type CanonicalChangeMsg,
+  type DispatchChangeMsg,
+  type DocEncoding,
+  type LineEndingId,
+  type LineFormat,
+  type SerialisedHistory,
+  type SerialisedUndoEntry,
 } from '@throng/core';
 import { UndoHistory, type UndoEntry } from './undo-service.js';
 
@@ -81,6 +88,23 @@ export class DocumentAuthority {
   private readonly history = new UndoHistory();
 
   /**
+   * The document's line endings (059 research R6). The content is `\n`-normalised, so this is the
+   * only place they exist — and the save path reads them from HERE, never from a view, so a panel
+   * that did not convert cannot write the old ending back.
+   */
+  private format: LineFormat;
+  /** The line format last written to disk, compared beside the content for dirt. */
+  private savedFormat: LineFormat;
+
+  /**
+   * The document's encoding (059 FR-055, research R17). Change Encoding is an undoable edit that writes
+   * nothing, so the encoding is document state held here beside the line format — and compared for dirt.
+   */
+  private enc: DocEncoding;
+  /** The encoding last written to disk, or read from it. */
+  private savedEnc: DocEncoding;
+
+  /**
    * The id every outgoing message names. Fixed for the document's life, except for one hand-over: 052
    * FR-011's owner closing while a linked panel remains, where the SAME document — text, version,
    * history — passes to that panel and must from then on speak in its id ({@link rekey}).
@@ -99,9 +123,37 @@ export class DocumentAuthority {
     initialText = '',
     /** Injected so a test can hold time still and prove the run-grouping rule exactly. */
     private readonly now: () => number = Date.now,
+    initialFormat: LineFormat = { lineEnding: 'lf' },
+    initialEncoding: DocEncoding = { encoding: 'utf8', hasBom: false },
   ) {
     this.content = Text.of(splitLines(initialText));
     this.savedDoc = this.content;
+    this.format = initialFormat;
+    this.savedFormat = initialFormat;
+    this.enc = initialEncoding;
+    this.savedEnc = initialEncoding;
+  }
+
+  get lineFormat(): LineFormat {
+    return this.format;
+  }
+
+  get encoding(): DocEncoding {
+    return this.enc;
+  }
+
+  /** The encoding of the file as last read or written — what a Discard returns to. */
+  get savedEncoding(): DocEncoding {
+    return this.savedEnc;
+  }
+
+  /**
+   * The file's encoding was learnt again, outside the history — a read, a reopen, or a save in an
+   * override (059 FR-024, FR-027). What the document holds and what the file holds are now both this.
+   */
+  adoptEncoding(encoding: DocEncoding): void {
+    this.enc = encoding;
+    this.savedEnc = encoding;
   }
 
   get doc(): Text {
@@ -141,12 +193,99 @@ export class DocumentAuthority {
   get dirty(): boolean {
     // No saved document at all — the backing file was deleted out from under us (FR-099).
     if (this.savedDoc === null) return true;
-    return !this.content.eq(this.savedDoc);
+    // A line-ending conversion changes no content, so the format is compared too (059 FR-035).
+    return (
+      !this.content.eq(this.savedDoc) ||
+      !lineFormatEq(this.format, this.savedFormat) ||
+      // An encoding change writes nothing until a save (059 FR-055).
+      !docEncodingEq(this.enc, this.savedEnc)
+    );
   }
 
-  /** The document was written to disk: what we hold is now what the file holds. */
+  /** The line format of the file as last read or written — what a Discard returns to. */
+  get savedLineFormat(): LineFormat {
+    return this.savedFormat;
+  }
+
+  /**
+   * The document was written to disk: what we hold is now what the file holds.
+   *
+   * The per-line record is mapped through every edit (059 FR-061), so it always has one entry per
+   * line break and a save writes each line with its own ending. Before FR-061 a save after an edit
+   * that added or removed a line fell back to the dominant ending everywhere and dropped the record.
+   */
   markSaved(): void {
     this.savedDoc = this.content;
+    this.savedFormat = this.format;
+    this.savedEnc = this.enc;
+  }
+
+  /**
+   * Change Encoding — one undo step that writes nothing (059 FR-055). The next save writes `next`.
+   *
+   * Returns `null` when the document is already in `next`: nothing to record. Like a conversion, the
+   * canonical message carries EMPTY changes, and every replica takes the encoding from `encoding`.
+   */
+  changeEncoding(next: DocEncoding, invokingViewId: string): CanonicalChangeMsg | null {
+    const before = this.enc;
+    if (docEncodingEq(before, next)) return null;
+    const empty = ChangeSet.empty(this.content.length);
+    this.apply(empty);
+    this.enc = next;
+    this.history.record({
+      changes: empty,
+      inverted: empty,
+      selectionBefore: null,
+      viewId: invokingViewId,
+      version: this.currentVersion,
+      mergeClass: null,
+      at: this.now(),
+      encoding: { before, after: next },
+    });
+    return {
+      documentId: this.documentId,
+      kind: 'edit',
+      changes: empty.toJSON(),
+      version: this.currentVersion,
+      dirty: this.dirty,
+      origin: invokingViewId,
+      encoding: next,
+    };
+  }
+
+  /**
+   * Convert every line ending to `target` — one undo step, never merged (059 FR-035, FR-037).
+   *
+   * Returns `null` when the document is already uniformly `target` (FR-038): nothing to record, and
+   * no version to spend. The canonical message carries EMPTY changes, so every replica — the
+   * invoker included — applies a no-op and takes the format from `lineFormat`.
+   */
+  convertLineEndings(target: LineEndingId, invokingViewId: string): CanonicalChangeMsg | null {
+    const before = this.format;
+    if (before.lineEnding === target && (before.mixedLineEndings?.length ?? 0) === 0) return null;
+    const after: LineFormat = { lineEnding: target };
+    const empty = ChangeSet.empty(this.content.length);
+    this.apply(empty);
+    this.format = after;
+    this.history.record({
+      changes: empty,
+      inverted: empty,
+      selectionBefore: null,
+      viewId: invokingViewId,
+      version: this.currentVersion,
+      mergeClass: null,
+      at: this.now(),
+      format: { before, after },
+    });
+    return {
+      documentId: this.documentId,
+      kind: 'edit',
+      changes: empty.toJSON(),
+      version: this.currentVersion,
+      dirty: this.dirty,
+      origin: invokingViewId,
+      lineFormat: toWireLineFormat(after),
+    };
   }
 
   /**
@@ -191,8 +330,13 @@ export class DocumentAuthority {
 
     const inverted = changes.invert(this.content);
     const versionBefore = this.currentVersion;
+    // Each line's ending follows it (059 FR-061): mapped over the document the change was made against.
+    const formatBefore = this.format;
+    const mapped = mapLineEndings(formatBefore, this.content, changes, msg.insertedLineEnding);
+    const format = lineFormatEq(mapped, formatBefore) ? undefined : { before: formatBefore, after: mapped };
     this.apply(changes);
-    this.record(msg, changes, inverted, versionBefore);
+    if (format) this.format = format.after;
+    this.record(msg, changes, inverted, versionBefore, format);
 
     return {
       documentId: this.documentId,
@@ -201,6 +345,7 @@ export class DocumentAuthority {
       version: this.currentVersion,
       dirty: this.dirty,
       origin: msg.viewId,
+      ...(format ? { lineFormat: toWireLineFormat(format.after) } : {}),
     };
   }
 
@@ -221,6 +366,8 @@ export class DocumentAuthority {
     const changes = entry.inverted;
     const inverted = changes.invert(this.content);
     this.apply(changes);
+    if (entry.format) this.format = entry.format.before;
+    if (entry.encoding) this.enc = entry.encoding.before;
     this.history.pushRedo({ ...entry, changes, inverted });
 
     return {
@@ -231,6 +378,8 @@ export class DocumentAuthority {
       dirty: this.dirty,
       origin: invokingViewId,
       selection: entry.selectionBefore,
+      ...(entry.format ? { lineFormat: toWireLineFormat(entry.format.before) } : {}),
+      ...(entry.encoding ? { encoding: entry.encoding.before } : {}),
     };
   }
 
@@ -242,6 +391,8 @@ export class DocumentAuthority {
     const changes = entry.inverted;
     const inverted = changes.invert(this.content);
     this.apply(changes);
+    if (entry.format) this.format = entry.format.after;
+    if (entry.encoding) this.enc = entry.encoding.after;
     this.history.pushUndo({ ...entry, changes, inverted });
 
     return {
@@ -252,6 +403,8 @@ export class DocumentAuthority {
       dirty: this.dirty,
       origin: invokingViewId,
       selection: entry.selectionBefore,
+      ...(entry.format ? { lineFormat: toWireLineFormat(entry.format.after) } : {}),
+      ...(entry.encoding ? { encoding: entry.encoding.after } : {}),
     };
   }
 
@@ -263,8 +416,10 @@ export class DocumentAuthority {
    * now have. For the same reason the rebase window is closed: a change still in flight against the
    * OLD document can no longer be landed, and `dispatch` will drop it rather than corrupt this one.
    */
-  reset(text: string, markClean = true): void {
+  reset(text: string, markClean = true, format?: LineFormat, encoding?: DocEncoding): void {
     this.content = Text.of(splitLines(text));
+    if (format) this.format = format;
+    if (encoding) this.enc = encoding;
     this.currentVersion += 1;
     this.applied.length = 0;
     this.appliedBase = this.currentVersion;
@@ -272,7 +427,11 @@ export class DocumentAuthority {
     // `markClean: false` restores content that is NOT what the file holds — unsaved edits recovered
     // after a crash (FR-102). The saved document is left as it was: the disk's content, which is
     // what the recovered text must be compared against to know it is dirty.
-    if (markClean) this.savedDoc = this.content;
+    if (markClean) {
+      this.savedDoc = this.content;
+      this.savedFormat = this.format;
+      this.savedEnc = this.enc;
+    }
   }
 
   /** How deep the undo stack is — for tests and diagnostics. */
@@ -294,6 +453,8 @@ export class DocumentAuthority {
       version: entry.version,
       mergeClass: entry.mergeClass,
       at: entry.at,
+      ...(entry.format ? { format: entry.format } : {}),
+      ...(entry.encoding ? { encoding: entry.encoding } : {}),
     });
     const { undo, redo } = this.history.entries;
     return { undo: undo.map(toJson), redo: redo.map(toJson) };
@@ -318,6 +479,8 @@ export class DocumentAuthority {
         version: entry.version,
         mergeClass: entry.mergeClass,
         at: entry.at,
+        ...(entry.format ? { format: entry.format } : {}),
+        ...(entry.encoding ? { encoding: entry.encoding } : {}),
       });
       this.history.restore(history.undo.map(fromJson), history.redo.map(fromJson));
     } catch {
@@ -339,6 +502,7 @@ export class DocumentAuthority {
     changes: ChangeSet,
     inverted: ChangeSet,
     versionBefore: number,
+    format?: { before: LineFormat; after: LineFormat },
   ): void {
     const at = this.now();
     const entry: UndoEntry = {
@@ -349,6 +513,9 @@ export class DocumentAuthority {
       version: this.currentVersion,
       mergeClass: msg.mergeClass ?? null,
       at,
+      // Undo cannot re-derive the record: a re-inserted break would take the dominant ending, not the
+      // one it had (059 FR-061, research R17).
+      ...(format ? { format } : {}),
     };
 
     const top = this.history.peekUndo();
@@ -367,9 +534,19 @@ export class DocumentAuthority {
       return;
     }
 
-    // Absorb it: the run reverts as one, and restores the cursor set from before the run BEGAN.
+    // Absorb it: the run reverts as one, and restores the cursor set — and the line format — from
+    // before the run BEGAN.
+    const runFormat =
+      top.format || format
+        ? {
+            before: top.format?.before ?? (format as { before: LineFormat }).before,
+            after: format?.after ?? (top.format as { after: LineFormat }).after,
+          }
+        : undefined;
+    const { format: _dropped, ...rest } = entry;
     this.history.replaceTop({
-      ...entry,
+      ...rest,
+      ...(runFormat ? { format: runFormat } : {}),
       changes: top.changes.compose(changes),
       // The run's inverse runs newest-first: undo this change, then undo everything before it.
       inverted: inverted.compose(top.inverted),

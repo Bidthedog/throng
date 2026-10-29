@@ -10,6 +10,56 @@
  * inspecting it, and each end parses with `ChangeSet.fromJSON`.
  */
 
+import type { EncodingId, LineEndingId } from '../workspace/model.js';
+
+/**
+ * A document's line endings, owned by its authority (059 research R6). The buffer is `\n`-normalised,
+ * so this is the only place a document's endings exist: the dominant one, and — for a file that
+ * mixes them — every break in order, which `encode` re-applies while the break count is unchanged.
+ */
+export interface LineFormat {
+  lineEnding: LineEndingId;
+  mixedLineEndings?: readonly LineEndingId[];
+}
+
+/**
+ * A document's encoding, owned by its authority beside its {@link LineFormat} (059 FR-055, research R17):
+ * Change Encoding is an undoable edit, so the encoding is document state, not file metadata.
+ */
+export interface DocEncoding {
+  encoding: EncodingId;
+  hasBom: boolean;
+}
+
+export function docEncodingEq(a: DocEncoding, b: DocEncoding): boolean {
+  return a.encoding === b.encoding && a.hasBom === b.hasBom;
+}
+
+/**
+ * What a replica needs of a {@link LineFormat} to show it. The record stays main's to own and apply;
+ * `lineEndings` is a display copy of it, present only while the document is mixed, so View Whitespace
+ * can mark each line with its own ending (059 FR-059).
+ */
+export interface WireLineFormat {
+  lineEnding: LineEndingId;
+  mixed: boolean;
+  lineEndings?: readonly LineEndingId[];
+}
+
+export function toWireLineFormat(f: LineFormat): WireLineFormat {
+  const mixed = (f.mixedLineEndings?.length ?? 0) > 0;
+  return mixed
+    ? { lineEnding: f.lineEnding, mixed, lineEndings: f.mixedLineEndings }
+    : { lineEnding: f.lineEnding, mixed };
+}
+
+export function lineFormatEq(a: LineFormat, b: LineFormat): boolean {
+  if (a.lineEnding !== b.lineEnding) return false;
+  const x = a.mixedLineEndings ?? [];
+  const y = b.mixedLineEndings ?? [];
+  return x.length === y.length && x.every((e, i) => e === y[i]);
+}
+
 /**
  * How a change may coalesce into the undo entry before it.
  *
@@ -35,6 +85,11 @@ export interface DispatchChangeMsg {
   selectionBefore: unknown;
   /** How this change may coalesce into the previous undo entry (FR-026). */
   mergeClass?: MergeClass;
+  /**
+   * Insert Line Break (059 FR-061): the line breaks this change inserts take this ending rather than
+   * the document's dominant one. Absent for every ordinary edit.
+   */
+  insertedLineEnding?: LineEndingId;
 }
 
 /** authority → EVERY replica, the originator included. The one ordered canonical stream. */
@@ -62,6 +117,14 @@ export interface CanonicalChangeMsg {
   origin: string;
   /** An undo/redo restores the recorded cursor set — but only in the view that INVOKED it (FR-026f). */
   selection?: unknown;
+  /**
+   * Present when the change altered the document's line endings: a conversion, or the undo/redo of
+   * one (059 FR-035/FR-036). `changes` is then empty, and every replica — the origin included —
+   * takes the format from here.
+   */
+  lineFormat?: WireLineFormat;
+  /** Present when the change altered the document's encoding: a Change Encoding, or its undo/redo (059 FR-055). */
+  encoding?: DocEncoding;
 }
 
 /**

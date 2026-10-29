@@ -9,18 +9,56 @@
  */
 import { basename, dirname, join, relative } from 'node:path';
 import {
-  decode,
+  detectTextFormat,
   encode,
-  isProbablyBinary,
+  isCodePageId,
+  misreadSuspect,
+  readText,
+  refusalMessage,
   resolveDrop,
+  UnrepresentableTextError,
   type DropDecision,
   resolveSaveConfinement,
   type AppSettings,
+  type CodePageId,
+  type DecodedFile,
   type EditorOwnerKind,
   type EncodingId,
   type IFileSystem,
   type LineEndingId,
+  type Unrepresentable,
 } from '@throng/core';
+import { codePageHint } from './code-page-guess.js';
+
+/**
+ * 059 FR-068 / FR-069 — how a document was read, when that is worth telling the user. `suspect`: detection read
+ * it in `readAs` but it may be in `likely` (`null`: no better guess than another encoding). `reopened`: the user
+ * reopened it in `readAs`, which lasts for this editor session only. Either way the condition is the document's,
+ * so every view of it shows the one notice; it goes when the document is saved in an encoding other than
+ * `readAs`, or dismissed.
+ */
+export interface ReadNotice {
+  kind: 'suspect' | 'reopened';
+  readAs: EncodingId;
+  likely?: CodePageId | null;
+  /** On a reopen in a code page: making it the fallback would read this file in it (FR-071) — false for
+   *  a file that is valid UTF-8, which detection reads as UTF-8 whatever the fallback. */
+  fallbackHelps?: boolean;
+}
+
+/**
+ * The notice a DETECTED read raises, or `null`. Only detection can misread: a forced encoding is the user's
+ * choice, told by `reopened`. A BOM-less UTF-8 reading may be the fallback code page read as UTF-8
+ * (`misreadSuspect`); a code-page reading may be another code page (`codePageHint`, which needs the bytes).
+ */
+function readNoticeFor(bytes: Uint8Array, f: DecodedFile, fallback: CodePageId): ReadNotice | null {
+  if (f.encoding === 'utf8') {
+    return !f.hasBom && misreadSuspect(f.text) ? { kind: 'suspect', readAs: 'utf8', likely: fallback } : null;
+  }
+  if (!isCodePageId(f.encoding)) return null;
+  const hint = codePageHint(bytes, f.text, f.encoding);
+  return hint ? { kind: 'suspect', readAs: f.encoding, likely: hint.likely } : null;
+}
 
 export type LoadResult =
   | {
@@ -29,8 +67,20 @@ export type LoadResult =
       encoding: EncodingId;
       hasBom: boolean;
       lineEnding: LineEndingId;
+      /** Every break of a file that mixes endings (043 FR-056), kept so a save rewrites none of them. */
+      mixedLineEndings?: readonly LineEndingId[];
+      /** The coordinator's answer to a view: whether the document mixes endings (059 FR-031). */
+      mixed?: boolean;
+      /** How detection read it, when that is worth telling the user (FR-068, FR-069). */
+      readNotice?: ReadNotice;
+      /** A reopen in a code page: whether detection with it as the fallback would read the file in it (FR-071). */
+      fallbackHelps?: boolean;
       relativeFolder: string | null;
     }
+  // 059: a file throng recognises but does not open — UTF-32 (FR-006), or bytes that are not valid in
+  // the encoding they claim or were reopened in (FR-014). `encoding` names the one that failed.
+  | { ok: false; reason: 'utf32'; error: string }
+  | { ok: false; reason: 'not-decodable'; encoding: EncodingId; error: string }
   // `out-of-tree` (018 / US9, FR-061): a load refused by the CONFINEMENT rule, and a distinct reason
   // from `io`. It used to be reported as an io/missing-file error — which the renderer SUPPRESSES when
   // missing-file warnings are off, making an ownership refusal look like nothing happening at all. A
@@ -44,10 +94,12 @@ export type LoadResult =
       error: string;
     };
 
-export type SaveReason = 'out-of-tree' | 'no-location' | 'io';
+export type SaveReason = 'out-of-tree' | 'no-location' | 'io' | 'unrepresentable';
 export type SaveResult =
   | { ok: true; absPath: string; encoding: EncodingId; lineEnding: LineEndingId }
-  | { ok: false; reason: SaveReason; error: string };
+  | { ok: false; reason: Exclude<SaveReason, 'unrepresentable'>; error: string }
+  // 059 FR-021: the encoding cannot hold a character in the document. NOTHING was written.
+  | { ok: false; reason: 'unrepresentable'; error: string; unrepresentable: Unrepresentable };
 
 export interface LoadRequest {
   absPath: string;
@@ -61,6 +113,9 @@ export interface LoadRequest {
    */
   ownerKind: EditorOwnerKind;
   allProjectRoots: readonly string[];
+  /** Read in this encoding instead of detecting one — Reopen with Encoding, or a chosen encoding being
+   *  restored (059 FR-024, FR-028). A read that is not lossless in it is refused, never patched. */
+  forcedEncoding?: EncodingId;
 }
 
 export interface SaveRequest {
@@ -69,6 +124,7 @@ export interface SaveRequest {
   encoding: EncodingId;
   hasBom: boolean;
   lineEnding: LineEndingId;
+  mixedLineEndings?: readonly LineEndingId[];
   ownerKind: EditorOwnerKind;
   ownerRoot: string | null;
   allProjectRoots: readonly string[];
@@ -92,16 +148,37 @@ export class EditorService {
       const decision = await this.resolveEntry(req);
       if (!decision.ok) return decision;
       const bytes = await this.fs.readBytes(decision.absPath);
-      if (isProbablyBinary(bytes)) {
-        return { ok: false, reason: 'binary', error: 'This file cannot be opened as text.' };
+      // One detection for every reader (059 FR-001). A refusal is a value, so it is reported, not
+      // thrown — and never decoded around with replacement characters (FR-014, FR-020).
+      const fallback = this.settings().editor.fallbackEncoding;
+      const read = readText(bytes, req.forcedEncoding, fallback);
+      if (!read.ok) {
+        if (read.reason === 'not-decodable') {
+          return {
+            ok: false,
+            reason: 'not-decodable',
+            encoding: read.encoding,
+            error: refusalMessage('not-decodable', read.encoding),
+          };
+        }
+        return { ok: false, reason: read.reason, error: refusalMessage(read.reason) };
       }
-      const decoded = decode(bytes);
+      const decoded = read.file;
+      const readNotice = req.forcedEncoding === undefined ? readNoticeFor(bytes, decoded, fallback) : null;
+      // FR-071: would making the reopened code page the fallback read this file in it? Not when the bytes are
+      // valid UTF-8 (or UTF-16), which detection takes first whatever the fallback.
+      const forced = req.forcedEncoding;
+      const verdict = forced !== undefined && isCodePageId(forced) ? detectTextFormat(bytes, forced) : null;
+      const fallbackHelps = verdict?.kind === 'text' && verdict.encoding === forced;
       return {
+        ...(fallbackHelps ? { fallbackHelps } : {}),
+        ...(readNotice ? { readNotice } : {}),
         ok: true,
         text: decoded.text,
         encoding: decoded.encoding,
         hasBom: decoded.hasBom,
         lineEnding: decoded.lineEnding,
+        ...(decoded.mixedLineEndings ? { mixedLineEndings: decoded.mixedLineEndings } : {}),
         relativeFolder: relativeFolderOf(decision.absPath, req.ownerRoot),
       };
     } catch (e) {
@@ -166,10 +243,15 @@ export class EditorService {
         encoding: req.encoding,
         hasBom: req.hasBom,
         lineEnding: req.lineEnding,
+        ...(req.mixedLineEndings ? { mixedLineEndings: req.mixedLineEndings } : {}),
       });
       await this.fs.writeBytes(req.absPath, bytes);
       return { ok: true, absPath: req.absPath, encoding: req.encoding, lineEnding: req.lineEnding };
     } catch (e) {
+      // Encoding fails BEFORE the write, so nothing reached the file (059 FR-021).
+      if (e instanceof UnrepresentableTextError) {
+        return { ok: false, reason: 'unrepresentable', error: e.message, unrepresentable: e.detail };
+      }
       return { ok: false, reason: 'io', error: message(e) };
     }
   }

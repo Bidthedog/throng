@@ -97,7 +97,11 @@ export async function openIntoEditorPanel(
     // FR-106d — the one deliberate bypass: a history step onto a file that is no longer there still moves,
     // so the panel shows its could-not-read state and the user can step past it.
     if (!(intent.kind === 'history' && isMissingReason(decision.reason))) {
-      publishRefusedOpen({ absPath, reason: decision.reason });
+      publishRefusedOpen({
+        absPath,
+        reason: decision.reason,
+        ...(decision.encoding ? { encoding: decision.encoding } : {}),
+      });
       return 'refused';
     }
   }

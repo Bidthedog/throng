@@ -38,12 +38,19 @@
  * what the reader may not do. The file's path is shown under it, as every panel's banner shows it.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
+import { refusalMessage, toDisplayPath, type NoticeSubject, type OsName, type PreviewNotice } from '@throng/core';
 import { PanelFailureBanner } from '../common/panel-failure-banner.js';
 import type { PreviewFailure, PreviewPanelState } from './preview-store.js';
 
 /** The notices this surface shows. The link conditions (FR-090e/f, FR-106c) are the link notice's. */
-export type PreviewFileNoticeKind = 'unreadable' | 'deleted' | 'too-large' | 'not-text' | 'no-provider';
+export type PreviewFileNoticeKind =
+  | 'unreadable'
+  | 'deleted'
+  | 'too-large'
+  | 'not-text'
+  | 'utf32'
+  | 'not-decodable'
+  | 'no-provider';
 
 export type FileNotice = Extract<PreviewNotice, { kind: PreviewFileNoticeKind }>;
 
@@ -52,6 +59,9 @@ const FILE_KINDS: ReadonlySet<string> = new Set<PreviewFileNoticeKind>([
   'deleted',
   'too-large',
   'not-text',
+  // 059 FR-006 / FR-053 — a UTF-32 file, and one that does not decode: refused, in the editor's words.
+  'utf32',
+  'not-decodable',
   'no-provider',
 ]);
 
@@ -80,8 +90,14 @@ export function previewNoticeMessage(notice: FileNotice): string {
       return 'This file could not be read.';
     case 'too-large':
       return 'This file is too large to preview.';
+    // 059 FR-053 — core's one wording, which the editor says too.
     case 'not-text':
-      return 'This file is not text.';
+      return refusalMessage('binary');
+    case 'utf32':
+      return refusalMessage('utf32');
+    // …named in the encoding it was read as (review R3).
+    case 'not-decodable':
+      return refusalMessage('not-decodable', notice.encoding);
     case 'no-provider':
       return 'This file type has no preview.';
     default:

@@ -5,6 +5,7 @@
  */
 import { DEFAULT_EXCLUDE_GLOBS } from '../explorer/exclude.js';
 import { DEFAULT_SEARCH_EXCLUDE_GLOBS } from '../search/search-exclude.js';
+import { isCodePageId, type CodePageId } from '../workspace/model.js';
 import type { DragModifierKey } from '../explorer/drag.js';
 import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
 import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/log-level.js';
@@ -339,6 +340,8 @@ export interface EditorSettings {
   saveAllScope: SaveAllScopeSetting;
   /** Line ending applied to brand-new documents. */
   defaultLineEnding: DefaultLineEnding;
+  /** 059 FR-069 — the code page a file no detection step claims is read in. */
+  fallbackEncoding: CodePageId;
   /** Files larger than this (bytes) report "too large" instead of opening (FR-062). */
   maxOpenFileBytes: number;
   /** Project-owned editor pill: full (project-relative) path, or just the name (FR-088). */
@@ -368,6 +371,12 @@ export interface EditorSettings {
   /** 024 US1 (#152): starting word-wrap state for a freshly-opened document. The per-document
    *  status-bar/menu/chord toggle overrides this in memory only (not persisted). */
   defaultWordWrap: boolean;
+  /** 059 FR-060: whether a new editor panel starts with View Whitespace on. Each panel's own toggle
+   *  overrides it and is kept with the panel. */
+  defaultShowWhitespace: boolean;
+  /** 059 FR-067: a View Whitespace marker names its character in a popover after a hover, and shows the
+   *  help cursor. Off, neither. */
+  whitespaceHoverNames: boolean;
   /** 024 US1 (#152): show the editor's per-panel status strip. When off, the strip is hidden and
    *  its row reclaimed; the wrap command and language picker stay reachable by chord/menu. */
   showStatusBar: boolean;
@@ -861,6 +870,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     autoSaveDebounceMs: 300,
     saveAllScope: 'project',
     defaultLineEnding: 'lf',
+    fallbackEncoding: 'windows1252',
     maxOpenFileBytes: 10485760,
     projectPathDisplay: 'full',
     subWorkspacePathDisplay: 'full',
@@ -875,6 +885,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     languageByExtension: {},
     persistUndoHistory: true,
     defaultWordWrap: true,
+    defaultShowWhitespace: false,
+    whitespaceHoverNames: true,
     showStatusBar: true,
     // 040 FR-040 — the gutter ships ON. It is what every editor in this class draws by default, and
     // a preference that reclaims width is opt-IN: shipping it off would change what today's users
@@ -1394,6 +1406,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
   const defaultLineEnding = LINE_ENDINGS.includes(v.defaultLineEnding as DefaultLineEnding)
     ? (v.defaultLineEnding as DefaultLineEnding)
     : fallback.defaultLineEnding;
+  const fallbackEncoding = isCodePageId(v.fallbackEncoding) ? v.fallbackEncoding : fallback.fallbackEncoding;
   const maxOpenFileBytes =
     typeof v.maxOpenFileBytes === 'number' && v.maxOpenFileBytes > 0
       ? v.maxOpenFileBytes
@@ -1412,6 +1425,10 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     typeof v.persistUndoHistory === 'boolean' ? v.persistUndoHistory : fallback.persistUndoHistory;
   const defaultWordWrap =
     typeof v.defaultWordWrap === 'boolean' ? v.defaultWordWrap : fallback.defaultWordWrap;
+  const defaultShowWhitespace =
+    typeof v.defaultShowWhitespace === 'boolean' ? v.defaultShowWhitespace : fallback.defaultShowWhitespace;
+  const whitespaceHoverNames =
+    typeof v.whitespaceHoverNames === 'boolean' ? v.whitespaceHoverNames : fallback.whitespaceHoverNames;
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   const showGutter = typeof v.showGutter === 'boolean' ? v.showGutter : fallback.showGutter;
@@ -1428,6 +1445,7 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     autoSaveDebounceMs,
     saveAllScope,
     defaultLineEnding,
+    fallbackEncoding,
     maxOpenFileBytes,
     projectPathDisplay,
     subWorkspacePathDisplay,
@@ -1437,6 +1455,8 @@ function editorSettings(v: unknown, fallback: EditorSettings): EditorSettings {
     languageByExtension: extensionMap(v.languageByExtension, fallback.languageByExtension),
     persistUndoHistory,
     defaultWordWrap,
+    defaultShowWhitespace,
+    whitespaceHoverNames,
     showStatusBar,
     // The FOURTH edit this key needs. A field in the interface, the defaults and the local above but
     // NOT in this hand-listed literal compiles, ships, and is silently dropped on every read — the

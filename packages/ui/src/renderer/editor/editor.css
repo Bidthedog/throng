@@ -268,6 +268,164 @@
   background: var(--throng-colour-editorStatusStripHover, #233047);
 }
 
+/* 059 FR-024 — the controls width never hides (language, its reset, wrap, sync, preview), inside the
+   trailing group after the two format indicators. It is what `status-strip.tsx` MEASURES; its intrinsic
+   width is fixed by the trailing group's `flex-shrink: 0` above, and `min-width: 0` is what still lets the
+   language label ellipsise when that group is clamped to the strip (040 FR-022b). */
+.editor-status-strip__fixed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 059 FR-030/FR-034 — the encoding and line-ending indicators: drawn as the language label is, in the
+   strip's own themed colour, so they take the strip's active / inactive dimming with it (016 FR-010g).
+   They are hidden whole by width (FR-032), never squeezed, so they do not shrink. */
+.editor-status-strip__format {
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: inherit; /* the strip's theme token — never a hardcoded colour */
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-status-strip__format:hover {
+  background: var(--throng-colour-editorStatusStripHover, #233047);
+}
+
+/* The encoding picker shares the language picker's surface and rows; its one line of title says which
+   command it is serving (Reopen with Encoding or Change Encoding). */
+.encoding-picker__title {
+  padding: 6px 10px 4px;
+  opacity: 0.8;
+}
+
+/* 059 FR-070 — "Unicode" and "Windows Code Pages": a group's heading, not a row. Quieter than the rows, and
+   ruled off from the group above with the context menu's own border. */
+.encoding-picker__heading {
+  padding: 6px 10px 2px;
+  font-size: 0.85em;
+  opacity: 0.7;
+  list-style: none;
+  user-select: none;
+}
+
+.encoding-picker__heading + li,
+.encoding-picker__heading:first-child {
+  border-top: none;
+}
+
+li + .encoding-picker__heading {
+  margin-top: 4px;
+  border-top: 1px solid var(--throng-colour-border);
+}
+
+/* 059 FR-059, FR-064 — View Whitespace. Every symbol is decoration: a space's and a tab's are pseudo-elements
+   laid over the character (so its width is untouched and nothing enters the text); the line-break, BOM and
+   named-character marks are widgets. Every marker is ONE character cell, so turning the view on moves no text
+   that is one cell wide, and every marker but a space's sits in a box filled with the accent colour, its glyph
+   drawn in the editor background: the two contrast in every theme, and both are existing tokens, so a user's
+   own theme draws them too. Every marker takes the pointer, so its name shows on hover (FR-065). */
+.editor-panel .cm-ws-space,
+.editor-panel .cm-ws-tab {
+  position: relative;
+}
+
+.editor-panel .cm-ws-space::before,
+.editor-panel .cm-ws-tab::before {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* A space is a dot and nothing else: no box, so indentation stays readable. */
+.editor-panel .cm-ws-space::before {
+  content: '·';
+  color: var(--throng-colour-accent);
+  font-weight: 700;
+}
+
+/* A tab is boxed across its own width, which is the only width that moves no text. */
+.editor-panel .cm-ws-tab {
+  background: var(--throng-colour-accent);
+  box-shadow: inset 0 0 0 1px var(--throng-colour-editorBg);
+  border-radius: 2px;
+}
+
+.editor-panel .cm-ws-tab::before {
+  content: '→';
+  color: var(--throng-colour-accentText);
+  font-weight: 700;
+}
+
+/* The line break, the BOM and every named character: one cell, a solid box, one bold glyph. Nothing here may
+   widen the cell — no horizontal padding or margin — and a glyph wider than a cell is clipped, not let out. */
+.editor-panel .cm-ws-eol,
+.editor-panel .cm-ws-bom,
+.editor-panel .cm-ws-control {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 1ch;
+  overflow: hidden;
+  vertical-align: top;
+  text-align: center;
+  background: var(--throng-colour-accent);
+  color: var(--throng-colour-accentText);
+  box-shadow: inset 0 0 0 1px var(--throng-colour-editorBg);
+  border-radius: 2px;
+  font-weight: 700;
+}
+
+/* The help cursor over a boxed marker, only while hover names are on (FR-066, FR-067): the class is on the
+   editor exactly when `editor.whitespaceHoverNames` is. Spaces and tabs keep the text cursor. */
+.editor-panel .cm-ws-hover-names .cm-ws-eol,
+.editor-panel .cm-ws-hover-names .cm-ws-bom,
+.editor-panel .cm-ws-hover-names .cm-ws-control {
+  cursor: help;
+}
+
+/* The hover-name popover (FR-067): portaled to the body, so it is styled at the root, on the raised surface
+   every menu and popover shares. It never takes the pointer — it sits just above it, and a hover it caught
+   would close it. Its left/top are written by the plugin, so no transform may move it off them. */
+.cm-ws-hover-name {
+  position: fixed;
+  z-index: 1000;
+  max-width: 360px;
+  padding: 3px 8px;
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  color: var(--throng-colour-text);
+  font-family: var(--throng-font-family);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A line break reads LF, CR or CR LF at its own width (FR-065, FR-066): nothing follows it on its line, so the
+   width moves no text. The label is text in the theme's editor font, drawn smaller than the line so the box
+   keeps the line's height, and looks the same in every theme. */
+.editor-panel .cm-ws-eol {
+  width: auto;
+  padding: 0 3px;
+}
+
+.editor-panel .cm-ws-eol__label {
+  font-size: 0.75em;
+  letter-spacing: 0.04em;
+  vertical-align: 0.1em;
+}
+
 /* 044 FR-001/FR-014 — the preview button: an icon control in the strip's own colours. It is drawn
    like the language indicator, and PRESSED (the file has a preview) holds the hover surface, so the
    state reads without a colour of its own. Disabled (the provider is off, FR-062) dims and stops

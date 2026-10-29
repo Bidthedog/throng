@@ -1713,6 +1713,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     switch (result.reason) {
       case 'binary':
         return { ok: false, notice: { kind: 'not-text' } };
+      // 059 FR-014, FR-053 — named in the editor's words, encoding included.
+      case 'not-decodable':
+        return { ok: false, notice: { kind: 'not-decodable', encoding: result.encoding } };
+      case 'utf32':
+        return { ok: false, notice: { kind: 'utf32' } };
       case 'too-large':
         return { ok: false, notice: { kind: 'too-large' } };
       case 'not-found':

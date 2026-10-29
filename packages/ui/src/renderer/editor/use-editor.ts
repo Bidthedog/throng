@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Annotation, Compartment, EditorSelection, EditorState, Prec, type Transaction } from '@codemirror/state';
 import {
   EditorView,
@@ -18,6 +18,8 @@ import {
   DEFAULT_BINDING_PLATFORM,
   effectiveActivePanelId,
   effectiveIndent,
+  encodingLabel,
+  refusalMessage,
   firstBinding,
   inferIndent,
   initialFold,
@@ -35,6 +37,7 @@ import {
   toggleSection,
   type ActionId,
   type CanonicalChangeMsg,
+  type EncodingId,
   type IndentProfile,
   type InferredIndent,
   type LineEndingId,
@@ -139,7 +142,23 @@ import {
   pasteCommand,
 } from './commands.js';
 import { getPanelLanguage } from './editor-language.js';
-import { editorContentMenu, linkMenuPosition, placeCaretForContextMenu } from './content-menu.js';
+import {
+  forgetPanelWhitespace,
+  panelWhitespace,
+  refreshWhitespace,
+  seedPanelWhitespace,
+  setPanelWhitespace,
+  usePanelWhitespace,
+  viewWhitespace,
+  whitespaceCompartment,
+  type WhitespaceFormat,
+} from './view-whitespace.js';
+import {
+  editorContentMenu,
+  linkMenuPosition,
+  placeCaretForContextMenu,
+  type LineEndingTarget,
+} from './content-menu.js';
 import { currentEditorPreviewAffordance } from './editor-preview.js';
 import { requestPreviewOpen } from '../preview/open-preview.js';
 import { openFileInTab } from './editor-open.js';
@@ -181,6 +200,17 @@ import {
 import { useContextMenu } from '../context-menu-provider.js';
 import { useKeybindings } from '../config/config-store.js';
 import { useServices } from '../composition-root.js';
+import { useOptionalConfirm } from '../confirm-dialog.js';
+import { applySaveRefusal, forgetSaveRefusal, type SaveRefusal } from './encoding-refusal-store.js';
+import { applyReadNotice, forgetReadNotice, type ReadNotice } from './read-notice-store.js';
+import {
+  forgetDocumentFormat,
+  getDocumentFormat,
+  setDocumentFormat,
+  useDocumentFormat,
+  type DocumentFormat,
+} from './document-format-store.js';
+import { requestEncodingPicker, type EncodingPickerMode } from './picker-request.js';
 
 /**
  * Marks a transaction as coming FROM the document's authority (016, FR-028f).
@@ -190,6 +220,12 @@ import { useServices } from '../composition-root.js';
  * and applied twice.
  */
 const fromAuthority = Annotation.define<boolean>();
+
+/**
+ * 059 FR-061 — the transaction is an Insert Line Break with this ending. The update listener passes it to the
+ * replica, which sends it with the change; an ordinary edit carries none and takes the dominant ending.
+ */
+const insertedLineEnding = Annotation.define<LineEndingTarget>();
 
 /**
  * Read-only while a move has taken this document out of its project (050 FR-035). In a compartment so a
@@ -295,6 +331,14 @@ function mergeClassOf(update: ViewUpdate): MergeClass {
  * ending — and the command must act on what the document is NOW, not what it was when the panel
  * mounted.
  */
+/** 059 — the format and whitespace commands' handlers (see `formatCommands` in `useEditor`). */
+interface FormatCommands {
+  pick: (mode: EncodingPickerMode) => void;
+  convert: (target: LineEndingTarget) => void;
+  insert: (ending: LineEndingTarget) => void;
+  toggleWhitespace: () => void;
+}
+
 function commandsFor(deps: {
   lineEnding: () => LineEndingId;
   indent: () => IndentProfile;
@@ -308,8 +352,32 @@ function commandsFor(deps: {
    * own reasoning, one level up).
    */
   markdownFold?: { isMarkdown: boolean } & FoldCommandDeps;
+  /**
+   * 059 FR-041, FR-058, FR-061 — the encoding, line-ending and whitespace commands (shipped unbound). Change
+   * Encoding and Reopen open the strip's ONE encoding picker; the conversions, inserts and the whitespace
+   * toggle run directly, as their menu items do.
+   */
+  format?: FormatCommands;
 }): Partial<Record<ActionId, ReturnType<typeof cutLineCommand>>> {
+  const format = deps.format;
+  const run = (fn: () => void) => (): boolean => {
+    fn();
+    return true;
+  };
   return {
+    ...(format
+      ? {
+          'editor.changeEncoding': run(() => format.pick('change')),
+          'editor.reopenWithEncoding': run(() => format.pick('reopen')),
+          'editor.convertLineEndingsToLf': run(() => format.convert('lf')),
+          'editor.convertLineEndingsToCr': run(() => format.convert('cr')),
+          'editor.convertLineEndingsToCrlf': run(() => format.convert('crlf')),
+          'editor.insertLineBreakLf': run(() => format.insert('lf')),
+          'editor.insertLineBreakCr': run(() => format.insert('cr')),
+          'editor.insertLineBreakCrlf': run(() => format.insert('crlf')),
+          'editor.toggleWhitespace': run(() => format.toggleWhitespace()),
+        }
+      : {}),
     'editor.cutLine': cutLineCommand(deps.lineEnding),
     'editor.indentLines': indentLinesCommand(deps.indent),
     'editor.outdentLines': outdentLinesCommand(deps.indent),
@@ -541,6 +609,11 @@ export function useEditor(params: UseEditorParams): void {
   const { documents } = useServices();
   const metaRef = useRef({ projectRoot, rootless, ownerProjectId, tabId, projects, settings, title: panel.title, tabTitle, documents });
   metaRef.current = { projectRoot, rootless, ownerProjectId, tabId, projects, settings, title: panel.title, tabTitle, documents };
+  // 059 FR-025 — Reopen with Encoding asks before discarding unsaved changes. Optional: an editor mounted
+  // bare (no provider) simply has no dirty-reopen to ask about.
+  const confirm = useOptionalConfirm();
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
 
   const viewRef = useRef<EditorView | null>(null);
   // The document position to scroll back to the top on this mount (issue #144). Held so
@@ -869,11 +942,47 @@ export function useEditor(params: UseEditorParams): void {
     [panelId],
   );
 
+  /** 059 FR-059 — what View Whitespace's line-break and BOM marks read, at draw time. */
+  const whitespaceFormat = useRef((): WhitespaceFormat => {
+    const f = getDocumentFormat(panelId);
+    const cfg = configRef.current;
+    return {
+      hasBom: f?.hasBom ?? cfg.hasBom ?? false,
+      lineEnding: f?.lineEnding ?? cfg.lineEnding ?? metaRef.current.settings.defaultLineEnding,
+      ...(f?.lineEndings ? { lineEndings: f.lineEndings } : {}),
+    };
+  }).current;
+
+  /**
+   * 059 FR-059 — flip THIS panel's View Whitespace and persist the choice with the panel. Reads the live
+   * state at call time, for the chord's and the menu's sake.
+   */
+  const toggleWhitespace = (): void => {
+    const next = !panelWhitespace(panelId, metaRef.current.settings.defaultShowWhitespace);
+    setPanelWhitespace(panelId, next);
+    ws.updatePanelConfig(panelId, { showWhitespace: next });
+  };
+
   /** The document's effective line ending — what the CLIPBOARD is terminated with (SC-009a). */
   const currentLineEnding = useCallback(
     (): LineEndingId => configRef.current.lineEnding ?? metaRef.current.settings.defaultLineEnding,
     [],
   );
+
+  /**
+   * 059 FR-041, FR-058, FR-061 — what the format chords do. Stable, and reading everything at call time: the
+   * picker through its registry, the rest through this panel's registered actions. Reopen does nothing on a
+   * document with no file on disk — its menu item is disabled there too (FR-026).
+   */
+  const formatCommands = useRef<FormatCommands>({
+    pick: (mode: EncodingPickerMode): void => {
+      if (mode === 'reopen' && (!configRef.current.filePath || fileMissingRef.current)) return;
+      requestEncodingPicker(panelId, mode);
+    },
+    convert: (target) => void getEditorActions(panelId)?.convertLineEndings?.(target),
+    insert: (ending) => void getEditorActions(panelId)?.insertLineBreak?.(ending),
+    toggleWhitespace: () => getEditorActions(panelId)?.toggleWhitespace?.(),
+  }).current;
 
   /** Push the effective indentation into the live view (FR-018/FR-018e). */
   const refreshIndent = (): void => {
@@ -890,6 +999,38 @@ export function useEditor(params: UseEditorParams): void {
       effects: wrapCompartment.reconfigure(wordWrapOn ? EditorView.lineWrapping : []),
     });
   }, [wordWrapOn]);
+
+  /*
+   * 059 FR-059, FR-060 — View Whitespace, per PANEL: this panel's own persisted choice, or the preference
+   * while it has made none. Seeded from the panel's config before paint, so a restored panel never flashes
+   * the wrong state; the toggle writes the store and the config together (`toggleWhitespace` below).
+   */
+  const persistedWhitespace = (panel.config as EditorPanelConfig | undefined)?.showWhitespace;
+  useLayoutEffect(() => {
+    seedPanelWhitespace(panel.id, persistedWhitespace);
+  }, [panel.id, persistedWhitespace]);
+  const whitespaceOn = usePanelWhitespace(panel.id, settings.defaultShowWhitespace);
+  const whitespaceOnRef = useRef(whitespaceOn);
+  whitespaceOnRef.current = whitespaceOn;
+  // 059 FR-067 — the markers' hover names (popover and help cursor), a preference read live.
+  const whitespaceHoverNames = settings.whitespaceHoverNames;
+  const whitespaceHoverNamesRef = useRef(whitespaceHoverNames);
+  whitespaceHoverNamesRef.current = whitespaceHoverNames;
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: whitespaceCompartment.reconfigure(
+        whitespaceOn ? viewWhitespace(whitespaceFormat, { hoverNames: whitespaceHoverNames }) : [],
+      ),
+    });
+    // `whitespaceFormat` reads refs at draw time and is stable for the panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whitespaceOn, whitespaceHoverNames]);
+  // The line-break and BOM marks are drawn from the format, which moves without a text change (a
+  // conversion, a Change Encoding, a relay): re-read them whenever the display copy does.
+  const displayedFormat = useDocumentFormat(panel.id);
+  useEffect(() => {
+    if (whitespaceOnRef.current) viewRef.current?.dispatch({ effects: refreshWhitespace.of(null) });
+  }, [displayedFormat]);
 
   /*
    * 045 FR-060 — `editor.links.detectInEditors`, on the LIVE view.
@@ -1070,6 +1211,8 @@ export function useEditor(params: UseEditorParams): void {
       encoding: cfg.encoding ?? 'utf8',
       hasBom: cfg.hasBom ?? false,
       lineEnding: cfg.lineEnding ?? m.settings.defaultLineEnding,
+      // 059 — a register SEED only (a restored document's last chosen encoding); the authority owns it after.
+      encodingChosen: cfg.encodingChosen === true,
     };
   };
 
@@ -1088,6 +1231,57 @@ export function useEditor(params: UseEditorParams): void {
       ownerProjectId: metaRef.current.ownerProjectId,
       movedOut: movedOutRef.current,
       replaced: replacedRef.current,
+    });
+  };
+
+  /**
+   * 059 — whether the document's line endings are MIXED, as the authority last said. Display only, beside
+   * `configRef`'s `lineEnding` (which is then the dominant ending).
+   */
+  const mixedRef = useRef(false);
+  /**
+   * 059 FR-059 — a mixed document's per-break record, as the authority last relayed it (`lineFormat.lineEndings`),
+   * for View Whitespace's line-break marks. Display only; absent on a uniform document.
+   */
+  const lineEndingsRef = useRef<readonly LineEndingId[] | undefined>(undefined);
+
+  /**
+   * 059 FR-030 … FR-034 — adopt what the AUTHORITY said about the document's format into the view's display
+   * copy (`configRef`) and the strip's store. Every route that hears it — a load or adoption answer, the
+   * meta relay, a canonical change carrying `lineFormat` — comes through here. Nothing calls this with a
+   * value the view decided for itself, and nothing sends the copy back as truth (Principle XI).
+   */
+  const adoptFormat = (said: {
+    encoding?: unknown;
+    hasBom?: unknown;
+    encodingChosen?: unknown;
+    lineEnding?: unknown;
+    mixed?: unknown;
+    lineEndings?: unknown;
+  }): void => {
+    const next = { ...configRef.current };
+    if (typeof said.encoding === 'string') next.encoding = said.encoding as DocumentFormat['encoding'];
+    if (typeof said.hasBom === 'boolean') next.hasBom = said.hasBom;
+    if (typeof said.encodingChosen === 'boolean') next.encodingChosen = said.encodingChosen;
+    if (typeof said.lineEnding === 'string') next.lineEnding = said.lineEnding as LineEndingId;
+    if (typeof said.mixed === 'boolean') mixedRef.current = said.mixed;
+    if (Array.isArray(said.lineEndings)) lineEndingsRef.current = said.lineEndings as LineEndingId[];
+    // A uniform document has no record, and a stale one must not outlive the mixed state it described.
+    if (said.mixed === false) lineEndingsRef.current = undefined;
+    configRef.current = next;
+    publishFormat();
+  };
+
+  /** Write the display copy into the strip's store (the indicators and the menu's checked state read it). */
+  const publishFormat = (): void => {
+    const cfg = configRef.current;
+    setDocumentFormat(panelId, {
+      encoding: cfg.encoding ?? 'utf8',
+      hasBom: cfg.hasBom ?? false,
+      encodingChosen: cfg.encodingChosen === true,
+      lineEnding: cfg.lineEnding ?? metaRef.current.settings.defaultLineEnding,
+      mixed: mixedRef.current,
+      ...(lineEndingsRef.current ? { lineEndings: lineEndingsRef.current } : {}),
     });
   };
 
@@ -1143,7 +1337,7 @@ export function useEditor(params: UseEditorParams): void {
       if (isMissingReason(entry.reason) && !metaRef.current.settings.warnOnMissingFile) continue;
       reportPanelFailureRef.current({
         panelId,
-        message: missingFileMessage(entry.reason),
+        message: missingFileMessage(entry.reason, entry.encoding),
         detail: missingFileDetail(entry, os),
       });
     }
@@ -1161,16 +1355,16 @@ export function useEditor(params: UseEditorParams): void {
   // Write the current content to `absPath` via UI main (confinement enforced there).
   // On refusal, surface a visible message and keep the buffer unsaved (FR-078/083).
   const writeTo = async (absPath: string, isNewPath: boolean): Promise<boolean> => {
-    const cfg = configRef.current;
     // The authority writes the file, so everything this view has typed must have REACHED it first.
     // Saving with a keystroke still in flight would write the document as it was a moment ago —
     // silently, and to the user's file.
     await replicaRef.current?.settled();
     const meta = buildMeta();
+    // 059 T016 — no `lineEnding`: the authority encodes with the document's own line format and encoding,
+    // which it owns. The view's copy of them is for display and is never sent back as truth.
     const result = await win()?.editor?.save({
       panelId,
       absPath: isNewPath ? absPath : undefined,
-      lineEnding: (meta.lineEnding as LineEndingId) ?? metaRef.current.settings.defaultLineEnding,
       ownerKind: meta.ownerKind,
       ownerRoot: meta.ownerRoot,
       allProjectRoots: meta.allProjectRoots,
@@ -1179,22 +1373,33 @@ export function useEditor(params: UseEditorParams): void {
       if (result && 'reason' in result && result.reason === 'replaced') {
         // The standing replaced notice already says it (one condition, one notice) — flashed, not repeated.
         flashReplacedNotice(panelId);
+      } else if (result && 'reason' in result && result.reason === 'unrepresentable') {
+        // 059 FR-022 — the document's own notice says it: the authority relays `saveRefused` to every view
+        // of the document (and re-sends it on a repeat, which flashes it). Never the modal below.
       } else if (result && 'reason' in result) {
         reportSaveError(result.reason, metaRef.current.rootless ? 'subworkspace' : 'project');
       }
       return false;
     }
-    // Built from the config AS IT IS NOW, not the `cfg` snapshotted before the awaits: main relays
+    adoptSaved(result, isNewPath);
+    return true;
+  };
+
+  /**
+   * A write landed (a save): adopt the path and the format the
+   * answer states, persist the panel's config, and — for a NEW path — re-derive what the name decides.
+   */
+  const adoptSaved = (
+    result: { absPath: string; encoding?: unknown; hasBom?: unknown; lineEnding?: unknown; mixed?: unknown },
+    isNewPath: boolean,
+  ): void => {
+    // Built from the config AS IT IS NOW, not a `cfg` snapshotted before the awaits: main relays
     // `movedOut: false` (a Save As into the owner project) before this invoke returns, and writing the
     // old config back would resurrect the flag in the persisted layout.
     const now = configRef.current;
-    configRef.current = {
-      ...now,
-      filePath: result.absPath,
-      encoding: result.encoding,
-      lineEnding: result.lineEnding,
-      hasBom: cfg.hasBom ?? false,
-    };
+    configRef.current = { ...now, filePath: result.absPath };
+    // 059 — the answer states the format the file was written in; the display copy follows it.
+    adoptFormat(result);
     // `movedOut` named explicitly: the store MERGES, so an absent key would leave the layout's flag standing.
     ws.updatePanelConfig(panelId, {
       ...configRef.current,
@@ -1212,11 +1417,17 @@ export function useEditor(params: UseEditorParams): void {
       refreshLanguage();
       republishCounts();
     }
-    return true;
   };
 
   // Prompt for a location (file-name pre-filled) then save there (new doc / Save As).
   const chooseThenSave = async (): Promise<boolean> => {
+    const chosen = await chooseLocation();
+    if (!chosen) return false; // cancelled
+    return writeTo(chosen, true);
+  };
+
+  /** The Save As dialog, its file-name field pre-filled. `null` when cancelled. */
+  const chooseLocation = async (): Promise<string | null> => {
     const cfg = configRef.current;
     const chosen = await win()?.editor?.chooseSavePath?.({
       defaultDir: cfg.filePath ? dirname(cfg.filePath) : (metaRef.current.projectRoot ?? undefined),
@@ -1229,8 +1440,7 @@ export function useEditor(params: UseEditorParams): void {
           ? BLANK_PANEL_NAME
           : metaRef.current.title,
     });
-    if (!chosen) return false; // cancelled
-    return writeTo(chosen, true);
+    return chosen ?? null;
   };
 
   const save = async (): Promise<boolean> => {
@@ -1250,6 +1460,92 @@ export function useEditor(params: UseEditorParams): void {
 
   // Save As: always choose a new location, even for an already-pathed doc (FR-084).
   const saveAs = async (): Promise<boolean> => chooseThenSave();
+
+  /**
+   * 059 FR-055 — Change Encoding: the document takes `encoding` and that choice's BOM, writing nothing.
+   *
+   * The authority owns it: the change is dirty and one undo step, and a format relay (and the canonical
+   * change carrying `encoding`) brings the new encoding back to every view of the document — this one
+   * included — so the display copy is not written from here. The next ordinary save writes the encoding,
+   * refusing a character it cannot hold (FR-021/FR-022). The current encoding is a no-op; the callers skip
+   * it, and the authority answers `changed: false` for it anyway.
+   *
+   * Replaces Save with Encoding (FR-027, superseded): an untitled document no longer needs a location first,
+   * because nothing is written until its ordinary save, which asks for one as it always has.
+   */
+  const changeEncoding = async (encoding: EncodingId, hasBom: boolean): Promise<boolean> => {
+    if (movedOutRef.current) return false;
+    // Ordered after anything still in flight, so the undo step lands after the keystrokes before it.
+    await replicaRef.current?.settled();
+    const result = await win()?.editor?.changeEncoding?.({ panelId, encoding, hasBom });
+    return result?.ok === true && result.changed;
+  };
+
+  /**
+   * 059 FR-024 … FR-026 — Reopen with Encoding: re-read the file from disk as `encoding`.
+   *
+   * The authority replaces the buffer (the ordinary reset broadcast), clears the undo history and writes
+   * nothing. On a DIRTY document that throws work away, so it asks first — discard or cancel — and Cancel
+   * changes nothing (FR-025). A document with no file on disk has nothing to re-read (FR-026).
+   */
+  const reopenWithEncoding = async (encoding: EncodingId): Promise<boolean> => {
+    const filePath = configRef.current.filePath;
+    if (!filePath || movedOutRef.current) return false;
+    if (dirtyRef.current) {
+      const ask = confirmRef.current;
+      if (!ask) return false;
+      const ok = await ask({
+        title: 'Reopen with Encoding',
+        message: `“${basename(filePath)}” has unsaved changes. Reopening it as ${encodingLabel(encoding, false)} discards them.`,
+        confirmLabel: 'Discard and Reopen',
+        cancelLabel: 'Cancel',
+        danger: true,
+      });
+      if (!ok) return false;
+    }
+    await replicaRef.current?.settled();
+    const result = await win()?.editor?.reopenWithEncoding?.({ panelId, encoding });
+    if (!result) return false;
+    if (result.ok !== true) {
+      if (result.reason === 'not-decodable') {
+        showEditorNotice({ title: 'Cannot reopen', message: refusalMessage('not-decodable', encoding) });
+      }
+      return false;
+    }
+    adoptFormat({ encoding, encodingChosen: true });
+    return true;
+  };
+
+  /**
+   * 059 FR-035 / FR-038 — convert every line ending to `target`: the authority makes it one undoable step
+   * that marks the document dirty, and answers `changed: false` for a document already uniformly `target`.
+   */
+  const convertLineEndings = async (target: LineEndingTarget): Promise<void> => {
+    if (movedOutRef.current) return;
+    await replicaRef.current?.settled();
+    await win()?.editor?.convertLineEndings?.({ panelId, target });
+  };
+
+  /**
+   * 059 FR-061 — Insert Line Break with `ending`: each selection replaced with a line break, exactly as Enter
+   * replaces it, as an ORDINARY edit — local echo, one undo step of its own — tagged with the ending, which
+   * the authority gives the breaks it inserts (`DispatchChangeMsg.insertedLineEnding`).
+   *
+   * The replica is settled FIRST, so the change goes out alone as the in-flight change: a buffered run is
+   * composed, and a composed change could not say which of its breaks the chosen ending belongs to.
+   */
+  const insertLineBreak = async (ending: LineEndingTarget): Promise<void> => {
+    if (movedOutRef.current) return;
+    await replicaRef.current?.settled();
+    const view = viewRef.current;
+    if (!view || view.state.readOnly) return;
+    view.dispatch(view.state.replaceSelection('\n'), {
+      scrollIntoView: true,
+      userEvent: 'input',
+      annotations: insertedLineEnding.of(ending),
+    });
+    view.focus();
+  };
 
   /**
    * Re-resolve the document's language and swap the grammar in place (016, FR-002a).
@@ -1384,6 +1680,10 @@ export function useEditor(params: UseEditorParams): void {
         // relay that said so arrived before this answer, and this assignment must not undo it).
         ...(loaded.linkedTo !== undefined ? { linkedTo: loaded.linkedTo } : {}),
       };
+      // 059 — a different document: its format is whatever the answer says, `mixed` and `encodingChosen` included.
+      mixedRef.current = false;
+      lineEndingsRef.current = undefined;
+      adoptFormat(loaded);
       // `linkedTo` named explicitly: the store MERGES, so an ordinary open must remove a stale link.
       ws.updatePanelConfig(panelId, { ...configRef.current, linkedTo: loaded.linkedTo });
       fileMissingRef.current = false;
@@ -1427,7 +1727,14 @@ export function useEditor(params: UseEditorParams): void {
     } else if (loaded && loaded.ok === false) {
       // A deliberate open of a bad/missing file: warn immediately (single file).
       fileMissingRef.current = isMissingReason(loaded.reason);
-      maybeWarn([{ filePath: absPath, reason: loaded.reason }]);
+      // 059 review R2 — a not-decodable refusal names the encoding it was read as.
+      maybeWarn([
+        {
+          filePath: absPath,
+          reason: loaded.reason,
+          ...('encoding' in loaded && loaded.encoding ? { encoding: loaded.encoding } : {}),
+        },
+      ]);
       publishState();
     }
   };
@@ -1474,6 +1781,11 @@ export function useEditor(params: UseEditorParams): void {
       openFile,
       revert,
       reloadFromDisk,
+      changeEncoding,
+      reopenWithEncoding,
+      convertLineEndings,
+      insertLineBreak,
+      toggleWhitespace,
     });
     return () => unregisterEditorActions(panelId);
     // save/isDirty/openFile read refs, so a stable registration is fine.
@@ -1512,11 +1824,12 @@ export function useEditor(params: UseEditorParams): void {
             indent: currentIndent,
             toggleWrap,
             markdownFold: markdownFoldDeps(),
+            format: formatCommands,
           }),
         ),
       ),
     });
-  }, [keybindings, currentLineEnding, currentIndent, toggleWrap, markdownFoldDeps]);
+  }, [keybindings, currentLineEnding, currentIndent, toggleWrap, markdownFoldDeps, formatCommands]);
 
   // Mount the CodeMirror view and initialise content.
   useEffect(() => {
@@ -1575,6 +1888,8 @@ export function useEditor(params: UseEditorParams): void {
         update.changes,
         update.startState.selection.toJSON(),
         mergeClassOf(update),
+        // 059 FR-061 — an Insert Line Break names its ending; anything else takes the dominant one.
+        update.transactions.map((tr) => tr.annotation(insertedLineEnding)).find((e) => e !== undefined),
       );
 
       // Debounced auto-save (Phase C) — only when enabled and the doc is pathed.
@@ -1696,6 +2011,7 @@ export function useEditor(params: UseEditorParams): void {
                 indent: currentIndent,
                 toggleWrap,
                 markdownFold: markdownFoldDeps(),
+                format: formatCommands,
               }),
             ),
           ),
@@ -1768,6 +2084,12 @@ export function useEditor(params: UseEditorParams): void {
                     toggle: toggleWrap,
                     chord: firstBinding(keybindingsRef.current, 'editor.toggleWordWrap'),
                   },
+                  // 059 FR-059 — View Whitespace, this PANEL's, after Word Wrap.
+                  whitespace: {
+                    on: whitespaceOnRef.current,
+                    toggle: () => getEditorActions(panelId)?.toggleWhitespace?.(),
+                    chord: firstBinding(keybindingsRef.current, 'editor.toggleWhitespace'),
+                  },
                   /*
                    * 033 US2 (FR-027) — the menu route to Go To Line.
                    *
@@ -1838,6 +2160,47 @@ export function useEditor(params: UseEditorParams): void {
                       }),
                   },
                   /*
+                   * 059 FR-058 — the Encoding and Line Endings items, beside Set Language, stating the
+                   * document's format as the authority last relayed it. Read at menu-open time, for the
+                   * language's reason: the format changes under a live view.
+                   */
+                  ...(() => {
+                    const f = getDocumentFormat(panelId);
+                    const cfg = configRef.current;
+                    const enc = f?.encoding ?? cfg.encoding ?? 'utf8';
+                    const bom = f?.hasBom ?? cfg.hasBom ?? false;
+                    const kb = keybindingsRef.current;
+                    return {
+                      encoding: {
+                        current: { encoding: enc, hasBom: bom },
+                        canReopen: !!cfg.filePath && !fileMissingRef.current && !movedOutRef.current,
+                        change: (c: { encoding: EncodingId; hasBom: boolean }) =>
+                          void changeEncoding(c.encoding, c.hasBom),
+                        openReopenPicker: () => requestEncodingPicker(panelId, 'reopen'),
+                        changeChord: firstBinding(kb, 'editor.changeEncoding'),
+                        chords: { reopen: firstBinding(kb, 'editor.reopenWithEncoding') },
+                      },
+                      lineEndings: {
+                        lineEnding: f?.lineEnding ?? cfg.lineEnding ?? metaRef.current.settings.defaultLineEnding,
+                        mixed: f?.mixed ?? false,
+                        convert: (target: LineEndingTarget) => void convertLineEndings(target),
+                        chords: {
+                          lf: firstBinding(kb, 'editor.convertLineEndingsToLf'),
+                          cr: firstBinding(kb, 'editor.convertLineEndingsToCr'),
+                          crlf: firstBinding(kb, 'editor.convertLineEndingsToCrlf'),
+                        },
+                        insert: {
+                          insert: (ending: LineEndingTarget) => void insertLineBreak(ending),
+                          chords: {
+                            lf: firstBinding(kb, 'editor.insertLineBreakLf'),
+                            cr: firstBinding(kb, 'editor.insertLineBreakCr'),
+                            crlf: firstBinding(kb, 'editor.insertLineBreakCrlf'),
+                          },
+                        },
+                      },
+                    };
+                  })(),
+                  /*
                    * 047 US3 (FR-036, contracts "Editor body menu") — the fold rows, Markdown
                    * documents only. `at` is the innermost section containing the CLICKED position:
                    * `placeCaretForContextMenu` already moved the caret there, above. The handlers
@@ -1899,6 +2262,12 @@ export function useEditor(params: UseEditorParams): void {
           wrapCompartment.of(
             documentWordWrap(wrapDocKey, metaRef.current.settings.defaultWordWrap)
               ? EditorView.lineWrapping
+              : [],
+          ),
+          // 059 FR-059 — View Whitespace, per panel; decoration only, so it never reaches the document.
+          whitespaceCompartment.of(
+            whitespaceOnRef.current
+              ? viewWhitespace(whitespaceFormat, { hoverNames: whitespaceHoverNamesRef.current })
               : [],
           ),
           updateListener,
@@ -2060,6 +2429,11 @@ export function useEditor(params: UseEditorParams): void {
       const target = viewRef.current;
       if (!target) return;
       dirtyRef.current = change.dirty;
+      // 059 T031 — a conversion (and the undo/redo of one) carries the document's new line format; its
+      // `changes` are applied below like any other. The display copy follows the authority.
+      if (change.lineFormat) adoptFormat(change.lineFormat);
+      // 059 FR-055 — and a Change Encoding (or the undo/redo of one) carries the document's encoding.
+      if (change.encoding) adoptFormat(change.encoding);
       const apply = replica.receive(change);
       if (!apply) {
         publishState(); // our own edit, acknowledged: nothing to apply, but `dirty` may have moved
@@ -2226,6 +2600,32 @@ export function useEditor(params: UseEditorParams): void {
       // Panel in ANOTHER window toggled it. One document, one answer, so this view follows.
       if (typeof msg.wordWrap === 'boolean') applyWordWrapFromSync(wrapDocKeyRef.current, msg.wordWrap);
       if (typeof msg.dirty === 'boolean') dirtyRef.current = msg.dirty;
+      /*
+       * 059 — the meta relay: the document's encoding, BOM, whether it was chosen, and its line format, as the
+       * AUTHORITY holds them. Adopted as the display copy; never sent back.
+       */
+      if (
+        msg.encoding !== undefined ||
+        msg.hasBom !== undefined ||
+        msg.encodingChosen !== undefined ||
+        msg.lineFormat !== undefined
+      ) {
+        adoptFormat({
+          encoding: msg.encoding,
+          hasBom: msg.hasBom,
+          encodingChosen: msg.encodingChosen,
+          ...(msg.lineFormat ?? {}),
+        });
+      }
+      /*
+       * 059 FR-022 — the document's save refusal, which the authority owns: raised (or, re-sent while it
+       * stands, flashed) on a refused save, and cleared (`null`) by a successful save or an edit that removed
+       * the character.
+       */
+      if (msg.saveRefused !== undefined) applySaveRefusal(panelId, msg.saveRefused as SaveRefusal | null);
+      // 059 FR-068 — how the document was read, which main owns: set on a suspect open or a reopen, `null` once
+      // it was saved in another encoding or dismissed.
+      if (msg.readNotice !== undefined) applyReadNotice(panelId, msg.readNotice as ReadNotice | null);
       // The on-disk file changed under our unsaved edits (FR-028) — a soft, one-shot
       // notice (no lock): saving overwrites the external change, revert loads it. The
       // notice NAMES the affected document — its containing tab, its panel, and the
@@ -2282,6 +2682,8 @@ export function useEditor(params: UseEditorParams): void {
         else if (msg.reset && msg.reset.version > state.version) applyReset(msg.reset);
       }
       publishState();
+      // 059 FR-030 — the indicators show on EVERY editor panel, an untitled one included.
+      publishFormat();
       reinferIndent(state.text); // what does THIS file already do? (FR-018a)
       refreshLanguage(); // the document's identity is now known — highlight it
       /*
@@ -2358,6 +2760,11 @@ export function useEditor(params: UseEditorParams): void {
           hasBom: existing.hasBom,
           lineEnding: existing.lineEnding,
         };
+        adoptFormat(existing);
+        // 059 FR-022 — a remount shows a standing save refusal from the authority's answer, with no relay.
+        applySaveRefusal(panelId, (existing.saveRefused as SaveRefusal | null | undefined) ?? null);
+        // 059 FR-068 — and the read notice, the same way.
+        applyReadNotice(panelId, (existing.readNotice as ReadNotice | null | undefined) ?? null);
         // Publish file-missing so the tab-open watcher (not this mount) raises the
         // notice — a panel drag/move remounts here but must NOT re-warn (FR-105).
         fileMissingRef.current = !!existing.fileMissing;
@@ -2403,7 +2810,7 @@ export function useEditor(params: UseEditorParams): void {
         const snapshot = await bridge?.recoverOne?.(panelId);
         if (snapshot && snapshot.text.length > 0 && !cancelled) {
           bridge?.register({ ...buildMeta(), replaced: true, text: '' });
-          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history);
+          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history, snapshot.format);
           const state = await bridge?.getContent?.(panelId);
           if (state) {
             replacedRef.current = state.replaced === true;
@@ -2428,7 +2835,7 @@ export function useEditor(params: UseEditorParams): void {
         const snapshot = await bridge?.recoverOne?.(panelId);
         if (snapshot && snapshot.text.length > 0 && !cancelled) {
           bridge?.register({ ...buildMeta(), movedOut: true, text: '' });
-          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history);
+          await bridge?.restoreRecovered(panelId, snapshot.text, snapshot.history, snapshot.format);
           const state = await bridge?.getContent?.(panelId);
           if (state) initialise(state);
         }
@@ -2458,6 +2865,7 @@ export function useEditor(params: UseEditorParams): void {
             hasBom: loaded.hasBom,
             lineEnding: loaded.lineEnding,
           };
+          adoptFormat(loaded);
           // 052 R1 — the path was already held (the owner loaded first, or this panel's own link lost the
           // race): this panel is a view of the holder's document, and the link goes back into the layout.
           if (loaded.linkedTo !== undefined) {
@@ -2471,7 +2879,7 @@ export function useEditor(params: UseEditorParams): void {
             // Unsaved edits survived a restart — restore them INTO THE AUTHORITY, dirty against the
             // disk file. Restoring them into this view alone would make it disagree with the
             // document it is a replica of, from its very first frame.
-            await bridge?.restoreRecovered(panelId, recovered.text, recovered.history);
+            await bridge?.restoreRecovered(panelId, recovered.text, recovered.history, recovered.format);
           }
         } else if (loaded && loaded.ok === false) {
           // The file could not be loaded. Publish it (the tab-open watcher raises the
@@ -2498,12 +2906,12 @@ export function useEditor(params: UseEditorParams): void {
           // (FR-102): show it (dirty) rather than a blank editor, so a save writes it
           // back to the original location. Blank only when nothing was captured.
           bridge?.register({ ...buildMeta(), text: '', unloadable: true });
-          if (recovered) await bridge?.restoreRecovered(panelId, recovered.text, recovered.history);
+          if (recovered) await bridge?.restoreRecovered(panelId, recovered.text, recovered.history, recovered.format);
         }
       } else if (recovered && recovered.text.length > 0) {
         // A brand-new unsaved document restored from its recovery temp (dirty).
         bridge?.register({ ...buildMeta(), text: '' });
-        await bridge?.restoreRecovered(panelId, recovered.text, recovered.history);
+        await bridge?.restoreRecovered(panelId, recovered.text, recovered.history, recovered.format);
       } else {
         // Brand-new empty document — register it (unpathed) so it appears in the
         // one-buffer registry only once it gains a path.
@@ -2594,6 +3002,13 @@ export function disposeEditor(panelId: string): void {
   // …nor the link readout (045 FR-167), for the same reason: a recycled panel id must not inherit a
   // stale "hovered" target from whatever this id last pointed at.
   clearEditorHoveredLink(panelId);
+  // …nor its copy of the document's format and save refusal (059): keyed by panel, so a recycled id
+  // would otherwise inherit a dead document's encoding and notice.
+  forgetDocumentFormat(panelId);
+  forgetSaveRefusal(panelId);
+  forgetReadNotice(panelId);
+  // …nor its View Whitespace choice (059 FR-059), which is the panel's own.
+  forgetPanelWhitespace(panelId);
   // …nor a link hint this panel raised (045 FR-165d, review round four I4): it describes a link in a
   // panel that no longer exists. Another panel's hint is left alone.
   hideLinkHintFor(panelId);

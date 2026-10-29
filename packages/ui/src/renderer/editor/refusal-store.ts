@@ -23,12 +23,15 @@
  * drops, which is the shape of bug that survives review.
  */
 import { useSyncExternalStore } from 'react';
+import type { EncodingId } from '@throng/core';
 
 export interface RefusedOpen {
   /** What the user asked to open. Half the casualty's identity (FR-007). */
   absPath: string;
   /** Why throng declined. One of `NOT_A_MISSING_FILE`. */
   reason: string;
+  /** 059 review R2 — the encoding a `not-decodable` file was read as, so the notice can name it. */
+  encoding?: EncodingId;
 }
 
 let queue: readonly RefusedOpen[] = [];

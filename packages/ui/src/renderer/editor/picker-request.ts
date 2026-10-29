@@ -15,7 +15,41 @@ const openers = new Map<string, () => void>();
  * Without this, "Set Language…" silently did nothing whenever a user had turned the bar off — a menu
  * item that is present, enabled, and inert is worse than one that is absent.
  */
-const reveals = new Map<string, () => void>();
+const reveals = new Map<string, (request: PickerRequest) => void>();
+
+/** 059 — which encoding command the encoding picker is serving. */
+export type EncodingPickerMode = 'reopen' | 'change';
+
+/** Which picker a hidden strip is being revealed FOR. */
+export type PickerRequest = { kind: 'language' } | { kind: 'encoding'; mode: EncodingPickerMode };
+
+/**
+ * 059 FR-024/FR-027 — the encoding picker's openers, by panel. The same idiom as the language picker's,
+ * for the same reason: the content menu, the commands and the strip's own popup must open the ONE
+ * picker the strip anchors, never a second copy that could disagree about the current encoding.
+ */
+const encodingOpeners = new Map<string, (mode: EncodingPickerMode) => void>();
+
+export function registerEncodingPickerOpener(panelId: string, open: (mode: EncodingPickerMode) => void): void {
+  encodingOpeners.set(panelId, open);
+}
+
+export function unregisterEncodingPickerOpener(panelId: string): void {
+  encodingOpeners.delete(panelId);
+}
+
+/**
+ * Open the panel's encoding picker for `mode` — revealing a hidden strip first, so a hidden status bar
+ * never strands the command (FR-033, SC-006).
+ */
+export function requestEncodingPicker(panelId: string, mode: EncodingPickerMode): void {
+  const open = encodingOpeners.get(panelId);
+  if (open) {
+    open(mode);
+    return;
+  }
+  reveals.get(panelId)?.({ kind: 'encoding', mode });
+}
 
 export function registerPickerOpener(panelId: string, open: () => void): void {
   openers.set(panelId, open);
@@ -26,7 +60,7 @@ export function unregisterPickerOpener(panelId: string): void {
 }
 
 /** Register the panel's "show the hidden strip, with its picker already open" fallback. */
-export function registerPickerReveal(panelId: string, reveal: () => void): void {
+export function registerPickerReveal(panelId: string, reveal: (request: PickerRequest) => void): void {
   reveals.set(panelId, reveal);
 }
 
@@ -44,5 +78,5 @@ export function requestLanguagePicker(panelId: string): void {
     open();
     return;
   }
-  reveals.get(panelId)?.();
+  reveals.get(panelId)?.({ kind: 'language' });
 }

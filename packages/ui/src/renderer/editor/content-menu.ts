@@ -1,6 +1,15 @@
 import { EditorSelection } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
-import { isFlowingDocument, type HeadingRecord, type LineEndingId, type PreviewAffordance } from '@throng/core';
+import {
+  ENCODING_CHOICES,
+  encodingLabel,
+  isFlowingDocument,
+  lineEndingLabel,
+  type EncodingId,
+  type HeadingRecord,
+  type LineEndingId,
+  type PreviewAffordance,
+} from '@throng/core';
 import type { MenuAction } from '../workspace/context-menu.js';
 import { withSplit, type SplitMenuArgs } from '../workspace/split-menu.js';
 import { isKeyboardMenu } from '../workspace/keyboard-menu.js';
@@ -34,6 +43,8 @@ export interface ContentMenuArgs {
   lineEnding: () => LineEndingId;
   /** 024 US1 (#152): the checkable word-wrap toggle — its current state, the action, and its chord. */
   wordWrap: { on: boolean; toggle: () => void; chord?: string };
+  /** 059 FR-059 — this PANEL's View Whitespace toggle, after Word Wrap. Absent draws none. */
+  whitespace?: { on: boolean; toggle: () => void; chord?: string };
   /**
    * 033 US2 (#219, FR-027): Go To Line — the action, and the chord it is CURRENTLY bound to.
    *
@@ -61,6 +72,16 @@ export interface ContentMenuArgs {
   /** 055 FR-024b — Reset Language; `enabled` while the document has a manual override. Absent draws none. */
   resetLanguage?: { enabled: boolean; reset: () => void };
   /**
+   * 059 FR-058 — the Encoding item, beside Set Language: the encoding indicator's own list as a submenu, and
+   * `editor.changeEncoding`'s chord on the item. Absent draws none.
+   */
+  encoding?: EncodingMenuArgs & { changeChord?: string };
+  /**
+   * 059 FR-058, FR-061 — the Line Endings item after it: the indicator's list plus Insert Line Break (LF) /
+   * (CR) / (CRLF). Absent draws none.
+   */
+  lineEndings?: LineEndingMenuArgs & { insert: InsertLineBreakArgs };
+  /**
    * 047 US3 (FR-036, contracts "Editor body menu") — the four fold rows, present only for a
    * Markdown document; `undefined` draws none of them. `section` is the innermost section
    * containing the position the menu was opened at (the clicked point, or the caret for a
@@ -74,6 +95,147 @@ export interface ContentMenuArgs {
   };
   // 045 FR-169 — no link input. Every link action lives in the ONE Link menu, which opens INSTEAD of
   // this one over a link (FR-171, `links/file-link-menu.ts`); this menu never carries a link row.
+}
+
+/** 059 FR-055, FR-056 — what the encoding list needs, read at menu-open time. */
+export interface EncodingMenuArgs {
+  /** The document's encoding and BOM — the entry matching both is marked current. */
+  current: { encoding: EncodingId; hasBom: boolean };
+  /** False for a document with no file on disk: there is nothing to re-read (FR-026). */
+  canReopen: boolean;
+  /** Change Encoding to that entry's encoding and BOM (FR-055). Never called for the current entry. */
+  change: (choice: { encoding: EncodingId; hasBom: boolean }) => void;
+  /** Open THE encoding picker — the one the strip anchors — for Reopen with Encoding (FR-056). */
+  openReopenPicker: () => void;
+  /** The live chord for Reopen with Encoding, once bound (FR-041 ships it unbound). */
+  chords?: { reopen?: string };
+}
+
+/** The three endings a document can be converted to, or a break inserted with (FR-057, FR-061). */
+export type LineEndingTarget = 'lf' | 'cr' | 'crlf';
+
+/** 059 FR-057 — what the line-ending list needs, read at menu-open time. */
+export interface LineEndingMenuArgs {
+  /** The uniform ending, or the dominant one when `mixed`. */
+  lineEnding: LineEndingId;
+  mixed: boolean;
+  convert: (target: LineEndingTarget) => void;
+  chords?: Partial<Record<LineEndingTarget, string>>;
+}
+
+/** 059 FR-061 — Insert Line Break (LF) / (CR) / (CRLF). */
+export interface InsertLineBreakArgs {
+  insert: (ending: LineEndingTarget) => void;
+  chords?: Partial<Record<LineEndingTarget, string>>;
+}
+
+/** 059 FR-070 — the submenu holding the code pages: not "ANSI" (a misnomer) and not "Legacy". */
+export const CODE_PAGES_LABEL = 'Windows Code Pages';
+
+/** The id a row's test id is pinned to — `utf16le-bom` — so it survives the label's check mark. */
+const encodingKey = (c: { encoding: EncodingId; hasBom: boolean }): string =>
+  `${c.encoding}${c.hasBom ? '-bom' : ''}`;
+
+/**
+ * 059 FR-055, FR-056, FR-070 — the encoding list: the Unicode encodings, then the Windows Code Pages submenu,
+ * the current one marked, then Reopen with Encoding… last. ONE builder for the encoding indicator's menu and the content menu's Encoding submenu: the
+ * indicator is an accelerator over these rows, so the two cannot drift (FR-033, FR-058).
+ *
+ * Choosing an entry is Change Encoding — the document changes, dirty and undoable, and nothing is written
+ * until a save. Choosing the current one is a no-op (FR-055). Reopen sits in a group of its own below,
+ * because it is a different act: it re-reads the file rather than changing the document.
+ */
+export function encodingMenuItems(a: EncodingMenuArgs): MenuAction[] {
+  const row = (c: (typeof ENCODING_CHOICES)[number]): MenuAction => {
+    const current = c.encoding === a.current.encoding && c.hasBom === a.current.hasBom;
+    return {
+      label: current ? `${c.label} ✓` : c.label,
+      testId: `menu-item-encoding-${encodingKey(c)}`,
+      section: 'viewState' as const,
+      group: 'change',
+      onClick: () => {
+        if (!current) a.change({ encoding: c.encoding, hasBom: c.hasBom });
+      },
+    };
+  };
+  // FR-070: the Unicode rows stay one click away; the code pages share one submenu, ticked when the document
+  // is in one of them so the current encoding shows without opening it.
+  const pages = ENCODING_CHOICES.filter((c) => c.group === 'codepage');
+  const inPages = pages.some((c) => c.encoding === a.current.encoding);
+  const rows: MenuAction[] = [
+    ...ENCODING_CHOICES.filter((c) => c.group === 'unicode').map(row),
+    {
+      label: inPages ? `${CODE_PAGES_LABEL} ✓` : CODE_PAGES_LABEL,
+      testId: 'menu-item-encoding-codepages',
+      section: 'viewState',
+      group: 'change',
+      submenu: pages.map(row),
+    },
+  ];
+  rows.push({
+    label: 'Reopen with Encoding…',
+    testId: 'menu-item-Reopen with Encoding…',
+    section: 'viewState',
+    group: 'reopen',
+    shortcut: a.chords?.reopen,
+    disabled: !a.canReopen,
+    onClick: () => a.openReopenPicker(),
+  });
+  return rows;
+}
+
+const ENDING_NAME: Record<LineEndingTarget, string> = { lf: 'LF', cr: 'CR', crlf: 'CRLF' };
+const ENDING_ORDER: readonly LineEndingTarget[] = ['lf', 'cr', 'crlf'];
+
+/**
+ * 059 FR-057 — the line-ending list: LF, CR, CRLF and Mixed, the current state marked. ONE builder for the
+ * line-ending indicator's menu and the content menu's Line Endings submenu.
+ *
+ * LF, CR and CRLF convert every ending, as one undoable step; the current UNIFORM ending is a no-op (FR-038).
+ * On a mixed document none of the three is current — the dominant ending included — so each converts.
+ * **Mixed is always listed and never selectable**: it is marked current on a mixed document and is only a
+ * state to switch FROM ("Users cannot switch to 'Mixed'" — the user).
+ */
+export function lineEndingMenuItems(a: LineEndingMenuArgs): MenuAction[] {
+  const rows: MenuAction[] = ENDING_ORDER.map((target) => {
+    const current = !a.mixed && a.lineEnding === target;
+    const name = ENDING_NAME[target];
+    return {
+      label: current ? `${name} ✓` : name,
+      testId: `menu-item-line-ending-${target}`,
+      section: 'viewState' as const,
+      group: 'convert',
+      shortcut: a.chords?.[target],
+      onClick: () => {
+        if (!current) a.convert(target);
+      },
+    };
+  });
+  rows.push({
+    label: a.mixed ? 'Mixed ✓' : 'Mixed',
+    testId: 'menu-item-line-ending-mixed',
+    section: 'viewState',
+    group: 'convert',
+    disabled: true,
+  });
+  return rows;
+}
+
+/**
+ * 059 FR-061 — Insert Line Break (LF) / (CR) / (CRLF), the content menu's explicit route to a mixed document:
+ * a line break with THAT ending at each caret, as an ordinary undoable edit. Enter keeps the dominant ending.
+ * Labelled as the key binder names the three commands, so the two surfaces agree; a group of their own below
+ * the conversions, because they change one line rather than every one.
+ */
+export function insertLineBreakItems(a: InsertLineBreakArgs): MenuAction[] {
+  return ENDING_ORDER.map((ending) => ({
+    label: `Insert Line Break (${ENDING_NAME[ending]})`,
+    testId: `menu-item-insert-line-break-${ending}`,
+    section: 'viewState' as const,
+    group: 'insert',
+    shortcut: a.chords?.[ending],
+    onClick: () => a.insert(ending),
+  }));
 }
 
 /**
@@ -246,6 +408,33 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
           },
         ]
       : []),
+    /*
+     * 059 FR-058 — Encoding and Line Endings, beside Set Language in View State, each naming the current state
+     * as Set Language names the language, and each holding its indicator's own list. With the status bar
+     * hidden these are the route (FR-033); the indicators are accelerators over them. Test ids pinned to the
+     * bare labels, so they survive the state changing.
+     */
+    ...(args.encoding
+      ? [
+          {
+            label: `Encoding (${encodingLabel(args.encoding.current.encoding, args.encoding.current.hasBom)})`,
+            testId: 'menu-item-Encoding',
+            section: 'viewState' as const,
+            shortcut: args.encoding.changeChord,
+            submenu: encodingMenuItems(args.encoding),
+          },
+        ]
+      : []),
+    ...(args.lineEndings
+      ? [
+          {
+            label: `Line Endings (${lineEndingLabel(args.lineEndings.lineEnding, args.lineEndings.mixed)})`,
+            testId: 'menu-item-Line Endings',
+            section: 'viewState' as const,
+            submenu: [...lineEndingMenuItems(args.lineEndings), ...insertLineBreakItems(args.lineEndings.insert)],
+          },
+        ]
+      : []),
     {
       // 024 US1 (#152) / Principle VI: every panel action has a menu item, even one also on the
       // status bar — so it survives a hidden status bar. The leading ✓ renders the current state.
@@ -255,6 +444,21 @@ export function editorContentMenu(args: ContentMenuArgs): MenuAction[] {
       shortcut: args.wordWrap.chord,
       onClick: () => args.wordWrap.toggle(),
     },
+    /*
+     * 059 FR-059 — View Whitespace, immediately after Word Wrap and in its idiom: the menu route to the
+     * status-bar toggle, so a hidden bar strands nothing. The check states the PANEL's own value.
+     */
+    ...(args.whitespace
+      ? [
+          {
+            label: args.whitespace.on ? 'View Whitespace ✓' : 'View Whitespace',
+            testId: 'menu-item-View Whitespace',
+            section: 'viewState' as const,
+            shortcut: args.whitespace.chord,
+            onClick: () => args.whitespace?.toggle(),
+          },
+        ]
+      : []),
     /*
      * 044 FR-122b — Synchronise Scrolling, after Word Wrap and in its idiom (contracts/menus-and-controls.md
      * §3, §10). Present exactly where Open Preview is — ENABLED even while that item is disabled, because

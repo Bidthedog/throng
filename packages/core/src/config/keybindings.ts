@@ -141,6 +141,17 @@ export type ActionId =
   // 024 US1 (#152): toggle word wrap for the focused editor's document. Ctrl+Alt+W — a single chord
   // the model already expresses, clear of the reserved terminal-key tier (constitution IV, v4.2.0).
   | 'editor.toggleWordWrap'
+  // 059 FR-041 (#517, #71): the document's own format — read again in a chosen encoding, written in one,
+  // or its line endings converted. Panel actions with menu items (FR-040); unbound by default.
+  | 'editor.reopenWithEncoding'
+  | 'editor.changeEncoding'
+  | 'editor.convertLineEndingsToCr'
+  | 'editor.insertLineBreakLf'
+  | 'editor.insertLineBreakCr'
+  | 'editor.insertLineBreakCrlf'
+  | 'editor.toggleWhitespace'
+  | 'editor.convertLineEndingsToLf'
+  | 'editor.convertLineEndingsToCrlf'
   // 024 US6 (#157): open the focused item's context menu from the keyboard (Shift+F10 / the Menu key),
   // so a menu-driven UI is reachable without a mouse (FR-018c). Neither chord is a reserved terminal key.
   | 'menu.open'
@@ -425,6 +436,15 @@ export const COMMAND_SCOPES: CommandScopes = {
   'editor.columnSelectLeft': EDITOR_ONLY,
   'editor.columnSelectRight': EDITOR_ONLY,
   'editor.toggleWordWrap': EDITOR_ONLY,
+  'editor.reopenWithEncoding': EDITOR_ONLY,
+  'editor.changeEncoding': EDITOR_ONLY,
+  'editor.convertLineEndingsToCr': EDITOR_ONLY,
+  'editor.insertLineBreakLf': EDITOR_ONLY,
+  'editor.insertLineBreakCr': EDITOR_ONLY,
+  'editor.insertLineBreakCrlf': EDITOR_ONLY,
+  'editor.toggleWhitespace': EDITOR_ONLY,
+  'editor.convertLineEndingsToLf': EDITOR_ONLY,
+  'editor.convertLineEndingsToCrlf': EDITOR_ONLY,
   // 047 (research R5) — Markdown section folding: a Markdown editor and a preview, never a terminal.
   'markdown.toggleSection': MARKDOWN_SURFACES,
   'markdown.toggleAll': MARKDOWN_SURFACES,
@@ -683,6 +703,17 @@ const WINDOWS_BINDINGS: PlatformBindings = {
     // Ctrl+G is. 046 iterate round 5 (FR-124): written `Mods+K1,K2` — Ctrl held through E then W.
     // Saved installs move from `Ctrl+E W` through shipped-defaults version 15.
     'editor.toggleWordWrap': ['Ctrl+E,W'],
+    // 059 FR-041 — unbound: the menu items are the route (FR-040), and none of the four is frequent
+    // enough to spend a chord on by default.
+    'editor.reopenWithEncoding': [],
+    'editor.changeEncoding': [],
+    'editor.convertLineEndingsToCr': [],
+    'editor.insertLineBreakLf': [],
+    'editor.insertLineBreakCr': [],
+    'editor.insertLineBreakCrlf': [],
+    'editor.toggleWhitespace': [],
+    'editor.convertLineEndingsToLf': [],
+    'editor.convertLineEndingsToCrlf': [],
   },
 };
 

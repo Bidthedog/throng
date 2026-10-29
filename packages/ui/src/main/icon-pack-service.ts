@@ -95,6 +95,8 @@ const SVG_SHAPES: Record<string, string> = {
   // 060 #532 (FR-037, FR-038): a house for this project's settings, a circled bar for the exclusions.
   projectSettings: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
   searchExclusions: '<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>',
+  // 059 (FR-059): a pilcrow — View Whitespace.
+  whitespace: '<path d="M17 4v16"/><path d="M13 4v16"/><path d="M19 4h-9a4 4 0 0 0 0 8h3"/>',
   collapse: '<path d="M15 6l-6 6 6 6"/>',
   expand: '<path d="M9 6l6 6-6 6"/>',
   rename: '<path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 5l4 4"/>',

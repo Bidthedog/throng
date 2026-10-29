@@ -333,7 +333,11 @@ import { setAtPath } from './metadata.js';
 // Bumped by 060 #532 (26 → 27): two icon tokens, `projectSettings` and `searchExclusions` (FR-037,
 // FR-038). The additive case again: every payload arrives, no existing value moves. The two new
 // `search.inFiles` settings need no bump (044's 7 → 8 reasoning).
-export const SHIPPED_DEFAULTS_VERSION = 27;
+//
+// Bumped by 059 round 2 (27 → 28): one icon token, `whitespace`, the editor status bar's View
+// Whitespace toggle (FR-059). The additive case again: the payload arrives, no existing value moves.
+// `editor.defaultShowWhitespace` needs no bump (044's 7 → 8 reasoning).
+export const SHIPPED_DEFAULTS_VERSION = 28;
 
 /**
  * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the

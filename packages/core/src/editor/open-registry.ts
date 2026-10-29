@@ -7,6 +7,7 @@
  * (reuses the 004 normalise). No OS calls.
  */
 import { normaliseFolder } from '../projects/project.js';
+import type { EncodingId } from '../workspace/model.js';
 
 export interface OpenDocEntry {
   panelId: string;
@@ -54,7 +55,8 @@ export type RefusalReason = string;
 export type OpenDecision =
   | { action: 'focus'; panelId: string; windowId: string }
   | { action: 'open' }
-  | { action: 'refuse'; reason: RefusalReason };
+  /** `encoding` — the encoding a `not-decodable` file claims, so the notice can name it (059 FR-053). */
+  | { action: 'refuse'; reason: RefusalReason; encoding?: EncodingId };
 
 /** Decide whether to focus the existing editor for `absPath` or open a new one. */
 export function openOrFocus(reg: OpenDocRegistry, absPath: string): OpenDecision {

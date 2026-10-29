@@ -1,6 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { FOCUS_MODE_STRIP_CLASS, FocusModeBadge, usePanelInFocusMode } from '../workspace/focus-mode-badge.js';
-import { firstBinding, formatGrouped, isFlowingDocument, languageName } from '@throng/core';
+import {
+  codePageName,
+  encodingLabel,
+  firstBinding,
+  formatGrouped,
+  isCodePageId,
+  isFlowingDocument,
+  languageName,
+  lineEndingLabel,
+} from '@throng/core';
 import { usePanelCaret, type PanelCaret } from './caret-store.js';
 import { useEditorHoveredLink } from './editor-hovered-link-store.js';
 import { LinkTargetReadout } from '../common/link-target-readout.js';
@@ -12,13 +21,26 @@ import {
   labelShortens,
   type LabelForm,
   type ReadoutId,
+  type SegmentId,
   type SegmentWidth,
 } from './status-strip-fit.js';
 import { usePanelLanguage } from './editor-language.js';
 import { LanguagePicker } from './language-picker.js';
+import { EncodingPicker } from './encoding-picker.js';
 import { clearDocumentOverride } from './language-override.js';
 import { useServicesOptional } from '../composition-root.js';
-import { registerPickerOpener, unregisterPickerOpener } from './picker-request.js';
+import {
+  registerEncodingPickerOpener,
+  registerPickerOpener,
+  unregisterEncodingPickerOpener,
+  unregisterPickerOpener,
+  type EncodingPickerMode,
+} from './picker-request.js';
+import { useDocumentFormat } from './document-format-store.js';
+import { encodingMenuItems, lineEndingMenuItems } from './content-menu.js';
+import { getEditorActions } from './editor-actions.js';
+import { useOptionalContextMenu } from '../context-menu-provider.js';
+import type { MenuAction } from '../workspace/context-menu.js';
 import { useFocusTrap } from '../common/focus-trap.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
 import { useEditorState } from './editor-state.js';
@@ -34,6 +56,7 @@ import {
   useDocumentWordWrap,
   toggleDocumentWordWrap,
 } from './word-wrap-store.js';
+import { usePanelWhitespace } from './view-whitespace.js';
 
 /**
  * The editor status strip (016, FR-010) — the band along the bottom of an Editor Panel showing the
@@ -112,10 +135,10 @@ export const BAR_GAP = 6;
 
 /** Whether two measurement tables agree, so an unchanged measurement causes no re-render. */
 function sameWidths(
-  a: Partial<Record<ReadoutId, SegmentWidth>>,
-  b: Partial<Record<ReadoutId, SegmentWidth>>,
+  a: Partial<Record<SegmentId, SegmentWidth>>,
+  b: Partial<Record<SegmentId, SegmentWidth>>,
 ): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as ReadoutId[]);
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)] as SegmentId[]);
   for (const key of keys) {
     if (a[key]?.full !== b[key]?.full || a[key]?.short !== b[key]?.short) return false;
   }
@@ -216,7 +239,12 @@ export interface StatusStripProps {
   relPath: string | null;
   /** Mount with the language picker already open — the strip was revealed IN ORDER to show it. */
   autoOpenPicker?: boolean;
-  /** The picker went from open to closed (chosen, dismissed, or Escaped). */
+  /**
+   * 059 — mount with the ENCODING picker already open for this command: the strip was revealed for it
+   * (Reopen with Encoding or Change Encoding run with the status bar hidden).
+   */
+  autoOpenEncodingPicker?: EncodingPickerMode;
+  /** A picker went from open to closed (chosen, dismissed, or Escaped). */
   onPickerClosed?: () => void;
   /**
    * 044 FR-001/FR-004 — the editor's OWN project root, which the preview button is decided against.
@@ -289,13 +317,34 @@ export function StatusStrip({
   projectId,
   relPath,
   autoOpenPicker = false,
+  autoOpenEncodingPicker,
   onPickerClosed,
   projectRoot = null,
 }: StatusStripProps): ReactElement {
   const resolution = usePanelLanguage(panelId);
   // Optional: the strip renders without the app's services in isolation; the reset then re-resolves only.
   const documents = useServicesOptional()?.documents ?? null;
-  const [pickerOpen, setPickerOpen] = useState(autoOpenPicker);
+  const [languagePickerOpen, setLanguagePickerOpen] = useState(autoOpenPicker);
+  /*
+   * 059 — the encoding picker, for Reopen with Encoding or the Change Encoding command. The strip owns it for the language
+   * picker's reason: it is what the picker is anchored to, and one picker means one answer about the
+   * current encoding. The two pickers share the strip's one slot — opening either closes the other.
+   */
+  const [encodingPicker, setEncodingPicker] = useState<EncodingPickerMode | null>(autoOpenEncodingPicker ?? null);
+  const pickerOpen = languagePickerOpen || encodingPicker !== null;
+  const setPickerOpen = (open: boolean | ((was: boolean) => boolean)): void => {
+    const next = typeof open === 'function' ? open(languagePickerOpen) : open;
+    if (next) setEncodingPicker(null);
+    setLanguagePickerOpen(next);
+  };
+  const openEncodingPicker = (mode: EncodingPickerMode): void => {
+    setLanguagePickerOpen(false);
+    setEncodingPicker(mode);
+  };
+  const closePickers = (): void => {
+    setLanguagePickerOpen(false);
+    setEncodingPicker(null);
+  };
   const name = languageName(resolution?.languageId ?? 'plaintext');
 
   /*
@@ -309,7 +358,7 @@ export function StatusStrip({
    * scrim paints above the panel — so it dimmed the editor, the window and the picker itself
    * (reported 2026-10-14). It stays one-at-a-time; it just does not dim anything.
    */
-  useTransientOverlay(pickerOpen, () => setPickerOpen(false), { scrim: false });
+  useTransientOverlay(pickerOpen, closePickers, { scrim: false });
 
   // Tell the panel when the picker closes, so a strip that is only on screen FOR the picker can go
   // away again (024 US1 follow-up). Edge-triggered: the panel must not be told on every render, and
@@ -337,6 +386,9 @@ export function StatusStrip({
   const filePath = useEditorState(panelId)?.filePath ?? null;
   const wrapDocKey = wordWrapDocKey(filePath, panelId);
   const wrapOn = useDocumentWordWrap(wrapDocKey, wrapSeed);
+  // 059 FR-059, FR-060 — View Whitespace is the PANEL's: its own choice, or the preference while it has none.
+  const whitespaceOn = usePanelWhitespace(panelId, useAppSettings().editor.defaultShowWhitespace);
+  const whitespaceChord = firstBinding(useKeybindings(), 'editor.toggleWhitespace');
 
   /*
    * 040 US1 — the readouts. TWO stores, and the split is a Principle XI requirement rather than an
@@ -425,21 +477,41 @@ export function StatusStrip({
   const [barWidth, setBarWidth] = useState(Number.POSITIVE_INFINITY);
   const [measured, setMeasured] = useState<{
     controls: number;
-    widths: Partial<Record<ReadoutId, SegmentWidth>>;
+    widths: Partial<Record<SegmentId, SegmentWidth>>;
   }>({ controls: 0, widths: {} });
+
+  /*
+   * 059 FR-030/FR-031 — the document's encoding and line format, from the display copy the authority's
+   * answers and relays write (`document-format-store.ts`). Shown on EVERY editor panel, UTF-8 without a
+   * BOM and LF included (clarification 1); before the first answer lands, the defaults a new document gets.
+   */
+  const format = useDocumentFormat(panelId);
+  const defaultLineEnding = useAppSettings().editor.defaultLineEnding;
+  const encoding = format?.encoding ?? 'utf8';
+  const hasBom = format?.hasBom ?? false;
+  const lineEnding = format?.lineEnding ?? defaultLineEnding;
+  const mixed = format?.mixed ?? false;
+  // 059 FR-073: a code page names its script, as the menus do (`Windows-1253 (Greek)`).
+  const encodingText = isCodePageId(encoding) ? codePageName(encoding) : encodingLabel(encoding, hasBom);
+  const lineEndingText = lineEndingLabel(lineEnding, mixed);
 
   const present = statusReadouts(caret, metrics).filter((r) => wanted(r.id));
   const fit = fitReadouts({
     available: barWidth - measured.controls - BAR_GAP,
     // Only readouts that are PRESENT may be fitted. A readout absent because there is no selection
     // (FR-005) or because the counts have not settled (FR-008b) was never hidden by width, and the
-    // hide order must not account for it.
+    // hide order must not account for it. The two format indicators are always present (FR-030), and
+    // are fitted as segments of their own so width can drop them after the line (FR-032).
     widths: Object.fromEntries(
-      present.filter((r) => measured.widths[r.id]).map((r) => [r.id, measured.widths[r.id]]),
-    ) as Partial<Record<ReadoutId, SegmentWidth>>,
+      [...present.map((r) => r.id), 'encoding' as const, 'lineEnding' as const]
+        .filter((id) => measured.widths[id])
+        .map((id) => [id, measured.widths[id]]),
+    ) as Partial<Record<SegmentId, SegmentWidth>>,
     gap: BAR_GAP,
   });
   const forms = new Map(fit.segments.map((s) => [s.id, s.label]));
+  const showEncoding = forms.has('encoding');
+  const showLineEnding = forms.has('lineEnding');
   const readouts = statusReadouts(
     caret,
     metrics,
@@ -459,10 +531,10 @@ export function StatusStrip({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const controls = controlsRef.current?.getBoundingClientRect().width ?? 0;
-    const widths: Partial<Record<ReadoutId, SegmentWidth>> = {};
+    const widths: Partial<Record<SegmentId, SegmentWidth>> = {};
     for (const el of rulerRef.current?.children ?? []) {
       const key = el.getAttribute('data-measure');
-      const [id, form] = (key ?? '').split(':') as [ReadoutId, LabelForm];
+      const [id, form] = (key ?? '').split(':') as [SegmentId, LabelForm];
       if (!id || !form) continue;
       const width = el.getBoundingClientRect().width;
       // A label with no shorter form is drawn ONCE and stands for both (see the ruler below). Taking
@@ -481,8 +553,19 @@ export function StatusStrip({
   // because the strip is what it is anchored to. A second picker rendered by the menu would be free
   // to disagree with this one about which language is selected.
   useEffect(() => {
-    registerPickerOpener(panelId, () => setPickerOpen(true));
-    return () => unregisterPickerOpener(panelId);
+    registerPickerOpener(panelId, () => {
+      setEncodingPicker(null);
+      setLanguagePickerOpen(true);
+    });
+    // 059 — and the encoding picker, for the commands' Reopen with Encoding and Change Encoding.
+    registerEncodingPickerOpener(panelId, (mode) => {
+      setLanguagePickerOpen(false);
+      setEncodingPicker(mode);
+    });
+    return () => {
+      unregisterPickerOpener(panelId);
+      unregisterEncodingPickerOpener(panelId);
+    };
   }, [panelId]);
 
   /**
@@ -511,7 +594,7 @@ export function StatusStrip({
   useEffect(() => {
     if (!pickerOpen) return;
     const onPointerDown = (event: MouseEvent): void => {
-      if (!stripRef.current?.contains(event.target as Node)) setPickerOpen(false);
+      if (!stripRef.current?.contains(event.target as Node)) closePickers();
     };
     // Capture, so a handler that stops propagation on its way up cannot leave the menu stranded.
     document.addEventListener('mousedown', onPointerDown, true);
@@ -538,6 +621,52 @@ export function StatusStrip({
     return () => observer.disconnect();
     // `stripRef` is stable; re-observing per render would tear the observer down mid-measurement.
   }, [stripRef]);
+
+  /*
+   * 059 FR-033 — each indicator opens a menu of its actions, and that menu is the EDITOR MENU's own items
+   * (`encodingMenuItems` / `lineEndingMenuItems`, the builders the content menu uses): the indicator is an
+   * accelerator over them, so a hidden status bar strands nothing and the two surfaces cannot drift.
+   *
+   * Opened on the app's one context-menu host. Optional, so the strip still renders bare in isolation.
+   * A TOGGLE, as the cog is: the host closes an open menu on any window pointerdown — before this click —
+   * so the press records whether THIS indicator's menu was the one up, and the click then leaves it shut.
+   */
+  const menuHost = useOptionalContextMenu();
+  const keybindings = useKeybindings();
+  const editorUi = useEditorState(panelId);
+  const canReopen = filePath !== null && editorUi?.fileMissing !== true && editorUi?.movedOut !== true;
+  const indicatorMenu = useRef<{ opId: number | null; wasOpen: boolean }>({ opId: null, wasOpen: false });
+  const pressIndicator = (): void => {
+    indicatorMenu.current.wasOpen =
+      menuHost?.openId !== null && menuHost?.openId === indicatorMenu.current.opId;
+  };
+  const openIndicatorMenu = (anchor: HTMLElement, items: MenuAction[]): void => {
+    if (!menuHost || indicatorMenu.current.wasOpen) {
+      indicatorMenu.current.wasOpen = false;
+      return;
+    }
+    const r = anchor.getBoundingClientRect();
+    indicatorMenu.current.opId = menuHost.openMenu(r.left, r.top, items);
+  };
+  const encodingItems = (): MenuAction[] =>
+    encodingMenuItems({
+      current: { encoding, hasBom },
+      canReopen,
+      change: (choice) => void getEditorActions(panelId)?.changeEncoding?.(choice.encoding, choice.hasBom),
+      openReopenPicker: () => openEncodingPicker('reopen'),
+      chords: { reopen: firstBinding(keybindings, 'editor.reopenWithEncoding') },
+    });
+  const lineEndingItems = (): MenuAction[] =>
+    lineEndingMenuItems({
+      lineEnding,
+      mixed,
+      convert: (target) => void getEditorActions(panelId)?.convertLineEndings?.(target),
+      chords: {
+        lf: firstBinding(keybindings, 'editor.convertLineEndingsToLf'),
+        cr: firstBinding(keybindings, 'editor.convertLineEndingsToCr'),
+        crlf: firstBinding(keybindings, 'editor.convertLineEndingsToCrlf'),
+      },
+    });
 
   // 054 FR-078 — Focus Mode is shown on the maximised panel's own strip.
   const focusMode = usePanelInFocusMode(panelId);
@@ -596,50 +725,103 @@ export function StatusStrip({
       <div
         className="editor-status-strip__group editor-status-strip__group--controls"
         data-testid={`editor-status-controls-${panelId}`}
-        // Measured, because the readouts get whatever the controls do not take: FR-024 says the
-        // language indicator and the wrap toggle are never hidden by width, so they are subtracted
-        // first and the readouts absorb the pressure (FR-014).
-        data-measure="controls"
-        ref={controlsRef}
       >
-        <button
-          type="button"
-          className="editor-status-strip__language"
-          data-testid={`editor-language-${panelId}`}
-          // The language indicator is an ACTION CONTROL, so it carries a hover title naming the
-          // action (constitution, NON-NEGOTIABLE). Its LABEL is the language name — that is data,
-          // not a control label, so the icon rule's text-label ban does not apply to the name itself.
-          title="Set language"
-          aria-haspopup="dialog"
-          onClick={() => setPickerOpen((open) => !open)}
-        >
-          {name}
-        </button>
-        {/* 055 FR-024 — only while the language is the user's own choice; inside the MEASURED group, so its
-            width is subtracted before the readouts are fitted. */}
-        {resolution?.source === 'override' ? (
-          <IconButton
-            token="destroy"
-            className="editor-status-strip__language-reset"
-            testId={`editor-language-reset-${panelId}`}
-            title="Reset language to detected"
-            onClick={() => void clearDocumentOverride({ panelId, projectId, relPath, documents })}
-          />
+        {/*
+          059 FR-030 — the encoding and line-ending indicators, in the trailing group before the language
+          label. They are fitted SEGMENTS (measured on the ruler, dropped after the line, FR-032), so they sit
+          OUTSIDE the measured block below: what that block costs is what is never hidden.
+
+          Named buttons with their label as data and the action in the hover title (FR-031, #282), in the
+          language label's themed colour and the strip's active / inactive treatment (FR-034).
+        */}
+        {showEncoding ? (
+          <button
+            type="button"
+            className="editor-status-strip__format editor-status-strip__encoding"
+            data-testid={`editor-encoding-${panelId}`}
+            title="Change encoding"
+            aria-label={`encoding: ${encodingText}`}
+            aria-haspopup="menu"
+            onPointerDown={pressIndicator}
+            onClick={(e) => openIndicatorMenu(e.currentTarget, encodingItems())}
+          >
+            {encodingText}
+          </button>
         ) : null}
-        <button
-          type="button"
-          className="editor-status-strip__wrap"
-          data-testid={`editor-word-wrap-${panelId}`}
-          title={wrapChord ? `Toggle word wrap (${wrapChord})` : 'Toggle word wrap'}
-          aria-pressed={wrapOn}
-          onClick={() => toggleDocumentWordWrap(wrapDocKey, wrapSeed, panelId)}
+        {showLineEnding ? (
+          <button
+            type="button"
+            className="editor-status-strip__format editor-status-strip__line-ending"
+            data-testid={`editor-line-ending-${panelId}`}
+            title="Change line endings"
+            aria-label={`line endings: ${lineEndingText}`}
+            aria-haspopup="menu"
+            onPointerDown={pressIndicator}
+            onClick={(e) => openIndicatorMenu(e.currentTarget, lineEndingItems())}
+          >
+            {lineEndingText}
+          </button>
+        ) : null}
+        <div
+          className="editor-status-strip__fixed"
+          data-testid={`editor-status-fixed-${panelId}`}
+          // Measured, because the segments get whatever these controls do not take: FR-024 says the
+          // language indicator and the wrap toggle are never hidden by width, so they are subtracted
+          // first and the readouts and indicators absorb the pressure (FR-014, 059 FR-032).
+          data-measure="controls"
+          ref={controlsRef}
         >
-          {wrapOn ? 'Wrap' : 'No Wrap'}
-        </button>
-        {/* 044 FR-001, FR-122c — the scroll-sync toggle and the preview button, after the wrap toggle, inside
-            the MEASURED group: their width is subtracted before the readouts are fitted, so width pressure
-            never hides either (040 FR-023/FR-024). */}
-        <PreviewButton panelId={panelId} projectId={projectId} filePath={filePath} projectRoot={projectRoot} />
+          <button
+            type="button"
+            className="editor-status-strip__language"
+            data-testid={`editor-language-${panelId}`}
+            // The language indicator is an ACTION CONTROL, so it carries a hover title naming the
+            // action (constitution, NON-NEGOTIABLE). Its LABEL is the language name — that is data,
+            // not a control label, so the icon rule's text-label ban does not apply to the name itself.
+            title="Set language"
+            aria-haspopup="dialog"
+            onClick={() => setPickerOpen((open) => !open)}
+          >
+            {name}
+          </button>
+          {/* 055 FR-024 — only while the language is the user's own choice; inside the MEASURED group, so its
+              width is subtracted before the readouts are fitted. */}
+          {resolution?.source === 'override' ? (
+            <IconButton
+              token="destroy"
+              className="editor-status-strip__language-reset"
+              testId={`editor-language-reset-${panelId}`}
+              title="Reset language to detected"
+              onClick={() => void clearDocumentOverride({ panelId, projectId, relPath, documents })}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="editor-status-strip__wrap"
+            data-testid={`editor-word-wrap-${panelId}`}
+            title={wrapChord ? `Toggle word wrap (${wrapChord})` : 'Toggle word wrap'}
+            aria-pressed={wrapOn}
+            onClick={() => toggleDocumentWordWrap(wrapDocKey, wrapSeed, panelId)}
+          >
+            {wrapOn ? 'Wrap' : 'No Wrap'}
+          </button>
+          {/* 059 FR-059 — View Whitespace, immediately after wrap and, like it, inside the MEASURED group, so width
+              never hides it (040 FR-024). An icon toggle (`whitespace`), pressed while this PANEL shows the
+              symbols; the panel's own action runs it, which the content menu item and the chord run too. */}
+          <IconButton
+            token="whitespace"
+            className="editor-status-strip__preview"
+            testId={`editor-whitespace-${panelId}`}
+            title={whitespaceChord ? `View Whitespace (${whitespaceChord})` : 'View Whitespace'}
+            ariaLabel="View Whitespace"
+            ariaPressed={whitespaceOn}
+            onClick={() => getEditorActions(panelId)?.toggleWhitespace?.()}
+          />
+          {/* 044 FR-001, FR-122c — the scroll-sync toggle and the preview button, after the wrap toggle, inside
+              the MEASURED group: their width is subtracted before the readouts are fitted, so width pressure
+              never hides either (040 FR-023/FR-024). */}
+          <PreviewButton panelId={panelId} projectId={projectId} filePath={filePath} projectRoot={projectRoot} />
+        </div>
       </div>
       {/*
         The RULER (040 FR-021, FR-022a). Every present readout, in both label forms, drawn where it
@@ -678,17 +860,43 @@ export function StatusStrip({
             </span>
           )),
         )}
+        {/* 059 — the two indicators, in the class that draws them, so their padding is measured too. */}
+        <span className="editor-status-strip__format" data-measure="encoding:full">
+          {encodingText}
+        </span>
+        <span className="editor-status-strip__format" data-measure="lineEnding:full">
+          {lineEndingText}
+        </span>
       </div>
       {/* The picker stays a direct child of the STRIP, not of the trailing group: it is positioned
           against the strip's stacking context (`editor.css` `.language-picker`), and the
           outside-click dismissal asks whether a click landed inside the strip. */}
-      {pickerOpen && (
+      {languagePickerOpen && (
         <LanguagePicker
           panelId={panelId}
           projectId={projectId}
           relPath={relPath}
           current={resolution?.languageId ?? 'plaintext'}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+      {encodingPicker !== null && (
+        <EncodingPicker
+          panelId={panelId}
+          mode={encodingPicker}
+          current={{ encoding, hasBom }}
+          onClose={closePickers}
+          onChoose={(choice) => {
+            const mode = encodingPicker;
+            closePickers();
+            const actions = getEditorActions(panelId);
+            if (mode === 'change') {
+              // FR-055 — the current entry is a no-op, as it is on the indicator's menu.
+              if (choice.encoding !== encoding || choice.hasBom !== hasBom) {
+                void actions?.changeEncoding?.(choice.encoding, choice.hasBom);
+              }
+            } else void actions?.reopenWithEncoding?.(choice.encoding);
+          }}
         />
       )}
     </div>

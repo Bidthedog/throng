@@ -5,16 +5,36 @@
  * same rules a Replace All does, rather than a second copy of them:
  *
  * - confinement on the RESOLVED path, so a symlink cannot walk a write out of its project;
- * - a binary file and a file that is not valid UTF-8 are REFUSED, never transcoded — a non-fatal decode
- *   of Windows-1252 would write `EF BF BD` over every accented character;
- * - the file's own encoding, BOM, dominant line ending and mixed endings go back out unchanged;
+ * - the file is read through the editor's own detection (059): a binary, UTF-32 or undecodable file is
+ *   REFUSED, never transcoded;
+ * - the file's own encoding, BOM, dominant line ending and mixed endings go back out unchanged, and a
+ *   result that encoding cannot hold is refused with nothing written (059 FR-021, FR-051);
  * - `isOpen` is asked once more with nothing between it and the write, because a `load()` in any await
  *   above makes the file open, and a disk write would then land behind a live buffer.
  */
-import { decode, encode, isDecodableUtf8, isProbablyBinary, type EncodeOptions, type IFileSystem } from '@throng/core';
+import {
+  UnrepresentableTextError,
+  encode,
+  readText,
+  type EncodeOptions,
+  type EncodingId,
+  type IFileSystem,
+  type CodePageId,
+} from '@throng/core';
 
 /** Why a rewrite wrote nothing, in the vocabulary 043 FR-058 reports. */
-export type RewriteFailure = 'readOnly' | 'locked' | 'io' | 'missing' | 'outOfTree' | 'binary' | 'encoding';
+export type RewriteFailure =
+  | 'readOnly'
+  | 'locked'
+  | 'io'
+  | 'missing'
+  | 'outOfTree'
+  | 'binary'
+  // 059: UTF-32 (FR-006); not lossless in the encoding it claims (FR-014); the result holds a character
+  // the file's encoding cannot (FR-021).
+  | 'utf32'
+  | 'not-decodable'
+  | 'unrepresentable';
 
 /** What the transform decided: the new text (`null` = write nothing), and a value for the caller. */
 export interface RewriteDecision<T> {
@@ -23,7 +43,8 @@ export interface RewriteDecision<T> {
 }
 
 export type RewriteOutcome<T> =
-  | { kind: 'failed'; reason: RewriteFailure }
+  /** `encoding` names the file's encoding for `not-decodable` and `unrepresentable`, so the report can. */
+  | { kind: 'failed'; reason: RewriteFailure; encoding?: EncodingId }
   /** A document opened on the file during the rewrite; nothing was written. The caller takes the buffer path. */
   | { kind: 'becameOpen' }
   /** The transform wrote nothing. */
@@ -35,6 +56,8 @@ export interface RewriteOptions {
   allowed: (realPath: string) => boolean;
   /** Asked immediately before the write. */
   isOpen: (absPath: string) => boolean;
+  /** `editor.fallbackEncoding` (059 FR-069): the editor's last detection step, not a second one. */
+  fallbackEncoding?: CodePageId;
 }
 
 export async function textFileRewrite<T>(
@@ -54,9 +77,9 @@ export async function textFileRewrite<T>(
 
   try {
     const bytes = await fs.readBytes(realPath);
-    if (isProbablyBinary(bytes)) return { kind: 'failed', reason: 'binary' };
-    if (!isDecodableUtf8(bytes)) return { kind: 'failed', reason: 'encoding' };
-    const file = decode(bytes);
+    const read = readText(bytes, undefined, options.fallbackEncoding);
+    if (!read.ok) return { kind: 'failed', reason: read.reason, ...('encoding' in read ? { encoding: read.encoding } : {}) };
+    const file = read.file;
 
     const decision = transform(file.text);
     if (decision.next === null) return { kind: 'unchanged', value: decision.value };
@@ -65,7 +88,13 @@ export async function textFileRewrite<T>(
     // written back. Mixed endings are kept line by line, or a one-line edit arrives as a whole-file diff.
     const opts: EncodeOptions = { encoding: file.encoding, hasBom: file.hasBom, lineEnding: file.lineEnding };
     if (file.mixedLineEndings) opts.mixedLineEndings = file.mixedLineEndings;
-    const out = encode(decision.next, opts);
+    let out: Uint8Array;
+    try {
+      out = encode(decision.next, opts);
+    } catch (e) {
+      if (e instanceof UnrepresentableTextError) return { kind: 'failed', reason: 'unrepresentable', encoding: file.encoding };
+      throw e;
+    }
 
     if (options.isOpen(absPath)) return { kind: 'becameOpen' };
     await fs.writeBytes(realPath, out);

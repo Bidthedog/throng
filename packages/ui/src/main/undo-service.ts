@@ -1,5 +1,5 @@
 import type { ChangeSet } from '@codemirror/state';
-import type { MergeClass } from '@throng/core';
+import type { DocEncoding, LineFormat, MergeClass } from '@throng/core';
 
 /**
  * The undo history of ONE document (016, FR-026c/FR-026d/FR-026e).
@@ -34,6 +34,13 @@ export interface UndoEntry {
   mergeClass: MergeClass;
   /** When it was recorded, so a run that the user paused in the middle of becomes two entries. */
   at: number;
+  /**
+   * A line-ending conversion (059 FR-035/FR-036): `changes`/`inverted` are empty, and undo/redo
+   * restore `before`/`after`. Absent on every text edit.
+   */
+  format?: { before: LineFormat; after: LineFormat };
+  /** A Change Encoding (059 FR-055): restored on undo and redo like `format`. */
+  encoding?: { before: DocEncoding; after: DocEncoding };
 }
 
 /**

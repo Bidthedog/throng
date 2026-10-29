@@ -686,12 +686,41 @@ declare global {
         /** A remount asking whether the document's path still reads (027 / #161). */
         verifyPath?: (panelId: string) => void;
         resync: (panelId: string) => Promise<import('@throng/core').ResetDocumentMsg | null>;
-        /** Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). */
-        restoreRecovered: (panelId: string, text: string, history?: unknown) => Promise<void>;
+        /**
+         * Restore crash-recovered content into the authority, dirty vs the disk file (FR-102). `format` is the
+         * snapshot's own (059 FR-015) — pass it through untouched; main validates it.
+         */
+        restoreRecovered: (panelId: string, text: string, history?: unknown, format?: unknown) => Promise<void>;
         /** THIS panel's crash snapshot — never the whole recovery directory (FR-027b). */
         recoverOne: (
           panelId: string,
-        ) => Promise<{ text: string; version: number; history?: unknown } | null>;
+        ) => Promise<{ text: string; version: number; history?: unknown; format?: unknown } | null>;
+        /** 059 FR-068 — dismiss the document's read notice, in every view of it. */
+        dismissReadNotice: (req: { panelId: string }) => Promise<void>;
+        /** 059 FR-024 — re-read the file in `encoding`. Ask about unsaved changes BEFORE calling (FR-025). */
+        reopenWithEncoding: (req: {
+          panelId: string;
+          encoding: import('@throng/core').EncodingId;
+        }) => Promise<
+          | { ok: true }
+          | {
+              ok: false;
+              reason: 'not-decodable' | 'no-file' | 'io';
+              encoding?: import('@throng/core').EncodingId;
+              error: string;
+            }
+        >;
+        /** 059 FR-055 — Change Encoding: dirty, one undo step, nothing written; `changed: false` when it already was. */
+        changeEncoding: (req: {
+          panelId: string;
+          encoding: import('@throng/core').EncodingId;
+          hasBom: boolean;
+        }) => Promise<{ ok: true; changed: boolean }>;
+        /** 059 FR-035, FR-057 — Convert to LF / CR / CRLF; `changed: false` when it already was (FR-038). */
+        convertLineEndings: (req: {
+          panelId: string;
+          target: 'lf' | 'cr' | 'crlf';
+        }) => Promise<{ ok: true; changed: boolean }>;
         getContent: (
           panelId: string,
         ) => Promise<{
@@ -711,6 +740,19 @@ declare global {
           encoding: import('@throng/core').EncodingId;
           hasBom: boolean;
           lineEnding: import('@throng/core').LineEndingId;
+          /** 059 FR-028 — the user chose `encoding` (display/restore copy). */
+          encodingChosen?: boolean;
+          /** 059 — the document mixes line endings; `lineEnding` is the dominant one. */
+          mixed?: boolean;
+          /** 059 FR-022 — the document's save is refused (a remount shows the notice from this). */
+          saveRefused?: import('@throng/core').Unrepresentable | null;
+          /** 059 FR-068 — how the document was read (a remount shows the notice from this). */
+          readNotice?: {
+            kind: 'suspect' | 'reopened';
+            readAs: import('@throng/core').EncodingId;
+            likely?: import('@throng/core').CodePageId | null;
+            fallbackHelps?: boolean;
+          } | null;
         } | null>;
         /**
          * 052 R7 — re-link a restored linked panel to its owner's document. Resolves the owner's state (this
@@ -744,7 +786,7 @@ declare global {
         }) => Promise<
           | { action: 'focus'; panelId: string; windowId: string }
           | { action: 'open' }
-          | { action: 'refuse'; reason: string }
+          | { action: 'refuse'; reason: string; encoding?: import('@throng/core').EncodingId }
         >;
         isOpen: (absPath: string) => Promise<boolean>;
         list: () => Promise<
@@ -756,7 +798,7 @@ declare global {
           }>
         >;
         recover: () => Promise<
-          Array<{ panelId: string; text: string; version: number; history?: unknown }>
+          Array<{ panelId: string; text: string; version: number; history?: unknown; format?: unknown }>
         >;
         subWorkspaceFiles: () => Promise<Array<{ filePath: string }>>;
         destroy: (panelId: string) => void;
@@ -768,6 +810,23 @@ declare global {
             reset?: import('@throng/core').ResetDocumentMsg;
             dirty?: boolean;
             deleted?: boolean;
+            /** 059 FR-034 — the document's format changed; render the indicators from these. */
+            encoding?: import('@throng/core').EncodingId;
+            hasBom?: boolean;
+            encodingChosen?: boolean;
+            lineFormat?: import('@throng/core').WireLineFormat;
+            /**
+             * 059 FR-022 — the save was refused for this character (re-sent on a repeat: flash), or `null` once
+             * a save succeeds or the character is gone.
+             */
+            saveRefused?: import('@throng/core').Unrepresentable | null;
+            /** 059 FR-068 — how the document was read, or `null` once that no longer applies. */
+            readNotice?: {
+            kind: 'suspect' | 'reopened';
+            readAs: import('@throng/core').EncodingId;
+            likely?: import('@throng/core').CodePageId | null;
+            fallbackHelps?: boolean;
+          } | null;
             /** The path became unreadable (true) or readable again (false) — 027 / #161. */
             unloadable?: boolean;
             externalChange?: boolean;
@@ -828,9 +887,13 @@ export type EditorLoadResult =
   | {
       ok: true;
       text: string;
-      encoding: 'utf8';
+      encoding: import('@throng/core').EncodingId;
       hasBom: boolean;
       lineEnding: 'lf' | 'crlf' | 'cr';
+      /** 059 — the file mixes line endings (present on the main-process answer; `lineEnding` is dominant). */
+      mixedLineEndings?: readonly ('lf' | 'crlf' | 'cr')[];
+      /** 059 — a linked load's answer carries the holder's format flat. */
+      mixed?: boolean;
       relativeFolder: string | null;
       /**
        * 052 R1 — the path was already held by another live panel's document, so this panel is now a view of
@@ -845,9 +908,11 @@ export type EditorLoadResult =
   // files — a rejection that says nothing at all (FR-061).
   | {
       ok: false;
-      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found';
+      reason: 'binary' | 'too-large' | 'io' | 'out-of-tree' | 'folder' | 'not-found' | 'utf32';
       error: string;
-    };
+    }
+  // 059 FR-014 — not lossless in the encoding it claims or was reopened in.
+  | { ok: false; reason: 'not-decodable'; encoding: import('@throng/core').EncodingId; error: string };
 
 /** Result of `window.throng.editor.resolveDrop` — may this dropped path be opened here? (018 / US9.) */
 export type EditorDropResult =
@@ -860,8 +925,15 @@ export type EditorDropResult =
 
 /** Result of `window.throng.editor.save`. */
 export type EditorSaveResult =
-  | { ok: true; absPath: string; encoding: 'utf8'; lineEnding: 'lf' | 'crlf' | 'cr' }
-  | { ok: false; reason: 'out-of-tree' | 'no-location' | 'io' | 'replaced'; error: string };
+  | { ok: true; absPath: string; encoding: import('@throng/core').EncodingId; lineEnding: 'lf' | 'crlf' | 'cr' }
+  | { ok: false; reason: 'out-of-tree' | 'no-location' | 'io' | 'replaced'; error: string }
+  // 059 FR-021 — nothing was written; the relay carries the same detail as `saveRefused`.
+  | {
+      ok: false;
+      reason: 'unrepresentable';
+      error: string;
+      unrepresentable: import('@throng/core').Unrepresentable;
+    };
 
 /** Result of `window.throng.editor.saveAll`. */
 export interface EditorSaveAllResult {

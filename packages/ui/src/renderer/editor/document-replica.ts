@@ -1,5 +1,5 @@
 import { ChangeSet } from '@codemirror/state';
-import type { CanonicalChangeMsg, DispatchChangeMsg, MergeClass } from '@throng/core';
+import type { CanonicalChangeMsg, DispatchChangeMsg, LineEndingId, MergeClass } from '@throng/core';
 
 /**
  * A view's replica of a document owned by UI main (016, FR-028f · constitution XI).
@@ -60,6 +60,8 @@ export class DocumentReplica {
   private bufferClass: MergeClass = null;
   private inFlightSelection: unknown = null;
   private inFlightClass: MergeClass = null;
+  /** 059 FR-061 — the in-flight change's Insert Line Break ending, when it is one. */
+  private inFlightEnding: LineEndingId | undefined = undefined;
   /** Resolved when nothing is left in flight — a save must not race the edit it is saving. */
   private readonly idleWaiters: (() => void)[] = [];
 
@@ -84,7 +86,18 @@ export class DocumentReplica {
    *
    * Sent immediately when nothing is in flight; composed into the buffer when something is.
    */
-  record(changes: ChangeSet, selectionBefore: unknown, mergeClass: MergeClass): void {
+  record(
+    changes: ChangeSet,
+    selectionBefore: unknown,
+    mergeClass: MergeClass,
+    /**
+     * 059 FR-061 — Insert Line Break's chosen ending, for the breaks this change inserts. Honoured only when
+     * the change is sent on its own: a buffered run is composed, and a composed change cannot say which of
+     * its breaks the ending belongs to. So the caller sends it from an IDLE replica (`settled()` first),
+     * which makes it the in-flight change, and anything typed meanwhile buffers behind it as usual.
+     */
+    insertedLineEnding?: LineEndingId,
+  ): void {
     if (this.inFlight) {
       // Composing into the buffer merges these keystrokes into ONE dispatch, and therefore one undo
       // entry. That is the same grouping the authority would have applied to them anyway (a run of
@@ -117,6 +130,7 @@ export class DocumentReplica {
     this.inFlight = changes;
     this.inFlightSelection = selectionBefore;
     this.inFlightClass = mergeClass;
+    this.inFlightEnding = insertedLineEnding;
     this.dispatchInFlight();
   }
 
@@ -133,11 +147,26 @@ export class DocumentReplica {
     // An undo or redo we invoked also carries our origin, and is NOT this: we asked the authority to
     // act and applied nothing locally, so it must be applied here like any other change. Only `kind`
     // tells them apart, which is why it exists.
-    if (msg.kind === 'edit' && msg.origin === this.viewId && this.inFlight) {
+    //
+    // A line-ending CONVERSION (059 T031) is an `edit` too, and may carry this view's origin — but this
+    // view never dispatched it, so it is never the acknowledgement of a keystroke still in flight. Taking
+    // it for one would drop that keystroke's real acknowledgement, which would then arrive as somebody
+    // else's change and apply the keystroke a second time. It is applied below like any other change
+    // (its `changes` are empty); the caller takes the new format from `msg.lineFormat`.
+    //
+    // Round 2 (FR-055, FR-061) widened what carries a format, so the test is no longer "has a lineFormat".
+    // A Change Encoding is the same shape (empty `changes`, an `encoding`), and an ORDINARY edit that changed
+    // the per-line record — an Insert Line Break, a deleted odd break — now carries `lineFormat` and IS this
+    // view's acknowledgement. What tells them apart is that a format-only change has no text change: a view
+    // never dispatches an empty change.
+    const formatOnly =
+      (msg.lineFormat !== undefined || msg.encoding !== undefined) && ChangeSet.fromJSON(msg.changes).empty;
+    if (msg.kind === 'edit' && msg.origin === this.viewId && this.inFlight && !formatOnly) {
       this.synced = msg.version;
       this.inFlight = null;
       this.inFlightSelection = null;
       this.inFlightClass = null;
+      this.inFlightEnding = undefined;
       this.sendBuffer();
       this.settleIfIdle();
       return null;
@@ -169,6 +198,7 @@ export class DocumentReplica {
     this.bufferSelection = null;
     this.inFlightSelection = null;
     this.inFlightClass = null;
+    this.inFlightEnding = undefined;
     this.bufferClass = null;
     this.settleIfIdle();
   }
@@ -214,6 +244,7 @@ export class DocumentReplica {
     this.inFlight = this.buffer;
     this.inFlightSelection = this.bufferSelection;
     this.inFlightClass = this.bufferClass;
+    this.inFlightEnding = undefined;
     this.buffer = null;
     this.bufferSelection = null;
     this.bufferClass = null;
@@ -229,6 +260,7 @@ export class DocumentReplica {
       baseVersion: this.synced,
       selectionBefore: this.inFlightSelection,
       mergeClass: this.inFlightClass,
+      ...(this.inFlightEnding !== undefined ? { insertedLineEnding: this.inFlightEnding } : {}),
     });
   }
 

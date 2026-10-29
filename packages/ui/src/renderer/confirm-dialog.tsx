@@ -243,6 +243,14 @@ export function useConfirm(): (options: ConfirmOptions) => Promise<boolean> {
   return ctx.confirm;
 }
 
+/**
+ * {@link useConfirm}, or null where no provider is mounted — for a hook that is also mounted bare (an editor
+ * view in isolation) and asks only on a path that needs a provider to be reachable at all.
+ */
+export function useOptionalConfirm(): ((options: ConfirmOptions) => Promise<boolean>) | null {
+  return useContext(ConfirmContext)?.confirm ?? null;
+}
+
 /** The n-way form — resolves to the chosen `value`, or `null` if the user dismissed the dialog. */
 export function useChoose(): (options: ConfirmOptions) => Promise<string | null> {
   const ctx = useContext(ConfirmContext);
