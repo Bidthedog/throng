@@ -4,6 +4,7 @@ import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root
 import { parseWindowIdentity } from './window-identity.js';
 import { PreferencesApp, isPreferencesTab } from './preferences/preferences-app.js';
 import { AboutApp } from './about/about-app.js';
+import { MonitorApp } from './resources/monitor-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
 import './theme.css';
@@ -47,6 +48,7 @@ if (!container) throw new Error('Renderer root element #root not found');
 const search = new URLSearchParams(window.location.search);
 const prefsTab = search.get('prefs');
 const aboutParam = search.get('about');
+const monitorParam = search.has('monitor');
 const identity = parseWindowIdentity(window.location.search);
 
 // The drain applies to EVERY window — that is the whole point of it (C22/C23).
@@ -56,6 +58,8 @@ createRoot(container).render(
   <StrictMode>
     {prefsTab !== null ? (
       <PreferencesApp initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'} />
+    ) : monitorParam ? (
+      <MonitorApp />
     ) : aboutParam !== null ? (
       <AboutApp />
     ) : identity.kind === 'subworkspace' ? (

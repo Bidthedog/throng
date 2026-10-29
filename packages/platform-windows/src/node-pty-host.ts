@@ -15,6 +15,7 @@ import {
   type ProcessSurvivor,
   type PtyHandle,
   type PtyStartOptions,
+  type PtyRosterEntry,
 } from '@throng/core';
 import { dropInheritedModulePath } from './spawn-env-windows.js';
 import { descendantsOf, type ProcessTreeRow } from './process-tree.js';
@@ -290,6 +291,19 @@ export class NodePtyHost implements IPtyHost {
   }
 
   /** Remove the exited session and end its host, after the session's attribution has run. */
+  /** 055 R5 — a direct host's handle IS the shell's OS pid. */
+  /** 055 T101 — a terminal's console host once attribution settles; null when it never resolves. */
+  async conhostOf(pid: number): Promise<number | null> {
+    const session = this.sessions.get(pid);
+    if (session === undefined) return null;
+    await session.conhostReady.catch(() => undefined);
+    return session.conhostPid;
+  }
+
+  rosterEntries(): PtyRosterEntry[] {
+    return [...this.sessions].map(([pid, s]) => ({ handlePid: pid, osPid: pid, conhostPid: s.conhostPid }));
+  }
+
   private async reapAfterExit(pid: number, session: Session): Promise<void> {
     await session.conhostReady;
     // The pass that should have found it may have failed (a timed-out table read); one more, while

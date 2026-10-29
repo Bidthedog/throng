@@ -107,6 +107,16 @@ export interface IconButtonProps {
    * `aria-haspopup`. Omitted for every other button, which then carries no such attribute at all.
    */
   ariaHasPopup?: 'menu';
+  /** A DISCLOSURE control's state (055 FR-119: a "?" that opens its words), announced as `aria-expanded`. */
+  ariaExpanded?: boolean;
+  /**
+   * No native hover title: the accessible name (`aria-label`) stays, but no tooltip is drawn. A recorded
+   * exception to the hover-title rule (055 FR-119, sixth feedback) for a control whose own click opens its
+   * words — a tooltip over a "?" that opens a popover says the same thing twice.
+   */
+  noTitle?: boolean;
+  /** The element that describes this control right now (the disclosed words), by id. */
+  ariaDescribedBy?: string;
 }
 
 export function IconButton({
@@ -131,6 +141,9 @@ export function IconButton({
   tabIndex,
   role,
   ariaHasPopup,
+  ariaExpanded,
+  ariaDescribedBy,
+  noTitle = false,
 }: IconButtonProps): ReactElement {
   /*
    * The pill is the SAME class the per-tab panel-count pill wears (031 FR-052b) — reused, not
@@ -149,11 +162,13 @@ export function IconButton({
       type="button"
       className={className}
       data-testid={testId}
-      title={title}
+      title={noTitle ? undefined : title}
       role={role}
       aria-label={ariaLabel ?? title}
       aria-pressed={ariaPressed}
       aria-haspopup={ariaHasPopup}
+      aria-expanded={ariaExpanded}
+      aria-describedby={ariaDescribedBy}
       tabIndex={tabIndex}
       disabled={disabled}
       onClick={onClick}

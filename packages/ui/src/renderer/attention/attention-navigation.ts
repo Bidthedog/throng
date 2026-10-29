@@ -68,6 +68,49 @@ export async function navigateToPanel(
   return focusLocalPanel(host.ws(), there, first?.id ?? target.panelId);
 }
 
+/** A project, or a tab in one: where the Resource Monitor's Activate goes when it names no panel (055 FR-110). */
+export interface PlaceTarget {
+  projectId: string;
+  tabId?: string;
+}
+
+const holdsTab = (layout: WorkspaceLayout | null, tabId: string): layout is WorkspaceLayout =>
+  layout !== null && layout.tabs.some((tab) => tab.id === tabId);
+
+/**
+ * Go to a project, and to a tab in it (055 FR-110): a tab this window holds is selected at once — a
+ * sub-workspace window's own tab needs no project switch, and it has none to make. Otherwise the project
+ * is switched to FIRST, and the tab selected once that project's layout holds it. `false` when the tab
+ * never appears, or this window cannot switch project for one it lacks.
+ */
+export async function navigateToPlace(host: NavigationHost, target: PlaceTarget): Promise<boolean> {
+  const { tabId } = target;
+  const here = host.layout();
+  if (tabId !== undefined && holdsTab(here, tabId)) {
+    if (here.activeTabId !== tabId) host.ws().setActiveTab(tabId);
+    return true;
+  }
+  if (host.switchProject === null) return false;
+  if (here?.projectId !== target.projectId) await host.switchProject(target.projectId);
+  if (tabId === undefined) return true;
+  const there = await host.awaitLayout((l) => l.projectId === target.projectId && holdsTab(l, tabId));
+  if (there === null) return false;
+  if (there.activeTabId !== tabId) host.ws().setActiveTab(tabId);
+  return true;
+}
+
+let placeNavigator: ((target: PlaceTarget) => Promise<boolean>) | null = null;
+
+/** Register (or clear) how THIS window goes to a project or a tab (FR-110). */
+export function registerPlaceNavigation(fn: ((target: PlaceTarget) => Promise<boolean>) | null): void {
+  placeNavigator = fn;
+}
+
+/** Take this window to a project or a tab in it. `false` when nothing is mounted or it cannot get there. */
+export function requestPlaceNavigation(target: PlaceTarget): Promise<boolean> {
+  return placeNavigator === null ? Promise.resolve(false) : placeNavigator(target);
+}
+
 /* ─── the window-level entry point the command uses ───────────────────────────────────────── */
 
 let navigator: ((target: NavigationTarget) => Promise<boolean>) | null = null;
@@ -145,6 +188,8 @@ export function AttentionNavigation({ switchProjects = true }: { switchProjects?
     };
     const navigate = (target: NavigationTarget): Promise<boolean> => navigateToPanel(host, target);
     registerAttentionNavigation(navigate);
+    // 055 FR-110 — the Resource Monitor's Activate on a project or a tab goes the same way.
+    registerPlaceNavigation((target) => navigateToPlace(host, target));
     goToNext = () => {
       const target = nextMarkedTarget({
         layout: wsRef.current.layout,
@@ -166,6 +211,7 @@ export function AttentionNavigation({ switchProjects = true }: { switchProjects?
     const off = window.throng?.attention?.onFocusPanel?.((target) => void navigate(target));
     return () => {
       registerAttentionNavigation(null);
+      registerPlaceNavigation(null);
       goToNext = null;
       off?.();
     };

@@ -42,6 +42,7 @@ import {
 } from './config/config-store.js';
 import { Spinner, useDelayedFlag } from './common/loading.js';
 import { StatusBar } from './statusbar/status-bar.js';
+import { EstimatesReporterMount, UnloadRouteMount } from './resources/use-estimates-reporter.js';
 import { Chevron } from './panes/chevron.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
@@ -580,6 +581,11 @@ export function App(): ReactElement {
             </section>
           </div>
           <StatusBar />
+          {/* 055 — reports this window's panel estimates while the monitor window is open, runs the
+              Destroys it routes here, and answers where its Minimise should shrink to (FR-085). */}
+          <EstimatesReporterMount />
+          {/* 055 FR-086 — Unload Project, routed here by the monitor window. */}
+          <UnloadRouteMount />
           <AppClosePrompt />
           {/* 050 — the window-level halves of a paste: they must outlive any one project's tree, so
               they are mounted here and not in the explorer. */}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { formatGrouped, parseGrouped, type FieldDescriptor } from '@throng/core';
+import { formatGrouped, parseGrouped, type AppSettings, type FieldDescriptor } from '@throng/core';
 
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
@@ -81,6 +81,22 @@ export function SettingControl(props: SettingControlProps): ReactElement {
 }
 
 const testId = (key: string): string => `control-${key}`;
+
+/**
+ * A descriptor's `note` (055 R11): a sentence about the value IN FORCE where a rule between fields
+ * changes it — the capture interval raised to the history window's minimum. Display only: the stored
+ * value is never rewritten, so there is nothing to commit and nothing here that can write. Renders
+ * nothing when the descriptor has no note, or has nothing to say right now.
+ */
+export function FieldNote({ descriptor, settings }: { descriptor: FieldDescriptor; settings: AppSettings }): ReactElement | null {
+  const text = descriptor.note?.(settings);
+  if (text === undefined) return null;
+  return (
+    <p className="settings-row__note" data-testid={`setting-note-${descriptor.key}`} role="note">
+      {text}
+    </p>
+  );
+}
 
 /** Abbreviations that must not be naively Title-cased (e.g. line endings). */
 const OPTION_LABEL_OVERRIDES: Record<string, string> = {

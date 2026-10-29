@@ -307,6 +307,15 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     return run && { projectRoot: run.projectRoot, filePath: run.filePath, providerId: run.providerId };
   }
 
+  /**
+   * 055 FR-024 — each run and the length of the text it last sent, which main keeps to compare the next
+   * one with: the preview panel's share of main's memory, for the Resource Monitor. A resource provider's
+   * content is a URL, and holds nothing worth counting.
+   */
+  previewEstimates(): { panelId: string; chars: number }[] {
+    return [...this.runs.values()].map((r) => ({ panelId: r.panelId, chars: r.lastSent?.kind === 'text' ? r.lastSent.text.length : 0 }));
+  }
+
   /** Whether a preview of this file is open (FR-012) — for menus built at open time. */
   isOpen(absPath: string): boolean {
     return this.byPath.has(canon(absPath));

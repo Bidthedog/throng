@@ -467,6 +467,17 @@ export class EditorCoordinator {
    */
   private readonly links = new Map<string, LinkEntry>();
 
+  /**
+   * 055 FR-024 — each open document's size, for the resource monitor's estimate of UI main's share.
+   * Counted once per document: the owning panel carries it, and every linked panel names its owner.
+   */
+  documentEstimates(): { panelId: string; chars: number; lines: number; sharedWith?: string }[] {
+    const out: { panelId: string; chars: number; lines: number; sharedWith?: string }[] = [];
+    for (const [panelId, doc] of this.docs) out.push({ panelId, chars: doc.authority.doc.length, lines: doc.authority.doc.lines });
+    for (const [panelId, link] of this.links) out.push({ panelId, chars: 0, lines: 0, sharedWith: link.owner });
+    return out;
+  }
+
   constructor(
     private readonly service: EditorService,
     private readonly recovery: EditorRecovery,

@@ -165,6 +165,7 @@ export type {
   IPtyHost,
   PtyStartOptions,
   PtyHandle,
+  PtyRosterEntry,
   PtyExit,
   ChildProcess,
   ProcessSurvivor,
@@ -178,6 +179,13 @@ export type { IElevationState } from './abstractions/elevation.js';
 // Process-cwd OS seam (012 revision): read a running process's working directory
 // (the daemon polls each terminal's shell pid to show its live cwd in the title).
 export type { IProcessCwd } from './abstractions/process-cwd.js';
+export type {
+  IProcessMetrics,
+  ProcessDescription,
+  ProcessSnapshot,
+  TerminateOutcome,
+  TerminateResult,
+} from './abstractions/process-metrics.js';
 // #199: let a window opened by a terminal command come to the front instead of behind throng.
 export type { IForegroundHandoff } from './abstractions/foreground-handoff.js';
 export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-handoff.js';
@@ -1411,3 +1419,6 @@ export type {
   LinkTarget,
   ResolvedTarget,
 } from './links/menu.js';
+
+export { descendantsOf, type ProcessTreeRow } from './process/process-tree.js';
+export * from './resources/index.js';

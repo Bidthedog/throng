@@ -33,7 +33,8 @@ export function isThrongOwned(p: ProcInfo): boolean {
   const cmd = p.commandLine;
   if (name === 'conhost.exe') return cmd.includes('--headless');
   if (name === 'node.exe') {
-    return cmd.includes('pty-agent-entry') || cmd.includes('THRONG_LOCK_DIR');
+    // 055 — the resource collector UI main forks: orphaned (and reaped) if UI main dies first.
+    return cmd.includes('pty-agent-entry') || cmd.includes('THRONG_LOCK_DIR') || cmd.includes('resource-collector-entry');
   }
   return false;
 }

@@ -107,7 +107,14 @@ import {
   instanceDatabasePath,
   instanceUserDataDir,
 } from './instance-paths.js';
-import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon } from './daemon-lifecycle.js';
+import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon, resolveDaemonNodeExe } from './daemon-lifecycle.js';
+import { fork } from 'node:child_process';
+import type { DaemonRoster, RosterUiProcess } from '@throng/ipc-contract';
+import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
+import { ResourceMonitorHost } from './resource-monitor-host.js';
+import { registerResourcesIpc, type ResourcesIpcSurface } from './resources-ipc.js';
+import { MONITOR_MIN_SIZE, ResourceMonitorWindow } from './resource-monitor-window.js';
+import { wireFloatingLayering } from './floating-window-layering.js';
 import { DaemonRpcError, type DaemonClient } from './daemon-client.js';
 import { ElectronDisplayInfo } from './electron-display-info.js';
 import { loadWindowState, saveWindowState } from './window-state.js';
@@ -2223,6 +2230,133 @@ if (isPrimaryInstance)
   instanceMainWindow = mainWindow; // a second launch brings THIS window forward (058 FR-018)
   attentionMainWindow = mainWindow;
   attentionWindowManager = windowManager;
+
+  /*
+   * 055 — the resource monitor. The collector is a separate Node process (R1), so measuring throng
+   * costs none of throng's own event loops; this host only forks it, answers its roster requests and
+   * relays. UI roles are re-read when a window or an Electron child comes or goes, never per tick.
+   */
+  const uiProcesses = (): RosterUiProcess[] => {
+    const out: RosterUiProcess[] = [{ pid: process.pid, role: 'main', label: 'Application' }];
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      const pid = win.webContents.getOSProcessId();
+      const label = win === mainWindow ? 'Main window' : win.getTitle() || 'Window';
+      if (pid > 0) out.push({ pid, role: 'window', label });
+    }
+    for (const m of app.getAppMetrics()) {
+      if (m.type === 'GPU') out.push({ pid: m.pid, role: 'gpu', label: 'GPU' });
+      else if (m.type === 'Utility') out.push({ pid: m.pid, role: 'utility', label: m.serviceName ?? m.name ?? 'Utility' });
+    }
+    return out;
+  };
+  const { ELECTRON_RUN_AS_NODE: _dropRunAsNode, ...collectorEnv } = process.env;
+  const resourceMonitor = new ResourceMonitorHost({
+    collectorEntry: resolveFromHere('../collector/resource-collector-entry.js'),
+    nodeExe: resolveDaemonNodeExe(
+      undefined,
+      (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
+      existsSync,
+      collectorEnv,
+    ),
+    fork: (entry, execPath) =>
+      fork(entry, [], { execPath, env: collectorEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'ignore', 'ipc'], windowsHide: true }),
+    daemonRoster: () => daemonClient.call<DaemonRoster>(RESOURCES_ROSTER_METHOD, {}),
+    uiProcesses,
+    documentEstimates: () => editorCoordinator.documentEstimates(),
+    previewEstimates: () => previews.previewEstimates(),
+    settings: () => currentSettings,
+    send: (windowId, channel, payload) => {
+      const win = BrowserWindow.fromId(windowId);
+      if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+    mainWindowId: () => currentMainWindow()?.id ?? null,
+    broadcast: (channel, payload) => {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    },
+  });
+  /*
+   * 055 R14 — the monitor window: built like Preferences (frameless, movable, parented to the main
+   * window, its layering shared), loaded from the same renderer entry with `?monitor`.
+   */
+  let resourcesIpc: ResourcesIpcSurface | null = null;
+  const monitorWindow = new ResourceMonitorWindow({
+    createWindow: ({ bounds, parent }) => {
+      const win = new BrowserWindow({
+        ...bounds,
+        minWidth: MONITOR_MIN_SIZE.width,
+        minHeight: MONITOR_MIN_SIZE.height,
+        frame: false,
+        ...(parent ? { parent: parent as BrowserWindow } : {}),
+        movable: true,
+        resizable: true,
+        // The title bar's Minimise is the monitor's own (FR-085): it closes into the status bar.
+        minimizable: false,
+        title: 'Resource Monitor — throng',
+        icon: appIcon(),
+        backgroundColor: themeBackground(),
+        show: false,
+        webPreferences: {
+          preload: resolveFromHere('../preload/preload.cjs'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      });
+      wireWindowMaximizeEvents(win);
+      denyRendererWindows(win.webContents, shellIntegration);
+      revealWhenPainted(win);
+      const unwireLayering = wireFloatingLayering(win);
+      win.on('closed', () => {
+        unwireLayering();
+        const main = currentMainWindow();
+        if (main && !main.isDestroyed()) main.focus();
+      });
+      void win.loadFile(resolveFromHere('../renderer/index.html'), { query: { monitor: '1' } });
+      return win;
+    },
+    mainWindow: () => currentMainWindow() ?? null,
+    workAreas: () => screen.getAllDisplays().map((d) => d.workArea),
+    statusRect: () => resourcesIpc?.requestStatusRect() ?? Promise.resolve(null),
+    schedule: (fn, ms) => void setTimeout(fn, ms),
+  });
+  resourcesIpc = registerResourcesIpc(ipcMain, {
+    host: resourceMonitor,
+    windowIdOf: (sender) => BrowserWindow.fromWebContents(sender)?.id ?? null,
+    osPidOf: (sender) => sender.getOSProcessId(),
+    sendTo: (windowId, channel, payload) => {
+      const win = BrowserWindow.fromId(windowId);
+      if (!win || win.isDestroyed()) return false;
+      // R12: the routed Destroy may confirm in that window, so it comes forward to show it.
+      if (win.isMinimized()) win.restore();
+      win.focus();
+      win.webContents.send(channel, payload);
+      return true;
+    },
+    mainWindowId: () => currentMainWindow()?.id ?? null,
+    postToMainWindow: (channel, payload) => {
+      const main = currentMainWindow();
+      if (!main || main.isDestroyed()) return false;
+      main.webContents.send(channel, payload);
+      return true;
+    },
+    monitor: monitorWindow,
+  });
+  onSettingsChanged.push((previous, next) => {
+    if (JSON.stringify(previous.resourceMonitor) !== JSON.stringify(next.resourceMonitor)) resourceMonitor.settingsChanged();
+  });
+  const watchWindowForResources = (win: BrowserWindow): void => {
+    const id = win.id;
+    win.on('closed', () => resourceMonitor.windowClosed(id));
+  };
+  watchWindowForResources(mainWindow);
+  app.on('browser-window-created', (_event, win) => {
+    resourceMonitor.uiChanged();
+    watchWindowForResources(win);
+  });
+  app.on('child-process-gone', () => resourceMonitor.uiChanged());
+  app.on('will-quit', () => resourceMonitor.stop());
+  resourceMonitor.start();
   /*
    * 044 FR-063 — a preview provider turned off, MAIN's half (contracts/preview-ipc.md §5).
    *

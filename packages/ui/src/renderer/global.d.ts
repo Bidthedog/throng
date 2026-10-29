@@ -47,6 +47,46 @@ declare global {
         onDifferentCopy: (cb: (notice: import('@throng/core').DifferentCopyNotice) => void) => () => void;
         differentCopyReady: () => void;
       };
+      /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
+      resources?: {
+        /** The latest cached summary; `null` before the first tick (FR-002, FR-051). */
+        summary: () => Promise<import('@throng/ipc-contract').ResourceSummary | null>;
+        /** Main window only: one summary per tick. */
+        onSummary: (cb: (s: import('@throng/ipc-contract').ResourceSummary) => void) => () => void;
+        /** Whether any window has the monitor open; every window reports its panels while it does. */
+        detailDemand: () => Promise<boolean>;
+        onDetailDemand: (cb: (on: boolean) => void) => () => void;
+        /** Turns detail collection on for this window until unsubscribed or the window closes. */
+        subscribeDetail: () => Promise<{ subscriptionId: number }>;
+        unsubscribeDetail: (subscriptionId: number) => Promise<void>;
+        onDetail: (cb: (f: import('@throng/ipc-contract').DetailFrame) => void) => () => void;
+        /** Context on change, estimates each tick — only while detail is in demand (R7). Main stamps the renderer's pid. */
+        reportPanels: (
+          context: import('@throng/ipc-contract').WorkspaceContext | null,
+          estimates: readonly import('@throng/ipc-contract').PanelEstimate[],
+        ) => void;
+        kill: (req: import('@throng/ipc-contract').KillRequest) => Promise<import('@throng/ipc-contract').KillResult>;
+        /**
+         * Run an action in the window that owns it (R12, R14): Destroy Tab / Destroy Panel in the window
+         * holding it, Unload Project in the main window. False when no window can.
+         */
+        routeAction: (req: import('./resources/route-action.js').RoutedAction) => Promise<boolean>;
+        /** This window is asked to run an action for the monitor. */
+        onAction: (cb: (req: import('./resources/route-action.js').RoutedAction) => void) => () => void;
+        /** Answer main about an Activate it routed here: whether this window got there (FR-086, FR-110). */
+        answerAction?: (requestId: number, ok: boolean) => void;
+        /** From any window: open the monitor window, or bring it forward (R14, FR-086). */
+        open: () => void;
+        /** Monitor window: shrink into the status-bar figures and close, or just close (FR-085). */
+        minimise: (opts: { reducedMotion: boolean }) => void;
+        /** Monitor window: the view it left, held by main until restart (FR-087); `null` the first time. */
+        viewState: () => Promise<unknown>;
+        saveViewState: (view: unknown) => void;
+        /** Main window: answer main's request for the status-bar figures' rectangle, in CSS px (FR-085). */
+        onStatusRectRequest: (
+          cb: () => { x: number; y: number; width: number; height: number } | null,
+        ) => () => void;
+      };
       /** 029 / #182 — daemon liveness, pushed rather than pulled. */
       daemon?: {
         state: () => Promise<import('@throng/core').DaemonState>;

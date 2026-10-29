@@ -8,6 +8,7 @@ import {
   type PtyExit,
   type PtyHandle,
   type PtyStartOptions,
+  type PtyRosterEntry,
 } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 
@@ -65,6 +66,12 @@ export class PtyAgentHost implements IPtyHost {
   /** Every key `start`ed and not yet ended — the set a failure must fail (not merely the
    *  keys that happen to have a listener registered yet, which would be a race). */
   private readonly liveKeys = new Set<number>();
+  /** 055 R5 — each live key's shell OS pid, from its `started` ack. */
+  private readonly osPids = new Map<number, number>();
+  /** 055 T101 — each live key's console host, from the agent's `conhost` event. */
+  private readonly conhostPids = new Map<number, number>();
+  /** 055 R5 — the agent's own pid, from its `ready`; null while no agent is connected. */
+  private agentOsPid: number | null = null;
   /** Per-key readiness budget, armed at connect and cleared by the `started` ack (C7). */
   private readonly readyTimers = new Map<number, ReturnType<typeof setTimeout>>();
   /** The last reason the launcher reported, appended to a lapse message (FR-015). Written
@@ -207,6 +214,8 @@ export class PtyAgentHost implements IPtyHost {
     this.dataCbs.delete(key);
     this.exitCbs.delete(key);
     this.liveKeys.delete(key);
+    this.osPids.delete(key);
+    this.conhostPids.delete(key);
     // A terminal that is gone has ended, whatever its in-flight end was still waiting for.
     for (const [reqId, waiter] of this.endWaiters) {
       if (waiter.key === key) {
@@ -308,10 +317,14 @@ export class PtyAgentHost implements IPtyHost {
         }
         break;
       }
+      case 'conhost':
+        if (this.liveKeys.has(ev.key) && typeof ev.pid === 'number') this.conhostPids.set(ev.key, ev.pid);
+        break;
       case 'started': {
         // The readiness ack (pty-agent-protocol.ts:26): the agent's ConPTY is spawned.
         // Whatever the shell does next — including printing nothing for a long time —
         // is no longer this budget's business.
+        if (typeof ev.pid === 'number') this.osPids.set(ev.key, ev.pid);
         const timer = this.readyTimers.get(ev.key);
         if (timer) {
           clearTimeout(timer);
@@ -320,8 +333,23 @@ export class PtyAgentHost implements IPtyHost {
         break;
       }
       case 'ready':
+        this.agentOsPid = typeof ev.pid === 'number' ? ev.pid : null;
         break;
     }
+  }
+
+  /** 055 R5 — handles here are keys; the OS pid is known once the agent acks the start. */
+  rosterEntries(): PtyRosterEntry[] {
+    return [...this.liveKeys].map((key) => ({
+      handlePid: key,
+      osPid: this.osPids.get(key) ?? null,
+      conhostPid: this.conhostPids.get(key) ?? null,
+    }));
+  }
+
+  /** 055 R5 — the agent process's pid, or null while none is connected. */
+  agentPid(): number | null {
+    return this.agentOsPid;
   }
 
   start(opts: PtyStartOptions): PtyHandle {

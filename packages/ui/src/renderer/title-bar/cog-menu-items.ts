@@ -48,6 +48,8 @@ const PREFERENCES_ITEMS: readonly { tab: PreferencesTab; label: string; icon: st
 export interface CogMenuActions {
   openPreferences: (tab: PreferencesTab) => void;
   openLogs: () => void;
+  /** 055 FR-056 — opens the Resource Monitor in the main window (the cog is a main-window control). */
+  openResourceMonitor: () => void;
   openAbout: () => void;
   /**
    * The live keybindings. 046 iterate round 2 (FR-113) removed this builder's only reader of it (the
@@ -90,6 +92,16 @@ export function cogMenuItems(actions: CogMenuActions): MenuAction[] {
     icon: 'folderOpen',
     section: 'application',
     onClick: () => actions.openLogs(),
+  });
+  // 055 FR-056 — the discoverable route to the Resource Monitor (the status-bar item and the chord are
+  // accelerators over this row). `application` like its neighbours: no divider is drawn, there is no
+  // section boundary here (FR-050).
+  items.push({
+    label: 'Resource Monitor',
+    testId: 'cog-resource-monitor',
+    icon: 'resourceMonitor',
+    section: 'application',
+    onClick: () => actions.openResourceMonitor(),
   });
   items.push({
     label: 'About throng',
