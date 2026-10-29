@@ -74,17 +74,52 @@ function contentOverflow(win: Page, testId: string): Promise<number> {
   }, testId);
 }
 
-/** Resize the real OS window and let the renderer settle. */
-async function setWindowWidth(app: ElectronApplication, width: number): Promise<void> {
+/**
+ * Resize the real OS window and wait for the renderer to settle.
+ *
+ * `setContentSize` returns before the renderer has laid out at the new width, and the bar's fit runs
+ * later still: a ResizeObserver reports the strip's width, which re-renders the readouts in the forms
+ * that fit. Measured before that, the readouts are still in the forms chosen for the OLD width and
+ * overflow — on a loaded runner by 79px, at both attempts. So wait for the condition rather than a
+ * duration: the viewport at the requested width, then the strip's width and every readout's chosen
+ * form unchanged across consecutive frames.
+ */
+async function setWindowWidth(
+  app: ElectronApplication,
+  win: Page,
+  stripTestId: string | null,
+  width: number,
+): Promise<void> {
   await app.evaluate(({ BrowserWindow }, w) => {
-    const [win] = BrowserWindow.getAllWindows();
-    if (!win) return;
+    const [bw] = BrowserWindow.getAllWindows();
+    if (!bw) return;
     // A maximized window ignores `setContentSize`, and the test would then measure one width twice
     // and pass without ever having resized anything.
-    if (win.isMaximized()) win.unmaximize();
-    const [, height] = win.getContentSize();
-    win.setContentSize(w, height);
+    if (bw.isMaximized()) bw.unmaximize();
+    const [, height] = bw.getContentSize();
+    bw.setContentSize(w, height);
   }, width);
+  await expect.poll(() => win.evaluate(() => window.innerWidth), { timeout: 10_000 }).toBe(width);
+  if (stripTestId === null) return; // nothing fitted yet: no editor is open
+  await win.evaluate(async (id) => {
+    const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+    const snapshot = () => {
+      const strip = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      const forms = [...(strip?.querySelectorAll<HTMLElement>('[data-readout]') ?? [])].map(
+        (el) => `${el.dataset.readout}:${el.dataset.label}`,
+      );
+      return `${strip?.clientWidth ?? -1}|${forms.join(',')}`;
+    };
+    let last = snapshot();
+    let stable = 0;
+    const deadline = performance.now() + 10_000;
+    while (stable < 3 && performance.now() < deadline) {
+      await frame();
+      const now = snapshot();
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+    }
+  }, stripTestId);
 }
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -106,7 +141,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
        *
        * 1400 is the width the layout declaration below already uses for "entirely uncrowded".
        */
-      await setWindowWidth(app, 1400);
+      await setWindowWidth(app, win, null, 1400);
       const pid = await openNote(win);
 
       // The document's own figures, once the debounced count has settled (FR-008b).
@@ -233,7 +268,7 @@ test('the bar stays one line high and the two groups never overlap across a resi
 
       // Wide. The window opens well above the 600px minimum; 1400 leaves the bar entirely
       // uncrowded, which is the baseline the narrow measurement is compared against.
-      await setWindowWidth(app, 1400);
+      await setWindowWidth(app, win, `editor-status-strip-${pid}`, 1400);
       const wide = await measure();
       expect(wide.bar, 'the bar must be one line high').toBeLessThanOrEqual(ONE_LINE_MAX);
       expect(wide.gap, 'the readouts must not overlap the language and wrap controls (FR-014)').toBeGreaterThanOrEqual(0);
@@ -249,7 +284,7 @@ test('the bar stays one line high and the two groups never overlap across a resi
        * that a horizontal drag never changes the height of the bar or of the text area, which is
        * the thing a horizontal drag has no business touching.
        */
-      await setWindowWidth(app, 900);
+      await setWindowWidth(app, win, `editor-status-strip-${pid}`, 900);
       const narrow = await measure();
       expect(narrow.bar, 'the bar must not wrap onto a second line').toBe(wide.bar);
       expect(narrow.area, 'the text area height must not move (SC-002)').toBe(wide.area);
@@ -262,7 +297,7 @@ test('the bar stays one line high and the two groups never overlap across a resi
 
       // …and back. A height that returned to something else would mean the first two measurements
       // agreed by accident.
-      await setWindowWidth(app, 1400);
+      await setWindowWidth(app, win, `editor-status-strip-${pid}`, 1400);
       const again = await measure();
       expect(again.bar).toBe(wide.bar);
       expect(again.area).toBe(wide.area);
