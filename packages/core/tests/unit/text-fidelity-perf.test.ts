@@ -7,13 +7,15 @@ import { utf16, concat, BOM_UTF16LE } from '../fixtures/text-formats.js';
  *
  * Measured over the whole read path a file open runs (`readText`: detection plus the decode), as a
  * RATIO to UTF-8 on the same machine in the same run, so a slow CI runner moves both sides and the
- * assertion stays about the encodings rather than the hardware. The two sides are timed INTERLEAVED,
- * one of each per round, and each keeps its best of nine: timed one after the other, a burst of load
- * from a neighbouring worker lands on one side only and decides the ratio by itself.
+ * assertion stays about the encodings rather than the hardware. Each round times both sides back to
+ * back, in alternating order, and the claim is the MEDIAN of the per-round ratios: a burst of load from
+ * a neighbouring worker spoils one round rather than deciding the result, and no single lucky UTF-8
+ * read sets the baseline — the best-of-nine of each side it replaced failed hosted runners at 1.51–1.72×
+ * on whichever encoding drew the outlier.
  */
 const LINE = 'The quick brown fox jumps over the lazy dog, 0123456789 — café £5.\n';
 const TEXT = LINE.repeat(Math.ceil((5 * 1024 * 1024) / LINE.length));
-const ROUNDS = 9;
+const ROUNDS = 15;
 
 function time(fn: () => void): number {
   const t = performance.now();
@@ -21,15 +23,23 @@ function time(fn: () => void): number {
   return performance.now() - t;
 }
 
-/** Best time of each side over `rounds` rounds, each round timing `a` then `b`. */
-function bestInterleaved(rounds: number, a: () => void, b: () => void): [number, number] {
-  let bestA = Infinity;
-  let bestB = Infinity;
+/** Median over `rounds` rounds of `cost / base`, the two timed back to back in alternating order. */
+function medianRatio(rounds: number, base: () => void, cost: () => void): number {
+  const ratios: number[] = [];
   for (let i = 0; i < rounds; i++) {
-    bestA = Math.min(bestA, time(a));
-    bestB = Math.min(bestB, time(b));
+    let b: number;
+    let c: number;
+    if (i % 2 === 0) {
+      b = time(base);
+      c = time(cost);
+    } else {
+      c = time(cost);
+      b = time(base);
+    }
+    ratios.push(c / b);
   }
-  return [bestA, bestB];
+  ratios.sort((x, y) => x - y);
+  return ratios[Math.floor(rounds / 2)] as number;
 }
 
 describe('5 MB read cost by encoding (059 SC-005)', () => {
@@ -48,12 +58,12 @@ describe('5 MB read cost by encoding (059 SC-005)', () => {
     it(`${name} is within 1.5× of UTF-8`, () => {
       const r = readText(bytes);
       expect(r.ok && r.file.text.length).toBe(TEXT.length);
-      const [base, cost] = bestInterleaved(
+      const ratio = medianRatio(
         ROUNDS,
         () => readText(utf8Bytes),
         () => readText(bytes),
       );
-      expect(cost).toBeLessThanOrEqual(base * 1.5);
+      expect(ratio).toBeLessThanOrEqual(1.5);
     });
   }
 });
