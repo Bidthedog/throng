@@ -58,6 +58,13 @@ const BOUND = 0.1;
 /** The gate's rank-agreement floor and per-kind share tolerance for a benchmark run (SC-009, amended). */
 const RHO_FLOOR = 0.85;
 const SHARE_POINTS = 0.05;
+/**
+ * `THRONG_CALIBRATE_LOG_ONLY=1`: measure and log every case, assert none. Set by the release lane: on the
+ * same code and Electron, a hosted runner there measured previews and the full-scrollback terminal 9–14%
+ * heavier than gate.yml's did (0.852–0.894 against 0.928–1.028), a spread as wide as the bound itself.
+ * gate.yml asserts SC-009; the release lane keeps the figures.
+ */
+const LOG_ONLY = process.env.THRONG_CALIBRATE_LOG_ONLY === '1';
 
 /** Blocks in a document of `megabytes`: each is 64 bytes of ASCII, so characters === bytes. */
 const blocksOf = (megabytes: number): number => Math.floor((megabytes * 1024 * 1024) / 64);
@@ -449,7 +456,7 @@ function expectCalibrated(what: string, estimated: number, measured: number, opt
   const miss = opts.knownMiss === undefined ? '' : ` (known miss, logged: ${opts.knownMiss})`;
   console.info(`calibration ${what}: estimated ${Math.round(estimated)} B, measured ${Math.round(measured)} B, ratio ${ratio.toFixed(3)}${miss}`);
   test.info().annotations.push({ type: 'calibration', description: `${what}: estimated/measured = ${ratio.toFixed(3)}${miss}` });
-  if (opts.assert === false || opts.knownMiss !== undefined) return;
+  if (LOG_ONLY || opts.assert === false || opts.knownMiss !== undefined) return;
   // Soft, so one run reports every case's ratio — the data `estimate-models.ts` is tuned from.
   expect.soft(Math.abs(estimated - measured) / measured, `${what}: estimate ${Math.round(estimated)} vs measured ${Math.round(measured)} (SC-009 ±${BOUND * 100}%)`).toBeLessThanOrEqual(BOUND);
 }
@@ -1382,7 +1389,7 @@ for (const bench of BENCH_NAMES) {
         const rho = spearman(estimates, rows.map((r) => r.measured));
         console.info(`bench-summary ${JSON.stringify({ run: bench, panels: rows.length, spearman: rho, totalEstimated: totalEst, totalMeasured: totalMeas, ratio: totalEst / totalMeas })}`);
         // Representative relative to each other: the monitor ranks the panels as their memory does…
-        expect.soft(rho, `${bench}: rank agreement of estimate and measured across ${rows.length} panels (SC-009 ρ ≥ ${RHO_FLOOR})`).toBeGreaterThanOrEqual(RHO_FLOOR);
+        if (!LOG_ONLY) expect.soft(rho, `${bench}: rank agreement of estimate and measured across ${rows.length} panels (SC-009 ρ ≥ ${RHO_FLOOR})`).toBeGreaterThanOrEqual(RHO_FLOOR);
         // …and divides the total among the kinds as their memory does. A known-miss row is logged, not
         // asserted (SC-009), so it is left out of the shares too: the narrow 1.5 MB "lines" editor alone,
         // at ~0.25×, moved bench-a's editor share 5–6 points on a hosted runner.
@@ -1396,6 +1403,7 @@ for (const bench of BENCH_NAMES) {
           const estShare = asserted.reduce((s, r) => s + (r.kind === kind ? r.est : 0), 0) / assertedEst;
           const measShare = asserted.reduce((s, r) => s + (r.kind === kind ? r.measured : 0), 0) / assertedMeas;
           console.info(`bench-share ${JSON.stringify({ run: bench, kind, estShare, measShare, points: (estShare - measShare) * 100, rows: asserted.length })}`);
+          if (LOG_ONLY) continue;
           expect
             .soft(Math.abs(estShare - measShare), `${bench}: ${kind} share of the total, estimated ${(estShare * 100).toFixed(1)}% vs measured ${(measShare * 100).toFixed(1)}% (SC-009 within ${SHARE_POINTS * 100} points)`)
             .toBeLessThanOrEqual(SHARE_POINTS);
