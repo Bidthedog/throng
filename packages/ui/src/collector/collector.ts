@@ -92,6 +92,8 @@ export class ResourceCollector {
   private tickNo = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private ticking = false;
+  /** When the last tick ended, or null before the first: a new interval is counted from it. */
+  private lastTickEnd: number | null = null;
   /** A tick was asked for (by `detail {on}`) while one ran: run another the moment it ends. */
   private tickAgain = false;
   private stopped = false;
@@ -116,7 +118,11 @@ export class ResourceCollector {
     switch (msg.type) {
       case 'configure':
         this.intervalMs = Math.max(1, msg.intervalSeconds * 1_000);
-        if (!this.ticking) this.schedule(this.intervalMs);
+        // Count the new interval from the last tick, so a configure that lands before the first one has run
+        // leaves it immediate instead of pushing the first reading a whole interval out.
+        if (!this.ticking) {
+          this.schedule(this.lastTickEnd === null ? 0 : Math.max(0, this.lastTickEnd + this.intervalMs - this.now()));
+        }
         break;
       case 'roster':
         this.roster = msg.roster;
@@ -187,6 +193,7 @@ export class ResourceCollector {
       }
     } finally {
       this.ticking = false;
+      this.lastTickEnd = this.now();
       const again = this.tickAgain;
       this.tickAgain = false;
       this.schedule(again ? 0 : this.intervalMs);

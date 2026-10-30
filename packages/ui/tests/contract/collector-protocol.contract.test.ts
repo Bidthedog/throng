@@ -119,6 +119,16 @@ describe('collector protocol (055 contract §2)', () => {
     c.stop();
   });
 
+  it('a configure arriving before the first tick does not postpone it by a whole interval', async () => {
+    // UI main configures the collector the moment it forks it; on a slow machine that message lands
+    // before start()'s immediate tick has run, and used to push the first reading a full interval out.
+    const c = run();
+    c.collector.start();
+    c.send({ type: 'configure', intervalSeconds: 60, historyMinutes: 5 });
+    await c.next('summary');
+    c.collector.stop();
+  });
+
   it('marks figures stale, keeps their time, and keeps the open monitor fed when a tick fails (convergence T095)', async () => {
     const c = run();
     c.send({ type: 'configure', intervalSeconds: 0.05, historyMinutes: 5 });
