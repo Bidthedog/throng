@@ -117,7 +117,7 @@ Settled while drafting, from the issue bodies and the rules above. Each is a rea
 
 ### Session 2026-10-30
 
-- Q: A 5 MB Windows-1252 open measures 1.55–1.72× UTF-8 on GitHub's hosted runners, over SC-005's 1.5×, while UTF-16 stays within it. Which gives? → A: **SC-005 allows 2× for the single-byte code pages and keeps 1.5× for UTF-16** — the user (2026-10-30), choosing from: amend the bound, or move the measurement out of the gating unit stage. The code-page read is the platform decoder (a table loop measured slower still), so the gap is the platform's single-byte decoder against its UTF-8 one, not work throng adds; the median of fifteen interleaved per-round ratios is what is held to the bound *(derived)*.
+- Q: A 5 MB Windows-1252 open measures 1.55–1.72× UTF-8 on GitHub's hosted runners, over SC-005's 1.5×, while UTF-16 stays within it. Which gives? → A: **SC-005 allows 2× for the single-byte code pages and keeps 1.5× for UTF-16** — the user (2026-10-30), choosing from: amend the bound, or move the measurement out of the gating unit stage. The code-page read is the platform decoder (a table loop measured slower still), so the gap is the platform's single-byte decoder against its UTF-8 one, not work throng adds; the median of fifteen interleaved per-round ratios is what is held to the bound *(derived)*. The same day UTF-16 measured 1.513× on a hosted runner under that median, so the 2× bound was extended to it, the same remedy for the same cause *(derived, reported to the user)*.
 
 ---
 
@@ -754,8 +754,8 @@ CRLF lines and its LF line.
   where it appeared in input: **zero** introduced occurrences.
 - **SC-005**: Opening a 5 MB file in any supported encoding takes no more than **1.5×** the time the
   same content takes as UTF-8, and no supported encoding pushes a 5 MB open past the editor's existing
-  large-file budget. *(Amended 2026-10-30: **2×** for the single-byte Windows code pages; UTF-16 keeps
-  1.5×. See Clarifications, Session 2026-10-30.)*
+  large-file budget. *(Amended 2026-10-30: **2×** for the single-byte Windows code pages and, after it
+  measured 1.51× on a hosted runner the same day, for UTF-16 too. See Clarifications, Session 2026-10-30.)*
 - **SC-006**: A user can find a document's encoding and line ending, and change either, in **two
   clicks** from the status bar, or through the editor menu with the status bar hidden.
 - **SC-007**: Converting a 5,000-line CRLF document to LF leaves the character count unchanged, and one
