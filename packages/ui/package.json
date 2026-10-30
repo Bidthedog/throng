@@ -1,6 +1,6 @@
 {
   "name": "@throng/ui",
-  "version": "1.0.0-alpha11",
+  "version": "1.0.0-alpha12",
   "private": true,
   "type": "module",
   "main": "dist/main/main.js",
@@ -54,7 +54,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "vite": "^8.3.5"
   }
 }

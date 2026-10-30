@@ -29,8 +29,13 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha12 — 2026-10-30
+
 ### Added
 
+- **Files keep their own encoding and line endings** ([#517](https://github.com/Bidthedog/throng/issues/517), [#71](https://github.com/Bidthedog/throng/issues/71)): UTF-16 and Windows code-page files such as Windows-1252 open, edit and save in their own encoding, so an edit changes only what it touches, in the editor, Find in Files and the preview. The editor's status bar and right-click menu change a file's encoding or convert its line endings (LF / CRLF) as an undoable edit, a file that may have been misread says so and suggests the likely code page, and a save the encoding cannot hold offers to save as UTF-8. The new *Fallback encoding* setting picks the code page used when detection cannot tell.
+- **View Whitespace** ([#517](https://github.com/Bidthedog/throng/issues/517)): a per-panel toggle in the editor's status bar and right-click menu marks every space, tab, line break, byte-order mark and invisible character, and hovering one names it.
+- **Find in Files has exclusions of its own** ([#532](https://github.com/Bidthedog/throng/issues/532)): a search exclusion list in Preferences, a per-panel toggle with a box for extra exclusions, and a per-project *Hidden to Find & Replace* list, reachable from the File Explorer and the results' right-click menus.
 - **Flag a panel to come back to** ([#522](https://github.com/Bidthedog/throng/issues/522)): *Flag* in any panel's right-click menu marks it as needing you, on its tab, project and category too, without a notification. The flag stays while you work in that panel and clears once you have left it and come back; it survives closing throng.
 
 - **Resource Monitor** ([#5](https://github.com/Bidthedog/throng/issues/5), [#133](https://github.com/Bidthedog/throng/issues/133)): the status bar shows the CPU, memory, GPU and I/O that throng and everything it started are using. Clicking it, or `Ctrl+Shift+Alt+R`, opens a monitor window — movable, above throng's windows, with throng usable behind it, in two columns split by a movable divider — the lists on the left, the selected item's bars, details and graphs on the right — with a **?** guide to using it, that breaks usage down by part of throng and by project, tab, panel, process and subprocess, with totals, graphs, a filter, idle and ended-process hiding and the folders throng holds. Network use per process is shown when throng runs as administrator. From it you can go to a project, tab or panel, unload a project, destroy a tab or panel, or force-end a process or everything below a node, confirmed by the new **Kill processes** setting.
@@ -39,10 +44,12 @@ What changed in each release of throng, written for someone deciding whether to 
 
 - **Marks say how many are waiting** ([#523](https://github.com/Bidthedog/throng/issues/523)): an attention mark is now one blinking circle in the theme's attention colour, the same for a failure as for a bell, and on a project, a tab and a minimised category it carries the number of panels that need you. A project's colour dot is a little larger, the size of the circle that takes its place. Every category header shows its number of projects, a tab shows its panel count once it holds two or more, and a minimised category's header is paler than an expanded one. Nothing moves as marks come and go. Themes and icon packs lose the two attention-mark icons and the Failed Attention Marker colour.
 - **Click a notification to reach its panel** ([#525](https://github.com/Bidthedog/throng/issues/525)): clicking anywhere on an attention toast, or on its Windows notification, takes you to the panel; the arrow button is gone.
+- **Find in Files is easier to read and drive** ([#513](https://github.com/Bidthedog/throng/issues/513)): results stay usable while a search runs and after it is cancelled, read more cleanly, can be grouped by folder structure, select with one click and open from a file heading, and a *Show results* setting starts them collapsed or expanded. *Open In* offers the current editor or preview for a file that is already open.
 
 ### Fixed
 
 - **A marked panel no longer notifies twice** ([#524](https://github.com/Bidthedog/throng/issues/524)): a panel whose mark came back when throng reopened, or was raised by a startup command, raised a new notification on its next signal while the mark was still showing.
+- **A terminal's link underlines no longer draw over its find bar** ([#537](https://github.com/Bidthedog/throng/issues/537)).
 
 ## 1.0.0-alpha11 — 2026-10-22
 
