@@ -71,7 +71,9 @@ function start(roster: ResourceRoster, readings: ProcessReading[], intervalSecon
     child,
     messages,
     send,
-    next: (type, timeoutMs = 5_000) =>
+    // Generous by default: the first wait covers the fork's start-up, which a loaded hosted runner took over
+    // 5 s to finish. Every latency the tests CLAIM (SC-002) passes its own bound and checks it by the clock.
+    next: (type, timeoutMs = 15_000) =>
       new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no ${type} within ${timeoutMs} ms`)), timeoutMs);
         waiters.push({ type, resolve: (m) => (clearTimeout(timer), resolve(m as never)) });
