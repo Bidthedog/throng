@@ -104,6 +104,10 @@ jobs:
       THRONG_E2E_WORKERS: 1
       THRONG_E2E_RETRIES: 3
       THRONG_E2E_JSON_OUT: e2e-report.json
+      # 055 SC-009's calibration logs its figures here and asserts none: this lane's runner measured
+      # previews and terminals 9–14% heavier than gate.yml's on the same code (alpha12, run 41079156400),
+      # a spread as wide as the ±10% bound. gate.yml is where SC-009 is asserted.
+      THRONG_CALIBRATE_LOG_ONLY: 1
       # OPT-IN, because a trace is not free and this lane is a GATE.
       #
       # This is the only place some failures happen, so it is the only place a trace can be taken
