@@ -80,7 +80,7 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       const levels = await nodes.evaluateAll((els) => els.map((e) => Number(e.getAttribute('aria-level'))));
       const parentIndex = levels.indexOf(Math.min(...levels));
       const parent = nodes.nth(parentIndex);
-      const shell = rowOf(mon, 'x:', 'cmd.exe').first();
+      const shell = rowOf(mon, 'x:', 'Command Prompt').first(); // cmd.exe's friendly name (FR-020)
       await expect(shell).toBeVisible();
 
       // Kill All Below on the parent: all three end, the shell does not.
