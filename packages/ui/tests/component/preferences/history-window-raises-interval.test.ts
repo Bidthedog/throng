@@ -12,6 +12,7 @@ import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { THRONG_THEME } from '@throng/core';
 import { NotificationProvider } from '../../../src/renderer/common/notification.js';
+import { settleConfigWrites } from '../../../src/renderer/config/write-config.js';
 import { ConfirmProvider } from '../../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../../src/renderer/config/config-store.js';
 import { ResetNoticeProvider } from '../../../src/renderer/preferences/reset-notice.js';
@@ -51,7 +52,8 @@ async function set(writes: ReturnType<typeof vi.fn>, key: string, value: number)
   fireEvent.blur(field);
   // Writes queue behind the config write lock: wait for this one to land, then let any companion write follow.
   await waitFor(() => expect(written(writes).map((p) => p.path.join('.'))).toContain(key.replace('resourceMonitor.', 'resourceMonitor.')));
-  await new Promise((r) => setTimeout(r, 50));
+  // Any companion write is queued behind the same lock: drain it (a condition), not a 50 ms guess.
+  await settleConfigWrites();
 }
 
 const written = (writes: ReturnType<typeof vi.fn>): { path: string[]; value: unknown }[] =>
@@ -62,35 +64,27 @@ afterEach(() => {
 });
 
 describe('History window → capture interval (FR-004b)', () => {
-  it('raises the interval to the new minimum when a longer window needs it', async () => {
-    const writes = await mount({ captureIntervalSeconds: 2, historyMinutes: 5 });
-    await set(writes, WINDOW, 30);
+  it.each([
+    { name: 'a longer window needs it', start: { captureIntervalSeconds: 2, historyMinutes: 5 }, window: 30, interval: 30 },
+    { name: 'the band’s minimum, not the window: a 10-minute window needs 5 s', start: { captureIntervalSeconds: 2, historyMinutes: 5 }, window: 10, interval: 5 },
+  ])('raises the interval to the new minimum — $name', async ({ start, window, interval }) => {
+    const writes = await mount(start);
+    await set(writes, WINDOW, window);
     const patches = written(writes);
-    expect(patches).toContainEqual({ path: ['resourceMonitor', 'historyMinutes'], value: 30 });
-    expect(patches).toContainEqual({ path: ['resourceMonitor', 'captureIntervalSeconds'], value: 30 });
+    expect(patches).toContainEqual({ path: ['resourceMonitor', 'historyMinutes'], value: window });
+    expect(patches).toContainEqual({ path: ['resourceMonitor', 'captureIntervalSeconds'], value: interval });
   });
 
-  it('raises it to the band\'s minimum, not to the window: a 10-minute window needs 5 s', async () => {
-    const writes = await mount({ captureIntervalSeconds: 2, historyMinutes: 5 });
-    await set(writes, WINDOW, 10);
-    expect(written(writes)).toContainEqual({ path: ['resourceMonitor', 'captureIntervalSeconds'], value: 5 });
-  });
-
-  it('leaves an interval that already meets the new minimum alone', async () => {
-    const writes = await mount({ captureIntervalSeconds: 30, historyMinutes: 5 });
-    await set(writes, WINDOW, 30);
+  it.each([
+    { name: 'it already meets the new minimum', start: { captureIntervalSeconds: 30, historyMinutes: 5 }, window: 30 },
+    { name: 'the window gets shorter (the user’s slower choice stands)', start: { captureIntervalSeconds: 30, historyMinutes: 30 }, window: 5 },
+  ])('leaves the interval alone when $name', async ({ start, window }) => {
+    const writes = await mount(start);
+    await set(writes, WINDOW, window);
     expect(written(writes).map((p) => p.path.join('.'))).not.toContain(INTERVAL);
   });
 
-  it('does not touch the interval when the window gets shorter (the user\'s slower choice stands)', async () => {
-    const writes = await mount({ captureIntervalSeconds: 30, historyMinutes: 30 });
-    await set(writes, WINDOW, 5);
-    expect(written(writes).map((p) => p.path.join('.'))).not.toContain(INTERVAL);
-  });
-
-  it('still says nothing and writes nothing merely for showing a stored interval below the minimum (hand-edited file)', async () => {
-    const writes = await mount({ captureIntervalSeconds: 2, historyMinutes: 30 });
-    await screen.findByTestId(`setting-note-${INTERVAL}`);
-    expect(writes).not.toHaveBeenCalled();
-  });
+  // The "showing a stored interval below the minimum writes nothing" case is asserted by
+  // `field-note.test.ts` (seed {2, 30}: "display only"); this copy was deleted as an exact duplicate.
 });
+

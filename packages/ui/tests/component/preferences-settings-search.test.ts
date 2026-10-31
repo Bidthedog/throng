@@ -124,72 +124,58 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the reset (X) button appears only when there is something to reset', () => {
-  it('is absent on an empty query', () => {
+/*
+ * Six tests became two mounts (audit, component-2a): the filter flow on one mount (reset hidden on an
+ * empty query, typing never blocked, narrowing, reset at once, empty state), and the in-flight
+ * keystroke on a second, because it needs the timer still armed. Every assertion is kept.
+ */
+describe('the settings search box, its debounce and its reset (X) button (FR-049)', () => {
+  it('shows no X on an empty query, types without blocking, narrows after the debounce, resets AT ONCE, and shows an empty state', () => {
     mount();
-    // Paired with a positive: the box itself IS there, so this is an absence in a rendered form
-    // rather than an absence in an empty document.
+    // The reset (X) appears only when there is something to reset. Paired with a positive: the box
+    // itself IS there, so this is an absence in a rendered form rather than in an empty document.
     expect(box()).toBeVisible();
     expect(screen.queryByTestId('settings-search-clear')).toBeNull();
-  });
-});
 
-describe('typing is never blocked, but the filter waits (FR-049)', () => {
-  it('updates the field at once while the form is still unfiltered', () => {
     /*
-     * The claim the E2E could only approximate. The clock has not moved, so the debounced
-     * `setApplied` provably has not run — not "probably has not run in the 3ms this took".
+     * Typing is never blocked, but the filter waits. The claim the E2E could only approximate: the
+     * clock has not moved, so the debounced `setApplied` provably has not run — not "probably has not
+     * run in the 3ms this took".
      */
-    mount();
     expect(rowCount(UNMATCHED)).toBe(1);
     typeQuery('theme');
     expect(box().value).toBe('theme'); // typing is never laggy
     expect(rowCount(UNMATCHED), 'the filter ran before its debounce elapsed').toBe(1);
-  });
 
-  it('narrows the form once the debounce quiets, taking emptied groups with it', () => {
-    mount();
-    typeQuery('theme');
+    // Narrows the form once the debounce quiets, taking emptied groups with it.
     settleDebounce();
     expect(rowCount(MATCHED)).toBe(1);
     expect(rowCount(UNMATCHED)).toBe(0);
     // A group with no surviving rows goes with them, rather than staying as an empty heading.
     expect(groupCount('Confirmations')).toBe(0);
-  });
 
-  it('shows an empty state, and no groups at all, when nothing matches', () => {
-    mount();
+    /*
+     * The reset restores every row AT ONCE — three things in one press, and the middle one is why
+     * `clearSearch` calls `applySearch.cancel()` before it sets state. The clock is deliberately NOT
+     * advanced after the click: a reset routed through the debounce would leave the form still
+     * filtered here, and the E2E — which polled — could not have told the difference.
+     */
+    const clear = screen.getByTestId('settings-search-clear');
+    expect(clear).toBeVisible();
+    fireEvent.click(clear);
+    expect(box().value).toBe('');
+    expect(rowCount(UNMATCHED), 'the reset was debounced rather than immediate').toBe(1);
+    expect(rowCount(MATCHED)).toBe(1);
+    expect(screen.queryByTestId('settings-search-clear')).toBeNull();
+
+    // An empty state, and no groups at all, when nothing matches.
     typeQuery('nosuchsettinganywhere');
     settleDebounce();
     expect(screen.getByTestId('settings-search-empty')).toBeVisible();
     expect(groupCount('Appearance')).toBe(0);
   });
-});
 
-describe('the reset restores every row AT ONCE (clearSearch cancels the pending filter)', () => {
-  it('clears the query, brings the rows back without waiting, and hides itself', () => {
-    /*
-     * Three things in one press, and the middle one is why `clearSearch` calls `applySearch.cancel()`
-     * before it sets state. The clock is deliberately NOT advanced after the click: a reset routed
-     * through the debounce would leave the form still filtered here, and the E2E — which polled —
-     * could not have told the difference.
-     */
-    mount();
-    typeQuery('theme');
-    settleDebounce();
-    expect(rowCount(UNMATCHED)).toBe(0);
-
-    const clear = screen.getByTestId('settings-search-clear');
-    expect(clear).toBeVisible();
-    fireEvent.click(clear);
-
-    expect(box().value).toBe('');
-    expect(rowCount(UNMATCHED), 'the reset was debounced rather than immediate').toBe(1);
-    expect(rowCount(MATCHED)).toBe(1);
-    expect(screen.queryByTestId('settings-search-clear')).toBeNull();
-  });
-
-  it('cancels a keystroke that was still in flight when it was pressed', () => {
+  it('cancels a keystroke that was still in flight when the reset was pressed', () => {
     /*
      * The half `applySearch.cancel()` exists for. Without it the pending timer fires 150ms after the
      * user has already emptied the box, and the form silently re-filters itself to a query that is
@@ -235,11 +221,22 @@ const TYPES = [...SEVERITIES, 'attention'] as const;
 const modeFor = (severity: string): HTMLSelectElement =>
   screen.getByTestId(`control-notifications.${severity}.mode`) as HTMLSelectElement;
 
+/*
+ * Audit (component-2a): "offers a mode, a duration and OS Notify for every type — fifteen leaves, no
+ * more" re-layered — its registry count (sixteen `notifications.*` leaves, five types of three after
+ * the global switch) is `settings-metadata.test.ts` "groups all sixteen under Notifications" and "gives
+ * each type one row of mode, duration and OS switch"; what stays here is that the form DRAWS them, merged
+ * into the row-order test. "names each mode as FR-001 names it" was deleted: the option labels are
+ * `settings-metadata.test.ts` "names the three modes as FR-001 does", and the rendered words are read
+ * from those labels by `preferences-enum-labels.test.ts`.
+ */
 describe('the Notifications category (migrated from notification-prefs.e2e.ts:304)', () => {
-  it('offers a mode, a duration and OS Notify for every type — fifteen leaves, no more', () => {
+  it('draws the global OS switch first, then one row each for Error, Warning, Information, Success, Attention, each with a mode, a duration and OS Notify (FR-108, FR-109)', () => {
     mount();
 
-    expect(screen.getByTestId('settings-group-Notifications')).toBeVisible();
+    const group = screen.getByTestId('settings-group-Notifications');
+    expect(group).toBeVisible();
+    expect(within(group).getByTestId('control-notifications.os')).toBeVisible();
     for (const type of TYPES) {
       expect(modeFor(type)).toBeVisible();
       // `timeoutMs`, and it renders TWO controls — a slider and a number field, which the E2E's
@@ -248,22 +245,6 @@ describe('the Notifications category (migrated from notification-prefs.e2e.ts:30
       expect(screen.getByTestId(`control-notifications.${type}.timeoutMs-slider`)).toBeVisible();
       expect(screen.getByTestId(`control-notifications.${type}.os`)).toBeVisible();
     }
-    // "No more" is the half the migrated test could not state: it looked up names it already knew. A
-    // sixth type added without a duration, or a stray control in the group, is exactly the drift a
-    // per-type surface accumulates.
-    const modes = screen.getAllByTestId(/^control-notifications\.[a-z]+\.mode$/);
-    const durations = screen.getAllByTestId(/^control-notifications\.[a-z]+\.timeoutMs$/);
-    const oses = screen.getAllByTestId(/^control-notifications\.[a-z]+\.os$/);
-    expect(modes).toHaveLength(TYPES.length);
-    expect(durations).toHaveLength(TYPES.length);
-    expect(oses).toHaveLength(TYPES.length);
-  });
-
-  it('shows the global OS switch first, then one row each for Error, Warning, Information, Success, Attention (FR-108, FR-109)', () => {
-    mount();
-
-    const group = screen.getByTestId('settings-group-Notifications');
-    expect(within(group).getByTestId('control-notifications.os')).toBeVisible();
     const rows = [...group.querySelectorAll<HTMLElement>('[data-testid^="setting-row-"]')];
     expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual(TYPES.map((t) => `setting-row-notifications.${t}`));
     expect(rows.map((r) => r.querySelector('.settings-row__label')?.textContent)).toEqual([
@@ -279,25 +260,6 @@ describe('the Notifications category (migrated from notification-prefs.e2e.ts:30
     // One set of row actions per row, none per leaf.
     for (const t of TYPES) expect(within(group).getByTestId(`setting-reset-notifications.${t}`)).toBeInTheDocument();
     expect(within(group).queryByTestId('setting-reset-notifications.error.mode')).toBeNull();
-  });
-
-  it('names each mode as FR-001 names it — the words, not the stored token', () => {
-    /*
-     * The assertion the migrated test was rewritten to add, and the reason is worth keeping: the
-     * stored token is what every other test drives, so a dropdown reading "Never / Timed / Dismiss"
-     * passed for months. A user does not read `never`.
-     */
-    mount();
-
-    for (const severity of SEVERITIES) {
-      const options = [...modeFor(severity).querySelectorAll('option')];
-      expect(options.map((o) => o.value)).toEqual(['never', 'timed', 'dismiss']);
-      expect(options.map((o) => o.textContent?.trim())).toEqual([
-        'Never display',
-        'Display for',
-        'Dismiss only',
-      ]);
-    }
   });
 });
 
