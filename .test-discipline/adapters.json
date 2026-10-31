@@ -1,0 +1,155 @@
+{
+  "runners": [
+    {
+      "id": "unit",
+      "match": ["npx vitest run --project unit", "npm run test:unit"],
+      "testGlobs": ["packages/*/tests/unit/**/*.test.ts"],
+      "run": {
+        "method": "npx vitest run --project unit --passWithNoTests {file} -t {test}",
+        "file": "npx vitest run --project unit --passWithNoTests {files}",
+        "dir": "npx vitest run --project unit --passWithNoTests {dir}",
+        "all": "npx vitest run --project unit --passWithNoTests"
+      },
+      "list": {
+        "file": "npx vitest list --project unit --json {file}",
+        "dir": "npx vitest list --project unit --json {dir}",
+        "all": "npx vitest list --project unit --json"
+      },
+      "bail": "--bail 1",
+      "junit": "--reporter=junit --outputFile={junit}",
+      "tag": {
+        "filter": "--tags-filter={expr}",
+        "term": "{tag}",
+        "not": "!",
+        "and": " && ",
+        "list": "npx vitest list --project unit --json --tags-filter={tag}"
+      },
+      "benched": { "env": "TD_BENCHED", "annotate": "test('name', { tags: ['benched'], skip: process.env.TD_BENCHED !== '1' }, fn)" },
+      "idFrom": { "file": "classname-as-path" },
+      "ioPatterns": ["node:child_process", "execFileSync", "spawnSync", "mkdtempSync", "symlinkSync"],
+      "eloc": {
+        "productionGlobs": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+        "exclude": ["**/*.d.ts", "**/generated/**"]
+      }
+    },
+    {
+      "id": "component",
+      "match": ["npx vitest run --project component", "npm run test:component"],
+      "testGlobs": ["packages/*/tests/component/**/*.test.ts"],
+      "run": {
+        "method": "npx vitest run --project component --passWithNoTests {file} -t {test}",
+        "file": "npx vitest run --project component --passWithNoTests {files}",
+        "dir": "npx vitest run --project component --passWithNoTests {dir}",
+        "all": "npx vitest run --project component --passWithNoTests"
+      },
+      "list": {
+        "file": "npx vitest list --project component --json {file}",
+        "dir": "npx vitest list --project component --json {dir}",
+        "all": "npx vitest list --project component --json"
+      },
+      "bail": "--bail 1",
+      "junit": "--reporter=junit --outputFile={junit}",
+      "tag": {
+        "filter": "--tags-filter={expr}",
+        "term": "{tag}",
+        "not": "!",
+        "and": " && ",
+        "list": "npx vitest list --project component --json --tags-filter={tag}"
+      },
+      "benched": { "env": "TD_BENCHED", "annotate": "test('name', { tags: ['benched'], skip: process.env.TD_BENCHED !== '1' }, fn)" },
+      "idFrom": { "file": "classname-as-path" },
+      "eloc": {
+        "productionGlobs": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+        "exclude": ["**/*.d.ts", "**/generated/**"]
+      }
+    },
+    {
+      "id": "integration",
+      "match": ["npx vitest run --project integration", "npm run test:integration"],
+      "testGlobs": ["packages/*/tests/integration/**/*.test.ts"],
+      "run": {
+        "method": "npx vitest run --project integration --passWithNoTests {file} -t {test}",
+        "file": "npx vitest run --project integration --passWithNoTests {files}",
+        "dir": "npx vitest run --project integration --passWithNoTests {dir}",
+        "all": "npx vitest run --project integration --passWithNoTests"
+      },
+      "list": {
+        "file": "npx vitest list --project integration --json {file}",
+        "dir": "npx vitest list --project integration --json {dir}",
+        "all": "npx vitest list --project integration --json"
+      },
+      "bail": "--bail 1",
+      "junit": "--reporter=junit --outputFile={junit}",
+      "tag": {
+        "filter": "--tags-filter={expr}",
+        "term": "{tag}",
+        "not": "!",
+        "and": " && ",
+        "list": "npx vitest list --project integration --json --tags-filter={tag}"
+      },
+      "benched": { "env": "TD_BENCHED", "annotate": "test('name', { tags: ['benched'], skip: process.env.TD_BENCHED !== '1' }, fn)" },
+      "idFrom": { "file": "classname-as-path" },
+      "eloc": {
+        "productionGlobs": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+        "exclude": ["**/*.d.ts", "**/generated/**"]
+      }
+    },
+    {
+      "id": "contract",
+      "match": ["npx vitest run --project contract", "npm run test:contract"],
+      "testGlobs": ["packages/*/tests/contract/**/*.test.ts"],
+      "run": {
+        "method": "npx vitest run --project contract --passWithNoTests {file} -t {test}",
+        "file": "npx vitest run --project contract --passWithNoTests {files}",
+        "dir": "npx vitest run --project contract --passWithNoTests {dir}",
+        "all": "npx vitest run --project contract --passWithNoTests"
+      },
+      "list": {
+        "file": "npx vitest list --project contract --json {file}",
+        "dir": "npx vitest list --project contract --json {dir}",
+        "all": "npx vitest list --project contract --json"
+      },
+      "bail": "--bail 1",
+      "junit": "--reporter=junit --outputFile={junit}",
+      "tag": {
+        "filter": "--tags-filter={expr}",
+        "term": "{tag}",
+        "not": "!",
+        "and": " && ",
+        "list": "npx vitest list --project contract --json --tags-filter={tag}"
+      },
+      "benched": { "env": "TD_BENCHED", "annotate": "test('name', { tags: ['benched'], skip: process.env.TD_BENCHED !== '1' }, fn)" },
+      "idFrom": { "file": "classname-as-path" },
+      "eloc": {
+        "productionGlobs": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+        "exclude": ["**/*.d.ts", "**/generated/**"]
+      }
+    },
+    {
+      "id": "e2e",
+      "match": ["npx playwright test", "npm run test:e2e"],
+      "testGlobs": ["packages/ui/tests/e2e/**/*.e2e.ts"],
+      "run": {
+        "method": "npx playwright test {file} -g {test}",
+        "file": "npx playwright test {file}",
+        "dir": "npx playwright test {dir}",
+        "all": "npx playwright test"
+      },
+      "env": { "PLAYWRIGHT_JUNIT_OUTPUT_FILE": "{junit}" },
+      "bail": "--max-failures=1",
+      "junit": "--reporter=junit",
+      "tag": {
+        "include": "--grep @{tag}",
+        "exclude": "--grep-invert @{tag}",
+        "list": "npx playwright test --list --grep @{tag}",
+        "names": { "critical-path": "core", "regression": "extended" }
+      },
+      "benched": { "env": "TD_BENCHED", "annotate": "test.describe('benched: name', { tag: '@benched' }, () => { test.skip(process.env.TD_BENCHED !== '1', 'benched'); … })" },
+      "idFrom": { "file": "classname-as-path" },
+      "eloc": {
+        "productionGlobs": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+        "exclude": ["**/*.d.ts", "**/generated/**"]
+      }
+    }
+  ]
+}

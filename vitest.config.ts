@@ -83,6 +83,10 @@ const osSerial = {
   hookTimeout: 60_000,
 } as const;
 
+const TD_TAGS = ['critical-path', 'regression', 'benched', 'slow-ok', 'contract', 'integration', 'e2e'].map(
+  (name) => ({ name }),
+);
+
 export default defineConfig({
   resolve: { alias },
   esbuild,
@@ -91,6 +95,9 @@ export default defineConfig({
     // folder (created here when a layer is run directly, or inherited from the
     // top-level wrapper). Runs once, before any worker is forked.
     globalSetup: ['./scripts/vitest-global-setup.mjs'],
+    // The test-discipline tags `td` filters on (`.test-discipline/adapters.json`). Vitest refuses a
+    // `--tags-filter` naming an undeclared tag, even when no test carries it yet.
+    tags: TD_TAGS,
     projects: [
       {
         resolve: { alias },
