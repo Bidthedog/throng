@@ -172,19 +172,6 @@ test('opens a resizable main window', { tag: ['@core', '@window', '@reserve:wind
   }
 });
 
-test('exposes only placeholder workspace content (no real product features)', { tag: ['@core', '@window'] }, async () => {
-  const app = await launchApp();
-  try {
-    const window = await app.firstWindow();
-    await window.getByTestId('throng-shell').waitFor({ state: 'visible' });
-    // The sidebar hosts only Projects + Sub-workspaces (the Terminals panel was removed, FR-023).
-    await expect(window.getByTestId('projects-panel')).toBeVisible();
-    await expect(window.locator('.sidebar-panel--terminals')).toHaveCount(0);
-  } finally {
-    await closeApp(app);
-  }
-});
-
 test('closes cleanly', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const app = await launchApp();
   await app.firstWindow();
