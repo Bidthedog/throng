@@ -179,41 +179,11 @@ test('a Preferences change survives a project created in the main window (FR-001
   );
 });
 
-/**
- * FR-006 / US1 scenario 4 — a changed setting is what LOADS after a restart.
- *
- * A separate `runApp` against the SAME config root, because that is what a restart is. Asserting it
- * inside the first app would only prove the value is in memory, which is the half that was never in
- * doubt: #260's complaint is that a change "is lost and never arrives", and a user who restarts to
- * check is the commonest way that gets noticed.
+
+/*
+ * MOVED DOWN (test-suite audit, pass 1): "a changed setting is what loads after a restart (FR-006)".
+ * Proof now lives in `integration/config-store.integration.test.ts` ("a setting written through the write path is what
+ * a fresh store reads"): a write through `writeConfigPatch`, then a SECOND store over the same root reads it, which is
+ * all a restart carries over. The Preferences control re-displaying the loaded value is not re-asserted: it is the
+ * generic "controls render the config payload" claim of `component/preferences-app.test.ts`.
  */
-test('a changed setting is what loads after a restart (FR-006)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  const cfgRoot = freshDir('throng-cfg-write-restart-');
-
-  await runApp(
-    async (app, win) => {
-      await settle(win);
-      const prefs = await openSettings(app, win);
-      const mode = prefs.getByTestId('control-notifications.error.mode');
-      await expect(mode).toHaveValue('dismiss');
-      await mode.selectOption('timed');
-      await expect
-        .poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: 5_000 })
-        .toBe('timed');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-
-  // A second launch, same config root. Nothing carries over but the file.
-  await runApp(
-    async (app, win) => {
-      await settle(win);
-      const prefs = await openSettings(app, win);
-      await expect(
-        prefs.getByTestId('control-notifications.error.mode'),
-        'the setting the user changed must be what loads',
-      ).toHaveValue('timed');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});

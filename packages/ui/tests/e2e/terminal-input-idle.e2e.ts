@@ -2,8 +2,37 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 import { makeCmdTerminal } from './altscreen-fixture.js';
+
+/*
+ * ONE app for this file, not one per test: none of these tests seeds state before launch, so each launch
+ * bought nothing (see `launch-sharing.md`). `runApp` runs the body against the shared window and refuses
+ * options rather than ignoring them; `createProject` appends a counter because a shared app accumulates
+ * projects and duplicate names make `.project-item` ambiguous. Serial mode: shared window, shared database;
+ * a failure skips the rest rather than running them against whatever state it left.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) throw new Error('this file shares one app; a test needing launch options must use runOwnApp');
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 /**
  * 028 T003 / T019 (#200) — the first keystroke after clicking into an idle terminal.

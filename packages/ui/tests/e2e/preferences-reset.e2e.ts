@@ -310,134 +310,44 @@ function readKeybindings(cfgRoot: string): any {
   }
 }
 
-test('US1: a key binding shows a reset icon only once overridden, and resetting it restores the shipped chords', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'keybindings');
-      await expect(prefs.getByTestId('keybindings-tab')).toBeVisible();
+/*
+ * DELETED (test-suite audit, pass 1): "US1: a key binding shows a reset icon only once overridden, and resetting it
+ * restores the shipped chords". Every claim is held lower or by a neighbour that makes it:
+ *   - resetting restores the FULL shipped chord set → `preferences-row-actions.e2e.ts` "clear unbinds an action
+ *     entirely, and reset brings the chords back" (panel.zoomIn, more than one chord restored) and
+ *     `integration/reset-ipc.test.ts` "restores the full shipped chord set for one action, leaving every other
+ *     binding alone" (which is the "other customisation untouched" assertion, on the real main-side reset);
+ *   - the affordance is disabled while pristine and enabled once overridden, and goes quiet after reset →
+ *     `component/preferences-keybindings-tab.test.ts` "resetting a user override restores the one default chord".
+ */
 
-      // Pristine: the row is at its shipped binding, so it carries NO reset affordance.
-      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeDisabled();
-
-      // `panel.zoomIn` ships with MULTIPLE bindings (a chord plus the Ctrl+wheel gesture) — remember
-      // them, because a reset must restore the FULL set, not just the one we remove (US1/AC4). It was
-      // `zoom.in` until 046 FR-105 left that a single chord, which would leave nothing to restore
-      // beside the one removed (046 T142, analyze G3).
-      const shippedZoomIn: string[] = readKeybindings(cfgRoot).bindings['panel.zoomIn'];
-      expect(shippedZoomIn.length).toBeGreaterThan(1);
-
-      // Customise two actions by dropping one chord from each.
-      await prefs.getByTestId('binding-panel.zoomIn-remove-0').click();
-      // The row immediately advertises itself as modified — the affordance IS the cue (FR-004a).
-      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeEnabled();
-      await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn']?.length)
-        .toBe(shippedZoomIn.length - 1);
-
-      const shippedZoomOut: string[] = readKeybindings(cfgRoot).bindings['panel.zoomOut'];
-      expect(shippedZoomOut.length).toBeGreaterThan(1);
-      await prefs.getByTestId('binding-panel.zoomOut-remove-0').click();
-      await expect(prefs.getByTestId('binding-reset-panel.zoomOut')).toBeEnabled();
-      /*
-       * Wait for the panel.zoomOut edit to be WRITTEN before resetting panel.zoomIn.
-       *
-       * The affordance turning enabled is renderer state; the file is written on a debounce. Reading
-       * it straight away — and, worse, resetting panel.zoomIn while that write is still pending — lets the
-       * pending write land AFTER the reset, carrying a bindings map in which the first action is still
-       * the edited version. The reset then looks broken: it comes back with the removed shipped chord
-       * still missing (measured when this case drove `zoom.in`, before 046 re-pointed it).
-       *
-       * Measured unloaded, so this is not an artefact of a loaded machine: 2 failures in 11 runs, and
-       * still 1 in 14 with the test budget raised to 120s — which is what ruled out slowness and
-       * pointed at the write ordering.
-       */
-      await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomOut']?.length)
-        .toBe(shippedZoomOut.length - 1);
-      const zoomOutAfterEdit: string[] = readKeybindings(cfgRoot).bindings['panel.zoomOut'];
-
-      // Reset exactly one — no confirmation, applied immediately.
-      await prefs.getByTestId('binding-reset-panel.zoomIn').click();
-      // The FULL shipped chord set comes back, not just the removed chord.
-      await expect
-        .poll(() => readKeybindings(cfgRoot)?.bindings?.['panel.zoomIn'])
-        .toEqual(shippedZoomIn);
-
-      // Its affordance disappears (it is no longer modified) …
-      await expect(prefs.getByTestId('binding-reset-panel.zoomIn')).toBeDisabled();
-      // … while the OTHER customisation is untouched and still offers its reset.
-      expect(readKeybindings(cfgRoot)?.bindings?.['panel.zoomOut']).toEqual(zoomOutAfterEdit);
-      await expect(prefs.getByTestId('binding-reset-panel.zoomOut')).toBeEnabled();
-    },
-  );
-});
-
-test('US2: a setting shows a reset icon only once overridden, and resetting it leaves its siblings alone', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+/*
+ * NARROWED (test-suite audit, pass 1): "US2: a setting shows a reset icon only once overridden, and resetting it
+ * leaves its siblings alone" — the sibling-untouched and the affordance-state assertions moved down
+ * (`integration/reset-ipc.test.ts` "restores exactly one leaf, leaving its siblings byte-identical"; the
+ * enabled/disabled state machine is `component/preferences-app.test.ts`). What stays is the wiring a lower layer
+ * cannot see: pressing a REAL row's reset in the Preferences window reaches main and the file changes.
+ */
+test('US2: resetting a modified setting from its row writes the shipped value back', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
       await expect(prefs.getByTestId('settings-tab')).toBeVisible();
 
-      // Pristine: no reset affordance anywhere.
-      await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeDisabled();
-
-      // Change two leaves under the same section.
       await prefs.getByTestId('control-editor.autoSave').click();
-      await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
       /*
-       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284).
-       *
-       * The reset no longer depends on the window's view. It runs in main, under the document lock,
-       * against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a stale
-       * view back. The window's view still decides what the test is pressing: whether a row offers
-       * its reset at all (FR-004a), and the document the editors compose their next edit from
-       * (#348). The settle keeps the test acting on the state the user would see.
-       *
-       * The symptom this guarded against — a poll for `false` that returns `true` for its whole
-       * budget, in a test that otherwise finishes in under a second — was measured again on a hosted
-       * runner after resets moved to main. That one was the reset's rename failing on a momentary
-       * hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`).
-       *
-       * `readSettings` cannot see the window's view: it reads the disk, and the disk was never the
-       * laggard.
+       * The FILE says true; wait until the PREFERENCES WINDOW does too (issue #284). The reset runs in main, under
+       * the document lock, against the file as it stands (`shipped-defaults-service.ts`), so it cannot write a
+       * stale view back; the window's view still decides whether the row offers its reset at all (FR-004a), and
+       * the settle keeps the test acting on the state the user would see. `readSettings` cannot see the window's
+       * view: it reads the disk, and the disk was never the laggard.
        */
       await settleAppConfig(prefs, { 'editor.autoSave': true });
 
-      const debounce = prefs.getByTestId('control-editor.autoSaveDebounceMs');
-      await debounce.fill('900');
-      await debounce.blur();
-      await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSaveDebounceMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(900);
-      // Both rows are now modified, and both say so.
-      await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeEnabled();
-
-      /*
-       * THE SECOND WRITE GETS THE SAME SETTLE AS THE FIRST (#284, again).
-       *
-       * The poll above proves the debounce value reached DISK; the settle proves the WINDOW holds it
-       * too, and those are different facts. The single-setting reset below runs in main, under the
-       * document lock, against the file as it stands (`shipped-defaults-service.ts`), so it reads
-       * the debounce value from disk and cannot write a stale view back. The window's view is still
-       * what enables the row the test clicks (FR-004a) and what the editor composes its next edit
-       * from (#348), which is why the settle stays.
-       *
-       * Measured on a hosted runner: the poll for `false` read `true` for its whole budget while
-       * every assertion before it passed. That turned out to be the reset's rename failing on a
-       * momentary hold and rolling back (#341, 032 FR-009; `reset-transient-sharing.test.ts`), not a
-       * stale view. `readSettings` cannot see the window's view, because the disk was never the
-       * laggard.
-       */
-      await settleAppConfig(prefs, { 'editor.autoSaveDebounceMs': 900 });
-
-      // Reset one leaf — immediate, no confirmation.
+      // Reset the leaf — immediate, no confirmation.
       await prefs.getByTestId('setting-reset-editor.autoSave').click();
       await expect.poll(() => readSettings(cfgRoot)?.editor?.autoSave, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
-      await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeDisabled();
-
-      // The sibling leaf keeps the user's value and keeps its affordance.
-      expect(readSettings(cfgRoot)?.editor?.autoSaveDebounceMs).toBe(900);
-      await expect(prefs.getByTestId('setting-reset-editor.autoSaveDebounceMs')).toBeEnabled();
     },
   );
 });
@@ -646,7 +556,7 @@ test('a reset performed in JSON mode refreshes the visible document (FR-013b)', 
   );
 });
 
-test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC-008, SC-011)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+test('resets are idempotent (SC-003, SC-008)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'settings');
@@ -660,19 +570,8 @@ test('resets are idempotent, and the four scopes are distinguishable (SC-003, SC
       await expect.poll(() => JSON.stringify(readSettings(cfgRoot))).toBe(before);
       // Nothing is overridden, so no row advertises itself as modified.
       await expect(prefs.getByTestId('setting-reset-editor.autoSave')).toBeDisabled();
-
-      // The four scopes read differently from their titles alone — none claims another's reach.
-      const titles = await Promise.all(
-        ['prefs-reset-current', 'prefs-reset-preferences', 'prefs-revert-all'].map((id) =>
-          prefs.getByTestId(id).getAttribute('title'),
-        ),
-      );
-      expect(new Set(titles).size).toBe(titles.length);
-      expect(titles).toEqual([
-        'Reset the Settings editor to its defaults',
-        'Reset All Preferences',
-        'Revert All Preferences',
-      ]);
+      // MOVED DOWN: "the four scopes are distinguishable from their titles alone" (SC-011) is
+      // `component/preferences-toolbar.test.ts`.
     },
   );
 });

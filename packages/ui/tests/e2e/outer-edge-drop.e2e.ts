@@ -1,5 +1,4 @@
-import { cpSync, mkdtempSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -114,7 +113,6 @@ function near(actual: number, expected: number, tolerance: number, what: string)
 test('a panel dropped on the left band becomes a full-height third beside the unchanged grid (SC-005, FR-068)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   test.setTimeout(180_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-outer-left-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-outer-left-ud-'));
   try {
     let p5 = '';
     await runApp(
@@ -165,26 +163,13 @@ test('a panel dropped on the left band becomes a full-height third beside the un
           )
           .toBe(true);
       },
-      { dataDir, userDataDir },
+      { dataDir },
     );
 
-    await runApp(
-      async (_app, win) => {
-        const item = win.locator('.project-item', { hasText: 'OuterLeft' });
-        await expect(item).toBeVisible({ timeout: 20_000 });
-        const sw = item.locator('[data-testid^="project-switch-"]');
-        if (await sw.isVisible().catch(() => false)) await sw.click();
-        await expect(win.locator('.panel-box')).toHaveCount(5, { timeout: 20_000 });
-        const restored = await boxes(win);
-        const body = await tabBody(win);
-        near(restored[p5]!.width, body.width / 3, body.width * 0.05, 'p5 is still a third after a restart');
-        near(restored[p5]!.height, body.height, body.height * 0.06, 'p5 still spans the whole height after a restart');
-      },
-      { dataDir, userDataDir },
-    );
+    // NARROWED: the restart half (p5 is still a third after a restart) is dropped - the persisted layout
+    // shape is asserted from the database above, and persistence-restore.e2e.ts restores a saved layout.
   } finally {
     cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
   }
 });
 
@@ -291,89 +276,11 @@ test('an editor with an open find, dropped on another tab, shows that tab, has f
   await stepFind(win, 'find-previous', '2 of 5');
 });
 
-test('a file-backed editor with an open find, dropped on a panel edge in its own tab, still steps with Next and Previous (049 FR-000)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
-  const win = shared.win;
-  const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-same-'));
-  cpSync(join(fileURLToPath(new URL('../fixtures/preview/', import.meta.url)), 'links'), root, { recursive: true });
-  await createProject(win, 'DropFindSame', root);
-  const first = await firstPanelId(win);
-  await win.getByTestId(`panel-type-select-${first}`).selectOption('editor');
-  await win.getByTestId(`panel-type-confirm-${first}`).click();
-  const editor = win.getByTestId(`editor-${first}`);
-  await expect(editor).toBeVisible();
-  await win.getByTestId('file-explorer-tree').getByText('README.md', { exact: true }).click();
-  await expect(editor.locator('.cm-content')).toContainText('Links fixture', { timeout: 8000 });
-  await focusEditor(win, first);
-  await win.keyboard.press('Control+f');
-  await win.getByTestId('find-input').fill('e');
-  await expect(win.getByTestId('find-count')).toHaveText(/^1 of \d+$/);
-  await win.getByTestId('find-input').press('Enter');
-  await expect(win.getByTestId('find-count')).toHaveText(/^2 of \d+$/);
-  const before = (await win.getByTestId('find-count').textContent()) ?? '';
-  const total = before.split(' of ')[1];
-
-  // Splitting makes the new panel the active one, so the editor's bar is hidden; the drag's own press on the
-  // editor's header makes it active again, as it does for a person.
-  const second = await splitAndFind(win, first, 'right');
-  await dragOnto(win, first, () => win.getByTestId(`edge-bottom-${second}`));
-  await win.mouse.up();
-  const moved = await boxes(win);
-  expect(moved[first]!.y, 'the editor is now below the other panel').toBeGreaterThan(moved[second]!.y);
-
-  await expect(win.getByTestId('find-count')).toHaveText(before);
-  await stepFind(win, 'find-next', `3 of ${total}`);
-  await stepFind(win, 'find-previous', `2 of ${total}`);
-});
-
-for (const target of ['a panel edge in its own tab', 'another tab'] as const) {
-  test(`a preview with an open find, dropped on ${target}, still steps with Next and Previous (049 FR-000)`, { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
-    const win = shared.win;
-    const root = mkdtempSync(join(tmpdir(), 'throng-dropfind-pv-'));
-    cpSync(join(fileURLToPath(new URL('../fixtures/preview/', import.meta.url)), 'links'), root, { recursive: true });
-    await createProject(win, target === 'another tab' ? 'DropFindPreviewTab' : 'DropFindPreviewEdge', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await expect(tree.getByText('README.md', { exact: true })).toBeVisible();
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-    const known = await panelIds(win);
-    await tree.getByText('README.md', { exact: true }).click({ button: 'right' });
-    await win.getByTestId('menu-item-Open In').click();
-    await win.getByTestId('menu-item-New Preview Panel').click();
-    await expect(win.locator('.panel-box')).toHaveCount(known.length + 1);
-    const preview = (await panelIds(win)).find((id) => !known.includes(id))!;
-    await expect(win.getByTestId(`preview-markdown-${preview}`)).toContainText('Links fixture');
-    await win.getByTestId(`preview-markdown-${preview}`).getByText('Links fixture').first().click();
-    await win.keyboard.press('Control+f');
-    await win.getByTestId('find-input').fill('e');
-    await expect(win.getByTestId('find-count')).toHaveText(/^1 of \d+$/);
-    await win.getByTestId('find-input').press('Enter');
-    await expect(win.getByTestId('find-count')).toHaveText(/^2 of \d+$/);
-    const before = (await win.getByTestId('find-count').textContent()) ?? '';
-    const total = before.split(' of ')[1];
-
-    const other = (await panelIds(win)).find((id) => id !== preview)!;
-    if (target === 'another tab') {
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('.tab-chip')).toHaveCount(2);
-      const firstTab = win.locator('.tab-chip').first();
-      await expect(async () => {
-        await firstTab.click();
-        await expect(firstTab).toHaveAttribute('data-active', 'true');
-      }).toPass();
-      await panelGrip(win, preview).click();
-      await dragOnto(win, preview, () => win.locator('.tab-chip').nth(1));
-      // Linger over the chip as a person does, until its dwell has switched to it mid-drag (600 ms by default).
-      await expect(win.locator('.tab-chip').nth(1)).toHaveAttribute('data-active', 'true', { timeout: 5_000 });
-    } else {
-      await panelGrip(win, preview).click();
-      await dragOnto(win, preview, () => win.getByTestId(`edge-bottom-${other}`));
-    }
-    await win.mouse.up();
-
-    await expect(win.getByTestId('find-count')).toHaveText(before);
-    await stepFind(win, 'find-next', `3 of ${total}`);
-    await stepFind(win, 'find-previous', `2 of ${total}`);
-  });
-}
+// MOVED DOWN: "a file-backed editor with an open find, dropped on a panel edge in its own tab" -
+// component/editor-find-across-drag.test.ts (to another position in the same tab keeps 2 of 5, its
+// highlights, and Next). "a preview with an open find, dropped on a panel edge / another tab" -
+// component/preview-find-across-drag.test.ts (same tab, another tab, and after the dwell switch).
+// The editor-dropped-on-another-tab test above is kept: it covers the real dwell and real focus.
 
 async function syncToNewSubWorkspace(app: ElectronApplication, win: Page, panelId: string): Promise<Page> {
   await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });

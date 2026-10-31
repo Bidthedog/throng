@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -63,42 +63,13 @@ const docText = (win: Page, pid: string): Promise<string> =>
     pid,
   );
 
-test('undo past a SAVE re-dirties the document, and a revert clears the history', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
-  writeFileSync(join(root, 'doc.txt'), 'original\n');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'UndoProj', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).click();
-      await win.getByTestId('file-explorer-tree').getByText('doc.txt', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        'original',
-        { timeout: 8000 },
-      );
-
-      // Type, save, then undo BACK PAST the save. The document is now unsaved again — its content
-      // no longer matches the file on disk, whatever the version counter says. (Deriving `dirty`
-      // from the version instead of the content got this exactly backwards: undo is the inverse
-      // applied FORWARD, so it ADVANCES the version, and a document undone back to its saved text
-      // would have reported itself dirty while being byte-identical to the file.)
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+End');
-      await win.keyboard.type('EDIT');
-      await win.keyboard.press('Control+s');
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
-
-      await win.keyboard.press('Control+z');
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
-
-      // …and Redo back to the saved content makes it CLEAN again, byte-identical to the file.
-      await win.keyboard.press('Control+y');
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0, { timeout: 8000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED (test-suite audit) — `undo past a SAVE re-dirties the document, and a revert clears the
+ * history`. Proved below E2E: `integration/document-authority.integration.test.ts:179` "survives a
+ * SAVE — undoing past it re-dirties the document" and the following "is CLEARED by a revert";
+ * `integration/editor-coordinator-lifecycle.integration.test.ts:339` dirtyChanged on undo back to the
+ * saved text and on the redo; `unit/undo-service.test.ts`.
+ */
 
 test('a crash restores the content AND its undo history — Ctrl+Z still reaches the past', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undorec-'));
@@ -138,6 +109,9 @@ test('a crash restores the content AND its undo history — Ctrl+Z still reaches
           'FIRST-SECOND',
           { timeout: 10000 },
         );
+        // Restored content is unsaved (dirty), so its dot shows. (Absorbed from the deleted
+        // `editor-recovery.e2e.ts`, whose restart-and-restore claim this test already makes.)
+        await expect(win.locator('.throng-unsaved-dot').first()).toBeVisible();
 
         // The content survived. Now the part that is easy to lose and hard to notice: ONE Ctrl+Z
         // must take back the second typing run, leaving the first — which is only possible if the

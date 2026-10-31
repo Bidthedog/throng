@@ -79,13 +79,6 @@ function control(win: Page, panelId: string, name: string): Locator {
   return banner(win, panelId).getByRole('button', { name, exact: true });
 }
 
-/** The banner's controls, in DOM order, as the names a keyboard or screen-reader user hears. */
-async function controlNames(win: Page, panelId: string): Promise<string[]> {
-  return banner(win, panelId)
-    .locator('button')
-    .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? el.getAttribute('title') ?? ''));
-}
-
 /**
  * SETUP GATE — WAIT until the panel has reached its failure state, before acting on it.
  *
@@ -372,7 +365,7 @@ test.afterAll(async () => {
  * T056a / T069apre — ALL THREE controls are reachable and OPERABLE by keyboard, in the order they
  * are displayed (FR-042a, the banner half of SC-009a).
  *
- * Focus first, then Tab, then a real key on the control — the idiom `notice-a11y.e2e.ts` uses. Each
+ * Focus first, then Tab, then a real key on the control — the idiom `notice-consolidation.e2e.ts` uses. Each
  * step answers a different question, and none of them answers the others:
  *   • focus() lands        → the control is focusable at all
  *   • Tab walks the set    → the DISPLAYED order IS the tab order, and no control traps focus
@@ -591,11 +584,9 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
       await inFailureState(win, brokenPid, 'editor');
       await expect(banner(win, brokenPid)).toBeVisible();
 
-      // ═══ 2 — NOT DISMISSIBLE (FR-046), as the complete list of what the banner offers. ═══
-      expect(
-        await controlNames(win, brokenPid),
-        'the banner offers a way to close itself while its condition still holds',
-      ).toEqual(['Try again', 'Copy details', 'Clear panel type']);
+      // ═══ 2 — NOT DISMISSIBLE (FR-046). The complete control list is component/panel-failure-banner.test.ts's
+      // ('offers exactly three controls, and none of them closes the banner'); the later steps here prove the
+      // banner stays up through a failing retry. ═══
 
       // ═══ 1 — a retry that FAILS says so, and the banner stays. ═══
       //
@@ -703,13 +694,9 @@ test('the banner appears with every severity set to Never display', { tag: ['@ex
         const pid = await firstPanelId(win);
         await failingTerminalOn(win, pid);
 
-        // The banner is there, whole — headline, pointer and all three controls.
+        // The banner is there, whole — headline and pointer (its three controls are
+        // component/panel-failure-banner.test.ts's).
         await expect(banner(win, pid)).toBeVisible({ timeout: 90_000 });
-        expect(await controlNames(win, pid)).toEqual([
-          'Try again',
-          'Copy details',
-          'Clear panel type',
-        ]);
 
         /*
          * T069pre — THE FINAL POINTER SENTENCE, ASSERTED WHERE IT HAS TO BE TRUE.

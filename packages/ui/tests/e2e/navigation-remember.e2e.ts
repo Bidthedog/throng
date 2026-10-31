@@ -53,21 +53,12 @@ import {
   settle,
   cleanupTemp,
 } from './harness.js';
-import { openGotoLine, openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
+import { openGotoLine, openQuickOpen, quickOpenRows } from './helpers/navigation.js';
 import { writeSettingsAtomic } from './helpers/config-write.js';
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * Fixtures
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
-
-/**
- * A project with FIVE files, one of which `guide` matches and the other four do not.
- *
- * The four decoys are what make "the modal shows that query's RESULTS" (FR-060) a real assertion.
- * With one file in the project, a seeded query and an unseeded one would list exactly the same
- * single row, and an implementation that put the text in the field without filtering would pass.
- */
-const FILE_COUNT = 5;
 
 /** Exactly `LONG_LINES` lines, and NO trailing newline — so the document has `LONG_LINES` lines. */
 const LONG_LINES = 400;
@@ -93,12 +84,6 @@ function makeProject(prefix: string): string {
   return root;
 }
 
-/** A second project, so "the active project changed" is a thing that can happen (AS-21). */
-function makeOtherProject(): string {
-  const root = mkdtempSync(join(tmpdir(), 'throng-remember-other-'));
-  writeFileSync(join(root, 'zebra-only.txt'), '// zebra-only.txt\n', 'utf8');
-  return root;
-}
 
 function freshCfgRoot(both: boolean): string {
   const dir = mkdtempSync(join(tmpdir(), 'throng-remember-cfg-'));
@@ -268,166 +253,32 @@ test.beforeEach(() => {
  * OFF — the shipped defaults (AS-18, AS-13, FR-057, M1, SC-014's first half)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted (AS-18, AS-13, FR-057)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const root = makeProject('throng-remember-off-');
-  // Its own config root, holding both settings explicitly OFF. Explicit rather than absent on
-  // purpose: an absent key and a `false` one must behave identically, and only one of the two is
-  // what a user who has turned the setting back off will actually have on disk.
-  const cfg = freshCfgRoot(false);
-  try {
-    await runApp(
-      async (_app, win) => {
-        await settle(win);
-        await createProject(win, 'RememberOff', root);
-
-        /*
-         * …and this is what the shipped defaults ARE. If either ever reads `true` the rest of the
-         * file is asserting something other than what ships (FR-058).
-         *
-         * TWO LEAF assertions rather than one `toEqual` on `editor.navigation`. The object is not
-         * this test's to describe: the app materialises the whole settings document, so the block
-         * read back also carries `quickOpenExcludeHidden` — a different requirement (FR-069b), owned
-         * by a different spec, and free to gain siblings without this file having an opinion. The
-         * first version asserted the whole block and failed on exactly that, having proved nothing
-         * about either setting it is actually about.
-         */
-        expect(readSettings(cfg)?.editor?.navigation?.rememberQuickOpenQuery).toBe(false);
-        expect(readSettings(cfg)?.editor?.navigation?.rememberGotoLineNumber).toBe(false);
-
-        /*
-         * The editor is made FIRST, and the order is mechanical rather than stylistic: choosing a
-         * file in Quick Open creates the tab's first editor when it has none (Q4), after which the
-         * untyped panel is gone and `panel-type-select-<id>` no longer exists. Making it here means
-         * both halves of this test drive the same panel.
-         */
-        const pid = await newEditor(win);
-        await openFileAndFocus(win, pid, 'long.txt', 'line-0001');
-
-        // Go To Line: go to a line, then reopen. AS-13.
-        await acceptGotoLine(win, '42');
-        await openGotoLine(win);
-        await expect(win.getByTestId('gotoline-input')).toHaveValue('');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('gotoline')).toHaveCount(0);
-
-        /*
-         * Quick Open: accept a query, then reopen. AS-18.
-         *
-         * AS-18's second clause — "and no results are listed" — is deliberately NOT asserted; the
-         * shared picker's K6 makes an empty query match everything, and FR-057 only ever required an
-         * empty INPUT. The spec records that correction in AS-18 itself.
-         */
-        await acceptQuickOpenQuery(win, 'guide', '// docs/guide.md');
-        await openQuickOpen(win);
-        await expect(win.getByTestId('quickopen-input')).toHaveValue('');
-        // …and it is listing the WHOLE project, which is what an unseeded query does.
-        await expect(quickOpenRows(win)).toHaveCount(FILE_COUNT);
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfg);
-  }
-});
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * ON — Quick Open (AS-19, AS-20, AS-21, FR-060, FR-061, FR-062)
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with rememberQuickOpenQuery on, the accepted query comes back selected with its own results — an abandoned one never does, and a project change discards it (AS-19, AS-20, AS-21)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const root = makeProject('throng-remember-qo-');
-  const other = makeOtherProject();
-  const cfg = freshCfgRoot(true);
-  try {
-    await runApp(
-      async (_app, win) => {
-        await settle(win);
-        await createProject(win, 'RememberQuickOpen', root);
-
-        /*
-         * AS-20 FIRST, before anything has ever been accepted.
-         *
-         * Order is the assertion. Run after an accepted query, "the input is empty" would be
-         * indistinguishable from "the abandoned query overwrote nothing"; run first, an empty input
-         * can only mean the abandoned query was never recorded at all (FR-061).
-         */
-        await openQuickOpen(win);
-        await win.keyboard.type('zzz-abandoned');
-        await expect(win.getByTestId('quickopen-input')).toHaveValue('zzz-abandoned');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-        await openQuickOpen(win);
-        await expect(win.getByTestId('quickopen-input')).toHaveValue('');
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-        // …now accept one, which is the only thing FR-061 records.
-        await acceptQuickOpenQuery(win, 'guide', '// docs/guide.md');
-
-        /*
-         * AS-19 — present, fully selected, and showing ITS results.
-         *
-         * The row assertion is the half that separates "seeded the control" from "seeded the field":
-         * a query written into the input without reaching the picker's own query state would list
-         * all five files, not the one this query matches.
-         */
-        await openQuickOpen(win);
-        expect(await inputState(win.getByTestId('quickopen-input'))).toEqual({
-          value: 'guide',
-          fullySelected: true,
-        });
-        await expect(quickOpenRows(win)).toHaveCount(1);
-        expect(await quickOpenRowPaths(win)).toEqual(['docs/guide.md']);
-
-        /*
-         * …and typing REPLACES it outright, with no keystroke spent clearing it.
-         *
-         * `README`, not `R`. A single `R` was the first attempt and it matched THREE files, which is
-         * the honest answer for this fixture — the picker matches the whole path, so `src/app.ts`
-         * and `src/util.ts` both carry an `r` in `src/`. Relaxing the count to 3 was the wrong fix:
-         * "three rows" is satisfied by a query that filtered nothing in particular, whereas "exactly
-         * README.md" can only be true if the typed query reached the picker's own query state.
-         *
-         * Replacement is proved just as strongly by a multi-character query: the first keystroke
-         * lands on the full selection and the rest append, so a selection that had NOT been replaced
-         * would leave `guideREADME` here rather than `README`.
-         */
-        await win.keyboard.type('README');
-        await expect(win.getByTestId('quickopen-input')).toHaveValue('README');
-        await expect(quickOpenRows(win)).toHaveCount(1);
-        expect(await quickOpenRowPaths(win)).toEqual(['README.md']);
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-        /*
-         * AS-21 / FR-062 — the ACTIVE PROJECT changes, and the query goes with it.
-         *
-         * `guide` describes a candidate set that belonged to the other project; carried across it
-         * would either match nothing and look broken, or match something else entirely. Creating a
-         * project opens it, which is what makes this a project change rather than a second window.
-         */
-        await createProject(win, 'RememberQuickOpenOther', other);
-        await openQuickOpen(win);
-        await expect(win.getByTestId('quickopen-input')).toHaveValue('');
-        // …and the new project's own file is what is listed, so this is the new candidate set and
-        // not an empty modal that failed to open properly.
-        await expect(quickOpenRows(win)).toHaveCount(1);
-        expect(await quickOpenRowPaths(win)).toEqual(['zebra-only.txt']);
-        await win.keyboard.press('Escape');
-        await expect(win.getByTestId('quickopen')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(other);
-    cleanupTemp(cfg);
-  }
-});
+/*
+ * MOVED DOWN (test-suite audit) — two declarations that launched an Electron app each, with a config
+ * root seeded before launch, only to read a modal's input:
+ *
+ *   `at the shipped defaults BOTH modals reopen empty, even straight after a value was accepted`
+ *       (AS-18, AS-13, FR-057)
+ *   `with rememberQuickOpenQuery on, the accepted query comes back selected with its own results —
+ *       an abandoned one never does, and a project change discards it` (AS-19, AS-20, AS-21)
+ *
+ * Quick Open's half is the real `QuickOpen` over the real `ConfigProvider` in
+ * `component/quick-open-header.test.ts` ("the remembered query"): off reopens empty and lists the
+ * whole project; on seeds the accepted query FULLY SELECTED into the picker's own query state, typing
+ * replaces it, an abandoned or cancelled open records nothing. Each is red when the setting is not
+ * read, when the seed is dropped and when an unopened file is recorded. The rules behind them — what
+ * counts as accepted, that a project change discards the query (AS-21, FR-062), that turning a
+ * setting off discards it (FR-063), and Go To Line's number (AS-13, AS-14) — are
+ * `unit/navigation-remember-store.test.ts` and `core/tests/unit/goto-line.test.ts`.
+ *
+ * What stays here is the one declaration below: the preferences window, the only place the toggles
+ * can be turned off by a user and the modal observed to change.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * ON — Go To Line (AS-14, FR-060, FR-061)

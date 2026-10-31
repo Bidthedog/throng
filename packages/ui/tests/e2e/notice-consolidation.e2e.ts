@@ -309,6 +309,28 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         expect(noticeBox.y).toBeGreaterThanOrEqual(stack.y - 1);
         expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(stack.y + stack.height + 1);
 
+        // ═══ 030 US3 (#235) / T041 — A GROWING NOTICE MUST NOT RE-READ ITSELF (FR-032a). ═══
+        //
+        // MERGED IN from the former `notice-a11y.e2e.ts` (test-suite audit, pass 1): it rebuilt this very
+        // two-launch dance (a project whose root is renamed away, restored with an unvisited tab) to read two
+        // attributes and one focus move. The notice lives inside `aria-live="polite"`, so a failure is audible at
+        // all — but it GROWS, and a live region re-reads its changed subtree: a forty-row list would be read
+        // aloud again at every tab visit. So the body announces ONCE and then opts out, and a separate
+        // visually-hidden region announces only the DELTA.
+        //
+        // First announcement, then silence: the body opts OUT once it has been read.
+        const body = notice.getByTestId('notice-body');
+        await expect(body).toHaveAttribute('aria-live', 'off', { timeout: 15_000 });
+
+        // The delta region exists, is polite, and is invisible to the eye. It is NOT asserted empty: the two
+        // panels in this tab report a beat apart, so the second has already grown the notice the first raised.
+        // What matters is what the NEXT growth says.
+        const delta = win.getByTestId('notice-growth-live');
+        await expect(delta).toHaveAttribute('aria-live', 'polite');
+        const deltaBox = await delta.boundingBox();
+        expect(deltaBox === null || deltaBox.width <= 1 || deltaBox.height <= 1).toBe(true);
+        const deltaBefore = (await delta.textContent()) ?? '';
+
         // ═══ T038 — VISITING AN UNRENDERED TAB GROWS THE LIVE NOTICE. ═══
         //
         // The panels in tabs two and three have never mounted, so their failures are not yet known
@@ -320,6 +342,36 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         // The tab it joined under is named, once, above its row.
         await expect(notice.getByTestId('notice-affected-tab')).toHaveCount(2);
         await expect(notice).toContainText('Second');
+
+        // ═══ GROWTH ANNOUNCES THE DELTA, AND ONLY THE DELTA (FR-032a). ═══
+        await expect
+          .poll(async () => (await delta.textContent()) ?? '', {
+            timeout: 15_000,
+            message: 'the growth announced nothing at all',
+          })
+          .not.toBe(deltaBefore);
+        const announced = (await delta.textContent()) ?? '';
+        // The panel that joined is named (by its file — panels are not renamable, 048), and so is its tab…
+        expect(announced).toContain('notes');
+        expect(announced).toContain('Second');
+        // …and the editor the user was already told about is NOT re-read. The whole requirement exists for this:
+        // the delta region is not a second copy of the list.
+        expect(announced, 'the delta region re-announced a panel already reported').not.toContain('docs');
+
+        // ═══ FR-032b — the list is reachable by keyboard, and lets go. ═══
+        const affected = notice.getByTestId('notice-affected');
+        await expect(affected).toHaveAttribute('tabindex', '0');
+        await affected.focus();
+        expect(
+          await win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '(none)'),
+        ).toBe('notice-affected');
+        // Tab leaves. A bounded scroll region that swallowed focus would strand a keyboard user in a toast they
+        // cannot dismiss.
+        await win.keyboard.press('Tab');
+        expect(
+          await win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '(none)'),
+          'focus is trapped inside the affected list',
+        ).not.toBe('notice-affected');
 
         // ═══ …and a DISMISSED notice raises a fresh one for the NEW panels only (FR-037a). ═══
         await win.getByTestId('panel-failure-notice-dismiss').click();

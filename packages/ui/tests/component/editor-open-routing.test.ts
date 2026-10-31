@@ -281,6 +281,81 @@ describe('a file already open somewhere is focused, never opened twice (FR-011a)
     expect(otherActions.openFile).not.toHaveBeenCalled();
     expect(editorPanels(live())).toHaveLength(target);
   });
+
+  /*
+   * MIGRATED FROM `quick-open-target.e2e.ts` (test-suite audit) — the two "one-buffer rule holds on the
+   * `new` target" declarations (FR-008, FR-011a, AS-9). The reported defect was that ONLY the `new`
+   * branch skipped the gate, so both are asserted with the target at "new" and a COUNT, never a
+   * presence: "an editor holds the file" is true of the broken build as well as the fixed one.
+   *
+   * Red-proven against `openFileInTab` with the gate skipped for that target
+   * (`decision?.action === 'focus' && openTarget !== 'new'`): both cases fail on the editor count.
+   */
+  it('with the target on "new", a file already open in this tab is activated, not copied (AS-9)', async () => {
+    mount();
+    const ws = await ready();
+    const tabId = tabOf(ws).id;
+    const holder = panelsIn(ws)[0].id;
+    act(() => ws.setPanelType(holder, 'editor', { filePath: FILE_A }));
+    asEditor(holder);
+    // Two panels, so "no second copy" and "the file's editor is the active one" say something: with a
+    // single editor on screen both are satisfied by a tab that has nowhere else for focus to be.
+    let other = '';
+    act(() => {
+      other = live().addPanel(tabId);
+    });
+    act(() => live().setPanelType(other, 'editor', { filePath: FILE_B }));
+    asEditor(other);
+    setLastActiveEditor(tabId, other);
+    act(() => live().setActivePanel(tabId, other));
+    Reflect.set(window, 'throng', {
+      editor: { openInto: () => Promise.resolve({ action: 'focus', panelId: holder }) },
+      panel: { notifyTyped: () => {} },
+    });
+
+    expect(editorPanels(live())).toHaveLength(2); // the layout this acts on, before any absence claim
+    expect(tabOf(live()).activePanelId).toBe(other);
+
+    await act(async () => {
+      await openFileInTab(live(), tabId, FILE_A, 'new');
+    });
+
+    expect(editorPanels(live())).toHaveLength(2);
+    expect(tabOf(live()).activePanelId).toBe(holder);
+  });
+
+  it('with the target on "new", a file open in ANOTHER tab activates that tab’s editor (FR-011a)', async () => {
+    mount();
+    const ws = await ready();
+    const firstTab = tabOf(ws).id;
+    const holder = panelsIn(ws)[0].id;
+    act(() => ws.setPanelType(holder, 'editor', { filePath: FILE_A }));
+    asEditor(holder);
+
+    let secondTab = '';
+    act(() => {
+      secondTab = live().addTab();
+    });
+    act(() => live().setActiveTab(secondTab));
+    Reflect.set(window, 'throng', {
+      editor: { openInto: () => Promise.resolve({ action: 'focus', panelId: holder }) },
+      panel: { notifyTyped: () => {} },
+    });
+
+    expect(layoutOf(live()).activeTabId).toBe(secondTab); // the layout this acts on
+    expect(layoutOf(live()).tabs).toHaveLength(2);
+
+    await act(async () => {
+      await openFileInTab(live(), secondTab, FILE_A, 'new');
+    });
+
+    // Tab 1 comes forward and still holds the one editor; the broken build leaves tab 2 active with
+    // a brand-new editor on the file in it, which is also "a count of one" — hence both assertions.
+    expect(layoutOf(live()).activeTabId).toBe(firstTab);
+    expect(layoutOf(live()).tabs).toHaveLength(2);
+    expect(panelsIn(live(), 0).filter((p) => p.kind === 'editor')).toHaveLength(1);
+    expect(panelsIn(live(), 1).filter((p) => p.kind === 'editor')).toHaveLength(0);
+  });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *

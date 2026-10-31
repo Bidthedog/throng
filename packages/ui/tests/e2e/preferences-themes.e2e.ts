@@ -313,7 +313,7 @@ test('the three-type button tokens appear in the editor and apply live (021, US7
       await expect(prefs.getByTestId('control-typography.button.family')).toBeVisible();
 
       // Edit confirmButtonBg → saved + reflected in the live CSS var. (The live BUTTON render across
-      // all three types, rest + hover, is proven end-to-end in theme-buttons.e2e.ts.)
+      // all three types, rest + hover, is proven end-to-end in theme-fields.e2e.ts.)
       await prefs.getByTestId('control-colours.confirmButtonBg-hex').fill('#123456');
       await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.confirmButtonBg, { timeout: FILE_OP_TIMEOUT_MS }).toBe('#123456');
       await expect

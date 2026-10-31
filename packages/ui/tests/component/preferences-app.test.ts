@@ -549,15 +549,19 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
- * preferences-theme-reset.e2e.ts — which BASELINE each control reads
+ * Theme-token Reset / Revert — the ONLY proof left at any layer
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
  * Reset and Revert on a theme token — the state machine, NOT the baselines (#76).
  *
- * ══ THIS DOES NOT REPLACE `preferences-theme-reset.e2e.ts`, AND HERE IS THE MEASUREMENT ══
+ * ══ `preferences-theme-reset.e2e.ts` IS DELETED (test-suite audit): THIS IS NOW THE ONLY PROOF ══
  *
- * It was written to. The plan was to migrate `:110` and `:132`, on the reasoning that the note in
+ * No E2E drives a theme token's Reset or Revert any more, so the state machine below is the whole of
+ * the coverage. What follows is why it was first written as a partial replacement, and what it still
+ * cannot see.
+ *
+ * It was written to replace that E2E. The plan was to migrate `:110` and `:132`, on the reasoning that the note in
  * that file — *"A component handed an `onReset` callback cannot tell you which it is wired to"* —
  * applied only to a test rendering `RowActions` in isolation, and not to one mounting
  * `PreferencesApp`, where `themes-tab.tsx` wires its own handlers.
@@ -570,12 +574,13 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
  *
  * — and BOTH leave every test below green. The cause is the FIXTURE, not the layer: the window opens
  * on the shipped theme, so `entryTheme` and `shippedTheme` hold the same value and it does not
- * matter which is read. The E2Es have exactly the same blind spot, for exactly the same reason, and
+ * matter which is read. The E2Es had exactly the same blind spot, for exactly the same reason, and
  * the recorded gap at the foot of this block says what a fixture that closed it would need.
  *
- * So the two verdicts are DECLINED and `preferences-theme-reset.e2e.ts` keeps both tests. 035's rule
- * is that a replacement covering part of what an E2E asserted is not a replacement, and this covers
- * the part that was never in doubt.
+ * So 035 DECLINED the two verdicts and kept both E2E tests, on the rule that a replacement covering
+ * part of what an E2E asserted is not a replacement. The test-suite audit has since deleted that
+ * file. The E2Es shared the fixture blind spot measured above, so the baseline gap is now uncovered
+ * at EVERY layer — see the recorded case at the foot of this block.
  *
  * ══ WHAT THESE FOUR ARE WORTH, THEN ══
  *
@@ -631,7 +636,7 @@ describe('a theme token’s Reset and Revert read two different baselines (#76)'
    *
    * The case that would genuinely separate the two baselines is a window opening on a token that is
    * ALREADY customised: reset then owes the factory value and revert owes the customisation, and
-   * they are different answers. Neither E2E covered it — both opened on the shipped theme, where the
+   * they are different answers. Neither of the (now deleted) E2Es covered it — both opened on the shipped theme, where the
    * on-entry value IS the shipped value, so the two controls were indistinguishable by outcome and a
    * build wiring both to the same baseline would have passed them both. The four tests above inherit
    * that limitation.

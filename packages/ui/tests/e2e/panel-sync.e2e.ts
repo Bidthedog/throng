@@ -73,6 +73,18 @@ async function subWorkspaceIds(win: Page): Promise<string[]> {
     );
 }
 
+/** Right-click the panel handle and sync it into a brand-new sub-workspace window. */
+async function syncToNewSubWorkspace(app: OpenApp['app'], win: Page, panelId: string): Promise<Page> {
+  await win.getByTestId(`panel-handle-${panelId}`).click({ button: 'right' });
+  await win.getByTestId('menu-item-Sync to').click();
+  const [child] = await Promise.all([
+    app.waitForEvent('window'),
+    win.getByTestId('menu-item-New Sub-workspace').click(),
+  ]);
+  await child.waitForLoadState('domcontentloaded');
+  return child;
+}
+
 test('the type-selection form syncs live across the project and sub-workspace windows', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
@@ -220,6 +232,33 @@ test('panel selection is INDEPENDENT across windows (not mirrored)', { tag: ['@e
     await child.waitForTimeout(400);
     await expect(win.getByTestId(`panel-${a}`)).toHaveAttribute('data-active', 'true');
     await expect(win.getByTestId(`panel-${b}`)).toHaveAttribute('data-active', 'false');
+  } finally {
+    if (!child.isClosed()) await child.close();
+  }
+});
+
+// Moved here from panel-owner-align.e2e.ts (FR-087), which seeded a persisted sub-workspace to reach the
+// same header. A panel synced into a new sub-workspace shows its owner there just the same (an origin
+// project's name and colour, panel-placeholder.tsx), so this shares the file's app instead of seeding one.
+test('the sub-workspace/project owner text is right-aligned beside the panel controls (FR-087)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  const win = shared.win;
+  await createProject(win, 'OwnerAlign', 'C:/c/owneralign');
+  const a = await firstPanelId(win);
+
+  const child = await syncToNewSubWorkspace(shared.app, win, a);
+  try {
+    const owner = child.getByTestId(`panel-project-${a}`);
+    await expect(owner).toBeVisible();
+    const ownerBox = await owner.boundingBox();
+    const panelBox = await child.getByTestId(`panel-${a}`).boundingBox();
+    expect(ownerBox).not.toBeNull();
+    expect(panelBox).not.toBeNull();
+    if (ownerBox && panelBox) {
+      // Owner text is in the right portion of the header (right-aligned).
+      expect(ownerBox.x).toBeGreaterThan(panelBox.x + panelBox.width * 0.5);
+      // …and its right edge is near the panel's right edge (beside the controls).
+      expect(ownerBox.x + ownerBox.width).toBeGreaterThan(panelBox.x + panelBox.width * 0.7);
+    }
   } finally {
     if (!child.isClosed()) await child.close();
   }

@@ -193,6 +193,38 @@ describe('the Zoom submenu is offered only where zoom is implemented (FR-062a, C
     expect(items.filter((i) => i.label === 'Zoom')).toEqual([]);
   });
 
+  it('runs the matching zoom action for each row, on every kind that zooms (the menu route to zoom)', () => {
+    // Moved down from panel-zoom.e2e.ts 'the panel right-click menu zooms that panel in and out': the
+    // menu route is each row invoking ITS action. The level arithmetic is the store's and core's.
+    for (const { kind, what } of KINDS.filter((k) => k.zooms)) {
+      const fired: string[] = [];
+      const items = panelHeaderMenu({
+        panel: panel({ kind }),
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [],
+        editor: kind === 'editor' ? { dirty: false, hasFilePath: true } : null,
+        panelFailure: false,
+        detach: null,
+        preview: kind === PREVIEW_KIND ? { providerKind: 'text', parented: false } : null,
+        actions: {
+          ...panelActions,
+          zoomIn: () => fired.push('in'),
+          zoomOut: () => fired.push('out'),
+          resetZoom: () => fired.push('reset'),
+        },
+      });
+      const rows = items.find((i) => i.label === 'Zoom')?.submenu ?? [];
+      const click = (label: string): void => rows.find((r) => r.label === label)?.onClick?.();
+      click('Zoom In');
+      expect(fired, `${what}: Zoom In`).toEqual(['in']);
+      click('Zoom Out');
+      expect(fired, `${what}: Zoom Out`).toEqual(['in', 'out']);
+      click('Reset Zoom');
+      expect(fired, `${what}: Reset Zoom`).toEqual(['in', 'out', 'reset']);
+    }
+  });
+
   it('leaves the panels that DO zoom with all three commands and their chords', () => {
     // The other direction, so the gate cannot be satisfied by removing Zoom everywhere. The chords
     // are checked too: this menu is the panel's canonical index of what it can do, and an item that

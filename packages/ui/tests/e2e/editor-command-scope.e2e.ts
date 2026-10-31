@@ -139,49 +139,13 @@ test('with a TERMINAL active, none of the editor commands fire — and the chord
   }
 });
 
-test('with the FILE TREE focused, Tab does not indent the document', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ScopeProj', root);
-      const [pid] = await panelIds(win);
-      await openEditor(win, pid);
-
-      // Clicking a file in the TREE opens it in the editor AND leaves the keyboard on the tree —
-      // so the app now has a live editor holding a document, and the focus somewhere else.
-      await win.getByTestId('file-explorer-tree').getByText('doc.txt', { exact: true }).click();
-      await win.keyboard.press('Tab');
-      await win.keyboard.press('Shift+Tab');
-
-      expect(await docText(win, pid)).toBe(CONTENT);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('with the FIND BAR focused, Tab does not indent the document', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ScopeProj', root);
-      const [pid] = await panelIds(win);
-      await openEditor(win, pid);
-
-      // The find bar lives INSIDE the editor panel, which is exactly what makes this dangerous: the
-      // panel is the active one, the editor is scoped live, and a Tab pressed while the caret is in
-      // the find INPUT would indent the document behind it — silently editing a file the user is
-      // only searching.
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+f');
-      await expect(win.getByTestId('find-input')).toBeFocused();
-
-      await win.keyboard.press('Tab');
-      await win.keyboard.press('Shift+Tab');
-
-      expect(await docText(win, pid)).toBe(CONTENT);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED (test-suite audit) — `with the FILE TREE focused, Tab does not indent the document` and
+ * `with the FIND BAR focused, Tab does not indent the document`. Both are decisions of the scope
+ * resolver, which no window is needed to see: `unit/scope.test.ts` "is the EXPLORER scope whenever
+ * the file tree holds the focus" and "a panel-scoped chord resolves only in the scope it belongs to"
+ * (AS-9), and "the focus guard (FR-017f) / stops an editor command firing from inside the find bar —
+ * Tab must not indent the file"; `core/tests/unit/keybindings-scope.test.ts:93` Tab resolves to
+ * `editor.indentLines` over an editor and to nothing over a terminal. The terminal test above stays:
+ * it is the real chord reaching a real shell.
+ */

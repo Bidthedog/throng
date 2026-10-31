@@ -313,56 +313,6 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
   }
 });
 
-test('a terminal panel keeps its name across a restart (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  test.setTimeout(180_000);
-  const root = makeProject('throng-restart-name-');
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-ud-'));
-  try {
-    // ── Launch 1: a terminal panel that names itself ──
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'RestartNames', root);
-        const term = await firstPanelId(win);
-
-        await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
-        await win.getByTestId(`panel-type-confirm-${term}`).click();
-        await expect(win.getByTestId(`terminal-${term}`)).toBeVisible();
-        // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
-        // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
-        await expect(win.getByTestId(`panel-title-${term}`)).toContainText('Command Prompt', {
-          timeout: 15_000,
-        });
-
-        // The terminal's name is asserted on screen above and again after the restart below; the layout
-        // only has to have been written before the app closes.
-        await expectLayoutSaved(dataDir, 'RestartNames', (json) => panelTitleInLayout(json, term) !== undefined);
-      },
-      { dataDir, userDataDir },
-    );
-
-    // ── Launch 2: the same project, reopened ──
-    await runApp(
-      async (_app, win) => {
-        await enterProject(win, 'RestartNames');
-
-        // No panel holding a terminal or a file may show the placeholder. A restored session does
-        // not necessarily re-emit its OSC title, so the terminal's name has to come from somewhere
-        // that survives — which is the whole of defect B.
-        const titles = win.locator('.panel-box__title');
-        await expect(titles).toHaveCount(1, { timeout: 20_000 });
-        await expect
-          .poll(async () => (await titles.allTextContents()).some((t) => /^Blank Panel( \d+)?$/.test(t)), {
-            timeout: 20_000,
-            message: 'a restored panel fell back to its "Blank Panel" placeholder',
-          })
-          .toBe(false);
-
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    for (const d of [root, dataDir, userDataDir]) cleanupTemp(d);
-  }
-});
+// DELETED: "a terminal panel keeps its name across a restart (#218 B)" - the reattach test above holds the
+// same claim (a panel with a terminal in it never settles on the "Blank Panel" placeholder) on the
+// harsher path: a renderer reload that leaves the name store empty while the daemon keeps the session.

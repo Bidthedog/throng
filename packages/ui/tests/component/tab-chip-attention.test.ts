@@ -43,10 +43,13 @@ function layoutOf(tabCount: number, extra: Array<[string, string]> = []): Worksp
   return { ...layout, activeTabId: 't1' };
 }
 
-function mount(tabCount: number, extra: Array<[string, string]> = []): void {
+function mount(tabCount: number, extra: Array<[string, string]> = [], tabs: Record<string, unknown> = {}): void {
   Reflect.set(window, 'throng', {
     panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn(), notifyTyped: vi.fn(), publishIdentities: vi.fn() },
-    config: { get: () => Promise.resolve({ settings: DEFAULT_APP_SETTINGS }), onChange: () => () => {} },
+    config: {
+      get: () => Promise.resolve({ settings: { ...DEFAULT_APP_SETTINGS, tabs: { ...DEFAULT_APP_SETTINGS.tabs, ...tabs } } }),
+      onChange: () => () => {},
+    },
   });
   const layout = layoutOf(tabCount, extra);
   const bridge: ThrongBridge = {
@@ -241,6 +244,71 @@ describe('the overflow controls (FR-011)', () => {
     await waitFor(() => screen.getByTestId('tabstrip-actions'));
     act(() => setAttentionMarks([makeMark('p5', PROJECT), makeMark('p6', PROJECT, { kind: 'failed', signal: 'processExited', detail: '2' })]));
     expect(screen.getByTestId('attention-overflow-right')).toHaveAttribute('data-kind', 'failed');
+  });
+});
+
+describe('the tab-actions group (migrated from tab-actions.e2e.ts, test-suite audit)', () => {
+  const control = (id: string): HTMLElement => screen.getByTestId(id);
+
+  it('is three themed icon controls, each naming its action on hover (T2, T4)', async () => {
+    mount(6);
+    await ready();
+    await waitFor(() => screen.getByTestId('tabstrip-actions'));
+    const expected: Array<[string, RegExp]> = [
+      ['tabstrip-step-left', /previous tab/i],
+      ['tabstrip-step-right', /next tab/i],
+      ['tabstrip-show-all', /show all tabs/i],
+    ];
+    for (const [testId, names] of expected) {
+      const el = control(testId);
+      // A themed icon drawn by the shared <Icon>, never a bare glyph typed into the markup.
+      expect(el.querySelectorAll('.icon'), `${testId} renders a themed icon`).toHaveLength(1);
+      // The icon carries no text, so the action is NAMED by the title and announced by the same string.
+      const title = el.getAttribute('title') ?? '';
+      expect(title, `${testId} names its action on hover`).toMatch(names);
+      expect(el.getAttribute('aria-label')).toBe(title);
+    }
+  });
+
+  it('makes a step control unavailable only where the strip cannot move that way (S4)', async () => {
+    mount(6);
+    await ready();
+    await waitFor(() => screen.getByTestId('tabstrip-actions'));
+
+    // At the start nothing is hidden on the left; the strip can still move right.
+    expect(control('tabstrip-step-left'), 'nothing is hidden to the left at the start').toBeDisabled();
+    expect(control('tabstrip-step-right')).toBeEnabled();
+
+    // At the end the two swap (6 tabs x 100 in a 250 viewport -> max scroll 350).
+    scrollTrackTo(350);
+    await waitFor(() => expect(control('tabstrip-step-right')).toBeDisabled());
+    expect(control('tabstrip-step-left')).toBeEnabled();
+
+    // Show all is never unavailable: it lists every tab, and there are always tabs.
+    expect(control('tabstrip-show-all')).toBeEnabled();
+  });
+
+  it('steps on the primary button only — a right-click is a request for a menu (#382)', async () => {
+    mount(6, [], { smoothScrollMs: 0 });
+    await ready();
+    await waitFor(() => screen.getByTestId('tabstrip-actions'));
+    const track = screen.getByTestId('tabstrip-track');
+    scrollTrackTo(0);
+
+    fireEvent.pointerDown(control('tabstrip-step-right'), { button: 2, pointerId: 1 });
+    fireEvent.pointerUp(control('tabstrip-step-right'), { button: 2, pointerId: 1 });
+    expect(track.scrollLeft, 'a right-click on step-right moved the strip').toBe(0);
+
+    // Positive control: the same gesture on the primary button DOES step, so the line above is not
+    // satisfied by a strip that cannot move in jsdom at all.
+    fireEvent.pointerDown(control('tabstrip-step-right'), { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(control('tabstrip-step-right'), { button: 0, pointerId: 1 });
+    expect(track.scrollLeft, 'the primary button steps').toBeGreaterThan(0);
+
+    const at = track.scrollLeft;
+    fireEvent.pointerDown(control('tabstrip-step-left'), { button: 2, pointerId: 1 });
+    fireEvent.pointerUp(control('tabstrip-step-left'), { button: 2, pointerId: 1 });
+    expect(track.scrollLeft, 'a right-click on step-left moved the strip').toBe(at);
   });
 });
 

@@ -73,7 +73,7 @@ test.beforeAll(async () => {
  * watcher's broadcast, so it polls `data-theme` (the same observable `theme-sweep.e2e.ts` uses)
  * rather than guessing how long that broadcast takes. Every caller in this file seeds a theme.
  */
-async function seedSettings(value: { appearance: { theme: string } }): Promise<void> {
+async function seedSettings(value: { appearance: { theme: string } } & Record<string, unknown>): Promise<void> {
   writeSettingsAtomic(cfgRoot, value);
   await expect(shared.win.locator('html')).toHaveAttribute('data-theme', value.appearance.theme, {
     timeout: 8000,
@@ -132,18 +132,7 @@ async function setEditorText(prefs: Page, kind: string, content: string): Promis
   await editor.pressSequentially(content);
 }
 
-/**
- * Leave the JSON editor, which is what APPLIES the buffer (032, FR-017).
- *
- * The mode toggle is the "closing the JSON view" trigger named first in the clarification. It is
- * also one of the three exits FR-018 blocks while the document is invalid, so a caller that expects
- * the leave to be refused simply asserts the block afterwards rather than calling something else.
- */
-async function leaveJsonEditor(prefs: Page): Promise<void> {
-  await prefs.getByTestId('prefs-mode-toggle').click();
-}
-
-test('the toggle flips all tabs to JSON and stays visible; valid JSON applies, invalid is surfaced', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+test('the toggle flips all tabs to JSON, the code editor is selectable, and the toggle stays visible', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await seedSettings({ appearance: { theme: 'throng' } });
   await sharedApp(
     async (app, win) => {
@@ -172,26 +161,14 @@ test('the toggle flips all tabs to JSON and stays visible; valid JSON applies, i
         wins[wins.length - 1].setSize(420, 360); // prefs window minimum
       });
       await expect(prefs.getByTestId('prefs-mode-toggle')).toBeVisible();
-
       /*
-       * Edit valid JSON → applies ON LEAVING, and persists (032 FR-017).
-       *
-       * The tolerant reader merges the rest over defaults, so a minimal valid document is enough to
-       * set the theme. What changed here is WHEN: nothing was written while the text was being
-       * typed, which is the whole point — a half-typed value is frequently still valid JSON, and
-       * applying it is what pulled the document out from under the user's cursor.
+       * NARROWED (test-suite audit, pass 1): "valid JSON applies ON LEAVING and persists (032 FR-017)" and "invalid
+       * JSON is surfaced, not applied" moved down — `component/preferences-json-tab.test.ts` "applies the buffer
+       * when the user LEAVES, and applies exactly what is in it" and `component/preferences-app.test.ts` (leave
+       * writes the document; an invalid buffer shows `json-invalid`, writes nothing and refuses the tab switch).
+       * What stays is what only a real window shows: the toggle flipping every tab, selectable text in the code
+       * editor, and the toggle reachable at the minimum window size.
        */
-      await setEditorText(prefs, 'settings', '{"appearance":{"theme":"Matrix"}}');
-      await leaveJsonEditor(prefs);
-      await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-      await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme, { timeout: FILE_OP_TIMEOUT_MS }).toBe('Matrix');
-
-      // Invalid JSON → surfaced, not applied (theme stays Matrix), and the user cannot leave.
-      await prefs.getByTestId('prefs-mode-toggle').click();
-      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
-      await setEditorText(prefs, 'settings', '{ not valid');
-      await expect(prefs.getByTestId('json-invalid')).toBeVisible();
-      expect(readSettings(cfgRoot)?.appearance?.theme).toBe('Matrix');
     },
   );
 });
@@ -508,19 +485,11 @@ test('a refused close is answered by Discard and close, from the notice (FR-018/
   );
 });
 
-test('a malformed settings.json shows its raw text in the JSON editor for repair (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  const malformed = '{ "appearance": { "theme": "throng" }  <-- broken';
-  const cfgRoot = freshCfgRoot({ 'settings.json': malformed });
-  await runOwnApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-      await prefs.getByTestId('prefs-mode-toggle').click();
-      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
-      await expect(prefs.getByTestId('json-editor-settings')).toContainText('<-- broken');
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MERGED (test-suite audit, pass 1): "a malformed settings.json shows its raw text in the JSON editor for repair
+ * (FR-043)" now runs in the same launch as `preferences-settings.e2e.ts` "a malformed settings.json opens the
+ * defaults-merged form without crashing" — both seed a malformed file BEFORE launch, so one app serves both.
+ */
 
 // 016 FR-001a / T030: throng's OWN configuration files are JSON, and they are among the files a
 // user is most likely to be looking at. The preferences JSON tabs are a SECOND CodeMirror view —
@@ -644,15 +613,11 @@ test('Ctrl+Z with no user edits leaves the document alone (#264)', { tag: ['@ext
  * can never catch a half-written file (#253).
  */
 test('an external change does not move the caret or replace the buffer under the user', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = freshCfgRoot({
-    'settings.json': `${JSON.stringify(
-      { appearance: { theme: 'Matrix' }, editor: { autoSave: false } },
-      null,
-      2,
-    )}\n`,
-  });
+  // SHARED APP (test-suite audit, pass 1): the seed only decides what the JSON tab shows when it mounts, so it is
+  // written into the shared root before the window opens, as the Ctrl+Z test above does.
+  await seedSettings({ appearance: { theme: 'Matrix' }, editor: { autoSave: false } });
 
-  await runOwnApp(
+  await sharedApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
       await prefs.getByTestId('prefs-mode-toggle').click();
@@ -726,16 +691,13 @@ test('an external change does not move the caret or replace the buffer under the
       await expect(editor).toContainText('Cyberpunk');
       await expect(prefs.getByTestId('json-external-change')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
 test('Overwrite With These Changes keeps the buffer and puts it on disk', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = freshCfgRoot({
-    'settings.json': `${JSON.stringify({ appearance: { theme: 'Matrix' } }, null, 2)}\n`,
-  });
+  await seedSettings({ appearance: { theme: 'Matrix' } });
 
-  await runOwnApp(
+  await sharedApp(
     async (app, win) => {
       const prefs = await openSettingsJson(app, win);
       const editor = prefs.getByTestId('json-editor-settings').locator('.cm-content');
@@ -753,6 +715,5 @@ test('Overwrite With These Changes keeps the buffer and puts it on disk', { tag:
       await expect(prefs.getByTestId('json-external-change')).toHaveCount(0);
       await expect.poll(() => readSettings(cfgRoot)?.appearance?.theme, { timeout: FILE_OP_TIMEOUT_MS }).toBe('Mine');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });

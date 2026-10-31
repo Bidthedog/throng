@@ -90,4 +90,23 @@ describe('a dropped panel is the active panel and takes focus (FR-000b)', () => 
     expect(mounted.ws().layout!.tabs).toHaveLength(3);
     await expectDroppedPanelActiveAndFocused('p2');
   });
+
+  it('dropped on the New-Tab button: a new active tab holds ONLY that panel (moved, not copied), the source tab keeps the rest', async () => {
+    // Moved down from drag-to-new-tab.e2e.ts (FR-027): the arrangement is the layout's, not a window's.
+    mounted = mountTabGroup(layout());
+    await screen.findByTestId('panel-p2');
+    await dragPanelTo(mounted, 'p2', 'tab-add');
+
+    const l = mounted.ws().layout!;
+    expect(l.tabs).toHaveLength(3);
+    const created = l.tabs.find((t) => t.id !== 't1' && t.id !== 't2')!;
+    expect(l.activeTabId).toBe(created.id);
+    expect(panelsIn(created.id)).toEqual(['p2']);
+    expect(created.root.type).toBe('panel'); // no split node left in the new tab
+    expect(panelsIn('t1')).toEqual(['p1']); // moved, not copied
+    expect(l.tabs.find((t) => t.id === 't1')!.root.type).toBe('panel');
+    await screen.findByTestId('panel-p2');
+    expect(screen.queryByTestId('split-node')).toBeNull();
+    expect(screen.queryByTestId('panel-p1')).toBeNull(); // the source tab is not the one shown
+  });
 });

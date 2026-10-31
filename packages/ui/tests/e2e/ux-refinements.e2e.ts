@@ -157,8 +157,6 @@ async function createProject(win: Page, name: string, root: string): Promise<voi
   await expect(active).toContainText(name);
 }
 
-const projectItem = (win: Page, name: string) => win.locator('.project-item', { hasText: name });
-
 async function panelIds(win: Page): Promise<string[]> {
   /*
    * 034 FR-045 — `evaluateAll` does NOT auto-wait. It resolves against whatever matches right now,
@@ -216,45 +214,12 @@ test.afterAll(async () => {
  * the panel renders once for everybody — measured: the mutation that gives every row the FIRST
  * project's path reddens both tests, and would have reddened nothing written against one project.
  */
-test('uses a native folder picker for the project root (FR-034)', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
-  try {
-    await app.evaluate(({ dialog }) => {
-      // 034 FR-045 — keep the function being replaced, so the `finally` can put back exactly what
-      // was here rather than a stub of our own invention. This file's launch does NOT stub the
-      // dialog (unlike `harness.openApp()`), so "restore to a cancelling default" would itself be a
-      // change to the app the other seven tests run against.
-      const g = globalThis as unknown as { __origShowOpenDialog?: typeof dialog.showOpenDialog };
-      g.__origShowOpenDialog ??= dialog.showOpenDialog;
-      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: ['C:/picked/folder'] })) as never;
-    });
-    await win.getByTestId('project-new').click();
-    await win.getByTestId('project-pick-folder').click();
-    await expect(win.getByTestId('project-root-input')).toHaveValue('C:/picked/folder');
-  } finally {
-    /*
-     * 034 FR-045 — both of this test's mutations are GLOBAL and outlive it.
-     *
-     * (a) `dialog.showOpenDialog` lives in the main process, so every later test would run against
-     *     an app that silently answers `C:/picked/folder` to any folder pick.
-     * (b) the draft project form is still open, with its name auto-filled to `folder` by the pick,
-     *     so the next `project-new` click would land on a form that is already showing.
-     *
-     * Bounded and best-effort on the form: if the test failed before the form opened, an unbounded
-     * click on an absent testid would burn the rest of the budget in a `finally` (issue #75).
-     */
-    await app.evaluate(({ dialog }) => {
-      const g = globalThis as unknown as { __origShowOpenDialog?: typeof dialog.showOpenDialog };
-      if (g.__origShowOpenDialog) dialog.showOpenDialog = g.__origShowOpenDialog as never;
-    });
-    await win.getByTestId('project-cancel').click({ timeout: 2000 }).catch(() => {});
-    // Swallowed on purpose: a throw HERE would replace whatever the test body failed with, and the
-    // body's failure is the one worth reading. If the form really is stuck open, the next test's
-    // `createProject` says so loudly on its own `project-new` click.
-    await expect(win.getByTestId('project-form'))
-      .toHaveCount(0, { timeout: 2000 })
-      .catch(() => {});
-  }
-});
+/*
+ * DELETED (test-suite audit): "uses a native folder picker for the project root (FR-034)". The dialog
+ * was stubbed, so it only proved the picked path reaches the input — held by
+ * `component/projects-panel-form.test.ts` ("auto-fills and SELECTS the name from the picked folder")
+ * and the main-process side by `contract/pick-folder-ipc.contract.test.ts`.
+ */
 
 test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await createProject(win, 'Resize', 'C:/c/rz');
@@ -307,38 +272,11 @@ test('resizes split cells by dragging a divider (FR-038)', { tag: ['@extended', 
  * does not yet assert double-click as the route into it. So that third stays here, and the tab and
  * panel thirds below it are gone.
  */
-test('renames a project by double-clicking its row (FR-041)', { tag: ['@extended', '@window'] }, async () => {
-  await createProject(win, 'DblClick', 'C:/c/dc');
-
-  // Project: double-click the entry → inline rename.
-  //
-  // 034 FR-045 — scoped to the row this test just created. `.first()` was the first project in the
-  // SIDEBAR, which under a shared app is test 1's `Pathy`: it renamed another test's project, and
-  // because the first half of a double-click is an ordinary click on `project-switch-*`, it also
-  // switched the active project — so the Tab and Panel renames below would have landed in a
-  // workspace this test never set up.
-  await projectItem(win, 'DblClick').locator('[data-testid^="project-switch-"]').dblclick();
-  const projInput = win.locator('[data-testid^="project-rename-input-"]');
-  await projInput.fill('Renamed Project');
-  await projInput.press('Enter');
-  await expect(win.locator('.project-item', { hasText: 'Renamed Project' })).toBeVisible();
-  /*
-   * …and it is still the ACTIVE project.
-   *
-   * This used to be setup — the Tab and Panel renames that followed needed to land in the workspace
-   * this test had set up, and the first half of a double-click is an ordinary click on
-   * `project-switch-*`, which switches projects. Those two thirds are now
-   * `component/tab-strip.test.ts`, so nothing downstream depends on it any more.
-   *
-   * It stays as an ASSERTION rather than being deleted with them, because it is the claim that
-   * makes the double-click a rename at all: a gesture whose click half switched the active project
-   * AND whose second half opened a rename box has done two things where the user asked for one.
-   * Nothing else says so.
-   */
-  const active = win.locator('.project-item[data-active="true"]');
-  await expect(active).toHaveCount(1);
-  await expect(active).toContainText('Renamed Project');
-});
+/*
+ * DELETED (test-suite audit): "renames a project by double-clicking its row (FR-041)". Held by
+ * `component/projects-panel-drag-categories.test.ts` ("a double-click on the name still renames") and
+ * `component/projects-panel-form.test.ts` (the rename box, via `user.dblClick`).
+ */
 
 test('resizes the sidebar horizontally by dragging its handle (FR-033)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await createProject(win, 'Sized', 'C:/c/sz');

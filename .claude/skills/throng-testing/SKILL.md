@@ -232,8 +232,8 @@ On the reference workstation the open answers well inside 300 ms, so it passed e
 run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
 the scan fired: the user got a banner in each panel and the file tree's own notice, and the
 consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
-duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
-90 s for an element that could no longer appear. Filed as #369.
+duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` (since merged into
+`notice-consolidation.e2e.ts`) failed 3/3, waiting the full 90 s for an element that could no longer appear. Filed as #369.
 
 ### How to spot it before a slow machine does
 

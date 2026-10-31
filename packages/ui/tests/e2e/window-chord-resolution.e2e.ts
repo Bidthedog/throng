@@ -203,14 +203,9 @@ test('the pane toggles still resolve — Ctrl+Shift+Alt+J and Ctrl+Shift+Alt+K',
   await expect(win.getByTestId('pane-hide-right')).toBeVisible();
 });
 
-test('the tab picker still resolves — Ctrl+Shift+Alt+T', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
-  const win = shared.win;
-  await win.locator('body').click();
-  await win.keyboard.press(chordFor('tabs.openPicker'));
-  await expect(win.getByTestId('tabpicker')).toBeVisible();
-  await win.keyboard.press('Escape');
-  await expect(win.getByTestId('tabpicker')).toHaveCount(0);
-});
+// DELETED (test-suite audit) — "the tab picker still resolves — Ctrl+Shift+Alt+T". `transient-overlays.e2e.ts`
+// opens and dismisses the tab picker on that chord in its overlay matrix, and `tab-scroll.e2e.ts` T048 presses
+// it as a keystroke; the manifest records it under `COVERED_ELSEWHERE`.
 
 test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was made for', { tag: ['@core', '@window', '@reserve:input'] }, async () => {
   const win = shared.win;
@@ -224,15 +219,9 @@ test('Quick Open still resolves — Ctrl+Shift+T, the chord the widening was mad
   await expect(win.getByTestId('quickopen')).toHaveCount(0);
 });
 
-test('Go To Line still resolves over the active editor — Ctrl+G', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
-  const win = shared.win;
-  await focusEditorPanel(win);
-  await win.keyboard.press(chordFor('navigate.gotoLine'));
-  await expect(win.getByTestId('gotoline')).toBeVisible();
-  await expect(win.getByTestId('gotoline-input')).toBeFocused();
-  await win.keyboard.press('Escape');
-  await expect(win.getByTestId('gotoline')).toHaveCount(0);
-});
+// DELETED (test-suite audit) — "Go To Line still resolves over the active editor — Ctrl+G".
+// `transient-overlays.e2e.ts` presses it in its overlay matrix and `goto-line-keybinding.e2e.ts` presses it;
+// the manifest records it under `COVERED_ELSEWHERE`.
 
 // REMOVED (048) — "the panel rename box still resolves — F2". `panel.rename` no longer exists: a panel is
 // named by its content and has no rename box (FR-030), so there is no chord left to resolve.

@@ -116,40 +116,13 @@ test('the gutter line numbers cannot be selected; the document body still can (#
     cleanupTemp(root);
   }
 });
-
-test('a theme without gutter tokens inherits the default gutter colours (no migration)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
-  const root = makeProject();
-  try {
-    mkdirSync(join(cfg, 'themes'), { recursive: true });
-    // A pre-009 theme document: no editorGutter* tokens at all.
-    writeFileSync(
-      join(cfg, 'themes', 'throng.json'),
-      JSON.stringify({ name: 'throng', colours: { editorBg: '#020202' } }),
-      'utf8',
-    );
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'GutterProj', root);
-        await openEditorWithFile(win);
-        // Falls back to the built-in default gutter background (#151a23).
-        await expect
-          .poll(
-            () =>
-              win.evaluate(() =>
-                getComputedStyle(document.documentElement)
-                  .getPropertyValue('--throng-colour-editorGutterBg')
-                  .trim(),
-              ),
-            { timeout: 8000 },
-          )
-          .toBe('#151a23');
-        expect(await bg(win, '.editor-panel .cm-gutters')).toBe('rgb(21, 26, 35)');
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    cleanupTemp(cfg);
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED (test-suite audit) — `a theme without gutter tokens inherits the default gutter colours
+ * (no migration)`. The inheritance is a theme-document decision, not a layout one: an absent token
+ * is filled from the shipped value (`core/tests/unit/shipped-defaults-upgrade.test.ts`
+ * `fillMissingThemeProps`, "fills a deeply-nested absent property without touching present ones"),
+ * the default theme ships a value for each token and `.cm-gutters` reads both custom properties
+ * (`component/gutter-tokens-live.test.ts` "keeps a shipped value for each in the default theme" and
+ * "declares .cm-gutters against both custom properties"). The first test above keeps the rendered
+ * paint under a real theme.
+ */

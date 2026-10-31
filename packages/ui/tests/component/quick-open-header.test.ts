@@ -58,7 +58,7 @@
  * in this file** — every one of them goes through `mount()`, which awaits the query input before a
  * test body begins. Nothing here can pass against an empty document.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,6 +69,7 @@ import { WorkspaceProvider } from '../../src/renderer/state/workspace-store.js';
 import { ConfigProvider, useConfigLoaded } from '../../src/renderer/config/config-store.js';
 import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 import { QuickOpen } from '../../src/renderer/navigate/quick-open.js';
+import { rememberedInput, resetRememberedInput } from '../../src/renderer/navigate/navigation-store.js';
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * The one mocked module — the seam, not the subject. See the header.
@@ -599,5 +600,107 @@ describe('the control says where the file will land IN WORDS (SC-020, FR-068)', 
     await user.click(screen.getByTestId('quickopen-target-label'));
     expect(target()).toHaveAttribute('data-value', 'lastActive');
     expect(target()).toHaveTextContent('Will open in the active editor (README)');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ *
+ * The remembered query — MIGRATED FROM `navigation-remember.e2e.ts` (test-suite audit)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Two E2E declarations — "at the shipped defaults BOTH modals reopen empty, even straight after a
+ * value was accepted" (AS-18, FR-057) and "with rememberQuickOpenQuery on, the accepted query comes
+ * back selected with its own results — an abandoned one never does" (AS-19, AS-20, FR-060, FR-061) —
+ * launched an Electron app each, with a config root seeded before launch, to read one modal's input.
+ *
+ * What they asserted splits into the store's rules, which are `unit/navigation-remember-store.test.ts`
+ * (what counts as accepted, what a project change discards, what turning a setting off discards),
+ * and the WIRING of the real modal to them, which is here: the setting is READ (SC-014's #108 — a
+ * setting rendered and never consumed passes everything else), the accepted query is seeded back
+ * fully selected and into the picker's own query state so the list shows ITS results, and an
+ * abandoned or cancelled open records nothing. The real `ConfigProvider` serves the setting, so
+ * "seeded on disk before launch" becomes an argument.
+ *
+ * Go To Line's half of the off-state (AS-13) and the line number's rules are the same store
+ * (`rememberGotoLineNumber`, `applyRememberSettings`), covered by the unit file; the project change
+ * and the discard-on-turn-off are `NavigationChrome` effects over `noteActiveProjectRoot` and
+ * `applyRememberSettings`, and the preferences-window round trip stays END-TO-END
+ * (`navigation-remember.e2e.ts`, the FR-059/FR-063 declaration).
+ */
+describe('the remembered query (033 Phase 8, FR-057, FR-060, FR-061, SC-014)', () => {
+  beforeEach(() => resetRememberedInput());
+  afterEach(() => resetRememberedInput());
+
+  const settingsWith = (on: boolean): Record<string, unknown> => ({
+    version: 1,
+    editor: { navigation: { rememberQuickOpenQuery: on } },
+  });
+  const rowPaths = (): string[] =>
+    rows().map((r) => (r.getAttribute('data-testid') ?? '').slice('quickopen-row-'.length));
+
+  /** Open Quick Open, type a query that has exactly one answer, accept it, and close the modal. */
+  async function accept(settings: Record<string, unknown>, query: string): Promise<void> {
+    const { user } = await mount({ settings });
+    await user.keyboard(query);
+    expect(rows()).toHaveLength(1);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(openFileInTab).toHaveBeenCalledTimes(1));
+    // The record sits BEHIND the open's await (#321): let the router's answer land before closing.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    cleanup();
+  }
+
+  it('at the shipped default (off) the modal reopens EMPTY, even straight after a value was accepted', async () => {
+    await accept(settingsWith(false), 'guide');
+
+    const { input } = await mount({ settings: settingsWith(false) });
+
+    expect(input).toHaveValue('');
+    // …and it is listing the WHOLE project, which is what an unseeded query does.
+    expect(rows()).toHaveLength(PATHS.length);
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+  });
+
+  it('with the setting on, the accepted query comes back FULLY SELECTED, showing its own results', async () => {
+    await accept(settingsWith(true), 'guide');
+    expect(rememberedInput().quickOpenQuery).toBe('guide');
+
+    const { user, input } = await mount({ settings: settingsWith(true) });
+
+    expect(input).toHaveValue('guide');
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'guide'.length]);
+    // The row assertion separates "seeded the control" from "seeded the field": text written into the
+    // input without reaching the picker's query state would list all four files.
+    expect(rowPaths()).toEqual(['docs/guide.md']);
+
+    // Typing REPLACES it outright, with no keystroke spent clearing it.
+    await user.keyboard('README');
+    expect(input).toHaveValue('README');
+    expect(rowPaths()).toEqual(['README.md']);
+  });
+
+  it('an ABANDONED query is never recorded (AS-20) — a dismissal has no path to the store', async () => {
+    const { user, onDismiss } = await mount({ settings: settingsWith(true) });
+    await user.keyboard('zzz-abandoned');
+    expect(screen.getByTestId('quickopen-input')).toHaveValue('zzz-abandoned');
+    await user.keyboard('{Escape}');
+    expect(onDismiss).toHaveBeenCalled();
+    expect(openFileInTab).not.toHaveBeenCalled();
+    cleanup();
+
+    const { input } = await mount({ settings: settingsWith(true) });
+
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+    expect(input).toHaveValue('');
+  });
+
+  it('an open the user cancelled (or that failed) records nothing — "accepted" means a file OPENED (FR-061)', async () => {
+    openFileInTab.mockResolvedValue(false);
+    await accept(settingsWith(true), 'guide');
+
+    const { input } = await mount({ settings: settingsWith(true) });
+
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+    expect(input).toHaveValue('');
   });
 });

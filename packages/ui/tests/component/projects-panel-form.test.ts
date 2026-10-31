@@ -50,7 +50,8 @@
  *     (`contract/pick-folder-ipc.contract.test.ts`), and the four E2E tests are deleted. Recorded
  *     rather than quietly edited, because "a real filesystem" was never the obstacle — the obstacle
  *     was that the code had no seam, and that is a fact about the code rather than about the layer.
- *   - `project-browse-neutral.e2e.ts` stays: three computed colours and a `:hover` (FR-049).
+ *   - `project-browse-neutral.e2e.ts` stays an E2E — now the Browse-button test in
+ *     `computed-style-chrome.e2e.ts`: three computed colours and a `:hover` (FR-049).
  *
  * ══ ANTI-VACUITY CONTROL ══
  *

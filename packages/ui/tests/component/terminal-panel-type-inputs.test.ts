@@ -47,9 +47,23 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { PanelTypeValues } from '@throng/core';
+import { createDefaultLayout, DEFAULT_APP_SETTINGS, type PanelTypeValues } from '@throng/core';
 import { TerminalInputs } from '../../src/renderer/panel-type/terminal-inputs.js';
 import { useFlavours } from '../../src/renderer/panel-type/use-flavours.js';
+import { PanelTypeForm } from '../../src/renderer/panel-type/panel-type-form.js';
+import { clearDraft } from '../../src/renderer/panel-type/panel-draft-store.js';
+import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
+import { ProjectsClient } from '../../src/renderer/state/projects-client.js';
+import { WorkspaceClient } from '../../src/renderer/state/workspace-client.js';
+import { SubWorkspacesClient } from '../../src/renderer/state/subworkspaces-client.js';
+import { DocumentClient } from '../../src/renderer/state/document-client.js';
+import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js';
+import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
+import { ServicesProvider } from '../../src/renderer/composition-root.js';
+import { WorkspaceProvider } from '../../src/renderer/state/workspace-store.js';
+import { ProjectsProvider } from '../../src/renderer/state/projects-store.js';
+import { NotificationProvider } from '../../src/renderer/common/notification.js';
+import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 
 /**
  * What `terminal.listFlavours` returns with `terminals.shellIntegration` OFF — the exact condition
@@ -381,5 +395,115 @@ describe('a flavour added to settings appears without a restart (FR-010a, migrat
     act(() => bridge.push());
 
     await waitFor(() => expect(flavourIds()).toEqual(['cmd', 'windows-powershell', 'my-wsl']));
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * The whole form: Confirm's gate and Clear
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * MOVED DOWN FROM `panel-type-form.e2e.ts` (the first test's form-state steps): "no type selected yet ->
+ * Confirm is blocked (FR-005)", "selecting Terminal reveals its inputs and enables Confirm (FR-003)" and
+ * "Clear returns to the initial empty state (FR-004)". None of them needed a shell; the E2E keeps the
+ * Confirm that LAUNCHES one, the header's type icon and the revert on exit.
+ *
+ * Mounted the way `terminal-admin-default-gate.test.ts` mounts it: the real `PanelTypeForm` over the real
+ * providers and a fake daemon, so Confirm's `disabled` and Clear's `onClick` are the shipped ones.
+ */
+const FORM_PANEL = 'p-form';
+
+function mountForm(): { user: ReturnType<typeof userEvent.setup> } {
+  Reflect.set(window, 'throng', {
+    terminal: {
+      listFlavours: () => Promise.resolve(FLAVOURS),
+      capabilities: () => Promise.resolve({ elevated: false }),
+    },
+    config: { get: () => Promise.resolve({ settings: DEFAULT_APP_SETTINGS }), onChange: () => () => {} },
+    panel: {},
+  });
+  const layout = createDefaultLayout('proj-form', { tab: 't1', panel: FORM_PANEL });
+  const bridge: ThrongBridge = {
+    invoke<T>(method: string): Promise<T> {
+      switch (method) {
+        case 'workspace.load':
+          return Promise.resolve({ layout, restored: true } as T);
+        case 'workspace.save':
+          return Promise.resolve({ ok: true } as T);
+        case 'workspace.loadSubWorkspaces':
+        case 'subworkspace.list':
+          return Promise.resolve({ subWorkspaces: [] } as T);
+        case 'projects.list':
+          return Promise.resolve({ projects: [] } as T);
+        case 'projects.categories.list':
+          return Promise.resolve({ categories: [] } as T);
+        default:
+          return Promise.reject(new Error(`unexpected RPC from the panel type form: ${method}`));
+      }
+    },
+  };
+  const services = {
+    projects: new ProjectsClient(bridge),
+    workspace: new WorkspaceClient(bridge),
+    subWorkspaces: new SubWorkspacesClient(bridge),
+    documents: new DocumentClient(bridge),
+    fileOpUndo: new FileOpUndoClient(bridge),
+    panelNames: new PanelNameClient(bridge),
+  };
+  const user = userEvent.setup();
+  render(
+    createElement(
+      ServicesProvider,
+      { services },
+      createElement(
+        ConfigProvider,
+        null,
+        createElement(
+          ProjectsProvider,
+          { client: services.projects },
+          createElement(
+            WorkspaceProvider,
+            { client: services.workspace, activeProjectId: 'proj-form' },
+            createElement(
+              NotificationProvider,
+              null,
+              createElement(PanelTypeForm, { panelId: FORM_PANEL, projectRoot: 'C:/proj' }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return { user };
+}
+
+describe('Confirm is gated by a chosen type, and Clear returns the form to empty (FR-003/FR-004/FR-005)', () => {
+  afterEach(() => clearDraft(FORM_PANEL));
+
+  it('blocks Confirm until a type is chosen, and choosing Terminal reveals its inputs and enables it', async () => {
+    const { user } = mountForm();
+    const confirm = await screen.findByTestId(`panel-type-confirm-${FORM_PANEL}`);
+    expect(confirm).toBeDisabled();
+    expect(screen.queryByTestId('terminal-flavour')).toBeNull();
+
+    await user.selectOptions(screen.getByTestId(`panel-type-select-${FORM_PANEL}`), 'terminal');
+
+    expect(await screen.findByTestId('terminal-flavour')).toBeVisible();
+    expect(screen.getByTestId('terminal-shell-arguments')).toBeVisible();
+    await waitFor(() => expect(confirm).toBeEnabled());
+  });
+
+  it('Clear drops the chosen type: the inputs go and Confirm is blocked again', async () => {
+    const { user } = mountForm();
+    const select = (await screen.findByTestId(`panel-type-select-${FORM_PANEL}`)) as HTMLSelectElement;
+    await user.selectOptions(select, 'terminal');
+    await screen.findByTestId('terminal-flavour');
+    await waitFor(() => expect(screen.getByTestId(`panel-type-confirm-${FORM_PANEL}`)).toBeEnabled());
+
+    await user.click(screen.getByTestId(`panel-type-clear-${FORM_PANEL}`));
+
+    expect(screen.queryByTestId('terminal-flavour')).toBeNull();
+    expect(screen.getByTestId(`panel-type-confirm-${FORM_PANEL}`)).toBeDisabled();
+    expect(select.value).toBe('');
   });
 });

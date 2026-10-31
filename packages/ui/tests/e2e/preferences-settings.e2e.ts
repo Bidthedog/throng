@@ -306,48 +306,6 @@ test('the settings search box sits above the first group (FR-049)', { tag: ['@ex
  * before an assertion runs.
  */
 
-/**
- * 019 US5 / #95 (C1, C2, FR-021/FR-023/FR-024): open-on-click has exactly one owner,
- * and it lives where users look for it.
- *
- * The pure guard (`packages/core/tests/unit/settings-open-on-click-single-owner.test.ts`)
- * can see that only one claimant is DECLARED; it cannot see DISCOVERABILITY, which is the
- * whole of C2 — the surviving control keeps the key `editor.openOnClick` (no rename, no
- * migration of a setting that works) and moves to the File Explorer group, where the inert
- * `explorer.openMode` used to sit.
- */
-test('open-on-click is one control, in the File Explorer group, offering none (#95, C2)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openSettings(app, win);
-
-      // The surviving control sits in File Explorer — where the inert one used to be —
-      // labelled "Open files with", the label the user already knew.
-      const row = prefs.getByTestId('setting-editor.openOnClick');
-      await expect(row).toBeVisible();
-      await expect(row.locator('.settings-row__label')).toHaveText('Open files with');
-      await expect(
-        prefs.getByTestId('settings-group-File Explorer').getByTestId('setting-editor.openOnClick'),
-      ).toHaveCount(1);
-
-      // FR-021: no SECOND control claims the job — anywhere in Preferences.
-      await expect(prefs.getByTestId('setting-explorer.openMode')).toHaveCount(0);
-      await expect(prefs.getByTestId('control-explorer.openMode')).toHaveCount(0);
-
-      // FR-024 / C2: `none` is retained by the survivor and becomes visible for the
-      // first time — the inert control never offered it.
-      const control = prefs.getByTestId('control-editor.openOnClick');
-      await expect(control.locator('option[value="none"]')).toHaveCount(1);
-      await expect(control.locator('option[value="single"]')).toHaveCount(1);
-      await expect(control.locator('option[value="double"]')).toHaveCount(1);
-
-      // …and it still works where it always did.
-      await control.selectOption('none');
-      await expect.poll(() => readSettings(cfgRoot)?.editor?.openOnClick, { timeout: FILE_OP_TIMEOUT_MS }).toBe('none');
-    },
-  );
-});
-
 test('a hand-written explorer.openMode changes nothing, warns nothing, and is stripped (#95, C1)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
@@ -397,21 +355,30 @@ test('an invalid number is not applied and is surfaced; last valid value stays',
   );
 });
 
-test('a malformed settings.json opens the defaults-merged form without crashing (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+test('a malformed settings.json opens the defaults-merged form, and shows its raw text in the JSON editor for repair (FR-043)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   /*
    * ITS OWN APP (034 FR-045). The claim is that the application STARTS on a broken settings file —
    * which is the whole of FR-043 — so producing the malformed document after startup would prove
    * something else entirely, however similar the assertions looked.
+   *
+   * MERGED (test-suite audit, pass 1): the JSON-editor half used to be its own launch in
+   * `preferences-json.e2e.ts` ("a malformed settings.json shows its raw text in the JSON editor for repair"), with
+   * the same pre-launch seed. One launch serves both.
    */
   const ownCfgRoot = freshCfgRoot();
   // Seed a malformed file before launch.
-  writeFileSync(join(ownCfgRoot, 'settings.json'), '{ this is : not valid json ', 'utf8');
+  writeFileSync(join(ownCfgRoot, 'settings.json'), '{ "appearance": { "theme": "throng" }  <-- broken', 'utf8');
   await runOwnApp(
     async (app, win) => {
       const prefs = await openSettings(app, win);
       // The form renders (defaults-merged) — a known control is present and shows a default.
       await expect(prefs.getByTestId('control-confirmations.destroyProject')).toBeVisible();
       await expect(prefs.getByTestId('control-confirmations.destroyProject')).toHaveValue('double');
+
+      // …and the JSON view of the same document shows the user's raw text, so they can repair it.
+      await prefs.getByTestId('prefs-mode-toggle').click();
+      await expect(prefs.getByTestId('json-tab-settings')).toBeVisible();
+      await expect(prefs.getByTestId('json-editor-settings')).toContainText('<-- broken');
     },
     { env: { THRONG_CONFIG_ROOT: ownCfgRoot } },
   );

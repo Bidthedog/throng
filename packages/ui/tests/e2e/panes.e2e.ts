@@ -76,6 +76,15 @@ test.afterAll(async () => {
   await shared?.close();
 });
 
+const beforeBg = (win: Page, sel: string): Promise<string> =>
+  win.evaluate((s) => {
+    const el = document.querySelector(s);
+    return el ? getComputedStyle(el, '::before').backgroundColor : 'missing';
+  }, sel);
+
+const widthOf = (win: Page, sel: string): Promise<number> =>
+  win.evaluate((s) => (document.querySelector(s) as HTMLElement).getBoundingClientRect().width, sel);
+
 /**
  * The button's gap from its pane's outer window edge, plus its size.
  *
@@ -176,7 +185,7 @@ test('a collapsed rail gives the button an equal margin on both sides (#1)', { t
   }
 });
 
-test('the three pane headers share a bottom border line (#6)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+test('the three pane headers share a bottom border line (#6); resize handles draw no line at rest (#3/#4)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const win = shared.win;
   await settle(win);
   await createProject(win, 'Aligned', 'C:/c/aligned'); // opens a tab-strip; explorer auto-expands
@@ -194,4 +203,13 @@ test('the three pane headers share a bottom border line (#6)', { tag: ['@extende
 
   expect(Math.abs(projects - tabs)).toBeLessThan(2);
   expect(Math.abs(files - tabs)).toBeLessThan(2);
+
+  // Merged from handles.e2e.ts (#3/#4): the resize handles draw no line at rest (the pane border is the only
+  // divider - no doubled line on the left) and keep their hit-area width. The sidebar width handle and the
+  // explorer handle both render their line via a ::before that is transparent at rest.
+  // transparent === rgba(0, 0, 0, 0).
+  expect(await beforeBg(win, '[data-testid="sidebar-hresize"]')).toBe('rgba(0, 0, 0, 0)');
+  expect(await beforeBg(win, '[data-testid="explorer-resize"]')).toBe('rgba(0, 0, 0, 0)');
+  // The explorer handle keeps its 6px hit area (spacing unchanged).
+  expect(Math.round(await widthOf(win, '[data-testid="explorer-resize"]'))).toBe(6);
 });

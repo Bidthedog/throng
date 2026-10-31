@@ -72,7 +72,7 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confirm types + launches', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
+test('replaces Empty Panel with the type form; Confirm types + launches a live terminal; exit reverts to the form', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-form-')));
   try {
     await runApp(async (_app, win) => {
@@ -83,23 +83,13 @@ test('replaces Empty Panel with the type form; swaps inputs; Clear resets; Confi
       await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible();
       await expect(win.getByTestId(`panel-body-${pid}`)).not.toContainText('Empty Panel');
 
-      // No type selected yet → Confirm is blocked (FR-005).
+      // NARROWED: Confirm blocked until a type is chosen (FR-005), Terminal revealing its inputs (FR-003)
+      // and Clear resetting the form (FR-004) are component/terminal-panel-type-inputs.test.ts (red-proven
+      // against Confirm's disabled gate and Clear's reset). What is left needs a real shell.
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
-      await expect(confirm).toBeDisabled();
-
-      // Selecting Terminal reveals its inputs (FR-003).
       const select = win.getByTestId(`panel-type-select-${pid}`);
-      await select.selectOption('terminal');
-      await expect(win.getByTestId('terminal-flavour')).toBeVisible();
-      await expect(win.getByTestId('terminal-shell-arguments')).toBeVisible();
-      await expect(confirm).toBeEnabled();
 
-      // Clear returns to the initial empty state (FR-004).
-      await win.getByTestId(`panel-type-clear-${pid}`).click();
-      await expect(win.getByTestId('terminal-flavour')).toHaveCount(0);
-      await expect(confirm).toBeDisabled();
-
-      // Re-select (cmd flavour) and Confirm → the form + type control go away and a
+      // Select Terminal (cmd flavour) and Confirm → the form + type control go away and a
       // live terminal opens (FR-006/014).
       await select.selectOption('terminal');
       await win.getByTestId('terminal-flavour').selectOption('cmd');

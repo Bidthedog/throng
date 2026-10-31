@@ -150,7 +150,9 @@ test('a fresh install lists all 14 default themes plus throng (15) and restores 
  *      names, and it is invisible to (1).
  *   3. TOKENISED — no rule of the banner's own stylesheet declares a literal colour. (2) is
  *      satisfied by a component that themes its background and hard-codes its border; this is the
- *      assertion that reads the source of truth rather than the outcome.
+ *      assertion that reads the source of truth rather than the outcome. MOVED DOWN (test-suite
+ *      audit, pass 1) to `packages/ui/tests/unit/banner-css-no-literal-colour.test.ts`: it is a fact
+ *      about the CSS source and needs no window. (1) and (2) stay: they read computed colours.
  * ════════════════════════════════════════════════════════════════════════════════════════════════ */
 
 /** sRGB relative luminance (WCAG 2.x), for the contrast ratio below. */
@@ -205,7 +207,7 @@ async function bannerColours(win: Page, panelId: string): Promise<BannerColours>
   });
 }
 
-test('the shared failure banner takes its colours from every shipped theme, and carries none of its own', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
+test('the shared failure banner is legible under every shipped theme, and its colours move with the theme', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   test.setTimeout(300_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-theme-banner-'));
   mkdirSync(join(root, 'src'));
@@ -253,48 +255,6 @@ test('the shared failure banner takes its colours from every shipped theme, and 
         ).toHaveCount(1, { timeout: 30_000 });
         const banner = win.getByTestId(`panel-failure-${brokenPid}`);
         await expect(banner).toBeVisible();
-
-        /*
-         * ── 3. The banner's own rules declare no literal colour (FR-047). ───────────────────────
-         *
-         * The rules are found through the banner's OWN class list, read off the rendered element,
-         * rather than through a guessed `.panel-failure` prefix. A guessed selector that matched
-         * nothing would report an empty list of offenders and pass — a component that hard-codes
-         * every colour it has would sail through it, which is the exact opposite of the point. The
-         * matched-rule count is asserted for the same reason.
-         */
-        const audit = await banner.evaluate((el) => {
-          const classes = Array.from(el.classList);
-          const offenders: string[] = [];
-          let matched = 0;
-          for (const sheet of Array.from(document.styleSheets)) {
-            let rules: CSSRuleList;
-            try {
-              rules = sheet.cssRules;
-            } catch {
-              continue; // a sheet we may not read has nothing of ours in it
-            }
-            for (const rule of Array.from(rules)) {
-              const selector = (rule as CSSStyleRule).selectorText;
-              if (!selector || !classes.some((c) => selector.includes(`.${c}`))) continue;
-              matched += 1;
-              const text = (rule as CSSStyleRule).style.cssText;
-              // `var(--…)`, `transparent`, `inherit` and `currentColor` are fine; a literal is not.
-              const stripped = text.replace(/var\([^)]*\)/g, '');
-              if (/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(stripped)) offenders.push(`${selector} { ${text} }`);
-            }
-          }
-          return { classes, matched, offenders };
-        });
-        expect(
-          audit.matched,
-          `no stylesheet rule matches any of the banner's classes (${audit.classes.join(', ')}) — ` +
-            'the colour audit below would have had nothing to look at',
-        ).toBeGreaterThan(0);
-        expect(
-          audit.offenders,
-          'the banner stylesheet hard-codes colours instead of using theme tokens',
-        ).toEqual([]);
 
         // ── 1 & 2. Legible in every theme, and different across them. ────────────────────────────
         const prefs = await openThemes(app, win);
