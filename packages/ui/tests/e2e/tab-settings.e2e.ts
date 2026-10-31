@@ -34,12 +34,9 @@ function freshCfgRoot(): string {
 /*
  * ONE app for this file, not one per test (034 FR-045, SC-010).
  *
- * None of the four tests seeded anything; each drives the preferences window and reads settings.json
- * or keybindings.json back. This file is the clearest case FOR the restore rather than against it:
- * the first test asserts the whole `tabs` block equals the SHIPPED defaults, and the third asserts
- * `maxNameLength` is still 64 after refusing an out-of-range edit — which the second test's drag to
- * 30 would otherwise have destroyed. Without `restoreConfigRoot` these three could not share an app;
- * with it, each opens on a pristine root exactly as it did with its own launch.
+ * None of the tests seeds anything; each drives the preferences window and reads settings.json or
+ * keybindings.json back. The editing test drags `maxNameLength` to 30, so the root is restored between
+ * tests and each opens on a pristine root exactly as it did with its own launch.
  *
  * The shim below REFUSES launch options rather than ignoring them: a swallowed config root does not
  * fail, it makes a test pass for the wrong reason.
@@ -131,83 +128,20 @@ async function sendChord(prefs: Page, key: string): Promise<void> {
   }, key);
 }
 
-/** Every BOUNDED tab setting, with the range and default the metadata declares. */
-const TAB_SETTINGS = [
-  // US7 (FR-055, FR-056) narrowed the first two ceilings from 3000 and 2000 to 1500: a delay
-  // measured in whole seconds was never a preference, and the top half of the range only cost aim
-  // across the half a user would actually visit.
-  { key: 'tabs.smoothScrollMs', min: '0', max: '1500', step: '50', value: '300' },
-  { key: 'tabs.closeArmingDelayMs', min: '0', max: '1500', step: '50', value: '300' },
-  { key: 'tabs.maxNameLength', min: '10', max: '128', step: '2', value: '64' },
-  // US6 (FR-050, FR-054a). `maxWidth` shares the name limit's range because it shares its UNIT —
-  // characters — so the two can be read against each other.
-  { key: 'tabs.maxWidth', min: '10', max: '128', step: '2', value: '32' },
-  { key: 'tabs.chevronRepeatDelayMs', min: '100', max: '3000', step: '50', value: '350' },
-  // US7 (FR-058). The one Tabs slider stepping in 25s — the delay a user tunes rather than sets
-  // once, so it wants finer stops than its neighbours. 500 sits on 0 + 25×20.
-  { key: 'tabs.popoverDelayMs', min: '0', max: '1500', step: '25', value: '500' },
-  /*
-   * The one member of this section whose key does NOT start `tabs.` — it moved here from the
-   * Behaviour group, where a tab-strip dwell delay sat under a heading that named no surface at
-   * all. Only `group` moved: the key is the settings.json contract, and renaming it would discard
-   * the value in every existing file.
-   *
-   * It is in this list precisely BECAUSE the key disagrees with the section. A reader checking
-   * "does the Tabs section expose every tab setting" by eye greps for `tabs.` and misses it, which
-   * is exactly the kind of gap this loop exists to close.
-   */
-  { key: 'behaviour.tabHoverActivateMs', min: '0', max: '5000', step: '50', value: '600' },
-] as const;
-
-test('T057 — the Tabs section exposes every setting, with their ranges and defaults', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPreferences(app, win, 'settings');
-
-      // ONE section, named for the thing it configures — the same word the Key Bindings editor uses
-      // for the picker's chord, so a user hunting for anything about tabs finds one word in both.
-      const group = prefs.getByTestId('settings-group-Tabs');
-      await expect(group).toBeVisible();
-
-      for (const setting of TAB_SETTINGS) {
-        await expect(
-          group.getByTestId(`setting-${setting.key}`),
-          `${setting.key} is in the Tabs section`,
-        ).toHaveCount(1);
-
-        // A bounded numeric renders a slider AND a field. The slider is where the DECLARED range
-        // becomes visible: min, max and the step that makes it aimable.
-        const slider = prefs.getByTestId(`control-${setting.key}-slider`);
-        await expect(slider).toBeVisible();
-        await expect(slider).toHaveAttribute('min', setting.min);
-        await expect(slider).toHaveAttribute('max', setting.max);
-        await expect(slider).toHaveAttribute('step', setting.step);
-
-        // …and the shipped default is what an untouched install shows.
-        await expect(prefs.getByTestId(`control-${setting.key}`)).toHaveValue(setting.value);
-        await expect(slider).toHaveValue(setting.value);
-      }
-
-      // The values on screen are the ones ON DISK: throng writes its shipped defaults out at first
-      // run, so "the default" is a fact about the file as well as about the form, and the two must
-      // agree before any of the editing tests below mean anything.
-      // The new-tab position is the group's one non-numeric: a select, so it declares a SET rather
-      // than a range and is checked here rather than in the loop above.
-      await expect(group.getByTestId('setting-tabs.newTabPosition')).toHaveCount(1);
-      await expect(prefs.getByTestId('control-tabs.newTabPosition')).toHaveValue('afterActive');
-
-      expect(readSettings(cfgRoot)?.tabs).toEqual({
-        smoothScrollMs: 300,
-        closeArmingDelayMs: 300,
-        maxNameLength: 64,
-        maxWidth: 32,
-        newTabPosition: 'afterActive',
-        chevronRepeatDelayMs: 350,
-        popoverDelayMs: 500,
-      });
-    },
-  );
-});
+/*
+ * MOVED DOWN: "T057 — the Tabs section exposes every setting, with their ranges and defaults". Every
+ * claim it made from the rendered form has a cheaper owner:
+ *
+ *   - each Tabs setting's group, control, range, step and shipped default —
+ *     `packages/core/tests/unit/tabs-settings.test.ts` (including `behaviour.tabHoverActivateMs`,
+ *     filed under Tabs though its key does not start `tabs.`);
+ *   - a slider rendering the min, max and step its descriptor declares —
+ *     `packages/ui/tests/component/preferences-number-control.test.ts`;
+ *   - the settings form grouping controls by their metadata group —
+ *     `packages/ui/tests/component/settings-tab-subgroups.test.ts`;
+ *   - the shipped defaults written to disk at first run —
+ *     `packages/core/tests/contract/shipped-defaults-fidelity.contract.test.ts`.
+ */
 
 test('T057 — each tab setting is editable by slider and by field, and persists', { tag: ['@extended', '@window'] }, async () => {
   await runApp(
