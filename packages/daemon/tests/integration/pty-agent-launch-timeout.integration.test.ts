@@ -55,12 +55,9 @@ function startOpts() {
 }
 
 /**
- * The ONLY launch/readiness budget that exists anywhere in the de-elevated path today:
- * the connect-retry deadline in `PtyAgentHost` (pty-agent-host.ts:36). Nothing observes
- * its expiry, which is precisely the defect. Tests wait past it plus a grace, so a
- * failure here cannot be "it just needed longer".
+ * Every test waits past the budget it injects plus this grace, so a failure here cannot be "it just
+ * needed longer". Every test injects its budgets below rather than waiting out the 15 s defaults.
  */
-const CONNECT_DEADLINE_MS = 15_000;
 const GRACE_MS = 3_000;
 
 /**
@@ -114,9 +111,13 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       // CreateProcessWithTokenW back to the daemon.
       const pipe = uniquePipe();
       let launches = 0;
-      const host = new PtyAgentHost(pipe, () => {
-        launches += 1;
-      });
+      const host = new PtyAgentHost(
+        pipe,
+        () => {
+          launches += 1;
+        },
+        { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS },
+      );
       expect(launches, 'the host must have attempted the de-elevated launch').toBe(1);
 
       const handle = host.start(startOpts());
@@ -124,10 +125,10 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       host.onData(handle, (chunk) => signals.chunks.push(chunk));
       host.onExit(handle, (e) => signals.exits.push(e));
 
-      // Wait past the host's own 15s connect deadline. Once it lapses, the retry loop
-      // stops (pty-agent-host.ts:71-74) and the host has *conclusively established*
-      // that the agent will never arrive — it must not keep this to itself.
-      await waitForSignal(signals, CONNECT_DEADLINE_MS + GRACE_MS);
+      // Wait past the host's connect deadline. Once it lapses, the retry loop stops
+      // (pty-agent-host.ts:71-74) and the host has *conclusively established* that the
+      // agent will never arrive — it must not keep this to itself.
+      await waitForSignal(signals, SHORT_CONNECT_MS + GRACE_MS);
 
       // TODAY: both are empty. The start command sits in `outbox` forever, the panel
       // shows a blank terminal with no prompt and no error — issue #94's hang.
@@ -157,7 +158,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
 
       host.dispose();
     },
-    CONNECT_DEADLINE_MS + GRACE_MS + 7_000,
+    SHORT_CONNECT_MS + GRACE_MS + 7_000,
   );
 
   it(
@@ -197,13 +198,13 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
         server.listen(pipe, resolve);
       });
 
-      const host = new PtyAgentHost(pipe, () => {});
+      const host = new PtyAgentHost(pipe, () => {}, { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS });
       const handle = host.start(startOpts());
       const signals: PanelSignals = { chunks: [], exits: [] };
       host.onData(handle, (chunk) => signals.chunks.push(chunk));
       host.onExit(handle, (e) => signals.exits.push(e));
 
-      await waitForSignal(signals, CONNECT_DEADLINE_MS + GRACE_MS);
+      await waitForSignal(signals, SHORT_READY_MS + GRACE_MS);
 
       // Sanity: this scenario really is "connected but never ready" — not a repeat of
       // the first test. The start DID reach the agent.
@@ -238,7 +239,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       for (const s of sockets) s.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
-    CONNECT_DEADLINE_MS + GRACE_MS + 7_000,
+    SHORT_READY_MS + GRACE_MS + 7_000,
   );
 
   it(
