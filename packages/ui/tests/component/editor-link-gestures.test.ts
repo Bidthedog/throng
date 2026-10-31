@@ -460,15 +460,16 @@ describe('T215 / D3 — Ctrl+click on the FIRST character of a decorated link fo
  * NO answer anywhere: a bridge that never resolves anything, and a first-character press.
  */
 describe('T215 / D3 — with no answer anywhere, a first-character Ctrl+click is claimed and followed', () => {
+  // The bridge is set on the real window rather than by replacing `window`: under the vmThreads pool
+  // the window is the context's own global, and it cannot be redefined.
   beforeEach(() => {
-    vi.stubGlobal('window', {
-      ...globalThis.window,
-      throng: { links: { resolve: () => new Promise<LinkResolution>(() => {}) } },
-    });
+    (window as unknown as { throng?: unknown }).throng = {
+      links: { resolve: () => new Promise<LinkResolution>(() => {}) },
+    };
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    delete (window as unknown as { throng?: unknown }).throng;
   });
 
   it('a first-character Ctrl+click on a link the view shows follows it — never a caret', () => {

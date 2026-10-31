@@ -11,7 +11,7 @@ without saturating the machine, and how to diagnose a flake — lives in the
 | Script | Layer | Runner | Parallelism |
 | --- | --- | --- | --- |
 | `npm run test:unit` | unit | Vitest (`--project unit`, `--project unit-isolated`) | parallel; `unit` shares one module registry per worker |
-| `npm run test:component` | component | Vitest (`--project component`, jsdom) | parallel (Vitest default) |
+| `npm run test:component` | component | Vitest (`--project component`, jsdom) | parallel (`vmThreads`: one VM context per file) |
 | `npm run test:integration` | integration | Vitest (`--project integration`) | **serial** (`fileParallelism: false`) |
 | `npm run test:contract` | contract | Vitest (`--project contract`) | **serial** (`fileParallelism: false`) |
 | `npm run test:e2e` | E2E | Playwright-Electron | two tiers; runs on CI, not a workstation |

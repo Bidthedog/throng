@@ -198,6 +198,10 @@ export default defineConfig({
           name: 'component',
           include: ['packages/**/tests/component/**/*.test.ts'],
           environment: 'jsdom',
+          // vmThreads reuses one jsdom-capable worker per thread and runs each file in a fresh VM
+          // context, instead of building the environment per file: setting up jsdom was ~half of
+          // this layer's time. Measured locally, same tree: 416 s on the default pool, 156 s here.
+          pool: 'vmThreads',
           setupFiles: ['./packages/ui/tests/component/setup.ts'],
           /*
            * 15 s, STATED rather than inherited (#355).

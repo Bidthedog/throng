@@ -362,7 +362,7 @@ describe('on a mounted preview panel', () => {
       const node = Array.from(body.querySelectorAll('p')).find((p) => p.textContent?.includes('alpha beta'))?.firstChild;
       if (!node) throw new Error('not drawn yet');
       return node;
-    });
+    }, COLD);
 
     act(() => selectText(text, 0, 5));
     await waitFor(() => expect(registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT) ?? registry.get(PREVIEW_OCCURRENCE_INACTIVE_HIGHLIGHT)).toBeTruthy());
