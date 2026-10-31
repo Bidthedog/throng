@@ -61,7 +61,7 @@ const createProject = (win: OpenApp['win'], name: string, root: string): Promise
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 
-test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)', { tag: ['@extended', '@window'] }, async () => {
+test('Shift+F10 and the ContextMenu key open the focused item’s menu, and closing it returns focus to the tree (FR-018c)', { tag: ['@extended', '@window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-menuopen-'));
   writeFileSync(join(root, 'thing.txt'), 'x\n');
   try {
@@ -104,6 +104,14 @@ test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)
       await expect(win.getByTestId('context-menu')).toBeVisible();
       await win.keyboard.press('Escape');
       await expect(win.getByTestId('context-menu')).toHaveCount(0);
+      // Closed by keyboard, so focus must land back inside the tree (#157 follow-up).
+      await expect
+        .poll(() =>
+          win.evaluate(
+            () => document.activeElement?.closest('[data-testid="file-explorer-tree"]') != null,
+          ),
+        )
+        .toBe(true);
 
       // The dedicated ContextMenu (Menu) key does the same.
       await row.click();
@@ -116,33 +124,10 @@ test('Shift+F10 and the ContextMenu key open the focused item’s menu (FR-018c)
   }
 });
 
-test('closing a context menu by keyboard returns focus to the File Explorer tree (#157 follow-up)', { tag: ['@extended', '@window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-menufocus-'));
-  writeFileSync(join(root, 'thing.txt'), 'x\n');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'MenuFocus', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('thing.txt', { exact: true }).click();
-      // Open by keyboard, then close by keyboard — focus must land back inside the tree.
-      await win.keyboard.press('Shift+F10');
-      await expect(win.getByTestId('context-menu')).toBeVisible();
-      await win.keyboard.press('Escape');
-      await expect(win.getByTestId('context-menu')).toHaveCount(0);
-      await expect
-        .poll(() =>
-          win.evaluate(
-            () => document.activeElement?.closest('[data-testid="file-explorer-tree"]') != null,
-          ),
-        )
-        .toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+// MERGED into the Shift+F10 test above: "closing a context menu by keyboard returns focus to the File
+// Explorer tree (#157 follow-up)" - the first Escape there is the close, and focus is polled after it.
 
-test('an advertised shortcut inside the menu runs the action and closes it — Ctrl+C then paste (#157 follow-up)', { tag: ['@extended', '@window'] }, async () => {
+test('a menu item shows its shortcut in brackets, and the advertised shortcut runs the action and closes it — Ctrl+C then paste (#125, #157 follow-up)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-menushort-'));
   writeFileSync(join(root, 'thing.txt'), 'x\n');
   try {
@@ -152,6 +137,22 @@ test('an advertised shortcut inside the menu runs the action and closes it — C
       // Open the file's menu, then Ctrl+C — the menu closes and the file is on the clipboard.
       await tree.getByText('thing.txt', { exact: true }).click({ button: 'right' });
       await expect(win.getByTestId('menu-item-Copy')).toBeVisible();
+      // Merged from context-menu-shortcuts.e2e.ts (#125): Copy is bound to Ctrl+C in the explorer scope, so its
+      // shortcut shows in brackets after the label (FR-003)...
+      await expect(win.getByTestId('menu-shortcut-Copy')).toHaveText('(Ctrl+C)');
+      // ...visually smaller than the label (FR-005)...
+      const sizes = await win.evaluate(() => {
+        const sc = document.querySelector('[data-testid="menu-shortcut-Copy"]') as HTMLElement;
+        const label = sc.closest('.context-menu__item')?.querySelector('.context-menu__label') as HTMLElement;
+        return {
+          shortcut: parseFloat(getComputedStyle(sc).fontSize),
+          label: parseFloat(getComputedStyle(label).fontSize),
+        };
+      });
+      expect(sizes.shortcut).toBeLessThan(sizes.label);
+      // ...and an item whose action has no keybinding (New File) renders no shortcut element (FR-004).
+      await expect(win.getByTestId('menu-item-New File')).toBeVisible();
+      await expect(win.getByTestId('menu-shortcut-New File')).toHaveCount(0);
       await win.keyboard.press('Control+c');
       await expect(win.getByTestId('context-menu')).toHaveCount(0);
       // Paste at the root → a de-duplicated copy proves Ctrl+C actually copied. The row names what

@@ -8,7 +8,7 @@ import { createProject, runApp } from './harness.js';
 // content, the main workspace is trimmed, and the sub-workspace is listed in the
 // sidebar with an auto name ("Sub-workspace 1").
 
-test('detaches a Tab into a new sub-workspace window', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+test('detaches a Tab into a new sub-workspace window with the custom title bar (identity + controls, no cog)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runApp(async (app, win) => {
     await createProject(win, 'Detacher', 'C:/c/detacher');
     await expect(win.getByTestId('tab-strip')).toBeVisible();
@@ -34,6 +34,21 @@ test('detaches a Tab into a new sub-workspace window', { tag: ['@extended', '@wi
     // The detached Tab's Panel renders in the new sub-workspace window.
     await expect(child.getByTestId('subworkspace-window')).toBeVisible();
     await expect(child.locator('.panel-box')).toHaveCount(1);
+    // US8 (007 Phase A parity) — merged in from subworkspace-titlebar.e2e.ts, which detached the very same
+    // Tab: the sub-workspace window carries the same custom title bar as the main window (its own
+    // identity + window controls) but NO cog (the preferences entry point is main-window only, FR-007).
+    // Custom title bar present at the very top (no OS bar above it).
+    const bar = child.getByTestId('title-bar');
+    await expect(bar).toBeVisible();
+    const box = await bar.boundingBox();
+    expect(box?.y ?? 99).toBeLessThanOrEqual(1);
+
+    // Identity shows the sub-workspace name; window controls work; NO cog.
+    await expect(child.getByTestId('title-bar-identity')).toContainText('Sub-workspace 1');
+    await expect(child.getByTestId('window-min')).toBeVisible();
+    await expect(child.getByTestId('window-max')).toBeVisible();
+    await expect(child.getByTestId('window-close')).toBeVisible();
+    await expect(child.getByTestId('title-bar-cog')).toHaveCount(0);
 
     // Clone, not move: the main workspace KEEPS both Tabs, and the sidebar lists
     // the new sub-workspace with its tab/panel counts (1 tab · 1 panel).

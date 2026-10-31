@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -93,82 +93,18 @@ function permanentDeleteConfig(): string {
   return cfgRoot;
 }
 
-test('a file created and then deleted OUTSIDE throng appears and disappears with no user action', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LiveSync', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-      await expect(tree.getByText('seed.txt', { exact: true })).toBeVisible();
-
-      // (1) External CREATE, directly under the watched root.
-      writeFileSync(join(root, 'external.txt'), 'from outside\n');
-      await expect(tree.getByText('external.txt', { exact: true })).toBeVisible({ timeout: 10_000 });
-
-      // (2) External DELETE of that same file.
-      rmSync(join(root, 'external.txt'), { force: true });
-      expect(existsSync(join(root, 'external.txt'))).toBe(false);
-      await expect(tree.getByText('external.txt', { exact: true })).toHaveCount(0, { timeout: 10_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a file created OUTSIDE throng in an EXPANDED subfolder appears there', { tag: ['@extended', '@explorer'] }, async () => {
-  // A loaded-but-nested directory is the case `reloadDirs()` re-reads by walking every loaded key,
-  // and the case a re-pointed or dead watcher breaks first.
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LiveSyncSub', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      await tree.getByText('sub', { exact: true }).dblclick();
-      await expect(tree.getByText('inner.txt', { exact: true })).toBeVisible({ timeout: 10_000 });
-
-      writeFileSync(join(root, 'sub', 'nested-external.txt'), 'x\n');
-      await expect(tree.getByText('nested-external.txt', { exact: true })).toBeVisible({ timeout: 10_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('a file deleted INSIDE throng leaves the tree immediately', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = makeProject();
-  const cfgRoot = permanentDeleteConfig();
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'LiveSyncDel', root);
-        const tree = win.getByTestId('file-explorer-tree');
-        await expect(tree).toBeVisible();
-
-        const row = tree.getByText('seed.txt', { exact: true });
-        await row.click();
-        await row.click({ button: 'right' });
-        await win.getByTestId('menu-item-Delete').click();
-        await win.getByTestId('confirm-accept').click();
-        const wry = win.getByTestId('confirm-accept');
-        if (await wry.isVisible().catch(() => false)) await wry.click();
-
-        // The delete really happened — so a tree that still shows it is a tree that is stale,
-        // not an operation that failed.
-        await expect.poll(() => existsSync(join(root, 'seed.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
-        await expect(tree.getByText('seed.txt', { exact: true })).toHaveCount(0, { timeout: 10_000 });
-        await expect(tree.locator('.explorer__error')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(cfgRoot);
-  }
-});
-
+/*
+ * DELETED (test-suite audit, pass 1) — three of the four, each covered by a test that makes the same assertion:
+ *   - "created and then deleted OUTSIDE throng appears and disappears" and "created OUTSIDE throng in an EXPANDED
+ *     subfolder appears there" → `explorer.e2e.ts` "reflects external filesystem changes live, preserving
+ *     expansion (US2)": an external create inside an expanded folder, an external create at the root, and an
+ *     external delete, each with no user action.
+ *   - "a file deleted INSIDE throng leaves the tree immediately" → `explorer.e2e.ts` "file operations via context
+ *     menu + toolbar", "keyboard shortcuts operate on the tree" and "delete confirmation can be cancelled" (each
+ *     deletes a file and asserts the row is gone), and the mixed-delete integration test
+ *     `integration/files-delete-mixed.integration.test.ts` for the disk side.
+ * The FOLDER delete below stays: no other test deletes a folder through the tree.
+ */
 test('a FOLDER deleted INSIDE throng leaves the tree immediately', { tag: ['@extended', '@explorer'] }, async () => {
   const root = makeProject();
   const cfgRoot = permanentDeleteConfig();

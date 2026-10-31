@@ -4,54 +4,11 @@ import { join } from 'node:path';
 
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
-import {
-  openApp,
-  runApp as runOwnApp,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { runApp as runOwnApp, cleanupTemp } from './harness.js';
 
 /*
- * ONE app for this file, not one per test.
- *
- * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
- * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
- * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
- *
- * The shims below exist so the test bodies below are unchanged:
- *   runApp        runs the body against the shared window. It refuses options rather than ignoring
- *                 them: a dropped config root does not fail, it passes for the wrong reason.
- *   createProject appends a counter, because a shared app accumulates projects and duplicate names
- *                 make `.project-item` ambiguous.
- *
- * Serial mode is required — shared window, shared database — and it means a failure skips the rest
- * rather than running them against whatever state the failure left behind.
+ * No shared app: the only test left seeds a config root BEFORE launch, so it owns its app (`runOwnApp`).
  */
-test.describe.configure({ mode: 'serial' });
-
-let shared: OpenApp;
-test.beforeAll(async () => {
-  shared = await openApp();
-});
-test.afterAll(async () => {
-  await shared?.close();
-});
-
-const runApp = (
-  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
-  opts?: AppOptions,
-): Promise<void> => {
-  if (opts) {
-    throw new Error(
-      'this file shares one app; a test needing launch options must call runOwnApp instead',
-    );
-  }
-  return fn(shared.app, shared.win, {
-    pipeName: shared.pipeName,
-    userDataDir: shared.userDataDir,
-  });
-};
 
 /** Open the preferences window on a tab, through the cog — the same route every prefs suite uses. */
 async function openPrefs(app: ElectronApplication, win: Page, tab: string): Promise<Page> {
@@ -121,25 +78,9 @@ async function openPrefs(app: ElectronApplication, win: Page, tab: string): Prom
  * The flip near the bottom-right corner, which reads `boundingBox()` and is real layout, and the Key
  * Bindings chord menu, which removes a chord from the file on disk.
  */
-test('the cog menu flips to stay on-screen near the bottom-right corner (FR-016)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  await runApp(async (_app, win) => {
-    // The bespoke cog menu positioned itself with a bare CSS `top:100%; right:0` — no measurement,
-    // no flip, no clamp. On the shared menu it inherits all three.
-    await win.getByTestId('title-bar-cog').click();
-    const menu = win.getByTestId('cog-menu');
-    await expect(menu).toBeVisible();
-
-    const box = await menu.boundingBox();
-    const size = win.viewportSize();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.y).toBeGreaterThanOrEqual(0);
-    if (size) {
-      expect(box!.x + box!.width).toBeLessThanOrEqual(size.width + 1);
-      expect(box!.y + box!.height).toBeLessThanOrEqual(size.height + 1);
-    }
-  });
-});
+// MOVED DOWN: "the cog menu flips to stay on-screen near the bottom-right corner (FR-016)" -
+// unit/clamp-to-viewport.test.ts (flips on both axes, bottom-right corner; point anchor for the context
+// menu) and unit/floating-surfaces.test.ts (the .context-menu is registered as measuring and flipping).
 
 test('the Key Bindings chord menu is the SHARED menu, and still removes the chord (FR-019)', { tag: ['@extended', '@window'] }, async () => {
   // The Key Bindings menu had ZERO end-to-end coverage — the ONLY menu in the application with none.

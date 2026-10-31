@@ -1,6 +1,5 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import {
   openApp,
@@ -37,8 +36,7 @@ const animationOf = (win: Page, testId: string): Promise<string> =>
  * every navigation, and turning test 1's entire subject — a running CSS animation — into
  * `animation-name: none`. The `afterEach` resets it.
  *
- * Deliberately NOT undone: test 1's `dialog.showSaveDialog` stub (:46-48), which is per-APP and
- * permanent. Test 2 never saves.
+ * Neither test saves any more, so there is no `dialog.showSaveDialog` stub to leak.
  *
  * ORDER IS LOAD-BEARING: test 1 reads `.project-item .throng-unsaved-dot` with `.first()` (:39), so
  * it needs to be the only project in the sidebar. It is declared first and must stay first.
@@ -90,7 +88,7 @@ const runApp = (
 test('the unsaved dot pulses in step across panel, tab and project', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pulse-'));
   ownedRoots.push(root);
-  await runApp(async (app, win) => {
+  await runApp(async (_app, win) => {
     await createProject(win, 'Pulse', root);
     const pid = await newEditor(win);
     const tabId = await win
@@ -110,14 +108,11 @@ test('the unsaved dot pulses in step across panel, tab and project', { tag: ['@e
       'throng-unsaved-pulse',
     );
 
-    // Saving clears the changes → the dot stops the instant it is saved (US5 #3 /
-    // SC-005): it is removed, since there are then no unsaved changes.
-    await app.evaluate(({ dialog }, p) => {
-      dialog.showSaveDialog = async () => ({ canceled: false, filePath: p });
-    }, join(root, 'scratch.txt'));
-    await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-    await win.keyboard.press('Control+s');
-    await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
+    // NARROWED (test-suite audit): this test used to finish by saving through Ctrl+S and watching the
+    // dot go. That half (US5 #3 / SC-005) is the save round trip, which `editor-basics.e2e.ts` already
+    // asserts end to end (type, dot visible, Ctrl+S, dot cleared) and `component/editor-dirty-store.test.ts`
+    // asserts for all four dots at once. What is left here is the part only a layout engine answers:
+    // the animation the three dots actually run.
   });
 });
 

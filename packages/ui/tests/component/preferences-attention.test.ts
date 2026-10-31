@@ -49,41 +49,27 @@ const row = (key: string): HTMLElement => screen.getByTestId(`setting-${key}`);
 const control = (key: string): HTMLInputElement | HTMLSelectElement =>
   screen.getByTestId(`control-${key}`) as HTMLInputElement | HTMLSelectElement;
 
-describe('the registry the form draws from', () => {
-  it('has the settings this spec names (a guard against asserting an empty list)', () => {
-    // 057 FR-108 / FR-111 (round 4): the notification choices moved to Notifications, one row per type;
-    // Attention keeps the clear delay and the taskbar badge only.
-    expect(ATTENTION_GROUP.map((d) => d.key).sort()).toEqual(['attention.clearDelayMs', 'attention.taskbarBadge']);
-    expect(SIGNALS).toHaveLength(7);
-    expect(TERMINAL_ATTENTION.map((d) => d.key)).toContain('terminals.attention.enabled');
-    expect(TERMINAL_ATTENTION.map((d) => d.key)).toContain('terminals.attention.quietSeconds');
-  });
-});
+// The registry-only guard ("has the settings this spec names": the Attention keys, 7 signals, master
+// switch and quiet time) moved to `packages/core/tests/unit/settings-metadata.test.ts` (audit,
+// component-2a): it never touched the DOM. The loops below still guard against an empty list by
+// asserting each row is PRESENT before anything about it.
 
-describe('the Attention group', () => {
-  it('lists every setting, each with its description', async () => {
+describe('Attention settings, as drawn (057 US4)', () => {
+  it('draws the Attention group and Terminal › Attention with every setting and description, and the notification choices live elsewhere (FR-108)', async () => {
     await mount({});
+
     const group = screen.getByTestId('settings-group-Attention');
     for (const d of ATTENTION_GROUP) {
       const el = within(group).getByTestId(`setting-${d.key}`);
       expect(el, d.key).toHaveTextContent(d.label);
       expect(el, d.key).toHaveTextContent(d.description);
     }
-  });
-
-  it('no longer carries the notification choices — they are Notifications’ now (FR-108)', async () => {
-    await mount({});
-    const group = screen.getByTestId('settings-group-Attention');
-    expect(within(group).getByTestId('setting-attention.clearDelayMs')).toBeInTheDocument();
+    // No longer carries the notification choices — they are Notifications' now (FR-108).
     expect(within(group).queryByTestId('control-attention.delivery.attention')).toBeNull();
     expect(within(group).queryByTestId('control-attention.toasts.attention.mode')).toBeNull();
     expect(screen.getByTestId('control-notifications.attention.mode')).toBeInTheDocument();
-  });
-});
 
-describe('Terminal › Attention', () => {
-  it('lists the master switch, every signal and the quiet time, each with its description', async () => {
-    await mount({});
+    // The master switch, every signal and the quiet time, each with its description.
     const sub = screen.getByTestId('settings-subgroup-Terminal-Attention');
     for (const d of TERMINAL_ATTENTION) {
       const el = within(sub).getByTestId(`setting-${d.key}`);
@@ -92,19 +78,20 @@ describe('Terminal › Attention', () => {
     }
   });
 
-  it('draws the per-signal switches DISABLED while the master switch is off — present, not hidden', async () => {
-    await mount({ terminals: { attention: { enabled: false } } });
-    expect(control('terminals.attention.enabled')).not.toBeDisabled();
+  it.each([
+    { enabled: false, label: 'DISABLED while the master switch is off — present, not hidden' },
+    { enabled: true, label: 'enabled while the master switch is on' },
+  ])('draws the per-signal switches and quiet time $label', async ({ enabled }) => {
+    await mount({ terminals: { attention: { enabled } } });
+    // Guard against an empty list: the registry holds the seven signals this spec names.
+    expect(SIGNALS.length).toBeGreaterThan(0);
+    if (!enabled) expect(control('terminals.attention.enabled')).not.toBeDisabled();
     for (const d of SIGNALS) {
       expect(row(d.key), d.key).toBeInTheDocument();
-      expect(control(d.key), d.key).toBeDisabled();
+      if (enabled) expect(control(d.key), d.key).not.toBeDisabled();
+      else expect(control(d.key), d.key).toBeDisabled();
     }
-    expect(control('terminals.attention.quietSeconds')).toBeDisabled();
-  });
-
-  it('enables them while the master switch is on', async () => {
-    await mount({ terminals: { attention: { enabled: true } } });
-    for (const d of SIGNALS) expect(control(d.key), d.key).not.toBeDisabled();
-    expect(control('terminals.attention.quietSeconds')).not.toBeDisabled();
+    if (enabled) expect(control('terminals.attention.quietSeconds')).not.toBeDisabled();
+    else expect(control('terminals.attention.quietSeconds')).toBeDisabled();
   });
 });

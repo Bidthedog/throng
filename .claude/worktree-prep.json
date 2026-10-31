@@ -12,7 +12,8 @@
     "context": []
   },
   "run": [
-    "npm install"
+    "npm install",
+    "npm run build"
   ],
   "teardown": [
     "powershell -NoProfile -ExecutionPolicy Bypass -File \"$(cygpath -w \"$SOURCE_PATH/.claude/skills/throng-clear-dev-state/scripts/clear-dev-state.ps1\")\" -RepoRoot \"$(cygpath -w \"$WORKTREE_PATH\")\" -KeepData"

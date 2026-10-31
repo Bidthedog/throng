@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, settle, createProject, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  settle,
+  createProject as newProject,
+  cleanupTemp,
+  type OpenApp,
+} from './harness.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * US4 (007 Phase F): icon packs — a pack dropped under icon-packs\ is selectable
@@ -18,9 +26,51 @@ function bareCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+
+/*
+ * ONE app for the first three tests (test-suite audit, pass 1) — 3 launches -> 1. The fourth, the BROKEN pack,
+ * keeps `runOwnApp`: it plants an unreadable pack.json BEFORE the app starts and asserts what STARTUP does with it.
+ *
+ * The three share a bare config root, which is write isolation and not seeding: nothing is in it when the app
+ * starts, and the first run seeds the bundled packs — which the first test then asserts, so DECLARATION ORDER IS
+ * LOAD-BEARING (a fresh install is only fresh once). Each leaves the pack on `throng` (the default) for the next,
+ * except the last, which has no successor. The preferences window is a singleton, so it is closed after each test
+ * (`app.waitForEvent('window')` never fires on a reused window).
+ *
+ * Projects accumulate on a shared app; the counter in `createProject` keeps their names apart.
+ */
+test.describe.configure({ mode: 'serial' });
+
+const sharedCfg = bareCfgRoot();
+let shared: OpenApp;
+let projectSeq = 0;
+
+test.beforeAll(async () => {
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: sharedCfg } });
+});
+
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
+/** The shared app, in the shape `runApp` had. Refuses launch options rather than silently ignoring them. */
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: unknown,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -67,7 +117,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
 
 
 test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  const cfgRoot = bareCfgRoot();
+  const cfgRoot = sharedCfg;
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -103,8 +153,11 @@ test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-04
       expect(box).not.toBeNull();
       expect(Math.round(box!.width)).toBe(24);
       expect(Math.round(box!.height)).toBe(24);
+
+      // Leave the default pack selected for the next test on this shared app.
+      await select.selectOption('throng');
+      await expect(select).toHaveValue('throng');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -150,7 +203,6 @@ test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-04
  * WINDOW.
  */
 test('selecting a pack changes the icons in the MAIN WINDOW, live, with no restart (FR-001/005)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -173,12 +225,10 @@ test('selecting a pack changes the icons in the MAIN WINDOW, live, with no resta
       await prefs.getByTestId('icon-pack-select').selectOption('throng');
       await expect(win.locator('.icon > svg')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
 test('pack icons take their colour from the THEME, not a fixed black (FR-004)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -200,7 +250,6 @@ test('pack icons take their colour from the THEME, not a fixed black (FR-004)', 
       expect(stroke).not.toBe('rgb(0, 0, 0)');
       expect(stroke).toBeTruthy();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -244,7 +293,7 @@ test('a BROKEN pack degrades: the app starts, icons fall back, and the picker sa
   mkdirSync(brokenDir, { recursive: true });
   writeFileSync(join(brokenDir, 'pack.json'), '{ this is not json', 'utf8');
 
-  await runApp(
+  await runOwnApp(
     async (app, win) => {
       // 1. The app STARTS. A broken pack must never be fatal.
       await settle(win);

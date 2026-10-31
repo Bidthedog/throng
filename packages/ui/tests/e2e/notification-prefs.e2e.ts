@@ -34,14 +34,11 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { DEFAULT_NOTIFICATION_SETTINGS } from '@throng/core';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { FILE_OP_TIMEOUT_MS,
   cleanupTemp,
   createProject,
   openApp,
-  runApp as runOwnApp,
-  setSlider,
   settle,
   stayedAbsent,
   type AppOptions,
@@ -72,7 +69,9 @@ function freshCfgRoot(seed?: Record<string, unknown>): string {
 }
 
 /*
- * ONE app for five of these six tests (034 FR-045, SC-010) — 6 launches -> 2.
+ * ONE app for every test here (034 FR-045, SC-010; the sixth, which seeded a pre-030 settings file and kept
+ * its own launch, moved to integration in the test-suite audit — the paragraph below describes it as it was).
+ * Originally: five of six tests — 6 launches -> 2.
  *
  * Five called `freshCfgRoot()` with no argument: write isolation, not pre-launch state, and
  * `restoreConfigRoot` provides that between tests. The sixth SEEDS a pre-030 settings.json before
@@ -332,165 +331,17 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
   );
 });
 
-/**
- * The two dwells this test uses, and why the pair of them is the assertion (FR-004).
- *
- * The first version of this test set the floor and asserted the notice was gone within ten seconds.
- * That is satisfied by the floor, by 5000, by "whatever constant the provider was arming before this
- * feature", and by every value under ten seconds — so the requirement it claimed to cover, *leaves
- * once N has elapsed*, was never measured, and a regression that armed every timed notice at one
- * hard-coded duration would have stayed green.
- *
- * Two dwells, at opposite ends of the allowed range, used to remove that — but only the SHORT one
- * still waits real time here. A hypothetical constant C had to satisfy both: C < SHORT_BUDGET to
- * clear the first, C > 15000 (the old `STILL_UP_AFTER` margin) to clear the second, and `C < 8000`
- * and `C > 15000` cannot both hold — so no constant passed either check. The LONG half of that pair
- * (034 FR-045/SC-008) moved to `packages/ui/tests/component/notice-dismissal-timer.test.ts`, which
- * proves it with a fake clock using these SAME two numbers (`LONG_MS` and its own `STILL_UP_AFTER`):
- * still present 15000 ms in, gone once `LONG_MS` itself elapses — the positive half no real-time wait
- * here ever proved. What stays real-time is that a genuine Preferences slider drag reaching `LONG_MS`
- * and a REAL error notice both actually happen; what no longer waits real seconds is "and it survived
- * N of them", which needs no window to prove.
+/*
+ * DELETED (test-suite audit, pass 1):
+ *   - "Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)" — the timer is
+ *     `component/notice-dismissal-timer.test.ts` (a fake clock: still present short of N, gone once N elapses),
+ *     the mode reaching the provider and gating a real notice is the test above, and a Preferences slider
+ *     persisting a bounded numeric is `preferences-slider.e2e.ts` (FR-033).
+ *   - "a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)" —
+ *     MOVED DOWN to `integration/config-store.integration.test.ts` ("a settings file with no notifications section
+ *     resolves to the shipped defaults and keeps the user’s own values"), which reads a real seeded config root
+ *     through `readConfigOnce`, the function startup calls.
  */
-const SHORT_MS = 3_000; // the floor of the allowed range, and on the slider's 500 grid
-const SHORT_BUDGET = 8_000; // generous over 3000, and comfortably under the old 15000 ms margin
-const LONG_MS = 30_000; // the ceiling — mirrored in notice-dismissal-timer.test.ts
-
-test('Display for N takes an ERROR notice away after N, and NOT before (FR-004, FR-012)', { tag: ['@extended', '@prefs'] }, async () => {
-  test.setTimeout(180_000);
-  await runApp(
-    async (app, win) => {
-      await settle(win);
-      const prefs = await openSettings(app, win);
-
-      // ── N at the FLOOR of the allowed range.
-      const mode = prefs.getByTestId('control-notifications.error.mode');
-      await mode.selectOption('timed');
-      /*
-       * The CONTROL took it — asserted separately from the file below, so the next failure says
-       * which half broke.
-       *
-       * Measured once in a full serial run: the poll on `settings.json` expired with the mode still
-       * `dismiss`, its default, and the same test passed 5/5 in isolation. That leaves two very
-       * different explanations — the dropdown never registered the change, or it did and the write
-       * was lost or reverted — and the file poll alone cannot tell them apart. It is not a longer
-       * timeout: a slow write and a lost write must not look the same, which is exactly what
-       * widening the budget would arrange. Tracked separately; this only makes the evidence land.
-       */
-      await expect(mode, 'the mode dropdown did not take the selection').toHaveValue('timed');
-      await setSlider(
-        prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
-        String(SHORT_MS),
-      );
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('timed');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(SHORT_MS);
-      // 057 FR-107: each type also carries its OS switch, which this edit leaves at its default.
-      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: SHORT_MS, os: false });
-
-      const notices = win.getByTestId('explorer-error');
-      await raiseErrorNotice(win);
-      // It appears — the timed mode does not mean "never shown".
-      await expect(notices).toHaveCount(1, { timeout: 20_000 });
-      const shownAt = Date.now();
-      // …and then it goes, unaided. On master an `error` waits forever, which is the exemption
-      // FR-012 removes.
-      await expect(notices).toHaveCount(0, { timeout: SHORT_BUDGET });
-      // Reported rather than merely bounded: a dwell creeping towards the budget is the early sign
-      // of the timer being armed from something other than the setting.
-      const dwelt = Date.now() - shownAt;
-      expect(dwelt, `a ${SHORT_MS} ms notice stood for ${dwelt} ms`).toBeLessThan(SHORT_BUDGET);
-
-      // ── The same code path, N at the CEILING (FR-016: it applies to the next notice raised).
-      await setSlider(
-        prefs.getByTestId('control-notifications.error.timeoutMs-slider'),
-        String(LONG_MS),
-      );
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.timeoutMs, { timeout: FILE_OP_TIMEOUT_MS }).toBe(LONG_MS);
-      await appliedInMainWindow(win, (n) => n?.error, { mode: 'timed', timeoutMs: LONG_MS, os: false });
-
-      await raiseErrorNotice(win);
-      await expect(notices).toHaveCount(1, { timeout: 20_000 });
-      /*
-       * "…and it is still there 15000 ms in, and gone once LONG_MS itself elapses" — the half that
-       * makes the SHORT case above mean something — is no longer waited out here in real time. 034
-       * FR-045/SC-008: `notice-dismissal-timer.test.ts` proves both ends of that with a fake clock,
-       * against this SAME `LONG_MS`, and goes further than any real-time wait could — an hour past a
-       * `dismiss`-mode notice's non-existent timer, not fifteen seconds past a `timed` one's. What
-       * this Electron window still proves, and only it can: that a real Preferences slider drag
-       * actually reaches `NotificationProvider` and a real error notice actually renders under it —
-       * both asserted above, with no wait needed for either.
-       */
-    },
-  );
-});
-
-/**
- * FR-014 / SC-014 — A SETTINGS FILE WRITTEN BEFORE THIS FEATURE STILL OPENS.
- *
- * `parseNotificationSettings` is total and `display-mode.test.ts` proves it on every malformed value
- * anyone could think of. That is the unit half, and it was the whole of the coverage: nothing
- * anywhere started the APPLICATION over a document with no `notifications` section, which is the
- * only place the two halves of the requirement can both be observed. FR-014 has two halves and says
- * so — the file loads and resolves to the shipped defaults, AND it raises no error notice about the
- * configuration. A parse that resolved correctly while some other layer complained about the missing
- * section would satisfy a unit test and fail the requirement, and nothing would have said so.
- *
- * The seeded document is what a user upgrading into 030 actually has: `version: 1`, no notification
- * preferences at all, and settings they had already changed from the shipped defaults. Both must
- * still be theirs afterwards — an upgrade that "worked" by resetting the file would pass a test that
- * only looked at the notifications.
- */
-test('a pre-030 settings file opens with its preferences intact and no configuration error (FR-014, SC-014)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = freshCfgRoot({
-    editor: { autoSave: true, autoSaveDebounceMs: 900 },
-  });
-  // Stated rather than assumed: the seed has to be genuinely pre-030 for the test to mean anything.
-  expect(readSettings(cfgRoot)?.notifications).toBeUndefined();
-
-  await runOwnApp(
-    async (app, win) => {
-      await settle(win);
-
-      // ── The absent section resolves to the shipped defaults (FR-013), in the running application
-      // and not merely in a parse.
-      // The whole resolved section, from the one source of the defaults (057 FR-107 added the OS
-      // switches and the Attention type to it).
-      await appliedInMainWindow(win, (n) => n, DEFAULT_NOTIFICATION_SETTINGS);
-
-      // ── …and the preferences the user had already set are still theirs (SC-014).
-      const editor = await win.evaluate(async () => {
-        const payload = await window.throng?.config?.get?.();
-        return (payload?.settings as Record<string, any> | undefined)?.editor ?? null;
-      });
-      expect(editor?.autoSave).toBe(true);
-      expect(editor?.autoSaveDebounceMs).toBe(900);
-
-      // ── NOTHING WAS REPORTED. This is the half FR-014 states explicitly and the half a parse test
-      // structurally cannot see: an upgrade the user has to dismiss a notice about is not a
-      // successful load, whatever the resolved values say.
-      const prefs = await openSettings(app, win);
-      await expect(prefs.getByTestId('settings-group-Notifications')).toBeVisible();
-      await expect(prefs.getByTestId('control-notifications.error.mode')).toHaveValue('dismiss');
-      // The user's own values, on the surface they would go looking at.
-      await expect(prefs.getByTestId('control-editor.autoSave')).toBeChecked();
-
-      for (const [where, page] of [
-        ['the main window', win],
-        ['the preferences window', prefs],
-      ] as const) {
-        // `.notice--error` and not `.notice`: FR-014's words are "raising no ERROR notice about the
-        // configuration", and pinning the absence of every toast would make this fail for reasons
-        // that have nothing to do with the requirement.
-        await expect(
-          page.locator('.notice--error'),
-          `an error notice was raised in ${where} over a settings file with no notification section`,
-        ).toHaveCount(0);
-      }
-      await expect(prefs.getByTestId('prefs-notice')).toHaveCount(0);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
 
 /*
  * REMOVED (048) — "Dismiss only outlives any timeout, asserted on a WARNING". Its warning was the daemon's

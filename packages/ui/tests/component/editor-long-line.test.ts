@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('a >10,000-character line (FR-008a, migrated from editor-highlighting.e2e.ts:201)', () => {
-  it('carries the plain-line marker, and an ordinary line does not', async () => {
+  it('carries the plain-line marker (an ordinary line does not) and is still a document — it takes an edit', async () => {
     const h = mountEditor({ doc: { text: DOC, version: 1, absPath: 'C:/proj/bundle.min.js' } });
     await waitFor(() => expect(h.text()).toContain('const readable'));
 
@@ -55,16 +55,12 @@ describe('a >10,000-character line (FR-008a, migrated from editor-highlighting.e
       expect(seen.some((l) => l.long && l.plain), 'the long line is not exempted').toBe(true);
       expect(seen.some((l) => !l.long && !l.plain), 'a normal line was wrongly exempted').toBe(true);
     });
-  });
 
-  it('is still a document rather than a picture of one — it takes an edit', async () => {
     /*
      * The other half, and the one that makes the exemption acceptable at all: the line is still
      * parsed and still editable; only the PAINTING is skipped. A guard that achieved its speed by
      * making the line read-only would satisfy the marker assertion above perfectly.
      */
-    const h = mountEditor({ doc: { text: DOC, version: 1, absPath: 'C:/proj/bundle.min.js' } });
-    await waitFor(() => expect(h.text()).toContain('const readable'));
     const view = h.view();
     const end = view.state.doc.length;
 

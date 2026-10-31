@@ -46,8 +46,8 @@ test.describe.configure({ mode: 'serial' });
  * that never happened as a broken move: on CI it read `false,true` — the file still at the root,
  * absent from the folder — thirty seconds later.
  *
- * The signal is `[role="treeitem"]:focus`, the same one `explorer-keyboard-selection.e2e.ts` already
- * uses, and it is a POSITIVE assertion about the row this test is about to act on rather than a
+ * The signal is `[role="treeitem"]:focus`, the same one `explorer.e2e.ts`'s arrow-key selection test
+ * already uses, and it is a POSITIVE assertion about the row this test is about to act on rather than a
  * pause hoping the state caught up. Issue #239 is the same defect in another spec, fixed the same
  * way; this file simply never had it applied.
  */

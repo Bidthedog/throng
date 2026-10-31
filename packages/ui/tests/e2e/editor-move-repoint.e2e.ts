@@ -205,7 +205,14 @@ async function expectLayoutHasPath(dataDir: string, projectName: string, path: s
  * `@reserve:window` (a panel in a BACKGROUND tab, whose listener is not mounted — FR-008 is a claim
  * about a window's other tabs, and there is no such thing below this layer).
  */
-test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag: ['@extended', '@editor', '@reserve:osdrag'] }, async () => {
+/*
+ * AC2 and AC3 are ONE declaration (test-suite audit): the drag-move and the save that follows it
+ * share a project, a file and an app launch, and AC3's claim — a save after a move writes to the NEW
+ * location — does not depend on HOW the file was moved. The cut+paste route is the integration
+ * suite's (`editor-move.integration.test.ts`, which drives `FilesService.move` whichever gesture
+ * asked); the residue here is a real drag (`@reserve:osdrag`) and then a real Ctrl+S.
+ */
+test('AC2/AC3 — a drag-move re-points the editor, and the next save writes to the NEW location without re-creating the old file', { tag: ['@extended', '@editor', '@reserve:osdrag'] }, async () => {
   const root = makeProject('ac2');
   const oldPath = join(root, 'note.txt');
   const newPath = join(root, 'dest', 'note.txt');
@@ -222,27 +229,8 @@ test('AC2 — a drag-move re-points the editor just as a cut+paste does', { tag:
 
       expect(await docPath(win, pid)).toBe(normPath(newPath));
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toHaveCount(0);
-    });
-  } finally {
-    rmRoot(root);
-  }
-});
 
-test('AC3 — saving after a move writes to the NEW location and does not re-create the old file', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
-  const root = makeProject('ac3');
-  const oldPath = join(root, 'note.txt');
-  const newPath = join(root, 'dest', 'note.txt');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Mv3', root);
-      const pid = await newEditor(win, await firstPanelId(win));
-      await openInto(win, pid, 'note.txt', 'MOVE-ME-BODY');
-
-      await cutPaste(win, 'note.txt', 'dest');
-      await expectMovedOnDisk(oldPath, newPath);
-      await letWatcherFire(win);
-
-      // Type into the moved document, then save it.
+      // AC3 — type into the moved document, then save it.
       const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
       await content.click();
       await win.keyboard.type('EDITED-AFTER-MOVE ');
@@ -261,6 +249,7 @@ test('AC3 — saving after a move writes to the NEW location and does not re-cre
     rmRoot(root);
   }
 });
+
 
 /*
  * DELETED (034 FR-045) — AC4, AC5 and AC6, each already asserted in

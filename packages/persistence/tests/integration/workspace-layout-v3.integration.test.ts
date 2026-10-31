@@ -7,6 +7,7 @@ import {
   createProject,
   collectPanels,
   panelZoomLevel,
+  splitPanel,
   type WorkspaceLayout,
 } from '@throng/core';
 import { openDatabase, runMigrations, WorkspaceRepository, ProjectRepository } from '@throng/persistence';
@@ -78,6 +79,33 @@ describe('workspace layout v2 → v3 migration + per-panel zoom round-trip (012)
       const result = repo.load('u', 'p2');
       expect(panelZoomLevel(collectPanels(result.layout.tabs[0].root)[0])).toBe(3);
       expect(result.layout.schemaVersion).toBe(3);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('round-trips a split arrangement: a row split holding a column split (panel-split SC-009)', () => {
+    // Moved down from panel-split.e2e.ts 'a split survives a restart': the arrangement is a property of
+    // what save writes and load reads back, not of a window.
+    const db = openDatabase({ databasePath: freshDbPath() });
+    try {
+      runMigrations(db);
+      seedProject(db, 'p6');
+      const repo = new WorkspaceRepository(db);
+      const base = createDefaultLayout('p6', { tab: 't1', panel: 'p1' });
+      const right = splitPanel(base, 't1', 'p1', 'right', { id: 'p2', title: 'Panel 2' });
+      const split = splitPanel(right, 't1', 'p2', 'down', { id: 'p3', title: 'Panel 3' });
+      repo.save('u', 'p6', split);
+
+      const root = repo.load('u', 'p6').layout.tabs[0].root;
+      expect(collectPanels(root).map((p) => p.id).sort()).toEqual(['p1', 'p2', 'p3']);
+      if (root.type !== 'split') throw new Error('the restored root is not a split');
+      expect(root.orientation).toBe('row');
+      const column = root.children[1];
+      if (column.type !== 'split') throw new Error('the restored second child is not a split');
+      expect(column.orientation).toBe('column');
+      expect(collectPanels(column).map((p) => p.id)).toEqual(['p2', 'p3']);
+      expect(root).toEqual(split.tabs[0].root);
     } finally {
       db.close();
     }

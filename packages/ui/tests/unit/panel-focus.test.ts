@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   registerPanelFocus,
   unregisterPanelFocus,
@@ -34,15 +34,26 @@ import {
  * test, because a stray parked id only shows up when some LATER panel happens to register under
  * that name. The drain below consumes the slot through the module's own API rather than reaching
  * into its internals.
+ *
+ * It is drained BEFORE each test as well as after: the unit project shares one module registry per
+ * worker (`isolate: false`), so a file that ran earlier in the same worker — through any production
+ * module that parks a focus request — can leave the slot holding 'p1'. The gate caught exactly that:
+ * the first test's callback ran twice, once for the stray parked request and once for its own call.
  */
 const noop = (): void => {};
 
-afterEach(() => {
+function drainParkedFocus(): void {
   // Park a request for a name nothing else uses, then satisfy it — the only way to empty the slot
   // through the public surface.
   requestPanelFocus('__drain__');
   registerPanelFocus('__drain__', noop);
   unregisterPanelFocus('__drain__');
+}
+
+beforeEach(drainParkedFocus);
+
+afterEach(() => {
+  drainParkedFocus();
 });
 
 describe('focusing a panel that is mounted', () => {

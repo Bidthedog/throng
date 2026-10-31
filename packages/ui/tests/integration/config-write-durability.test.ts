@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -40,15 +40,9 @@ function obstruct(path: string): void {
 }
 
 describe('FileConfigStore.write durability', () => {
-  it('reports failure when the target cannot be written', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-    obstruct(store.pathOf({ kind: 'settings' }));
-
-    const result = await store.write({ kind: 'settings' }, { editor: { autoSaveDebounceMs: 1500 } });
-
-    expect(result.ok).toBe(false);
-  });
+  // "Reports failure when the target cannot be written" and "leaves no temp file behind when the write
+  // ultimately fails" were the same writes as config-store-retry-exhaustion.test.ts (`ok` false, no
+  // `.tmp` strays) and config-store-error-diagnosis.test.ts; they live there now.
 
   it('retries a transient rename failure and lands the value', async () => {
     const root = freshRoot();
@@ -71,16 +65,6 @@ describe('FileConfigStore.write durability', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ editor: { autoSaveDebounceMs: 1500 } });
   });
 
-  it('does not leave its temp file behind when the write ultimately fails', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-    obstruct(store.pathOf({ kind: 'settings' }));
-
-    await store.write({ kind: 'settings' }, { editor: { autoSaveDebounceMs: 1500 } });
-
-    const strays = readdirSync(root).filter((name) => name.includes('.tmp'));
-    expect(strays).toEqual([]);
-  });
 });
 
 describe('writeConfigDoc', () => {

@@ -54,6 +54,10 @@ import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
  * 034 EXAMINATION: ALL TWELVE STAY, AND ALL NINETEEN LAUNCHES ARE EARNED
  * ─────────────────────────────────────────────────────────────────────────────
  *
+ * (Later pyramid pass: the four ordinary-close cases became one test and the Terminate All language
+ * override folded into the Terminate All layout-and-zoom test, so twelve tests became eight and each
+ * merged test pays two launches where its parts paid eight.)
+ *
  * This is the heaviest file in the suite, so it is the first place anyone hunting launches will
  * look. It was examined under spec 034 (FR-045) and nothing moved. The reason is structural
  * rather than a matter of effort: every test here is of the form "X, set immediately before a
@@ -268,194 +272,113 @@ async function zoomInTwice(win: Page, pid: string): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC1 — "An override set immediately before a Terminate All close is present after the next launch."
-// AC4 — "A regression test drives the terminate-all shutdown path, not just the ordinary one."
+// AC1/AC4 (a language override set before TERMINATE ALL) is no longer a test of its own: it is asserted in the
+// second launch of 'layout, zoom and a language override set immediately before TERMINATE ALL survive the next
+// launch', further down, which already drove the same close from the same kind of project.
 //
-// PASSES. The reported symptom does not reproduce; kept as the guard that says so.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-test('#86 AC1/AC4: a language override set immediately before TERMINATE ALL survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
-  const root = makeProject();
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-ta-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ta-user-'));
-  let projectId = '';
-  try {
-    await runApp(
-      async (app, win) => {
-        await createProject(win, 'TermAllProj', root);
-        projectId = await firstProjectId(win);
-
-        const editorPid = await firstPanelId(win);
-        await openEditorOn(win, editorPid, 'scriptfile', 'echo');
-        await addTerminalPanel(win, editorPid, root); // what makes the close WARN rather than quit
-
-        // Let the LAYOUT settle before the decision under test, deliberately: this test is about the
-        // OVERRIDE, and a layout write lost in the same shutdown could otherwise explain a failure
-        // all by itself (the panel simply not reopening on the file). Blame stays isolated. Poll the
-        // store for both panels (editor + terminal) rather than guess at the debounce's timing.
-        await expect
-          .poll(() => storedPanels(win, projectId), {
-            message: 'baseline layout (editor + terminal panels) must be stored before the language decision',
-          })
-          .toHaveLength(2);
-
-        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
-
-        // THE DECISION. Two clicks, exactly as a user makes it (the issue's steps 1-2).
-        await win.getByTestId(`editor-language-${editorPid}`).click();
-        await expect(win.getByTestId(`language-picker-${editorPid}`)).toBeVisible();
-        await win.getByTestId(`language-filter-${editorPid}`).fill('shell');
-        await win.getByTestId('language-option-shell').click();
-
-        // The user's confirmation that it took — the ONLY signal they get. Everything after this
-        // point, they are entitled to believe is remembered.
-        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Shell');
-
-        // …and now they close. No sleep: "set it, then close" is the whole bug report.
-        await terminateAllClose(app, win);
-      },
-      { dataDir, userDataDir },
-    );
-
-    await runApp(
-      async (_app, win) => {
-        const projectItem = win.locator('.project-item', { hasText: 'TermAllProj' });
-        await expect(projectItem).toBeVisible();
-        await projectItem.locator('[data-testid^="project-switch-"]').click();
-
-        // Assert the STORE first: this separates "the write never landed" (a drain bug) from "the
-        // write landed but the UI does not read it" (a load bug). They demand different fixes, and
-        // a UI-only assertion cannot tell them apart.
-        expect(
-          await storedOverride(win, projectId, 'scriptfile'),
-          'the override the user set before Terminate All must be IN THE STORE',
-        ).toBe('shell');
-
-        // …and it must reach the user, which is the thing they actually asked for.
-        const editor = win.locator('.editor-panel').first();
-        await expect(editor).toBeVisible({ timeout: 10_000 });
-        await expect(editor.locator('.cm-content')).toContainText('echo', { timeout: 10_000 });
-        await expect(win.locator('.editor-status-strip__language').first()).toHaveText('Shell', {
-          timeout: 10_000,
-        });
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-    cleanupTemp(root);
-  }
-});
-
+// MERGED, AND WHY: the four ORDINARY-close cases (layout, zoom, language override, and the workspace window's
+// config write) each paid two launches to ask one question — does what was set just before an ordinary close
+// survive? — so they are now ONE test, 'layout, zoom, a language override and a config write set immediately
+// before an ORDINARY close all survive the next launch'. Every assertion is kept and read in the second launch.
 // ═══════════════════════════════════════════════════════════════════════════════
 // AC3 — "…covers whether OTHER deferred writes are lost on the same path (layout, per-panel zoom…)"
 //
 // THE BLAST RADIUS. Layout and per-panel zoom are ONE deferred write (`workspace.save`, 400ms).
-// Both tests below FAIL, and they fail on the ORDINARY close — the exit the issue treats as safe.
+// The test below FAILS without the drain, and it fails on the ORDINARY close — the exit the issue treats as safe.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3: a layout change made immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
+test('#86 AC3/AC4/C23: layout, zoom, a language override and a config write set immediately before an ORDINARY close all survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-oc-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-oc-user-'));
-  let projectId = '';
-  try {
-    await runApp(
-      async (app, win) => {
-        await createProject(win, 'LayoutOrdinary', root);
-        projectId = await firstProjectId(win);
-
-        const editorPid = await firstPanelId(win);
-        await openEditorOn(win, editorPid, 'scriptfile', 'echo');
-
-        // Baseline (ONE panel) is safely stored, so a failure below can only be the NEW write. Poll
-        // the store directly rather than sleeping then checking once — the condition IS the wait.
-        await expect
-          .poll(() => storedPanels(win, projectId), { message: 'baseline must be stored first' })
-          .toHaveLength(1);
-
-        // THE DECISION: add a panel — an ordinary, visible structural edit the user watches happen.
-        await addPanel(win, editorPid);
-
-        // …and close. NO terminals running, so this is the "ordinary way" the issue calls safe:
-        // no prompt, and a 250ms fuse against a 400ms debounce.
-        await ordinaryClose(app);
-      },
-      { dataDir, userDataDir },
-    );
-
-    await runApp(
-      async (_app, win) => {
-        const projectItem = win.locator('.project-item', { hasText: 'LayoutOrdinary' });
-        await expect(projectItem).toBeVisible();
-        await projectItem.locator('[data-testid^="project-switch-"]').click();
-        await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 10_000 });
-
-        const panels = await storedPanels(win, projectId);
-        expect(
-          panels.length,
-          `the panel added before closing must be IN THE STORE (stored: ${JSON.stringify(panels)})`,
-        ).toBe(2);
-        await expect(win.locator('.panel-box')).toHaveCount(2);
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-    cleanupTemp(root);
-  }
-});
-
-test('#86 AC3: a per-panel zoom set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
-  const root = makeProject();
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocz-user-'));
+  // One config root across BOTH launches: the workspace window's config write (C23) lands in this settings.json.
+  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-oc-root-'));
   let projectId = '';
   let editorPid = '';
   try {
     await runApp(
       async (app, win) => {
-        await createProject(win, 'ZoomOrdinary', root);
+        // C23: creating the project persists the chosen folder through the undebounced, `void`-dropped
+        // `writeConfig({kind:'settings'}, …)` — in the WORKSPACE window. It is a guard, not a proof: it passes
+        // with the drain disabled (see the C23 notes in git history), and is kept because it costs one assertion.
+        await createProject(win, 'OrdinaryClose', root);
         projectId = await firstProjectId(win);
 
         editorPid = await firstPanelId(win);
         await openEditorOn(win, editorPid, 'scriptfile', 'echo');
-        // baseline layout safely stored — poll rather than guess at the debounce's timing
+
+        // Baseline (ONE panel) is safely stored, so a failure below can only be the NEW writes. Poll the store
+        // directly rather than sleeping then checking once — the condition IS the wait. It is also the
+        // "settle the layout before the language decision" fence: a layout write lost in the same shutdown
+        // could otherwise explain a failure of the override check all by itself.
         await expect
           .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
           .toHaveLength(1);
 
-        // THE DECISION: zoom the panel in, via the real keyboard chord.
+        // AC4: the language override — two clicks, exactly as a user makes it. An awaited IPC with no debounce.
+        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
+        await win.getByTestId(`editor-language-${editorPid}`).click();
+        await expect(win.getByTestId(`language-picker-${editorPid}`)).toBeVisible();
+        await win.getByTestId(`language-filter-${editorPid}`).fill('shell');
+        await win.getByTestId('language-option-shell').click();
+        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Shell');
+
+        // AC3: a structural edit AND a zoom, both riding the same deferred 400ms write — added last, so they are
+        // the writes still pending when the close lands.
+        await addPanel(win, editorPid);
         await zoomInTwice(win, editorPid);
 
+        // …and close. NO terminals running, so this is the "ordinary way" the issue calls safe: no prompt, and a
+        // 250ms fuse against a 400ms debounce.
         await ordinaryClose(app);
       },
-      { dataDir, userDataDir },
+      { dataDir, userDataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
 
     await runApp(
       async (_app, win) => {
-        const projectItem = win.locator('.project-item', { hasText: 'ZoomOrdinary' });
+        const projectItem = win.locator('.project-item', { hasText: 'OrdinaryClose' });
         await expect(projectItem).toBeVisible();
         await projectItem.locator('[data-testid^="project-switch-"]').click();
         await expect(win.locator('.panel-box').first()).toBeVisible({ timeout: 10_000 });
 
+        // Assert the STORE first: it separates "the write never landed" (a drain bug) from "the write landed but
+        // the UI does not read it" (a load bug).
         const panels = await storedPanels(win, projectId);
-        const panel = panels.find((p) => p.id === editorPid);
         expect(
-          panel?.zoom,
+          panels.length,
+          `the panel added before closing must be IN THE STORE (stored: ${JSON.stringify(panels)})`,
+        ).toBe(2);
+        expect(
+          panels.find((p) => p.id === editorPid)?.zoom,
           `the zoom the user set before closing must be IN THE STORE (stored: ${JSON.stringify(panels)})`,
         ).toBe(1);
+        expect(
+          await storedOverride(win, projectId, 'scriptfile'),
+          'the override set before an ordinary close must be IN THE STORE',
+        ).toBe('shell');
+
         // …and it must come back on screen, not merely sit in the blob.
+        await expect(win.locator('.panel-box')).toHaveCount(2);
         await expect(win.getByTestId(`panel-${editorPid}`)).toHaveAttribute('data-zoom', '1');
+        await expect(win.locator('.editor-status-strip__language').first()).toHaveText('Shell', {
+          timeout: 10_000,
+        });
       },
-      { dataDir, userDataDir },
+      { dataDir, userDataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } },
     );
+
+    const settings = JSON.parse(readFileSync(join(cfgRoot, 'settings.json'), 'utf8')) as {
+      newProject?: { lastProjectFolder?: string };
+    };
+    expect(
+      settings.newProject?.lastProjectFolder,
+      `the workspace window's config write must have landed (settings: ${JSON.stringify(settings.newProject)})`,
+    ).toBe(root);
   } finally {
     cleanupTemp(dataDir);
     cleanupTemp(userDataDir);
+    cleanupTemp(cfgRoot);
     cleanupTemp(root);
   }
 });
@@ -1048,131 +971,11 @@ test('#110: after a DRAG, an ordinary close lets the PROCESS exit — the hidden
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AC4 / SC-005 claim the override survives EITHER exit. Only Terminate All was ever measured
-// (`:182`). This measures the other one, and is expected GREEN on the first run: the mechanism
-// says it cannot fail. If it is ever RED, #86 is wider than it was reproduced to be.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-test('#86 AC4: a language override set immediately before an ORDINARY close survives the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
-  const root = makeProject();
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-ocl-user-'));
-  let projectId = '';
-  try {
-    await runApp(
-      async (app, win) => {
-        await createProject(win, 'LangOrdinary', root);
-        projectId = await firstProjectId(win);
-
-        const editorPid = await firstPanelId(win);
-        await openEditorOn(win, editorPid, 'scriptfile', 'echo');
-
-        // Let the LAYOUT settle before the decision under test, exactly as the Terminate All
-        // case above does and for the same reason: this test is about the OVERRIDE, and the
-        // layout write riding the same shutdown would otherwise explain a failure all by
-        // itself — the panel simply not reopening on the file, so the strip has nothing to
-        // read. Measured: with the drain removed, this test fails ONLY on the strip, while
-        // the override sits correctly in the store. Blame stays isolated. Poll the store directly
-        // rather than guess at the debounce's timing.
-        await expect
-          .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
-          .toHaveLength(1);
-
-        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
-
-        await win.getByTestId(`editor-language-${editorPid}`).click();
-        await expect(win.getByTestId(`language-picker-${editorPid}`)).toBeVisible();
-        await win.getByTestId(`language-filter-${editorPid}`).fill('shell');
-        await win.getByTestId('language-option-shell').click();
-        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Shell');
-
-        await ordinaryClose(app); // no sleep: "set it, then close" is the whole bug report
-      },
-      { dataDir, userDataDir },
-    );
-
-    await runApp(
-      async (_app, win) => {
-        const projectItem = win.locator('.project-item', { hasText: 'LangOrdinary' });
-        await expect(projectItem).toBeVisible();
-        await projectItem.locator('[data-testid^="project-switch-"]').click();
-
-        expect(
-          await storedOverride(win, projectId, 'scriptfile'),
-          'the override set before an ordinary close must be IN THE STORE',
-        ).toBe('shell');
-        await expect(win.locator('.editor-status-strip__language').first()).toHaveText('Shell', {
-          timeout: 10_000,
-        });
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-    cleanupTemp(root);
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// The WORKSPACE window writes config too (`projects-panel.tsx` → `writeConfig`), which is why
-// the drain is not gated on "a preferences window".
-//
-// Creating a project with a chosen root folder is the ONLY path to `persistLastProjectFolder`.
-// A RENAME cannot prove this — it goes through `updateProject` → an awaited SQLite IPC that
-// never touches `writeConfig` at all.
-//
-// ── THIS IS A GUARD, NOT A PROOF. MEASURED, IT PASSES WITH THE DRAIN DISABLED. ──
-//
-// It is kept, and labelled, rather than dressed up: C23 justified widening the drain to every
-// window by saying a preferences-only gate "would have acked `projects-panel.tsx:208`'s write in
-// flight". Driven, that write CANNOT be lost, and the reason matters — it is UNDEBOUNCED, so
-// `void writeConfig(…)` has already handed the payload to main over IPC before the close event
-// fires. Main completes the file write whether or not the renderer is alive to await it: a
-// dropped promise loses the RESULT, never the write. There is no deferred state here for
-// `settleConfigWrites` to settle, so no test staged on this journey can discriminate, and one
-// that appeared to would be measuring something else.
-//
-// The widening is right anyway, and IS proved — by the JSON-tab case above. The preferences
-// window is a separate RENDERER PROCESS with its own copy of the write module, so a drain that
-// asked only the workspace window would settle nothing there. "Name no windows, ask the list" is
-// load-bearing for that reason, not for this one.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-test('#86 C23: the WORKSPACE window\'s own config write survives an immediate ORDINARY close', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
-  const root = makeProject();
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-cfg-user-'));
-  // One config root across BOTH launches: the write under test lands in this settings.json.
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-root-'));
-  const env = { THRONG_CONFIG_ROOT: cfgRoot };
-  try {
-    await runApp(
-      async (app, win) => {
-        // Creating the project persists the chosen folder through the undebounced,
-        // `void`-dropped `writeConfig({kind:'settings'}, …)` — in the WORKSPACE window.
-        await createProject(win, 'CfgOrdinary', root);
-        // …and the user closes at once, with that write still in flight.
-        await ordinaryClose(app);
-      },
-      { dataDir, userDataDir, env },
-    );
-
-    const settings = JSON.parse(readFileSync(join(cfgRoot, 'settings.json'), 'utf8')) as {
-      newProject?: { lastProjectFolder?: string };
-    };
-    expect(
-      settings.newProject?.lastProjectFolder,
-      `the workspace window's config write must have landed (settings: ${JSON.stringify(settings.newProject)})`,
-    ).toBe(root);
-  } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-    cleanupTemp(cfgRoot);
-    cleanupTemp(root);
-  }
-});
-
+// MERGED into 'layout, zoom, a language override and a config write set immediately before an ORDINARY close
+// all survive the next launch' above: the ORDINARY-close language override (AC4, "expected GREEN on the first
+// run") and the workspace window's own config write (C23, "a guard, not a proof — it passes with the drain
+// disabled") each cost two launches to ask the same question that test asks, and are asserted in its second
+// launch. Their reasoning is kept in that test's comments and in git history.
 // ═══════════════════════════════════════════════════════════════════════════════
 // The other half of the blast radius: the SAME two writes, on the SAME journey, taking the
 // TERMINATE-ALL exit instead. These PASS today — only because the prompt stalls the close past the
@@ -1180,7 +983,7 @@ test('#86 C23: the WORKSPACE window\'s own config write survives an immediate OR
 // not the other cannot pass unnoticed.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE ALL survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
+test('#86 AC1/AC3/AC4: layout, zoom and a language override set immediately before TERMINATE ALL survive the next launch', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   const root = makeProject();
   const dataDir = mkdtempSync(join(tmpdir(), 'throng-tal-data-'));
   const userDataDir = mkdtempSync(join(tmpdir(), 'throng-tal-user-'));
@@ -1200,6 +1003,17 @@ test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE AL
         await expect
           .poll(() => storedPanels(win, projectId), { message: 'baseline layout must be stored first' })
           .toHaveLength(2);
+
+        // AC1 (was its own test): the language override — two clicks, exactly as a user makes it (the issue's
+        // steps 1-2). An awaited IPC with no debounce; the layout is settled above, so a failure here can only be
+        // the override.
+        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Plain Text');
+        await win.getByTestId(`editor-language-${editorPid}`).click();
+        await expect(win.getByTestId(`language-picker-${editorPid}`)).toBeVisible();
+        await win.getByTestId(`language-filter-${editorPid}`).fill('shell');
+        await win.getByTestId('language-option-shell').click();
+        // The user's confirmation that it took — the ONLY signal they get.
+        await expect(win.getByTestId(`editor-language-${editorPid}`)).toHaveText('Shell');
 
         // THE DECISIONS: a structural edit AND a zoom, both riding the same deferred write.
         await addPanel(win, editorPid);
@@ -1226,6 +1040,16 @@ test('#86 AC3/AC4: layout and per-panel zoom set immediately before TERMINATE AL
           panels.find((p) => p.id === editorPid)?.zoom,
           `the zoom must be IN THE STORE (stored: ${JSON.stringify(panels)})`,
         ).toBe(1);
+        // Assert the STORE first (a drain bug is "the write never landed"; a load bug is "it landed but the UI
+        // does not read it")…
+        expect(
+          await storedOverride(win, projectId, 'scriptfile'),
+          'the override the user set before Terminate All must be IN THE STORE',
+        ).toBe('shell');
+        // …and it must reach the user, which is the thing they actually asked for.
+        await expect(win.locator('.editor-status-strip__language').first()).toHaveText('Shell', {
+          timeout: 10_000,
+        });
       },
       { dataDir, userDataDir },
     );

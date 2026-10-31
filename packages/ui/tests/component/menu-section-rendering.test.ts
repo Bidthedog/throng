@@ -31,8 +31,8 @@
  * ══ WHAT STAYS END-TO-END ══
  *
  *   - That a right-click on a real tree row builds THIS menu from the real explorer state. That call
- *     site is `file-tree.tsx`'s, and it stays proved by `context-menu-shortcuts.e2e.ts`, which
- *     right-clicks `a.txt` in a real project and reads the menu that comes back.
+ *     site is `file-tree.tsx`'s, and it stays proved by `menu-keyboard.e2e.ts`'s shortcut test, which
+ *     right-clicks `thing.txt` in a real project and reads the menu that comes back.
  *   - Anything about how a rule LOOKS — `theme.css`'s `.context-menu__separator` height, colour and
  *     margins. jsdom applies no stylesheet, so a rule that renders as an invisible zero-height line
  *     passes every assertion here (034 FR-049).

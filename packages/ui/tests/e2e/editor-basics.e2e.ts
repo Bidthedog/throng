@@ -1,8 +1,46 @@
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp, FILE_OP_TIMEOUT_MS } from './harness.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  FILE_OP_TIMEOUT_MS,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test (the pattern is `editor-open.e2e.ts`'s). Neither test seeds
+ * state before launch, and each builds its own project, which swaps the whole workspace.
+ *   runApp        runs against the shared window and REFUSES options rather than ignoring them.
+ *   createProject appends a counter, so duplicate names never make `.project-item` ambiguous.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 // Delivery A (US1/US3/US4/US5/US8-pills): a usable editor — create → type →
 // Ctrl+S (confined) → new-doc LF default → Ctrl+Shift+S scope → Files-pane active
@@ -65,32 +103,6 @@ test('creates an editor, types, saves within the tree, and shows type + file pil
   }
 });
 
-test('refuses an out-of-tree save and leaves the buffer unsaved', { tag: ['@core', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
-  const outside = mkdtempSync(join(tmpdir(), 'throng-out-'));
-  const escapePath = join(outside, 'escape.txt');
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'EditProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'secret');
-
-      await stubSaveDialog(app, escapePath);
-      await win.keyboard.press('Control+s');
-
-      // The confinement rejection is a visible message box, never a silent no-op (FR-078) — wait
-      // for it rather than guessing how long the save round-trip takes.
-      await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
-      // Nothing is written outside the project tree; the buffer stays unsaved.
-      expect(existsSync(escapePath)).toBe(false);
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-    });
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(outside);
-  }
-});
-
 test('the File Explorer pane gates Ctrl+S (no-op) and highlights when active', { tag: ['@core', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
   const savePath = join(root, 'gated.txt');
@@ -137,54 +149,19 @@ test('the File Explorer pane gates Ctrl+S (no-op) and highlights when active', {
   }
 });
 
-test('warns (does not lock) when a dirty saved file changes on disk; Save-All writes the scope', { tag: ['@core', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-ed-'));
-  const savePath = join(root, 'watched.txt');
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'EditProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'v1');
-
-      // Save once so the doc is pathed.
-      await stubSaveDialog(app, savePath);
-      await win.keyboard.press('Control+s');
-      await expect
-        .poll(() => (existsSync(savePath) ? readFileSync(savePath, 'utf8') : ''), { timeout: FILE_OP_TIMEOUT_MS })
-        .toBe('v1');
-
-      // Edit again → dirty. There is NO lock now: an external write SUCCEEDS…
-      await typeInto(win, pid, ' more');
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
-      let externalWriteSucceeded = true;
-      try {
-        writeFileSync(savePath, 'EXTERNAL');
-      } catch {
-        externalWriteSucceeded = false;
-      }
-      expect(externalWriteSucceeded).toBe(true);
-
-      /*
-       * …and throng surfaces a soft "changed on disk" notice (FR-028), keeping the buffer.
-       *
-       * 030 US3 / T052 — LEFT ALONE, deliberately. This is `file-changed-notice.ts`, which still
-       * routes through `editor-notice-store.ts`; what FR-035 removed was the per-tab MISSING-FILE
-       * batch, not the store. The three identifiers below are preserved exactly for that reason
-       * (T051b), and this test is one of the six assertions that keeps them honest.
-       */
-      await expect(win.getByTestId('editor-notice-dialog')).toBeVisible({ timeout: 8000 });
-      await expect(win.getByTestId('editor-notice-message')).toContainText('changed');
-      await win.getByTestId('editor-notice-ok').click();
-
-      // Ctrl+Shift+S (Save-All, project scope) writes the edited buffer (overwrites
-      // the external change — last-write-wins, like VS Code).
-      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-      await win.keyboard.press('Control+Shift+S');
-      await expect
-        .poll(() => readFileSync(savePath, 'utf8'), { timeout: FILE_OP_TIMEOUT_MS })
-        .toContain('more');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * ── THREE DECLARATIONS DELETED (test-suite audit) ──
+ *
+ *   - `refuses an out-of-tree save and leaves the buffer unsaved` is a duplicate of the migrated
+ *     proof: `integration/editor-service-save.integration.test.ts:70` (refused, nothing written
+ *     outside) plus `component/editor-notices.test.ts` "a refused save says so" (visible notice,
+ *     buffer left unsaved).
+ *   - `warns (does not lock) when a dirty saved file changes on disk; Save-All writes the scope` is
+ *     `integration/editor-external-change.integration.test.ts` ("a DIRTY editor gets a one-shot
+ *     'changed on disk' notice, buffer untouched"), the notice's wording in
+ *     `component/editor-notices.test.ts`, Save-All's scope in `core/tests/unit/save-scope.test.ts`
+ *     and its write in `editor-coordinator-lifecycle.integration.test.ts` ("saveAll saves every dirty
+ *     document").
+ *   - `editor-indicators.e2e.ts` ("the unsaved dot lights ... and clears on save") was a strict
+ *     subset of the first test above, which types, sees the dot, saves and sees it clear.
+ */

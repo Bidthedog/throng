@@ -9,7 +9,8 @@
  *
  * ══ WHY THIS ONE, AND NOT ITS NEIGHBOUR ══
  *
- * The other test in that file creates a real file on a real disk and renames it, and it STAYS: no
+ * The other test in that file (now in `explorer.e2e.ts`, "New File on a folder creates a file inside
+ * it, in rename mode") creates a real file on a real disk and renames it, and it STAYS: no
  * single layer below E2E proves menu → create → rename-commit → bytes at `sub/made.txt`, and FR-047
  * forbids replacing four fifths of a test. This one is different. Its subject is
  * `onEmptyContextMenu` (`file-tree.tsx:457`) — a handler that decides WHICH NODE the menu is about,

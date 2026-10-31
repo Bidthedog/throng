@@ -291,42 +291,9 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
   }
 });
 
-test('the caret survives a tab switch away and back (issue 144)', { tag: ['@core', '@editor', '@reserve:input'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'CaretProj', root);
-      const pid = await firstPanelId(win);
-      await newEditor(win, pid);
-
-      // Open the file and put the caret at the END of the third line ("CCCC").
-      await win.getByTestId(`editor-${pid}`).click();
-      await win.getByTestId('file-explorer-tree').getByText('lines.txt', { exact: true }).click();
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await expect(content).toContainText('CCCC', { timeout: 8000 });
-      await content.locator('.cm-line', { hasText: 'CCCC' }).click();
-      await win.keyboard.press('End');
-
-      // Switch AWAY: a second tab becomes active, so the editor's tab unmounts (saving
-      // its view state), then switch BACK to the editor's tab (remount → restore).
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('.tab-chip')).toHaveCount(2);
-      await win.locator('.tab-chip').nth(0).click();
-      await expect(content).toContainText('CCCC', { timeout: 8000 });
-
-      // Focus the editor WITHOUT clicking (a click would move the caret). CodeMirror
-      // reflects its restored state-selection to the DOM on focus, so the marker we
-      // type lands at the caret the fix restored.
-      await content.evaluate((el) => (el as HTMLElement).focus());
-      await win.keyboard.type('Z');
-
-      const lines = await docLines(win, pid);
-      // Restored: the marker appends to the line the caret was left on…
-      expect(lines[2]).toBe('CCCCZ');
-      // …and the first line is untouched (it would read "ZAAAA" if the caret reset to 0).
-      expect(lines[0]).toBe('AAAA');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED (test-suite audit) — `the caret survives a tab switch away and back (issue 144)`. A subset
+ * of `the scroll position is restored and the editor re-focuses on switch back` above, which drives
+ * the same tab-away/tab-back remount and types a marker WITHOUT re-clicking, so the marker lands
+ * where the restored selection put the caret ('row-199Z'); a caret reset to offset 0 fails it too.
+ */

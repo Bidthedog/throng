@@ -34,7 +34,7 @@ function seedProject(db: ReturnType<typeof openDatabase>, id: string): void {
 }
 
 describe('migration v7', () => {
-  it('creates document_state and its index', () => {
+  it('creates document_state and its index', { tags: ['regression'] }, () => {
     const db = freshDb();
     try {
       const objects = db
@@ -49,7 +49,7 @@ describe('migration v7', () => {
     }
   });
 
-  it('is IDEMPOTENT — re-running the chain against an already-migrated store changes nothing', () => {
+  it('is IDEMPOTENT — re-running the chain against an already-migrated store changes nothing', { tags: ['regression'] }, () => {
     const db = freshDb();
     try {
       seedProject(db, 'p1');

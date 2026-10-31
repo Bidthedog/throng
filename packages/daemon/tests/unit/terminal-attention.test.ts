@@ -3,7 +3,7 @@ import { BEL, ESC, config, makeHarness, sleep, type AttentionHarness, type Harne
 
 /*
  * 057 — the daemon's attention producer, through the real TerminalService and RPC router.
- * Layer: integration — what is under test is the wiring between the output handler, the rate limiter, the
+ * Layer: unit — (moved down from integration: no shell is spawned) what is under test is the wiring between the output handler, the rate limiter, the
  * config the service holds and the events sink; none of it exists below a real service. The PTY host is a
  * fake so the bytes are exact and no shell is spawned (a bell storm through a real conhost proves nothing
  * more about this wiring).
@@ -338,49 +338,8 @@ describe('terminal.attention producer (057)', () => {
     });
   });
 
-  /*
-   * SC-004 / Principle XII — measured, not assumed. 10 s of a 1,000-bell-a-second storm (10 chunks of 100 every
-   * 100 ms, so the event loop and the rate-window timers run as they would), once with attention on and once
-   * off. What is timed is the work the output path does for those chunks; the difference is what attention
-   * costs. Layer: integration — the cost is the whole handler (scan, limiter, publish), not the scanner alone
-   * (that is attention-scan.bench.test.ts). Measured at authoring: 59 ms of handler work with attention off,
-   * 87 ms on, for 10,000 chunks (about 3 µs a chunk), one signal published.
-   */
-  it('a sustained 1,000/s bell storm costs the output path within noise and publishes one signal (SC-004)', async () => {
-    const STORM_MS = 10_000;
-    const TICK_MS = 100;
-    const PER_TICK = 100;
-    const payload = `${'x'.repeat(256)}${BEL}`;
-
-    async function storm(enabled: boolean): Promise<{ workMs: number; signals: number; bytes: number }> {
-      const h = await harness();
-      await h.rpc('terminal.attentionConfig', config({ enabled }));
-      let workMs = 0;
-      const started = Date.now();
-      let tick = 0;
-      while (Date.now() - started < STORM_MS) {
-        const t0 = performance.now();
-        for (let i = 0; i < PER_TICK; i++) h.host.emit(payload);
-        workMs += performance.now() - t0;
-        tick += 1;
-        const wait = started + tick * TICK_MS - Date.now();
-        if (wait > 0) await sleep(wait);
-      }
-      return { workMs, signals: h.signals.length, bytes: h.outputs.join('').length };
-    }
-
-    const off = await storm(false);
-    const on = await storm(true);
-    console.log(
-      `attention storm: ${off.workMs.toFixed(0)} ms of handler work off, ${on.workMs.toFixed(0)} ms on, ${on.signals} signal(s)`,
-    );
-    expect(on.bytes).toBe(off.bytes); // same bytes through either way
-    expect(off.signals).toBe(0);
-    expect(on.signals).toBe(1);
-    // Noise bound: 10,000 chunks; attention may add at most 100 ms in all (10 µs a chunk) or the off run's
-    // own cost again, whichever is larger — a loaded workstation moves both runs, not just one.
-    expect(on.workMs - off.workMs).toBeLessThan(Math.max(100, off.workMs));
-  }, 60_000);
+  // MOVED: the 10 s SC-004 bell-storm cost soak (regression tier) lives in
+  // ../integration/terminal-attention-storm.integration.test.ts.
 
   it('the bytes published on terminal.output are identical with attention on and off (FR-067)', async () => {
     const stream = [`a${BEL}b`, `${ESC}]9;note${BEL}`, `${ESC}]9;4;1;5${BEL}${ESC}]9;4;0${BEL}`, 'plain\r\n'];

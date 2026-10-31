@@ -90,7 +90,7 @@ async function startBusyTerminals(projectId: string, round: number): Promise<voi
 }
 
 describe('051 FR-022 — a switch straight after Unload with End Terminals (#468)', () => {
-  it(`answers projects.setActive within ${SWITCH_BOUND_MS} ms while the unloaded project's terminals end`, async () => {
+  it(`answers projects.setActive within ${SWITCH_BOUND_MS} ms while the unloaded project's terminals end`, { tags: ['regression'] }, async () => {
     const a = await createProject('A', rootA);
     const b = await createProject('B', rootB);
 

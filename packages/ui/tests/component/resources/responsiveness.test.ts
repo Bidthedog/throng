@@ -119,24 +119,21 @@ const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floo
 
 /**
  * How long this machine, right now, takes to draw 450 rows of the same shape as the monitor's (a list item
- * with eight children and a few attributes), as a median of `RUNS` — a yardstick for how busy it is.
+ * with eight children and a few attributes) — a yardstick for how busy it is at this moment.
  */
 function referenceMs(): number {
-  const samples: number[] = [];
-  for (let i = 0; i < RUNS; i += 1) {
-    const rows = Array.from({ length: 450 }, (_, r) =>
-      createElement(
-        'li',
-        { key: r, role: 'treeitem', 'data-testid': `ref-${r}`, title: `row ${r}` },
-        ...Array.from({ length: 8 }, (_, c) => createElement('span', { key: c, className: 'ref', 'data-metric': c, title: `cell ${c}` }, `${r}:${c}`)),
-      ),
-    );
-    const t0 = performance.now();
-    const view = render(createElement('ul', null, rows));
-    samples.push(performance.now() - t0);
-    view.unmount();
-  }
-  return median(samples);
+  const rows = Array.from({ length: 450 }, (_, r) =>
+    createElement(
+      'li',
+      { key: r, role: 'treeitem', 'data-testid': `ref-${r}`, title: `row ${r}` },
+      ...Array.from({ length: 8 }, (_, c) => createElement('span', { key: c, className: 'ref', 'data-metric': c, title: `cell ${c}` }, `${r}:${c}`)),
+    ),
+  );
+  const t0 = performance.now();
+  const view = render(createElement('ul', null, rows));
+  const ms = performance.now() - t0;
+  view.unmount();
+  return ms;
 }
 
 /** The reference above on a machine doing nothing else (measured alone, 2026-10-15, Windows 11, the repo's dev box). */
@@ -151,19 +148,32 @@ const REFERENCE_QUIET_MS = 45;
  * reading is divided by how much slower the machine is right now than when it is idle, measured by drawing
  * a fixed reference list immediately afterwards. On an idle machine the divisor is 1 and the budget is the
  * plain 100 ms; it never makes a reading LOWER than the machine's own slowness explains.
+ *
+ * ══ THE YARDSTICK IS READ BESIDE EACH SAMPLE, NOT AFTER ALL OF THEM ══
+ *
+ * It used to be one median of five reference draws taken once the five timed runs had finished — seconds
+ * later for a capture, by which time a parallel run's load had moved. Measured under a loaded run: four
+ * interactions read a slowdown of 10.7–12.8, then the capture's divisor read 5.49 straight after its own
+ * 654 ms of work — so a reading of ~55–60 ms at its neighbours' slowdown was reported as 119. So each
+ * timed run is paired with a reference draw taken immediately after it, and the budget is checked against
+ * the median of the per-run ratios: the divisor describes the moment the work ran, not a later one.
  */
 function medianMs(work: () => void, before: () => void = () => undefined): number {
-  const samples: number[] = [];
+  const raws: number[] = [];
+  const slowdowns: number[] = [];
+  const scaled: number[] = [];
   for (let i = 0; i < RUNS; i += 1) {
     before();
     const t0 = performance.now();
     work();
-    samples.push(performance.now() - t0);
+    const raw = performance.now() - t0;
+    const slowdown = Math.max(1, referenceMs() / REFERENCE_QUIET_MS);
+    raws.push(raw);
+    slowdowns.push(slowdown);
+    scaled.push(raw / slowdown);
   }
-  const raw = median(samples);
-  const slowdown = Math.max(1, referenceMs() / REFERENCE_QUIET_MS);
-  readings.push({ raw: Math.round(raw), slowdown: Math.round(slowdown * 100) / 100 });
-  return raw / slowdown;
+  readings.push({ raw: Math.round(median(raws)), slowdown: Math.round(median(slowdowns) * 100) / 100 });
+  return median(scaled);
 }
 /** What was read, in the order the interactions ran: the raw median and the machine's slowdown at the time. */
 const readings: { raw: number; slowdown: number }[] = [];
@@ -175,17 +185,60 @@ function mountFiltered(): void {
   act(() => setView({ filterText: 'proc' }));
 }
 
+/**
+ * The smallest tree that has the shape the duplicate came from: processes under a Projects component (a project,
+ * a tab, a panel, a shell of seven) beside processes directly under other components. Not 450 processes — the
+ * listing rule does not depend on how many there are, only on the Projects subtree sitting inside a component.
+ */
+function smallHierarchy(tick: number): ResourceNode {
+  pid = 1000;
+  const projectTree = node({
+    id: 'p:0',
+    kind: 'project',
+    label: 'Project 0',
+    projectState: 'active',
+    owner: { projectId: '0' },
+    children: [
+      node({
+        id: 't:0-0',
+        kind: 'tab',
+        label: 'Tab 0',
+        owner: { projectId: '0', tabId: '0-0' },
+        children: [
+          node({ id: 'n:0-0-0', kind: 'panel', label: 'Panel 0', panelKind: 'terminal', owner: { projectId: '0', tabId: '0-0', panelId: '0-0-0' }, children: [shell(tick)] }),
+        ],
+      }),
+    ],
+  });
+  const uiProcs = Array.from({ length: 2 }, () => {
+    pid += 1;
+    return proc(pid, `proc-${pid}.exe`, figures(tick));
+  });
+  return node({
+    id: 'root',
+    kind: 'root',
+    label: 'throng',
+    owner: { component: 'ui' },
+    children: [
+      node({ id: 'c:ui', kind: 'component', label: 'UI', owner: { component: 'ui' }, children: uiProcs }),
+      node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [projectTree] }),
+    ],
+  });
+}
+
 describe('a filtered view lists each process once (SC-010)', () => {
-  it('draws 450 process rows for 450 processes — not the 900 it used to', () => {
-    mountFiltered();
+  it('draws one process row per process (9) — not the doubled list it used to', () => {
+    act(() => ingestFrame(frame(1, smallHierarchy(1))));
+    render(createElement(Breakdown));
+    act(() => setView({ filterText: 'proc' }));
     const processRows = screen.getAllByRole('treeitem').filter((r) => r.getAttribute('data-kind') === 'process');
     const ids = processRows.map((r) => r.getAttribute('data-node-id'));
-    expect(ids).toHaveLength(450);
-    expect(new Set(ids).size).toBe(450);
+    expect(ids).toHaveLength(9);
+    expect(new Set(ids).size).toBe(9);
   });
 });
 
-describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes (median of ${RUNS})`, () => {
+describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes (median of ${RUNS})`, { tags: ['regression'] }, () => {
   const report: Record<string, number> = {};
   afterEach(() => console.info(`responsiveness (jsdom, median of ${RUNS}; ms as on a quiet machine): ${JSON.stringify(report)}; raw median and machine slowdown, in run order: ${JSON.stringify(readings)}`));
 

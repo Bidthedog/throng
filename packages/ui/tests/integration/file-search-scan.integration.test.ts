@@ -564,7 +564,7 @@ describe('project isolation (043 T053a, FR-018, Constitution I)', () => {
 });
 
 describe("SC-004's scan half (043 T053b)", () => {
-  it('streams a 5,000-file corpus in bounded batches, the first before the scan ends', async () => {
+  it('streams a 5,000-file corpus in bounded batches, the first before the scan ends', { tags: ['regression'] }, async () => {
     const root = await makeRoot();
     const DIRS = 40;
     const PER_DIR = 125;

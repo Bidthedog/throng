@@ -102,7 +102,9 @@ export function runFileWatcherContract(
 
           // The churn is STILL RUNNING when this assertion is made. A watcher that only reports
           // once the machine goes quiet is a watcher whose consumer is stale exactly when it is busy.
-          await new Promise((r) => setTimeout(r, 2000));
+          // Bounded at the same 2 s, but ends the moment the first report lands.
+          const deadline = Date.now() + 2000;
+          while (reported === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 25));
           expect(
             reported,
             'nothing was reported while the directory kept changing — the coalescing window has no ceiling',
@@ -125,7 +127,10 @@ export function runFileWatcherContract(
         try {
           await new Promise((r) => setTimeout(r, 150));
           for (let i = 0; i < 30; i += 1) await h.touch(`burst-${i}.json`);
-          await new Promise((r) => setTimeout(r, 800));
+          // Wait for the first report (bounded at 2 s), then a short settle so a split flush would still be counted.
+          const deadline = Date.now() + 2000;
+          while (reported === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 25));
+          await new Promise((r) => setTimeout(r, 300));
           expect(reported).toBeGreaterThan(0);
           expect(reported, 'a 30-write burst must not become 30 reports').toBeLessThan(10);
         } finally {

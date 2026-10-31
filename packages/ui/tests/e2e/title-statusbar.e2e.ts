@@ -14,15 +14,17 @@ const title = (app: ElectronApplication): Promise<string> =>
  * DELETED (034 FR-045): "window title shows active project · Tab · Panel (no path, no totals);
  * status bar keeps the path".
  *
- * A strict subset of `status-bar-deduped.e2e.ts` — "the status bar keeps only the project root
- * path; the title bar keeps the identity". That test polls the same OS title for the same exact
- * string, reads the same `status-project-path`, and makes the same `not.toContainText(project)`
+ * A strict subset of `status-bar-deduped.e2e.ts` (itself deleted since, by the test-suite audit; its
+ * in-app halves are `component/status-bar-content.test.ts` and
+ * `component/app-title-bar-identity.test.ts`) — "the status bar keeps only the project root
+ * path; the title bar keeps the identity". That test polled the same OS title for the same exact
+ * string, read the same `status-project-path`, and made the same `not.toContainText(project)`
  * assertion on the status bar. The three negative assertions here — no path, no totals, no
- * [ADMIN] — are all implied by the exact-equality on the title that both tests already make.
+ * [ADMIN] — were all implied by the exact-equality on the title that both tests made.
  *
  * The elevated test below is NOT a duplicate, and the difference is worth stating because it
  * nearly went with it: it asserts the OS/taskbar title carries [ADMIN], which is `TitleManager`
- * in main. `status-bar-deduped.e2e.ts` asserts the IN-APP title bar carries it. Two surfaces, one
+ * in main. `component/app-title-bar-identity.test.ts` asserts the IN-APP title bar carries it. Two surfaces, one
  * marker, and only one of them is what a user sees in the taskbar.
  */
 

@@ -60,95 +60,93 @@ let seq = 0;
 const pipe = (): string => `\\\\.\\pipe\\throng-deleted-entry-${process.pid}-${seq++}`;
 
 describe('ensureDaemon and a daemon whose install folder has been deleted', () => {
-  it('does not adopt a same-build daemon running from a folder that no longer exists', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('alpha6-build');
-
-    // The portable run's daemon: the same build, running from its self-extraction folder — which the
-    // launcher has since deleted.
-    const portable = entryFile('alpha6-build');
-    rmSync(join(portable, '..'), { recursive: true, force: true });
-
-    await fakeDaemon(pipeName, {
-      status: 'ok',
+  /** Our entry plus the pong of a daemon whose own entry has been deleted from disk. */
+  interface OrphanCase {
+    name: string;
+    pid: number;
+    build: () => { ours: string; pong: Record<string, unknown> };
+    why: string;
+  }
+  const orphanCases: OrphanCase[] = [
+    {
+      // The portable run's daemon: the same build, running from its self-extraction folder — which
+      // the launcher has since deleted.
+      name: 'a same-build daemon running from a folder that no longer exists',
       pid: 999_999,
-      buildId: 'alpha6-build',
-      daemonEntry: portable,
+      why:
+        'the app adopted a daemon whose code has been deleted from disk: every terminal it starts then ' +
+        'fails to load conpty.node, which went with the folder',
+      build: () => {
+        const portable = entryFile('alpha6-build');
+        rmSync(join(portable, '..'), { recursive: true, force: true });
+        return {
+          ours: entryFile('alpha6-build'),
+          pong: { status: 'ok', pid: 999_999, buildId: 'alpha6-build', daemonEntry: portable },
+        };
+      },
+    },
+    {
+      // The #192 guard spares another instance's daemon so its terminals survive. A deleted install
+      // has no terminals it can start and nothing that will come back for it, so the guard must not
+      // leave it squatting on the pipe for ever.
+      name: 'an orphan of a DIFFERENT build too, rather than leaving it alone as a foreign instance',
+      pid: 999_998,
+      why: 'the #192 guard left a deleted install squatting on the pipe',
+      build: () => {
+        const portable = entryFile('alpha6-build');
+        rmSync(join(portable, '..'), { recursive: true, force: true });
+        return {
+          ours: entryFile('beta7-build'),
+          pong: { status: 'ok', pid: 999_998, buildId: 'alpha6-build', daemonEntry: portable },
+        };
+      },
+    },
+    {
+      // #429's shape on the ONE pipe every packaged copy now uses (058 D6): the portable copy's daemon
+      // reports itself packaged, from a self-extraction folder that is gone. The installed copy must
+      // replace it.
+      name: 'a deleted portable copy’s daemon now that portable shares the user namespace (058 D6)',
+      pid: 999_996,
+      why: 'the installed copy left a deleted portable copy’s daemon on the shared pipe',
+      build: () => {
+        const installed = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
+        dirs.push(installed);
+        const oursDir = join(installed, 'resources', 'app', 'packages', 'daemon', 'dist');
+        mkdirSync(oursDir, { recursive: true });
+        const ours = join(oursDir, 'main.js');
+        writeFileSync(ours, '// daemon entry', 'utf8');
+        writeFileSync(join(oursDir, 'BUILD_ID'), 'beta7-build', 'utf8');
+        const extraction = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
+        const portable = join(extraction, 'resources', 'app', 'packages', 'daemon', 'dist', 'main.js');
+        rmSync(extraction, { recursive: true, force: true });
+        return {
+          ours,
+          pong: { status: 'ok', pid: 999_996, buildId: 'beta7-build', daemonEntry: portable, packaged: true },
+        };
+      },
+    },
+  ];
+
+  it.each(orphanCases)('retires $name', async ({ pid, build, why }) => {
+    const pipeName = pipe();
+    const { ours, pong } = build();
+    const server = await fakeDaemon(pipeName, pong);
+    // A kill that worked: the fake stops listening, so the wait-for-the-pipe loop exits at once.
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      server.close();
+      return true;
     });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
 
     const res = await ensureDaemon({
       pipeName,
       daemonEntry: ours,
       pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
+      readyTimeoutMs: 100,
     }).catch((error: unknown) => ({ threw: String(error) }));
 
-    expect(
-      res,
-      'the app adopted a daemon whose code has been deleted from disk: every terminal it starts then ' +
-        'fails to load conpty.node, which went with the folder',
-    ).not.toEqual({ spawned: false });
-    expect(kill, 'the orphaned daemon was left running on our pipe').toHaveBeenCalledWith(999_999);
-  }, 30_000);
-
-  it('retires an orphan of a DIFFERENT build too, rather than leaving it alone as a foreign instance', async () => {
-    // The #192 guard spares another instance's daemon so its terminals survive. A deleted install
-    // has no terminals it can start and nothing that will come back for it, so the guard must not
-    // leave it squatting on the pipe for ever.
-    const pipeName = pipe();
-    const ours = entryFile('beta7-build');
-    const portable = entryFile('alpha6-build');
-    rmSync(join(portable, '..'), { recursive: true, force: true });
-
-    await fakeDaemon(pipeName, {
-      status: 'ok',
-      pid: 999_998,
-      buildId: 'alpha6-build',
-      daemonEntry: portable,
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    const res = await ensureDaemon({
-      pipeName,
-      daemonEntry: ours,
-      pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
-    }).catch(() => undefined);
-
-    expect(res?.foreign).not.toBe(true);
-    expect(kill).toHaveBeenCalledWith(999_998);
-  }, 30_000);
-
-  it('replaces a deleted portable copy’s daemon now that portable shares the user namespace (058 D6)', async () => {
-    // #429's shape on the ONE pipe every packaged copy now uses: the portable copy's daemon reports
-    // itself packaged, from a self-extraction folder that is gone. The installed copy must replace it.
-    const pipeName = pipe();
-    const installed = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
-    dirs.push(installed);
-    const oursDir = join(installed, 'resources', 'app', 'packages', 'daemon', 'dist');
-    mkdirSync(oursDir, { recursive: true });
-    const ours = join(oursDir, 'main.js');
-    writeFileSync(ours, '// daemon entry', 'utf8');
-    writeFileSync(join(oursDir, 'BUILD_ID'), 'beta7-build', 'utf8');
-    const extraction = mkdtempSync(join(tmpdir(), 'throng-deleted-entry-'));
-    const portable = join(extraction, 'resources', 'app', 'packages', 'daemon', 'dist', 'main.js');
-    rmSync(extraction, { recursive: true, force: true });
-
-    await fakeDaemon(pipeName, {
-      status: 'ok',
-      pid: 999_996,
-      buildId: 'beta7-build',
-      daemonEntry: portable,
-      packaged: true,
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
-      () => undefined,
-    );
-
-    expect(kill).toHaveBeenCalledWith(999_996);
+    expect(res, why).not.toEqual({ spawned: false });
+    expect((res as { foreign?: boolean }).foreign).not.toBe(true);
+    expect(kill, 'the orphaned daemon was left running on our pipe').toHaveBeenCalledWith(pid);
   }, 30_000);
 
   it('still reuses a same-build daemon whose entry exists — the ordinary case is untouched', async () => {

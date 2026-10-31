@@ -1,83 +1,45 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test, expect, _electron as electron } from '@playwright/test';
-import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, commitTabRename, shutdownApp, DAEMON_READY_TIMEOUT_MS, panelGrip, splitPanelViaMenu } from './harness.js';
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { commitTabRename, openApp, panelGrip, splitPanelViaMenu, type OpenApp } from './harness.js';
 
-registerTempCleanup();
-import type { ElectronApplication, Page } from '@playwright/test';
+/*
+ * ONE app for the file (test-suite audit): the two tests below each launched their own Electron app and
+ * daemon — through a hand-rolled `startHarness` — to create one project and drag something. Neither seeds
+ * anything before launch. Sharing is safe because only the ACTIVE project's layout renders, so
+ * `.panel-box`, `.split--column` and `.tab-chip` read the workspace the test just made and no other;
+ * the two projects have distinct names and distinct sibling roots, so FR-029's root exclusivity (which
+ * refuses identical, ancestor AND descendant roots) is never engaged.
+ *
+ * No `mode: 'serial'`: `fullyParallel: false` already runs the file in order on one worker, and the two
+ * drags are independent claims — one failing must not skip the other.
+ */
+let shared: OpenApp;
 
-const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
-const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
 
-interface Harness {
-  daemon: ChildProcess;
-  dataDir: string;
-  pipeName: string;
-}
-
-function startDaemon(pipeName: string, dataDir: string): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [daemonEntry], {
-    env: { ...process.env, THRONG_PIPE_NAME: pipeName, THRONG_DATABASE_PATH: join(dataDir, 'throng.db') },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('daemon not ready')), DAEMON_READY_TIMEOUT_MS);
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (c: string) => {
-      if (c.includes('listening')) {
-        clearTimeout(timer);
-        resolve(child);
-      }
-    });
-    child.on('error', (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
-  });
-}
-
-function stopDaemon(daemon: ChildProcess): Promise<void> {
-  return new Promise<void>((resolve) => {
-    daemon.once('exit', () => resolve());
-    daemon.kill();
-    setTimeout(resolve, 3000);
-  });
-}
-
-async function startHarness(): Promise<Harness> {
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-e2e-dock-'));
-  const pipeName = `\\\\.\\pipe\\throng-e2e-dock-${process.pid}-${Date.now()}`;
-  const daemon = await startDaemon(pipeName, dataDir);
-  return { daemon, dataDir, pipeName };
-}
-
-function launchApp(pipeName: string): Promise<ElectronApplication> {
-  const userData = tmpDir('throng-ud-');
-  return electron.launch({
-    args: [mainEntry, `--user-data-dir=${userData}`],
-    env: {
-      ...process.env,
-      THRONG_PIPE_NAME: pipeName,
-      THRONG_CONFIG_ROOT: tmpDir('throng-cfg-'),
-      THRONG_TEST_SHELL_HISTORY: 'off',
-    },
-  });
-}
-
-async function createProjectAndOpen(win: Page): Promise<void> {
+/**
+ * Create a project and wait until it is the ACTIVE one with its workspace drawn. Settling on "listed"
+ * would leave the previous project's panels on screen, which a shared app has.
+ */
+async function createProjectAndOpen(win: Page, name: string, root: string): Promise<void> {
   await win.getByTestId('project-new').click();
-  await win.getByTestId('project-name-input').fill('Docking');
-  await win.getByTestId('project-root-input').fill('C:/code/docking');
+  await win.getByTestId('project-name-input').fill(name);
+  await win.getByTestId('project-root-input').fill(root);
   await win.getByTestId('project-save').click();
+  const active = win.locator('.project-item[data-active="true"]');
+  await expect(active).toHaveCount(1);
+  await expect(active).toContainText(name);
   await expect(win.getByTestId('tab-strip')).toBeVisible();
   await expect(win.locator('.panel-box')).toHaveCount(1);
 }
 
 async function panelIds(win: Page): Promise<string[]> {
+  await expect(win.locator('.panel-box').first()).toBeAttached();
   return win.locator('.panel-box').evaluateAll((els) =>
     els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),
   );
@@ -127,65 +89,46 @@ async function dragPanelToEdge(win: Page, sourceId: string, targetId: string, ed
  */
 
 test('splits a Panel by dragging another onto its edge (no Panel lost)', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    const win = await app.firstWindow();
-    await createProjectAndOpen(win);
+  const win = shared.win;
+  await createProjectAndOpen(win, 'DockingSplit', 'C:/c/dock-split');
 
-    const first = (await panelIds(win))[0];
-    await splitPanelViaMenu(win, first);
-    await expect(win.locator('.panel-box')).toHaveCount(2);
+  const first = (await panelIds(win))[0];
+  await splitPanelViaMenu(win, first);
+  await expect(win.locator('.panel-box')).toHaveCount(2);
 
-    const [a, b] = await panelIds(win);
-    // Drag B onto A's bottom edge → a column split forms; both panels survive.
-    await dragPanelToEdge(win, b, a, 'bottom');
-    await expect(win.locator('.split--column')).toHaveCount(1);
-    await expect(win.locator('.panel-box')).toHaveCount(2);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
+  const [a, b] = await panelIds(win);
+  // Drag B onto A's bottom edge → a column split forms; both panels survive.
+  await dragPanelToEdge(win, b, a, 'bottom');
+  await expect(win.locator('.split--column')).toHaveCount(1);
+  await expect(win.locator('.panel-box')).toHaveCount(2);
 });
 
-
 test('reorders Tabs by dragging', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    const win = await app.firstWindow();
-    await createProjectAndOpen(win);
+  const win = shared.win;
+  await createProjectAndOpen(win, 'DockingTabs', 'C:/c/dock-tabs');
 
-    // Each new Tab opens in rename mode; commit the default title before
-    // reordering (a Tab being renamed isn't draggable).
-    await win.getByTestId('tab-add').click();
-    await commitTabRename(win);
-    await win.getByTestId('tab-add').click();
-    await commitTabRename(win);
-    await expect(win.locator('.tab-chip')).toHaveCount(3);
+  // Each new Tab opens in rename mode; commit the default title before
+  // reordering (a Tab being renamed isn't draggable).
+  await win.getByTestId('tab-add').click();
+  await commitTabRename(win);
+  await win.getByTestId('tab-add').click();
+  await commitTabRename(win);
+  await expect(win.locator('.tab-chip')).toHaveCount(3);
 
-    const before = await win.locator('.tab-chip').allInnerTexts();
-    // Drag the last tab onto the left half of the first → it lands before it.
-    const last = win.locator('.tab-chip').last();
-    const first = win.locator('.tab-chip').first();
-    const lbox = await last.boundingBox();
-    const fbox = await first.boundingBox();
-    if (!lbox || !fbox) throw new Error('tab boxes missing');
-    await win.mouse.move(lbox.x + lbox.width / 2, lbox.y + lbox.height / 2);
-    await win.mouse.down();
-    await win.mouse.move(lbox.x + lbox.width / 2 - 8, lbox.y + lbox.height / 2, { steps: 3 });
-    await win.mouse.move(fbox.x + 4, fbox.y + fbox.height / 2, { steps: 8 });
-    await win.mouse.up();
+  const before = await win.locator('.tab-chip').allInnerTexts();
+  // Drag the last tab onto the left half of the first → it lands before it.
+  const last = win.locator('.tab-chip').last();
+  const first = win.locator('.tab-chip').first();
+  const lbox = await last.boundingBox();
+  const fbox = await first.boundingBox();
+  if (!lbox || !fbox) throw new Error('tab boxes missing');
+  await win.mouse.move(lbox.x + lbox.width / 2, lbox.y + lbox.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(lbox.x + lbox.width / 2 - 8, lbox.y + lbox.height / 2, { steps: 3 });
+  await win.mouse.move(fbox.x + 4, fbox.y + fbox.height / 2, { steps: 8 });
+  await win.mouse.up();
 
-    const after = await win.locator('.tab-chip').allInnerTexts();
-    expect(after).not.toEqual(before);
-    expect(after[0]).toBe(before[before.length - 1]);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
+  const after = await win.locator('.tab-chip').allInnerTexts();
+  expect(after).not.toEqual(before);
+  expect(after[0]).toBe(before[before.length - 1]);
 });

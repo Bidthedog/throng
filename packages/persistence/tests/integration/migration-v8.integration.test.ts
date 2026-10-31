@@ -32,7 +32,7 @@ function seedProject(db: ReturnType<typeof openDatabase>, id: string): void {
 }
 
 describe('migration v8', () => {
-  it('brings the chain up to v8 and creates the fileop_undo table', () => {
+  it('brings the chain up to v8 and creates the fileop_undo table', { tags: ['regression'] }, () => {
     const db = freshDb();
     try {
       // At least v8: the exact latest version is pinned once, in user-version-pin, so a later
@@ -75,7 +75,7 @@ describe('migration v8', () => {
     }
   });
 
-  it('is idempotent — re-running v8 against an already-migrated store is a safe no-op (v3.5.0)', () => {
+  it('is idempotent — re-running v8 against an already-migrated store is a safe no-op (v3.5.0)', { tags: ['regression'] }, () => {
     const db = freshDb();
     try {
       seedProject(db, 'proj-3');

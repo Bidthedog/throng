@@ -1,10 +1,9 @@
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, probeConhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { skipIfElevated } from './admin.js';
 import { processTable } from './helpers/processes.js';
 
@@ -22,17 +21,10 @@ test.beforeEach(() => skipIfElevated());
 //
 // Each test opens a real terminal, confirms its conhost appears under the daemon, ends
 // it via a specific path, then asserts NO conhost survives beyond the pre-terminal
-// baseline. Coverage: every detected flavour (panel-destroy) + project-delete + the
-// exact `terminal.killAll` the app-close "Terminate all" choice issues.
-
-/** The flavour ids the type-selection form offers on THIS machine. */
-async function detectedFlavours(win: Page, panelId: string): Promise<string[]> {
-  await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  return win
-    .getByTestId('terminal-flavour')
-    .locator('option')
-    .evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value).filter(Boolean));
-}
+// baseline. Coverage: panel-destroy (cmd; every detected flavour is asked of the daemon in
+// terminal-conhost-reap.integration.test.ts) + project-delete + Unload with End Terminals.
+// The app-close "Terminate all" choice is covered by the last test only for what the app
+// itself starts (the Resource Monitor's collector).
 
 /**
  * Confirm a Terminal Panel with `flavour` and wait until its ConPTY host has actually
@@ -69,33 +61,6 @@ async function openTerminal(
   await win.waitForTimeout(1200);
 }
 
-/**
- * The pids of `image` processes whose parent is `parentPid` — for a non-elevated daemon, the shells
- * its ConPTY sessions launched. `null` when the OS query itself failed, so a broken probe can never
- * read as "the same shells" or as "no shells".
- */
-function shellChildren(parentPid: number, image: string): number[] | null {
-  try {
-    const out = execFileSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '${image}' -and $_.ParentProcessId -eq ${parentPid} } | ForEach-Object { $_.ProcessId }`,
-      ],
-      { encoding: 'utf8', timeout: 8000, windowsHide: true },
-    );
-    return out
-      .split(/\r?\n/)
-      .map((l) => Number(l.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0)
-      .sort((a, b) => a - b);
-  } catch {
-    return null;
-  }
-}
-
 /** Click through however many confirmation dialogs the destroy flow shows. */
 async function acceptConfirmations(win: Page): Promise<void> {
   const dialog = win.getByTestId('confirm-dialog');
@@ -112,7 +77,15 @@ async function acceptConfirmations(win: Page): Promise<void> {
   }
 }
 
-test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
+/*
+ * MOVED DOWN (the per-flavour loop): 'panel-destroy reaps the conhost for EVERY detected terminal flavour' opened and
+ * destroyed one real terminal per installed shell through the whole app. What differs between flavours is the
+ * daemon's end path, not the renderer, so every flavour is now asked directly in
+ * packages/daemon/tests/integration/terminal-conhost-reap.integration.test.ts (`terminal.kill` per detected shell,
+ * the console host asserted gone before shutdown's sweep). What only the app can show is that destroying a panel SENDS
+ * `terminal.kill` at all, so the cmd case stays here, @core.
+ */
+test('panel-destroy reaps the terminal’s conhost', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-destroy-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -120,36 +93,16 @@ test('panel-destroy reaps the conhost for EVERY detected terminal flavour', { ta
       const dpid = await daemonPid(pipeName);
       const baseline = conhostChildren(dpid);
 
-      const flavours = await detectedFlavours(win, await firstPanelId(win));
-      expect(flavours.length).toBeGreaterThan(0);
+      const pid = await firstPanelId(win);
+      // A second Panel so destroying the terminal Panel is allowed (keep ≥ 1).
+      await splitPanelViaMenu(win, pid);
+      await openTerminal(win, pid, 'cmd', dpid);
 
-      /*
-       * The budget has to scale with the work, because this test's cost is not fixed.
-       *
-       * It opens and destroys a real terminal PER INSTALLED FLAVOUR, and each round spawns several
-       * `powershell.exe` probes to ask the OS which conhosts the daemon owns. On a machine with two
-       * shells that fits inside Playwright's default 30s; on one with five, or when PowerShell is
-       * slow because the machine is busy, it cannot — and the test then failed as a flat TIMEOUT,
-       * with no assertion having failed and nothing to point at.
-       *
-       * That is a measurement problem wearing a defect's clothes: it reports "terminals leak" on a
-       * loaded machine and says nothing at all about terminals. Sizing the budget by the actual
-       * flavour count keeps the assertion honest on any machine.
-       */
-      test.setTimeout(20_000 + flavours.length * 25_000);
-
-      for (const flavour of flavours) {
-        const pid = await firstPanelId(win);
-        // A second Panel so destroying the terminal Panel is allowed (keep ≥ 1).
-        await splitPanelViaMenu(win, pid);
-        await openTerminal(win, pid, flavour, dpid);
-
-        // Destroy the Panel → daemon `terminal.kill` → the conhost must be reaped.
-        await win.getByTestId(`panel-close-${pid}`).click();
-        await expect(win.getByTestId('confirm-dialog')).toBeVisible();
-        await acceptConfirmations(win);
-        await expectNoOrphanConhosts(dpid, baseline);
-      }
+      // Destroy the Panel → daemon `terminal.kill` → the conhost must be reaped.
+      await win.getByTestId(`panel-close-${pid}`).click();
+      await expect(win.getByTestId('confirm-dialog')).toBeVisible();
+      await acceptConfirmations(win);
+      await expectNoOrphanConhosts(dpid, baseline);
     });
   } finally {
     cleanupTemp(root);
@@ -176,7 +129,7 @@ test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@te
   }
 });
 
-test('Unload Project and End Terminals reaps a busy terminal, and Unload Project keeps an idle shell alive, through the row menu', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
+test('Unload Project and End Terminals reaps a busy terminal with no dialog, paints the row italic, and reloads with a new shell', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-orphan-unload-'));
   try {
     await runApp(async (_app, win, { pipeName }) => {
@@ -234,108 +187,52 @@ test('Unload Project and End Terminals reaps a busy terminal, and Unload Project
       expect(normal).toBe('normal');
       await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
       await expect.poll(() => conhostChildren(dpid).length, { timeout: 20000 }).toBeGreaterThan(baseline.length);
-      // The real condition for "settled, and idle" (the daemon's OWN busy check) rather than a fixed
-      // wait for attribution to have happened.
-      await expect
-        .poll(
-          async () => {
-            const result = (await daemonRpc(pipeName, 'terminal.list', { includeBusy: true })) as {
-              sessions: Array<{ panelId: string; busy: boolean }>;
-            } | null;
-            return result?.sessions.find((s) => s.panelId === pid)?.busy ?? null;
-          },
-          { timeout: 15000 },
-        )
-        .toBe(false);
 
-      // --- Unload Project (default keepRunning), with only an IDLE shell (FR-086, Principle III) ---
-      // Keep Terminals Running keeps EVERY terminal, idle shells included: the same shell process,
-      // and the same ConPTY host, are still there after the unload and after the project is
-      // selected again — the panel reattaches rather than spawning a new shell.
-      const shellsBefore = shellChildren(dpid, 'cmd.exe');
-      expect(shellsBefore, 'the shell probe failed').not.toBeNull();
-      expect(shellsBefore, 'exactly one cmd.exe shell under the daemon').toHaveLength(1);
-      const hostsBefore = probeConhostChildren(dpid);
-      expect(hostsBefore.ok, 'the conhost probe failed').toBe(true);
-      const hostsKept = hostsBefore.pids.filter((p) => !baseline.includes(p)).sort((a, b) => a - b);
-      expect(hostsKept).toHaveLength(1);
-
-      await row.click({ button: 'right' });
-      await win.getByTestId('menu-item-Unload Project').click();
-      await expect(row).toHaveAttribute('data-loaded', 'false');
-      await expect(win.getByTestId('confirm-dialog')).toHaveCount(0);
-
-      await row.locator('[data-testid^="project-switch-"]').click();
-      await expect(row).toHaveAttribute('data-loaded', 'true');
-      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
-      // The reattached session answers the daemon's own list as the same idle panel.
-      await expect
-        .poll(
-          async () => {
-            const result = (await daemonRpc(pipeName, 'terminal.list', { includeBusy: true })) as {
-              sessions: Array<{ panelId: string; busy: boolean }>;
-            } | null;
-            return result?.sessions.find((s) => s.panelId === pid)?.busy ?? null;
-          },
-          { timeout: 15000 },
-        )
-        .toBe(false);
-      expect(shellChildren(dpid, 'cmd.exe'), 'the idle shell survived Unload with the same pid').toEqual(shellsBefore);
-      const hostsAfter = probeConhostChildren(dpid);
-      expect(hostsAfter.ok, 'the conhost probe failed').toBe(true);
-      expect(hostsAfter.pids.filter((p) => !baseline.includes(p)).sort((a, b) => a - b)).toEqual(hostsKept);
+      /*
+       * REMOVED (pyramid pass): the second half of this test — 'Unload Project keeps an idle shell alive, with
+       * the same shell pid and the same console host' (046 FR-086, Principle III). It re-drove the unload through
+       * the row menu to assert two lower facts: Keep sends the terminal RPC nothing
+       * (packages/ui/tests/component/unload-keep-terminals.test.ts, 'T124 repro') and a reattach finds the SAME
+       * session (packages/daemon/tests/unit/terminal-reattach-identity.test.ts). What stays is what only the app can show — End reaps a BUSY shell with no dialog, and the row paints italic.
+       */
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('app-close “Terminate all” reaps every terminal’s conhost', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-orphan-closeall-'));
+/*
+ * NARROWED: this was 'app-close “Terminate all” reaps every terminal’s conhost' — two live terminals, the exact
+ * `terminal.killAll` the close issues, and the daemon's conhosts checked after. The terminal side of that is the
+ * same end path 'panel-destroy' and the project-delete test above already drive (and `terminal.killAll` is pinned in
+ * packages/daemon/tests/integration/terminal-reattach.integration.test.ts and command-memory-attached). What only a
+ * real app can show is below: the Resource Monitor's collector, a process throng itself starts, is gone once the app
+ * is (055, Principle III).
+ */
+test('closing the app leaves no resource-collector process behind', { tag: ['@core', '@terminal', '@reserve:process'] }, async () => {
   // 055 (Principle III): the Resource Monitor's collector is a process throng starts, so it is one this
   // test must see gone once the app is — found by its entry point and parentage, never by image name,
   // since other throng instances (and the user's own) run collectors too.
   let collectors: number[] = [];
-  try {
-    await runApp(async (app, win, { pipeName }) => {
-      const mainPid = app.process().pid;
-      await expect
-        .poll(
-          () => {
-            collectors = processTable()
-              .filter((p) => p.parent === mainPid && p.cmd.includes('resource-collector-entry'))
-              .map((p) => p.pid);
-            return collectors.length;
-          },
-          { timeout: 30_000, message: 'the app never started a resource collector to check for' },
-        )
-        .toBeGreaterThan(0);
-      await createProject(win, 'CloseAll', root);
-      const dpid = await daemonPid(pipeName);
-      const baseline = conhostChildren(dpid);
-
-      // Two live terminals in two Panels.
-      const pidA = await firstPanelId(win);
-      await splitPanelViaMenu(win, pidA);
-      await openTerminal(win, pidA, 'cmd', dpid);
-      const pidB = (await win.locator('.panel-box').evaluateAll((els) =>
-        els.map((el) => (el as HTMLElement).dataset.panelId ?? ''),
-      )).find((id) => id !== pidA)!;
-      await openTerminal(win, pidB, 'cmd', dpid);
-      expect(conhostChildren(dpid).length).toBeGreaterThanOrEqual(baseline.length + 2);
-
-      // The exact call the app-close "Terminate all" choice issues (main.ts).
-      await daemonRpc(pipeName, 'terminal.killAll', {});
-      await expectNoOrphanConhosts(dpid, baseline);
-    });
-    // The app has closed: nothing it started may be left running.
+  await runApp(async (app) => {
+    const mainPid = app.process().pid;
     await expect
-      .poll(() => processTable().filter((p) => collectors.includes(p.pid) && p.cmd.includes('resource-collector-entry')).length, {
-        timeout: 20_000,
-        message: 'a resource-collector-entry process survived the app closing',
-      })
-      .toBe(0);
-  } finally {
-    cleanupTemp(root);
-  }
+      .poll(
+        () => {
+          collectors = processTable()
+            .filter((p) => p.parent === mainPid && p.cmd.includes('resource-collector-entry'))
+            .map((p) => p.pid);
+          return collectors.length;
+        },
+        { timeout: 30_000, message: 'the app never started a resource collector to check for' },
+      )
+      .toBeGreaterThan(0);
+  });
+  // The app has closed: nothing it started may be left running.
+  await expect
+    .poll(() => processTable().filter((p) => collectors.includes(p.pid) && p.cmd.includes('resource-collector-entry')).length, {
+      timeout: 20_000,
+      message: 'a resource-collector-entry process survived the app closing',
+    })
+    .toBe(0);
 });

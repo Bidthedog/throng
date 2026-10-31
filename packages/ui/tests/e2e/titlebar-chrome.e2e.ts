@@ -3,38 +3,57 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import {
-  openApp,
-  runApp as runOwnApp,
-  cleanupTemp,
-  type AppOptions,
-  type OpenApp,
-} from './harness.js';
+import { openApp, cleanupTemp, type AppOptions, type OpenApp } from './harness.js';
 
 /*
- * ONE app for this file, not one per test.
+ * ONE app for this file, not one per test — ALL FOUR tests (test-suite audit).
  *
  * Each test used to launch its own Electron app, daemon and window — roughly two seconds apiece, and
- * 604 such launches across the suite — to run assertions that never needed a pristine app. Only a
- * test that seeds state BEFORE launch genuinely does, and those keep their own app via `runOwnApp`.
+ * 604 such launches across the suite — to run assertions that never needed a pristine app. Two kept
+ * their own app for a reason that does not survive a look:
+ *
+ *  - the cog-dropdown test seeded a THEME before launch. That theme is simply in force for the whole
+ *    file now: the other tests assert on layout, window state and window ownership, none of which
+ *    reads a colour, so sharing a seeded config root costs them nothing.
+ *  - the preferences-window test needs an app in which NOTHING has yet opened the preferences window
+ *    (the cog re-uses an existing one, no `window` event is emitted, and the wait would hang). It is
+ *    LAST in the file for that reason, and no earlier test opens it — the cog-dropdown test opens only
+ *    the dropdown, and dismisses it.
  *
  * The shims below exist so the test bodies below are unchanged:
  *   runApp        runs the body against the shared window. It refuses options rather than ignoring
  *                 them: a dropped config root does not fail, it passes for the wrong reason.
- *   createProject appends a counter, because a shared app accumulates projects and duplicate names
- *                 make `.project-item` ambiguous.
  *
- * Serial mode is required — shared window, shared database — and it means a failure skips the rest
- * rather than running them against whatever state the failure left behind.
+ * Serial mode is required — shared window, shared database, order-dependent last test — and it means a
+ * failure skips the rest rather than running them against whatever state the failure left behind.
  */
 test.describe.configure({ mode: 'serial' });
 
+// A theme file carrying `surface`, `surfaceActive` and `accent`, in force for the whole file.
+const cfgRoots: string[] = [];
+function seedThemeSurfaces(surface: string, surfaceActive: string, accent?: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-chrome-'));
+  cfgRoots.push(dir);
+  mkdirSync(join(dir, 'themes'), { recursive: true });
+  const colours: Record<string, string> = { surface, surfaceActive };
+  if (accent !== undefined) colours.accent = accent;
+  writeFileSync(
+    join(dir, 'themes', 'throng.json'),
+    JSON.stringify({ name: 'throng', colours }, null, 2),
+    'utf8',
+  );
+  return dir;
+}
+
 let shared: OpenApp;
 test.beforeAll(async () => {
-  shared = await openApp();
+  shared = await openApp({
+    env: { THRONG_CONFIG_ROOT: seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00') },
+  });
 });
 test.afterAll(async () => {
   await shared?.close();
+  for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
 
 const runApp = (
@@ -107,34 +126,14 @@ test('title bar spans the top and hosts the cog + window controls', { tag: ['@ex
 // The cog dropdown must re-theme with the active theme (FR-030). Its surfaces are
 // styled from `--surface` / `--surface-active`, which must resolve to the theme's
 // tokens rather than silently falling back to a hardcoded literal.
-const cfgRoots: string[] = [];
-function seedThemeSurfaces(surface: string, surfaceActive: string, accent?: string): string {
-  const dir = mkdtempSync(join(tmpdir(), 'throng-cfg-chrome-'));
-  cfgRoots.push(dir);
-  mkdirSync(join(dir, 'themes'), { recursive: true });
-  const colours: Record<string, string> = { surface, surfaceActive };
-  if (accent !== undefined) colours.accent = accent;
-  writeFileSync(
-    join(dir, 'themes', 'throng.json'),
-    JSON.stringify({ name: 'throng', colours }, null, 2),
-    'utf8',
-  );
-  return dir;
-}
-test.afterAll(() => {
-  for (const dir of cfgRoots.splice(0))
-    cleanupTemp(dir);
-});
-
 test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  // A theme file carrying `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded the menu card
-  // onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared context menu
-  // — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu card
-  // follows the theme: the user's theme colours reach the menu, not a hardcoded default.
-  const cfgRoot = seedThemeSurfaces('#ff00aa', '#00cc55', '#ffcc00');
+  // The theme seeded in `beforeAll` carries `surface`, `surfaceActive` and `accent`. 021 (FR-023) folded
+  // the menu card onto `surfaceActive` (the old `menuSurface` is gone), so the cog dropdown — a shared
+  // context menu — paints on the theme's OWN `surfaceActive`. This is the end-to-end proof that the menu
+  // card follows the theme: the user's theme colours reach the menu, not a hardcoded default.
   const SURFACE_ACTIVE = 'rgb(0, 204, 85)';
   const ACCENT = 'rgb(255, 204, 0)';
-  await runOwnApp(
+  await runApp(
     async (_app, win) => {
       await win.getByTestId('title-bar-cog').click();
       const menu = win.getByTestId('cog-menu');
@@ -156,8 +155,11 @@ test('the cog dropdown menu follows the active theme (018/021, FR-008/FR-023)', 
       await expect
         .poll(() => item.evaluate((el) => getComputedStyle(el).backgroundColor))
         .toBe(ACCENT);
+
+      // Dismiss the dropdown, so the shared window starts the next test with no menu over it.
+      await win.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -190,12 +192,11 @@ test('window controls maximise/restore (button + double-click) and minimise', { 
 
 test('cog opens the single shared preferences window on the matching tab; non-modal + movable', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   /*
-   * Its OWN app. The subject here is the cog OPENING that window, and there is only one of them per
-   * app — so if any earlier test in this file has already opened it, the cog re-uses it, no `window`
-   * event is emitted, and the wait below hangs. Sharing an app is right for this file generally and
-   * wrong for the one test whose subject is the window's creation.
+   * LAST in the file, on the shared app. The subject here is the cog OPENING that window, and there is
+   * only one of them per app — so if any earlier test had already opened it, the cog would re-use it,
+   * no `window` event would be emitted, and the wait below would hang. None before it does.
    */
-  await runOwnApp(async (app, win) => {
+  await runApp(async (app, win) => {
     // Settings → the prefs window opens on the Settings tab.
     await win.getByTestId('title-bar-cog').click();
     const [prefs] = await Promise.all([

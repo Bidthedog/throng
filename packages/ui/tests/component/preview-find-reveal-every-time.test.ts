@@ -80,22 +80,8 @@ async function mountAllCollapsed(): Promise<ReturnType<typeof userEvent.setup>> 
 }
 
 describe('Next and F3 across four collapsed sections (FR-004)', () => {
-  it('opens each section as its match becomes current, with F3', async () => {
-    const user = await mountAllCollapsed();
-    await waitFor(() => expect(text('alpha needle')).toBeVisible());
-
-    await user.keyboard('{F3}');
-    await waitFor(() => expect(screen.getByTestId('find-count')).toHaveTextContent('2 of 4'));
-    await waitFor(() => expect(text('beta needle')).toBeVisible());
-
-    await user.keyboard('{F3}');
-    await waitFor(() => expect(screen.getByTestId('find-count')).toHaveTextContent('3 of 4'));
-    await waitFor(() => expect(text('gamma needle')).toBeVisible());
-
-    await user.keyboard('{F3}');
-    await waitFor(() => expect(screen.getByTestId('find-count')).toHaveTextContent('4 of 4'));
-    await waitFor(() => expect(text('delta needle')).toBeVisible());
-  });
+  // DELETED: the plain forward F3 walk — one step across collapsed sections is preview-find-fold-reveal.test.ts
+  // ("matches in two collapsed sections"); the cases below keep what only this longer document adds.
 
   it('opens a section the reader collapsed again after find had opened it, when Next returns to it', async () => {
     const user = await mountAllCollapsed();

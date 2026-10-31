@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Project, ProjectCategory } from '@throng/core';
 import {
   openDatabase,
@@ -47,12 +47,26 @@ let projects: ProjectRepository;
 const OWNER = 'alice';
 const DEFAULT_NAME = 'In Progress';
 
+// Migrate once; every test mutates, so each gets its own COPY of the migrated file (writing-tests §5).
+let templateDir: string;
+let templatePath: string;
+beforeAll(() => {
+  templateDir = mkdtempSync(join(tmpdir(), 'throng-cats-template-'));
+  templatePath = join(templateDir, 'throng.db');
+  const template = openDatabase({ databasePath: templatePath });
+  runMigrations(template);
+  template.close();
+});
+afterAll(() => {
+  rmSync(templateDir, { recursive: true, force: true });
+});
+
 beforeEach(() => {
   const dir = mkdtempSync(join(tmpdir(), 'throng-cats-'));
   tempDirs.push(dir);
   dbPath = join(dir, 'throng.db');
+  copyFileSync(templatePath, dbPath);
   db = openDatabase({ databasePath: dbPath });
-  runMigrations(db);
   categories = new ProjectCategoryRepository(db);
   projects = new ProjectRepository(db);
 });

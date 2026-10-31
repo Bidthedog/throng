@@ -44,7 +44,7 @@
  * Delete `ConfirmProvider` from `mount()` and `useConfirm` throws, so every test in the file fails
  * inside the render — which matters because two of them assert an ABSENCE.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -146,34 +146,9 @@ describe('an injected subgroup renders as a subsection (FR-036a)', () => {
     expect(within(subsection('Beta')).getByText('Beta')).toBeInTheDocument();
   });
 
-  it('puts each token in its own subsection, and the loose one in neither', () => {
-    mount();
-    expect(subsection('Beta')).toContainElement(screen.getByTestId('theme-row-synthetic.beta'));
-    expect(subsection('Alpha')).toContainElement(screen.getByTestId('theme-row-synthetic.alpha'));
-    const loose = screen.getByTestId('theme-row-synthetic.loose');
-    expect(subsection('Beta')).not.toContainElement(loose);
-    expect(subsection('Alpha')).not.toContainElement(loose);
-  });
-
-  it('renders the loose token ABOVE every subsection (FR-036b)', () => {
-    mount();
-    const loose = screen.getByTestId('theme-row-synthetic.loose');
-    for (const name of ['Beta', 'Alpha']) {
-      expect(
-        loose.compareDocumentPosition(subsection(name)) & Node.DOCUMENT_POSITION_FOLLOWING,
-        `the loose row must precede ${name}`,
-      ).toBeTruthy();
-    }
-  });
-
-  it('orders the subsections by DECLARATION, not alphabetically (FR-036a)', () => {
-    mount();
-    expect(
-      subsection('Beta').compareDocumentPosition(subsection('Alpha')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      'Beta was declared first, so Beta renders first',
-    ).toBeTruthy();
-  });
+  // MOVED DOWN: which subsection a token lands in, the loose token rendering above every subsection
+  // (FR-036b) and declaration order (FR-036a) are the shared grouper's rules, asserted over
+  // `groupDescriptors` in unit/group-descriptors.test.ts. The test above keeps the wiring.
 
   it('is a labelled group to assistive technology, not an anonymous div', () => {
     // The same claim the other two tabs make. The rendering rules bind all three, and one shared
@@ -200,41 +175,9 @@ describe('the shipped theme tokens are unchanged by this feature (US3 scenario 9
     expect(held.real.length, 'the shipped registry must have been captured').toBeGreaterThan(0);
   });
 
-  it('leaves every shipped token in its own group section and in no subsection', () => {
-    mount();
-    const subsections = [...document.querySelectorAll('[data-testid^="themes-subgroup-"]')];
-    for (const d of held.real) {
-      // `colours.iconColour` is rendered beside the icon-pack selector, not in the Colours group —
-      // see the exclusion test below.
-      if (d.control === 'icon' || d.key === 'colours.iconColour') continue;
-      const row = screen.getByTestId(`theme-row-${d.key}`);
-      expect(screen.getByTestId(`settings-group-${d.group}`), d.key).toContainElement(row);
-      for (const sub of subsections) expect(sub.contains(row), d.key).toBe(false);
-    }
-  });
-
-  it('renders NO subsection once the synthetic group is filtered out', () => {
-    /*
-     * The nearest this file can get to "the real registry, rendered". A query that matches a
-     * shipped token and none of the synthetic ones leaves the tab showing exactly what it showed
-     * before this feature — and it must show no subsection at all, because the shipped registry
-     * declares none.
-     */
-    const real = held.real.find((d) => d.control !== 'icon') as FieldDescriptor;
-    mount();
-    const box = screen.getByTestId('themes-search') as HTMLInputElement;
-    // Real timers here: `ThemesTab` takes no `searchDebounceMs` prop, so its 150 ms debounce is
-    // waited out rather than advanced — the same choice `preferences-themes-tab.test.ts` makes.
-    box.focus();
-    return userEvent
-      .setup()
-      .type(box, real.key)
-      .then(async () => {
-        await waitFor(() => expect(screen.queryByTestId('theme-row-synthetic.beta')).toBeNull());
-        expect(screen.getByTestId(`theme-row-${real.key}`)).toBeInTheDocument();
-        expect(document.querySelectorAll('[data-testid^="themes-subgroup-"]')).toHaveLength(0);
-      });
-  });
+  // MOVED DOWN: "no shipped theme token declares a subgroup" is asserted over THEME_METADATA in
+  // core/tests/unit/metadata-subgroup.test.ts; with none declared the tab can render no subsection
+  // for them (the search-filtered variant made the same claim through a 150 ms debounce).
 
   it('still keeps colours.iconColour out of the generic groups (FR-027)', () => {
     /*

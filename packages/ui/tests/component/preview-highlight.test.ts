@@ -151,7 +151,8 @@ describe('what stays plain (FR-086, FR-008a)', () => {
     expect(loadLanguage).not.toHaveBeenCalled();
   }, COLD);
 
-  it('the budget is per DOCUMENT: blocks each under it but together over it leave the rest plain (adversarial review M2)', async () => {
+  // Tier: regression — a budget assertion that highlights ~100,000 characters of code, 3 s of the file's cost.
+  it('the budget is per DOCUMENT: blocks each under it but together over it leave the rest plain (adversarial review M2)', { tags: ['regression'], timeout: 60_000 }, async () => {
     // Three blocks of ~40% of the budget each: the first two fit (80%), the third would take it to 120%.
     const line = 'const a = 1;\n';
     const code = line.repeat(Math.floor((HIGHLIGHT_BUDGET_CHARS * 0.4) / line.length));
@@ -168,7 +169,7 @@ describe('what stays plain (FR-086, FR-008a)', () => {
     const blocks = [...host.querySelectorAll('code')];
     expect(blocks.map((b) => b.textContent)).toEqual([code, code, code]);
     expect(blocks.map((b) => b.querySelectorAll('span').length > 0)).toEqual([true, true, false]);
-  }, 60_000);
+  });
 });
 
 describe('the cost of a highlight (fix round 1, items 4 and 10)', () => {

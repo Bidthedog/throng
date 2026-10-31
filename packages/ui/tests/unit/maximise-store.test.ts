@@ -7,6 +7,8 @@
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_KEYBINDINGS } from '@throng/core';
+import { panelHeaderMenu, type PanelHeaderMenuArgs } from '../../src/renderer/workspace/panel-header-menu.js';
 import {
   __resetMaximise,
   ensurePanelVisible,
@@ -181,6 +183,28 @@ describe('maximise store (054 FR-070 – FR-076)', () => {
     expect(renderToStaticMarkup(createElement(Probe))).toBe('<span>false</span>');
     maximiseSection('t1', 'p1', 'd0', render);
     expect(renderToStaticMarkup(createElement(Probe))).toBe('<span>true</span>');
+  });
+
+  // Moved down from `component/maximise-panel.test.ts`, whose `mount()` it never used: the claim is the
+  // store's gate on the title menu's rows (FR-074), which `panelHeaderMenu()` reads without any DOM.
+  it('draws Split, Send to Tab, Sync to and Destroy disabled in the title menu until restored (FR-074)', () => {
+    const menu = (): ReturnType<typeof panelHeaderMenu> =>
+      panelHeaderMenu({
+        panel: { type: 'panel', id: 'p1', originProjectId: 'proj-max', title: 'p1' },
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [{ id: 't2', title: 'Two' }],
+        editor: null,
+        detach: { subWorkspaces: [], detachToNew: () => undefined, syncToExisting: () => undefined },
+        actions: {} as PanelHeaderMenuArgs['actions'],
+      } as PanelHeaderMenuArgs);
+    const rows = ['Split', 'Send to Tab', 'Sync to', 'Destroy Panel'];
+    // The mounted tab group registers this; here the store is asked which tab holds the panel directly.
+    registerPanelTabResolver((panelId) => (panelId === 'p1' ? 't1' : null));
+    maximisePanel('t1', 'p1');
+    for (const label of rows) expect(menu().find((i) => i.label === label)?.disabled, label).toBe(true);
+    restoreAll('t1');
+    for (const label of rows) expect(menu().find((i) => i.label === label)?.disabled, label).toBeFalsy();
   });
 
   it('useTabMaximise reads the tab stack through React', () => {

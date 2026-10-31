@@ -16,10 +16,13 @@
  * component is handed `overridden`, `changed`, `clearable` and three optional handlers, and an
  * omitted handler IS the decline.
  *
- * WHAT STAYED AN E2E: what each action actually does to the file — Reset returning a token to its
+ * WHAT THIS CANNOT SEE: what each action actually does to the file — Reset returning a token to its
  * SHIPPED value versus Revert returning it to the value the window OPENED with. Those differ only in
  * which baseline they read, and the baselines live in the config store and the window's own opening
  * snapshot. A component handed an `onReset` callback cannot tell you which of the two it is wired to.
+ * That stayed an E2E until the test-suite audit deleted `preferences-theme-reset.e2e.ts`; the
+ * theme-token state machine in `component/preferences-app.test.ts` is now the only proof of it, and
+ * says what it still cannot tell apart.
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

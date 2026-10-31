@@ -77,52 +77,33 @@ async function expectActive(win: Page, pid: string): Promise<void> {
  * panel it names is the one that renders as active. A second press would prove nothing the first
  * did not.
  */
-test('the directional chord reaches the mover and the new panel renders active (FR-015)', { tag: ['@extended', '@window'] }, async () => {
+test('the directional and both cycle chords reach the mover and the new panel renders active (FR-015, SC-008a)', { tag: ['@extended', '@window'] }, async () => {
   await runApp(async (_app, win) => {
     await createProject(win, 'MoveFocus', 'C:/c/mf');
     await addPanels(win, 2); // a row of three: p1 | p2 | p3
     await expect(win.locator('.panel-box')).toHaveCount(3);
-    const [p1, p2] = await panelIds(win);
+    const [p1, p2, p3] = await panelIds(win);
 
     await win.getByTestId(`panel-${p1}`).click();
     await expectActive(win, p1);
 
     await win.keyboard.press(shippedPress('focus.right'));
     await expectActive(win, p2);
-  });
-});
 
-/**
- * SC-008a — the cycle chord reaches the ring, and the move is RENDERED.
- *
- * ── WHAT LEFT (035 T039) ──
- *
- * This pressed forward three times to prove the wrap, then backward twice to prove the reverse: five
- * keypresses for a ring whose behaviour is `focus-move.test.ts`'s ("wraps forward and backward
- * through the ring", and "forward then the same count backward returns to the start").
- *
- * Both chords are kept because they are two different bindings — `Control+Backquote` and
- * `Control+Shift+Backquote`, the second of which produces a different key entirely — and a binding
- * that is not delivered is exactly what a unit test cannot see. The WRAP is not re-proved here.
- */
-test('both cycle chords reach the ring and the new panel renders active (SC-008a)', { tag: ['@extended', '@window'] }, async () => {
-  await runApp(async (_app, win) => {
-    await createProject(win, 'CycleFocus', 'C:/c/cf');
-    await addPanels(win, 2); // p1 | p2 | p3
-    const [p1, p2] = await panelIds(win);
-
-    await win.getByTestId(`panel-${p1}`).click();
-    await expectActive(win, p1);
-
+    // SC-008a - the cycle chords. Both are kept because they are two different bindings -
+    // `Control+Backquote` and `Control+Shift+Backquote`, the second of which produces a different key
+    // entirely - and a binding that is not delivered is what a unit test cannot see. Forward from p2 to
+    // p3, then the reverse chord back to p2; the WRAP is not re-proved here.
     await win.keyboard.press('Control+Backquote');
-    await expectActive(win, p2);
-
-    // The reverse binding is a DIFFERENT chord, not the same one with a flag — hence a witness of
-    // its own. That it lands back on p1 is the mover's business, asserted in core.
+    await expectActive(win, p3);
     await win.keyboard.press('Control+Shift+Backquote');
-    await expectActive(win, p1);
+    await expectActive(win, p2);
   });
 });
+
+// MERGED into the directional test above: "both cycle chords reach the ring and the new panel renders active
+// (SC-008a)". The cycle chords are two more bindings the unit tests cannot see delivered; the wrap itself is
+// core's focus-move.test.ts.
 
 test('move-focus works from a focused terminal and editor, and input routing follows (FR-003)', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mf-io-'));

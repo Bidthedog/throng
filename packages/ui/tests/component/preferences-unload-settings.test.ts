@@ -11,7 +11,7 @@
  * `useAppSettings`/`useOnEntry` read a context with a real DEFAULT, so no config bridge is needed to
  * render the shipped document.
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
@@ -33,57 +33,21 @@ function mount(): void {
   );
 }
 
-const rowFor = (key: string): HTMLElement | null => screen.queryByTestId(`setting-${key}`);
 const controlFor = (key: string): HTMLElement | null => screen.queryByTestId(`control-${key}`);
 
 afterEach(() => {
   Reflect.deleteProperty(window, 'throng');
 });
 
-describe('the withdrawn unload confirmation level has no control (FR-111)', () => {
-  it('draws no confirmations.unloadProject row or control', () => {
-    mount();
-
-    expect(screen.getByTestId('settings-group-Confirmations')).toBeInTheDocument();
-    expect(rowFor('confirmations.unloadProject'), 'the withdrawn setting still has a row').toBeNull();
-    expect(controlFor('confirmations.unloadProject'), 'the withdrawn setting still has a control').toBeNull();
-  });
-
-  it('no Confirmations row is labelled for unloading with running terminals', () => {
-    mount();
-
-    const group = screen.getByTestId('settings-group-Confirmations');
-    expect(within(group).queryByText('Unload a project with running terminals')).toBeNull();
-  });
-});
-
-describe('projects.unloadTerminalAction is unchanged (FR-034a, FR-081)', () => {
-  it('sits in the Confirmations group, offering Keep terminals running / End terminals', () => {
-    mount();
-
-    const group = screen.getByTestId('settings-group-Confirmations');
-    const row = within(group).getByTestId('setting-projects.unloadTerminalAction');
-    expect(within(row).getByText('Unload project: default terminal action')).toBeInTheDocument();
-
-    const control = controlFor('projects.unloadTerminalAction') as HTMLSelectElement;
-    const labels = [...control.querySelectorAll('option')].map((o) => o.textContent?.trim());
-    expect(labels).toEqual(['Keep terminals running', 'End terminals']);
-  });
-
-  it('defaults to keepRunning, matching app-settings.ts', () => {
-    mount();
-
-    expect((controlFor('projects.unloadTerminalAction') as HTMLSelectElement).value).toBe('keepRunning');
-  });
-
-  it('its description mentions no dialog, and no idle shells being closed (FR-086, FR-111)', () => {
-    mount();
-
-    const row = rowFor('projects.unloadTerminalAction')!;
-    expect(row.textContent ?? '').not.toMatch(/dialog/i);
-    expect(row.textContent ?? '').not.toMatch(/clos\w*\s+idle/i);
-  });
-
+/*
+ * The five read-only cases that lived here (no unloadProject row/control, no Confirmations row for
+ * it, the select's label/options/group, the keepRunning default, the description wording) were
+ * deleted in the audit: they re-read registry data, which is proved without a DOM by
+ * `packages/core/tests/unit/settings-metadata.test.ts` ("the Unload settings in the registry after
+ * FR-111") and `app-settings-unload.test.ts` ("defaults to keepRunning"). What only a mount can show
+ * is that the control WRITES, which is the one case kept.
+ */
+describe('projects.unloadTerminalAction in the editor (FR-034a, FR-081)', () => {
   it('changing it writes projects.unloadTerminalAction, and nothing else', async () => {
     const writes: unknown[] = [];
     Reflect.set(window, 'throng', {

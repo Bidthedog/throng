@@ -20,7 +20,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../src/main/config-store.js';
 
 const tempDirs: string[] = [];
@@ -38,81 +38,78 @@ function rootWithSettingsAsDirectory(): string {
 }
 
 describe('FR-009 — a definite outcome once the retries are spent', () => {
-  it('reports failure rather than claiming success', async () => {
-    const store = new FileConfigStore(rootWithSettingsAsDirectory());
-    const outcome = await store.write({ kind: 'settings' }, { appearance: { theme: 'Matrix' } });
+  // Each failing write waits out the store's 1 s rename retry budget, so the failure is produced ONCE
+  // and every read-only claim below is asserted against it. The "reports failure rather than claiming
+  // success" claim lives in config-store-error-diagnosis.test.ts and in `ok` here.
+  let root = '';
+  let failed: Awaited<ReturnType<FileConfigStore['write']>>;
+  let elapsed = 0;
+  let strays: string[] = [];
+  let different: Awaited<ReturnType<FileConfigStore['write']>>;
+  let second: Awaited<ReturnType<FileConfigStore['write']>>;
 
-    expect(outcome.ok).toBe(false);
+  beforeAll(async () => {
+    root = rootWithSettingsAsDirectory();
+    tempDirs.pop(); // owned by this group (afterAll), not by the per-test afterEach
+    const store = new FileConfigStore(root);
+
+    const started = Date.now();
+    failed = await store.write({ kind: 'settings' }, {});
+    elapsed = Date.now() - started;
+    strays = readdirSync(root).filter((name) => name.includes('.tmp'));
+    // After the failure, on the same store: a different document, then the same one again.
+    different = await store.write({ kind: 'keybindings' }, { version: 1, bindings: {} });
+    second = await store.write({ kind: 'settings' }, {});
   });
 
-  it('names the file the user knows, and says it is a folder (FR-010a/FR-010b)', async () => {
-    const store = new FileConfigStore(rootWithSettingsAsDirectory());
-    const outcome = await store.write({ kind: 'settings' }, {});
-    if (outcome.ok) throw new Error('expected the write to fail');
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('names the file the user knows, and says it is a folder (FR-010a/FR-010b)', () => {
+    if (failed.ok) throw new Error('expected the write to fail');
 
     // The destination, never the `.tmp` staging file the user has never seen.
-    expect(outcome.error).toContain('settings.json');
-    expect(outcome.error).not.toContain('.tmp');
+    expect(failed.error).toContain('settings.json');
+    expect(failed.error).not.toContain('.tmp');
     // ACCURATE, not merely plausible: EPERM alone would have produced "is open in another program",
     // sending the user to look for a program that does not exist.
-    expect(outcome.error).toContain('folder');
+    expect(failed.error).toContain('folder');
   });
 
-  it('keeps the raw system error in `detail` for the log and for Copy (FR-010c)', async () => {
-    const store = new FileConfigStore(rootWithSettingsAsDirectory());
-    const outcome = await store.write({ kind: 'settings' }, {});
-    if (outcome.ok) throw new Error('expected the write to fail');
+  it('keeps the raw system error in `detail` for the log and for Copy (FR-010c)', () => {
+    if (failed.ok) throw new Error('expected the write to fail');
 
     // What a bug report is reconstructed from. It simply is not the sentence.
-    expect(outcome.detail).toBeTruthy();
-    expect(outcome.detail).not.toBe(outcome.error);
+    expect(failed.detail).toBeTruthy();
+    expect(failed.detail).not.toBe(failed.error);
   });
 
-  it('leaves no staging file behind when it gives up', async () => {
+  it('leaves no staging file behind when it gives up', () => {
     // A failed write that litters `.tmp` files would fill the config root over time, and the next
     // reader would have to guess which of them was real.
-    const root = rootWithSettingsAsDirectory();
-    const store = new FileConfigStore(root);
-    await store.write({ kind: 'settings' }, {});
-
-    const strays = readdirSync(root).filter((name) => name.includes('.tmp'));
     expect(strays).toEqual([]);
   });
 
-  it('does not hang: the retry is BOUNDED', async () => {
+  it('does not hang: the retry is BOUNDED', () => {
     // The other half of "bounded". A permanently failing target must surface as a failure, not as a
     // write that never settles — a caller awaiting it would wedge, and the symptom would be
     // "preferences stopped saving" with nothing in the log.
-    const store = new FileConfigStore(rootWithSettingsAsDirectory());
-
-    const started = Date.now();
-    const outcome = await store.write({ kind: 'settings' }, {});
-    const elapsed = Date.now() - started;
-
-    expect(outcome.ok).toBe(false);
+    expect(failed.ok).toBe(false);
     // The product's budget is 1000 ms; a generous ceiling catches an unbounded loop without
     // policing machine load. (EPERM on a directory is retried; other platforms fail at once.)
     expect(elapsed, `the write took ${elapsed} ms to give up`).toBeLessThan(5_000);
   });
 
-  it('a later write to a DIFFERENT document still succeeds', async () => {
+  it('a later write to a DIFFERENT document still succeeds', () => {
     // A failed write must not wedge the store. The per-path chain uses `then(op, op)` precisely so
     // a rejected predecessor does not strand the queue behind it.
-    const root = rootWithSettingsAsDirectory();
-    const store = new FileConfigStore(root);
-
-    const failed = await store.write({ kind: 'settings' }, {});
-    const succeeded = await store.write({ kind: 'keybindings' }, { version: 1, bindings: {} });
-
     expect(failed.ok).toBe(false);
-    expect(succeeded).toEqual({ ok: true });
+    expect(different).toEqual({ ok: true });
     expect(existsSync(join(root, 'keybindings.json'))).toBe(true);
   });
 
-  it('a later write to the SAME document still gets an answer', async () => {
-    const store = new FileConfigStore(rootWithSettingsAsDirectory());
-    await store.write({ kind: 'settings' }, {});
-    const second = await store.write({ kind: 'settings' }, {});
+  it('a later write to the SAME document still gets an answer', () => {
     expect(second.ok).toBe(false); // still failing, but ANSWERING — not hung
   });
 });

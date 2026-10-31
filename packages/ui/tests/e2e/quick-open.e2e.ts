@@ -34,7 +34,6 @@ import {
   QUICK_OPEN_CHORD,
   openQuickOpen,
   quickOpenRows,
-  quickOpenRowPaths,
   chooseQuickOpenRow,
 } from './helpers/navigation.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
@@ -301,27 +300,12 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
  * AS-3, AS-4 — choosing
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-click-');
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOClick', tree.root);
-
-      await openQuickOpen(win);
-      await win.keyboard.type('guide');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-
-      // `chooseQuickOpenRow` waits for the row, clicks it, and waits for the modal to detach (Q5).
-      expect(await chooseQuickOpenRow(win, 0)).toBe('docs/guide.md');
-      await expect(editors(win).locator('.cm-content')).toContainText('// docs/guide.md', {
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * `clicking a row opens that file and closes the modal (AS-4)` MERGED into the SC-004 test below
+ * (test-suite audit): its Quick Open leg now CHOOSES BY CLICK (`chooseQuickOpenRow`), so the one test
+ * proves both that the click is a way to choose (and closes the modal, Q5) and that the file lands as
+ * it does from the tree.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-6 — a query that matches nothing
@@ -363,8 +347,7 @@ test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@ext
  * and it is stronger than any single route test: four route tests prove the routing four times,
  * where one equivalence test proves Quick Open is on the same path.
  *
- * `:324` stays too. It is the only test here that CLICKS a row with the mouse, and clicking is the
- * gesture AS-4 is about.
+ * The click gesture (AS-4) is the same SC-004 test: its Quick Open leg chooses by clicking a row.
  */
 
 
@@ -389,34 +372,14 @@ test('clicking a row opens that file and closes the modal (AS-4)', { tag: ['@ext
  * running-app half was already asserted twice.
  */
 
-test('with a second project open, no file outside the current project root is listed (AS-13, FR-005)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qo-scope-');
-  const other = createOtherProject();
-  try {
-    await runApp(async (_app, win) => {
-      await settle(win);
-      await createProject(win, 'QOScopeDeep', tree.root); // …the deep tree, opened first
-      await createProject(win, 'QOScopeOther', other); // …and now THIS one is active
-
-      await openQuickOpen(win);
-
-      // The active project's own file is offered…
-      await win.getByTestId('quickopen-input').fill('zebra');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      expect(await quickOpenRowPaths(win)).toEqual(['zebra-only.txt']);
-
-      // …and the other project's is not, though the app still has it open.
-      await win.getByTestId('quickopen-input').fill(DEEP_TREE.ranking.query);
-      await expect(quickOpenRows(win)).toHaveCount(0);
-      await expect(win.getByTestId('quickopen-empty')).toBeVisible();
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-    cleanupTemp(other);
-  }
-});
+/*
+ * DELETED (test-suite audit) — "with a second project open, no file outside the current project root
+ * is listed (AS-13, FR-005)". The candidate set is whatever the window's index subscription mirrors,
+ * and the scoping is the hook's and the service's, not a window's: `component/use-file-index.test.ts`
+ * "ignores a push for a DIFFERENT root" (:124) and "clears the previous root's files rather than
+ * showing them under the new name" (:194), over `integration/project-file-index.integration.test.ts`
+ * "S1 — two windows on one root share one walk ... and a third root is separate".
+ */
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * AS-14, AS-15, FR-014 — order, stability and the cap
@@ -492,7 +455,10 @@ test('a file opened by Quick Open produces the same outcome as the same file ope
       await expect(editors(win)).toHaveCount(0);
       await openQuickOpen(win);
       await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
+      await expect(quickOpenRows(win)).toHaveCount(1);
+      // By CLICK, not Enter: this leg is also the only test here that clicks a row (AS-4), and
+      // `chooseQuickOpenRow` waits for the modal to detach (Q5).
+      expect(await chooseQuickOpenRow(win, 0)).toBe('README.md');
       await expect(editors(win).locator('.cm-content')).toContainText('// README.md', {
         timeout: 8000,
       });
@@ -576,7 +542,7 @@ test('in a sub-workspace window the candidate set is that window’s own root, n
        * RE-ENTER THE PROJECT FIRST. A reloaded window comes up with NO project selected — shipped
        * behaviour that long predates this feature, asserted directly by
        * `editor-caret-persist.e2e.ts` (`workspace-no-project` visible straight after a reload) and
-       * worked around in the same way by `editor-stranded-recovery.e2e.ts`. Measured here with an
+       * was worked around in the same way by the since-deleted `editor-stranded-recovery.e2e.ts`. Measured here with an
        * instrumented probe after this line failed: the main window had zero active projects and no
        * file tree, so the chord opened nothing — which is FR-018 / A5 behaving exactly as specified,
        * not the chord being dead. Without this click the assertion tests the reload, not the chord.

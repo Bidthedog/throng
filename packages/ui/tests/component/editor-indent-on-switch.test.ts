@@ -29,8 +29,8 @@ import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
  * See `helpers/mount-editor.ts`. A real `EditorView` renders `.cm-content` and handles keydown
  * through its own keymap; what jsdom cannot do is LAYOUT. So the pressing of Tab, the command it
  * reaches, the profile that command reads and the text that lands in the document are all here —
- * and the file's rendered appearance is not, which is why `editor-file-switch.e2e.ts` keeps its
- * markdown-highlighting test under `@reserve:layout`.
+ * and the file's rendered appearance is not, which is why `editor-highlighting.e2e.ts` keeps the
+ * markdown-highlighting test (merged in from `editor-file-switch.e2e.ts`) under `@reserve:layout`.
  *
  * The second open goes through `getEditorActions(panelId).openFile`, which is the route a tree click
  * takes: it calls `editor.load`, records the new path, and re-derives the language from it before

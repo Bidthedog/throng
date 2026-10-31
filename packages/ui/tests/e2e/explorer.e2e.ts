@@ -17,7 +17,7 @@ import { openApp,
   cleanupTemp,
   type AppOptions,
   type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /**
  * Toggle a folder's expansion via its CHEVRON (#121) — the folder NAME only
@@ -300,7 +300,12 @@ test('file operations via context menu + toolbar (US3): delete, new folder, cut/
   }
 });
 
-test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
+/*
+ * NARROWED (test-suite audit, pass 1): the Delete-key half moved out — `delete-mixed.e2e.ts` "file-first selection
+ * (opens an editor) then Delete key removes ALL selected" presses the real Delete key on a file-first selection
+ * with an editor open, which is the same claim with more in it. F2 rename stays.
+ */
+test('keyboard shortcuts operate on the tree: F2 renames (US3)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
     await runApp(async (_app, win) => {
@@ -308,24 +313,7 @@ test('keyboard shortcuts operate on the tree: Del deletes, F2 renames (US3)', { 
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      // Select a.txt and press Delete → confirm → it vanishes.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await win.keyboard.press('Delete');
-      await win.getByTestId('confirm-accept').click();
-      await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0);
-
-      // Clicking a.txt OPENED it in an editor, and deleting the file force-dirties that buffer so it
-      // survives and a later save re-creates the file (006, FR-099). The renderer learns that from the
-      // file watcher, asynchronously — so WAIT for the dirty marker rather than racing it. Without this
-      // the test passed or failed on whether the click below beat the watcher, which is not a property
-      // anyone chose. Opening README.md into a dirty editor then legitimately raises the four-choice
-      // unsaved-open prompt (006, US9); keep the buffer and take a new editor.
-      await expect(win.locator('.panel-box__unsaved')).toBeVisible();
-      await tree.getByText('README.md', { exact: true }).click();
-      await win.getByTestId('unsaved-open-new').click();
-
-      // Select README.md, press F2 → inline rename; commit a new name. (The click also returns DOM
-      // focus to the tree, which the dismissed prompt took.)
+      // Select README.md, press F2 → inline rename; commit a new name.
       await tree.getByText('README.md', { exact: true }).click();
       await win.keyboard.press('F2');
       const rename = tree.locator('input.tree-rename');
@@ -380,56 +368,14 @@ test('copy/paste duplicates with a non-clobbering name; open-in-explorer raises 
   }
 });
 
-test('drag-and-drop moves a file into a folder (US3b)', { tag: ['@extended', '@explorer', '@reserve:osdrag'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Drag README.md onto the `src` folder → it moves there.
-      await tree
-        .getByText('README.md', { exact: true })
-        .dragTo(tree.getByText('src', { exact: true }));
-
-      // Assert the MOVE on disk — deterministic, unlike the tree's post-drop expand
-      // state (react-arborist may leave `src` collapsed, hiding the moved node). It
-      // moved, not copied: README.md is under src/ and no longer at the root.
-      await expect
-        .poll(() => existsSync(join(projectRoot, 'src', 'README.md')), { timeout: FILE_OP_TIMEOUT_MS })
-        .toBe(true);
-      expect(existsSync(join(projectRoot, 'README.md'))).toBe(false);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
-test('multi-select (Ctrl-click) then Delete removes all selected (US3b)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
-  const projectRoot = makeProjectFolder();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Demo', projectRoot);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree).toBeVisible();
-
-      // Select a.txt, then Ctrl-click README.md to add it to the selection.
-      await tree.getByText('a.txt', { exact: true }).click();
-      await tree.getByText('README.md', { exact: true }).click({ modifiers: ['Control'] });
-      await expect(tree.locator('.tree-row--selected')).toHaveCount(2);
-
-      // Delete → confirm once → both removed.
-      await win.keyboard.press('Delete');
-      await win.getByTestId('confirm-accept').click();
-      await expect(tree.getByText('a.txt', { exact: true })).toHaveCount(0);
-      await expect(tree.getByText('README.md', { exact: true })).toHaveCount(0);
-    });
-  } finally {
-    cleanupTemp(projectRoot);
-  }
-});
-
+/*
+ * DELETED (test-suite audit, pass 1):
+ *   - "drag-and-drop moves a file into a folder (US3b)" → `explorer-tree-state.e2e.ts` (1), which drags a folder onto
+ *     a folder with the same real drag and asserts the move landed.
+ *   - "multi-select (Ctrl-click) then Delete removes all selected (US3b)" → `delete-mixed.e2e.ts` "file-first
+ *     selection (opens an editor) then Delete key removes ALL selected" (Ctrl-click selection, Delete key, one
+ *     confirm, every selected row gone).
+ */
 test('delete confirmation can be cancelled; the toolbar Delete button works (US3 polish)', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {
@@ -518,7 +464,13 @@ test('a large folder stays responsive — virtualised rows (polish T061)', { tag
   }
 });
 
-test('remembers expansion + selection per project; root is selectable', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
+/*
+ * NARROWED (test-suite audit, pass 1): the expansion-per-project half moved out — "the resulting open state
+ * survives a project switch and a window reload" in `subtree-expand-collapse.e2e.ts` (AS-10/D8) and the persisted
+ * expansion in `explorer-tree-state.e2e.ts` (5) hold it. What stays is the SELECTION surviving a project switch,
+ * and the root row being selectable.
+ */
+test('remembers selection per project; root is selectable', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
   const rootA = makeProjectFolder();
   const rootB = makeProjectFolder();
   try {
@@ -527,22 +479,19 @@ test('remembers expansion + selection per project; root is selectable', { tag: [
       const tree = win.getByTestId('file-explorer-tree');
       await expect(tree).toBeVisible();
 
-      // Expand `src` (via its chevron, #121) and select README.md in Alpha.
-      await toggleFolder(tree, 'src');
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
+      // Select README.md in Alpha.
       await tree.getByText('README.md', { exact: true }).click();
       await expect(tree.locator('.tree-row--selected', { hasText: 'README.md' })).toBeVisible();
 
-      // Create + switch to Beta — Alpha's tree unmounts; Beta starts collapsed.
+      // Create + switch to Beta — Alpha's tree unmounts; Beta starts with nothing selected.
       await createProject(win, 'Beta', rootB);
-      await expect(tree.getByText('index.ts', { exact: true })).toHaveCount(0);
+      await expect(tree.locator('.tree-row--selected', { hasText: 'README.md' })).toHaveCount(0);
 
-      // Switch back to Alpha → its expansion AND selection are restored.
+      // Switch back to Alpha → its selection is restored.
       await win
         .locator('.project-item', { hasText: 'Alpha' })
         .locator('[data-testid^="project-switch-"]')
         .click();
-      await expect(tree.getByText('index.ts', { exact: true })).toBeVisible();
       await expect(tree.locator('.tree-row--selected', { hasText: 'README.md' })).toBeVisible();
 
       // The root row is selectable (but stays expanded).
@@ -553,5 +502,249 @@ test('remembers expansion + selection per project; root is selectable', { tag: [
   } finally {
     cleanupTemp(rootA);
     cleanupTemp(rootB);
+  }
+});
+
+/*
+ * ── MERGED IN (test-suite audit, pass 1) — one app instead of three ──
+ *
+ * The three tests below used to be `explorer-new-items.e2e.ts`, `explorer-keyboard-selection.e2e.ts` and
+ * `explorer-bottom-click.e2e.ts`: one Electron launch, one daemon and one window each, for a test that seeds
+ * nothing before launch. They now run on this file's shared app. The bodies are unchanged apart from the project
+ * helpers, which are named apart here because the file already has `makeProjectFolder`.
+ *
+ * MOVED to `packages/ui/tests/component/explorer-root-menu.test.ts` (034 FR-045), from the former
+ * explorer-new-items file: the FR-097 empty-space (root-targeted) menu test, as six. What stayed is the whole
+ * chain for New File on a folder — menu, create, a focused rename box, a commit, and bytes at `sub/made.txt`.
+ */
+
+// Session 2026-07-06c: New File in the context menu (FR-096).
+function makeNewItemsProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-newitems-'));
+  mkdirSync(join(root, 'sub'));
+  writeFileSync(join(root, 'sub', 'keep.txt'), 'x');
+  writeFileSync(join(root, 'a.txt'), 'A');
+  return root;
+}
+
+test('New File on a folder creates a file inside it, in rename mode (FR-096)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
+  const root = makeNewItemsProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'NI', root);
+      const tree = win.getByTestId('file-explorer-tree');
+      await expect(tree).toBeVisible();
+
+      // Right-click the `sub` folder → New File → creates sub/New file.txt in rename.
+      await tree.getByText('sub', { exact: true }).click({ button: 'right' });
+      await win.getByTestId('menu-item-New File').click();
+
+      // The rename input is focused on the new file.
+      const input = tree.locator('input.tree-rename');
+      await expect(input).toBeVisible({ timeout: 6000 });
+      await input.fill('made.txt');
+      await win.keyboard.press('Enter');
+
+      await expect
+        .poll(() => existsSync(join(root, 'sub', 'made.txt')), { timeout: FILE_OP_TIMEOUT_MS })
+        .toBe(true);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/*
+ * 024 US3 follow-up — in File Explorer the arrow keys move the SELECTION, not a separate cursor.
+ *
+ * Every file operation reads the selection, so a tree where the highlight and the operations
+ * disagree quietly does the wrong thing: Ctrl+X cut the row the user had arrowed AWAY from, and
+ * Ctrl+V pasted into that row's folder rather than the one the cursor was resting on. This drives
+ * both from the keyboard alone and proves the file that actually moved is the one that was cut, into
+ * the folder the cursor had reached.
+ */
+test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-kbdsel-'));
+  mkdirSync(join(root, 'sub'));
+  writeFileSync(join(root, 'a.txt'), 'A\n');
+  writeFileSync(join(root, 'b.txt'), 'B\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'KbdSelProj', root);
+      const tree = win.getByTestId('file-explorer-tree');
+      await expect(tree.getByText('a.txt', { exact: true })).toBeVisible({ timeout: 8000 });
+
+      // Start on the folder (a single click selects it; only a double-click expands it), so the
+      // whole rest of the gesture is keyboard-only.
+      await tree.getByText('sub', { exact: true }).click();
+
+      // The highlighted row is drawn ONLY by the selected-row background — no second focus ring
+      // boxing it in, now that selection and focus are the same thing.
+      await expect
+        .poll(() =>
+          win.evaluate(() => {
+            const row = document.querySelector(
+              '[data-testid="file-explorer-tree"] [role="treeitem"]:focus',
+            );
+            return row ? getComputedStyle(row).outlineStyle : 'no-focused-row';
+          }),
+        )
+        .toBe('none');
+      // Down onto a.txt — this must SELECT it, not merely draw a cursor over it.
+      await win.keyboard.press('ArrowDown');
+      await win.keyboard.press('Control+x');
+      // Back up onto the folder, which is now the paste target for the same reason.
+      await win.keyboard.press('ArrowUp');
+      await win.keyboard.press('Control+v');
+
+      // a.txt moved into the folder, which the paste opened to reveal it (050 FR-025b): present
+      // once, a level down, and selected.
+      const moved = tree.getByRole('treeitem', { name: 'a.txt', exact: true });
+      await expect(moved).toHaveAttribute('aria-level', '3', { timeout: 8000 });
+      await expect(moved).toHaveAttribute('aria-selected', 'true');
+      await expect(tree.getByText('b.txt', { exact: true })).toBeVisible(); // untouched
+      await expect.poll(() => existsSync(join(root, 'sub', 'a.txt'))).toBe(true);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/**
+ * #419 — a click at the bottom of a tree that shows BOTH scrollbars leaves the tree where it is.
+ *
+ * With a horizontal and a vertical scrollbar showing and the list scrolled all the way down, the
+ * first click on a row nudged the tree up, and the reporter's double-click then missed the row.
+ *
+ * ══ WHAT WAS MEASURED ══
+ *
+ * The nudge, every time: on the unfixed build one click on the last row moved the scroller from
+ * 797 to 785 — the horizontal scrollbar's height. Selecting asks react-window to reveal the row, and
+ * react-window clamps with the list's full height rather than its client height, so a list at its
+ * true bottom sits past what it thinks is the last offset. The fix leaves a row already in full
+ * view alone (`visible-row-scroll.ts`, decision pinned in `visible-row-scroll.test.ts`).
+ *
+ * Why that costs the double-click: for 150 ms after ANY scroll react-window sets
+ * `pointer-events: none` on its rows. Observed here when Playwright's own scroll-into-view preceded
+ * the gesture — the second press landed on a container with no row under it. With a real-paced
+ * gesture and no other scroll, synthetic input does NOT reproduce the lost double-click on the
+ * unfixed build (5/5 passed), so the double-click assertion below is a statement of intent, not a
+ * reproduction. The scroll assertion is the reproduction.
+ *
+ * The gesture is driven by coordinates, at a human's pace, after the list has settled: a locator
+ * click would first scroll the (over-wide) row into view horizontally, which no user does.
+ *
+ * Why this layer: two real scrollbars and react-window's clamp exist only with a real layout.
+ */
+const BOTTOM_FOLDERS = 60;
+const BOTTOM_LONG = 'a-folder-name-long-enough-to-be-wider-than-the-file-explorer-pane';
+const bottomFolderName = (i: number): string => `f${String(i).padStart(2, '0')}-${BOTTOM_LONG}`;
+
+function makeBottomClickProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-bottom-click-'));
+  for (let i = 0; i < BOTTOM_FOLDERS; i++) {
+    const folder = join(root, bottomFolderName(i));
+    mkdirSync(folder);
+    writeFileSync(join(folder, 'inside.txt'), 'x\n');
+  }
+  return root;
+}
+
+interface ScrollerState {
+  top: number;
+  max: number;
+  hBar: boolean;
+  vBar: boolean;
+  /** react-window's isScrolling state: the rows ignore the pointer while it is set. */
+  settled: boolean;
+}
+
+/** The tree's own scroller: the first element under the body that scrolls vertically. */
+function scroller(win: Page, scrollToBottom = false): Promise<ScrollerState> {
+  return win.evaluate((toBottom) => {
+    const body = document.querySelector('[data-testid="file-explorer-tree"] .explorer__body');
+    const el = [...(body?.querySelectorAll<HTMLElement>('*') ?? [])].find((e) =>
+      /(auto|scroll)/.test(getComputedStyle(e).overflowY),
+    );
+    if (!el) throw new Error('no scrolling element in the explorer body');
+    if (toBottom) el.scrollTop = el.scrollHeight;
+    // react-window marks its ROWS container `pointer-events: none` while scrolling. It is not the
+    // scroller's first child: react-arborist puts its drop-cursor layer ahead of it.
+    const scrolling = [...el.children].some((c) => (c as HTMLElement).style.pointerEvents === 'none');
+    return {
+      top: el.scrollTop,
+      max: el.scrollHeight - el.clientHeight,
+      hBar: el.scrollWidth > el.clientWidth,
+      vBar: el.scrollHeight > el.clientHeight,
+      settled: !scrolling,
+    };
+  }, scrollToBottom);
+}
+
+/** A point on the part of the row the user can see: a little in from the pane's left, mid-height. */
+async function visiblePointOn(win: Page, rel: string): Promise<{ x: number; y: number }> {
+  return win.evaluate((relPath) => {
+    const body = document
+      .querySelector('[data-testid="file-explorer-tree"] .explorer__body')!
+      .getBoundingClientRect();
+    const row = document
+      .querySelector(`.tree-row[data-rel-path="${relPath}"]`)!
+      .getBoundingClientRect();
+    return { x: Math.max(row.left, body.left) + 60, y: row.top + row.height / 2 };
+  }, rel);
+}
+
+test('a click at the bottom of a two-scrollbar tree leaves the tree where it is (#419)', { tag: ['@extended', '@explorer', '@reserve:layout'] }, async () => {
+  const root = makeBottomClickProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'BottomClick', root);
+      const tree = win.getByTestId('file-explorer-tree');
+      const rowFor = (rel: string) => tree.locator(`.tree-row[data-rel-path="${rel}"]`);
+      const opened = (rel: string) => rowFor(rel).locator('.tree-twisty');
+      await expect(rowFor(bottomFolderName(0))).toBeVisible({ timeout: 8000 });
+
+      // Control: the same double-click at the TOP of the list expands the folder, so a failure below
+      // is about where the row sits, not about the gesture.
+      const first = bottomFolderName(0);
+      await expect.poll(async () => (await scroller(win)).settled).toBe(true);
+      const top = await visiblePointOn(win, first);
+      await win.mouse.click(top.x, top.y, { clickCount: 2, delay: 70 });
+      await expect(opened(first)).toHaveClass(/tree-twisty--open/);
+      await opened(first).click();
+      await expect(opened(first)).not.toHaveClass(/tree-twisty--open/);
+
+      const last = bottomFolderName(BOTTOM_FOLDERS - 1);
+      await scroller(win, true);
+      await expect(rowFor(last)).toBeVisible();
+      // The user has stopped scrolling before they double-click.
+      await expect.poll(async () => (await scroller(win)).settled).toBe(true);
+      const before = await scroller(win);
+      expect(before.hBar, 'precondition: a horizontal scrollbar').toBe(true);
+      expect(before.vBar, 'precondition: a vertical scrollbar').toBe(true);
+      expect(before.top, 'precondition: scrolled to the bottom').toBeGreaterThanOrEqual(before.max - 1);
+
+      const bottom = await visiblePointOn(win, last);
+      // One click selects the row. Measured on the unfixed build: 797 -> 785, every run — the tree
+      // rose by the horizontal scrollbar's height.
+      await win.mouse.click(bottom.x, bottom.y);
+      await expect.poll(async () => (await scroller(win)).settled).toBe(true);
+      expect((await scroller(win)).top, 'a click on a row in full view moved the tree').toBe(before.top);
+
+      // And the double-click on it expands it. Measured: this half PASSES on the unfixed build too once
+      // the gesture is a real one — synthetic input does not reproduce the lost double-click, only the
+      // scroll beneath it. It stays as the user-facing statement of what the fix is for.
+      // At a human's pace: ~70 ms held per press, so the second press lands ~140 ms after the first.
+      await win.mouse.click(bottom.x, bottom.y, { clickCount: 2, delay: 70 });
+
+      // Its child lands below the viewport, which a virtualised list does not render — so the
+      // folder's own open state is what says the double-click landed.
+      await expect(opened(last), 'the double-click did not expand the folder').toHaveClass(
+        /tree-twisty--open/,
+        { timeout: 2000 },
+      );
+    });
+  } finally {
+    cleanupTemp(root);
   }
 });

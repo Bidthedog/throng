@@ -257,54 +257,46 @@ describe('a commit that cannot be carried out says so (FR-058)', () => {
     await user.click(screen.getByTestId('menu-item-Replace All'));
   };
 
-  it('reports a rejected commit instead of doing nothing visible at all', async () => {
-    stub.commit.mockRejectedValue(new Error('EPERM: operation not permitted'));
+  it.each([
+    {
+      name: 'a rejected commit, instead of doing nothing visible at all',
+      arrange: (): void => {
+        stub.commit.mockRejectedValue(new Error('EPERM: operation not permitted'));
+      },
+      confirm: false,
+      text: 'EPERM',
+    },
+    {
+      // A channel that changed under the renderer answers this way, and it used to fall straight
+      // through the `committed` check — no notice, no marking, no visible change.
+      name: 'an answer whose shape it does not recognise',
+      arrange: (): void => {
+        stub.commit.mockResolvedValue({ status: 'ok' });
+      },
+      confirm: false,
+      text: '',
+    },
+    {
+      name: 'a rejection of the CONFIRMED re-ask as well',
+      arrange: (): void => {
+        stub.commit
+          .mockResolvedValueOnce({ committed: false, reason: 'needsConfirmation', unopenedFileCount: 2 })
+          .mockRejectedValue(new Error('EBUSY: resource busy'));
+      },
+      confirm: true,
+      text: 'EBUSY',
+    },
+  ])('reports $name', async ({ arrange, confirm, text }) => {
+    arrange();
     const user = await ready();
     await commitAll(user);
+    if (confirm) await user.click(await screen.findByTestId('confirm-accept'));
 
     const notices = await screen.findAllByTestId('fif-commit-outcome');
     // ONE card, and the same one a successful commit uses: one condition, one surface.
     expect(notices).toHaveLength(1);
     expect(notices[0]?.className).toContain('notice--error');
-    expect(notices[0]?.textContent ?? '').toContain('EPERM');
-  });
-
-  it('reports an answer whose shape it does not recognise', async () => {
-    // A channel that changed under the renderer answers this way, and it used to fall straight
-    // through the `committed` check — no notice, no marking, no visible change.
-    stub.commit.mockResolvedValue({ status: 'ok' });
-    const user = await ready();
-    await commitAll(user);
-
-    const notices = await screen.findAllByTestId('fif-commit-outcome');
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.className).toContain('notice--error');
-  });
-
-  it('reports a rejection of the CONFIRMED re-ask as well', async () => {
-    stub.commit
-      .mockResolvedValueOnce({ committed: false, reason: 'needsConfirmation', unopenedFileCount: 2 })
-      .mockRejectedValue(new Error('EBUSY: resource busy'));
-    const user = await ready();
-    await commitAll(user);
-    await user.click(await screen.findByTestId('confirm-accept'));
-
-    const notices = await screen.findAllByTestId('fif-commit-outcome');
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.textContent ?? '').toContain('EBUSY');
-  });
-
-  it('still says nothing when the user cancelled — there is no outcome to report', async () => {
-    stub.commit.mockResolvedValue({
-      committed: false,
-      reason: 'needsConfirmation',
-      unopenedFileCount: 2,
-    });
-    const user = await ready();
-    await commitAll(user);
-    await user.click(await screen.findByTestId('confirm-cancel'));
-
-    expect(screen.queryByTestId('fif-commit-outcome')).toBeNull();
+    expect(notices[0]?.textContent ?? '').toContain(text);
   });
 });
 

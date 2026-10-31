@@ -1,5 +1,16 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { openApp, runApp as runOwnApp, reloadWindow, daemonRpc, type OpenApp } from './harness.js';
+import {
+  openApp,
+  runApp as runOwnApp,
+  createProject,
+  reloadWindow,
+  daemonRpc,
+  cleanupTemp,
+  type OpenApp,
+} from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // US7: the Sub-workspaces panel lists the user's first-class sub-workspaces and
@@ -38,7 +49,9 @@ import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
  * still correct: tests 1 and 2 open no window that survives them (test 2's is closed BY the delete
  * it is asserting), and test 4 runs in a different Electron process entirely.
  *
- * ORDER IS LOAD-BEARING for test 1, so say it plainly. Test 1 opens with
+ * (Test-suite audit: the list/rename/delete test that used to be first moved down to a component test, so no test here asserts the virgin empty state any more; the notes on order below describe the file as it was. ORDER IS NOW LOAD-BEARING for the LAST test only.)
+ *
+ * ORDER WAS LOAD-BEARING for test 1, so say it plainly. Test 1 opens with
  * `expect(subworkspaces-empty).toBeVisible()` BEFORE it seeds anything — a claim about a virgin
  * store, which only the first test in the app is entitled to make. It is declared first and must
  * stay first. Everything after it seeds, and a seed is a replace, so nothing else depends on order.
@@ -57,8 +70,12 @@ test.beforeAll(async () => {
   shared = await openApp();
 });
 
+/** Project roots made by the merged-in rename test; removed once the shared app has closed. */
+const ownedRoots: string[] = [];
+
 test.afterAll(async () => {
   await shared?.close();
+  for (const dir of ownedRoots.splice(0)) cleanupTemp(dir);
 });
 
 const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', { subWorkspaces: [
@@ -67,41 +84,10 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-const seedTwo = `(() => window.throng.invoke('workspace.persistSubWorkspaces', { subWorkspaces: [
-  { id: 'swA', ownerUser: 'u', name: 'Detached A', colour: '#3fb950',
-    bounds: { x: 0, y: 0, width: 400, height: 300 },
-    tabs: [{ id: 'ta', title: 'T', root: { type: 'panel', id: 'pa', originProjectId: 'x', title: 'P' } }] },
-  { id: 'swB', ownerUser: 'u', name: 'Detached B', colour: '#6aa3ff',
-    bounds: { x: 0, y: 0, width: 400, height: 300 },
-    tabs: [{ id: 'tb', title: 'T', root: { type: 'panel', id: 'pb', originProjectId: 'x', title: 'P' } }] },
-] }))()`;
-
-test('lists, renames and deletes sub-workspaces', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
-  const win = shared.win;
-  // FIRST IN THE FILE, and it has to be: this asserts the empty state of a store nothing has
-  // written to yet, before any seed. See the file header.
-  await expect(win.getByTestId('subworkspaces-panel')).toBeVisible();
-  await expect(win.getByTestId('subworkspaces-empty')).toBeVisible();
-
-  // Seed via the daemon, then reload so the lazy list picks it up.
-  await win.evaluate(seedSub);
-  await reloadWindow(win);
-  await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Detached A');
-
-  // Rename (double-click → edit).
-  await win.getByTestId('subworkspace-name-sw1').dblclick();
-  const input = win.getByTestId('subworkspace-rename-input-sw1');
-  await input.fill('Renamed SW');
-  await input.press('Enter');
-  await expect(win.getByTestId('subworkspace-name-sw1')).toHaveText('Renamed SW');
-
-  // Delete uses the configurable double confirmation (default) → summary + wry.
-  await win.getByTestId('subworkspace-delete-sw1').click();
-  await win.getByTestId('confirm-accept').click(); // summary
-  await expect(win.getByTestId('confirm-dialog')).toContainText('absolutely sure');
-  await win.getByTestId('confirm-accept').click(); // wry
-  await expect(win.getByTestId('subworkspaces-empty')).toBeVisible();
-});
+// MOVED DOWN (test-suite audit) — "lists, renames and deletes sub-workspaces" is
+// `component/subworkspaces-panel.test.ts` (empty state, list with counts, double-click rename with Enter and
+// Escape, the double confirmation before a delete), each red-proven against the line it names. The window
+// half of deleting stays below.
 
 // US7 feedback: deleting an OPEN sub-workspace closes its window too.
 test('deleting an open sub-workspace closes its window', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
@@ -192,7 +178,7 @@ test('opens a sub-workspace window that renders its panels (lazy reopen)', { tag
  */
 // US7 / T078 / Constitution XI: closing the main window closes every
 // sub-workspace window (the focus/raise group is also a lifecycle group).
-test('closing the main window closes all sub-workspace windows', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
+test('closing the main window closes all sub-workspace windows', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   await runOwnApp(async (app, win) => {
     await win.evaluate(seedSub);
     await reloadWindow(win);
@@ -211,7 +197,7 @@ test('closing the main window closes all sub-workspace windows', { tag: ['@core'
 
 // US7 / T079 / FR-017a: a sub-workspace window's bounds are persisted on
 // move/resize/close and restored (clamped onto a visible display) on reopen.
-test('persists and restores a sub-workspace window size on reopen', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
+test('persists and restores a sub-workspace window size on reopen', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const app = shared.app;
   const win = shared.win;
   await win.evaluate(seedSub);
@@ -298,60 +284,62 @@ test('persists and restores a sub-workspace window size on reopen', { tag: ['@co
   }
 });
 
-// US7: the sub-workspace list reorders by dragging its grip (parity with the
-// project list), and the new order persists across a restart (position column).
-test('reorders sub-workspaces by dragging, and the order persists', { tag: ['@core', '@window', '@reserve:layout'] }, async () => {
+// MOVED DOWN (test-suite audit) — "reorders sub-workspaces by dragging, and the order persists": the drop and
+// the RPC it produces are `component/subworkspaces-panel.test.ts` ("drag-to-reorder by the grip"); the order
+// surviving a restart is the daemon's `subworkspace.reorder` persistence, held by its integration tests.
+
+// MERGED IN (test-suite audit) from project-rename-subworkspace.e2e.ts, which launched its own app and daemon
+// to watch one cross-window update. Renaming a project updates that project's name shown in OTHER windows —
+// specifically the owner text on sub-workspace panels — without needing a reload.
+//
+// LAST IN THE FILE, and it has to be: it creates a project, which the whole-list assertions above must not
+// see. The seed replaces the sub-workspace list, so nothing before it is disturbed either way.
+test('renaming a project updates its name on sub-workspace panels live', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  const app = shared.app;
   const win = shared.win;
-  // Replaces the list with exactly these two, so the exact-equality assertions below mean the same
-  // thing they meant against a pristine app.
-  await win.evaluate(seedTwo);
+  const root = mkdtempSync(join(tmpdir(), 'throng-rensub-'));
+  ownedRoots.push(root);
+  await createProject(win, 'OldName', root);
+  const pid = (
+    (await win.locator('[data-testid^="project-switch-"]').first().getAttribute('data-testid')) ?? ''
+  ).replace('project-switch-', '');
+
+  // Seed a sub-workspace whose panel is OWNED by that project, then reload so it appears, and open its window.
+  await win.evaluate((originProjectId) => {
+    return window.throng!.invoke!('workspace.persistSubWorkspaces', {
+      subWorkspaces: [
+        {
+          id: 'sw1',
+          ownerUser: 'u',
+          name: 'SubA',
+          colour: '#3fb950',
+          bounds: { x: 0, y: 0, width: 700, height: 460 },
+          tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId, title: 'P' } }],
+        },
+      ],
+    });
+  }, pid);
   await reloadWindow(win);
-  const names = () => win.locator('.subworkspace-item__name').allInnerTexts();
-  await expect(async () => {
-    expect(await names()).toEqual(['Detached A', 'Detached B']);
-  }).toPass({ timeout: 5000 });
 
-  // Drag B's grip above A.
-  const grip = win.locator('.subworkspace-item', { hasText: 'Detached B' }).locator('.subworkspace-item__grip');
-  const target = win.locator('.subworkspace-item', { hasText: 'Detached A' });
-  /*
-   * `hover()` rather than a move to a remembered box: it re-resolves the element's position at the
-   * moment of the action, and waits for that box to be STABLE across consecutive frames first.
-   *
-   * The sidebar settles late. The sub-workspace list renders at y≈449 and ends up at y≈671 once
-   * the panels above it finish loading, so a `boundingBox()` read before that is stale by ~222px
-   * — and pressing at those coordinates puts the mouse-down on `.panel__body`, well clear of the
-   * grip. No drag starts, and the only symptom is an order that never changed, which reads like a
-   * product bug three steps from the actual fault.
-   *
-   * Measured, not reasoned about: a probe on `document.elementFromPoint` at the press coordinates
-   * reported `DIV.panel__body` (y=449.5) in every failing run and `SPAN.subworkspace-item__grip`
-   * (y=671.5) in every passing one. It survives 12/12 under load with this, against 2 failures in
-   * 10 without. The bug only appears on a loaded machine because that is what makes the sidebar
-   * slow to settle — it is not a timing subtlety in the drag itself.
-   */
-  await grip.hover();
-  await win.mouse.down();
-  const gbox = await grip.boundingBox();
-  const tbox = await target.boundingBox();
-  if (!gbox || !tbox) throw new Error('boxes missing');
-  await win.mouse.move(gbox.x + gbox.width / 2, gbox.y - 8, { steps: 3 });
-  /*
-   * Assert the drag actually STARTED, so a press that misses fails HERE, naming its cause, rather
-   * than surfacing later as "the order did not change" — which sent this investigation down a
-   * dnd-kit rabbit hole the first time round.
-   */
-  await expect(win.locator('.subworkspace-item--dragging')).toHaveCount(1);
-  await win.mouse.move(tbox.x + tbox.width / 2, tbox.y + 2, { steps: 8 });
-  await win.mouse.up();
+  const child = await openSubWorkspaceWindow(app, win, 'sw1');
+  await child.waitForLoadState('domcontentloaded');
+  try {
+    // The panel's owner text shows the project's CURRENT name.
+    const owner = child.getByTestId('panel-project-p');
+    await expect(owner).toContainText('OldName', { timeout: 10000 });
 
-  await expect(async () => {
-    expect(await names()).toEqual(['Detached B', 'Detached A']);
-  }).toPass({ timeout: 5000 });
+    // Rename the project in the MAIN window (inline).
+    await win.getByTestId(`project-switch-${pid}`).dblclick();
+    const rename = win.getByTestId(`project-rename-input-${pid}`);
+    await rename.fill('BrandNewName');
+    await rename.press('Enter');
+    await expect(win.locator('.project-item', { hasText: 'BrandNewName' })).toBeVisible();
 
-  // Reload → the reordered order survives (persisted via the position column).
-  await reloadWindow(win);
-  await expect(async () => {
-    expect(await names()).toEqual(['Detached B', 'Detached A']);
-  }).toPass({ timeout: 5000 });
+    // The sub-workspace window's panel owner text updates WITHOUT a reload.
+    await expect(owner).toContainText('BrandNewName', { timeout: 10000 });
+    await expect(owner).not.toContainText('OldName');
+  } finally {
+    // Shared app: leave no sub-workspace window open.
+    if (!child.isClosed()) await child.close();
+  }
 });

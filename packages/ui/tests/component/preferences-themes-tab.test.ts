@@ -127,74 +127,48 @@ const iconCells = (): HTMLElement[] =>
  * its own registry, and that the empty and clear states exist at all.
  *
  * The filter is debounced by 150 ms, which is why every search below is awaited.
+ *
+ * The icon section is PART of the theme, so it is part of the search. It used to sit outside the
+ * filtered groups and simply ignore the query: search for "terminal" and you got two matching colour
+ * rows and, still, the entire icon grid underneath. A section that ignores the filter is worse than
+ * one with no filter at all, because it looks like a result.
  */
-describe('the Themes typeahead (FR-021, SC-024)', () => {
-  it('narrows the token rows to the ones that match', async () => {
+describe('the Themes typeahead, icon section included (FR-021, SC-024)', () => {
+  it('narrows the token rows, says so when nothing matches, drops or narrows the icon section, and restores everything when cleared', async () => {
+    // Chained from six tests on six mounts (audit, component-2a); each step ends clearing the box.
     const { user } = mount();
-    // Both present first — the control that stops the absence assertion below being vacuous.
+    // Both present first — the control that stops the absence assertions below being vacuous.
     expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
     expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible();
+    // The icon section renders the whole grid when no search is active.
+    expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
+    const unfiltered = iconCells().length;
+    expect(unfiltered).toBeGreaterThan(5);
 
+    // Narrows the token rows to the ones that match.
     await user.type(search(), 'terminal');
-
     await waitFor(() => expect(screen.queryByTestId('theme-row-colours.editorBg')).toBeNull());
     expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
-  });
+    await user.click(screen.getByTestId('themes-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible());
 
-  it('says so when nothing matches, rather than showing a blank tab', async () => {
-    const { user } = mount();
-    expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
-
+    // Says so when nothing matches, rather than showing a blank tab — and the icon section
+    // DISAPPEARS entirely for a query that matches no icon and no colour.
     await user.type(search(), 'zzzznothing');
-
     await waitFor(() => expect(screen.getByTestId('themes-search-empty')).toBeVisible());
     expect(screen.queryByTestId('theme-row-colours.terminalBg')).toBeNull();
-  });
+    expect(screen.queryByTestId('settings-group-Icons')).toBeNull();
 
-  it('brings every row back when the search is cleared', async () => {
-    const { user } = mount();
-    await user.type(search(), 'zzzznothing');
-    await waitFor(() => expect(screen.getByTestId('themes-search-empty')).toBeVisible());
-
-    // The clear CANCELS the pending filter rather than queueing behind it, so it is immediate.
+    // Brings every row back when the search is cleared. The clear CANCELS the pending filter rather
+    // than queueing behind it, so it is immediate.
     await user.click(screen.getByTestId('themes-search-clear'));
-
     expect(search()).toHaveValue('');
     await waitFor(() => expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible());
     expect(screen.queryByTestId('themes-search-empty')).toBeNull();
-  });
-});
-
-/**
- * The icon section is PART of the theme, so it is part of the search.
- *
- * It used to sit outside the filtered groups and simply ignore the query: search for "terminal" and
- * you got two matching colour rows and, still, the entire icon grid underneath. A section that
- * ignores the filter is worse than one with no filter at all, because it looks like a result.
- */
-describe('the icon section is not exempt from the search (FR-021)', () => {
-  it('renders the whole grid when no search is active', () => {
-    mount();
-    expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
-    expect(iconCells().length).toBeGreaterThan(5);
-  });
-
-  it('DISAPPEARS entirely for a query that matches no icon and no colour', async () => {
-    const { user } = mount();
     expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
 
-    await user.type(search(), 'zzzznothing');
-
-    await waitFor(() => expect(screen.queryByTestId('settings-group-Icons')).toBeNull());
-    expect(screen.getByTestId('themes-search-empty')).toBeVisible();
-  });
-
-  it('keeps the section but NARROWS the grid for a query that matches an icon token', async () => {
-    const { user } = mount();
-    const unfiltered = iconCells().length;
-
+    // Keeps the icon section but NARROWS the grid for a query that matches an icon token.
     await user.type(search(), 'destroy');
-
     await waitFor(() => expect(screen.queryByTestId('icon-cell-rename')).toBeNull());
     expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
     expect(screen.getByTestId('icon-cell-destroy')).toBeVisible();
@@ -226,7 +200,8 @@ describe('the icon section is not exempt from the search (FR-021)', () => {
  * control, and nonsense on screen. Which is what a DOM can look at.
  */
 describe('every typography role offers every attribute', () => {
-  it('renders a control for each of the seven attributes of a non-editor role', () => {
+  it('renders all seven attributes of a non-editor role, has RETIRED the dialog role, and sheds casing and decoration on the EDITOR role', () => {
+    // Merged from three read-only tests on one mount (audit, component-2a).
     mount();
     for (const key of [
       'typography.tab.italic',
@@ -239,17 +214,12 @@ describe('every typography role offers every attribute', () => {
     ]) {
       expect(screen.getByTestId(`control-${key}`), `${key} is not editable`).toBeVisible();
     }
-  });
 
-  it('has RETIRED the dialog role — the preferences window inherits the base application font', () => {
-    mount();
-    // Preceded by a positive on the same registry, so "absent" cannot mean "nothing rendered".
-    expect(screen.getByTestId('control-typography.tab.family')).toBeVisible();
+    // The dialog role is retired — the preferences window inherits the base application font. The
+    // positive on the same registry (`typography.tab.family`, above) makes "absent" mean something.
     expect(screen.queryByTestId('control-typography.dialog.family')).toBeNull();
-  });
 
-  it('sheds casing and decoration on the EDITOR role — source text is not prose', () => {
-    mount();
+    // Source text is not prose.
     expect(screen.getByTestId('control-typography.editor.sizePx')).toBeVisible();
     for (const gone of ['case', 'italic', 'underline', 'strikethrough']) {
       expect(

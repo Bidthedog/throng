@@ -29,17 +29,17 @@
  *   data-value="exclude" | "include" what it is doing NOW, not what pressing it would do — the same
  *                                    convention `quickopen-target` follows
  *
- * ══ WHY THIS FILE IS SERIAL ══
+ * ══ SERIAL TIER, AND WHY THAT IS NOW THE CALLER'S QUESTION ══
  *
- * It drives the file tree's CONTEXT MENU, to hide a file the way a user does (SC-022). throng closes
- * menus when its window loses focus, so a second headed app started concurrently would close the menu
- * underneath this one — which is why `parallel-plan.json` lists this file. It was in the parallel tier
- * until the toggle arrived; the move is a consequence of that assertion, not of the file's age.
+ * `parallel-plan.json` lists this file because it used to drive the file tree's CONTEXT MENU to hide
+ * a file (SC-022), and throng closes menus when its window loses focus. That walk moved to
+ * `integration/project-file-index.integration.test.ts` (test-suite audit), so nothing here opens a
+ * menu any more; whether the file belongs in the parallel tier is for `tier-plan.test.ts` to say.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { openApp, createProject as newProject, firstPanelId, panelIds, focusEditor, commitTabRename, settle, type AppOptions, type OpenApp, splitPanelViaMenu } from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, focusEditor, settle, type AppOptions, type OpenApp } from './harness.js';
 import { createDeepTree, cleanupDeepTree, DEEP_TREE } from './helpers/deep-tree.js';
-import { openQuickOpen, quickOpenRows, quickOpenRowPaths } from './helpers/navigation.js';
+import { openQuickOpen, quickOpenRows } from './helpers/navigation.js';
 
 /*
  * ONE app for this file, and now EVERY test in it shares that one. The last spec that seeded
@@ -74,7 +74,6 @@ let projectSeq = 0;
 const createProject = (win: Page, name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-const editors = (win: Page) => win.locator('.editor-panel');
 const target = (win: Page) => win.getByTestId('quickopen-target');
 
 /**
@@ -92,50 +91,6 @@ async function editorWithProject(win: Page, name: string, root: string): Promise
   await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
   await focusEditor(win, pid);
   return pid;
-}
-
-/**
- * Press Enter on a query whose answer is exactly ONE file — after waiting for that row to exist.
- *
- * `Enter` is answered from the highlighted row and nothing queues it, so a key pressed while the
- * file index is still enumerating (FR-015 / S3, the "Still listing this project's files…" state) is
- * correctly ignored and never retried: the modal stays open, the row arrives a beat later, and the
- * test then fails on an assertion about editor panels. Measured on the sibling spec at 2 failures in
- * 6 against a freshly launched app — see `chooseTheOnlyRow` in `quick-open.e2e.ts`, which carries
- * the captured evidence. The same guard belongs here, where every one of these queries also has
- * exactly one answer.
- */
-async function chooseTheOnlyRow(win: Page): Promise<void> {
-  await expect(quickOpenRows(win)).toHaveCount(1);
-  await win.keyboard.press('Enter');
-}
-
-/**
- * Put the control on "a new editor panel" and leave focus back in the query input.
- *
- * The keyboard route (E5 / T4), not a click, because a click on the header moves DOM focus out of
- * the input and the Enter that follows would then be answered by the control rather than by the
- * list — which is E1's whole subject and would make these tests measure the wrong key.
- */
-async function chooseNewEditorTarget(win: Page): Promise<void> {
-  await win.keyboard.press('Shift+Tab');
-  await expect(target(win)).toBeFocused();
-  await win.keyboard.press('Space');
-  await expect(target(win)).toHaveAttribute('data-value', 'new');
-  await win.keyboard.press('Tab');
-  await expect(win.getByTestId('quickopen-input')).toBeFocused();
-}
-
-/** Add a sibling panel to `pid` and make it an editor. Returns the new panel's id. */
-async function addEditorPanel(win: Page, pid: string): Promise<string> {
-  const before = await win.locator('.panel-box').count();
-  await splitPanelViaMenu(win, pid);
-  await expect(win.locator('.panel-box')).toHaveCount(before + 1);
-  const next = (await panelIds(win)).filter((id) => id !== pid)[0];
-  await win.getByTestId(`panel-type-select-${next}`).selectOption('editor');
-  await win.getByTestId(`panel-type-confirm-${next}`).click();
-  await expect(win.getByTestId(`editor-${next}`)).toBeVisible();
-  return next;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -183,80 +138,25 @@ async function addEditorPanel(win: Page, pid: string): Promise<string> {
  * of them on the `findByTestId('quickopen-input')` that each test awaits before it starts.
  */
 
-test('the control says where the file will land IN WORDS, names the panel, and is one click target (SC-020, FR-068)', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * NARROWED (test-suite audit) to the one claim only a layout engine can make: the modal must not JUMP
+ * as the target sentence changes length. The wording, the panel name, the single-button shape and the
+ * click-the-words toggle are `component/quick-open-header.test.ts` "the control says where the file
+ * will land IN WORDS (SC-020, FR-068)"; jsdom has no layout, so the box comparison stays.
+ */
+test('the modal does not jump as the target sentence changes length (SC-020, FR-068)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const tree = createDeepTree('throng-qot-words-');
   try {
     await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOTargetWords', tree.root);
-
-      /*
-       * Give the panel the name a user would recognise it by — the file it holds.
-       *
-       * `panelDisplayTitle` is the single rule that decides a panel's name (#218), so asserting the
-       * stem of the open file here is asserting the string the panel header itself shows. A name
-       * derived any other way could agree today and drift tomorrow, which is the whole reason that
-       * function exists.
-       */
+      await editorWithProject(win, 'QOTargetWords', tree.root);
       await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-        '// README.md',
-        { timeout: 8000 },
-      );
-
-      await focusEditor(win, pid);
-      await openQuickOpen(win);
-
-      /*
-       * SC-020 — WITHOUT hovering. Nothing in this test moves the pointer over the control before
-       * this assertion, so a hover title cannot satisfy it: the sentence is either in the rendered
-       * text or the requirement is unmet.
-       */
       await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-      await expect(target(win)).toContainText('Will open in the active editor (README)');
 
-      /*
-       * FR-068 — ONE click target: the icon and the words live inside a single `<button>`, not a
-       * button beside a label. Asked of the DOM, because "they look adjacent" is exactly the shape
-       * the requirement rejects.
-       */
-      const shape = await win.getByTestId('quickopen').evaluate((card) => {
-        const btn = card.querySelector('[data-testid="quickopen-target"]');
-        const label = card.querySelector('[data-testid="quickopen-target-label"]');
-        return {
-          tag: btn?.tagName ?? '(no control)',
-          labelInsideButton: btn !== null && label !== null && btn.contains(label),
-          hasThemeIcon: btn?.querySelector('.icon') != null,
-          nestedButtons: btn?.querySelectorAll('button').length ?? -1,
-        };
-      });
-      expect(shape).toEqual({
-        tag: 'BUTTON',
-        labelInsideButton: true,
-        hasThemeIcon: true,
-        nestedButtons: 0,
-      });
-
-      /*
-       * The modal must not JUMP as the sentence changes length. `.picker` is a fixed-width card, so
-       * the two strings resize the button and nothing else — asserted rather than assumed, because
-       * a header control sized by its content is precisely how a dialog acquires a twitch.
-       */
+      // `.picker` is a fixed-width card, so the two strings resize the button and nothing else.
       const boxBefore = await win.getByTestId('quickopen').boundingBox();
-
-      // …and clicking the WORDS operates it. This is the assertion the user's request is about:
-      // an icon with a label beside it would pass every other check in this test and fail here.
       await win.getByTestId('quickopen-target-label').click();
       await expect(target(win)).toHaveAttribute('data-value', 'new');
-      await expect(target(win)).toContainText('Will open in a new editor');
-      await expect(target(win)).not.toContainText('active editor');
       expect(await win.getByTestId('quickopen').boundingBox()).toEqual(boxBefore);
-
-      // It toggles back, and names the panel again — the name is read live, not captured on open.
-      await win.getByTestId('quickopen-target-label').click();
-      await expect(target(win)).toHaveAttribute('data-value', 'lastActive');
-      await expect(target(win)).toContainText('Will open in the active editor (README)');
 
       await win.keyboard.press('Escape');
       await expect(win.getByTestId('quickopen')).toHaveCount(0);
@@ -278,136 +178,21 @@ test('the control says where the file will land IN WORDS, names the panel, and i
  * The route is proven equivalent once, and the setting is proven on that route once. Asserting
  * the setting a third time through Quick Open tests the same branch with a different way in.
  *
- * The one-buffer cases below are deliberately NOT covered by that argument: they are not what the
- * setting selects, they are what it does when the file is already open.
- */
-
-/* ────────────────────────────────────────────────────────────────────────────────────────────────
- * The one-buffer rule holds on the `new` target too — FR-008, FR-011a, AS-9
+ * MOVED DOWN (test-suite audit) — the two "one-buffer rule holds on the `new` target" declarations
+ * (FR-008, FR-011a, AS-9: a file already open in this tab is activated, not copied; a file open in
+ * ANOTHER tab activates that tab's editor). Quick Open hands `openFileInTab` the control's value, and
+ * the gate that was skipped for `new` is that function's: `component/editor-open-routing.test.ts`,
+ * "with the target on "new", a file already open in this tab is activated, not copied (AS-9)" and
+ * "... open in ANOTHER tab activates that tab's editor (FR-011a)", both red with the gate skipped for
+ * the `new` target. That Quick Open passes the control's value through unchanged is
+ * `component/quick-open-header.test.ts` "Enter IN THE INPUT opens the highlighted row, at the path and
+ * target the control was left on".
  *
- * Reported from hand-testing: with the control on "a new editor panel", choosing a file that was
- * ALREADY open produced a SECOND editor on the same file. FR-008 requires Quick Open to route
- * through the shipped open-file path "inheriting every check it makes", and the one-buffer rule is
- * the first of those checks; AS-9 states the outcome directly. The `lastActive` target was correct
- * throughout, which is what localises the defect: only the `new` branch skipped the gate.
- *
- * Both tests assert a COUNT, never a presence. The defect is a second copy, and "an editor holds
- * README" is true of the broken build as well as the fixed one.
+ * Reported from hand-testing, for the record: with the control on "a new editor panel", choosing a
+ * file that was ALREADY open produced a SECOND editor on the same file.
  * ──────────────────────────────────────────────────────────────────────────────────────────────── */
 
-test('with the control on "a new editor panel", a file already open in this tab is activated, not copied (FR-008, FR-011a, AS-9)', { tag: ['@core', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qot-onebuf-');
-  try {
-    await runApp(async (_app, win) => {
-      // Editor A holds README.md.
-      const a = await editorWithProject(win, 'QOTargetOneBuffer', tree.root);
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
-        '// README.md',
-        { timeout: 8000 },
-      );
 
-      /*
-       * Editor B holds something else and is where the chord comes from.
-       *
-       * Two panels, not one: with a single editor on screen "no second copy" and "the file's editor
-       * is focused" are both satisfied by a tab that has nowhere else for focus to be, and neither
-       * assertion would then say anything. B is also what makes this the user's gesture — they were
-       * in one editor and asked for a file that lives in another.
-       */
-      const b = await addEditorPanel(win, a);
-      await focusEditor(win, b);
-      await openQuickOpen(win);
-      await win.keyboard.type('deep-widget');
-      await chooseTheOnlyRow(win);
-      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
-        '// src/app/components/widgets/deep-widget.ts',
-        { timeout: 8000 },
-      );
-      await expect(editors(win)).toHaveCount(2);
-
-      // From B, ask for README.md — open in A — with the control on "a new editor panel".
-      await focusEditor(win, b);
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      await chooseNewEditorTarget(win);
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-      // No third panel, exactly one editor holds the file, B keeps its own document…
-      await expect(editors(win)).toHaveCount(2);
-      await expect(editors(win).filter({ hasText: '// README.md' })).toHaveCount(1);
-      await expect(win.getByTestId(`editor-${b}`).locator('.cm-content')).toContainText(
-        '// src/app/components/widgets/deep-widget.ts',
-      );
-      // …and A — the editor that already held it — is the one that ends up with the caret.
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-editor.cm-focused')).toBeVisible({
-        timeout: 8000,
-      });
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
-
-test('with the control on "a new editor panel", a file open in ANOTHER tab activates that tab’s editor (FR-011a)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qot-onebuf-tab-');
-  try {
-    await runApp(async (_app, win) => {
-      // Tab 1: editor A holds README.md.
-      const a = await editorWithProject(win, 'QOTargetOneBufferTab', tree.root);
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await chooseTheOnlyRow(win);
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
-        '// README.md',
-        { timeout: 8000 },
-      );
-      const tabsBefore = await win.locator('.tab-chip').count();
-
-      // Tab 2, with its own editor — `tab-add` creates AND switches, and opens the chip in rename
-      // mode, which would otherwise swallow every key below.
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('.tab-chip')).toHaveCount(tabsBefore + 1);
-      await commitTabRename(win);
-      const c = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${c}`).selectOption('editor');
-      await win.getByTestId(`panel-type-confirm-${c}`).click();
-      await expect(win.getByTestId(`editor-${c}`)).toBeVisible();
-      await focusEditor(win, c);
-      // Only the active tab renders, so A is off screen and this tab holds exactly one editor.
-      await expect(editors(win)).toHaveCount(1);
-      await expect(win.getByTestId(`editor-${a}`)).toHaveCount(0);
-
-      // From tab 2, ask for README.md — open in tab 1 — with the control on "a new editor panel".
-      await openQuickOpen(win);
-      await win.keyboard.type('README');
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      await chooseNewEditorTarget(win);
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId('quickopen')).toHaveCount(0);
-
-      /*
-       * Tab 1 comes forward and its editor is the one holding the file.
-       *
-       * `editor-A` being on screen IS the tab switch — a panel renders only in the active tab — and
-       * it is the assertion the count alone cannot make: the broken build leaves tab 2 active with a
-       * brand-new editor on README.md in it, which is also a count of one.
-       */
-      await expect(win.getByTestId(`editor-${a}`)).toBeVisible({ timeout: 8000 });
-      await expect(win.getByTestId(`editor-${a}`).locator('.cm-content')).toContainText(
-        '// README.md',
-      );
-      await expect(editors(win)).toHaveCount(1);
-      await expect(win.locator('.tab-chip')).toHaveCount(tabsBefore + 1); // …no tab was added either
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The exclusion toggle — FR-069 to FR-069c, SC-018, SC-022
@@ -430,64 +215,47 @@ test('with the control on "a new editor panel", a file open in ANOTHER tab activ
 /** The toggle. Named here by §5's derivation, exactly as `quickopen-target` is. */
 const hiddenToggle = (win: Page) => win.getByTestId('quickopen-hidden');
 
-/** Hide `relPath` through the route the user has — the tree's own context menu (004). */
-async function hideInProject(win: Page, folder: string, name: string): Promise<void> {
-  const tree = win.getByTestId('file-explorer-tree');
-  await tree.getByTestId(`tree-twisty-${folder}`).click();
-  await expect(tree.getByText(name, { exact: true })).toBeVisible();
-  await tree.getByText(name, { exact: true }).click({ button: 'right' });
-  await win.locator('.context-menu__item', { hasText: 'Hide in this project' }).click();
-  // The tree dropping the row is the acknowledgement that the daemon write landed. Waiting on it
-  // rather than on a duration is what stops the assertions below racing the round trip.
-  await expect(tree.getByText(name, { exact: true })).toHaveCount(0);
-}
 
-test('at the shipped default NEITHER mechanism’s files are candidates, and the toggle brings both back (SC-018, SC-022, FR-069c)', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * NARROWED (test-suite audit) — `at the shipped default NEITHER mechanism's files are candidates, and
+ * the toggle brings both back (SC-018, SC-022, FR-069c)`. The two mechanisms and the include flag are
+ * decisions of the index, not of a window: `integration/project-file-index.integration.test.ts`
+ * "AS-12 — at the SHIPPED exclude globs, nothing under .git or node_modules is listed" (:353),
+ * "FR-069c — the globs and the hidden set compose in ONE walk" (:567), "FR-069a — changing the hidden
+ * set re-walks the root and pushes the difference" (:580) and "two subscriptions to one root at
+ * different includeHidden values get DIFFERENT sets" (:640), with the toggle's own contract in
+ * `component/quick-open-header.test.ts` (:515-:560). The tree's "Hide in this project" context-menu
+ * walk is gone with it.
+ *
+ * WHAT STAYS is FR-069b, which nothing below E2E reads: "the toggle changes the current modal; the
+ * setting decides where every modal starts" is `NavigationChrome`'s reset on the transition into an
+ * open Quick Open, and the toggle's `data-value` is the observable.
+ */
+test('the toggle changes this invocation only — the next Quick Open starts excluding again (FR-069b)', { tag: ['@extended', '@editor'] }, async () => {
   const tree = createDeepTree('throng-qot-hidden-');
   try {
     await runApp(async (_app, win) => {
       const pid = await editorWithProject(win, 'QOToggleBoth', tree.root);
-      await hideInProject(win, 'src', 'hidden-in-project.txt');
       await focusEditor(win, pid);
 
       await openQuickOpen(win);
       // FR-069b — the shipped setting is "exclude", so the modal opens excluding.
       await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
-
-      /*
-       * The two halves, asserted INDEPENDENTLY and by positive queries with exact expected results.
-       *
-       * `quarantined` is carried only by files under `.git` and `node_modules`, both of which the
-       * shipped globs hide (FR-070). `hidden-in-project` is carried only by the file just hidden
-       * through the tree, which no glob touches. Neither can carry the other.
-       */
       await win.getByTestId('quickopen-input').fill(DEEP_TREE.excludedQuery);
-      await expect(quickOpenRows(win), 'the glob half of SC-018').toHaveCount(0);
-      await win.getByTestId('quickopen-input').fill(DEEP_TREE.hidable.query);
-      await expect(quickOpenRows(win), 'SC-022 — the hidden-set half').toHaveCount(0);
+      await expect(quickOpenRows(win)).toHaveCount(0);
 
-      // Flip it. "Show hidden" means EVERYTHING the project hides — one rule set, not two (FR-069c).
+      // Flip it: the hidden files are candidates for THIS invocation.
       await hiddenToggle(win).click();
       await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'include');
-
-      await expect(quickOpenRows(win)).toHaveCount(1);
-      expect(await quickOpenRowPaths(win)).toEqual([DEEP_TREE.hidable.path]);
-      await win.getByTestId('quickopen-input').fill(DEEP_TREE.excludedQuery);
       await expect(quickOpenRows(win)).toHaveCount(2);
-      expect((await quickOpenRowPaths(win)).sort()).toEqual([
-        '.git/quarantined-object.txt',
-        'node_modules/quarantined-pkg/quarantined-module.ts',
-      ]);
-
       await win.keyboard.press('Escape');
       await expect(win.getByTestId('quickopen')).toHaveCount(0);
 
-      // FR-069b — the setting decides where every modal STARTS, so the next one starts excluding
-      // again. The toggle changed this invocation, not the preference.
+      // The setting decides where every modal STARTS: the next one excludes again.
       await focusEditor(win, pid);
       await openQuickOpen(win);
       await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
-      await win.getByTestId('quickopen-input').fill(DEEP_TREE.hidable.query);
+      await win.getByTestId('quickopen-input').fill(DEEP_TREE.excludedQuery);
       await expect(quickOpenRows(win)).toHaveCount(0);
       await win.keyboard.press('Escape');
     });
@@ -496,65 +264,12 @@ test('at the shipped default NEITHER mechanism’s files are candidates, and the
   }
 });
 
-test('flipping the toggle to SHOW excluded files never empties the list mid-flight (FR-069d)', { tag: ['@extended', '@editor'] }, async () => {
-  const tree = createDeepTree('throng-qot-noflash-');
-  try {
-    await runApp(async (_app, win) => {
-      const pid = await editorWithProject(win, 'QOToggleNoFlash', tree.root);
-      await focusEditor(win, pid);
-      await openQuickOpen(win);
-
-      /*
-       * A query that matches whether or not hidden files are included, so the list has rows on BOTH
-       * sides of the flip. Without that the assertion below could not tell "blanked while the wider
-       * walk runs" from "this query legitimately matches nothing yet".
-       */
-      await win.getByTestId('quickopen-input').fill(DEEP_TREE.ranking.query);
-      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'exclude');
-      const before = await quickOpenRows(win).count();
-      expect(before, 'the query matched nothing before the flip — the fixture is wrong').toBeGreaterThan(0);
-
-      await hiddenToggle(win).click();
-
-      /*
-       * ══ WHY THIS ASSERTION IS SHAPED LIKE THIS ══
-       *
-       * Waiting for `data-value` to change is not decoration: it proves React has COMMITTED the
-       * render that the flip caused. Only then is `count()` — which does NOT retry, and so samples
-       * the DOM as it is right now — asking a meaningful question.
-       *
-       * Sampling immediately after the click instead would read the pre-flip DOM and pass against a
-       * broken build, which is the failure mode this whole feature has been repeatedly bitten by: a
-       * guard that cannot fail. Against the defect this test was written for, the count here is 0,
-       * because the modal switches from the standing subscription to a second one that has never
-       * held any paths, and the user sees the list blink empty before the wider set arrives.
-       *
-       * ══ THIS IS ONE HALF OF FR-069d, AND THE OTHER HALF IS NOT HERE ══
-       *
-       * Rows surviving the flip means the previous, NARROWER list is being borrowed while the wider
-       * index builds — and a narrower list served with nothing said is the very thing FR-069d
-       * forbids. What makes the borrow legitimate is the "still listing" line standing over it, and
-       * that pairing is asserted on the 12,000-file fixture in `quick-open-perf.e2e.ts`, where the
-       * walk is long enough to sample. This tree is small enough that the wider walk can finish
-       * inside a frame, so an assertion here on the line being up would be a race, not a guard.
-       */
-      await expect(hiddenToggle(win)).toHaveAttribute('data-value', 'include');
-      const during = await quickOpenRows(win).count();
-      expect(
-        during,
-        'the list emptied the moment the toggle flipped — that blink is the reported flash',
-      ).toBeGreaterThan(0);
-
-      // And it still converges on the wider set, so "no flash" was not bought by never updating.
-      await expect(quickOpenRows(win)).toHaveCount(before, { timeout: 10_000 });
-
-      // The borrow is TEMPORARY. A "still listing" line left standing over a settled list would be
-      // the mirror-image defect — a permanent caveat on an answer that is complete.
-      await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
-
-      await win.keyboard.press('Escape');
-    });
-  } finally {
-    cleanupDeepTree(tree);
-  }
-});
+/*
+ * DELETED (test-suite audit) — `flipping the toggle to SHOW excluded files never empties the list
+ * mid-flight (FR-069d)`. The flip moves the window onto a second subscription that has never held
+ * paths; what it must not do is blank the list meanwhile. That is the hook's decision, proved with
+ * no window: `component/use-file-index.test.ts` "KEEPS the list when it arrives before this key has
+ * ever delivered a ready" (:156) and "DISCARDS the list when it arrives after a ready for this key —
+ * main has disowned it" (:180), the pair that keeps the borrow from being either permanent or absent.
+ * The "still listing" pairing on a long walk remains `quick-open-perf.e2e.ts`.
+ */

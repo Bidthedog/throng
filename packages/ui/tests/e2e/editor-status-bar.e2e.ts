@@ -25,7 +25,46 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp, geom } from './harness.js';
+import {
+  openApp,
+  createProject as newProject,
+  firstPanelId,
+  cleanupTemp,
+  geom,
+  type AppOptions,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for this file, not one per test (the pattern is `editor-open.e2e.ts`'s): neither test seeds
+ * state before launch, and each builds its own project, which swaps the whole workspace. Both set the
+ * real window's width themselves before measuring, so neither depends on the width the other left.
+ *   runApp        runs against the shared window and REFUSES options rather than ignoring them.
+ *   createProject appends a counter, so duplicate names never make `.project-item` ambiguous.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 /**
  * Three lines, and every figure it produces is distinctive.

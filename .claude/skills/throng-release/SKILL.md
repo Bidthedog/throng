@@ -31,7 +31,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 ## The shape of it
 
 ```
-preflight → branch → CHANGELOG → version bump → dependency audit → docs
+preflight → branch → CHANGELOG → version bump → dependency audit → docs → test-suite audit
   → local checks → commit → PR → gate.yml → merge → tag → release.yml (full E2E
   → package → reconcile → verify ×6 combinations → coexistence → render body) → human sign-off → publish
 ```
@@ -164,13 +164,13 @@ Two traps, both from the alpha5 run:
 `better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
 
 **Then prove it, because native code moved.** Electron and `koffi` ship binaries the daemon loads
-under the bundled host-Node runtime, so a patch bump is not a no-op. Run everything the gate runs
-except E2E, on the upgraded tree, and quote the counts:
+under the bundled host-Node runtime, so a patch bump is not a no-op. Run the cheap stages locally,
+then push and dispatch `gate.yml` for the OS-heavy layers (*Verifying done-ness* in `CLAUDE.md`),
+and quote the counts from both:
 
 ```sh
 npm run build && npm run typecheck && npm run lint
 npm run test:unit && npm run test:component
-npm run test:integration && npm run test:contract
 ```
 
 Capture the output to a scratch file rather than filtering it — the **running-tests** skill owns
@@ -193,7 +193,27 @@ Two things the audit does not cover, because they belong to this skill:
   change (see [Keeping this skill true](#keeping-this-skill-true)).
 - Every configurable option added this cycle is named in the changelog entry.
 
-## 7. Prove it locally before spending a runner
+## 7. Test-suite audit — keep the runs from growing out of hand
+
+Every release audits the test suite, so its cost is looked at once a cycle rather than when CI has
+already become slow. Do it on the release branch, alongside the docs audit, **before the gate**.
+
+1. **Measure.** `td` (test-discipline) runs every layer through `.test-discipline/adapters.json`.
+   Record a fresh smoke-tier run per vitest runner — `td run --runner <unit|component|integration|contract> --tier smoke --no-bail` —
+   and read the E2E stage and per-job durations from the last green `gate.yml` run. Never run the E2E
+   suite locally for this.
+2. **Audit.** Dispatch the `test-discipline:test-auditor` agent, per the `writing-tests` skill's
+   `references/suite-audit.md` (*Dispatching the audit*). For a large suite, segment it into disjoint
+   file sets (by layer, and the E2E specs by category tag) and run one auditor per segment in parallel.
+3. **Report, don't apply.** Put the findings in the release PR description under **Test-suite audit**:
+   the per-layer counts and wall-clock against the last release's, each tier against its `td` budget,
+   and the proposed actions (delete, move down a layer, share setup, re-tier) with predicted savings.
+   Applying them is ordinary work on its own branch after the release, never part of the release
+   commit — the release ships the tree the gate tested.
+4. **Ask the user** which proposals to schedule. A suite that grew since the last release, or a tier
+   newly over budget, is called out first.
+
+## 8. Prove it locally before spending a runner
 
 ```sh
 npm run build                                                   # release-notes.mjs imports @throng/core
@@ -208,7 +228,7 @@ the publish job would refuse — find out here, not after a tag.
 
 Read the rendered body rather than only its exit code. It is what ships.
 
-## 8. Commit, PR, gate, merge
+## 9. Commit, PR, gate, merge
 
 Author the commit message into a file and use `git commit -F` — never `-m`, which lets the shell eat
 backticks and `$(…)` from the message while the commit succeeds. Follow the **git-commit** skill.
@@ -229,7 +249,7 @@ what establishes done-ness:
 
 ```sh
 gh workflow run gate.yml --ref release/v<version>
-gh run watch <run-id> --exit-status                              # one blocking watch, ~35 min
+gh run watch <run-id> --exit-status                              # one blocking watch
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
@@ -238,7 +258,7 @@ directions. If `status` is not `completed`, the watch gave up and the run is sti
 
 Merge once it is green and the PR's own checks pass.
 
-## 9. Tag
+## 10. Tag
 
 The tag is cut on `master`, after the merge, and pushing it is what starts the release.
 
@@ -251,7 +271,7 @@ git push origin v<version>
 
 Never force-push a tag, and never move one that has published.
 
-## 10. Watch `release.yml`
+## 11. Watch `release.yml`
 
 ```sh
 gh run list --workflow release.yml --limit 3
@@ -264,13 +284,10 @@ the ref. The `master` run does everything except publish and is pure duplication
 public repo, so leave it unless runner minutes are being watched. **Take every verdict from the tag
 run**, which is the one carrying the publish job.
 
-The jobs, each gating the next (`needs` in brackets). Before 058 the alpha5 run (`35531917920`) took
-**45 minutes** tag-to-approval. This shape, measured on the first green rehearsal (`39520454070`,
-`skip_e2e`): build 5 min, the six verify legs 2.5–4 min each in parallel, coexistence 9 min,
-render-body 1 min — **20 minutes** without the E2E job, so about **53** with its 33:
+The jobs, each gating the next (`needs` in brackets):
 
 1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. This is
-   the only place the `@extended` half of the suite runs. **33 min** on a runner. A red suite means
+   the only place in the release pipeline the `@extended` half of the suite runs. A red suite means
    no artifact.
 2. **Work out the verification matrix** `combinations` (ubuntu, beside the E2E) — emits
    `artifact-set.mjs list --combinations --json`.
@@ -315,7 +332,7 @@ globs or resolves by extension is [references/artifact-set.md](references/artifa
 each verification step proves, and the four-outcome verdict model, is
 [references/verification.md](references/verification.md).
 
-## 11. The human QA sign-off
+## 12. The human QA sign-off
 
 **Blocking, and it is the user's to give.** Put in front of them what they need to decide with,
 rather than a link to go and find it: the rendered body you already downloaded in step 10, the seven
@@ -327,7 +344,7 @@ notification rather than a message they see when they next look.
 
 No automation, default or timeout can satisfy it. Do not try to approve it yourself.
 
-## 12. After it publishes
+## 13. After it publishes
 
 ```sh
 gh release view v<version> --json name,isPrerelease,assets,publishedAt \
@@ -376,7 +393,7 @@ gh workflow run release.yml --ref master -f publish=false
 Use it when the pipeline itself is what is being fixed.
 
 When only the installers or the verification harness are being fixed, add `-f skip_e2e=true`: it
-leaves out the full E2E suite (~33 minutes) and the build and verification jobs still run. `gate.yml`
+leaves out the full E2E suite and the build and verification jobs still run. `gate.yml`
 already runs that suite on the same tree. The publish job refuses to run when `skip_e2e` is set, so a
 release can never follow a skipped suite:
 

@@ -31,7 +31,7 @@ afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('1,000 interleaved writes', () => {
+describe('1,000 interleaved writes', { tags: ['regression'] }, () => {
   it('loses nothing (SC-004)', async () => {
     const root = mkdtempSync(join(tmpdir(), 'throng-write-soak-'));
     tempDirs.push(root);

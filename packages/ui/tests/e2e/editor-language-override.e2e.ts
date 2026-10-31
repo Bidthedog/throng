@@ -154,38 +154,6 @@ const tokenColours = (win: Page, pid: string): Promise<number> =>
  * path in `useEditor` — plus everything in this file about computed colours and the themed control,
  * which is layout.
  */
-test('the language indicator is a themed control with a hover title (constitution — NON-NEGOTIABLE)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LangProj', root);
-      const pid = await openEditorOn(win, 'main.rs', 'fn main');
-      const control = win.getByTestId(`editor-language-${pid}`);
-
-      // It is an ACTION control, so it names its action on hover.
-      await expect(control).toHaveAttribute('title', 'Set language');
-
-      // Its colours resolve from THEME TOKENS — never a hardcoded value, and never an inline SVG.
-      const styling = await win.evaluate((id) => {
-        const el = document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!;
-        const strip = getComputedStyle(el);
-        const tokenBg = getComputedStyle(document.documentElement)
-          .getPropertyValue('--throng-colour-editorStatusStripBg')
-          .trim();
-        return {
-          stripBg: strip.backgroundColor,
-          tokenBg,
-          inlineSvgs: el.querySelectorAll('svg').length,
-        };
-      }, pid);
-      expect(styling.tokenBg).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(styling.inlineSvgs, 'the strip must not carry an inline SVG').toBe(0);
-      expect(styling.stripBg).not.toBe('rgba(0, 0, 0, 0)');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 test('two clicks reach and change the language, it re-highlights at once, and it SURVIVES A RESTART (SC-004a)', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
   const root = makeProject();
@@ -250,48 +218,49 @@ test('two clicks reach and change the language, it re-highlights at once, and it
   }
 });
 
-test('the strip truncates in a narrow panel and never collapses the text area (FR-010c)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'LangProj', root);
-      const pid = await openEditorOn(win, 'main.rs', 'fn main');
+/*
+ * MOVED DOWN (test-suite audit) — "the strip truncates in a narrow panel and never collapses the text
+ * area (FR-010c)". The label's `overflow: hidden`, `text-overflow: ellipsis` and `white-space: nowrap`
+ * are declared keywords on a plain class, so `component/status-strip-declared-css.test.ts` ("the
+ * language label truncates, and the strip does not clip (FR-010c)") reads them from the application's
+ * own stylesheet — red with `text-overflow` changed to `clip`, and red with `overflow: hidden` on the
+ * strip. The text area's height staying put as the bar changes is measured in
+ * `editor-status-bar.e2e.ts`.
+ */
 
-      const geometry = await win.evaluate((id) => {
-        const strip = document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!;
-        const panel = document.querySelector(`[data-testid="editor-${id}"]`)!;
-        const label = document.querySelector(`[data-testid="editor-language-${id}"]`)!;
-        const labelStyle = getComputedStyle(label);
-        return {
-          stripHeight: strip.getBoundingClientRect().height,
-          panelHeight: panel.getBoundingClientRect().height,
-          labelOverflow: labelStyle.overflow,
-          ellipsis: labelStyle.textOverflow,
-          wrap: labelStyle.whiteSpace,
-        };
-      }, pid);
-
-      // The text area still has real height — the strip sits BELOW it, it does not eat it.
-      expect(geometry.panelHeight).toBeGreaterThan(50);
-      expect(geometry.stripHeight).toBeGreaterThan(0);
-      // The LABEL truncates. Clipping the STRIP would also clip the picker it opens — which is
-      // exactly the bug this assertion originally had, and the E2E caught.
-      expect(geometry.labelOverflow).toBe('hidden');
-      expect(geometry.ellipsis).toBe('ellipsis');
-      expect(geometry.wrap).toBe('nowrap');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('the strip DIMS with its panel — it does not stay lit while every other indicator dims (FR-010g)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+/*
+ * The themed-control claims (constitution — NON-NEGOTIABLE) that used to be their own declaration —
+ * "the language indicator is a themed control with a hover title" — are folded into this one (test-suite
+ * audit): both open the same file in a real editor and read the same strip, so they share its setup.
+ */
+test('the strip is a themed control that DIMS with its panel — it does not stay lit while every other indicator dims (constitution, FR-010g)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'LangProj', root);
       const pid = await openEditorOn(win, 'main.rs', 'fn main');
       await expect(win.getByTestId(`editor-language-${pid}`)).toHaveText('Rust');
+
+      // It is an ACTION control, so it names its action on hover.
+      await expect(win.getByTestId(`editor-language-${pid}`)).toHaveAttribute('title', 'Set language');
+
+      // Its colours resolve from THEME TOKENS — never a hardcoded value, and never an inline SVG.
+      const styling = await win.evaluate((id) => {
+        const el = document.querySelector(`[data-testid="editor-status-strip-${id}"]`)!;
+        const strip = getComputedStyle(el);
+        const tokenBg = getComputedStyle(document.documentElement)
+          .getPropertyValue('--throng-colour-editorStatusStripBg')
+          .trim();
+        return {
+          stripBg: strip.backgroundColor,
+          tokenBg,
+          inlineSvgs: el.querySelectorAll('svg').length,
+        };
+      }, pid);
+      expect(styling.tokenBg).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(styling.inlineSvgs, 'the strip must not carry an inline SVG').toBe(0);
+      expect(styling.stripBg).not.toBe('rgba(0, 0, 0, 0)');
+
       // The file was opened from the File Explorer, which therefore holds the active pane, and 046
       // FR-121 shows no workspace panel as active while it does — so the strip is dimmed here. Put
       // focus back in the editor first; the lit reading is about the workspace's active panel.

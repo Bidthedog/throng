@@ -6,8 +6,37 @@ import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js'
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from '@playwright/test';
-import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp } from './harness.js';
+import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject as newProject, firstPanelId, openApp, type AppOptions, type OpenApp } from './harness.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
+
+/*
+ * ONE app for this file, not one per test: none of these tests seeds state before launch, so each launch
+ * bought nothing (see `launch-sharing.md`). `runApp` runs the body against the shared window and refuses
+ * options rather than ignoring them; `createProject` appends a counter because a shared app accumulates
+ * projects and duplicate names make `.project-item` ambiguous. Serial mode: shared window, shared database;
+ * a failure skips the rest rather than running them against whatever state it left.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: AppOptions,
+): Promise<void> => {
+  if (opts) throw new Error('this file shares one app; a test needing launch options must use runOwnApp');
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 /**
  * #90 — terminal keyboard fidelity for a modified Enter. Drives the REAL key path (xterm +

@@ -17,6 +17,21 @@ function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
   });
 }
 
+/**
+ * Prove the recursive watch is armed by waiting for a probe file's report, instead of sleeping for a guess.
+ * The probe sits in the root itself, so it never names `src` or `docs`.
+ */
+async function armed(root: string, seen: () => number): Promise<void> {
+  const probe = join(root, 'watch-armed.probe');
+  const before = seen();
+  for (let i = 0; i < 40 && seen() === before; i += 1) {
+    await writeFile(probe, String(i));
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  await waitFor(() => seen() > before);
+  await rm(probe, { force: true });
+}
+
 describe('ExplorerWatcher live-sync push (004 US2 T029)', () => {
   it('emits a change when a file is created under the watched root', async () => {
     const root = await mkdtemp(join(tmpdir(), 'throng-watch-'));
@@ -25,10 +40,12 @@ describe('ExplorerWatcher live-sync push (004 US2 T029)', () => {
     const watcher = new ExplorerWatcher(new NodeFileWatcher(50), (e) => events.push(e));
     watcher.setRoot(root);
     try {
-      await new Promise((r) => setTimeout(r, 150)); // let the recursive watch arm
+      await armed(root, () => events.length);
       await writeFile(join(root, 'src', 'new.ts'), 'x');
-      await waitFor(() => events.length > 0);
-      expect(events.length).toBeGreaterThan(0);
+      const named = (): boolean =>
+        events.some((e) => e.relDir === 'src' || (e as { relDirs?: string[] }).relDirs?.includes('src'));
+      await waitFor(named);
+      expect(named()).toBe(true);
     } finally {
       watcher.dispose();
       await rm(root, { recursive: true, force: true });
@@ -47,7 +64,7 @@ describe('ExplorerWatcher live-sync push (004 US2 T029)', () => {
     });
     watcher.setRoot(root);
     try {
-      await new Promise((r) => setTimeout(r, 150)); // let the recursive watch arm
+      await armed(root, () => events.length);
       await writeFile(join(root, 'src', 'a.ts'), 'x');
       await writeFile(join(root, 'docs', 'b.md'), 'x');
       const named = (): Set<string> => new Set(events.flatMap((e) => e.relDirs ?? []));

@@ -224,7 +224,9 @@ describe('a clash between commands whose scopes intersect', () => {
  * immediately.
  */
 describe('the key bindings typeahead (FR-017, SC-019)', () => {
-  it('narrows by NAME', async () => {
+  it('narrows by NAME and by CHORD, says so when nothing matches, and brings the whole list back when cleared', async () => {
+    // Chained from four tests on four mounts (audit, component-2a); each step ends by clearing, so the
+    // next starts from the whole list.
     const { user } = mountTab();
     expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
     // The control must share NO token with the query. `focus.left` looks like the obvious choice
@@ -232,20 +234,17 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
     // `editor.cutLine` is in 'Editor' and carries no 'zoom' in key, label, description or chords.
     expect(screen.getByTestId('binding-editor.cutLine')).toBeVisible();
 
+    // By NAME.
     await user.type(search(), 'zoom');
-
     await waitFor(() => expect(screen.queryByTestId('binding-editor.cutLine')).toBeNull());
     expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-  });
+    await user.click(screen.getByTestId('keybindings-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('binding-editor.cutLine')).toBeVisible());
 
-  it('narrows by CHORD — what you actually remember when you want to know what a key does', async () => {
-    const { user } = mountTab();
-    expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-
-    // `focus.left` ships bound to exactly this and its name contains no part of it.
+    // By CHORD — what you actually remember when you want to know what a key does. `focus.left`
+    // ships bound to exactly this and its name contains no part of it.
     // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
     await user.type(search(), 'Ctrl+Shift+Alt+ArrowLeft');
-
     // BOTH assertions inside the wait. Waiting only on `focus.left` being visible waits for
     // something already true of the UNFILTERED list, so it returns on the first tick and the
     // absence below is then read before the 150 ms debounce has applied — green or red by timing.
@@ -253,28 +252,17 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
       expect(screen.getByTestId('binding-focus.left')).toBeVisible();
       expect(screen.queryByTestId('binding-zoom.in')).toBeNull();
     });
-  });
+    await user.click(screen.getByTestId('keybindings-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('binding-zoom.in')).toBeVisible());
 
-  it('says so when a query matches nothing, rather than showing an empty page', async () => {
-    const { user } = mountTab();
-    // The anti-vacuity control for the two absence assertions that follow.
-    expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-
+    // Says so when a query matches nothing, rather than showing an empty page.
     await user.type(search(), 'zzzznothing');
-
     await waitFor(() => expect(screen.getByTestId('keybindings-search-empty')).toBeVisible());
     expect(screen.queryByTestId('binding-zoom.in')).toBeNull();
-  });
-
-  it('brings the whole list back when the search is cleared', async () => {
-    const { user } = mountTab();
-    await user.type(search(), 'zzzznothing');
-    await waitFor(() => expect(screen.getByTestId('keybindings-search-empty')).toBeVisible());
 
     // The clear is IMMEDIATE, never debounced — it cancels the pending filter rather than joining
-    // the queue behind it.
+    // the queue behind it — and brings the whole list back.
     await user.click(screen.getByTestId('keybindings-search-clear'));
-
     expect(search()).toHaveValue('');
     await waitFor(() => expect(screen.getByTestId('binding-zoom.in')).toBeVisible());
     expect(screen.queryByTestId('keybindings-search-empty')).toBeNull();
@@ -400,22 +388,14 @@ describe('the tab hands the write path the map it built (FR-033)', () => {
     // 046 iterate round 1 (FR-102): view.toggleProjects' shipped chord moved to tier 1, and to J by
     // iterate round 3 (FR-117).
     expect(lastMap(docs)?.['view.toggleProjects']).toEqual(['Ctrl+Shift+Alt+J', 'Ctrl+K']);
-  });
 
-  it('carries the document VERSION through, so the write is not a downgrade', async () => {
     /*
-     * Not in the E2E, and reachable only from here: the E2E read `bindings` out of the file and
-     * never looked at the rest of the document. The tab composes `{ version, bindings }` by hand,
-     * so dropping the version is a one-character change that no assertion on `bindings` can see.
+     * The document VERSION is carried through, so the write is not a downgrade (merged from its own
+     * test in the audit, component-2a — it was the same double-click, capture and write). Not in the
+     * E2E, and reachable only from here: the E2E read `bindings` out of the file and never looked at
+     * the rest of the document. The tab composes `{ version, bindings }` by hand, so dropping the
+     * version is a one-character change that no assertion on `bindings` can see.
      */
-    const { docs } = recordWrites();
-    const { user } = mountTab();
-
-    await user.dblClick(screen.getByTestId('binding-view.toggleProjects'));
-    await screen.findByTestId('capture-modal');
-    press('k', { ctrlKey: true });
-
-    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
     expect(docs[docs.length - 1].version).toBe(DEFAULT_KEYBINDINGS.version);
   });
 

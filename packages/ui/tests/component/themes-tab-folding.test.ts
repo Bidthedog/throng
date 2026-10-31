@@ -109,22 +109,9 @@ describe('a token group heading folds (FR-001, FR-006)', () => {
     expect(COLOUR).toBeDefined();
   });
 
-  it('shows its token count, folds on click and restores on a second click', () => {
-    mount();
-    const total = TOKENS.filter((d) => d.group === FIRST).length;
-    expect(count(idOf(FIRST))).toBe(formatGrouped(total));
-    const row = screen.getByTestId(`theme-row-${TOKENS.find((d) => d.group === FIRST)!.key}`);
-    expect(isHidden(row)).toBe(false);
 
-    fireEvent.click(toggle(idOf(FIRST)));
-
-    expect(expanded(idOf(FIRST))).toBe(false);
-    expect(isHidden(row)).toBe(true);
-    expect(expanded(idOf(LAST))).toBe(true);
-
-    fireEvent.click(toggle(idOf(FIRST)));
-    expect(isHidden(row)).toBe(false);
-  });
+  // MOVED DOWN: fold-on-click and restore is the shared element's behaviour, asserted for the Settings tab in
+  // settings-tab-folding.test.ts and in isolation in preferences-fold-heading.test.ts.
 });
 
 describe('the Icons section folds like every other section (FR-013)', () => {
@@ -177,28 +164,8 @@ describe('fold state is remembered, per tab (FR-010, FR-012)', () => {
   });
 });
 
-describe('the keyboard (FR-004, SC-002)', () => {
-  it('reaches a token-group heading and the Icons heading with Tab, and Enter / Space toggle them', async () => {
-    const user = userEvent.setup();
-    mount();
-    // Fold everything so the Tab walk is short: each heading is then the next stop after the last.
-    fireEvent.click(screen.getByTestId('themes-collapse-all'));
-    screen.getByTestId('themes-collapse-all').focus();
-    const reached = new Set<Element | null>();
-    for (let i = 0; i < ALL.length + 2; i++) {
-      await user.tab();
-      reached.add(document.activeElement);
-    }
-    expect(reached.has(toggle(idOf(FIRST))), 'a token group heading').toBe(true);
-    expect(reached.has(toggle(ICONS)), 'the Icons heading').toBe(true);
-
-    toggle(ICONS).focus();
-    await user.keyboard('{Enter}');
-    expect(expanded(ICONS)).toBe(true);
-    await user.keyboard(' ');
-    expect(expanded(ICONS)).toBe(false);
-  });
-});
+// DELETED: the Tab walk and Enter / Space on a heading are the shared FoldHeading's (preferences-fold-heading.test.ts:
+// a real button, toggles on Enter and Space); nothing here is Themes-specific.
 
 describe('a search shows matches in folded groups (FR-008, FR-009)', () => {
   beforeEach(() => {
@@ -277,35 +244,6 @@ describe('Expand All and Collapse All (FR-011b)', () => {
     for (const id of ALL) expect(expanded(id), `${id} expanded`).toBe(true);
   });
 
-  it('act on this tab only', () => {
-    localStorage.setItem(STORE, JSON.stringify({ v: 2, settings: { [JSON.stringify([FIRST])]: true } }));
-    mount();
-    fireEvent.click(collapseAll());
-    const stored = JSON.parse(localStorage.getItem(STORE)!) as Record<string, Record<string, boolean>>;
-    expect(stored.settings).toEqual({ [JSON.stringify([FIRST])]: true });
-  });
-
-  it('are disabled while the search box has text', () => {
-    vi.useFakeTimers();
-    try {
-      mount();
-      fireEvent.change(screen.getByTestId('themes-search'), { target: { value: 'x' } });
-      expect(expandAll()).toBeDisabled();
-      expect(collapseAll()).toBeDisabled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('are reachable with Tab and act on Enter', async () => {
-    const user = userEvent.setup();
-    mount();
-    screen.getByTestId('themes-search').focus();
-    await user.tab();
-    expect(document.activeElement).toBe(expandAll());
-    await user.tab();
-    expect(document.activeElement).toBe(collapseAll());
-    await user.keyboard('{Enter}');
-    expect(expanded(ICONS)).toBe(false);
-  });
+  // DELETED: disabled-while-searching, tab-only and Tab / Enter reachability of the bulk buttons are the shared
+  // FoldAllButtons' (preferences-fold-heading.test.ts) and the Settings tab's wiring (settings-tab-folding.test.ts).
 });

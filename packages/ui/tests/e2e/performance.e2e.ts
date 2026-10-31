@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, panelGrip, splitPanelViaMenu } from './harness.js';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 import { expectWithinSla } from './helpers/sla.js';
 
 registerTempCleanup();
@@ -159,38 +159,5 @@ test('restores a project workspace within the launch budget (NFR-002)', { tag: [
   }
 });
 
-test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  const h = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName);
-    const win = await app.firstWindow();
-    await createProject(win, 'Feedback');
-    const firstId = await win
-      .locator('.panel-box')
-      .first()
-      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
-    await splitPanelViaMenu(win, firstId);
-    await expect(win.locator('.panel-box')).toHaveCount(2);
-
-    const ids = await win
-      .locator('.panel-box')
-      .evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.panelId ?? ''));
-    const [a, b] = ids;
-
-    const handle = panelGrip(win, b);
-    const box = await handle.boundingBox();
-    if (!box) throw new Error('handle has no box');
-    await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await win.mouse.down();
-    // Pass the activation distance; edge drop-zones for the other panel must
-    // appear quickly (NFR-001 target 100 ms; the bound absorbs polling overhead).
-    await win.mouse.move(box.x + box.width / 2 + 8, box.y + box.height / 2 + 8, { steps: 2 });
-    await expect(win.getByTestId(`edge-right-${a}`)).toBeVisible({ timeout: 200 });
-    await win.mouse.up();
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
-});
+// MOVED: "shows drop-target feedback promptly once a Panel drag starts" now lives in drag-ghost.e2e.ts,
+// on that file's shared app.

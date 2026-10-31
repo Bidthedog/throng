@@ -122,9 +122,10 @@ async function closeApp(app: ElectronApplication): Promise<void> {
   await shutdownApp(app);
 }
 
-test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
+test('opens the two-Pane shell within 5 seconds (NFR-002), is resizable, and closes cleanly', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
   const start = Date.now();
   const app = await launchApp();
+  let closed = false;
   try {
     const window = await app.firstWindow();
     await window.getByTestId('throng-shell').waitFor({ state: 'visible' });
@@ -153,63 +154,39 @@ test('opens the two-Pane shell within 5 seconds (NFR-002)', { tag: ['@core', '@w
       elapsedMs: Date.now() - start,
       budgetMs: 5000,
     });
-  } finally {
-    await closeApp(app);
-  }
-});
 
-test('opens a resizable main window', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
-  const app = await launchApp();
-  try {
-    await app.firstWindow();
+    // Merged from 'opens a resizable main window': asserted AFTER the SLA is measured, so the extra
+    // main-process round trip can never count against the 5 second budget.
     const isResizable = await app.evaluate(async ({ BrowserWindow }) => {
       const [win] = BrowserWindow.getAllWindows();
       return win.isResizable();
     });
     expect(isResizable).toBe(true);
-  } finally {
+
+    /*
+     * Merged from 'closes cleanly'. "Cleanly" means the GRACEFUL path finished — not that the process is
+     * gone, which force-killing also achieves and which would make this unable to fail.
+     *
+     * So it is timed. `closeApp` reaps the detached daemon, then `shutdownApp` destroys the windows and
+     * closes, racing a 15s grace before it resorts to `taskkill`. Finishing well inside that grace is
+     * exactly the claim: the app shut itself down when asked.
+     *
+     * A bare `app.close()` is NOT the thing to assert here. It hangs even on a healthy app, because
+     * throng runs its own close handling and Playwright is waiting on a window that is waiting on the
+     * app; destroying the windows first is what lets it exit.
+     */
+    const began = Date.now();
+    closed = true;
     await closeApp(app);
-  }
-});
+    const took = Date.now() - began;
 
-test('exposes only placeholder workspace content (no real product features)', { tag: ['@core', '@window'] }, async () => {
-  const app = await launchApp();
-  try {
-    const window = await app.firstWindow();
-    await window.getByTestId('throng-shell').waitFor({ state: 'visible' });
-    // The sidebar hosts only Projects + Sub-workspaces (the Terminals panel was removed, FR-023).
-    await expect(window.getByTestId('projects-panel')).toBeVisible();
-    await expect(window.locator('.sidebar-panel--terminals')).toHaveCount(0);
+    // validity-bound: derived from the production constant SHUTDOWN_GRACE_MS (15s), and it is not a
+    // performance claim — a shutdown that needed the force-kill fallback cannot come in under ten
+    // seconds, so this number is the only thing distinguishing "closed itself" from "was killed".
+    // Remove it and the test passes when the app had to be killed, which is the opposite of what it
+    // says it checks. 034 SC-007's ceiling-needs-a-requirement rule is answered by the constant.
+    expect(took, `shutdown took ${took}ms — it needed the force-kill fallback`).toBeLessThan(10_000);
   } finally {
-    await closeApp(app);
+    if (!closed) await closeApp(app);
   }
-});
-
-test('closes cleanly', { tag: ['@core', '@window', '@reserve:window'] }, async () => {
-  const app = await launchApp();
-  await app.firstWindow();
-
-  /*
-   * "Cleanly" means the GRACEFUL path finished — not that the process is gone, which force-killing
-   * also achieves and which would make this test unable to fail.
-   *
-   * So it is timed. `closeApp` reaps the detached daemon, then `shutdownApp` destroys the windows and
-   * closes, racing a 15s grace before it resorts to `taskkill`. Finishing well inside that grace is
-   * exactly the claim: the app shut itself down when asked.
-   *
-   * A bare `app.close()` is NOT the thing to assert here, which took a while to establish. It hangs
-   * even on a healthy app, because throng runs its own close handling and Playwright is waiting on a
-   * window that is waiting on the app; destroying the windows first is what lets it exit. Asserting
-   * the bare call would have been asserting a behaviour throng does not have.
-   */
-  const began = Date.now();
-  await closeApp(app);
-  const took = Date.now() - began;
-
-  // validity-bound: derived from the production constant SHUTDOWN_GRACE_MS (15s), and it is not a
-  // performance claim — a shutdown that needed the force-kill fallback cannot come in under ten
-  // seconds, so this number is the only thing distinguishing "closed itself" from "was killed".
-  // Remove it and the test passes when the app had to be killed, which is the opposite of what it
-  // says it checks. 034 SC-007's ceiling-needs-a-requirement rule is answered by the constant.
-  expect(took, `shutdown took ${took}ms — it needed the force-kill fallback`).toBeLessThan(10_000);
 });

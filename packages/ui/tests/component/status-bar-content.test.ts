@@ -185,11 +185,10 @@ describe('status bar content (FR-003/004, narrowed by 026 / #166)', () => {
 /**
  * The bar carries no ADMIN pill, whatever the daemon says (026 / #166).
  *
- * ADDED COVERAGE, not a migration. `status-bar-deduped.e2e.ts:70` asserts two things — that
- * `[ADMIN]` is on the title bar AND that the status bar has no pill — and only the second half is
- * this component's. The first is composed in `app.tsx:517` and reaches `TitleBar` as a plain
- * `identity` prop, so proving it here would need that composition extracted; that is a production
- * refactor, not a test migration, and the E2E keeps both halves until someone makes it.
+ * ADDED COVERAGE, not a migration. The deleted `status-bar-deduped.e2e.ts:70` asserted two things —
+ * that `[ADMIN]` is on the title bar AND that the status bar has no pill — and only the second half
+ * is this component's. The first is composed in `AppTitleBar` and reaches `TitleBar` as a plain
+ * `identity` prop; it is `component/app-title-bar-identity.test.ts`, which mounts that composition.
  *
  * The half below was asserted nowhere, and it is the one with a mechanism worth pinning. #166's
  * finding was that the pill, the dot, the name and the `Tab · Panel` context were all SECOND COPIES

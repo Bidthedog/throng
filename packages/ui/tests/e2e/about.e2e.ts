@@ -207,15 +207,10 @@ async function openAboutViaCog(win: Page, app: ElectronApplication): Promise<Pag
   return aboutWin;
 }
 
-test('The cog menu has an "About throng" item that opens the About window (the discoverable entry point)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  const about = await openAboutViaCog(win, app);
-  await expect(about.getByTestId('about-window')).toBeVisible();
-  // It is the same About surface, showing the authoritative PRODUCT version (FR-001/FR-003) —
-  // the root package.json version, not Electron's app.getVersion().
-  await expect(about.getByTestId('about-version')).toHaveText(PRODUCT_VERSION);
-});
+// DELETED: "the cog menu has an About item that opens the About window" - identical to the opening steps
+// and version assertion of the test below, which opens About through the same cog entry point.
 
-test('About shows the product version (not Electron\'s), the copyright holder, the new title, close-only chrome, and third-party licences', { tag: ['@extended', '@window', '@reserve:runtime'] }, async () => {
+test('About shows the product version (not Electron\'s), the copyright holder, and third-party licences loaded in place', { tag: ['@extended', '@window', '@reserve:runtime'] }, async () => {
   const about = await openAboutViaCog(win, app);
   await expect(about.getByTestId('about-window')).toBeVisible();
 
@@ -230,13 +225,7 @@ test('About shows the product version (not Electron\'s), the copyright holder, t
   await expect(copyright).toContainText(PRODUCT_AUTHOR);
   await expect(copyright).not.toContainText('contributors');
 
-  // Title bar reads "About — throng".
-  await expect(about.getByTestId('title-bar-identity')).toHaveText('About — throng');
-
-  // Only a close control — no minimise/maximise on a fixed-size dialog.
-  await expect(about.getByTestId('window-close')).toBeVisible();
-  await expect(about.getByTestId('window-min')).toHaveCount(0);
-  await expect(about.getByTestId('window-max')).toHaveCount(0);
+  // (Title bar identity and close-only chrome: component/title-bar.test.ts - every window uses TitleBar.)
 
   // Third-party packages: the FULL production closure, not just the root's direct deps — so
   // transitive deps the UI pulls in (e.g. @codemirror/view) must appear, and there must be many.
@@ -244,6 +233,8 @@ test('About shows the product version (not Electron\'s), the copyright holder, t
   await expect(thirdParty).toContainText('better-sqlite3');
   await expect(thirdParty).toContainText('@codemirror/view');
   expect(await thirdParty.getByRole('listitem').count()).toBeGreaterThan(50);
+  // The list loads asynchronously (#139, FR-015/FR-017); once populated the loading affordance is gone.
+  await expect(about.getByTestId('about-thirdparty-loading')).toHaveCount(0);
   // A live, canonical link to each licence (SPDX) and to the project page (https GitHub).
   const licenceLink = thirdParty.getByRole('link', { name: 'MIT' }).first();
   await expect(licenceLink).toHaveAttribute('href', /spdx\.org\/licenses\/MIT/);
@@ -387,3 +378,20 @@ async function watchCloseRequests(
       }),
   };
 }
+
+test('closing About before the list resolves cancels the load without error (#139)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+  const errors: string[] = [];
+  win.on('pageerror', (e) => errors.push(String(e)));
+  const about = await openAboutViaCog(win, app);
+  about.on('pageerror', (e) => errors.push(String(e)));
+  // Close immediately - the in-flight getThirdParty() result is dropped by the `active` guard
+  // (FR-016); no "setState on unmounted" or navigation error is raised.
+  await about.close();
+  // Wait for the CLOSE to actually finish rather than a fixed pause: about-window.ts's own
+  // 'closed' handler re-enables every other window once it runs, which is the same handler that
+  // any late reaction to the close (in either window) would follow.
+  await expect
+    .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isEnabled()))
+    .toBe(true);
+  expect(errors, `renderer errors on early close:\n${errors.join('\n')}`).toEqual([]);
+});

@@ -8,7 +8,7 @@
  *    window to change them would open a second window and steal focus — throng closes menus on
  *    blur, so that alone would make unrelated specs flake — so these write `settings.json` in the
  *    run's own config root and let the app's hot-reload (#108) pick it up, exactly as
- *    `config-hotreload.e2e.ts` and `explorer-follow-active-editor.e2e.ts` already do.
+ *    `explorer-follow-active-editor.e2e.ts` already does.
  *
  *  - **Opening a rename box and reading its counter.** `tab-rename-input-<id>` /
  *    `tabstrip-rename-count-<id>` and their panel twins are the surface C1–C6 are stated over.

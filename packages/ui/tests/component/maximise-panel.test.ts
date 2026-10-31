@@ -9,12 +9,11 @@
  */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectPanels, createDefaultLayout, DEFAULT_KEYBINDINGS, type Panel, type WorkspaceLayout } from '@throng/core';
 import { mountTabGroup, type MountedTabGroup } from './helpers/mount-tab-group.js';
 import { __resetMaximise, getMaximiseStack, maximisePanel, restoreAll, toggleMaximisePanel } from '../../src/renderer/workspace/maximise-store.js';
 import { splitMenuItems } from '../../src/renderer/workspace/split-menu.js';
-import { panelHeaderMenu, type PanelHeaderMenuArgs } from '../../src/renderer/workspace/panel-header-menu.js';
 import { focusPanelIfLocal, createDedicatedEditor } from '../../src/renderer/editor/open-into-panel.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { __resetPanelFocus } from '../../src/renderer/workspace/panel-focus.js';
@@ -48,13 +47,15 @@ const body = (): HTMLElement => screen.getByTestId('tab-body');
 const shape = (): string[] => getMaximiseStack('t1').map((t) => `${t.kind}:${t.panelId}`);
 const ids = (): string[] => collectPanels(m!.ws().layout!.tabs[0]!.root).map((p) => p.id);
 
-async function settle(ms = 0): Promise<void> {
+/** Run `ms` of a fake clock (the caller has called `vi.useFakeTimers()`), inside `act`. */
+async function advance(ms: number): Promise<void> {
   await act(async () => {
-    await new Promise<void>((r) => setTimeout(r, ms));
+    await vi.advanceTimersByTimeAsync(ms);
   });
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   m?.unmount();
   m = undefined;
   __resetMaximise();
@@ -133,35 +134,23 @@ describe('a maximised tab is modal (FR-074)', () => {
     expect(screen.getByTestId('panel-close-p1')).not.toBeDisabled();
   });
 
-  it('draws Split, Send to Tab, Sync to and Destroy disabled in the title menu until restored', async () => {
-    await mount();
-    const menu = (): ReturnType<typeof panelHeaderMenu> =>
-      panelHeaderMenu({
-        panel: blank('p1'),
-        panelVerb: 'Destroy',
-        keybindings: DEFAULT_KEYBINDINGS,
-        otherTabs: [{ id: 't2', title: 'Two' }],
-        editor: null,
-        detach: { subWorkspaces: [], detachToNew: () => undefined, syncToExisting: () => undefined },
-        actions: {} as PanelHeaderMenuArgs['actions'],
-      } as PanelHeaderMenuArgs);
-    const rows = ['Split', 'Send to Tab', 'Sync to', 'Destroy Panel'];
-    act(() => maximisePanel('t1', 'p1'));
-    for (const label of rows) expect(menu().find((i) => i.label === label)?.disabled, label).toBe(true);
-    act(() => restoreAll('t1'));
-    for (const label of rows) expect(menu().find((i) => i.label === label)?.disabled, label).toBeFalsy();
-  });
+  // The title menu's Split / Send to Tab / Sync to / Destroy rows drawn disabled until restored is a pure
+  // store + `panelHeaderMenu()` claim: `unit/maximise-store.test.ts`.
 
   it('a disabled Split or Send to Tab row opens no submenu', async () => {
-    const user = userEvent.setup();
     await mount();
     act(() => maximisePanel('t1', 'p1'));
+    const user = userEvent.setup();
     await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId('panel-handle-p1') });
-    for (const label of ['Split', 'Send to Tab']) {
-      const row = await screen.findByTestId(`menu-item-${label}`);
-      expect(row).toHaveAttribute('aria-disabled', 'true');
-      await user.hover(row);
-      await settle(400);
+    const rows = await Promise.all(['Split', 'Send to Tab'].map((l) => screen.findByTestId(`menu-item-${l}`)));
+    for (const row of rows) expect(row).toHaveAttribute('aria-disabled', 'true');
+
+    // The hover-intent delay is a timer: run it on a fake clock rather than waiting it out. (No `userEvent`
+    // here — Testing Library's async wrapper waits on a real timer the fake clock would never fire.)
+    vi.useFakeTimers();
+    for (const row of rows) {
+      fireEvent.mouseEnter(row);
+      await advance(400);
     }
     expect(screen.queryByTestId('menu-item-Split Right')).toBeNull();
     expect(screen.queryByTestId('menu-item-New Tab')).toBeNull();
@@ -182,15 +171,16 @@ describe('a maximised tab is modal (FR-074)', () => {
   it('starts no panel drag, so no drop zones appear', async () => {
     await mount();
     act(() => maximisePanel('t1', 'p1'));
+    vi.useFakeTimers();
     const handle = screen.getByTestId('panel-handle-p1');
     fireEvent.pointerDown(handle, { isPrimary: true, button: 0, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(document, { isPrimary: true, clientX: 40, clientY: 10 });
     fireEvent.pointerMove(document, { isPrimary: true, clientX: 80, clientY: 10 });
-    await settle();
+    await advance(0);
     expect(document.querySelector('.edge-zones')).toBeNull();
     expect(screen.queryByTestId('outer-edge-zones')).toBeNull();
     fireEvent.pointerUp(document, { isPrimary: true, clientX: 80, clientY: 10 });
-    await settle(80);
+    await advance(80);
   });
 
   it('an open landing in a hidden panel restores the tab first', async () => {
@@ -248,8 +238,12 @@ describe('what ends or survives a maximise (FR-073, FR-075, FR-076)', () => {
   });
 
   it('maximising and restoring write nothing to the layout — no save is scheduled', async () => {
-    await mount();
-    await settle(500); // whatever the load itself scheduled has gone out
+    // The save is debounced (400 ms): a fake clock lets the window pass without waiting it out.
+    vi.useFakeTimers();
+    m = mountTabGroup(threePanels()); // not `mount()`: its findBy* polling would wait on the fake clock
+    await advance(0);
+    screen.getByTestId('panel-maximise-p1');
+    await advance(500); // whatever the load itself scheduled has gone out
     const before = m!.saves.mock.calls.length;
     const layoutBefore = m!.ws().layout;
     // Through the toggle the chord and the control share. (A CLICK also activates the panel it lands
@@ -257,7 +251,7 @@ describe('what ends or survives a maximise (FR-073, FR-075, FR-076)', () => {
     act(() => toggleMaximisePanel('t1', 'p1'));
     expect(body()).toHaveAttribute('data-maximised', 'p1');
     act(() => toggleMaximisePanel('t1', 'p1'));
-    await settle(500);
+    await advance(500);
     expect(m!.saves.mock.calls.length).toBe(before);
     expect(m!.ws().layout).toBe(layoutBefore);
   });

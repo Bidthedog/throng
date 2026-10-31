@@ -139,9 +139,7 @@ export function discoverKeepShiftChords(): Map<string, string[]> {
 export const COVERED: ReadonlyMap<string, string> = new Map([
   ['view.toggleProjects', 'the two pane toggles'],
   ['view.toggleExplorer', 'the two pane toggles'],
-  ['tabs.openPicker', 'the tab picker'],
   ['navigate.quickOpen', 'Quick Open — the chord the widening was made for'],
-  ['navigate.gotoLine', 'Go To Line over the active editor'],
   ['file.undo', 'undo and redo a file operation'],
   ['file.redo', 'undo and redo a file operation'],
   ['focus.cycle', 'cycling panel focus both ways'],
@@ -190,6 +188,13 @@ export const COVERED: ReadonlyMap<string, string> = new Map([
  */
 export const COVERED_ELSEWHERE: ReadonlyMap<string, { spec: string; press: string }> = new Map([
   ['menu.open', { spec: 'menu-keyboard.e2e.ts', press: 'Shift+F10' }],
+  /*
+   * Test-suite audit — both pressed by a spec that owns the surface, so the chord file no longer carries
+   * a launch for them: Go To Line by `goto-line-keybinding.e2e.ts`, the tab picker by `tab-scroll.e2e.ts`
+   * (T048, reading the shipped default). `transient-overlays.e2e.ts` opens both again in its overlay matrix.
+   */
+  ['tabs.openPicker', { spec: 'tab-scroll.e2e.ts', press: 'Control+Shift+Alt+T' }],
+  ['navigate.gotoLine', { spec: 'goto-line-keybinding.e2e.ts', press: 'Control+G' }],
   /*
    * 041 FR-020a — `Ctrl+Shift+Alt+V` (tier 1 since 046 FR-102, on V since iterate round 3's FR-117;
    * `M` before, which is `focus.explorer`'s now) takes the letter branch, so it belongs in this file's subject, and it
@@ -312,7 +317,21 @@ export function codeOnly(src: string): string {
 /** `keyboard.press('<chord>')` — the keystroke itself, not a mention of it. */
 export function pressesChord(src: string, chord: string): boolean {
   const literal = chord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(String.raw`keyboard\s*\.\s*press\(\s*['"\`]${literal}['"\`]`).test(src);
+  if (new RegExp(String.raw`keyboard\s*\.\s*press\(\s*['"\`]${literal}['"\`]`).test(src)) return true;
+  /*
+   * …or the same keystroke pressed as `keyboard.press(shippedPress('<action>'))` — an E2E that reads
+   * the shipped default rather than spelling it. Still a keystroke, not a mention: it is accepted only
+   * for an action whose first shipped binding IS this chord.
+   */
+  for (const [action, tokens] of Object.entries(shippedBindingsFor().bindings)) {
+    const token = (tokens as string[] | undefined)?.[0];
+    if (token === undefined) continue;
+    const presses = splitStrokes(token) ? toPlaywrightPresses(token) : [];
+    if (presses.length !== 1 || presses[0] !== chord) continue;
+    const act = action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(String.raw`keyboard\s*\.\s*press\(\s*shippedPress\(\s*['"\`]${act}['"\`]\s*\)`).test(src)) return true;
+  }
+  return false;
 }
 
 /**

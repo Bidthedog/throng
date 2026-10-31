@@ -152,23 +152,19 @@ async function expectFindKept(): Promise<void> {
 }
 
 describe('a preview with an open find, dragged (FR-000)', () => {
-  it('to another position in the same tab keeps 2 of 5, its highlights, and Next', async () => {
+  it.each([
+    { where: 'to another position in the same tab', target: 'edge-right-p2', linger: undefined, tab: 't1' },
+    { where: 'into another tab', target: 'tab-t2', linger: undefined, tab: 't2' },
+    {
+      where: 'into another tab, after lingering over its chip until the tab switched mid-drag',
+      target: 'tab-t2',
+      linger: 700,
+      tab: 't2',
+    },
+  ])('$where keeps 2 of 5, its highlights, and Next', async ({ target, linger, tab }) => {
     await mountWithFindAtTwoOfFive();
-    await dragPanelTo(mounted!, 'pv', 'edge-right-p2');
-    await expectFindKept();
-  });
-
-  it('into another tab keeps 2 of 5, its highlights, and Next', async () => {
-    await mountWithFindAtTwoOfFive();
-    await dragPanelTo(mounted!, 'pv', 'tab-t2');
-    expect(mounted!.ws().layout!.activeTabId).toBe('t2');
-    await expectFindKept();
-  });
-
-  it('into another tab, after lingering over its chip until the tab switched mid-drag, keeps 2 of 5, its highlights, and Next', async () => {
-    await mountWithFindAtTwoOfFive();
-    await dragPanelTo(mounted!, 'pv', 'tab-t2', 700);
-    expect(mounted!.ws().layout!.activeTabId).toBe('t2');
+    await dragPanelTo(mounted!, 'pv', target, linger);
+    expect(mounted!.ws().layout!.activeTabId).toBe(tab);
     await expectFindKept();
   });
 });

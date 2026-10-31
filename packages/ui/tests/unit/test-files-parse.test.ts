@@ -103,7 +103,9 @@ describe('every test file parses', () => {
     const broken: string[] = [];
     const unreadable: string[] = [];
 
-    for (const file of files) {
+    // Every file is checked concurrently: the transform is native and asynchronous, so a serial
+    // await per file left it idle between files, and that wait was most of this test's cost.
+    const check = async (file: string): Promise<void> => {
       let source: string;
       try {
         source = readWithRetry(file);
@@ -120,11 +122,11 @@ describe('every test file parses', () => {
          * an I/O problem the suite should go red over: there is nothing left to check. Skipped, and
          * the check is `existsSync` rather than the errno so a rename mid-walk lands here too.
          */
-        if (!existsSync(file)) continue;
+        if (!existsSync(file)) return;
         // Reported SEPARATELY. "I could not read this" and "this does not parse" are different
         // facts, and only the second is a broken spec.
         unreadable.push(`${relative(testsRoot, file)}: ${(e as Error).message.split('\n')[0]}`);
-        continue;
+        return;
       }
       const parse = async (text: string): Promise<string | null> => {
         try {
@@ -189,7 +191,10 @@ describe('every test file parses', () => {
           broken.push(`${relative(testsRoot, file)}: ${secondError} [${sizes}]`);
         }
       }
-    }
+    };
+    await Promise.all(files.map(check));
+    broken.sort();
+    unreadable.sort();
 
     expect(broken, `these test files do not parse:\n  ${broken.join('\n  ')}`).toEqual([]);
     expect(

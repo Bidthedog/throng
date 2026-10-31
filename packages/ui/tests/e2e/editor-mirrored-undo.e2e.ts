@@ -32,7 +32,7 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', { tag: ['@extended', '@editor'] }, async () => {
+test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013), and each view keeps its OWN cursor (FR-028c)', { tag: ['@extended', '@editor'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-mirundo-'));
   try {
     await runApp(async (app, win) => {
@@ -93,37 +93,16 @@ test('Undo in a mirrored view reverts an edit made in the OTHER view (SC-013)', 
       await child.keyboard.press('Control+y');
       await expect(childEditor).toHaveText('ALPHA-BETA', { timeout: 10000 });
       await expect(mainEditor).toHaveText('ALPHA-BETA', { timeout: 10000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
-test('a mirrored view keeps its OWN cursor and scroll — view state is per view (FR-028c)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-mircur-'));
-  try {
-    await runApp(async (app, win) => {
-      await win.evaluate(seedSub);
-      await reloadWindow(win);
-      await createProject(win, 'CursorProj', root);
-      const pid = await newEditor(win);
-
-      const mainEditor = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+      // ── FR-028c — view state is per VIEW. ────────────────────────────────────────────────────
+      // MERGED IN from `a mirrored view keeps its OWN cursor and scroll` (test-suite audit): the same
+      // file in the same two windows, so it continues here rather than paying a second app, a second
+      // sub-workspace window and a second mirror gesture.
+      await win.bringToFront();
       await mainEditor.click();
-      await win.keyboard.type('one\ntwo\nthree');
-      await quiesced(mainEditor, { what: 'main editor after typing one/two/three' });
-
-      const child = await openSubWorkspaceWindow(app, win, 'sw1');
-      await child.waitForLoadState('domcontentloaded');
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await win.getByTestId('menu-item-Sync to').click();
-      await win.getByTestId('menu-item-Mirror').click();
-      await win.getByTestId('menu-item-T').click();
-
-      const childEditor = child.getByTestId(`editor-${pid}`).locator('.cm-content');
+      await win.keyboard.press('Control+End');
+      await win.keyboard.type('\ntwo\nthree');
       await expect(childEditor).toContainText('three', { timeout: 10000 });
-      // the freshly-opened sub-workspace window's layout settling before we interact with it
-      await geom(child.getByTestId(`editor-${pid}`));
 
       // The line each window's caret is on, as the user actually SEES it — the active-line
       // highlight, not a reach into CodeMirror's internals.
@@ -134,7 +113,7 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
       await child.bringToFront();
       await childEditor.click();
       await child.keyboard.press('Control+Home');
-      await expect(activeLine(child)).toHaveText('one', { timeout: 10000 });
+      await expect(activeLine(child)).toHaveText('ALPHA-BETA', { timeout: 10000 });
 
       await win.bringToFront();
       await mainEditor.click();
@@ -145,9 +124,10 @@ test('a mirrored view keeps its OWN cursor and scroll — view state is per view
       await win.keyboard.type('!');
       await expect(childEditor).toContainText('three!', { timeout: 10000 });
       await expect(activeLine(win)).toHaveText('three!');
-      await expect(activeLine(child)).toHaveText('one'); // …view B's caret never moved
+      await expect(activeLine(child)).toHaveText('ALPHA-BETA'); // …view B's caret never moved
     });
   } finally {
     cleanupTemp(root);
   }
 });
+

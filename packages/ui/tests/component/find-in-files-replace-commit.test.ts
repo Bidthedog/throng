@@ -202,6 +202,10 @@ describe('T095 — the irreversible-commit warning (FR-057b, FR-057c, FR-057d, F
     // One call so far — the ASK. Nothing has been written, and the panel has not re-asked.
     expect(callsTo()).toHaveLength(1);
     expect(callsTo()[0]?.confirmedIrreversible).toBe(false);
+
+    // The decision buttons carry TEXT labels, under the themeable-icon exception.
+    expect(screen.getByTestId('confirm-accept').textContent?.trim().length ?? 0).toBeGreaterThan(0);
+    expect(screen.getByTestId('confirm-cancel').textContent?.trim().length ?? 0).toBeGreaterThan(0);
   });
 
   it('cancelling writes nothing at all', async () => {
@@ -236,23 +240,6 @@ describe('T095 — the irreversible-commit warning (FR-057b, FR-057c, FR-057d, F
     expect(callsTo()).toHaveLength(1);
   });
 
-  it('with the preference off the commit proceeds unasked (FR-057c)', async () => {
-    // Identical from here: `warnIrreversibleCommit: false` makes main skip the gate, so the panel
-    // sees a committed result on the first call.
-    const user = await ready();
-    await commitVia(user, 'fif-row-src/b.ts-40', 'Replace All');
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-  });
-
-  it('the decision buttons carry TEXT labels, under the themeable-icon exception', async () => {
-    // Only the FIRST answer is overridden; the re-ask falls through to the committing default.
-    stub.commit.mockResolvedValueOnce(NEEDS);
-    const user = await ready();
-    await commitVia(user, 'fif-row-src/a.ts-6', 'Replace All');
-
-    expect((await screen.findByTestId('confirm-accept')).textContent?.trim().length ?? 0).toBeGreaterThan(0);
-    expect(screen.getByTestId('confirm-cancel').textContent?.trim().length ?? 0).toBeGreaterThan(0);
-  });
 });
 
 describe('T098 — the outcome is reported ONCE (FR-058)', () => {

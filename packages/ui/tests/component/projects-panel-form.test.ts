@@ -50,7 +50,8 @@
  *     (`contract/pick-folder-ipc.contract.test.ts`), and the four E2E tests are deleted. Recorded
  *     rather than quietly edited, because "a real filesystem" was never the obstacle — the obstacle
  *     was that the code had no seam, and that is a fact about the code rather than about the layer.
- *   - `project-browse-neutral.e2e.ts` stays: three computed colours and a `:hover` (FR-049).
+ *   - `project-browse-neutral.e2e.ts` stays an E2E — now the Browse-button test in
+ *     `computed-style-chrome.e2e.ts`: three computed colours and a `:hover` (FR-049).
  *
  * ══ ANTI-VACUITY CONTROL ══
  *
@@ -681,27 +682,17 @@ describe('removing a project names the Remove verb, and promises no files are de
     return within(row).getByTestId(/^project-delete-/);
   };
 
-  it('labels the control itself Remove, not Delete', async () => {
+  it('labels the control Remove, confirms first, names the Remove verb with no forbidden verb, and CANCEL keeps the project', async () => {
+    // One mount for what was five: they all read the same dialog on the same project.
+    const { user } = await mount([], { picked: undefined });
+    await createProject(user, 'Verbs', 'C:/c/verbs');
+
     // The tooltip is the only wording a user sees before they commit to anything.
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Verbs', 'C:/c/verbs');
-
     expect(deleteControl('Verbs').getAttribute('title') ?? '').toMatch(/remove/i);
-  });
 
-  it('confirms first — the control alone never removes anything (FR-042)', async () => {
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Verbs', 'C:/c/verbs');
-
+    // The control alone never removes anything (FR-042): it opens a confirmation.
     await user.click(deleteControl('Verbs'));
-
     await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toBeVisible());
-  });
-
-  it('names the Remove verb in the confirmation, and says no files are deleted', async () => {
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Verbs', 'C:/c/verbs');
-    await user.click(deleteControl('Verbs'));
 
     const dialog = await screen.findByTestId('confirm-dialog');
     expect(dialog.textContent ?? '').toMatch(/remove/i);
@@ -709,24 +700,8 @@ describe('removing a project names the Remove verb, and promises no files are de
       dialog.textContent ?? '',
       'the one promise that makes Remove different from Delete',
     ).toMatch(/no files/i);
-  });
-
-  it('lets NO forbidden verb leak into the sentence', async () => {
-    // "Destroy" belongs to a panel, where a process really does end. On a project it is simply
-    // false, and a user who reads it here has been told their files are at risk.
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Verbs', 'C:/c/verbs');
-    await user.click(deleteControl('Verbs'));
-
-    const dialog = await screen.findByTestId('confirm-dialog');
+    // "Destroy" belongs to a panel, where a process really does end. On a project it is simply false.
     expect(dialog.textContent ?? '').not.toMatch(/destroy/i);
-  });
-
-  it('CANCEL keeps the project — the row is still there', async () => {
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Verbs', 'C:/c/verbs');
-    await user.click(deleteControl('Verbs'));
-    await screen.findByTestId('confirm-dialog');
 
     await user.click(screen.getByTestId('confirm-cancel'));
 
@@ -782,21 +757,14 @@ describe('each project row carries its own path (FR-032)', () => {
     return within(row).getByTestId('project-path').textContent ?? '';
   };
 
-  it('shows the path under the name, per row, with two projects on screen', async () => {
+  it('shows each path under its own row, and puts no project’s path on another’s row', async () => {
+    // Two rows: a single row cannot tell a per-row path apart from one the panel renders once.
     const { user } = await mount([], { picked: undefined });
     await createProject(user, 'Pathy', 'C:/code/some/deep/path');
     await createProject(user, 'Otherly', 'C:/code/elsewhere');
 
     expect(pathOf('Pathy')).toContain('C:/code/some/deep/path');
     expect(pathOf('Otherly')).toContain('C:/code/elsewhere');
-  });
-
-  it('does not put one project’s path on another’s row', async () => {
-    // The failure a single-row test cannot see, and the reason the E2E had to scope its query.
-    const { user } = await mount([], { picked: undefined });
-    await createProject(user, 'Pathy', 'C:/code/some/deep/path');
-    await createProject(user, 'Otherly', 'C:/code/elsewhere');
-
     expect(pathOf('Pathy')).not.toContain('elsewhere');
     expect(pathOf('Otherly')).not.toContain('deep/path');
   });

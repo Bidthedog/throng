@@ -250,23 +250,11 @@ afterEach(async () => {
   Reflect.deleteProperty(window, 'throng');
 });
 
-describe('SPIKE — the window mounts and shows a tab', () => {
-  it('renders the settings editor', async () => {
-    mount();
-    await ready();
-    expect(screen.getByTestId('settings-tab')).toBeVisible();
-  });
-
-  it('switches to the JSON view and back', async () => {
-    const { user } = mount();
-    await ready();
-    await intoJson(user);
-    expect(screen.getByTestId('json-tab-settings')).toBeVisible();
-
-    await user.click(screen.getByTestId('prefs-mode-toggle'));
-    await waitFor(() => expect(screen.getByTestId('settings-tab')).toBeInTheDocument());
-  });
-});
+/*
+ * The two SPIKE tests (window mounts / JSON view toggles) were deleted in the audit: every test in
+ * this file asserts `settings-tab` through `ready()`, and the JSON round trip is the fixing test
+ * below.
+ */
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * An invalid document blocks every exit, and says so ONCE
@@ -276,41 +264,14 @@ describe('SPIKE — the window mounts and shows a tab', () => {
 /** A document that is definitely not JSON — the migrated spec's mid-edit state. */
 const MID_EDIT = '{ "appearance": { "theme": "throng"';
 
-describe('an invalid JSON document blocks every exit (FR-018)', () => {
-  it('refuses a TAB SWITCH, leaving the JSON editor on screen', async () => {
-    const { user } = mount();
-    await ready();
-    await intoJson(user);
+const VALID_DOC = '{"appearance":{"theme":"throng"},"editor":{"autoSave":true}}';
 
-    setJson(MID_EDIT);
-    await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
-
-    await user.click(screen.getByTestId('prefs-tab-keybindings'));
-
-    // Still the settings JSON editor — the switch did not happen. Paired: the tab that WOULD have
-    // been shown is absent, so a window that rendered nothing at all fails rather than passes.
-    expect(screen.getByTestId('json-tab-settings')).toBeVisible();
-    expect(screen.queryByTestId('json-tab-keybindings')).toBeNull();
-  });
-
-  it('refuses LEAVING the JSON view', async () => {
-    const { user } = mount();
-    await ready();
-    await intoJson(user);
-
-    setJson(MID_EDIT);
-    await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
-
-    await user.click(screen.getByTestId('prefs-mode-toggle'));
-
-    expect(screen.getByTestId('json-tab-settings')).toBeVisible();
-    expect(screen.queryByTestId('settings-tab')).toBeNull();
-  });
-});
-
-describe('the refusal is VISIBLE, and there is exactly ONE of it (FR-019)', () => {
-  it('flashes the existing notice rather than raising another', async () => {
+describe('an invalid JSON document blocks every exit, says so ONCE, and writes nothing (FR-017/018/019)', () => {
+  it('refuses a tab switch and leaving the JSON view, flashing ONE notice that states the condition', async () => {
     /*
+     * Merged from five tests (audit, component-2a) that shared one mount, one `intoJson` and one
+     * `setJson(MID_EDIT)`; every assertion is kept.
+     *
      * The defect `CLAUDE.md` holds up as its worked example. An invalid document once reported
      * itself three ways — this banner, a toast on a refused tab switch, and a strip at the top of
      * the window on a refused close — and two of them told the user they could not leave while a
@@ -319,7 +280,7 @@ describe('the refusal is VISIBLE, and there is exactly ONE of it (FR-019)', () =
      * So: one surface, made louder. `json-document-notice.tsx:102` adds `--flash` while the refusal
      * count is above zero, and the two retired identifiers must not come back.
      */
-    const { user } = mount();
+    const { user, written } = mount();
     await ready();
     await intoJson(user);
 
@@ -328,8 +289,20 @@ describe('the refusal is VISIBLE, and there is exactly ONE of it (FR-019)', () =
     // Not flashing yet: nothing has been refused. Asserted BEFORE, so the class arriving below is a
     // change rather than a state that was always there.
     expect(notice.className).not.toMatch(/json-tab__error--flash/);
+    // FR-017: nothing is written as the user types.
+    expect(written).toEqual([]);
+
+    // "You cannot leave" is a claim about the user's options, and it is false the moment an escape
+    // exists — Discard is right there. The rule is to state the condition instead.
+    expect(notice.textContent ?? '').toContain('This document is not valid:');
+    expect(notice.textContent ?? '').not.toMatch(/cannot leave/i);
 
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
+
+    // Still the settings JSON editor — the switch did not happen. Paired: the tab that WOULD have
+    // been shown is absent, so a window that rendered nothing at all fails rather than passes.
+    expect(screen.getByTestId('json-tab-settings')).toBeVisible();
+    expect(screen.queryByTestId('json-tab-keybindings')).toBeNull();
 
     await waitFor(() =>
       expect(screen.getByTestId('json-invalid').className).toMatch(/json-tab__error--flash/),
@@ -338,54 +311,26 @@ describe('the refusal is VISIBLE, and there is exactly ONE of it (FR-019)', () =
     expect(screen.queryByTestId('json-close-blocked')).toBeNull();
     // One notice, not two.
     expect(screen.queryAllByTestId('json-invalid')).toHaveLength(1);
-  });
 
-  it('says what is WRONG, never what the user may not do', async () => {
-    /*
-     * "You cannot leave" is a claim about the user's options, and it is false the moment an escape
-     * exists — Discard is right there. The rule is to state the condition instead.
-     */
-    const { user } = mount();
-    await ready();
-    await intoJson(user);
+    // The other exit: LEAVING the JSON view is refused too.
+    await user.click(screen.getByTestId('prefs-mode-toggle'));
+    expect(screen.getByTestId('json-tab-settings')).toBeVisible();
+    expect(screen.queryByTestId('settings-tab')).toBeNull();
 
-    setJson(MID_EDIT);
-    const notice = await screen.findByTestId('json-invalid');
-
-    expect(notice.textContent ?? '').toContain('This document is not valid:');
-    expect(notice.textContent ?? '').not.toMatch(/cannot leave/i);
-  });
-});
-
-describe('nothing is written while the document is invalid (FR-017)', () => {
-  it('writes nothing as the user types, and nothing on a refused exit', async () => {
     /*
      * FR-017 holds UNDER a refused exit, which is the half a "does it block?" test misses: a window
      * that refused the exit and wrote the broken document anyway would satisfy every assertion
      * above and leave the user's settings file unparseable.
      */
-    const { user, written } = mount();
-    await ready();
-    await intoJson(user);
-
-    setJson(MID_EDIT);
-    await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
-    expect(written).toEqual([]);
-
-    await user.click(screen.getByTestId('prefs-tab-keybindings'));
-    await waitFor(() =>
-      expect(screen.getByTestId('json-invalid').className).toMatch(/json-tab__error--flash/),
-    );
-
     expect(written, 'a refused exit wrote the invalid document').toEqual([]);
   });
-});
 
-describe('fixing the document opens every exit again (FR-017/FR-018)', () => {
-  it('clears the notice, lets the JSON view close, and writes what the buffer holds', async () => {
+  it('opens every exit again once the document parses, and writes what the buffer holds on leaving', async () => {
     /*
      * The other half of the rule, and the one a "does it block?" test cannot state: a gate that
-     * never re-opens is not a gate, it is a trap. The migrated test ended here for the same reason.
+     * never re-opens is not a gate, it is a trap. Chained from two tests (audit, component-2a): the
+     * leave-and-write round trip first, then the tab-switch exit refused and re-opened on the same
+     * window. Both exits were refused together, so both are proved to re-open together.
      *
      * The WRITE is asserted, not just the exit: FR-017 says the buffer is applied when the user
      * LEAVES, so an exit that opened without writing would lose the edit silently — which is the
@@ -399,7 +344,7 @@ describe('fixing the document opens every exit again (FR-017/FR-018)', () => {
     await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
     expect(written).toEqual([]);
 
-    setJson('{"appearance":{"theme":"throng"},"editor":{"autoSave":true}}');
+    setJson(VALID_DOC);
     await waitFor(() => expect(screen.queryByTestId('json-invalid')).toBeNull());
     // Still nothing written: FR-017 writes on LEAVING, not on typing, valid or not.
     expect(written).toEqual([]);
@@ -410,20 +355,15 @@ describe('fixing the document opens every exit again (FR-017/FR-018)', () => {
     expect(screen.queryByTestId('json-tab-settings')).toBeNull();
     await waitFor(() => expect(written).toHaveLength(1));
     expect(JSON.parse(written[0].json)).toEqual({ appearance: { theme: 'throng' }, editor: { autoSave: true } });
-  });
 
-  it('lets a TAB SWITCH through once the document parses', async () => {
-    // The other exit, re-opened. Both were refused together, so both are proved to re-open together.
-    const { user } = mount();
-    await ready();
+    // The tab-switch exit: refused while invalid, through once it parses.
     await intoJson(user);
-
     setJson(MID_EDIT);
     await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
     expect(screen.queryByTestId('json-tab-keybindings')).toBeNull();
 
-    setJson('{"appearance":{"theme":"throng"},"editor":{"autoSave":true}}');
+    setJson(VALID_DOC);
     await waitFor(() => expect(screen.queryByTestId('json-invalid')).toBeNull());
 
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
@@ -456,8 +396,9 @@ describe('fixing the document opens every exit again (FR-017/FR-018)', () => {
  * behaviour asserted below.
  */
 describe('an unknown theme name is refused, with the real ones named', () => {
-  it('refuses it, names the setting, quotes the value, and lists what exists', async () => {
-    const { user } = mount();
+  it('refuses it, names the setting, quotes the value, lists what exists — blocks the Themes tab — and accepts a real one', async () => {
+    // Chained from three tests (audit, component-2a): they were three steps of the same session.
+    const { user, written } = mount();
     await ready();
     await intoJson(user);
 
@@ -470,37 +411,20 @@ describe('an unknown theme name is refused, with the real ones named', () => {
     expect(notice.textContent ?? '').toContain('appearance.theme');
     expect(notice.textContent ?? '').toContain('"NoSuchTheme"');
     expect(notice.textContent ?? '').toContain('throng');
-  });
 
-  it('so the Themes tab cannot be reached with it — which is what produced the trap', async () => {
-    const { user, written } = mount();
-    await ready();
-    await intoJson(user);
-
-    setJson('{"appearance":{"theme":"NoSuchTheme"}}');
-    await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
-
+    // So the Themes tab cannot be reached with it — which is what produced the trap.
     await user.click(screen.getByTestId('prefs-tab-themes'));
 
     expect(screen.getByTestId('json-tab-settings')).toBeVisible();
     expect(screen.queryByTestId('json-tab-theme')).toBeNull();
     // …and the name never reached the document. The trap needs it written to spring.
     expect(written).toEqual([]);
-  });
 
-  it('accepts a theme that DOES exist, and the tab opens', async () => {
     /*
      * The positive control, and not a formality: every assertion above is a refusal, and a document
      * gate that refused EVERYTHING would satisfy all of them while making the Themes tab
      * unreachable for good.
      */
-    const { user } = mount();
-    await ready();
-    await intoJson(user);
-
-    setJson('{"appearance":{"theme":"NoSuchTheme"}}');
-    await waitFor(() => expect(screen.getByTestId('json-invalid')).toBeVisible());
-
     setJson('{"appearance":{"theme":"throng"}}');
     await waitFor(() => expect(screen.queryByTestId('json-invalid')).toBeNull());
 
@@ -577,17 +501,6 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
     expect(settingActions.querySelectorAll('button')).toHaveLength(3);
   });
 
-  it('offers RESET but not revert for a value that is overridden and untouched', async () => {
-    // The user arrives with the override already in place. There is something to reset TO, and
-    // nothing yet to undo.
-    mount('settings', SEED);
-    await ready();
-    await waitFor(() => expect(control().value).toBe('900'));
-
-    expect(reset()).toBeEnabled();
-    expect(revert()).toBeDisabled();
-  });
-
   it('offers BOTH once the value is edited this session', async () => {
     const { user } = mount('settings', SEED);
     await ready();
@@ -601,14 +514,21 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
     expect(reset()).toBeEnabled();
   });
 
-  it('leaves a REVERT behind after a reset — a reset is itself undoable', async () => {
+  it('leaves a REVERT behind after a reset, which gives back the value the window OPENED WITH, and closes the cycle', async () => {
     /*
      * THE ONE THAT PROTECTS THE USER'S WORK. Without it a mis-clicked reset destroys an override
      * with no way home, and the row looks entirely correct while it does.
+     *
+     * Chained from four tests (audit, component-2a); the first three were prefixes of the last.
      */
     const { user } = mount('settings', SEED);
     await ready();
     await waitFor(() => expect(control().value).toBe('900'));
+
+    // The user arrives with the override already in place. There is something to reset TO, and
+    // nothing yet to undo.
+    expect(reset()).toBeEnabled();
+    expect(revert()).toBeDisabled();
 
     await user.click(reset());
 
@@ -616,47 +536,32 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
     await waitFor(() => expect(reset()).toBeDisabled());
     // …and the way back is offered.
     expect(revert()).toBeEnabled();
-  });
 
-  it('and taking that revert gives back the value the WINDOW OPENED WITH, not the shipped default', async () => {
-    const { user } = mount('settings', SEED);
-    await ready();
-    await waitFor(() => expect(control().value).toBe('900'));
-
-    await user.click(reset());
-    await waitFor(() => expect(reset()).toBeDisabled());
     await user.click(revert());
 
     // 900 — their override — and NOT whatever the shipped default happens to be.
     await waitFor(() => expect(control().value).toBe('900'));
-  });
 
-  it('has nothing left to revert once the value is back where it started', async () => {
     // The cycle closes: overridden and unchanged again, which is the first row of the table above.
-    const { user } = mount('settings', SEED);
-    await ready();
-    await waitFor(() => expect(control().value).toBe('900'));
-
-    await user.click(reset());
-    await waitFor(() => expect(reset()).toBeDisabled());
-    await user.click(revert());
-    await waitFor(() => expect(control().value).toBe('900'));
-
     await waitFor(() => expect(revert()).toBeDisabled());
     expect(reset()).toBeEnabled();
   });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
- * preferences-theme-reset.e2e.ts — which BASELINE each control reads
+ * Theme-token Reset / Revert — the ONLY proof left at any layer
  * ────────────────────────────────────────────────────────────────────────── */
 
 /**
  * Reset and Revert on a theme token — the state machine, NOT the baselines (#76).
  *
- * ══ THIS DOES NOT REPLACE `preferences-theme-reset.e2e.ts`, AND HERE IS THE MEASUREMENT ══
+ * ══ `preferences-theme-reset.e2e.ts` IS DELETED (test-suite audit): THIS IS NOW THE ONLY PROOF ══
  *
- * It was written to. The plan was to migrate `:110` and `:132`, on the reasoning that the note in
+ * No E2E drives a theme token's Reset or Revert any more, so the state machine below is the whole of
+ * the coverage. What follows is why it was first written as a partial replacement, and what it still
+ * cannot see.
+ *
+ * It was written to replace that E2E. The plan was to migrate `:110` and `:132`, on the reasoning that the note in
  * that file — *"A component handed an `onReset` callback cannot tell you which it is wired to"* —
  * applied only to a test rendering `RowActions` in isolation, and not to one mounting
  * `PreferencesApp`, where `themes-tab.tsx` wires its own handlers.
@@ -669,12 +574,13 @@ describe('the row action gutter (FR-016, SC-017, #76)', () => {
  *
  * — and BOTH leave every test below green. The cause is the FIXTURE, not the layer: the window opens
  * on the shipped theme, so `entryTheme` and `shippedTheme` hold the same value and it does not
- * matter which is read. The E2Es have exactly the same blind spot, for exactly the same reason, and
+ * matter which is read. The E2Es had exactly the same blind spot, for exactly the same reason, and
  * the recorded gap at the foot of this block says what a fixture that closed it would need.
  *
- * So the two verdicts are DECLINED and `preferences-theme-reset.e2e.ts` keeps both tests. 035's rule
- * is that a replacement covering part of what an E2E asserted is not a replacement, and this covers
- * the part that was never in doubt.
+ * So 035 DECLINED the two verdicts and kept both E2E tests, on the rule that a replacement covering
+ * part of what an E2E asserted is not a replacement. The test-suite audit has since deleted that
+ * file. The E2Es shared the fixture blind spot measured above, so the baseline gap is now uncovered
+ * at EVERY layer — see the recorded case at the foot of this block.
  *
  * ══ WHAT THESE FOUR ARE WORTH, THEN ══
  *
@@ -695,49 +601,33 @@ describe('a theme token’s Reset and Revert read two different baselines (#76)'
     fireEvent.blur(control());
   }
 
-  it('offers NEITHER on an untouched built-in theme — it is already at both baselines', async () => {
-    // The window just opened on the shipped theme: nothing to reset to, nothing to undo.
-    mount('themes');
-    await ready('themes-tab');
-
-    expect(reset()).toBeDisabled();
-    expect(revert()).toBeDisabled();
-  });
-
-  it('lights BOTH up once a token is edited', async () => {
-    const { user } = mount('themes');
-    await ready('themes-tab');
-
-    await setToken(user, '#abcdef');
-
-    await waitFor(() => expect(reset()).toBeEnabled());
-    expect(revert()).toBeEnabled();
-  });
-
-  it('RESET returns the token to its shipped value, and goes quiet again', async () => {
+  it('walks the whole state machine: quiet on open, both lit on edit, RESET to shipped, REVERT to on-entry', async () => {
+    // Chained from four tests (audit, component-2a): each was the previous one's setup.
     const { user } = mount('themes');
     await ready('themes-tab');
     const shipped = control().value;
     expect(shipped).toMatch(/^#/);
 
+    // NEITHER on an untouched built-in theme — it is already at both baselines. The window just
+    // opened on the shipped theme: nothing to reset to, nothing to undo.
+    expect(reset()).toBeDisabled();
+    expect(revert()).toBeDisabled();
+
+    // BOTH light up once a token is edited.
     await setToken(user, '#abcdef');
     await waitFor(() => expect(reset()).toBeEnabled());
-    await user.click(reset());
+    expect(revert()).toBeEnabled();
 
+    // RESET returns the token to its shipped value, and goes quiet again.
+    await user.click(reset());
     await waitFor(() => expect(control().value).toBe(shipped));
     await waitFor(() => expect(reset()).toBeDisabled());
-  });
 
-  it('REVERT returns the token to the value the window OPENED with, and goes quiet again', async () => {
-    const { user } = mount('themes');
-    await ready('themes-tab');
-    const onEntry = control().value;
-
+    // REVERT returns the token to the value the window OPENED with, and goes quiet again.
     await setToken(user, '#0f0f0f');
     await waitFor(() => expect(revert()).toBeEnabled());
     await user.click(revert());
-
-    await waitFor(() => expect(control().value).toBe(onEntry));
+    await waitFor(() => expect(control().value).toBe(shipped));
     await waitFor(() => expect(revert()).toBeDisabled());
   });
 
@@ -746,7 +636,7 @@ describe('a theme token’s Reset and Revert read two different baselines (#76)'
    *
    * The case that would genuinely separate the two baselines is a window opening on a token that is
    * ALREADY customised: reset then owes the factory value and revert owes the customisation, and
-   * they are different answers. Neither E2E covered it — both opened on the shipped theme, where the
+   * they are different answers. Neither of the (now deleted) E2Es covered it — both opened on the shipped theme, where the
    * on-entry value IS the shipped value, so the two controls were indistinguishable by outcome and a
    * build wiring both to the same baseline would have passed them both. The four tests above inherit
    * that limitation.
@@ -785,19 +675,15 @@ describe('a theme token’s Reset and Revert read two different baselines (#76)'
  * exactly that, which is why the count is the assertion and not a detail of it.
  */
 describe('the icon colour is edited in one place (FR-027)', () => {
-  it('renders exactly ONE hex control for the token, not one per eligible section', async () => {
+  it('renders exactly ONE hex control for the token, and puts it in the Icons row', async () => {
     mount('themes');
     await ready('themes-tab');
 
     expect(screen.queryAllByTestId('control-colours.iconColour-hex')).toHaveLength(1);
-  });
 
-  it('puts it in the Icons row — where the user is standing when the icons look wrong', async () => {
-    // Placement is the reason it is hand-placed at all. A single control in the generic Colours
-    // list would satisfy the count above and still make the user hunt for it.
-    mount('themes');
-    await ready('themes-tab');
-
+    // Placement is the reason it is hand-placed at all — where the user is standing when the icons
+    // look wrong. A single control in the generic Colours list would satisfy the count above and
+    // still make the user hunt for it.
     const row = await screen.findByTestId('icon-colour-row');
     expect(row.querySelectorAll('[data-testid="control-colours.iconColour-hex"]')).toHaveLength(1);
   });
@@ -819,21 +705,15 @@ describe('the icon colour is edited in one place (FR-027)', () => {
  * This half is a query over rendered chrome.
  */
 describe('the preferences window offers no minimise (FR-042)', () => {
-  it('draws no minimise control', async () => {
+  it('draws no minimise control, but still draws maximise and close', async () => {
     mount('settings');
     await ready();
 
     expect(screen.queryByTestId('window-min')).toBeNull();
-  });
-
-  it('still draws maximise and close — the absence above is specific, not a missing title bar', async () => {
     /*
      * The anti-vacuity half, and it is not hypothetical: a title bar that failed to render at all
      * would satisfy "no minimise control" perfectly, and the E2E paired the two for the same reason.
      */
-    mount('settings');
-    await ready();
-
     expect(screen.queryByTestId('window-max')).not.toBeNull();
     expect(screen.queryByTestId('window-close')).not.toBeNull();
   });
@@ -885,44 +765,16 @@ describe('each preferences tab keeps its own scroll offset (migrated from prefer
 
   const offsetOf = (tab: string): number => (panel(tab) as unknown as { scrollTop: number }).scrollTop;
 
-  it('starts a tab you have never visited at its own top, not the last one’s offset', async () => {
-    const { user } = await mount();
-    await ready();
-    scrollTo('settings', 240);
-    expect(offsetOf('settings')).toBe(240);
-
-    await user.click(screen.getByTestId('prefs-tab-themes'));
-    await waitFor(() => expect(screen.getByTestId('themes-tab')).toBeInTheDocument());
-
-    expect(offsetOf('themes'), 'Themes must not inherit Settings’ offset').toBe(0);
-  });
-
-  it('restores each tab’s own offset when you come back to it', async () => {
-    const { user } = await mount();
-    await ready();
-    scrollTo('settings', 240);
-
-    await user.click(screen.getByTestId('prefs-tab-themes'));
-    await waitFor(() => expect(screen.getByTestId('themes-tab')).toBeInTheDocument());
-    scrollTo('themes', 120);
-
-    await user.click(screen.getByTestId('prefs-tab-settings'));
-    await waitFor(() => expect(screen.getByTestId('settings-tab')).toBeInTheDocument());
-    expect(offsetOf('settings'), 'Settings’ own offset, not Themes’').toBe(240);
-
-    await user.click(screen.getByTestId('prefs-tab-themes'));
-    await waitFor(() => expect(screen.getByTestId('themes-tab')).toBeInTheDocument());
-    expect(offsetOf('themes'), 'and Themes’ own, not Settings’').toBe(120);
-  });
-
-  it('keeps a THIRD tab’s offset apart from the other two', async () => {
+  it('keeps each tab’s own offset: a fresh tab starts at its top, and every tab gets its own back', async () => {
     /*
-     * Two tabs cannot tell "each tab has its own" from "the offsets alternate" — with two values
-     * and two tabs, a single spare slot swapped back and forth looks identical. Three can.
+     * Chained from three tests (audit, component-2a). THREE tabs rather than two, because two
+     * cannot tell "each tab has its own" from "the offsets alternate" — with two values and two
+     * tabs, a single spare slot swapped back and forth looks identical.
      */
     const { user } = await mount();
     await ready();
     scrollTo('settings', 240);
+    expect(offsetOf('settings')).toBe(240);
 
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
     await waitFor(() => expect(screen.getByTestId('keybindings-tab')).toBeInTheDocument());
@@ -930,14 +782,18 @@ describe('each preferences tab keeps its own scroll offset (migrated from prefer
 
     await user.click(screen.getByTestId('prefs-tab-themes'));
     await waitFor(() => expect(screen.getByTestId('themes-tab')).toBeInTheDocument());
+    expect(offsetOf('themes'), 'Themes must not inherit the last tab’s offset').toBe(0);
     scrollTo('themes', 120);
 
     await user.click(screen.getByTestId('prefs-tab-settings'));
     await waitFor(() => expect(screen.getByTestId('settings-tab')).toBeInTheDocument());
-    expect(offsetOf('settings')).toBe(240);
+    expect(offsetOf('settings'), 'Settings’ own offset, not Themes’').toBe(240);
     await user.click(screen.getByTestId('prefs-tab-keybindings'));
     await waitFor(() => expect(screen.getByTestId('keybindings-tab')).toBeInTheDocument());
     expect(offsetOf('keybindings')).toBe(60);
+    await user.click(screen.getByTestId('prefs-tab-themes'));
+    await waitFor(() => expect(screen.getByTestId('themes-tab')).toBeInTheDocument());
+    expect(offsetOf('themes'), 'and Themes’ own, not Settings’').toBe(120);
   });
 });
 
@@ -1007,7 +863,14 @@ describe('a token edit writes the THEME document (migrated from preferences-them
     await waitFor(() => expect(lastIconColour(written)).toBe(hex));
   };
 
-  it('writes the edited colour, addressed to the theme that is ACTIVE', async () => {
+  /*
+   * Merged from three tests (audit, component-2a). The old "reflects the new value back from the
+   * document" test re-read `lastIconColour(written)` — the exact predicate `writtenIconColour`
+   * already waits on — so it could not fail once the wait passed. Mutation proof: `applyTheme`
+   * writing `iconColour: '#999999'` instead of the edit turned all three old tests red, and the
+   * reflects-back one failed at the shared wait, never at its own assertion.
+   */
+  it('writes the edited colour to the ACTIVE theme document, and never to the settings document', async () => {
     const { user, written } = mount('themes');
     await ready('themes-tab');
 
@@ -1023,33 +886,10 @@ describe('a token edit writes the THEME document (migrated from preferences-them
       (last.id as { name?: string }).name,
       'addressed to the active theme, not to a fixed name',
     ).toBe('throng');
-  });
 
-  it('does not write the SETTINGS document for a token edit', async () => {
     // The crossing this file's own fake bridge used to make. A token edit that landed in the
     // settings document would take every setting the user has with it.
-    const { user, written } = mount('themes');
-    await ready('themes-tab');
-
-    await editIconColour(user, '#123456');
-    await writtenIconColour(written, '#123456');
-
     expect(written.filter((w) => (w.id as { kind?: string }).kind === 'settings')).toEqual([]);
-  });
-
-  it('reflects the new value back from the document, not from the field’s own memory', async () => {
-    /*
-     * The "reflects live" half, and it needed care to state: the colour field holds its own value
-     * while it is being typed into, so reading the field back proves nothing about the write. The
-     * observable that does is a SECOND mount of the same bridge — the window re-opened — which can
-     * only show the new colour if the write was made and adopted.
-     */
-    const { user, written } = mount('themes');
-    await ready('themes-tab');
-    await editIconColour(user, '#123456');
-    await writtenIconColour(written, '#123456');
-
-    expect(lastIconColour(written), 'the document the next open will read').toBe('#123456');
   });
 });
 
@@ -1063,6 +903,12 @@ describe('choosing a theme activates it (select = activate, migrated from prefer
      */
     const { user, patched, written } = mount('themes', {}, {}, ['throng', 'CustomOne']);
     await ready('themes-tab');
+    /*
+     * There is no separate Apply — the selection IS the activation. A dropdown that staged the
+     * choice behind an Apply button would write nothing at the moment of selection, and
+     * "select = activate" would be false while every other assertion still passed.
+     */
+    expect(patched, 'nothing has been changed yet').toEqual([]);
 
     await user.selectOptions(screen.getByTestId('theme-select'), 'CustomOne');
 
@@ -1070,20 +916,5 @@ describe('choosing a theme activates it (select = activate, migrated from prefer
     const changes = patched.at(-1)!.changes as Array<{ path: string[]; value: unknown }>;
     expect(changes).toEqual([{ path: ['appearance', 'theme'], value: 'CustomOne' }]);
     expect(written, 'and it did not rewrite the whole settings document to do it').toEqual([]);
-  });
-
-  it('there is no separate Apply — the selection IS the activation', async () => {
-    /*
-     * The claim the migrated test's title makes and its body only implies. A dropdown that staged
-     * the choice behind an Apply button would write nothing at the moment of selection, and
-     * "select = activate" would be false while every other assertion still passed.
-     */
-    const { user, patched } = mount('themes', {}, {}, ['throng', 'CustomOne']);
-    await ready('themes-tab');
-    expect(patched, 'nothing has been changed yet').toEqual([]);
-
-    await user.selectOptions(screen.getByTestId('theme-select'), 'CustomOne');
-
-    await waitFor(() => expect(patched.length).toBeGreaterThan(0));
   });
 });

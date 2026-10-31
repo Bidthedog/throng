@@ -248,7 +248,7 @@ describe('the setting (FR-019)', () => {
  * Principle XII / SC-005: the frame's work — offset mapping, matching, range building, painting — on a rendered
  * 10,000-line document with a word of ≥ 2,000 occurrences, and the `selectionchange` handler itself only schedules.
  */
-describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', () => {
+describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', { tags: ['regression'] }, () => {
   it('the frame completes well inside 100 ms, and the handler only schedules', () => {
     const html = Array.from({ length: 10_000 }, (_, i) => (i % 4 === 0 ? `<p>needle ${i} and needle again</p>` : `<p>plain line ${i}</p>`)).join('\n');
     const host = hostWith(html);
@@ -362,7 +362,7 @@ describe('on a mounted preview panel', () => {
       const node = Array.from(body.querySelectorAll('p')).find((p) => p.textContent?.includes('alpha beta'))?.firstChild;
       if (!node) throw new Error('not drawn yet');
       return node;
-    });
+    }, COLD);
 
     act(() => selectText(text, 0, 5));
     await waitFor(() => expect(registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT) ?? registry.get(PREVIEW_OCCURRENCE_INACTIVE_HIGHLIGHT)).toBeTruthy());

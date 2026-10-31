@@ -105,7 +105,7 @@ describe('WindowsProcessMetrics (055 T020, R2)', () => {
     await runProcessMetricsContract({ make: () => metrics, selfPid: process.pid });
   });
 
-  it("agrees with GetProcessTimes on a busy child's CPU over 2 s, within 2 points", async () => {
+  it("agrees with GetProcessTimes on a busy child's CPU over 2 s, within 2 points", { tags: ['regression'] }, async () => {
     const pid = busy.pid!;
     const s1 = await metrics.snapshot();
     const i1 = independent(pid);
@@ -118,7 +118,7 @@ describe('WindowsProcessMetrics (055 T020, R2)', () => {
     expect(Math.abs(pct(ours(s2) - ours(s1), elapsed) - pct(i2.cpuTicks - i1.cpuTicks, elapsed))).toBeLessThan(2);
   });
 
-  it('reports a 200 MB child’s private working set within 5% of the Working Set - Private counter', async () => {
+  it('reports a 200 MB child’s private working set within 5% of the Working Set - Private counter', { tags: ['regression'] }, async () => {
     const pid = big.pid!;
     const ours = (await metrics.snapshot()).readings.find((r) => r.pid === pid)!.privateWorkingSet;
     const theirs = privateWorkingSetOf(pid);

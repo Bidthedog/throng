@@ -54,6 +54,32 @@ function startChurn(dir: string): () => void {
   return () => clearInterval(timer);
 }
 
+/**
+ * The real watcher, with a count of the watches still live. "The last unsubscribe disposes the watch" is
+ * then asserted on the disposal itself, immediately, instead of sleeping to see that nothing arrives.
+ */
+class SpyWatcher implements IFileWatcher {
+  private readonly inner = new NodeFileWatcher(150);
+  private active = 0;
+  get live(): number {
+    return this.active;
+  }
+  watch(dir: string, onChange: (p: string) => void, options?: WatchOptions): Disposable {
+    const sub = this.inner.watch(dir, onChange, options);
+    this.active += 1;
+    let disposed = false;
+    return {
+      dispose: () => {
+        if (!disposed) {
+          disposed = true;
+          this.active -= 1;
+        }
+        sub.dispose();
+      },
+    };
+  }
+}
+
 interface Sent {
   id: number;
   payload: FileIndexUpdate;
@@ -369,7 +395,7 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
   }, 30_000);
 
   it('S7 — a reconcile that finds no difference sends nothing at all', async () => {
-    const h = await Harness.create({ quietMs: 200, reconcileMaxWaitMs: 800 });
+    const h = await Harness.create({ quietMs: 100, reconcileMaxWaitMs: 300 });
     try {
       await seedProject(h.root);
       h.service.subscribe(1, h.root);
@@ -380,7 +406,8 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       // A CONTENT change: the watcher signals, both the rescan and the reconcile run, and the set
       // of files is identical. A quiescent project must cost no messages.
       await writeFile(join(h.root, 'src', 'a.ts'), 'a much longer body than before');
-      await new Promise((r) => setTimeout(r, 2500)); // deliberately longer than both ceilings
+      // Absence window: longer than the watcher's 150 ms debounce plus both ceilings (100 ms quiet, 300 ms max wait).
+      await new Promise((r) => setTimeout(r, 700));
       expect(h.sent.slice(mark), 'no path set changed, so nothing may be sent').toEqual([]);
     } finally {
       await h.destroy();
@@ -438,7 +465,8 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
   }, 40_000);
 
   it('S9 — the LAST unsubscribe disposes the watch; an unsubscribe with no root leaves every root', async () => {
-    const h = await Harness.create();
+    const spy = new SpyWatcher();
+    const h = await Harness.create({ watcher: spy });
     const other = await mkdtemp(join(tmpdir(), 'throng-file-index-second-'));
     try {
       await seedProject(h.root);
@@ -452,7 +480,7 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
 
       // One of two goes away: the watch survives for the other.
       h.service.unsubscribe(1, h.root);
-      let mark = h.sent.length;
+      const mark = h.sent.length;
       await writeFile(join(h.root, 'still-watched.txt'), 'x');
       await waitFor(
         'the surviving subscriber to still receive deltas',
@@ -460,19 +488,14 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       );
       expect(h.to(1, mark), 'an unsubscribed window receives nothing').toEqual([]);
 
-      // The LAST one goes away: the watch is disposed and nothing is sent to anyone.
+      // The LAST one goes away: the watch is disposed (asserted on the disposal, not on an absence window).
+      expect(spy.live, 'both roots are watched until their last subscriber goes').toBe(2);
       h.service.unsubscribe(2, h.root);
-      mark = h.sent.length;
-      await writeFile(join(h.root, 'after-dispose.txt'), 'x');
-      await new Promise((r) => setTimeout(r, 2500));
-      expect(h.sent.slice(mark)).toEqual([]);
+      expect(spy.live, "the last unsubscribe disposed that root's watch, and only that one").toBe(1);
 
       // A destroyed webContents unsubscribes from EVERY root (no root argument).
       h.service.unsubscribe(1);
-      mark = h.sent.length;
-      await writeFile(join(other, 'after-destroy.txt'), 'x');
-      await new Promise((r) => setTimeout(r, 2500));
-      expect(h.sent.slice(mark)).toEqual([]);
+      expect(spy.live, 'the remaining root was released too').toBe(0);
     } finally {
       await rm(other, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
       await h.destroy();
@@ -663,7 +686,8 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
   }, 30_000);
 
   it('each of the two indices is disposed on its OWN last unsubscribe (S9)', async () => {
-    const h = await Harness.create({ globs: ['**/node_modules'] });
+    const spy = new SpyWatcher();
+    const h = await Harness.create({ globs: ['**/node_modules'], watcher: spy });
     try {
       await seedProject(h.root);
       h.service.subscribe(1, h.root, false);
@@ -673,7 +697,9 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await armWatch(h, 1);
 
       // Leaving the flipped index must not take the standing one down with it.
+      expect(spy.live, 'each index holds a watch of its own').toBe(2);
       h.service.unsubscribe(1, h.root, true);
+      expect(spy.live).toBe(1);
       const mark = h.sent.length;
       await writeFile(join(h.root, 'still-watched.txt'), 'x');
       const { value } = await waitFor(
@@ -687,10 +713,7 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       ).toEqual([]);
 
       h.service.unsubscribe(1, h.root, false);
-      const quiet = h.sent.length;
-      await writeFile(join(h.root, 'after-dispose.txt'), 'x');
-      await new Promise((r) => setTimeout(r, 2500));
-      expect(h.sent.slice(quiet)).toEqual([]);
+      expect(spy.live, 'the last index released its watch').toBe(0);
     } finally {
       await h.destroy();
     }

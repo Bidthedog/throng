@@ -7,7 +7,8 @@ import { openApp,
   firstPanelId,
   cleanupTemp,
   type AppOptions,
-  type OpenApp, FILE_OP_TIMEOUT_MS } from './harness.js';
+  type OpenApp, FILE_OP_TIMEOUT_MS, focusEditor } from './harness.js';
+import { shippedTwoStroke } from '../shared/window-chords.js';
 
 /*
  * ONE app for this file, not one per test.
@@ -176,3 +177,191 @@ test('the editor renders in the themeable monospace font (Consolas default)', { 
     cleanupTemp(root);
   }
 });
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * MERGED IN (test-suite audit) from editor-word-wrap.e2e.ts — none of the three passes launch options, so all share this file's one app
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * US1 (#152, spec 024): per-document editor word-wrap toggle, reachable from the status bar, the
+ * content menu, and the `Ctrl+E,W` two-stroke chord (046 FR-091, FR-124; Ctrl+Alt+W before it). Default On (editor.defaultWordWrap). The toggle reflows the
+ * live view (the CodeMirror content's white-space flips between wrapping and not).
+ */
+
+function makeWrapProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-wrap-'));
+  // A single very long line so wrapping is observable.
+  writeFileSync(join(root, 'long.txt'), 'x'.repeat(400) + '\n');
+  return root;
+}
+
+/** The CodeMirror content wraps when its computed white-space is a wrapping mode. */
+async function contentWraps(win: import('@playwright/test').Page, pid: string): Promise<boolean> {
+  const ws = await win
+    .getByTestId(`editor-${pid}`)
+    .locator('.cm-content')
+    .evaluate((el) => getComputedStyle(el as HTMLElement).whiteSpace);
+  return ws === 'break-spaces' || ws === 'pre-wrap' || ws === 'normal';
+}
+
+test('word wrap toggles from the status bar, the chord, and the content menu (#152)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
+  const root = makeWrapProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'WrapProj', root);
+      const pid = await firstPanelId(win);
+      await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
+      await win.getByTestId(`panel-type-confirm-${pid}`).click();
+      await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
+      await win.getByTestId(`editor-${pid}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('long.txt', { exact: true }).click();
+      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('xxxx', {
+        timeout: 8000,
+      });
+
+      const wrapBtn = win.getByTestId(`editor-word-wrap-${pid}`);
+      // Default On.
+      await expect(wrapBtn).toHaveText('Wrap');
+      await expect(wrapBtn).toHaveAttribute('aria-pressed', 'true');
+      expect(await contentWraps(win, pid)).toBe(true);
+
+      // Status-bar toggle → off; the view stops wrapping.
+      await wrapBtn.click();
+      await expect(wrapBtn).toHaveText('No Wrap');
+      await expect(wrapBtn).toHaveAttribute('aria-pressed', 'false');
+      await expect.poll(() => contentWraps(win, pid)).toBe(false);
+
+      // Ctrl+E,W → back on. Two strokes (046 FR-091) in ONE continuous press (FR-124): Ctrl held
+      // from E through W. The first leaves the editor visibly waiting, and only then is the second
+      // sent, so it lands in the chord rather than in the document.
+      const { hold, first, second } = shippedTwoStroke('editor.toggleWordWrap');
+      await focusEditor(win, pid);
+      for (const mod of hold) await win.keyboard.down(mod);
+      await win.keyboard.press(first);
+      await expect(win.getByTestId('editor-pending-chord')).toBeVisible();
+      await win.keyboard.press(second);
+      for (const mod of [...hold].reverse()) await win.keyboard.up(mod);
+      await expect(win.getByTestId('editor-pending-chord')).toHaveCount(0);
+      await expect(wrapBtn).toHaveText('Wrap');
+      await expect.poll(() => contentWraps(win, pid)).toBe(true);
+
+      // Content menu carries a checkable "Word Wrap" item that toggles it off again.
+      await win.getByTestId(`editor-${pid}`).locator('.cm-content').click({ button: 'right' });
+      await expect(win.getByTestId('menu-item-Word Wrap')).toContainText('✓'); // checked while on
+      await win.getByTestId('menu-item-Word Wrap').click();
+      await expect(wrapBtn).toHaveText('No Wrap');
+      await expect.poll(() => contentWraps(win, pid)).toBe(false);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * MERGED IN (test-suite audit) from editor-scroll-position.e2e.ts
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * US8 (#154) — "Save Document Scroll Position". With the pref OFF (default), opening a different
+ * file in place resets scroll to the top; with it ON, reopening a file in place restores its scroll.
+ */
+
+const longText = (marker: string): string =>
+  Array.from({ length: 300 }, (_, i) => `${marker}_LINE_${i + 1}`).join('\n') + '\n';
+
+function makeScrollProject(): string {
+  const root = mkdtempSync(join(tmpdir(), 'throng-scroll-'));
+  writeFileSync(join(root, 'one.txt'), longText('ONE'));
+  writeFileSync(join(root, 'two.txt'), longText('TWO'));
+  return root;
+}
+
+const scrollTop = (win: Page) => win.locator('.cm-scroller').first().evaluate((el) => el.scrollTop);
+
+test('with the pref off (default), opening a different file in place scrolls to the top (#154)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+  const root = makeScrollProject();
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'Scroll', root);
+      const tree = win.getByTestId('file-explorer-tree');
+
+      await tree.getByText('one.txt', { exact: true }).click();
+      await expect(win.locator('.cm-content').first()).toContainText('ONE_LINE_1');
+
+      // Scroll to the bottom of file one.
+      await win.locator('.cm-content').first().click();
+      await win.keyboard.press('Control+End');
+      await expect.poll(() => scrollTop(win)).toBeGreaterThan(100);
+
+      // Open file two IN PLACE (default openTarget reuses this editor).
+      await tree.getByText('two.txt', { exact: true }).click();
+      await expect(win.locator('.cm-content').first()).toContainText('TWO_LINE_1');
+
+      // US8 (off): the new document starts at the top, not carrying file one's scroll.
+      await expect.poll(() => scrollTop(win)).toBeLessThan(5);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────────
+ * MERGED IN (test-suite audit) from editor-encoding.e2e.ts
+ * ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 059 US2 + US3 + US4 — a UTF-16 file in the real app: the status bar names its format, its line-ending
+ * list switches it to CR and its encoding list to UTF-8, and Ctrl+S writes what was chosen (T043, T069).
+ *
+ * Why E2E: the indicators' rendered text in a real status bar and the menus they open on a real click
+ * are the user's whole route through this feature; every piece beneath them — detection,
+ * the authority's line format, the save — is proven lower, and only a running app composes them.
+
+/** UTF-16 LE with a BOM — what PowerShell 5.1's `>` writes. */
+function utf16le(text: string): Buffer {
+  return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+}
+
+test('a UTF-16 LE file shows its format, switches to CR and UTF-8 from the status bar, and saves both (059 US2, US3, US4)', { tag: ['@extended', '@editor', '@reserve:input'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-encoding-'));
+  const file = join(root, 'ps.txt');
+  writeFileSync(file, utf16le('héllo\r\nwörld\r\n'));
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'EncodingProj', root);
+      const pid = await firstPanelId(win);
+      await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
+      await win.getByTestId(`panel-type-confirm-${pid}`).click();
+      await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
+      await win.getByTestId(`editor-${pid}`).click();
+      await win.getByTestId('file-explorer-tree').getByText('ps.txt', { exact: true }).click();
+      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
+      await expect(content).toContainText('héllo', { timeout: 8000 });
+
+      await expect(win.getByTestId(`editor-encoding-${pid}`)).toHaveText('UTF-16 LE');
+      await expect(win.getByTestId(`editor-line-ending-${pid}`)).toHaveText('CRLF');
+
+      // FR-057 — the line-ending list switches to CR; nothing is written yet.
+      await win.getByTestId(`editor-line-ending-${pid}`).click();
+      await win.getByTestId('menu-item-line-ending-cr').click();
+      await expect(win.getByTestId(`editor-line-ending-${pid}`)).toHaveText('CR');
+
+      // FR-055 — the encoding list changes the document's encoding, still writing nothing.
+      await win.getByTestId(`editor-encoding-${pid}`).click();
+      await win.getByTestId('menu-item-encoding-utf8').click();
+      await expect(win.getByTestId(`editor-encoding-${pid}`)).toHaveText('UTF-8');
+      expect(readFileSync(file).toString('hex')).toBe(utf16le('héllo\r\nwörld\r\n').toString('hex'));
+
+      await focusEditor(win, pid);
+      await win.keyboard.press('Control+S');
+      await expect
+        .poll(() => readFileSync(file).toString('hex'), { timeout: 8000 })
+        .toBe(Buffer.from('héllo\rwörld\r', 'utf8').toString('hex'));
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
