@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { act, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AffectedPanel } from '@throng/core';
 import {
@@ -83,13 +84,15 @@ afterAll(() => {
 
 let settingsPayload: Record<string, unknown> = { version: 1 };
 
-beforeEach(() => {
+function installBridge(): void {
   settingsPayload = { version: 1 };
   (window as unknown as { throng: unknown }).throng = {
     notices: { log: () => {} },
     config: { get: () => Promise.resolve({ settings: settingsPayload }) },
   };
-});
+}
+
+beforeEach(installBridge);
 
 afterEach(() => {
   delete (window as unknown as { throng?: unknown }).throng;
@@ -106,15 +109,21 @@ function ProbeView({ into }: { into: Probe }): ReactElement | null {
   return null;
 }
 
-async function mount(): Promise<Probe> {
+/** `host`: mount on a root of our own (outside Testing Library's auto-cleanup) instead of with `render`. */
+async function mount(host?: { container: HTMLElement; roots: Root[] }): Promise<Probe> {
   const probe: Probe = {};
-  render(
-    createElement(
-      ConfigProvider,
-      null,
-      createElement(NotificationProvider, null, createElement(ProbeView, { into: probe })),
-    ),
+  const tree = createElement(
+    ConfigProvider,
+    null,
+    createElement(NotificationProvider, null, createElement(ProbeView, { into: probe })),
   );
+  if (host) {
+    const root = createRoot(host.container);
+    host.roots.push(root);
+    act(() => root.render(tree));
+  } else {
+    render(tree);
+  }
   await waitFor(() => {
     expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
   });
@@ -128,8 +137,8 @@ const AFFECTED: readonly AffectedPanel[] = [
 ];
 
 /** Raise the consolidated notice #313 was found on: a subject, a message, and the panel list. */
-async function raiseConsolidated(): Promise<void> {
-  const probe = await mount();
+async function raiseConsolidated(host?: { container: HTMLElement; roots: Root[] }): Promise<void> {
+  const probe = await mount(host);
   act(() =>
     probe.notify!({
       severity: 'error',
@@ -161,9 +170,31 @@ const pointerEventsOf = (selector: string): string =>
  * expected to produce. This test states a value theme.css sets TODAY and the fix does not touch, so
  * a sheet that did not land fails here first and names the reason.
  */
+/*
+ * Every test from here to the dismissal one only READS the one consolidated notice, so it is raised once —
+ * on its own root, because Testing Library's auto-cleanup would unmount a tree rendered in `beforeAll`
+ * after the first test. The dismissal test removes the notice, so it keeps its own mount.
+ */
+const shared = { container: undefined as unknown as HTMLElement, roots: [] as Root[] };
+
+beforeAll(async () => {
+  installBridge();
+  shared.container = document.createElement('div');
+  document.body.appendChild(shared.container);
+  await raiseConsolidated(shared);
+});
+
+function releaseShared(): void {
+  for (const root of shared.roots.splice(0)) act(() => root.unmount());
+}
+
+afterAll(() => {
+  releaseShared();
+  shared.container.remove();
+});
+
 describe('the stylesheet under test is really loaded', () => {
-  it('cascades a rule theme.css declares today', async () => {
-    await raiseConsolidated();
+  it('cascades a rule theme.css declares today', () => {
     expect(
       pointerEventsOf('.notice__dismiss'),
       'theme.css did not parse or did not cascade — every other assertion here is vacuous',
@@ -174,8 +205,7 @@ describe('the stylesheet under test is really loaded', () => {
 });
 
 describe('#313 — a click on a notice hits the notice', () => {
-  it('does not pass the click through the card to whatever is beneath it', async () => {
-    await raiseConsolidated();
+  it('does not pass the click through the card to whatever is beneath it', () => {
     expect(
       pointerEventsOf('.notice'),
       'the card is transparent to the pointer, so the hit test walks past it to the control ' +
@@ -183,8 +213,7 @@ describe('#313 — a click on a notice hits the notice', () => {
     ).not.toBe('none');
   });
 
-  it('leaves the column itself transparent, so only the cards are solid', async () => {
-    await raiseConsolidated();
+  it('leaves the column itself transparent, so only the cards are solid', () => {
     // The other half of the same rule, and the reason `.notices` keeps `none`: the column is a
     // fixed 520px-wide strip up the whole right-hand side of the window, and the empty space
     // between and above the cards must never intercept anything.
@@ -193,8 +222,7 @@ describe('#313 — a click on a notice hits the notice', () => {
 });
 
 describe('#313 — the affected-panel list scrolls by mouse as well as keyboard', () => {
-  it('lets the wheel reach the scroll region', async () => {
-    await raiseConsolidated();
+  it('lets the wheel reach the scroll region', () => {
     expect(
       pointerEventsOf('.notice__affected'),
       'the list cannot receive a wheel event, so its scrollbar is drawn but inert',
@@ -202,8 +230,7 @@ describe('#313 — the affected-panel list scrolls by mouse as well as keyboard'
     expect(window.getComputedStyle(el('.notice__affected')).overflowY).toBe('auto');
   });
 
-  it('keeps the keyboard route, and does not trap focus in it (FR-032b, preserved)', async () => {
-    await raiseConsolidated();
+  it('keeps the keyboard route, and does not trap focus in it (FR-032b, preserved)', () => {
     const list = el('.notice__affected');
     expect(list.tabIndex, 'the list must remain a tab stop').toBe(0);
     expect(
@@ -215,6 +242,7 @@ describe('#313 — the affected-panel list scrolls by mouse as well as keyboard'
 
 describe('#313 — dismissal is the remedy when a notice covers something', () => {
   it('is dismissable, which is what the supersession rests on', async () => {
+    releaseShared(); // the notice raised once above would otherwise be the one dismissed
     await raiseConsolidated();
     // The panel-type form's Confirm button sits bottom-right of its panel and the notice column
     // bottom-right of the window: they really do collide, and dismissal is the sanctioned way out.

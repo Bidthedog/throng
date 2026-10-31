@@ -68,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -293,8 +294,18 @@ async function mountedFiring(settings?: { autoSave?: boolean; absPath?: string |
   return h;
 }
 
-/** Comfortably past the debounce, without being a race if the machine is busy. */
+/** Comfortably past the debounce — on a fake clock, so it costs nothing and cannot race a busy machine. */
 const PAST_FAST_SAVE_MS = FAST_SAVE_MS * 8;
+
+/**
+ * Let the debounce elapse. Called after `mountedFiring()` (whose `waitFor` polling would wait forever on a
+ * fake clock), once the edit has been acknowledged.
+ */
+async function pastTheDebounce(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_FAST_SAVE_MS);
+  });
+}
 
 /**
  * Acknowledge every edit this view has dispatched, exactly as UI main does.
@@ -364,14 +375,13 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
   it('never fires at all when auto-save is OFF', async () => {
     // The control. Without it, a timer that fired for EVERY document would satisfy the case above.
     const h = await mountedFiring({ autoSave: false });
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
     });
     ackEdits(h, 0);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    await pastTheDebounce();
 
     expect(h.calls.save, 'a disabled setting must write nothing (FR-061)').not.toHaveBeenCalled();
   });
@@ -382,6 +392,7 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
      * pass the first case and write twice here — once for each keystroke, on the user's file.
      */
     const h = await mountedFiring();
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'A' } });
@@ -392,10 +403,9 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
     // Both, including the one the replica buffered behind the first (see `ackEdits`).
     ackEdits(h, ackEdits(h, 0));
 
-    await waitFor(() => expect(h.calls.save).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    // The window elapses once and the save fires — and nothing more is armed afterwards.
+    await pastTheDebounce();
+    await pastTheDebounce();
     expect(h.calls.save, 'the second edit must RE-arm the timer, not add one').toHaveBeenCalledTimes(1);
   });
 
@@ -413,14 +423,13 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
     const chooseSavePath = vi.fn(() => Promise.resolve(null));
     (Reflect.get(window, 'throng') as { editor: Record<string, unknown> }).editor.chooseSavePath =
       chooseSavePath;
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
     });
     ackEdits(h, 0);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    await pastTheDebounce();
 
     expect(h.calls.save, 'an unpathed document has nowhere confined to go').not.toHaveBeenCalled();
     expect(chooseSavePath, 'and no dialog may appear unasked').not.toHaveBeenCalled();

@@ -147,7 +147,7 @@ async function replaceMatch(
 }
 
 describe('#378 — two adjacent matches, replaced one at a time (FR-050, FR-054)', () => {
-  it('replaces the SECOND match, not the text the first replacement inserted', async () => {
+  it('replaces the SECOND match at its CURRENT position, not the text the first replacement inserted', async () => {
     const user = await ready();
     await replaceMatch(user, 0);
     // The first commit is the uncontroversial one, and it is stated so a failure below cannot be
@@ -157,24 +157,13 @@ describe('#378 — two adjacent matches, replaced one at a time (FR-050, FR-054)
     await replaceMatch(user, 2);
     // Each of the user's two matches became the replacement, and nothing wrote inside the other.
     expect(text).toBe(`${REPLACEMENT}${REPLACEMENT}`);
-  });
-
-  it('names the match’s CURRENT position on the second commit, not the scanned one', async () => {
-    const user = await ready();
-    await replaceMatch(user, 0);
-    await replaceMatch(user, 2);
 
     const second = stub.commit.mock.calls[1]?.[0] as CommitPayload;
     // `abab` → `zzabzzab` moved the second match four characters along. The panel committed the
     // first one, so the panel is the only thing that can know that.
     expect(second.targets).toEqual([{ relPath: FILE, edits: [{ from: 6, to: 8 }] }]);
-  });
 
-  it('reports no refusal, and marks both rows committed', async () => {
-    const user = await ready();
-    await replaceMatch(user, 0);
-    await replaceMatch(user, 2);
-
+    // …and it reports no refusal, and marks both rows committed.
     const notices = await screen.findAllByTestId('fif-commit-outcome');
     for (const notice of notices) {
       expect(notice.textContent ?? '').not.toContain('the match had gone');

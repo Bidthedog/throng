@@ -29,10 +29,11 @@
  * missing subsection. Drop the mock entirely and they fail the same way, which is the state this
  * file was written in.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FieldDescriptor } from '@throng/core';
 import { KeybindingsTab } from '../../src/renderer/preferences/keybindings-tab.js';
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
@@ -127,12 +128,42 @@ afterEach(() => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('an injected subgroup renders as a subsection (FR-036a)', () => {
-  beforeEach(() => {
+  /*
+   * All five tests only READ one rendered tab, so it is mounted once — on its own root, outside Testing
+   * Library's auto-cleanup, which would unmount a tree rendered in `beforeAll` after the first test. The
+   * URL and the registry are set here because the file-level `beforeEach` runs per test, after this.
+   */
+  let container: HTMLElement;
+  let root: Root;
+
+  beforeAll(() => {
+    window.history.replaceState(null, '', '/?foldDefault=open');
     setRegistry([...held.real, ...SYNTHETIC]);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        createElement(
+          NotificationProvider,
+          null,
+          createElement(
+            ResetNoticeProvider,
+            null,
+            createElement(ContextMenuProvider, null, createElement(KeybindingsTab, {})),
+          ),
+        ),
+      );
+    });
+  });
+
+  afterAll(() => {
+    act(() => root.unmount());
+    container.remove();
+    setRegistry(held.real);
   });
 
   it('renders the subsection inside its group section, with the tab’s own id prefix', () => {
-    mountTab();
     const section = screen.getByTestId(`keybindings-group-${GROUP}`);
     expect(section).toContainElement(subsection('Beta'));
     expect(section).toContainElement(subsection('Alpha'));
@@ -140,7 +171,6 @@ describe('an injected subgroup renders as a subsection (FR-036a)', () => {
   });
 
   it('puts each binding in its own subsection, and the loose one in neither', () => {
-    mountTab();
     expect(subsection('Beta')).toContainElement(screen.getByTestId('binding-synthetic.beta'));
     expect(subsection('Alpha')).toContainElement(screen.getByTestId('binding-synthetic.alpha'));
     const loose = screen.getByTestId('binding-synthetic.loose');
@@ -149,7 +179,6 @@ describe('an injected subgroup renders as a subsection (FR-036a)', () => {
   });
 
   it('renders the loose binding ABOVE every subsection (FR-036b)', () => {
-    mountTab();
     const loose = screen.getByTestId('binding-synthetic.loose');
     for (const name of ['Beta', 'Alpha']) {
       expect(
@@ -160,7 +189,6 @@ describe('an injected subgroup renders as a subsection (FR-036a)', () => {
   });
 
   it('orders the subsections by DECLARATION, not alphabetically (FR-036a)', () => {
-    mountTab();
     expect(
       subsection('Beta').compareDocumentPosition(subsection('Alpha')) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -171,7 +199,6 @@ describe('an injected subgroup renders as a subsection (FR-036a)', () => {
   it('is a labelled group to assistive technology, not an anonymous div', () => {
     // The same claim `settings-tab-subgroups.test.ts` makes, asserted here because the rendering
     // rules bind all three tabs — and because one shared component is now what satisfies it.
-    mountTab();
     expect(screen.getByRole('group', { name: 'Beta' })).toBe(subsection('Beta'));
     expect(screen.getByRole('group', { name: 'Alpha' })).toBe(subsection('Alpha'));
   });

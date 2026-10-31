@@ -32,7 +32,7 @@
  * surfaces reach the handler by different routes, so they are three assertions rather than one
  * restated three times.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
@@ -119,14 +119,6 @@ const openFlyout = async (user: ReturnType<typeof userEvent.setup>): Promise<HTM
 };
 
 describe('the menu asks about the row it was opened from (FR-087)', () => {
-  it('offers the targets for that row, and names the file it asked about', async () => {
-    const user = await ready();
-    await rightClick(user, 'fif-row-src/b.ts-40');
-
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
-    expect(askedFor).toEqual(['src/b.ts']);
-  });
-
   it('lays the targets out exactly as the shared builder gives them, disabled states and all', async () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
@@ -143,14 +135,19 @@ describe('the menu asks about the row it was opened from (FR-087)', () => {
       'true',
     );
     expect(within(flyout).getByTestId('menu-item-Other Tab')).toBeTruthy();
+
+    // …and clicking the disabled one does nothing at all.
+    await user.click(within(flyout).getByTestId('menu-item-New Editor'));
+    expect(opened).toEqual([]);
   });
 
-  it('asks again, about the new row, when the menu is reopened elsewhere', async () => {
+  it('offers the targets for the row it was opened from, asking again about the new row when reopened elsewhere', async () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/b.ts-40');
 
+    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
     // The second answer must be about b.ts. A menu that cached the first would offer targets
     // computed for a different file, and nothing on screen would say so.
     expect(askedFor).toEqual(['src/a.ts', 'src/b.ts']);
@@ -184,14 +181,6 @@ describe('choosing a target sends the row, with its match (FR-087c)', () => {
     expect(opened[0]).toMatchObject({ relPath: 'src/b.ts', target: { kind: 'tab', tabId: 'tab-2' } });
   });
 
-  it('does nothing at all when a disabled target is clicked', async () => {
-    const user = await ready();
-    await rightClick(user, 'fif-row-src/a.ts-6');
-    const flyout = await openFlyout(user);
-    await user.click(within(flyout).getByTestId('menu-item-New Editor'));
-
-    expect(opened).toEqual([]);
-  });
 });
 
 describe('drawn and disabled where the menu names no file (FR-087d)', () => {
@@ -236,22 +225,18 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     expect(askedFor).toEqual([]);
   });
 
-  it('over the toolbar', async () => {
+  it.each([
+    ['the toolbar', 'fif-term'],
+    ['the status line', 'fif-status'],
+  ])('over %s — and nothing opens from the disabled parent', async (_surface, idPrefix) => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
     await user.keyboard('{Escape}');
-    await rightClick(user, `fif-term-${PANEL_ID}`);
+    await rightClick(user, `${idPrefix}-${PANEL_ID}`);
 
     expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it('over the status line', async () => {
-    const user = await ready();
-    await rightClick(user, 'fif-row-src/a.ts-6');
-    await user.keyboard('{Escape}');
-    await rightClick(user, `fif-status-${PANEL_ID}`);
-
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByTestId('menu-item-Open In'));
+    expect(opened).toEqual([]);
   });
 
   it('is drawn, and disabled, when no chrome is mounted to answer', async () => {
@@ -262,14 +247,6 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     await rightClick(user, 'fif-row-src/a.ts-6');
 
     expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it('never opens anything from a disabled parent', async () => {
-    const user = await ready();
-    await rightClick(user, `fif-term-${PANEL_ID}`);
-    await user.click(screen.getByTestId('menu-item-Open In'));
-
-    expect(opened).toEqual([]);
   });
 });
 
@@ -390,21 +367,5 @@ describe('044 — Open In’s editor targets are unchanged (FR-055)', () => {
     expect(within(flyout).getByTestId('menu-item-New Editor')).toBeTruthy();
     expect(within(flyout).queryByTestId('menu-item-Preview')).toBeNull();
     expect(within(flyout).queryByText(/preview/i)).toBeNull();
-  });
-});
-
-describe('the panel still needs no workspace store', () => {
-  it('renders, searches and builds the whole menu with no workspace provider', async () => {
-    /*
-     * The guard for the property in this file's header. `renderFindInFilesPanel` supplies a context
-     * menu provider and nothing else — no workspace, no projects, no settings — and the menu below
-     * is fully built, Open In included. `useWorkspace()` anywhere in the panel makes this throw.
-     */
-    const user = await ready();
-    await rightClick(user, 'fif-row-src/a.ts-6');
-
-    expect(screen.getByTestId('menu-item-Open In')).toBeTruthy();
-    expect(screen.getByTestId('menu-item-Collapse all')).toBeTruthy();
-    expect(vi.mocked(stub.start)).toHaveBeenCalled();
   });
 });
