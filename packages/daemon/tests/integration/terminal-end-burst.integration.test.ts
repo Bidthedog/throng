@@ -55,7 +55,7 @@ afterEach(async () => {
   rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
-describe('ending several terminals at once (#465)', () => {
+describe('ending several terminals at once (#465)', { tags: ['regression'] }, () => {
   it(
     `every session reports its exit, ${ROUNDS} rounds of ${PER_ROUND} ended the moment they attach`,
     async () => {

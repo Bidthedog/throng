@@ -346,7 +346,7 @@ describe('terminal.attention producer (057)', () => {
    * (that is attention-scan.bench.test.ts). Measured at authoring: 59 ms of handler work with attention off,
    * 87 ms on, for 10,000 chunks (about 3 µs a chunk), one signal published.
    */
-  it('a sustained 1,000/s bell storm costs the output path within noise and publishes one signal (SC-004)', async () => {
+  it('a sustained 1,000/s bell storm costs the output path within noise and publishes one signal (SC-004)', { tags: ['regression'] }, async () => {
     const STORM_MS = 10_000;
     const TICK_MS = 100;
     const PER_TICK = 100;

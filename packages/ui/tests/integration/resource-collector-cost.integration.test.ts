@@ -90,7 +90,7 @@ async function measure(withTrace: boolean): Promise<void> {
   }
 }
 
-describe('the collector’s own cost (055 SC-004)', () => {
+describe('the collector’s own cost (055 SC-004)', { tags: ['regression'] }, () => {
   it('averages under 1% of one core in summary mode at the default 2 s interval', () => measure(false), WINDOW_MS + 15_000);
 
   it.skipIf(!new WindowsElevation().isElevated())(
