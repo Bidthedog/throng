@@ -58,22 +58,33 @@ function startOpts() {
  * Every test waits past the budget it injects plus this grace, so a failure here cannot be "it just
  * needed longer". Every test injects its budgets below rather than waiting out the 15 s defaults.
  */
-const GRACE_MS = 3_000;
+const GRACE_MS = 500;
 
 /**
  * A deliberately short readiness budget for the slow-shell scenario, injected at the host's
  * constructor seam (Principle X — the host never reads the environment itself; production
  * binds these from `IDaemonSettings` in the daemon's composition root). Waiting out the real
- * 15s default would prove the same thing at 7x the cost.
+ * 15s default would prove the same thing at 75x the cost.
  */
-const SHORT_READY_MS = 2_000;
+const SHORT_READY_MS = 200;
 
 /**
- * A deliberately short CONNECT budget, injected at the same seam, for the scenarios that must
- * wait for the deadline to lapse *before* they do anything. Waiting out the real 15s would
- * prove the same thing at 30x the cost.
+ * A deliberately short CONNECT budget, injected at the same seam, for the scenarios in which NO
+ * agent is listening and the deadline is expected to lapse. Waiting out the real 15s would
+ * prove the same thing at 150x the cost.
  */
-const SHORT_CONNECT_MS = 500;
+const SHORT_CONNECT_MS = 100;
+
+/**
+ * The CONNECT budget where a live server IS listening: a connect to a local pipe takes
+ * milliseconds, but the budget must not be so tight that machine load makes the lapse win the
+ * race against a connection that was about to succeed. Only the relaunch-after-drop scenario
+ * waits this out.
+ */
+const LIVE_CONNECT_MS = 300;
+
+/** Enough past a connect lapse for the host to have published it (the lapse is a timer, not an event we can await). */
+const lapsed = (connectMs: number): Promise<void> => delay(connectMs + 150);
 
 /** The two lapse routes' messages, which MUST stay distinguishable (C7). */
 const CONNECT_LAPSE = /de-elevated terminal agent never started/;
@@ -198,13 +209,15 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
         server.listen(pipe, resolve);
       });
 
-      const host = new PtyAgentHost(pipe, () => {}, { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS });
+      // A live server is listening, so the connect succeeds at once; the budget is generous because
+      // only the READINESS lapse is being timed here.
+      const host = new PtyAgentHost(pipe, () => {}, { connectMs: 5_000, readyMs: SHORT_READY_MS });
       const handle = host.start(startOpts());
       const signals: PanelSignals = { chunks: [], exits: [] };
       host.onData(handle, (chunk) => signals.chunks.push(chunk));
       host.onExit(handle, (e) => signals.exits.push(e));
 
-      await waitForSignal(signals, SHORT_READY_MS + GRACE_MS);
+      await waitForSignal(signals, SHORT_READY_MS + GRACE_MS + 1_000);
 
       // Sanity: this scenario really is "connected but never ready" — not a repeat of
       // the first test. The start DID reach the agent.
@@ -261,7 +274,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       });
 
       // Boot → lapse, with NO terminal live. Nothing is watching; nothing may be lost.
-      await delay(SHORT_CONNECT_MS + GRACE_MS);
+      await lapsed(SHORT_CONNECT_MS);
 
       // ...and only NOW does the user add a terminal. FR-012 must hold for a terminal opened
       // at ANY time after the lapse, not merely one that happened to be live at that instant.
@@ -307,7 +320,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       );
 
       // The deadline lapses while the shim is still compiling: no reason exists yet.
-      await delay(SHORT_CONNECT_MS + GRACE_MS);
+      await lapsed(SHORT_CONNECT_MS);
       // The shim finally dies and says why — too late for the lapse, in time for the user.
       report?.('CreateProcessWithTokenW failed: 1314');
 
@@ -354,17 +367,18 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
         (_pipe, r) => {
           reports.push(r);
         },
-        { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS },
+        { connectMs: LIVE_CONNECT_MS, readyMs: SHORT_READY_MS },
       );
-      // Launch #1 connects, then reports a failure of its own (e.g. a stray shim exit).
-      await delay(SHORT_CONNECT_MS);
+      // Launch #1 connects (a live server is listening), then reports a failure of its own (e.g. a
+      // stray shim exit).
+      while (sockets.length === 0) await delay(10);
       reports[0]?.('launch #1 died: exit 5');
 
       // The agent's connection drops → the host relaunches (C8). Launch #2 reports NOTHING,
       // and no server is listening any more, so its connect budget lapses in silence.
       for (const s of sockets) s.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await delay(SHORT_CONNECT_MS + GRACE_MS);
+      await lapsed(LIVE_CONNECT_MS);
 
       const handle = host.start(startOpts());
       const signals: PanelSignals = { chunks: [], exits: [] };
@@ -385,7 +399,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       host.dispose();
       for (const s of sockets) s.destroy();
     },
-    SHORT_CONNECT_MS * 2 + GRACE_MS + SHORT_READY_MS * 3 + 7_000,
+    LIVE_CONNECT_MS * 2 + GRACE_MS + SHORT_READY_MS * 3 + 7_000,
   );
 
   it(
