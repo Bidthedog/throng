@@ -5,15 +5,15 @@
       "match": ["npx vitest run --project unit", "npm run test:unit"],
       "testGlobs": ["packages/*/tests/unit/**/*.test.ts"],
       "run": {
-        "method": "npx vitest run --project unit --passWithNoTests {file} -t {test}",
-        "file": "npx vitest run --project unit --passWithNoTests {files}",
-        "dir": "npx vitest run --project unit --passWithNoTests {dir}",
-        "all": "npx vitest run --project unit --passWithNoTests"
+        "method": "npx vitest run --project unit --project unit-isolated --passWithNoTests {file} -t {test}",
+        "file": "npx vitest run --project unit --project unit-isolated --passWithNoTests {files}",
+        "dir": "npx vitest run --project unit --project unit-isolated --passWithNoTests {dir}",
+        "all": "npx vitest run --project unit --project unit-isolated --passWithNoTests"
       },
       "list": {
-        "file": "npx vitest list --project unit --json {file}",
-        "dir": "npx vitest list --project unit --json {dir}",
-        "all": "npx vitest list --project unit --json"
+        "file": "npx vitest list --project unit --project unit-isolated --json {file}",
+        "dir": "npx vitest list --project unit --project unit-isolated --json {dir}",
+        "all": "npx vitest list --project unit --project unit-isolated --json"
       },
       "bail": "--bail 1",
       "junit": "--reporter=junit --outputFile={junit}",
@@ -22,7 +22,7 @@
         "term": "{tag}",
         "not": "!",
         "and": " && ",
-        "list": "npx vitest list --project unit --json --tags-filter={tag}"
+        "list": "npx vitest list --project unit --project unit-isolated --json --tags-filter={tag}"
       },
       "benched": { "env": "TD_BENCHED", "annotate": "test('name', { tags: ['benched'], skip: process.env.TD_BENCHED !== '1' }, fn)" },
       "idFrom": { "file": "classname-as-path" },

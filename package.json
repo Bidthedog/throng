@@ -44,7 +44,7 @@
     "gate": "node scripts/gate.mjs",
     "test": "node scripts/run-tests.mjs",
     "pretest:e2e": "npm run build",
-    "test:unit": "vitest run --project unit",
+    "test:unit": "vitest run --project unit --project unit-isolated",
     "test:component": "vitest run --project component",
     "test:integration": "vitest run --project integration",
     "test:contract": "vitest run --project contract",
