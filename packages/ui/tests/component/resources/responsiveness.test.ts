@@ -175,13 +175,56 @@ function mountFiltered(): void {
   act(() => setView({ filterText: 'proc' }));
 }
 
+/**
+ * The smallest tree that has the shape the duplicate came from: processes under a Projects component (a project,
+ * a tab, a panel, a shell of seven) beside processes directly under other components. Not 450 processes — the
+ * listing rule does not depend on how many there are, only on the Projects subtree sitting inside a component.
+ */
+function smallHierarchy(tick: number): ResourceNode {
+  pid = 1000;
+  const projectTree = node({
+    id: 'p:0',
+    kind: 'project',
+    label: 'Project 0',
+    projectState: 'active',
+    owner: { projectId: '0' },
+    children: [
+      node({
+        id: 't:0-0',
+        kind: 'tab',
+        label: 'Tab 0',
+        owner: { projectId: '0', tabId: '0-0' },
+        children: [
+          node({ id: 'n:0-0-0', kind: 'panel', label: 'Panel 0', panelKind: 'terminal', owner: { projectId: '0', tabId: '0-0', panelId: '0-0-0' }, children: [shell(tick)] }),
+        ],
+      }),
+    ],
+  });
+  const uiProcs = Array.from({ length: 2 }, () => {
+    pid += 1;
+    return proc(pid, `proc-${pid}.exe`, figures(tick));
+  });
+  return node({
+    id: 'root',
+    kind: 'root',
+    label: 'throng',
+    owner: { component: 'ui' },
+    children: [
+      node({ id: 'c:ui', kind: 'component', label: 'UI', owner: { component: 'ui' }, children: uiProcs }),
+      node({ id: 'c:projects', kind: 'component', label: 'Projects', children: [projectTree] }),
+    ],
+  });
+}
+
 describe('a filtered view lists each process once (SC-010)', () => {
-  it('draws 450 process rows for 450 processes — not the 900 it used to', () => {
-    mountFiltered();
+  it('draws one process row per process (9) — not the doubled list it used to', () => {
+    act(() => ingestFrame(frame(1, smallHierarchy(1))));
+    render(createElement(Breakdown));
+    act(() => setView({ filterText: 'proc' }));
     const processRows = screen.getAllByRole('treeitem').filter((r) => r.getAttribute('data-kind') === 'process');
     const ids = processRows.map((r) => r.getAttribute('data-node-id'));
-    expect(ids).toHaveLength(450);
-    expect(new Set(ids).size).toBe(450);
+    expect(ids).toHaveLength(9);
+    expect(new Set(ids).size).toBe(9);
   });
 });
 

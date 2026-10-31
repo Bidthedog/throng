@@ -20,7 +20,7 @@
  *
  * The document has two collapsed sections and a table in every section, all above the reader's place.
  */
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { createElement, useState, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialFold, setSection, type PreviewAttachRequest, type PreviewUpdate } from '@throng/core';
@@ -33,7 +33,7 @@ const VIEW_TOP = 100;
 const LINE_PX = 20;
 const TABLE_RAW_PX = 100;
 const TABLE_LAID_OUT_PX = 60;
-/** Longer than the body's table-layout debounce (120 ms), so the deferred pass has run. */
+/** Scales the wait bound for the body's table-layout debounce (120 ms); `settle` waits on the pass itself. */
 const TABLE_PASS_MS = 200;
 
 function section(n: number): string {
@@ -104,8 +104,21 @@ let answerOver: Partial<PreviewUpdate> = {};
 
 const host = (): HTMLElement => screen.getByTestId(`preview-body-${m!.id}`);
 
+/**
+ * `settle()` waits for the CONDITION the tests need — the deferred table pass has laid every table out — not for
+ * a fixed 200 ms. `settle(0)` is just a frame.
+ */
 async function settle(ms = TABLE_PASS_MS): Promise<void> {
-  await act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  if (ms > 0) {
+    await waitFor(
+      () => {
+        const tables = [...(bodyEl()?.querySelectorAll<HTMLElement>('table') ?? [])];
+        expect(tables.length, 'the body has drawn its tables').toBeGreaterThan(0);
+        expect(tables.filter((t) => t.style.tableLayout !== 'fixed')).toEqual([]);
+      },
+      { timeout: ms * 10, interval: 10 },
+    );
+  }
   await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 

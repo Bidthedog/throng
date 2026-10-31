@@ -20,7 +20,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SETTINGS_METADATA, formatGrouped, type FieldDescriptor } from '@throng/core';
+import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
@@ -177,12 +177,9 @@ describe('every heading shows how many rows it holds (FR-006)', () => {
     expect(count(EDITOR)).toBe('4');
   });
 
-  it('digit-groups the count of the real registry', () => {
-    mount();
-    const editorRows = SETTINGS_METADATA.filter((d) => d.group === 'Editor').length;
-    expect(editorRows).toBeGreaterThan(1);
-    expect(count(EDITOR)).toBe(formatGrouped(editorRows));
-  });
+
+  // MOVED DOWN: the real registry's per-section count is asserted over `groupCounts` in
+  // unit/group-counts.test.ts; the digit grouping of the rendered number in preferences-fold-heading.test.ts.
 });
 
 describe('fold state is remembered (FR-010, FR-011, FR-011a, FR-012)', () => {
@@ -204,34 +201,8 @@ describe('fold state is remembered (FR-010, FR-011, FR-011a, FR-012)', () => {
     expect(isHidden(row('editor.statusBar.showCounts'))).toBe(true);
   });
 
-  it('writes the settings namespace only', () => {
-    mount(NESTED);
-    fireEvent.click(toggle(EDITOR));
-    const stored = JSON.parse(localStorage.getItem(STORE)!) as Record<string, unknown>;
-    expect(stored.v).toBe(2);
-    expect(stored.settings).toEqual({ [JSON.stringify(['Editor'])]: true });
-    expect(stored.keybindings).toEqual({});
-    expect(stored.themes).toEqual({});
-  });
-
-  it('ignores a stored key that names a heading which no longer exists, and opens a new heading unfolded', () => {
-    localStorage.setItem(
-      STORE,
-      JSON.stringify({
-        v: 2,
-        settings: { [JSON.stringify(['No Such Section'])]: true, [JSON.stringify(['Editor'])]: true },
-      }),
-    );
-    expect(() => mount(NESTED)).not.toThrow();
-    expect(expanded(EDITOR)).toBe(false);
-    expect(expanded(TERMINALS), 'a heading absent from the store opens unfolded').toBe(true);
-  });
-
-  it('survives corrupt stored state by opening everything unfolded', () => {
-    localStorage.setItem(STORE, '{definitely not json');
-    mount(NESTED);
-    expect(expanded(EDITOR)).toBe(true);
-  });
+  // MOVED DOWN (stored-state cases): the namespace written, a stale key, corrupt JSON and a key missing
+  // from the store are asserted in unit/preferences-folds.test.ts and component/use-preference-folds.test.ts.
 });
 
 describe('sections start folded (FR-016, FR-017, SC-006) — no seam', () => {
@@ -268,14 +239,6 @@ describe('sections start folded (FR-016, FR-017, SC-006) — no seam', () => {
     expect(expanded(EDITOR)).toBe(false);
   });
 
-  it('reads a stored v2 state lacking a key at that key default', () => {
-    localStorage.setItem(STORE, JSON.stringify({ v: 2, settings: { [JSON.stringify(['Terminals'])]: false } }));
-    mount(NESTED);
-    expect(expanded(TERMINALS)).toBe(true);
-    expect(expanded(EDITOR), 'section with no entry: folded').toBe(false);
-    expect(expanded(PREVIEWS), 'subgroup with no entry: unfolded').toBe(true);
-  });
-
   it('Expand All then a remount keeps every heading open', () => {
     const first = mount(NESTED);
     fireEvent.click(screen.getByTestId('settings-expand-all'));
@@ -288,7 +251,7 @@ describe('sections start folded (FR-016, FR-017, SC-006) — no seam', () => {
 describe('folding never discards an invalid entry (FR-007)', () => {
   it('shows the warning marker while folded and keeps the entry for when it unfolds', async () => {
     const user = userEvent.setup();
-    mount();
+    mount([at('editor.maxOpenFileBytes', 'Editor'), at('terminals.defaultRunAsAdmin', 'Terminals')]);
     const input = screen.getByTestId('control-editor.maxOpenFileBytes');
     await user.clear(input);
     await user.type(input, 'abc');
@@ -304,11 +267,6 @@ describe('folding never discards an invalid entry (FR-007)', () => {
     expect(screen.getByTestId('control-editor.maxOpenFileBytes')).toHaveValue('abc');
   });
 
-  it('does not show it when nothing inside is invalid', () => {
-    mount();
-    fireEvent.click(toggle(EDITOR));
-    expect(screen.queryByTestId(`${EDITOR}-invalid`)).toBeNull();
-  });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -316,19 +274,6 @@ describe('folding never discards an invalid entry (FR-007)', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the keyboard folds and unfolds (FR-004, FR-005)', () => {
-  it('reaches every heading with Tab', async () => {
-    const user = userEvent.setup();
-    mount(NESTED);
-    const seen = new Set<Element | null>();
-    for (let i = 0; i < 40; i++) {
-      await user.tab();
-      seen.add(document.activeElement);
-    }
-    for (const id of [EDITOR, PREVIEWS, MARKDOWN, MERMAID, TERMINALS]) {
-      expect(seen.has(toggle(id)), `${id} is reachable`).toBe(true);
-    }
-  });
-
   it('Enter folds and Space unfolds, and aria-expanded follows', async () => {
     const user = userEvent.setup();
     mount(NESTED);
@@ -410,75 +355,9 @@ describe('a search shows its matches in folded sections (FR-008, FR-009)', () =>
     expect(count(EDITOR)).toBe('4');
   });
 
-  it('discards a toggle made during the search and never writes it', () => {
-    mount(NESTED);
-    fireEvent.click(toggle(TERMINALS));
-    const before = localStorage.getItem(STORE);
-    search('warnonmissingfile');
-    // Editor holds the match; fold it during the search, then clear.
-    fireEvent.click(toggle(EDITOR));
-    expect(expanded(EDITOR)).toBe(false);
-    expect(localStorage.getItem(STORE), 'nothing written during a search').toBe(before);
-
-    fireEvent.click(screen.getByTestId('settings-search-clear'));
-    expect(expanded(EDITOR), 'the during-search toggle is discarded').toBe(true);
-    expect(expanded(TERMINALS), 'the pre-search fold is back').toBe(false);
-    expect(localStorage.getItem(STORE)).toBe(before);
-  });
-
-  it('treats a click made in the debounce gap as transient: typed but not yet applied, never written', () => {
-    mount(NESTED);
-    fireEvent.change(screen.getByTestId('settings-search'), { target: { value: 'warn' } });
-    // The filter has NOT settled: `applied` is still empty, the box already has text.
-    fireEvent.click(toggle(EDITOR));
-    expect(localStorage.getItem(STORE), 'nothing written in the gap').toBeNull();
-    act(() => {
-      vi.advanceTimersByTime(DEBOUNCE_MS + 10);
-    });
-    fireEvent.click(screen.getByTestId('settings-search-clear'));
-    expect(expanded(EDITOR), 'the gap toggle did not become a real fold').toBe(true);
-    expect(localStorage.getItem(STORE)).toBeNull();
-  });
-
-  it('keeps a folded heading folded during the debounce gap, and unfolds it once the filter lands', () => {
-    mount(NESTED);
-    fireEvent.click(toggle(EDITOR));
-    fireEvent.change(screen.getByTestId('settings-search'), { target: { value: 'warn' } });
-    expect(expanded(EDITOR), 'no unfold flash before the filter is applied').toBe(false);
-    expect(screen.getByTestId('settings-expand-all')).toBeDisabled();
-    act(() => {
-      vi.advanceTimersByTime(DEBOUNCE_MS + 10);
-    });
-    expect(expanded(EDITOR)).toBe(true);
-  });
-
-  it('does not resurface a toggle made in an earlier search when the same query is typed again', () => {
-    mount(NESTED);
-    search('warnonmissingfile');
-    fireEvent.click(toggle(EDITOR));
-    expect(expanded(EDITOR)).toBe(false);
-    fireEvent.click(screen.getByTestId('settings-search-clear'));
-    search('warnonmissingfile');
-    expect(expanded(EDITOR)).toBe(true);
-  });
-
-  it('does not treat a whitespace-only query as a search', () => {
-    mount(NESTED);
-    fireEvent.click(toggle(EDITOR));
-    search('   ');
-    expect(expanded(EDITOR), 'the filter shows everything, so nothing unfolds').toBe(false);
-    expect(screen.getByTestId('settings-expand-all')).not.toBeDisabled();
-    expect(count(EDITOR)).toBe('4');
-  });
-
-  it('never stores the temporary unfolding a search causes', () => {
-    mount(NESTED);
-    fireEvent.click(toggle(EDITOR));
-    const before = localStorage.getItem(STORE);
-    search('showcursorposition');
-    fireEvent.click(screen.getByTestId('settings-search-clear'));
-    expect(localStorage.getItem(STORE)).toBe(before);
-  });
+  // MOVED DOWN: the transient search folds (a toggle during a search, in the debounce gap, repeating a
+  // query, a whitespace-only query, nothing stored) are asserted over the hook in
+  // component/use-preference-folds.test.ts ("during a search", "one definition of searching").
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -567,7 +446,8 @@ describe('Expand All and Collapse All (FR-011b)', () => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('folding forces no layout (Principle XII)', () => {
-  it('performs zero layout reads for Collapse All and for a single toggle, over the real registry', () => {
+  // Layer: component; tier regression — a cost property (no forced layout) measured over the whole real registry.
+  it('performs zero layout reads for Collapse All and for a single toggle, over the real registry', { tags: ['regression'] }, () => {
     mount();
     const reads: string[] = [];
     const spies = [

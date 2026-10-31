@@ -14,12 +14,10 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialFold, setSection } from '@throng/core';
 import { __resetFoldStateStore, setDocumentFoldState } from '../../src/renderer/editor/fold-state-store.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
-import { SearchKeybindings } from '../../src/renderer/search/search-keybindings.js';
 import { __resetFindState } from '../../src/renderer/search/search-store.js';
 import { COLD, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 
@@ -108,54 +106,34 @@ describe('Go to Heading onto a COLLAPSED heading (FR-042c, FR-040)', () => {
   };
   const three = (host: HTMLElement) => host.querySelector<HTMLElement>('[data-heading-slug="three"]')!;
 
-  for (const how of ['enter', 'click'] as const) {
-    it(`${how}: a heading hidden in a collapsed ancestor is revealed and scrolled to`, async () => {
-      const host = await open();
-      setDocumentFoldState(`panel:${m!.id}`, setSection(initialFold('expanded'), 'two', true));
-      await waitFor(() => expect(three(host).hidden).toBe(true));
-
-      const user = userEvent.setup();
-      await press(user, 'g');
-      const row = await screen.findByTestId('heading-outline-row-three');
-      if (how === 'enter') fireEvent.keyDown(row, { key: 'Enter' });
-      else fireEvent.click(row);
-
-      await waitFor(() => expect(three(host).hidden).toBe(false));
-      await waitFor(() => expect(host.scrollTop).toBe(120));
-    });
-
-    it(`${how}: a heading whose OWN section is collapsed is expanded and scrolled to`, async () => {
-      const host = await open();
-      setDocumentFoldState(`panel:${m!.id}`, setSection(initialFold('expanded'), 'three', true));
-      await waitFor(() => expect(screen.getByText('body three')).not.toBeVisible());
-
-      const user = userEvent.setup();
-      await press(user, 'g');
-      const row = await screen.findByTestId('heading-outline-row-three');
-      if (how === 'enter') fireEvent.keyDown(row, { key: 'Enter' });
-      else fireEvent.click(row);
-
-      await waitFor(() => expect(screen.getByText('body three')).toBeVisible());
-      await waitFor(() => expect(host.scrollTop).toBe(120));
-    });
-  }
-});
-
-describe('Find’s current match inside a COLLAPSED section (FR-040)', () => {
-  it('expands the section a match is in, mounted through the real find bar — proven by the previously-hidden text becoming visible', async () => {
-    m = await mountMarkdownPreview(DOC, undefined, { extras: [createElement(SearchKeybindings, { key: 'search-kb' })] });
-    await screen.findByText('Jump to Three', {}, COLD);
-    const bodyThree = () => screen.getByText('body three');
-
-    setDocumentFoldState(`panel:${m.id}`, setSection(initialFold('expanded'), 'two', true));
-    await waitFor(() => expect(bodyThree()).not.toBeVisible());
+  // The Enter variants are not repeated here: Enter and click on an outline row run the same jump (Enter on a row
+  // jumps, heading-outline.test.ts), so the click cases carry the reveal.
+  it('click: a heading hidden in a collapsed ancestor is revealed and scrolled to', async () => {
+    const host = await open();
+    setDocumentFoldState(`panel:${m!.id}`, setSection(initialFold('expanded'), 'two', true));
+    await waitFor(() => expect(three(host).hidden).toBe(true));
 
     const user = userEvent.setup();
-    await press(user, 'f');
-    await waitFor(() => expect(screen.getByTestId(`find-bar-${m!.id}`)).toBeVisible());
-    await user.type(screen.getByTestId('find-input'), 'body three');
-    await waitFor(() => expect(screen.getByTestId('find-count')).toHaveTextContent('1 of 1'));
+    await press(user, 'g');
+    fireEvent.click(await screen.findByTestId('heading-outline-row-three'));
 
-    await waitFor(() => expect(bodyThree()).toBeVisible());
+    await waitFor(() => expect(three(host).hidden).toBe(false));
+    await waitFor(() => expect(host.scrollTop).toBe(120));
+  });
+
+  it('click: a heading whose OWN section is collapsed is expanded and scrolled to', async () => {
+    const host = await open();
+    setDocumentFoldState(`panel:${m!.id}`, setSection(initialFold('expanded'), 'three', true));
+    await waitFor(() => expect(screen.getByText('body three')).not.toBeVisible());
+
+    const user = userEvent.setup();
+    await press(user, 'g');
+    fireEvent.click(await screen.findByTestId('heading-outline-row-three'));
+
+    await waitFor(() => expect(screen.getByText('body three')).toBeVisible());
+    await waitFor(() => expect(host.scrollTop).toBe(120));
   });
 });
+
+// DELETED: Find's current match inside a collapsed section — an exact duplicate of
+// preview-find-fold-reveal.test.ts ("typed find, match in a section that is itself collapsed").
