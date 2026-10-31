@@ -25,7 +25,7 @@ Only the infra class has a bounded, evidenced retry path in CI; the test gate ne
 ## Adding a spec file — two registrations, both enforced
 
 1. **Tag every test in it.** Exactly one significance tag (`@core`, which gates CI and is capped at
-   50, or `@extended`, which runs at release) and at least one category tag. A test with neither
+   50, or `@extended`, which runs in the gate and at release) and at least one category tag. A test with neither
    runs in no lane and would disappear silently — the property the deleted shard plan used to guard,
    now checked per test rather than per file.
 2. `packages/ui/tests/e2e/parallel-plan.json` — required if the spec **opens the preferences window,
@@ -63,7 +63,7 @@ plan to register in: 034 FR-057 removed it, and the tier filter now reads the sp
 
 ## Environment switches
 
-`THRONG_E2E_TIER` (parallel/serial locally), `THRONG_E2E_WORKERS`, `THRONG_E2E_GROUP` +
+`THRONG_E2E_TIER` (parallel/serial), `THRONG_E2E_WORKERS`, `THRONG_E2E_GROUP` +
 `THRONG_E2E_SHARDS` (CI), `THRONG_E2E_RETRIES`, `THRONG_E2E_STEP_MS` (watch a run happen),
 `THRONG_E2E_INCLUDE_ADMIN`, `THRONG_E2E_INCLUDE_QUARANTINE`, `THRONG_E2E_CLIPBOARD` (**set it, or a
 spec pastes the developer's real clipboard**), `THRONG_INPUT_SOAK` / `_REPS`, `THRONG_CLAUDE_E2E` /
@@ -99,11 +99,11 @@ component test, and a value that ends up on disk is an integration test.
 
 There is no longer any rule requiring an E2E for a UI change. The old one — *"mandatory for any
 user-facing UI change"* — was removed at constitution v5.0.0, because it was a one-way ratchet that
-produced 235 spec files and 46.9 measured minutes. Before adding an E2E, answer in one sentence what
-a lower layer would be unable to see.
+grew the suite without bound. Before adding an E2E, answer in one sentence what a lower layer would
+be unable to see.
 
 Every E2E test carries exactly one significance tag (`@core`, which gates CI and is capped, or
-`@extended`, which runs at release) and at least one category tag; the build fails otherwise, and
+`@extended`, which runs in the gate and at release) and at least one category tag; the build fails otherwise, and
 fails again if the suite exceeds its declared budget. Deleting an E2E is allowed and has one rule:
 the lower-layer replacement is written and observed **failing** against a broken implementation
 first.

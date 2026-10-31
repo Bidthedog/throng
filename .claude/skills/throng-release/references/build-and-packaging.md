@@ -96,9 +96,9 @@ Jobs: **Plan E2E** → **Lint & type-check** → **Unit / component / integratio
 first, for the daemon-spawning layers' `BUILD_ID`) → **E2E (@core)**, plus **E2E (@admin,
 elevated)**. Windows runners, one worker, 1920×1080 forced, an alias-free temp dir.
 
-**There is one E2E job, not three shards** (034 FR-057). Sharding bought ~12 minutes down to ~4-5 at
-THREE TIMES the runner-minutes, plus a ~3-4 minute `npm ci` + build toll per shard before any test
-ran (#103) — a trade that does not pay for a ≤50-test critical lane. `shard-plan.json`,
+**There is one E2E job, not three shards** (034 FR-057). Sharding multiplied the runner-minutes and
+paid the `npm ci` + build toll once per shard before any test ran (#103) — a trade that does not pay
+for a ≤50-test critical lane. `shard-plan.json`,
 `THRONG_E2E_SHARDS`, `THRONG_E2E_GROUP`, the blob reporter, `THRONG_E2E_BLOB_OUT`, the `merge-e2e`
 job and `blob-report-naming.test.ts` are all gone with it; the last four existed only because three
 shards wrote one filename (#216).
@@ -113,15 +113,16 @@ the shard script.
 
 ## Spending runner minutes well
 
-**Run it locally before you push it** — the full E2E suite is ~21 minutes locally (measured
-2026-08-18 at 229 spec files), while CI runs only the 50-test `@core` lane in four to five minutes.
-The one thing local runs genuinely cannot answer is elevation: a developer machine is normally not
-elevated, GitHub's runners always are.
+**E2E runs on CI, not on the workstation before a push.** The `@core` lane runs on every ready PR;
+`@extended` runs in `gate.yml` and `release.yml`. Locally, run at most the one spec covering the
+change, at one worker, when a lower layer cannot show the failure — the root `CLAUDE.md`'s *Running
+tests locally* owns that rule. Elevation is the thing only CI can answer either way: a developer
+machine is normally not elevated, GitHub's runners always are.
 
 There is **no way to skip a CI job any more** — the `[ci-admin-only]` marker and the `plan` job that
-read it are gone (034 FR-057). The marker existed to avoid spending ~36 runner-minutes on three
-12-minute shards; there are no shards, so it would now skip one short job while making the gating
-lane something a commit message could switch off.
+read it are gone (034 FR-057). The marker existed to avoid paying for three shards; there are no
+shards, so it would now skip one short job while making the gating lane something a commit message
+could switch off.
 
 ## Not yours
 

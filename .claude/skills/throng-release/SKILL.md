@@ -164,13 +164,13 @@ Two traps, both from the alpha5 run:
 `better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
 
 **Then prove it, because native code moved.** Electron and `koffi` ship binaries the daemon loads
-under the bundled host-Node runtime, so a patch bump is not a no-op. Run everything the gate runs
-except E2E, on the upgraded tree, and quote the counts:
+under the bundled host-Node runtime, so a patch bump is not a no-op. Run the cheap stages locally,
+then push and dispatch `gate.yml` for the OS-heavy layers (*Verifying done-ness* in `CLAUDE.md`),
+and quote the counts from both:
 
 ```sh
 npm run build && npm run typecheck && npm run lint
 npm run test:unit && npm run test:component
-npm run test:integration && npm run test:contract
 ```
 
 Capture the output to a scratch file rather than filtering it — the **running-tests** skill owns
@@ -229,7 +229,7 @@ what establishes done-ness:
 
 ```sh
 gh workflow run gate.yml --ref release/v<version>
-gh run watch <run-id> --exit-status                              # one blocking watch, ~35 min
+gh run watch <run-id> --exit-status                              # one blocking watch
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
@@ -264,13 +264,10 @@ the ref. The `master` run does everything except publish and is pure duplication
 public repo, so leave it unless runner minutes are being watched. **Take every verdict from the tag
 run**, which is the one carrying the publish job.
 
-The jobs, each gating the next (`needs` in brackets). Before 058 the alpha5 run (`35531917920`) took
-**45 minutes** tag-to-approval. This shape, measured on the first green rehearsal (`39520454070`,
-`skip_e2e`): build 5 min, the six verify legs 2.5–4 min each in parallel, coexistence 9 min,
-render-body 1 min — **20 minutes** without the E2E job, so about **53** with its 33:
+The jobs, each gating the next (`needs` in brackets):
 
 1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. This is
-   the only place the `@extended` half of the suite runs. **33 min** on a runner. A red suite means
+   the only place in the release pipeline the `@extended` half of the suite runs. A red suite means
    no artifact.
 2. **Work out the verification matrix** `combinations` (ubuntu, beside the E2E) — emits
    `artifact-set.mjs list --combinations --json`.
@@ -376,7 +373,7 @@ gh workflow run release.yml --ref master -f publish=false
 Use it when the pipeline itself is what is being fixed.
 
 When only the installers or the verification harness are being fixed, add `-f skip_e2e=true`: it
-leaves out the full E2E suite (~33 minutes) and the build and verification jobs still run. `gate.yml`
+leaves out the full E2E suite and the build and verification jobs still run. `gate.yml`
 already runs that suite on the same tree. The publish job refuses to run when `skip_e2e` is set, so a
 release can never follow a skipped suite:
 

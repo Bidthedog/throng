@@ -14,7 +14,7 @@ without saturating the machine, and how to diagnose a flake — lives in the
 | `npm run test:component` | component | Vitest (`--project component`, jsdom) | parallel (Vitest default) |
 | `npm run test:integration` | integration | Vitest (`--project integration`) | **serial** (`fileParallelism: false`) |
 | `npm run test:contract` | contract | Vitest (`--project contract`) | **serial** (`fileParallelism: false`) |
-| `npm run test:e2e` | E2E | Playwright-Electron | two local tiers |
+| `npm run test:e2e` | E2E | Playwright-Electron | two tiers; runs on CI, not a workstation |
 
 `npm run test` runs all five through `scripts/run-tests.mjs`, scratching everything under one
 temporary folder per run ([temp files](../.claude/skills/throng-testing/references/temp-files.md)).
@@ -50,6 +50,13 @@ While iterating, run the tests under your cursor — one file, one project:
 
 ```bash
 npx vitest run --project unit packages/core/tests/unit/<the-one>.test.ts
+```
+
+**E2E runs on CI**: the `@core` lane on a ready pull request, `@extended` in `gate.yml` and
+`release.yml`. Do not run the E2E suite, a tier or a batch of specs locally before pushing. At most,
+run the one spec covering your change, at one worker, when a lower layer cannot show the failure:
+
+```bash
 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
@@ -78,7 +85,7 @@ It runs on a GitHub-hosted runner, dispatched against a ref:
 
 ```bash
 gh workflow run gate.yml --ref <branch>
-gh run watch <run-id> --exit-status       # one blocking watch, expect ~35 min
+gh run watch <run-id> --exit-status       # one blocking watch
 gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
@@ -95,8 +102,8 @@ Every E2E test carries exactly one significance tag and at least one category ta
 
 | Tag | Where it runs | Cap |
 | --- | --- | --- |
-| `@core` | every CI run of a non-draft pull request (`ci.yml`, one job, one worker), and locally | **50** — a hard ceiling, guarded |
-| `@extended` | the release lane, before an installer is built | none |
+| `@core` | every CI run of a non-draft pull request (`ci.yml`, one job, one worker) | **50** — a hard ceiling, guarded |
+| `@extended` | the gate (`gate.yml`) and the release lane (`release.yml`), before an installer is built | none |
 
 Category tags — `@boot @terminal @editor @explorer @prefs @window @persistence @failure` — say what a
 test is about, so a failure names an area before anyone opens the file. `@admin` (needs elevation)
@@ -104,11 +111,11 @@ and `@quarantine` (excluded, coverage lost) are environment tags and orthogonal 
 by `--grep` composed with `grepInvert` in `playwright.config.ts`, so an untagged test would run in
 neither lane — which is why the guard exists.
 
-Locally, `npm run test:e2e` runs the suite in two tiers: a parallel tier at several workers, then a
+`npm run test:e2e` — the gate's E2E stage — runs the suite in two tiers: a parallel tier, then a
 serial tier at one worker for specs that steal focus, drive real shells or assert wall-clock
 ceilings. A spec in that class is registered in `packages/ui/tests/e2e/parallel-plan.json`, and
-`tier-plan.test.ts` fails the build if it is not. The tiers, worker counts and their measurements
-are in [tiers and workers](../.claude/skills/throng-testing/references/tiers-and-workers.md).
+`tier-plan.test.ts` fails the build if it is not. The tiers and worker counts are in
+[tiers and workers](../.claude/skills/throng-testing/references/tiers-and-workers.md).
 
 ## The budget ratchet
 
@@ -117,8 +124,8 @@ per category and in `@core`. It fails when the suite grows past the budget **and
 below it without the budget being re-seeded — so re-seed it in the same commit that removes a test.
 The second half does the work: it stops a migration quietly banking a reduction and then spending
 it again. `reserve-tag-debt.json` is the same both-ways ratchet for tests that do not yet name a
-reserve entry. How past specs paid for the declarations they added is recorded in
-[the budget histories](../.claude/skills/throng-testing/references/budget-history.md).
+reserve entry. How a new declaration is paid for is *Paying for a new declaration* in
+[the E2E reserve and its tags](../.claude/skills/throng-testing/references/e2e-reserve-and-tags.md).
 
 ## Where a performance SLA is measured
 
@@ -151,13 +158,12 @@ practice. Its references hold the rest, one topic each:
 | Topic | Reference |
 | --- | --- |
 | The E2E reserve, replacing an E2E, `@reserve:*` tags | [e2e-reserve-and-tags.md](../.claude/skills/throng-testing/references/e2e-reserve-and-tags.md) |
-| Per-spec budget histories (044, 045, 046) | [budget-history.md](../.claude/skills/throng-testing/references/budget-history.md) |
 | Bridge parity guard, renderer typecheck | [build-guards.md](../.claude/skills/throng-testing/references/build-guards.md) |
 | The gate in detail | [gate.md](../.claude/skills/throng-testing/references/gate.md) |
 | Performance SLAs | [performance-sla.md](../.claude/skills/throng-testing/references/performance-sla.md) |
 | No headless mode | [no-headless.md](../.claude/skills/throng-testing/references/no-headless.md) |
 | Test environment variables | [environment-variables.md](../.claude/skills/throng-testing/references/environment-variables.md) |
-| Local tiers, worker counts, suite timings | [tiers-and-workers.md](../.claude/skills/throng-testing/references/tiers-and-workers.md) |
+| E2E tiers, worker counts | [tiers-and-workers.md](../.claude/skills/throng-testing/references/tiers-and-workers.md) |
 | Elevation, `@admin`, `skipIfElevated()` | [elevation.md](../.claude/skills/throng-testing/references/elevation.md) |
 | Writing an E2E: config writes, one app per file, helpers | [writing-e2e.md](../.claude/skills/throng-testing/references/writing-e2e.md) |
 | The flaky-test gate, reproducing a flake | [flakes.md](../.claude/skills/throng-testing/references/flakes.md) |
