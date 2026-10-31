@@ -10,7 +10,7 @@ without saturating the machine, and how to diagnose a flake — lives in the
 
 | Script | Layer | Runner | Parallelism |
 | --- | --- | --- | --- |
-| `npm run test:unit` | unit | Vitest (`--project unit`) | parallel (Vitest default) |
+| `npm run test:unit` | unit | Vitest (`--project unit`, `--project unit-isolated`) | parallel; `unit` shares one module registry per worker |
 | `npm run test:component` | component | Vitest (`--project component`, jsdom) | parallel (Vitest default) |
 | `npm run test:integration` | integration | Vitest (`--project integration`) | **serial** (`fileParallelism: false`) |
 | `npm run test:contract` | contract | Vitest (`--project contract`) | **serial** (`fileParallelism: false`) |
@@ -18,6 +18,15 @@ without saturating the machine, and how to diagnose a flake — lives in the
 
 `npm run test` runs all five through `scripts/run-tests.mjs`, scratching everything under one
 temporary folder per run ([temp files](../.claude/skills/throng-testing/references/temp-files.md)).
+
+A unit file that mocks a module, stubs a global or spies on an export runs in `unit-isolated`, with
+its own module registry; `vitest.config.ts` finds those files by reading them, so nothing is listed
+by hand. Every other unit file shares its worker's registry with the files before it, so a unit test
+must leave module state and globals as it found them.
+
+Tests tagged `regression` — soaks, repeated rounds and performance budgets — are skipped on pull
+requests and run in `gate.yml` and the release lane. Tag one with `{ tags: ['regression'] }` on the
+`it` or `describe`.
 
 The integration and contract layers spawn real OS processes (node-pty shells, directory-lock
 holders) and **can only run one file at a time** — concurrent spawning hits the Windows
@@ -49,7 +58,7 @@ both are in [the E2E reserve and its tags](../.claude/skills/throng-testing/refe
 While iterating, run the tests under your cursor — one file, one project:
 
 ```bash
-npx vitest run --project unit packages/core/tests/unit/<the-one>.test.ts
+npm run test:unit -- packages/core/tests/unit/<the-one>.test.ts
 ```
 
 **E2E runs on CI**: the `@core` lane on a ready pull request, `@extended` in `gate.yml` and
