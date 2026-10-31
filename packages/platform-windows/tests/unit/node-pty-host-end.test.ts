@@ -161,7 +161,10 @@ describe('051 R2 — end()', () => {
     await expect(host.end(handle, 200)).rejects.toThrow(/did not end within/);
     clearInterval(timer);
     expect(Date.now() - started).toBeGreaterThanOrEqual(190);
-    expect(ticks).toBeGreaterThanOrEqual(10);
+    // The claim is that the wait does not BLOCK the loop, not how fast a starved loop ticks: a
+    // blocking wait lets the 10 ms interval fire at most once, after it returns. A floor of 10 failed
+    // with 5 ticks under a full parallel unit run on a loaded machine.
+    expect(ticks).toBeGreaterThanOrEqual(2);
   });
 
   it('rejects with the OS refusal when the shell does not exit', async () => {
