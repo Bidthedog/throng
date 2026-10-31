@@ -185,7 +185,7 @@ describe('a filtered view lists each process once (SC-010)', () => {
   });
 });
 
-describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes (median of ${RUNS})`, () => {
+describe(`each interaction finishes in ${BUDGET_MS} ms with about 450 processes (median of ${RUNS})`, { tags: ['regression'] }, () => {
   const report: Record<string, number> = {};
   afterEach(() => console.info(`responsiveness (jsdom, median of ${RUNS}; ms as on a quiet machine): ${JSON.stringify(report)}; raw median and machine slowdown, in run order: ${JSON.stringify(readings)}`));
 

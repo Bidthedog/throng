@@ -225,7 +225,7 @@ describe('#459 — a standalone preview shown again comes back at its own place 
     expect(topBlockLine(host())).toBe(before.line);
   });
 
-  it('SC-011 — twenty hide/show cycles keep the place every time', async () => {
+  it('SC-011 — twenty hide/show cycles keep the place every time', { tags: ['regression'] }, async () => {
     await mountDoc();
     const before = await readAt(`panel:${m!.id}`, 'S6 p2');
     for (let i = 0; i < 20; i += 1) {

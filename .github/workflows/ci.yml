@@ -55,8 +55,35 @@ jobs:
       - name: TypeScript type-check
         run: npm run typecheck
 
+  # The vitest layers run as two jobs in parallel: unit + component need no build and no OS
+  # processes, integration + contract need the daemon built and run serially. One job ran all four
+  # back to back, so the PR waited for their sum. Tests tagged `regression` (soaks, sweeps,
+  # performance budgets) are left to `gate.yml` and the release lane.
+  test-fast:
+    name: Unit / component
+    if: github.event.pull_request.draft != true
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npm run test:unit -- --tags-filter='!regression'
+      - name: Component tests
+        run: npm run test:component -- --tags-filter='!regression'
+
   test:
-    name: Unit / integration / contract
+    name: Integration / contract
     if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 30
@@ -79,26 +106,17 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
-      # Unit tests run against TypeScript source (aliased in vitest.config.ts) and need
-      # no build. Integration & contract, however, spawn the REAL daemon
-      # (`node packages/daemon/dist/main.js`) and read its `dist/BUILD_ID`, so the daemon
-      # must be built first — on a clean checkout there is no `dist/`. `npm run build`
-      # produces the daemon dist and stamps BUILD_ID (same build the E2E job runs).
+      # Integration & contract spawn the REAL daemon (`node packages/daemon/dist/main.js`) and
+      # read its `dist/BUILD_ID`, so the daemon must be built first — on a clean checkout there is
+      # no `dist/`. `npm run build` produces the daemon dist and stamps BUILD_ID.
       - name: Build (daemon dist + BUILD_ID for the daemon-spawning layers)
         run: npm run build
       # Integration & contract spawn real OS processes and are single-file-serial by
       # design (see docs/testing.md) — run each layer as its own step so a failure names it.
-      - name: Unit tests
-        run: npm run test:unit
-      # Component tests render renderer components into jsdom — no app, no daemon, no window.
-      # They run before the OS-heavy layers because they are nearly as cheap as unit and now
-      # carry assertions that used to cost an Electron launch apiece (034 FR-044).
-      - name: Component tests
-        run: npm run test:component
       - name: Integration tests
-        run: npm run test:integration
+        run: npm run test:integration -- --tags-filter='!regression'
       - name: Contract tests
-        run: npm run test:contract
+        run: npm run test:contract -- --tags-filter='!regression'
 
   e2e:
     name: E2E (@core)
