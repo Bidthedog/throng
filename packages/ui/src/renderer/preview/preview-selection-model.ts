@@ -80,6 +80,9 @@ export function offsetOfPoint(cache: CachedModel, node: Node, offset: number): n
   point.collapse(true);
   for (const e of cache.model.entries) {
     const textNode = e.node as unknown as Node;
+    // A cached node the DOM has since replaced (a layout pass re-wrapping tokens, a normalize) is in another
+    // tree, and comparePoint throws WrongDocumentError for it — skip it rather than throw out of the frame.
+    if (!textNode.isConnected) continue;
     if (point.comparePoint(textNode, 0) >= 0) return e.from;
   }
   return cache.model.text.length;
