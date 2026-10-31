@@ -1,5 +1,5 @@
 /**
- * Shared helpers for the 057 attention integration tests. NOT a test file. A real `TerminalService` and RPC
+ * Shared helpers for the 057 attention tests (unit layer). NOT a test file. A real `TerminalService` and RPC
  * router over a fake PTY host, so the bytes and exits are exact and no shell is spawned.
  */
 import type {

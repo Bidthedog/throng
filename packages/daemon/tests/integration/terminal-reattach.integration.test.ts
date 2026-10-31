@@ -45,33 +45,9 @@ const attach = (panelId: string) =>
   });
 
 describe('reattach + idle/busy close (US3)', () => {
-  it('a second attach for the same panel replays scrollback and stays the one session', async () => {
-    await attach('r1');
-    await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'r1', data: 'echo REPLAY_MARKER_9\r\n' });
-    await waitFor(
-      () =>
-        evt.notifications.some(
-          (n) => n.method === 'terminal.output' && String(n.params.data).includes('REPLAY_MARKER_9'),
-        ),
-      8000,
-      'the marker to reach the scrollback buffer, so the reattach has something to replay',
-    );
-
-    // Reattach: the daemon replays the buffered scrollback (FR-015a) — same session.
-    const again = await attach('r1');
-    expect(again.result.status).toBe('running');
-    expect(String(again.result.scrollback)).toContain('REPLAY_MARKER_9');
-
-    const listed = await rpcCall(daemon.pipeName, 'terminal.list', {});
-    expect(listed.result.sessions.filter((s: any) => s.panelId === 'r1')).toHaveLength(1);
-
-    await rpcCall(daemon.pipeName, 'terminal.kill', { panelId: 'r1' });
-    await waitFor(
-      () => !daemon.lockManager.hasOpenTerminals('proj'),
-      8000,
-      "the project's terminal lock to be released",
-    );
-  });
+  // DELETED: 'a second attach replays scrollback and stays the one session' — proved at unit by
+  // terminal-reattach-identity.test.ts (IMPLICIT reattach reuses the SAME session, host.started length 1) and
+  // terminal-reattach-title.test.ts / terminal-repaint.test.ts (the reattach result carries the replayed scrollback).
 
   it('closeIdle closes an idle shell but keeps a busy one; killAll removes the rest', async () => {
     await attach('idle1');

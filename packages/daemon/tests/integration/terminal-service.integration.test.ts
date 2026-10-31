@@ -30,22 +30,8 @@ afterEach(async () => {
 
 const launch = (file = CMD) => ({ panelId: 'p1', projectId: 'proj', launch: { file, args: [], cwd }, cols: 80, rows: 24 });
 
-describe('terminal.capabilities (elevation gate, FR-025a)', () => {
-  it('reports the daemon elevation to the UI (false by default)', async () => {
-    const caps = await rpcCall(daemon.pipeName, 'terminal.capabilities', {});
-    expect(caps.result).toEqual({ elevated: false });
-  });
-
-  it('reports elevated=true when the daemon runs elevated', async () => {
-    const elevated = await startTerminalDaemon({ elevated: true });
-    try {
-      const caps = await rpcCall(elevated.pipeName, 'terminal.capabilities', {});
-      expect(caps.result).toEqual({ elevated: true });
-    } finally {
-      await elevated.stop();
-    }
-  });
-});
+// MOVED DOWN: terminal.capabilities (FR-025a) and the missing-executable launch error (FR-019) are proved
+// in packages/daemon/tests/unit/terminal-service-wiring.test.ts.
 
 describe('terminal.* daemon IPC (Phase C·1)', () => {
   it('cold-starts, streams output, echoes input, then kills with an exit notification', async () => {
@@ -77,14 +63,5 @@ describe('terminal.* daemon IPC (Phase C·1)', () => {
     // The session is gone from list after exit.
     const listed = await rpcCall(daemon.pipeName, 'terminal.list', {});
     expect(listed.result.sessions.find((s: any) => s.panelId === 'p1')).toBeUndefined();
-  });
-
-  it('returns a launch-failure error for a missing executable (FR-019)', async () => {
-    const res = await rpcCall(daemon.pipeName, 'terminal.attach', {
-      ...launch('C:/throng-no-such-shell-xyz.exe'),
-      panelId: 'p2',
-    });
-    expect(res.error).toBeTruthy();
-    expect(String(res.error.message)).toMatch(/launch/i);
   });
 });

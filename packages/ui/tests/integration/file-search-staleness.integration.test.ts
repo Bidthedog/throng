@@ -105,14 +105,33 @@ async function rig(files: Record<string, string>): Promise<Rig> {
   );
   services.push(service);
 
+  let reports = 0;
   const watcher = new ExplorerWatcher(new NodeFileWatcher(50), (evt, absRoot) => {
+    reports += 1;
     // Exactly what the composition root does at the broadcast site: a SECOND consumer of one watch.
     void service.noteDirectoryChanged(absRoot, evt.relDir);
   });
   watchers.push(watcher);
   watcher.setRoot(root);
-  // Let the recursive watch arm before anything is written.
-  await new Promise((r) => setTimeout(r, 200));
+  // Prove the recursive watch is armed before anything is written: a probe file's report arriving is the
+  // condition (a fixed sleep guessed at it). The probe is removed again, and its removal awaited, so no
+  // late event of ours lands in a test's window and the corpus is unchanged.
+  const probe = join(root, 'watch-armed.probe');
+  const armStart = reports;
+  // A write before the watch arms is simply lost, so write until one is reported.
+  for (let i = 0; i < 100 && reports === armStart; i += 1) {
+    await writeFile(probe, String(i));
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  await waitFor('the watch to report the probe file', () => (reports > armStart ? true : undefined));
+  const afterWrite = reports;
+  await rm(probe, { force: true });
+  await waitFor('the watch to report the probe removed', () => (reports > afterWrite ? true : undefined));
+  // Our own probe must be fully drained (a coalesced report can trail the last one) before a test's window.
+  for (let last = -1; last !== reports; ) {
+    last = reports;
+    await new Promise((r) => setTimeout(r, 150));
+  }
 
   const scanAs = async (panelId: string): Promise<void> => {
     const before = sent.length;

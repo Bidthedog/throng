@@ -4,7 +4,7 @@ import { BEL, ESC, makeHarness, sleep, type AttentionHarness } from './attention
 
 /*
  * 057 FR-066, FR-091 — the daemon's attention ledger across a detach.
- * Layer: integration — the ledger lives in the real service and is filled by the same paths that publish to
+ * Layer: unit — (moved down from integration: fake PTY host, no shell) the ledger lives in the real service and is filled by the same paths that publish to
  * a sink; what matters is what a reattaching main reads back, so it goes through the router as main does.
  */
 const live: AttentionHarness[] = [];
