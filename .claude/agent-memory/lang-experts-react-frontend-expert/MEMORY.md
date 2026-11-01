@@ -1,0 +1,2 @@
+- [Renderer tests are not typechecked](renderer-test-typecheck-gap.md) — no tsconfig covers packages/ui/tests; verify test-side shapes by hand
+- [IconButton tokens are unchecked](icon-button-token-gap.md) — icon-tokens-exist only scans `<Icon token=`; verify new IconButton tokens in core theme
