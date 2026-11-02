@@ -51,6 +51,13 @@ the moment the user changed any key binding. A guard now keeps the gate honest â
 `packages/ui/tests/unit/renderer-typecheck-gate.test.ts` fails if the renderer check is ever unwired
 from `npm run typecheck`.
 
+A third check, `npm run typecheck:e2e` (`tsc -p packages/ui/tests/e2e/tsconfig.json`), covers the
+Playwright specs and their helpers, which Playwright transpiles without checking. Without it, a spec
+that lost an import it still used failed only as a `ReferenceError` in the gate's E2E stage. The
+specs' view of `window.throng` is declared loosely in `tests/e2e/globals.d.ts`, because an evaluate
+body reaches bridge internals the renderer's typing does not expose. The same guard test fails if
+this check is unwired.
+
 You can still run just the renderer's check while iterating:
 
 ```

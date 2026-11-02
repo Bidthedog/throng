@@ -30,7 +30,7 @@ both styles written into the one buffer that reaches disk.
 
 Relevant code: `core/src/editor/document.ts`, `document-sync.ts`, `effective-indent.ts`,
 `undo-persistence.ts`; renderer `document-replica.ts`, `editor-views.ts`, `editor-state.ts`.
-Relevant tests: `document-authority.contract.test.ts`, `document-authority.integration.test.ts`,
+Relevant tests: `document-authority.contract.test.ts`, `unit/document-authority.test.ts`,
 `editor-one-buffer`, `editor-mirror-ownership`, `editor-fidelity`.
 
 ## The rest of the surface

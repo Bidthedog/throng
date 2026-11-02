@@ -6,12 +6,14 @@ Part of the `throng-testing` skill; the contributor overview is [`docs/testing.m
 
 ## The `@admin` suite
 
-The elevated `@admin` E2E (run-as-admin / de-elevation) are separate; run them
-locally with `npm run test:e2e:admin` from an elevated shell. The normal suite
+The elevated `@admin` E2E (run-as-admin / de-elevation) are separate, and CI runs
+them (below). `npm run test:e2e:admin` hops UAC from a non-elevated shell; on the
+workstation, use it only for the one `@admin` spec covering a change. The normal suite
 **excludes** `@admin` specs (config `grepInvert`), so an elevated dev machine doesn't
 run them here; a runner sets `THRONG_E2E_INCLUDE_ADMIN` to opt back in.
 
-**CI runs the `@admin` suite** in its own job (`E2E (@admin, elevated)`), which sets
+**CI runs the `@admin` suite** in its own job (`E2E (@admin, elevated)` on a ready PR, `Nightly @admin
+E2E` in `gate.yml`), through `scripts/ci-run-admin-e2e.ps1`, which sets
 `THRONG_E2E_INCLUDE_ADMIN=1` and calls `npx playwright test` directly — never
 `npm run test:e2e:admin`, which exists to hop UAC from a non-elevated shell and is
 both pointless and interactive where the process is already elevated. It is a job
@@ -24,7 +26,7 @@ One job, one run, one signal. Until it existed, `@admin` specs were excluded fro
 the *only* runner capable of running them, and the gap read as covered because a
 comment claimed a dedicated runner that did not exist.
 
-## Run the suite non-elevated
+## Run non-elevated
 
 The terminal E2E assume a **non-elevated (normal-integrity) daemon** — the common
 case for a user, but **not** how CI runs (CI is elevated; see [tiers-and-workers.md](tiers-and-workers.md#throng_e2e_workers--parallel-workers)). A non-elevated
@@ -38,9 +40,10 @@ process tree those assertions don't hold for. Such specs call `skipIfElevated()`
 run stays green.
 
 **A green CI bar is still not full coverage — but the gap is now small and deliberate.** CI is
-elevated, so a guarded test does not run there; those assumptions are verified only by a developer
-running the suite from a non-elevated shell, which is why a non-elevated run belongs in a PR's
-evidence. **Prefer a non-elevated shell for the full E2E run.**
+elevated, so a guarded test does not run there; those assumptions are verified only from a
+non-elevated shell. When a change touches a guarded spec, run that one spec, at one worker, from a
+non-elevated shell, and put the run in the PR's evidence — never the full suite (*Where a test is
+allowed to run* in [SKILL.md](../SKILL.md#where-a-test-is-allowed-to-run)).
 
 **Call it inside the test body, never at module scope.** `skipIfElevated()` at the top of a file
 skips *every test in it*, which is how the gap below got so large: the guard was applied per FILE
