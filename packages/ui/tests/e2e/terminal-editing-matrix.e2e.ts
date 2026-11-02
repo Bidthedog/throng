@@ -312,6 +312,10 @@ for (const flavour of FLAVOURS) {
            * Runs LAST of the five: it fills the buffer past one screen, and the steps above read the
            * screen for their markers.
            */
+          // cmd is proven by terminal-scrollback-nav.e2e.ts:105-113 (Ctrl+Home shows the top of the
+          // history, Ctrl+End returns to the live end, in a cmd terminal): the chords are throng's, not
+          // the shell's, so the other three flavours keep this step for their ConPTY paths only.
+          if (flavour.label === 'cmd') return;
           const term = win.getByTestId(`terminal-${pid}`);
           await win.keyboard.type(flavour.fill, { delay: 12 });
           await win.keyboard.press('Enter');

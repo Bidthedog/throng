@@ -355,8 +355,7 @@ export async function openApp(opts: AppOptions = {}): Promise<OpenApp> {
     win: started.win,
     pipeName: started.pipeName,
     userDataDir: started.userDataDir,
-    // `true`: a shared app is torn down in an afterAll, where the flush cannot wait for a hook.
-    close: () => started.teardown(true),
+    close: () => started.teardown(),
   };
 }
 
@@ -1014,23 +1013,25 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
   // The graceful path: destroy detached sub-workspace windows first (the child windows), settle,
   // then destroy whatever remains (the main window) — mirrors the manual "switch focus, close both
   // windows with a beat between" that avoids the handshake hang — then finalise with app.close().
+  // With no child window there is nothing to put a beat between, so most apps skip it: this runs for
+  // every launch in the suite, about 300 of them per gate.
   const graceful = (async () => {
-    await app
+    const children = await app
       .evaluate(({ BrowserWindow }) => {
         const wins = BrowserWindow.getAllWindows();
         // Heuristic: the earliest-created window is the main one; destroy the rest first.
-        const [main, ...children] = wins.sort((a, b) => a.id - b.id);
-        for (const w of children) if (!w.isDestroyed()) w.destroy();
-        return main?.id ?? null;
+        const [, ...rest] = wins.sort((a, b) => a.id - b.id);
+        for (const w of rest) if (!w.isDestroyed()) w.destroy();
+        return rest.length;
       })
-      .catch(() => null);
-    await new Promise((r) => setTimeout(r, 200));
+      .catch(() => 0);
+    if (children > 0) await new Promise((r) => setTimeout(r, 200));
     await app
       .evaluate(({ BrowserWindow }) => {
         for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.destroy();
       })
       .catch(() => {});
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 50));
     await app.close().catch(() => {});
   })();
 

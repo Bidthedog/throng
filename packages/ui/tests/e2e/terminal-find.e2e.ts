@@ -289,7 +289,7 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       // Queue output that lands a few seconds from NOW, so it arrives while we are
       // parked on the match without us typing anything in the meantime.
       await term.click();
-      await win.keyboard.type('ping -n 7 127.0.0.1 >nul & echo LATE_OUTPUT', { delay: 15 });
+      await win.keyboard.type('ping -n 3 127.0.0.1 >nul & echo LATE_OUTPUT', { delay: 15 });
       await win.keyboard.press('Enter');
 
       // …and find scrolls it back INTO view, parking the viewport up in the scrollback.
@@ -299,8 +299,8 @@ test('parked on a match, incoming output does not yank the viewport away (FR-012
       await expect(term).toContainText('FREEZE_MARKER');
 
       // The delayed output lands while we sit on the match…
-      // sleep-justified: the only signal that LATE_OUTPUT reached the buffer while parked is the Control+End jump this test performs AFTER, which is the auto-follow resume FR-012a proves happens later.
-      await win.waitForTimeout(9000);
+      // sleep-justified: the only signal that LATE_OUTPUT reached the buffer while parked is the Control+End jump this test performs AFTER, which is the auto-follow resume FR-012a proves happens later. The window is the ping's own duration (-n 3 is ~2 s, counted from typing, before find even opened) plus margin: a negative claim ("not dragged down") needs a window, and this one outlasts the output it waits for.
+      await win.waitForTimeout(3500);
 
       // …and the viewport has NOT been dragged down to it: the match is still on screen
       // and the newest output is not (auto-follow is suspended — FR-012a).

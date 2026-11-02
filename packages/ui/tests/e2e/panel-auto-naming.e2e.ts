@@ -211,54 +211,20 @@ test('a generated name the daemon adjusts is not a rename — the panel still au
   }
 });
 
-/**
- * The New Tab route's panel takes its name from the FILE it ends up holding (#218).
+/*
+ * DELETED (pass 2): 'a New Tab panel takes its name from the file its editor opens (#218)'.
  *
- * ── WHAT LEFT (035 T055) ──
- *
- * Two of this test's three claims are `TabGroup`'s and are now
- * `component/tab-strip.test.ts` ("the New Tab route names its panel automatically"):
- *
- *   - the TAB opens in rename mode, not the panel — the route's own comment said this behaviour
- *     "was asserted nowhere";
- *   - the panel it brings is NOT marked custom, which is the whole of #218. A panel that believes
- *     it was renamed stops auto-naming, so the terminal title and the editor's file name are
- *     suppressed on exactly the panels a user has just created — the reported symptom.
- *
- * The component version also asserts the Escape path, which this did by hand and never checked the
- * consequence of. Red-proven by making `makePanel` mark every new panel custom: 2 red.
- *
- * ── WHY THE REST STAYS ──
- *
- * What is left is the JOURNEY that feeds the name: choose an editor, click `notes.md` in the real
- * explorer tree, and watch the header become "notes". The naming RULE is `panelDisplayTitle`, pure
- * and covered in core; reaching it needs the explorer, a real file on disk and the editor
- * registering its path, which is three layers agreeing.
+ * Its claims are held lower, and its one E2E-only remainder moved to a sibling:
+ *   - the New Tab route opens the TAB (not the panel) in rename mode and Escape renames nothing:
+ *     `component/tab-strip.test.ts` 'the New Tab route names its panel automatically (#218)'. A panel
+ *     can no longer be renamed at all (048 FR-030), so "marked custom" has no state left to assert.
+ *   - the header shows the opened file's stem and re-derives it when the file changes:
+ *     `component/panel-box.test.ts` 'uses the basename with the final extension stripped, and
+ *     RE-derives when the file changes'; the rule itself is `core/tests/unit/editor-auto-title.test.ts`.
+ *   - clicking a file in the real explorer tree and seeing the header become the stem is now one
+ *     assertion in `editor-open.e2e.ts` ('clicking a file opens it, another file replaces a clean
+ *     doc, ...'), which already makes that click.
  */
-test('a New Tab panel takes its name from the file its editor opens (#218)', { tag: ['@extended', '@window'] }, async () => {
-  const root = makeProject('throng-newtab-');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'NewTabProj', root);
-      await firstPanelId(win);
-
-      await win.getByTestId('tab-add').click();
-      await expect(win.locator('[data-testid^="tab-rename-input-"]')).toBeVisible();
-      await win.keyboard.press('Escape');
-
-      const pid = await firstPanelId(win); // the new tab's only panel
-
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-      await win.getByTestId(`editor-${pid}`).click();
-      await win.getByTestId('file-explorer-tree').getByText('notes.md', { exact: true }).click();
-      await expect(win.getByTestId(`panel-title-${pid}`)).toHaveText('notes', { timeout: 15_000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 test('a terminal that reattaches to its running session keeps its name (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = makeProject('throng-reattach-name-');
@@ -313,56 +279,6 @@ test('a terminal that reattaches to its running session keeps its name (#218 B)'
   }
 });
 
-test('a terminal panel keeps its name across a restart (#218 B)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  test.setTimeout(180_000);
-  const root = makeProject('throng-restart-name-');
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-restart-name-ud-'));
-  try {
-    // ── Launch 1: a terminal panel that names itself ──
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'RestartNames', root);
-        const term = await firstPanelId(win);
-
-        await win.getByTestId(`panel-type-select-${term}`).selectOption('terminal');
-        await win.getByTestId('terminal-flavour').selectOption('cmd');
-        await win.getByTestId(`panel-type-confirm-${term}`).click();
-        await expect(win.getByTestId(`terminal-${term}`)).toBeVisible();
-        // 053 FR-001 (superseding 023 FR-033): a terminal is named by the title template — its shell's label, never
-        // the raw window title (`C:\WINDOWS\system32\cmd.exe`) cmd announces.
-        await expect(win.getByTestId(`panel-title-${term}`)).toContainText('Command Prompt', {
-          timeout: 15_000,
-        });
-
-        // The terminal's name is asserted on screen above and again after the restart below; the layout
-        // only has to have been written before the app closes.
-        await expectLayoutSaved(dataDir, 'RestartNames', (json) => panelTitleInLayout(json, term) !== undefined);
-      },
-      { dataDir, userDataDir },
-    );
-
-    // ── Launch 2: the same project, reopened ──
-    await runApp(
-      async (_app, win) => {
-        await enterProject(win, 'RestartNames');
-
-        // No panel holding a terminal or a file may show the placeholder. A restored session does
-        // not necessarily re-emit its OSC title, so the terminal's name has to come from somewhere
-        // that survives — which is the whole of defect B.
-        const titles = win.locator('.panel-box__title');
-        await expect(titles).toHaveCount(1, { timeout: 20_000 });
-        await expect
-          .poll(async () => (await titles.allTextContents()).some((t) => /^Blank Panel( \d+)?$/.test(t)), {
-            timeout: 20_000,
-            message: 'a restored panel fell back to its "Blank Panel" placeholder',
-          })
-          .toBe(false);
-
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    for (const d of [root, dataDir, userDataDir]) cleanupTemp(d);
-  }
-});
+// DELETED: "a terminal panel keeps its name across a restart (#218 B)" - the reattach test above holds the
+// same claim (a panel with a terminal in it never settles on the "Blank Panel" placeholder) on the
+// harsher path: a renderer reload that leaves the name store empty while the daemon keeps the session.

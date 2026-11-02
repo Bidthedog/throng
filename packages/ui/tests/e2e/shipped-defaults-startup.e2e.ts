@@ -73,7 +73,7 @@ async function boot(root: string): Promise<void> {
 // shipped record. But it was @core and this was @extended, so deleting it without promoting would
 // have quietly dropped first-run coverage out of the lane that gates every push. A broken first run
 // is not something to discover at release.
-test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record', { tag: ['@core', '@prefs', '@reserve:window'] }, async () => {
+test('first run (empty config): seeds settings, keybindings, every built-in theme and the version marker from the record; a relaunch rewrites nothing', { tag: ['@core', '@prefs', '@reserve:window'] }, async () => {
   const root = makeRoot(); // empty → true first run
 
   await boot(root);
@@ -88,12 +88,13 @@ test('first run (empty config): seeds settings, keybindings, every built-in them
   // Sampled theme files deep-equal the shipped values (throng keeps its icon pack).
   expect(JSON.parse(readFileSync(themePath(root, 'throng'), 'utf8'))).toEqual(SHIPPED.themes.throng);
   expect(JSON.parse(readFileSync(themePath(root, A_BUILTIN), 'utf8'))).toEqual(SHIPPED.themes[A_BUILTIN]);
-});
 
-test('relaunch is idempotent: a second start rewrites no config file', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
-  const root = makeRoot();
-  await boot(root); // seed
-
+  /*
+   * MERGED IN (test-suite audit, pass 1): "relaunch is idempotent: a second start rewrites no config file" was a
+   * test of its own that began with the very same first-run boot above (an empty root, `boot`, then a second
+   * `boot`). The relaunch is the second half of the same seed-or-upgrade DECISION in main.ts, on the same root,
+   * so it follows here instead of paying for a third and fourth launch. The tags are this test's (@core).
+   */
   const before = {
     settings: readFileSync(settingsPath(root), 'utf8'),
     keybindings: readFileSync(keybindingsPath(root), 'utf8'),

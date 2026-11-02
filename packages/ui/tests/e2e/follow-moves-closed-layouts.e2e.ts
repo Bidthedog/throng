@@ -3,10 +3,10 @@
  * tab not shown since launch (FR-001 – FR-003, FR-005, FR-007, FR-008, SC-001, SC-002, #397).
  *
  * This is MT-06 and MT-07 of the branch's manual test plan, automated at the maintainer's request.
- * subworkspace-rename-follow.e2e.ts already holds MT-06 steps 1–3 (one rename reaching a closed sub-workspace);
- * this file adds what that one does not: two renames and an undo, the navigation history the record carries, a
- * sub-workspace edited while another is closed, a preview whose file is cut into another project while its own
- * project is inactive, and a tab never shown since launch.
+ * It holds MT-06 steps 1–6 (renames reaching a closed sub-workspace — the single-rename arrangement of the deleted
+ * subworkspace-rename-follow.e2e.ts is the first leg of the first test): two renames and an undo, the navigation
+ * history the record carries, a sub-workspace edited while another is closed, a preview whose file is cut into
+ * another project while its own project is inactive, and a tab never shown since launch.
  *
  * Layer: E2E, @reserve:window. The daemon's rewrite is pinned in
  * daemon/tests/integration/workspace-follow-moves.integration.test.ts and each move route's walk in
@@ -14,7 +14,16 @@
  * closed, a real second renderer reopening from the rewritten record, or an application restart restoring a tab
  * the user has not yet visited.
  *
- * Own app per test: each seeds a sub-workspace record, a data folder or a project root before it needs it.
+ * ONE shared app for the first four tests (test-suite audit, pass 1) — their four launches become one. They create every project and
+ * seed every sub-workspace record THROUGH the running app (`workspace.persistSubWorkspaces`, then a window reload),
+ * so nothing is on disk before the process starts. Each uses its own project name and project root;
+ * `persistSubWorkspaces` REPLACES the owner's whole set, so each test's seed starts that test from a clean slate, and
+ * every sub-workspace window is closed after each test (`afterEach`) so the next `openSub` opens a fresh window
+ * instead of focusing one a previous test left. Temp roots are removed once, after the shared app has closed — never
+ * in a per-test `finally`, which would delete a root the application is still watching.
+ *
+ * The LAST test keeps its own app and says why where it stands: it relaunches against the same data folder three
+ * times, which is the thing it is about.
  */
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,7 +31,9 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
 import {
-  runApp,
+  openApp,
+  runApp as runOwnApp,
+  type OpenApp,
   createProject,
   daemonRpc,
   reloadWindow,
@@ -40,7 +51,43 @@ import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 const BODY = 'FOLLOW-CLOSED-BODY';
 const OTHER = 'OTHER-FILE-BODY';
 
-// ── Sub-workspace plumbing (the shape subworkspace-rename-follow.e2e.ts established) ───────────────────────────────
+// ── The shared app ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+const sharedTemps: string[] = [];
+
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+
+/** Close every sub-workspace window, so the next test opens its own rather than focusing a stale one. */
+test.afterEach(async () => {
+  await shared.app.evaluate(({ BrowserWindow }) => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed() && w.webContents.getURL().includes('sw=')) w.close();
+    }
+  });
+});
+
+test.afterAll(async () => {
+  await shared?.close();
+  for (const dir of sharedTemps.splice(0)) cleanupTemp(dir);
+});
+
+/** The shared app in the shape `runApp` had. It takes no launch options: a test that needs them uses `runOwnApp`. */
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win'], ctx: { pipeName: string; userDataDir: string }) => Promise<void>,
+  opts?: unknown,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win, { pipeName: shared.pipeName, userDataDir: shared.userDataDir });
+};
+
+// ── Sub-workspace plumbing (the shape the deleted subworkspace-rename-follow.e2e.ts established) ───────────────────────────────
 
 interface SubSeed {
   id: string;
@@ -163,7 +210,7 @@ test('two renames and an undo reach a closed sub-workspace, which reopens on the
       await expectNoMissingReport(win);
     });
   } finally {
-    cleanupTemp(root);
+    sharedTemps.push(root);
   }
 });
 
@@ -196,7 +243,7 @@ test('a closed sub-workspace’s navigation history follows two renames: Back ne
       await expectNoMissingReport(child, PANEL);
     });
   } finally {
-    cleanupTemp(root);
+    sharedTemps.push(root);
   }
 });
 
@@ -236,7 +283,7 @@ test('a sub-workspace edited while another is closed keeps its edits through a r
       await expectNoMissingReport(reopened, 'swone');
     });
   } finally {
-    cleanupTemp(root);
+    sharedTemps.push(root);
   }
 });
 
@@ -279,8 +326,8 @@ test('a preview in an inactive project whose file is cut into another project sa
       await expectNoMissingReport(win);
     });
   } finally {
-    cleanupTemp(rootP);
-    cleanupTemp(rootQ);
+    sharedTemps.push(rootP);
+    sharedTemps.push(rootQ);
   }
 });
 
@@ -321,7 +368,7 @@ test('a tab not shown since launch follows a rename across a restart (FR-007, FR
   const session = { dataDir, userDataDir };
   try {
     // Session 1: an editor on a.md in a second tab T2; T1 left showing.
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       await settle(win);
       await createProject(win, 'Unshown', root);
       await win.getByTestId('tab-add').click();
@@ -338,7 +385,7 @@ test('a tab not shown since launch follows a rename across a restart (FR-007, FR
     }, session);
 
     // Session 2: launched on T1; without visiting T2, rename a.md → b.md.
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       await switchProject(win, 'Unshown');
       await expect(win.locator('.editor-panel')).toHaveCount(0);
       await renameInTree(win, 'a.md', 'b.md');
@@ -346,7 +393,7 @@ test('a tab not shown since launch follows a rename across a restart (FR-007, FR
     }, session);
 
     // Session 3: open T2 — its editor is on b.md, clean, with no could-not-read banner.
-    await runApp(async (_app, win) => {
+    await runOwnApp(async (_app, win) => {
       await switchProject(win, 'Unshown');
       await win.locator('.tab-chip').nth(1).click();
       const editor = win.locator('.editor-panel').first();

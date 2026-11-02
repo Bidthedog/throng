@@ -161,12 +161,33 @@ test('one cause across several tabs is one notice, listing every panel it defeat
   for (const name of ['docs', 'notes', 'scratch']) {
     writeFileSync(join(root, `${name}.txt`), `${name.toUpperCase()}\n`);
   }
+  // Two more projects, for the unclassified-failure half below (merged from the former second test).
+  const rootA = mkdtempSync(join(tmpdir(), 'throng-nc-a-'));
+  const rootB = mkdtempSync(join(tmpdir(), 'throng-nc-b-'));
+  const movedA = `${rootA}-renamed`;
+  const movedB = `${rootB}-renamed`;
+  writeFileSync(join(rootA, 'one.txt'), 'ONE\n');
+  writeFileSync(join(rootA, 'two.txt'), 'TWO\n');
+  writeFileSync(join(rootB, 'three.txt'), 'THREE\n');
 
   try {
     // ── Launch 1: a workspace worth breaking. Three tabs, editors and one real terminal. ──────
     await runApp(
       async (_app, win) => {
         await settle(win);
+        await createProject(win, 'Alpha', rootA);
+        const [a1] = await panelIds(win);
+        await editorOn(win, a1!, 'one.txt');
+        await addPanels(win, 1);
+        const aIds = await panelIds(win);
+        await editorOn(win, aIds.find((id) => id !== a1)!, 'two.txt');
+        await persisted(dataDir, 'Alpha', 'two.txt');
+
+        await createProject(win, 'Bravo', rootB);
+        const [b1] = await panelIds(win);
+        await editorOn(win, b1!, 'three.txt');
+        await persisted(dataDir, 'Bravo', 'three.txt');
+
         await createProject(win, 'Consol', root);
         const [first] = await panelIds(win);
         await editorOn(win, first!, 'docs.txt'); // the panel is titled by its file — 048 removed renaming
@@ -202,6 +223,8 @@ test('one cause across several tabs is one notice, listing every panel it defeat
 
     // The one cause: the project's root folder is no longer where the project says it is.
     await renameWhenReleased(root, moved);
+    await renameWhenReleased(rootA, movedA);
+    await renameWhenReleased(rootB, movedB);
 
     // ── Launch 2: the project open that everything fails during. ──────────────────────────────
     await runApp(
@@ -309,6 +332,28 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         expect(noticeBox.y).toBeGreaterThanOrEqual(stack.y - 1);
         expect(noticeBox.y + noticeBox.height).toBeLessThanOrEqual(stack.y + stack.height + 1);
 
+        // ═══ 030 US3 (#235) / T041 — A GROWING NOTICE MUST NOT RE-READ ITSELF (FR-032a). ═══
+        //
+        // MERGED IN from the former `notice-a11y.e2e.ts` (test-suite audit, pass 1): it rebuilt this very
+        // two-launch dance (a project whose root is renamed away, restored with an unvisited tab) to read two
+        // attributes and one focus move. The notice lives inside `aria-live="polite"`, so a failure is audible at
+        // all — but it GROWS, and a live region re-reads its changed subtree: a forty-row list would be read
+        // aloud again at every tab visit. So the body announces ONCE and then opts out, and a separate
+        // visually-hidden region announces only the DELTA.
+        //
+        // First announcement, then silence: the body opts OUT once it has been read.
+        const body = notice.getByTestId('notice-body');
+        await expect(body).toHaveAttribute('aria-live', 'off', { timeout: 15_000 });
+
+        // The delta region exists, is polite, and is invisible to the eye. It is NOT asserted empty: the two
+        // panels in this tab report a beat apart, so the second has already grown the notice the first raised.
+        // What matters is what the NEXT growth says.
+        const delta = win.getByTestId('notice-growth-live');
+        await expect(delta).toHaveAttribute('aria-live', 'polite');
+        const deltaBox = await delta.boundingBox();
+        expect(deltaBox === null || deltaBox.width <= 1 || deltaBox.height <= 1).toBe(true);
+        const deltaBefore = (await delta.textContent()) ?? '';
+
         // ═══ T038 — VISITING AN UNRENDERED TAB GROWS THE LIVE NOTICE. ═══
         //
         // The panels in tabs two and three have never mounted, so their failures are not yet known
@@ -321,6 +366,36 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         await expect(notice.getByTestId('notice-affected-tab')).toHaveCount(2);
         await expect(notice).toContainText('Second');
 
+        // ═══ GROWTH ANNOUNCES THE DELTA, AND ONLY THE DELTA (FR-032a). ═══
+        await expect
+          .poll(async () => (await delta.textContent()) ?? '', {
+            timeout: 15_000,
+            message: 'the growth announced nothing at all',
+          })
+          .not.toBe(deltaBefore);
+        const announced = (await delta.textContent()) ?? '';
+        // The panel that joined is named (by its file — panels are not renamable, 048), and so is its tab…
+        expect(announced).toContain('notes');
+        expect(announced).toContain('Second');
+        // …and the editor the user was already told about is NOT re-read. The whole requirement exists for this:
+        // the delta region is not a second copy of the list.
+        expect(announced, 'the delta region re-announced a panel already reported').not.toContain('docs');
+
+        // ═══ FR-032b — the list is reachable by keyboard, and lets go. ═══
+        const affected = notice.getByTestId('notice-affected');
+        await expect(affected).toHaveAttribute('tabindex', '0');
+        await affected.focus();
+        expect(
+          await win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '(none)'),
+        ).toBe('notice-affected');
+        // Tab leaves. A bounded scroll region that swallowed focus would strand a keyboard user in a toast they
+        // cannot dismiss.
+        await win.keyboard.press('Tab');
+        expect(
+          await win.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? '(none)'),
+          'focus is trapped inside the affected list',
+        ).not.toBe('notice-affected');
+
         // ═══ …and a DISMISSED notice raises a fresh one for the NEW panels only (FR-037a). ═══
         await win.getByTestId('panel-failure-notice-dismiss').click();
         await expect(consolidated(win)).toHaveCount(0);
@@ -332,68 +407,23 @@ test('one cause across several tabs is one notice, listing every panel it defeat
         await expect(rows(win)).toHaveCount(1);
         await expect(consolidated(win)).toContainText('Third');
         expect(await consolidated(win).innerText()).not.toContain('Second');
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    cleanupTemp(existsSync(moved) ? moved : root);
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-  }
-});
 
-/**
- * T039 — grouped by the OPERATION where 029 identified no cause, and two operations are two notices.
- *
- * An editor that cannot load its file reports a `LoadResult` reason, not an errno: 029's classifier
- * never sees it and correctly declines to guess (FR-011b), so these failures carry no cause at all.
- * FR-029a says such failures group by the action that produced them — which is what makes the notice
- * possible without widening 029's closed `FailureKind` set (FR-029b).
- *
- * The second half is the one that keeps that from becoming "everything is one notice": two project
- * opens are two actions, and two actions are two notices, each speaking only for its own casualties.
- */
-test('an unclassified multi-panel failure groups by operation, and two operations are two notices', { tag: ['@extended', '@failure', '@reserve:window'] }, async () => {
-  test.setTimeout(420_000);
-  const rootA = mkdtempSync(join(tmpdir(), 'throng-consol-a-'));
-  const rootB = mkdtempSync(join(tmpdir(), 'throng-consol-b-'));
-  const movedA = `${rootA}-renamed`;
-  const movedB = `${rootB}-renamed`;
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-consol2-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-consol2-ud-'));
-  writeFileSync(join(rootA, 'one.txt'), 'ONE\n');
-  writeFileSync(join(rootA, 'two.txt'), 'TWO\n');
-  writeFileSync(join(rootB, 'three.txt'), 'THREE\n');
+        /*
+         * ═══ T039 — grouped by the OPERATION where 029 identified no cause, and two operations are two
+         * notices (merged from the former second test, which paid its own two-launch dance). ═══
+         *
+         * An editor that cannot load its file reports a `LoadResult` reason, not an errno: 029's
+         * classifier never sees it and declines to guess (FR-011b), so these failures carry no cause.
+         * FR-029a groups them by the action that produced them; two project opens are two actions.
+         *
+         * The Consol notice is dismissed first, so every count below is the count of Alpha's and
+         * Bravo's own notices and means what it meant when this ran alone.
+         */
+        await win.getByTestId('panel-failure-notice-dismiss').click();
+        await expect(consolidated(win)).toHaveCount(0);
 
-  try {
-    await runApp(
-      async (_app, win) => {
-        await settle(win);
-        await createProject(win, 'Alpha', rootA);
-        const [a1] = await panelIds(win);
-        await editorOn(win, a1!, 'one.txt');
-        await addPanels(win, 1);
-        const aIds = await panelIds(win);
-        await editorOn(win, aIds.find((id) => id !== a1)!, 'two.txt');
-        await persisted(dataDir, 'Alpha', 'two.txt');
-
-        await createProject(win, 'Bravo', rootB);
-        const [b1] = await panelIds(win);
-        await editorOn(win, b1!, 'three.txt');
-        await persisted(dataDir, 'Bravo', 'three.txt');
-      },
-      { dataDir, userDataDir },
-    );
-
-    await renameWhenReleased(rootA, movedA);
-    await renameWhenReleased(rootB, movedB);
-
-    await runApp(
-      async (_app, win) => {
-        await settle(win);
         await enterProject(win, 'Alpha');
-        // ONE notice for two unclassified failures — grouped by the open, not by a cause neither
-        // of them has.
+        // ONE notice for two unclassified failures — grouped by the open, not by a cause neither has.
         await expect(consolidated(win)).toHaveCount(1, { timeout: 90_000 });
         await expect(rows(win)).toHaveCount(2, { timeout: 30_000 });
         await expect(consolidated(win)).toContainText('Alpha');
@@ -411,9 +441,18 @@ test('an unclassified multi-panel failure groups by operation, and two operation
       { dataDir, userDataDir },
     );
   } finally {
+    cleanupTemp(existsSync(moved) ? moved : root);
     cleanupTemp(existsSync(movedA) ? movedA : rootA);
     cleanupTemp(existsSync(movedB) ? movedB : rootB);
     cleanupTemp(dataDir);
     cleanupTemp(userDataDir);
   }
 });
+
+/*
+ * MERGED (test-suite audit, pass 2): "an unclassified multi-panel failure groups by operation, and two operations
+ * are two notices" is the tail of the test above. It paid a second two-launch dance to restore the same kind of
+ * workspace; Alpha and Bravo now ride in the first launch and the second launch enters them after the Consol
+ * notice is dismissed. The grouping rule itself is `core/tests/unit/notice/grouping.test.ts:101-106` and
+ * `ui/tests/unit/notice-suppression.test.ts:94`.
+ */

@@ -2,7 +2,46 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, cleanupTemp } from './harness.js';
+import { openApp, createProject as newProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
+
+/*
+ * ONE app for the four tests (pass 2), on ONE config root. They used one launch each and a config root each,
+ * and the config root was write isolation (see "EVERY TEST OWNS ITS CONFIG ROOT" below: the leak that matters is
+ * into OTHER FILES, and a root of this file's own still keeps `showGutter` away from them). The conditions that
+ * make sharing safe:
+ *
+ *   - Unique project names (`createProject` below appends a counter; all four used `GutterVis`).
+ *   - `editor.showGutter` is put back to true in a `finally` by every test (`restoreGutter`), because tests 2, 3 and
+ *     4 turn it off and the next test begins by asserting the gutter is there.
+ *   - The preferences window is a singleton, and tests 1 and 4 open it. Each closes it before returning, so the
+ *     next test never finds a window already on another tab or in JSON mode. Test 1 (settings tab, UI mode) runs
+ *     before test 4 (keybindings, toggled into JSON mode), and nothing after test 4 uses the window.
+ *   - Roots (the project root with wide.txt, and the config root) are removed in `afterAll`, after the app has
+ *     closed, not under the running app's watchers.
+ *   - Serial mode: a shared window and database, and a failure must skip the rest.
+ *   - No real shell and no watcher outlives the app: the only resources are the editor and the prefs window.
+ *
+ * NEEDS CI: verify at `--repeat-each=3` (launch-sharing.md: four conversions on this branch passed once and were
+ * reverted for flaking).
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let cfgRoot = '';
+const projectRoots: string[] = [];
+test.beforeAll(async () => {
+  cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: cfgRoot } });
+});
+test.afterAll(async () => {
+  await shared?.close();
+  for (const r of projectRoots) cleanupTemp(r);
+  if (cfgRoot !== '') cleanupTemp(cfgRoot);
+});
+
+let projectSeq = 0;
+const createProject = (win: Page, name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 /**
  * `editor.showGutter` hides and restores the line-number gutter, live, in both editor surfaces
@@ -62,8 +101,18 @@ const LINES = Array.from(
 
 function makeProject(): string {
   const root = mkdtempSync(join(tmpdir(), 'throng-gutvis-'));
+  projectRoots.push(root); // removed in afterAll, once the app that watches it has closed
   writeFileSync(join(root, 'wide.txt'), LINES.join('\n') + '\n', 'utf8');
   return root;
+}
+
+/** Put `editor.showGutter` back to its shipped default, so the next test finds the gutter it asserts on. */
+async function restoreGutter(win: Page): Promise<void> {
+  await setGutter(win, true);
+  // A write reaches the renderer through the config watcher, so wait for it to land on any editor on screen.
+  if ((await win.locator('.editor-panel').count()) > 0) {
+    await expect(win.locator('.editor-panel .cm-gutters')).toHaveCount(1);
+  }
 }
 
 async function openEditorWithFile(win: Page): Promise<string> {
@@ -397,48 +446,45 @@ const readout = (win: Page, id: string, pid: string): Promise<string | null> =>
  * is the irreducible part, and the tag has to name the reason the test is here.
  */
 test('the gutter goes and returns on an already-open editor, with no reopen', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
+  const { app, win } = shared;
   try {
-    await runApp(
-      async (app, win) => {
-        await createProject(win, 'GutterVis', root);
-        const pid = await openEditorWithFile(win);
-        const gutter = win.getByTestId(`editor-${pid}`).locator('.cm-gutters');
+    await createProject(win, 'GutterVis', root);
+    const pid = await openEditorWithFile(win);
+    const gutter = win.getByTestId(`editor-${pid}`).locator('.cm-gutters');
 
-        // Present to begin with: the shipped default is ON, and an absence assertion after a
-        // toggle proves nothing if it was never there.
-        await expect(gutter).toHaveCount(1);
+    // Present to begin with: the shipped default is ON, and an absence assertion after a
+    // toggle proves nothing if it was never there.
+    await expect(gutter).toHaveCount(1);
 
-        /*
-         * The REAL control, clicked by a user, in the window that owns it. The other three
-         * declarations drive `config.writePatch` directly — which is the same write path, but not
-         * the same evidence: this is the one that says the row on the form is wired to the setting.
-         */
-        const prefs = await openPrefs(app, win, 'settings');
-        await expect(prefs.getByTestId('settings-tab')).toBeVisible();
-        await prefs.getByTestId('control-editor.showGutter').click();
+    /*
+     * The REAL control, clicked by a user, in the window that owns it. The other three
+     * declarations drive `config.writePatch` directly — which is the same write path, but not
+     * the same evidence: this is the one that says the row on the form is wired to the setting.
+     */
+    const prefs = await openPrefs(app, win, 'settings');
+    await expect(prefs.getByTestId('settings-tab')).toBeVisible();
+    await prefs.getByTestId('control-editor.showGutter').click();
 
-        /*
-         * `toHaveCount(0)`, not `getComputedStyle(document.querySelector('.cm-gutters')!)`. With the
-         * gutter hidden that element is null, and the non-null assertion the neighbouring
-         * `editor-gutter.e2e.ts:31-34` establishes would throw a TypeError inside `page.evaluate` —
-         * a failure whose stack points at the helper rather than at this assertion.
-         */
-        await expect(gutter, 'the gutter is gone from the open panel').toHaveCount(0);
+    /*
+     * `toHaveCount(0)`, not `getComputedStyle(document.querySelector('.cm-gutters')!)`. With the
+     * gutter hidden that element is null, and the non-null assertion the neighbouring
+     * `editor-gutter.e2e.ts:31-34` establishes would throw a TypeError inside `page.evaluate` —
+     * a failure whose stack points at the helper rather than at this assertion.
+     */
+    await expect(gutter, 'the gutter is gone from the open panel').toHaveCount(0);
 
-        // …and back. The panel was never reopened and the file was never re-read.
-        await prefs.getByTestId('control-editor.showGutter').click();
-        await expect(gutter, 'and it comes back').toHaveCount(1);
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
-          'line 001',
-        );
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
+    // …and back. The panel was never reopened and the file was never re-read.
+    await prefs.getByTestId('control-editor.showGutter').click();
+    await expect(gutter, 'and it comes back').toHaveCount(1);
+    await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText(
+      'line 001',
     );
+
+    // The preferences window is a singleton: close it so the next test finds none already open.
+    await prefs.close();
   } finally {
-    cleanupTemp(cfg);
-    cleanupTemp(root);
+    await restoreGutter(win);
   }
 });
 
@@ -447,45 +493,39 @@ test('the gutter goes and returns on an already-open editor, with no reopen', { 
  * ────────────────────────────────────────────────────────────────────────── */
 
 test('the text starts at the panel’s left padding once the gutter is hidden', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
+  const { win } = shared;
   try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'GutterVis', root);
-        const pid = await openEditorWithFile(win);
-        const gutter = win.getByTestId(`editor-${pid}`).locator('.cm-gutters');
-        await expect(gutter).toHaveCount(1);
+    await createProject(win, 'GutterVis', root);
+    const pid = await openEditorWithFile(win);
+    const gutter = win.getByTestId(`editor-${pid}`).locator('.cm-gutters');
+    await expect(gutter).toHaveCount(1);
 
-        /*
-         * THIS is the assertion research.md D3 rejects the CSS approach for. `visibility: hidden`
-         * would satisfy every "the gutter is not visible" check and leave this number exactly where
-         * it started — the width the user was trying to reclaim never reaching the text.
-         *
-         * Measured on `.cm-content`, never on `.cm-line`: the lines are virtualised, and each one
-         * carries its own 6px left padding in both states, so a line's left edge moves by the same
-         * amount either way and says nothing about the gutter.
-         */
-        const withGutter = await textInset(win);
-        expect(withGutter, 'the gutter must be spending real width to begin with').toBeGreaterThan(
-          10,
-        );
-
-        await setGutter(win, false);
-        await expect(gutter).toHaveCount(0);
-
-        await expect
-          .poll(() => textInset(win), {
-            timeout: 8000,
-            message: 'the text column never moved left — the reclaimed width did not reach it',
-          })
-          .toBeLessThanOrEqual(1);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
+    /*
+     * THIS is the assertion research.md D3 rejects the CSS approach for. `visibility: hidden`
+     * would satisfy every "the gutter is not visible" check and leave this number exactly where
+     * it started — the width the user was trying to reclaim never reaching the text.
+     *
+     * Measured on `.cm-content`, never on `.cm-line`: the lines are virtualised, and each one
+     * carries its own 6px left padding in both states, so a line's left edge moves by the same
+     * amount either way and says nothing about the gutter.
+     */
+    const withGutter = await textInset(win);
+    expect(withGutter, 'the gutter must be spending real width to begin with').toBeGreaterThan(
+      10,
     );
+
+    await setGutter(win, false);
+    await expect(gutter).toHaveCount(0);
+
+    await expect
+      .poll(() => textInset(win), {
+        timeout: 8000,
+        message: 'the text column never moved left — the reclaimed width did not reach it',
+      })
+      .toBeLessThanOrEqual(1);
   } finally {
-    cleanupTemp(cfg);
-    cleanupTemp(root);
+    await restoreGutter(win);
   }
 });
 
@@ -494,131 +534,125 @@ test('the text starts at the panel’s left padding once the gutter is hidden', 
  * ────────────────────────────────────────────────────────────────────────── */
 
 test('the top visible line and the selection survive the toggle', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
+  const { win } = shared;
   try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'GutterVis', root);
-        const pid = await openEditorWithFile(win);
+    await createProject(win, 'GutterVis', root);
+    const pid = await openEditorWithFile(win);
 
-        // A selection the status bar can report: three lines from the top of the document.
-        await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
-        await win.keyboard.press('Control+Home');
-        await win.keyboard.press('Shift+ArrowDown');
-        await win.keyboard.press('Shift+ArrowDown');
-        await win.keyboard.press('Shift+End');
+    // A selection the status bar can report: three lines from the top of the document.
+    await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();
+    await win.keyboard.press('Control+Home');
+    await win.keyboard.press('Shift+ArrowDown');
+    await win.keyboard.press('Shift+ArrowDown');
+    await win.keyboard.press('Shift+End');
 
-        /*
-         * Scroll to a WRAPPED ROW in the middle of a logical line — see `scrollToWrappedRow`. The
-         * top of the document would make "unchanged" vacuous; the top of a LINE would make the
-         * assertion below unable to tell a row anchor from a line anchor, which is the defect.
-         */
-        const anchor = await scrollToWrappedRow(win);
-        expect(
-          anchor.rows,
-          'the document must genuinely wrap, or there is no visual row to distinguish',
-        ).toBeGreaterThanOrEqual(3);
-        expect(anchor.row, 'and the viewport must start INSIDE that line, not at its first row')
-          .toBeGreaterThanOrEqual(2);
+    /*
+     * Scroll to a WRAPPED ROW in the middle of a logical line — see `scrollToWrappedRow`. The
+     * top of the document would make "unchanged" vacuous; the top of a LINE would make the
+     * assertion below unable to tell a row anchor from a line anchor, which is the defect.
+     */
+    const anchor = await scrollToWrappedRow(win);
+    expect(
+      anchor.rows,
+      'the document must genuinely wrap, or there is no visual row to distinguish',
+    ).toBeGreaterThanOrEqual(3);
+    expect(anchor.row, 'and the viewport must start INSIDE that line, not at its first row')
+      .toBeGreaterThanOrEqual(2);
 
-        /*
-         * The WAIT for this has moved into `scrollToWrappedRow`, where the scroll is applied — and
-         * that is the fix rather than a tidy-up.
-         *
-         * There used to be a poll here, and its history is worth keeping because both versions were
-         * wrong in the same direction. It first polled for /^line \d{3}$/, which "line 001"
-         * satisfies, so it returned instantly on the state the next line then failed on. Tightened
-         * to exclude 001, it started TIMING OUT instead — because waiting here can only observe a
-         * scroll that has already happened, and this one had been silently undone by CodeMirror's
-         * measure cycle before the poll ever ran. A wait cannot fix a scroll that did not stick;
-         * only re-applying it can, which is what the helper now does.
-         *
-         * What remains is the assertion itself, kept because it is the premise of everything below:
-         * if the viewport is at the top of the document, "unchanged across the toggle" is vacuous.
-         */
-        const before = await topVisibleLine(win);
-        expect(before, 'the scroll must have left the top of the document').not.toBe('line 001');
+    /*
+     * The WAIT for this has moved into `scrollToWrappedRow`, where the scroll is applied — and
+     * that is the fix rather than a tidy-up.
+     *
+     * There used to be a poll here, and its history is worth keeping because both versions were
+     * wrong in the same direction. It first polled for /^line \d{3}$/, which "line 001"
+     * satisfies, so it returned instantly on the state the next line then failed on. Tightened
+     * to exclude 001, it started TIMING OUT instead — because waiting here can only observe a
+     * scroll that has already happened, and this one had been silently undone by CodeMirror's
+     * measure cycle before the poll ever ran. A wait cannot fix a scroll that did not stick;
+     * only re-applying it can, which is what the helper now does.
+     *
+     * What remains is the assertion itself, kept because it is the premise of everything below:
+     * if the viewport is at the top of the document, "unchanged across the toggle" is vacuous.
+     */
+    const before = await topVisibleLine(win);
+    expect(before, 'the scroll must have left the top of the document').not.toBe('line 001');
 
-        const line = await readout(win, 'line', pid);
-        const column = await readout(win, 'column', pid);
-        // `toHaveCount(1)` FIRST. `textContent()` returns `''` for an element that exists and throws
-        // a 30-second timeout for one that does not, so `expect(selected).not.toBeNull()` below could
-        // never fail: by the time it ran, either the element was there or the call had already blown
-        // up somewhere with no message about a status bar.
-        await expect(
-          win.getByTestId(`editor-status-selected-${pid}`),
-          'the status bar must be reporting a selection',
-        ).toHaveCount(1);
-        const selected = await readout(win, 'selected', pid);
+    const line = await readout(win, 'line', pid);
+    const column = await readout(win, 'column', pid);
+    // `toHaveCount(1)` FIRST. `textContent()` returns `''` for an element that exists and throws
+    // a 30-second timeout for one that does not, so `expect(selected).not.toBeNull()` below could
+    // never fail: by the time it ran, either the element was there or the call had already blown
+    // up somewhere with no message about a status bar.
+    await expect(
+      win.getByTestId(`editor-status-selected-${pid}`),
+      'the status bar must be reporting a selection',
+    ).toHaveCount(1);
+    const selected = await readout(win, 'selected', pid);
 
-        await setGutter(win, false);
-        await expect(win.getByTestId(`editor-${pid}`).locator('.cm-gutters')).toHaveCount(0);
+    await setGutter(win, false);
+    await expect(win.getByTestId(`editor-${pid}`).locator('.cm-gutters')).toHaveCount(0);
 
-        /*
-         * The DOCUMENT anchor, not `scrollDOM.scrollTop`. Hiding the gutter widens the text column,
-         * which re-wraps this deliberately-long-lined document and changes its rendered height — so
-         * the pixel offset provably moves, and only the place the reader was at can be promised.
-         */
-        await expect
-          .poll(() => topVisibleLine(win), {
-            timeout: 8000,
-            message: 'the reader was moved to a different line by a change of preference',
-          })
-          .toBe(before);
+    /*
+     * The DOCUMENT anchor, not `scrollDOM.scrollTop`. Hiding the gutter widens the text column,
+     * which re-wraps this deliberately-long-lined document and changes its rendered height — so
+     * the pixel offset provably moves, and only the place the reader was at can be promised.
+     */
+    await expect
+      .poll(() => topVisibleLine(win), {
+        timeout: 8000,
+        message: 'the reader was moved to a different line by a change of preference',
+      })
+      .toBe(before);
 
-        /*
-         * ══ AND AT THE GRANULARITY THE REQUIREMENT IS ACTUALLY ABOUT ══
-         *
-         * The line assertion above passes whether the reader kept their place or was thrown to the
-         * TOP of the line they were three rows into: `topVisibleLine` iterates `.cm-line`, which is
-         * one element per LOGICAL line however many rows it wraps to, so both outcomes read back the
-         * same eight characters.
-         *
-         * That is not a hypothetical gap. `lineBlockAtHeight` returns the block for a whole logical
-         * line — CodeMirror's own words: "a range delimited on both sides by either a non-hidden line
-         * break, or the start/end of the document" — and wrapping does not subdivide it. Anchoring
-         * on it and restoring with `y: 'start'` therefore puts the line's FIRST row at the top, and
-         * the reader loses however far into the line they had scrolled. In a long logical line —
-         * minified JSON, a prose paragraph, the preferences JSON editor which wraps unconditionally
-         * — that is hundreds of rows.
-         *
-         * So this measures the position that WAS at the top-left and asks where it is now. One row
-         * of slack, because the anchor is recovered here through `caretRangeFromPoint` and in the
-         * implementation through `posAtCoords`, and the two may disagree by a character at a wrap
-         * boundary. A line anchor misses by the number of rows the reader had scrolled in — asserted
-         * above to be at least two — so the two outcomes are never within a row of each other.
-         */
-        await expect
-          .poll(
-            async () => {
-              const now = await anchorOffsetFromTop(win, anchor);
-              // Infinity, never -1, when the position cannot be located: a sentinel that satisfies
-              // the bound below would be a test that passes because its measurement failed. And the
-              // magnitude, so being thrown DOWN the line fails as loudly as being thrown up it.
-              if (!now.found || now.rowHeight <= 0) return Number.POSITIVE_INFINITY;
-              return Math.abs(now.delta) / now.rowHeight;
-            },
-            {
-              timeout: 8000,
-              message:
-                'the reader was thrown to the start of their logical line: the position that was ' +
-                'at the top of the viewport is now several visual rows below it (FR-044)',
-            },
-          )
-          .toBeLessThanOrEqual(1);
+    /*
+     * ══ AND AT THE GRANULARITY THE REQUIREMENT IS ACTUALLY ABOUT ══
+     *
+     * The line assertion above passes whether the reader kept their place or was thrown to the
+     * TOP of the line they were three rows into: `topVisibleLine` iterates `.cm-line`, which is
+     * one element per LOGICAL line however many rows it wraps to, so both outcomes read back the
+     * same eight characters.
+     *
+     * That is not a hypothetical gap. `lineBlockAtHeight` returns the block for a whole logical
+     * line — CodeMirror's own words: "a range delimited on both sides by either a non-hidden line
+     * break, or the start/end of the document" — and wrapping does not subdivide it. Anchoring
+     * on it and restoring with `y: 'start'` therefore puts the line's FIRST row at the top, and
+     * the reader loses however far into the line they had scrolled. In a long logical line —
+     * minified JSON, a prose paragraph, the preferences JSON editor which wraps unconditionally
+     * — that is hundreds of rows.
+     *
+     * So this measures the position that WAS at the top-left and asks where it is now. One row
+     * of slack, because the anchor is recovered here through `caretRangeFromPoint` and in the
+     * implementation through `posAtCoords`, and the two may disagree by a character at a wrap
+     * boundary. A line anchor misses by the number of rows the reader had scrolled in — asserted
+     * above to be at least two — so the two outcomes are never within a row of each other.
+     */
+    await expect
+      .poll(
+        async () => {
+          const now = await anchorOffsetFromTop(win, anchor);
+          // Infinity, never -1, when the position cannot be located: a sentinel that satisfies
+          // the bound below would be a test that passes because its measurement failed. And the
+          // magnitude, so being thrown DOWN the line fails as loudly as being thrown up it.
+          if (!now.found || now.rowHeight <= 0) return Number.POSITIVE_INFINITY;
+          return Math.abs(now.delta) / now.rowHeight;
+        },
+        {
+          timeout: 8000,
+          message:
+            'the reader was thrown to the start of their logical line: the position that was ' +
+            'at the top of the viewport is now several visual rows below it (FR-044)',
+        },
+      )
+      .toBeLessThanOrEqual(1);
 
-        // The selection half is safe by construction — a reconfigure carries no `changes` and no
-        // `selection` — but "by construction" is an argument, and this is the measurement.
-        expect(await readout(win, 'line', pid), 'the caret line').toBe(line);
-        expect(await readout(win, 'column', pid), 'the caret column').toBe(column);
-        expect(await readout(win, 'selected', pid), 'the selected count').toBe(selected);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
+    // The selection half is safe by construction — a reconfigure carries no `changes` and no
+    // `selection` — but "by construction" is an argument, and this is the measurement.
+    expect(await readout(win, 'line', pid), 'the caret line').toBe(line);
+    expect(await readout(win, 'column', pid), 'the caret column').toBe(column);
+    expect(await readout(win, 'selected', pid), 'the selected count').toBe(selected);
   } finally {
-    cleanupTemp(cfg);
-    cleanupTemp(root);
+    await restoreGutter(win);
   }
 });
 
@@ -627,47 +661,43 @@ test('the top visible line and the selection survive the toggle', { tag: ['@exte
  * ────────────────────────────────────────────────────────────────────────── */
 
 test('the standalone editor in the preferences window reads the same setting', { tag: ['@extended', '@editor', '@reserve:window'] }, async () => {
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-cfgroot-'));
   const root = makeProject();
+  const { app, win } = shared;
   try {
-    await runApp(
-      async (app, win) => {
-        await createProject(win, 'GutterVis', root);
+    await createProject(win, 'GutterVis', root);
 
-        /*
-         * The KEY BINDINGS document, not settings. The toggle below rewrites `settings.json`, and a
-         * JSON tab showing that same file would take an external-change notice at the same instant —
-         * a second subject in a test about a gutter. Key bindings is the same `StandaloneEditor`
-         * over a document this test never touches.
-         */
-        const prefs = await openPrefs(app, win, 'keybindings');
-        await prefs.getByTestId('prefs-mode-toggle').click();
-        const editor = prefs.getByTestId('json-editor-keybindings');
-        await expect(editor).toBeVisible();
-        const gutter = editor.locator('.cm-gutters');
-        await expect(gutter, 'the standalone editor draws a gutter to begin with').toHaveCount(1);
+    /*
+     * The KEY BINDINGS document, not settings. The toggle below rewrites `settings.json`, and a
+     * JSON tab showing that same file would take an external-change notice at the same instant —
+     * a second subject in a test about a gutter. Key bindings is the same `StandaloneEditor`
+     * over a document this test never touches.
+     */
+    const prefs = await openPrefs(app, win, 'keybindings');
+    await prefs.getByTestId('prefs-mode-toggle').click();
+    const editor = prefs.getByTestId('json-editor-keybindings');
+    await expect(editor).toBeVisible();
+    const gutter = editor.locator('.cm-gutters');
+    await expect(gutter, 'the standalone editor draws a gutter to begin with').toHaveCount(1);
 
-        // From the OTHER window. This is the whole point of the declaration: one setting, two
-        // renderer realms, and no way for them to disagree.
-        await win.bringToFront();
-        await setGutter(win, false);
+    // From the OTHER window. This is the whole point of the declaration: one setting, two
+    // renderer realms, and no way for them to disagree.
+    await win.bringToFront();
+    await setGutter(win, false);
 
-        await expect(
-          gutter,
-          'the preferences JSON editor kept its gutter while the panels lost theirs — the second ' +
-            'call site (#254 warns about it by name) was missed',
-        ).toHaveCount(0);
-        // Still the same editor, still holding the document: hidden, not unmounted.
-        await expect(editor).toBeVisible();
+    await expect(
+      gutter,
+      'the preferences JSON editor kept its gutter while the panels lost theirs — the second ' +
+        'call site (#254 warns about it by name) was missed',
+    ).toHaveCount(0);
+    // Still the same editor, still holding the document: hidden, not unmounted.
+    await expect(editor).toBeVisible();
 
-        await win.bringToFront();
-        await setGutter(win, true);
-        await expect(gutter).toHaveCount(1);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
+    await win.bringToFront();
+    await setGutter(win, true);
+    await expect(gutter).toHaveCount(1);
+
+    await prefs.close();
   } finally {
-    cleanupTemp(cfg);
-    cleanupTemp(root);
+    await restoreGutter(win);
   }
 });

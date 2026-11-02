@@ -123,9 +123,10 @@ async function interruptUntil(win: Page, term: Locator, pid: string, pattern: Re
 }
 
 test('every shell names its running command, shell and directory, and drops the command when it stops (FR-001, FR-002, FR-009, SC-001)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-titles-'));
   const folder = basename(root);
+  mkdirSync(join(root, 'alpha', 'bravo', 'charlie', 'delta', 'echofold'), { recursive: true });
   try {
     await runApp(async (_app, win) => {
       await createProject(win, 'TitleShells', root);
@@ -169,64 +170,45 @@ test('every shell names its running command, shell and directory, and drops the 
       const long = await expectName(win, pids[0]!, new RegExp(`^${esc(longLine.slice(0, 30))}.*… \\| ${esc(shells[0]!.label)} \\(`));
       expect(long.split(' | ')[0]!.length, `the command is cut at about 40 characters: ${long}`).toBeLessThanOrEqual(41);
       await interruptUntil(win, terms[0]!, pids[0]!, atPrompt(shells[0]!.label, folder));
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
-test('a deep directory keeps its drive and last folder and shortens the middle (FR-004, FR-012)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(180_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-titles-deep-'));
-  mkdirSync(join(root, 'alpha', 'bravo', 'charlie', 'delta', 'echofold'), { recursive: true });
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TitleDeep', root);
-      const pid = await firstPanelId(win);
-      const shell = (await flavours(win, pid)).find((f) => f.id === 'cmd')!;
-      const term = await makeTerminal(win, pid, 'cmd');
-      await expectName(win, pid, atPrompt(shell.label, basename(root)), TERMINAL_OUTPUT_TIMEOUT_MS);
-      await typeLine(win, term, 'cd alpha\\bravo\\charlie\\delta\\echofold');
-      const name = await expectName(win, pid, new RegExp(`^${esc(shell.label)} \\([A-Za-z]:\\\\.*….*echofold\\)$`));
-      expectNoForeignTitle(name);
-      expect(name, 'the shortened directory still names the temp folders above the project').not.toContain(basename(root));
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+      /*
+       * Step 6 (was its own test, FR-016): a reloaded terminal does not name the command its previous shell was
+       * running. Folded in as a step: it needed the same project, the same shells and the same ping. Run on the
+       * cmd terminal (cmd is on every machine); the other shells reload with it and are not looked at.
+       */
+      const cmdIndex = shells.findIndex((f) => f.id === 'cmd');
+      expect(cmdIndex, 'the cmd shell is not offered').toBeGreaterThanOrEqual(0);
+      const cmdPid = pids[cmdIndex]!;
+      const cmdShell = shells[cmdIndex]!;
+      await typeLine(win, terms[cmdIndex]!, `ping ${TARGET} -t`);
+      await expectName(win, cmdPid, running(`ping ${TARGET} -t`, cmdShell.label, folder));
 
-test('a reloaded terminal does not name the command its previous shell was running (FR-016)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(180_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-titles-reload-'));
-  const folder = basename(root);
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TitleReload', root);
-      const pid = await firstPanelId(win);
-      const shell = (await flavours(win, pid)).find((f) => f.id === 'cmd')!;
-      const term = await makeTerminal(win, pid, 'cmd');
-      await expectName(win, pid, atPrompt(shell.label, folder), TERMINAL_OUTPUT_TIMEOUT_MS);
-      await typeLine(win, term, `ping ${TARGET} -t`);
-      await expectName(win, pid, running(`ping ${TARGET} -t`, shell.label, folder));
-
-      await win.locator('.project-item', { hasText: 'TitleReload' }).click({ button: 'right' });
+      await win.locator('.project-item', { hasText: 'TitleShells' }).click({ button: 'right' });
       await win.getByTestId('menu-item-Unload Project and End Terminals').click();
       await expectPingCount(TARGET, 0);
-      await switchProject(win, 'TitleReload');
+      await switchProject(win, 'TitleShells');
 
       // From the first moment the panel is named until its new shell has answered, it never names the old ping.
-      const reloaded = win.getByTestId(`terminal-${pid}`);
+      const reloaded = win.getByTestId(`terminal-${cmdPid}`);
       const names: string[] = [];
       await expect
         .poll(async () => {
-          names.push(await fullName(win, pid));
+          names.push(await fullName(win, cmdPid));
           return (await reloaded.innerText().catch(() => '')).includes('>');
         }, { timeout: TERMINAL_OUTPUT_TIMEOUT_MS })
         .toBe(true);
-      names.push(await fullName(win, pid));
+      names.push(await fullName(win, cmdPid));
       expect(names.filter((n) => n.includes('ping')), 'the reloaded panel named the old ping').toEqual([]);
-      await expectName(win, pid, atPrompt(shell.label, folder));
+      await expectName(win, cmdPid, atPrompt(cmdShell.label, folder));
+
+      /*
+       * Step 7 (was its own test, FR-004, FR-012): a deep directory keeps its drive and last folder and shortens the
+       * middle. Last, because it moves the cmd terminal out of the project folder.
+       */
+      await typeLine(win, reloaded, 'cd alpha\\bravo\\charlie\\delta\\echofold');
+      const deep = await expectName(win, cmdPid, new RegExp(`^${esc(cmdShell.label)} \\([A-Za-z]:\\\\.*….*echofold\\)$`));
+      expectNoForeignTitle(deep);
+      expect(deep, 'the shortened directory still names the temp folders above the project').not.toContain(folder);
     });
   } finally {
     cleanupTemp(root);

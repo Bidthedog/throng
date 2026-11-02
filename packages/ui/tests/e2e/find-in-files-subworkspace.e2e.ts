@@ -94,9 +94,8 @@ async function search(win: Page, panelId: string, term: string, matches: number)
 /**
  * Close a child window, tolerating one the application closed underneath us.
  *
- * The second half of this test destroys a panel whose sub-workspace then closes itself (FR-026b),
- * so by the time the `finally` runs the window may be mid-close. A throw there would fail the test
- * during CLEANUP, blaming the assertion that had already passed.
+ * A page the application closed underneath us is already in the state cleanup wanted; a throw there
+ * would fail the test during CLEANUP, blaming an assertion that had already passed.
  */
 async function closeIfOpen(page: Page): Promise<void> {
   if (page.isClosed()) return;
@@ -119,13 +118,13 @@ async function syncToNewSubWorkspace(win: Page, panelId: string): Promise<Page> 
   return child;
 }
 
-test('a synced Find in Files panel carries its query, survives its view closing, and dies with the parent', { tag: ['@extended', '@explorer', '@reserve:window'] }, async () => {
+test('a synced Find in Files panel carries its query, and survives its view closing', { tag: ['@extended', '@explorer', '@reserve:window'] }, async () => {
   const win = shared.win;
   const panelId = await openPanel(win);
   await search(win, panelId, 'needle', 2);
 
   /* ── FR-025 / FR-025b — the view exists in the second window, holding the same query ───────── */
-  let child = await syncToNewSubWorkspace(win, panelId);
+  const child = await syncToNewSubWorkspace(win, panelId);
   try {
     await expect(child.getByTestId(`fif-panel-${panelId}`)).toBeVisible({ timeout: 20_000 });
     // The find session travelled with the panel (FR-025b): same id, same term, in a window that was
@@ -140,51 +139,9 @@ test('a synced Find in Files panel carries its query, survives its view closing,
   await expect(win.getByTestId(`fif-term-${panelId}`)).toHaveValue('needle');
   // Its results too: the parent's search is not disturbed by a window it was never in.
   await expect(win.getByTestId(`fif-total-${panelId}`)).toHaveText('2');
-
-  /* ── FR-026 / scenario 7 — destroying the PARENT closes the sub-workspace view ─────────────── */
-  child = await syncToNewSubWorkspace(win, panelId);
-  try {
-    await expect(child.getByTestId(`fif-panel-${panelId}`)).toBeVisible({ timeout: 20_000 });
-
-    await win.getByTestId(`panel-close-${panelId}`).click();
-    /*
-     * Destroying a MIRRORED panel is announced before it happens, and the announcement is FR-026
-     * said to the user: the cascade is one-directional and irreversible, so the warning names the
-     * sub-workspaces the panel will vanish from. Asserted rather than clicked past — a destroy that
-     * stopped warning would still pass everything below it.
-     */
-    await expect(win.getByTestId('confirm-warning')).toContainText(/sub-workspace/i);
-    await win.getByTestId('confirm-accept').click();
-    await expect(win.locator('[data-testid^="fif-panel-"]')).toHaveCount(0);
-
-    /*
-     * The view goes with it — either because the window closed (FR-026b: a sub-workspace left empty
-     * is closed) or because the panel was taken out of a window still holding something else. Both
-     * are the requirement being met, and which happens depends on what else the sub-workspace was
-     * carrying, so the assertion is on the PANEL rather than on the window.
-     *
-     * ══ WHY THE `catch`, WHICH IS NOT DEFENSIVENESS ══
-     *
-     * `isClosed()` followed by a query is check-then-act across a process boundary, and the window
-     * is being closed by the very destroy under test. Measured: this read as `child.isClosed() ?
-     * 0 : await …count()` and failed three times out of three at `--repeat-each=3` with
-     * "Target page, context or browser has been closed" — while passing on a single run, which is
-     * the shape a flake takes when it is a race in the TEST. A page that closes between the check
-     * and the query is the strongest possible evidence that the view went away, so it answers the
-     * question rather than interrupting it.
-     */
-    const viewGone = async (): Promise<boolean> => {
-      if (child.isClosed()) return true;
-      try {
-        return (await child.getByTestId(`fif-panel-${panelId}`).count()) === 0;
-      } catch {
-        return true;
-      }
-    };
-    await expect.poll(viewGone, { timeout: 20_000 }).toBe(true);
-  } finally {
-    await closeIfOpen(child);
-  }
+  // NARROWED: "destroying the PARENT closes the sub-workspace view" (FR-026, scenario 7) is held by
+  // destroy-cascade.e2e.ts ('destroying a mirrored Panel in the PROJECT removes it from the sub-workspace too
+  // (with warning)'), which asserts the same warning and the same disappearance for any mirrored panel.
 });
 
 test('a synced Find in Files panel shows the parent’s results and follows them', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {

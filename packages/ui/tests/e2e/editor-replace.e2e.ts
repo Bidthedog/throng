@@ -80,7 +80,7 @@ async function openFile(win: Page, pid: string, name: string, expectText: string
 /*
  * ── TWO MOVED (035 T055) ──
  *
- * `packages/ui/tests/component/editor-search-controller.test.ts`:
+ * `packages/ui/tests/unit/editor-search-controller.test.ts`:
  *
  *   :128  replace-current changes only the current match and advances to the next
  *   :157  editing the document while find is open does not misplace a later replace

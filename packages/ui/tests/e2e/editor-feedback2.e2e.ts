@@ -164,11 +164,11 @@ test('the save dialog defaults the file name to the Panel name (FR-083)', { tag:
     // Capture the save-dialog default path.
     await app.evaluate(({ dialog }) => {
       (globalThis as Record<string, unknown>).__savePath = null;
-      dialog.showSaveDialog = async (a: unknown, b: unknown) => {
+      dialog.showSaveDialog = (async (a: unknown, b: unknown) => {
         const opts = (b ?? a) as { defaultPath?: string };
         (globalThis as Record<string, unknown>).__savePath = opts?.defaultPath ?? '';
         return { canceled: true, filePath: undefined };
-      };
+      }) as unknown as typeof dialog.showSaveDialog;
     });
 
     await win.getByTestId(`editor-${pid}`).locator('.cm-content').click();

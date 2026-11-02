@@ -29,7 +29,6 @@ import {
   reloadWindow,
   cleanupTemp,
 } from './harness.js';
-import { writeSettingsAtomic } from './helpers/config-write.js';
 import { seedTabs } from './helpers/tabs.js';
 import { skipIfElevated } from './admin.js';
 
@@ -353,45 +352,11 @@ test('B5 — the start directory is persisted, and the reopened project restarts
 // AS-4 / A2 / B8 / FR-030 / FR-037 — the catalogue, not a copy of it.
 // ---------------------------------------------------------------------------
 
-test('AS-4 — a user-defined flavour appears with no further configuration; a disabled built-in does not', { tag: ['@extended', '@terminal'] }, async () => {
-  const root = makeProjectFolder('throng-oit-custom-');
-  const cfg = mkdtempSync(join(tmpdir(), 'throng-oit-custom-cfg-'));
-  try {
-    writeSettingsAtomic(cfg, {
-      terminals: {
-        // Nothing about the catalogue or its configuration UI changes for this feature (FR-037,
-        // B8) — this is the SHIPPED settings shape, written exactly as `terminal-flavours.e2e.ts`
-        // writes it, and the menu inherits both halves of it for free.
-        disabledBuiltins: ['cmd'],
-        flavours: [
-          {
-            id: 'my-wsl',
-            label: 'WSL: Ubuntu',
-            file: 'wsl.exe',
-            args: ['-d', 'Ubuntu'],
-            defaultShellArguments: '--cd ~',
-          },
-        ],
-      },
-    });
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'CustomFlavour', root);
-        const tree = win.getByTestId('file-explorer-tree');
-        const level = await openTerminalSubmenu(win, tree.getByText('deep', { exact: true }));
-        const labels = await labelsOf(level);
-        expect(labels).toContain('WSL: Ubuntu');
-        expect(labels).not.toContain('Command Prompt');
-        await closeMenu(win);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfg } },
-    );
-  } finally {
-    for (const d of [root, cfg]) {
-      cleanupTemp(d);
-    }
-  }
-});
+// MOVED DOWN to `packages/ui/tests/unit/open-in-terminal-catalogue.test.ts`: AS-4 — a user-defined flavour
+// written into settings appears in Open In → Terminal with no further configuration, and a disabled
+// built-in does not. It seeded a config root and launched Electron to read two labels; the unit drives the
+// real catalogue service over the parsed settings into the real menu builder (red-proved by making
+// `mergeFlavours` ignore `disabledBuiltins`). AS-1 below still compares the live submenu with the type-picker.
 
 // ---------------------------------------------------------------------------
 // AS-6 / A3 / FR-035 — shown and DISABLED when there is nothing to launch.

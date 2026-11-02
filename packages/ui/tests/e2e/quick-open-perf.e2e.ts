@@ -76,7 +76,6 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await shared?.close();
   if (bigRoot !== '') cleanupTemp(bigRoot);
-  if (smallRoot !== '') cleanupTemp(smallRoot);
 });
 
 const runApp = (
@@ -98,25 +97,6 @@ const createProject = (win: Page, name: string, root: string): Promise<void> =>
 /** The name the big fixture's project is opened under, once, by the first test that needs it. */
 const BIG_PROJECT = 'QOPerfBig';
 
-/**
- * A tiny second project, existing only to be SWITCHED TO.
- *
- * Leaving the big root drops its last subscriber and UI main disposes the index (S9), so coming back
- * re-walks all twelve thousand files from nothing — which is the in-flight walk FR-015 is about.
- *
- * This used to be a side effect of the test that ran before the S3 one, and that test moved down a
- * layer (035 T038). The dependency was never written down as a requirement of the S3 test; it was
- * described in its header as a happy fact about its neighbour, and removing the neighbour broke it.
- * Owning the precondition here is what stops that happening to the next person.
- */
-const SMALL_PROJECT = 'QOPerfSmall';
-let smallRoot = '';
-
-function createSmallTree(): string {
-  const root = mkdtempSync(join(tmpdir(), 'throng-qop-small-'));
-  writeFileSync(join(root, 'anchor.txt'), '// anchor\n');
-  return root;
-}
 let bigProjectOpen = false;
 
 /**
@@ -324,164 +304,14 @@ test('typing performs no IPC at all — no files.* call and no fileIndex subscri
  */
 
 /*
- * PLACED HERE, and the position is load-bearing in two directions.
+ * TWO TESTS MOVED DOWN (pass 2) - "flipping the exclusion toggle on a large project SAYS it is still listing
+ * before it widens the list (FR-069d)" and "a modal opened before enumeration finishes says it is still listing,
+ * then shows results (FR-015, S3)". Both are now `component/quick-open-header.test.ts`, "a candidate set that is
+ * still being built": the real `QuickOpen` over an `index` prop that is `building`, with no rows (S3) and with
+ * a borrowed list of rows (FR-069d), then rerendered `ready`. Red-proven against a line that renders only at
+ * zero rows (the borrowed-list test goes red) and against a line never rendered (both go red).
  *
- * It needs the big project ACTIVE and its standing index already warm, which is what the test above
- * leaves behind. And it must not come after the live-index test, because the final test in this file
- * depends on that one having switched away — leaving the big root's index disposed, so that
- * switching back re-walks. Sitting between them satisfies both.
+ * What the hook does with the pushes that produce those states (the borrow, the root change, a bare
+ * `building`) is `component/use-file-index.test.ts`. Twelve thousand files were written and walked twice to
+ * make a status flag observable; the flag is a prop of the component and needs no walk.
  */
-test('flipping the exclusion toggle on a large project SAYS it is still listing before it widens the list (FR-069d)', { tag: ['@extended', '@editor'] }, async () => {
-  test.setTimeout(180_000);
-  await runApp(async (_app, win) => {
-    await settle(win);
-    await useBigProject(win);
-
-    await openQuickOpen(win);
-    // The standing subscription is warm, so the modal opens with a list and no waiting state — the
-    // baseline this test's claim is measured against.
-    await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
-    await expect(quickOpenRows(win).first()).toBeVisible();
-
-    /*
-     * ══ WHAT FR-069d ACTUALLY REQUIRES, AND WHAT THIS ASSERTION USED TO SAY INSTEAD ══
-     *
-     * The prohibition is on presenting a PARTIAL list as though it were whole. This test used to
-     * read that as "there are no rows while it builds" and asserted `toHaveCount(0)` — which was a
-     * true description of the code on the day it was written and is not the behaviour the feature
-     * wants. Emptying the list is the reported flash (`quick-open-target.e2e.ts` owns that half), so
-     * the modal now BORROWS the previous, narrower list while the wider index builds.
-     *
-     * A borrowed list is a partial list. What makes it legitimate rather than a lie is that the
-     * "Still listing this project's files…" line stands over it the whole time — so the two things
-     * this samples are the rows AND the line, in one read, because either alone passes against a
-     * broken build: the line with no rows is the old blink, and the rows with no line are the
-     * silent partial list.
-     */
-    await win.getByTestId('quickopen-hidden').click();
-    await expect(win.getByTestId('quickopen-hidden')).toHaveAttribute('data-value', 'include');
-    await expect
-      .poll(
-        async () =>
-          win.evaluate(() => ({
-            listing: document.querySelector('[data-testid="quickopen-building"]') !== null,
-            rows: document.querySelectorAll('[data-testid^="quickopen-row-"]').length > 0,
-          })),
-        {
-          timeout: 10_000,
-          message:
-            'the flipped toggle never showed rows and the "still listing" line at the same moment — ' +
-            'either the list blinked empty, or a narrower list was served with nothing saying so',
-        },
-      )
-      .toEqual({ listing: true, rows: true });
-
-    await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 60_000 });
-    /*
-     * `fill`, not `keyboard.type` — the toggle was CLICKED, so it holds focus.
-     *
-     * Typing after a click would go to the button and change nothing, and the list would still be
-     * showing its uncapped default: two hundred rows, the FR-014 cap. Which is exactly what this
-     * assertion caught the first time it ran, reported as `Expected: 60, Received: 200`. Worth the
-     * note, because "200" reads like a truncation bug rather than a test that typed into a button.
-     */
-    await win.getByTestId('quickopen-input').fill('widget-0001');
-    await expect(quickOpenRows(win)).toHaveCount(BIG_TREE_DIRS);
-
-    // Back to the setting's value: the standing index is still there, so this costs no walk at all.
-    await win.getByTestId('quickopen-input').fill('');
-    await win.getByTestId('quickopen-hidden').click();
-    await expect(win.getByTestId('quickopen-hidden')).toHaveAttribute('data-value', 'exclude');
-    await expect(win.getByTestId('quickopen-building')).toHaveCount(0);
-
-    await win.keyboard.press('Escape');
-    await expect(win.getByTestId('quickopen')).toHaveCount(0);
-  });
-});
-
-/*
- * ONE TEST REMOVED (035 T038) — "a file created and then deleted OUTSIDE throng becomes, and stops
- * being, choosable within two seconds", now split across two files that already existed and one that
- * did not:
- *
- *   - **the delta arrives within SC-005's two seconds** —
- *     `integration/project-file-index.integration.test.ts`, against a real watcher and a real
- *     filesystem ("a create, a rename and a delete each reach the subscriber as a delta within two
- *     seconds");
- *   - **the fold is applied correctly** — `core/tests/unit/file-index-view.test.ts`, ten cases;
- *   - **the window MIRRORS the push** — `component/use-file-index.test.ts`, which did not exist.
- *
- * That third file is the reason this could not simply be deleted against the first two. Both sides
- * of `useFileIndex` were well covered and the hook itself was covered by nothing, so every rule in
- * its own comments — which pushes belong to this subscription, when a bare `building` is a walk
- * starting rather than main disowning the index, whether a flag change may keep the list it has —
- * was load-bearing and untested. The integration test proves the delta is SENT; nothing proved the
- * window did anything with it.
- *
- * Red-proven against five mutations, each caught by the test that should catch it: ignore-flag,
- * accept-any-root, always-blank, never-disown, keep-across-roots.
- *
- * The replacement is also broader. This test watched one file appear and disappear; the hook tests
- * additionally pin the two-subscriptions-one-channel rule (FR-069) and the FR-005 root change, both
- * of which produce a list that is silently WRONG rather than merely late — and neither of which this
- * test could reach without a second project and a toggle.
- */
-
-/*
- * LAST ON PURPOSE, and it depends on the test above having run.
- *
- * FR-015 is about a modal opened while the walk is STILL IN FLIGHT, so this test needs a walk it can
- * outrun. It cannot get one by opening the big fixture as a second project — a root is exclusive
- * (FR-029) and the big fixture is already open. What it can do is leave and come back: the previous
- * test switched the window to its own small project, which dropped the big root's last subscriber
- * and disposed its index in UI main (S9), so switching BACK subscribes afresh and re-walks all
- * twelve thousand files from nothing.
- *
- * That is the same enumeration a first open performs, reached without a second fixture — and it is
- * why this test sits at the end of the file rather than beside the other two big-project tests.
- */
-test('a modal opened before enumeration finishes says it is still listing, then shows results (FR-015, S3)', { tag: ['@extended', '@editor'] }, async () => {
-  test.setTimeout(180_000);
-  await runApp(async (_app, win) => {
-    await settle(win);
-
-    /*
-     * LEAVE the big project first, so that coming back is a fresh walk.
-     *
-     * This is the whole precondition, and it is done here rather than inherited: while the window is
-     * on the big root, its index is held and switching "back" to it re-walks nothing — which is
-     * exactly what happens if this step is missing, and `quickopen-building` then never appears.
-     */
-    smallRoot = createSmallTree();
-    await createProject(win, SMALL_PROJECT, smallRoot);
-    await expect(win.locator('.project-item[data-active="true"]')).toContainText(SMALL_PROJECT);
-
-    // Back to the big fixture — a SWITCH, not a second project.
-    await win
-      .locator('.project-item', { hasText: BIG_PROJECT })
-      .locator('[data-testid^="project-switch-"]')
-      .click();
-    await expect(win.locator('.project-item[data-active="true"]')).toContainText(BIG_PROJECT);
-
-    /*
-     * The chord goes in immediately, while the walk of 12,000 files is still in flight.
-     *
-     * The fixture's SIZE is the lever that makes this observable: a keypress costs milliseconds and
-     * enumerating twelve thousand files costs considerably more, so the building state is on screen
-     * for long enough to be seen. If this ever becomes racy, the fixture grows — the answer is never
-     * to soften the assertion into one a partial list would also satisfy, which is the failure S3
-     * exists to prevent.
-     */
-    await openQuickOpen(win);
-    await expect(win.getByTestId('quickopen-building')).toBeVisible();
-
-    // …and then the real list, which is the second half of S3: a partial list must never be
-    // presented as though it were whole.
-    await expect(win.getByTestId('quickopen-building')).toHaveCount(0, { timeout: 30_000 });
-    await win.keyboard.type('widget-0001');
-    await expect(quickOpenRows(win)).toHaveCount(BIG_TREE_DIRS);
-
-    await win.keyboard.press('Escape');
-    await expect(win.getByTestId('quickopen')).toHaveCount(0);
-  });
-});

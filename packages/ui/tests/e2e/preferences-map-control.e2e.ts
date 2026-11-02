@@ -126,7 +126,12 @@ async function openPrefs(app: ElectronApplication, win: Page): Promise<Page> {
  * path keeps a witness, and FR-022c (an empty map means empty, rather than falling back to the
  * shipped value) keeps the end-to-end test it actually needs.
  */
-test('a row can be removed, and the removal STICKS — an empty map means empty (FR-022c)', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * MERGED (pass 2): "a row can be removed, and the removal STICKS — an empty map means empty (FR-022c)" is
+ * the first half of the next test — one window, one app run. FR-022c's semantics in the model are
+ * `core/tests/unit/editor-settings.test.ts` (an empty map stays empty).
+ */
+test('a removed row STICKS — an empty map means empty (FR-022c); reset CLEARS the extension map and REPOPULATES the indentation map', { tag: ['@extended', '@prefs'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win);
@@ -142,17 +147,9 @@ test('a row can be removed, and the removal STICKS — an empty map means empty 
       // The whole of FR-022c: a map that fell back to its shipped value whenever it was empty could
       // never be cleared — the user deletes the row, saves, and watches it come straight back.
       await expect
-        .poll(() => readSettings(cfgRoot)?.editor?.languageByExtension)
+        .poll(() => readSettings(cfgRoot)?.editor?.languageByExtension, { message: 'the removal sticks' })
         .toEqual({});
       await expect(prefs.getByTestId('map-row-editor.languageByExtension-.bar')).toHaveCount(0);
-    },
-  );
-});
-
-test('reset CLEARS the extension map and REPOPULATES the indentation map', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win);
 
       // Add an extension mapping, and remove a language's indentation.
       await prefs.getByTestId('map-new-key-editor.languageByExtension').fill('.zig');

@@ -154,7 +154,7 @@ const line = (win: Page, pid: string, text: string) =>
 /*
  * ── THREE OF THE FOUR MOVED (035 T055) ──
  *
- * `packages/ui/tests/component/editor-content-menu.test.ts` now owns what the menu's items DO:
+ * `packages/ui/tests/unit/editor-content-menu.test.ts` now owns what the menu's items DO:
  *
  *   :123  right-clicking INSIDE a selection preserves it; outside collapses it (FR-012a)
  *   :154  right-clicking OUTSIDE a selection moves the caret there (FR-012a)
@@ -180,7 +180,7 @@ const line = (win: Page, pid: string, text: string) =>
  * outright — which is correct for testing the decision and proves nothing about the measurement.
  * One test buys that, so one test keeps it.
  */
-test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', { tag: ['@extended', '@editor'] }, async () => {
+test('mouse-only cut and paste — no selection cuts the whole line (FR-012b)', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
