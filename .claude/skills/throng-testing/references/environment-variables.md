@@ -12,7 +12,7 @@ Where a variable has its own section below or in another reference, that is its 
 
 | Variable | What it does | Detail |
 |---|---|---|
-| `THRONG_E2E_TIER` | `parallel` or `serial`: run one local tier on its own | [tiers-and-workers.md](tiers-and-workers.md) |
+| `THRONG_E2E_TIER` | `parallel` or `serial`: run one tier on its own | [tiers-and-workers.md](tiers-and-workers.md) |
 | `THRONG_E2E_WORKERS` | Playwright worker count for the E2E layer (default 6; 2 when elevated) | [tiers-and-workers.md](tiers-and-workers.md#throng_e2e_workers--parallel-workers) |
 | `THRONG_E2E_RETRIES` | Retry count (default 2, diagnostic only); `0` shows raw first-attempt results | [flakes.md](flakes.md) |
 | `THRONG_E2E_FAIL_FAST` | `1` stops `run-e2e-local.mjs` at the first failing test; `npm run gate` sets it | `scripts/run-e2e-local.mjs` |

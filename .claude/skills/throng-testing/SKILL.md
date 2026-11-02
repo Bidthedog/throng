@@ -24,14 +24,22 @@ Playwright as *"Process failed to launch"*).
 ### The commands that are never run locally
 
 Named, because "the full suite" was read as `npm run gate` only — and the run that actually reached
-the workstation was `npm run test:e2e`, which is not the gate, and is 18 minutes of every core.
+the workstation was `npm run test:e2e`, which is not the gate, and pins every core for as long as it
+runs.
 
 | Never run locally | Run this instead |
 |---|---|
 | `npm run gate` | `gh workflow run gate.yml --ref <branch>` |
-| `npm run test:e2e` | the individual specs: `npx playwright test <spec>` |
+| `npm run test:e2e`, a tier (`THRONG_E2E_TIER`), or any batch of specs | push and let CI run it — `@core` on a ready PR, `@extended` in `gate.yml` and `release.yml` |
 | `npm run test:e2e:raw`, `npm run test:e2e:admin` | as above |
 | Any `vitest run --project <p>` with **no path** | the same command with the file under the cursor |
+
+**E2E is not run locally before a push.** At most, the one spec covering the change, at one worker —
+`npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1` — and only when a lower layer
+cannot show the failure. The root `CLAUDE.md` (*Running tests locally*) owns this rule.
+
+For a single unit, component, integration or contract file, `td run --runner <unit|component|integration|contract> --scope file --target <path>`
+is the preferred form; it records the telemetry `td audit` and `td rank` read.
 
 **Every vitest run that does reach the workstation passes `--maxWorkers=50%`.** Vitest defaults to a
 worker per core, so even a narrow run of a few component files pins the whole machine while it starts
@@ -90,8 +98,7 @@ gh run watch "$RUN" --exit-status
 gh run view "$RUN" --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 ```
 
-Say the expected cost in one line before starting the watch: *"Waiting on gate run `<id>`, expected
-~35 min."*
+Say in one line what you are waiting on before starting the watch: *"Waiting on gate run `<id>`."*
 
 **`gh run watch --exit-status` detaches early, and its exit code then lies in both directions.**
 Observed twice on this repo's runner in one afternoon:
@@ -112,8 +119,8 @@ failure that has not happened yet.
 
 ### When one stage is red, run one stage
 
-The gate is fail-fast, so re-running it to reach the stage that failed spends ~19 minutes re-proving
-seven green ones. That was measured twice, learning one number each time.
+The gate is fail-fast, so re-running it to reach the stage that failed re-proves every green stage
+before it.
 
 ```bash
 gh workflow run gate.yml --ref "$(git branch --show-current)" -f only=test:contract
@@ -225,8 +232,8 @@ On the reference workstation the open answers well inside 300 ms, so it passed e
 run. On the gate runner (~2.5× slower, cold disk) two restored editors were both still loading when
 the scan fired: the user got a banner in each panel and the file tree's own notice, and the
 consolidated notice that 030 FR-034a requires to **supersede** the tree's was never raised — the exact
-duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` failed 3/3, waiting the full
-90 s for an element that could no longer appear. Filed as #369.
+duplicate-notice storm FR-029 exists to end. `notice-a11y.e2e.ts:115` (since merged into
+`notice-consolidation.e2e.ts`) failed 3/3, waiting the full 90 s for an element that could no longer appear. Filed as #369.
 
 ### How to spot it before a slow machine does
 
@@ -349,7 +356,7 @@ tells that you already are: the test drives the UI only to reach a value it then
 move inside one component (that is component).
 
 **Every E2E test carries exactly one significance tag — `@core` or `@extended` — and at least one
-category tag.** `@core` gates CI and is capped; `@extended` runs at release. The build fails on a
+category tag.** `@core` gates CI and is capped; `@extended` runs in the gate and at release. The build fails on a
 test that carries neither, and on a suite that exceeds its declared budget. Adding an E2E therefore
 means deciding, out loud, whether breaking it would make the product unusable.
 
@@ -359,13 +366,13 @@ passing is not evidence, and a replacement covering part of what the E2E asserte
 replacement.
 
 ```bash
-npx vitest run --project unit --project component --project integration --project contract
+npx vitest run --project <layer> <the replacement test file>
 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
 **Pass the full path, with the `.e2e.ts` — a bare stem runs the whole suite.** Check any filter
-before a long run with `npx playwright test <your filter> --list | tail -1`, which launches nothing;
-the measurement is in [references/measuring-durations.md](references/measuring-durations.md).
+with `npx playwright test <your filter> --list | tail -1`, which launches nothing; see
+[references/measuring-durations.md](references/measuring-durations.md).
 
 ## When an E2E passes but the user says it is broken
 
@@ -457,12 +464,11 @@ results in one run, so the register had never been the true list anyway.
 question is nearly always the same one: *does it fail because the machine is busy?*
 
 ```bash
-# Fails at six workers, passes at one → contention, not a defect.
-THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=1
-THRONG_E2E_RETRIES=0 npx playwright test <spec> --workers=6
+# Red inside a loaded CI or gate run, passes alone at one worker → contention, not a defect.
+THRONG_E2E_RETRIES=0 npx playwright test packages/ui/tests/e2e/<spec>.e2e.ts --workers=1
 ```
 
-A pass rate that falls as workers rise is starvation; a defect fails the *same* test every time. If
+A spec that fails only under load is starvation; a defect fails the *same* test every time. If
 it is starvation, the answer is a budget or a tier — **not** an entry here. See
 [references/budgets.md](references/budgets.md), which records the six clocks and what each is
 derived from, and [references/tiers-and-workers.md](references/tiers-and-workers.md) for the tier
@@ -470,9 +476,8 @@ boundary.
 
 ### When the starvation test cannot answer
 
-The worker sweep above discriminates only where the worker count is a variable. **A spec in the
-SERIAL tier already runs at one worker**, so running it at one worker again proves nothing, and
-running it at six tells you about a configuration it never uses.
+The comparison above discriminates only where load is the variable. **A spec in the SERIAL tier
+already runs at one worker**, so running it alone at one worker again proves nothing.
 
 That is where a red is most likely to be misread as flakiness, and it happened: five serial-tier
 specs appeared to fail in a rotating set across gate runs on the self-hosted runner, which reads
@@ -505,20 +510,19 @@ overview.
 | Reference | Read it when |
 |---|---|
 | [e2e-harness.md](references/e2e-harness.md) | writing or converting an E2E spec, the harness helpers, the tier and parallel plans, diagnosing a flake — the area knowledge behind this skill's process |
-| [e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md) | adding, demoting or deleting an E2E; choosing its `@reserve:*` tag |
-| [budget-history.md](references/budget-history.md) | a spec adds or removes E2E declarations and you want the precedent for moving the budget, `reserve-tag-debt.json` and `parallel-plan.json` |
+| [e2e-reserve-and-tags.md](references/e2e-reserve-and-tags.md) | adding, demoting or deleting an E2E; paying for a new declaration under the budget; choosing its `@reserve:*` tag |
 | [build-guards.md](references/build-guards.md) | a renderer↔main channel changes, or the bridge-parity or renderer-typecheck guard goes red |
 | [gate.md](references/gate.md) | you need why the gate is ordered and hosted as it is (the loop is above) |
 | [performance-sla.md](references/performance-sla.md) | writing or changing a wall-clock assertion; an `sla-not-measured` annotation appears |
 | [no-headless.md](references/no-headless.md) | someone proposes hidden or off-screen E2E windows |
 | [environment-variables.md](references/environment-variables.md) | a run needs a `THRONG_*` knob, or a spec depends on one the harness sets |
-| [tiers-and-workers.md](references/tiers-and-workers.md) | choosing a tier or worker count, placing a spec in the serial tier, quoting a suite timing |
+| [tiers-and-workers.md](references/tiers-and-workers.md) | choosing a tier or worker count, placing a spec in the serial tier |
 | [elevation.md](references/elevation.md) | a spec depends on admin rights; adding `skipIfElevated()`; elevated and non-elevated runs disagree |
 | [writing-e2e.md](references/writing-e2e.md) | writing or converting a spec: config-root writes, one app per file, the harness helpers |
 | [flakes.md](references/flakes.md) | a test passes on retry; before stress-testing one spec |
 | [flake-case-studies.md](references/flake-case-studies.md) | a waited-for value is empty or stale; a flake vanishes under instrumentation; a terminal spec asserts DEC modes |
 | [budgets.md](references/budgets.md) | before raising any E2E timeout |
-| [measuring-durations.md](references/measuring-durations.md) | before quoting a spec file's cost, or starting a long run with a positional filter |
+| [measuring-durations.md](references/measuring-durations.md) | measuring a spec file's cost, or before any run with a positional filter |
 | [quarantine.md](references/quarantine.md) | before tagging `@quarantine`; "what are we not testing?" |
 | [global-os-resources.md](references/global-os-resources.md) | a spec launches Electron directly, or a run touches the clipboard or shell history |
 | [temp-files.md](references/temp-files.md) | a run leaves a `throng_e2e_<runhash>` folder behind |
