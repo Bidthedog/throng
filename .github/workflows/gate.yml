@@ -46,6 +46,11 @@ on:
           - 'test:integration'
           - 'test:contract'
           - 'test:e2e'
+      # A measurement, not a setting: see THRONG_E2E_WORKERS below for why the default stays 1.
+      e2e_workers:
+        description: 'Workers for the E2E parallel tier. The serial tier is always 1.'
+        type: string
+        default: '1'
       # Stress ONE E2E test instead of running the gate — see the `stress` job. Here rather than in a
       # workflow of its own because a workflow_dispatch file is only dispatchable once it is on the
       # default branch, and a flake is stressed on the branch that fixes it.
@@ -118,7 +123,11 @@ env:
   #
   # The parallel tier is therefore parallel in name only here, and the wall-clock cost is small
   # because the serial tier is ~86% of the stage and single-worker either way.
-  THRONG_E2E_WORKERS: '1'
+  #
+  # Two workers were measured again on 2026-11-01. The tier took about 5.8 min against about 7.4 at
+  # one, saving under 2 min of 22. One run of two was red: terminal-link-once's Ctrl+click opened
+  # nothing inside 5 s, then passed on retry (run 41349085748). e2e_workers stays for measuring.
+  THRONG_E2E_WORKERS: ${{ inputs.e2e_workers || '1' }}
 
   # Retries are DIAGNOSTIC only. `failOnFlakyTests` (playwright.config.ts) still fails a test that
   # passes only on retry, so these buy the first failure's assertion and trace rather than absorbing
@@ -231,6 +240,11 @@ jobs:
         shell: pwsh
         env:
           ONLY: ${{ inputs.only || 'full gate' }}
+          # 055 SC-009's memory calibration is 11 minutes of a one-worker E2E stage. The nightly run
+          # asserts it (unset = the gate's trimmed set); a dispatched gate skips it, so a PR's gate does
+          # not pay for it. The release lane still logs the figures (release.yml).
+          # (Not `== 'schedule' && '' || 'none'`: '' is falsy in an expression, so that reads 'none' always.)
+          THRONG_CALIBRATE: ${{ github.event_name != 'schedule' && 'none' || '' }}
 
         run: |
           # ── CLEAN THE MODULE PATH HERE, IN THIS PROCESS ─────────────────────────────────────
@@ -295,6 +309,38 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # The @admin subset, which the `gate` job's Playwright config excludes. ci.yml runs it on every ready
+  # PR; without this, a change reaching master by any other route would not meet it until the next PR.
+  # Also on a dispatch that includes E2E, because a schedule only ever runs on the default branch and
+  # this job would otherwise be unprovable before it merges. Its own job so a red gate stage cannot
+  # stop it; the name differs from ci.yml's required check on purpose.
+  admin:
+    name: Nightly @admin E2E
+    if: ${{ github.event_name == 'schedule' || (inputs.stress_spec == '' && (inputs.only == 'full gate' || inputs.only == 'test:e2e')) }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run @admin E2E suite (this runner is elevated)
+        shell: pwsh
+        run: ./scripts/ci-run-admin-e2e.ps1
+      - name: Upload @admin traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: gate-test-results-admin
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
   # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
   #
   # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
@@ -305,7 +351,7 @@ jobs:
   # an existing open issue with the same title gets a comment instead.
   report-failure:
     name: Report a failed nightly
-    needs: gate
+    needs: [gate, admin]
     if: ${{ failure() && github.event_name == 'schedule' }}
 
     # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue
@@ -328,7 +374,7 @@ jobs:
               `- Commit: ${context.sha}`,
               `- Run: ${runUrl}`,
               '',
-              'The gate is fail-fast, so the failing stage is the last one printed in the run log.',
+              'The gate is fail-fast, so the failing stage is the last one printed in its job log; the @admin job reports separately.',
             ].join('\n');
 
             const existing = await github.paginate(github.rest.issues.listForRepo, {

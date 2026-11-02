@@ -55,8 +55,35 @@ jobs:
       - name: TypeScript type-check
         run: npm run typecheck
 
+  # The vitest layers run as two jobs in parallel: unit + component need no build and no OS
+  # processes, integration + contract need the daemon built and run serially. One job ran all four
+  # back to back, so the PR waited for their sum. Tests tagged `regression` (soaks, sweeps,
+  # performance budgets) are left to `gate.yml` and the release lane.
+  test-fast:
+    name: Unit / component
+    if: github.event.pull_request.draft != true
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Use an alias-free temp dir
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npm run test:unit -- --tags-filter='!regression'
+      - name: Component tests
+        run: npm run test:component -- --tags-filter='!regression'
+
   test:
-    name: Unit / integration / contract
+    name: Integration / contract
     if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 30
@@ -79,26 +106,17 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
-      # Unit tests run against TypeScript source (aliased in vitest.config.ts) and need
-      # no build. Integration & contract, however, spawn the REAL daemon
-      # (`node packages/daemon/dist/main.js`) and read its `dist/BUILD_ID`, so the daemon
-      # must be built first — on a clean checkout there is no `dist/`. `npm run build`
-      # produces the daemon dist and stamps BUILD_ID (same build the E2E job runs).
+      # Integration & contract spawn the REAL daemon (`node packages/daemon/dist/main.js`) and
+      # read its `dist/BUILD_ID`, so the daemon must be built first — on a clean checkout there is
+      # no `dist/`. `npm run build` produces the daemon dist and stamps BUILD_ID.
       - name: Build (daemon dist + BUILD_ID for the daemon-spawning layers)
         run: npm run build
       # Integration & contract spawn real OS processes and are single-file-serial by
       # design (see docs/testing.md) — run each layer as its own step so a failure names it.
-      - name: Unit tests
-        run: npm run test:unit
-      # Component tests render renderer components into jsdom — no app, no daemon, no window.
-      # They run before the OS-heavy layers because they are nearly as cheap as unit and now
-      # carry assertions that used to cost an Electron launch apiece (034 FR-044).
-      - name: Component tests
-        run: npm run test:component
       - name: Integration tests
-        run: npm run test:integration
+        run: npm run test:integration -- --tags-filter='!regression'
       - name: Contract tests
-        run: npm run test:contract
+        run: npm run test:contract -- --tags-filter='!regression'
 
   e2e:
     name: E2E (@core)
@@ -233,18 +251,6 @@ jobs:
     if: github.event.pull_request.draft != true
     runs-on: windows-2022
     timeout-minutes: 20
-    env:
-      THRONG_E2E_WORKERS: 1
-      # Clears playwright.config.ts's grepInvert so @admin is SELECTED rather than excluded.
-      THRONG_E2E_INCLUDE_ADMIN: '1'
-      PLAYWRIGHT_JSON_OUTPUT_NAME: admin-report.json
-      # The de-elevation spec's own LAUNCH_BUDGET_MS is 25s, SHORTER than the production worst
-      # case of connect 15s + readiness 15s (019 C7) — a connect at ~14s followed by no ack would
-      # surface at ~29s and be reported as "it hung (#94)", the very failure the spec exists to
-      # detect. 8000/8000 makes the worst case 16s. Production defaults (15000/15000) are
-      # untouched; these are injected settings, not code (Principle X).
-      THRONG_AGENT_CONNECT_TIMEOUT_MS: '8000'
-      THRONG_AGENT_READY_TIMEOUT_MS: '8000'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -255,29 +261,9 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      # `npx playwright test` DIRECTLY, never `npm run test:e2e:admin`: that script exists to hop
-      # UAC from a non-elevated shell (Start-Process -Verb RunAs) and is pointless — and
-      # interactive (-NoExit) — where the process is already elevated.
       - name: Run @admin E2E suite (this runner is elevated)
         shell: pwsh
-        run: |
-          # Quote '@admin': in PowerShell a bare @admin is the splatting operator on an (undefined)
-          # variable $admin, so the tag expands to nothing and Playwright selects zero tests —
-          # which this step's own fail-on-zero guard then reports as an uncovered de-elevation path.
-          npx playwright test --grep '@admin' --workers=1 --reporter=list,json
-          $testsFailed = $LASTEXITCODE -ne 0
-          # A run that selected NOTHING must fail. Playwright exits 0 on an empty selection, so
-          # exit code alone cannot tell "all @admin specs passed" from "no @admin spec ran" — and
-          # SC-008 measures EXECUTED > 0, not exit 0. A green bar bought by an empty selection is
-          # precisely the proof-that-cannot-fail this feature abolishes.
-          if (-not (Test-Path admin-report.json)) { throw 'No @admin JSON report was produced.' }
-          $stats = (Get-Content admin-report.json -Raw | ConvertFrom-Json).stats
-          $executed = $stats.expected + $stats.unexpected + $stats.flaky
-          Write-Host "@admin executed=$executed (expected=$($stats.expected) unexpected=$($stats.unexpected) flaky=$($stats.flaky) skipped=$($stats.skipped))"
-          if ($executed -lt 1) {
-            throw "No @admin test EXECUTED ($($stats.skipped) skipped). This runner is elevated, so an @admin spec that skips or is grep-excluded means the de-elevation path is unverified — the hole 019 FR-013a closes."
-          }
-          if ($testsFailed) { throw 'The @admin E2E suite failed.' }
+        run: ./scripts/ci-run-admin-e2e.ps1
       - name: Upload @admin traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
