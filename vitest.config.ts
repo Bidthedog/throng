@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
@@ -50,6 +52,11 @@ const esbuild = {
 // run. Both suites still passed, because a race that needs load to appear does not
 // appear every time; that is precisely what makes silently-dropped serialization
 // worth fixing rather than living with.
+//
+// Do not split the OS-free files into a parallel project. Tried and measured on a hosted runner
+// (2026-11-01, gate run 41325776233): 121 such files summed 343 s at four workers against 30 s
+// serial, the SQLite-backed ones up to 100x slower, and their phase took longer than they cost
+// serially, with a 100 ms service-bound test failing under the load.
 const osSerial = {
   fileParallelism: false,
   pool: 'forks',
@@ -83,6 +90,35 @@ const osSerial = {
   hookTimeout: 60_000,
 } as const;
 
+const TD_TAGS = ['critical-path', 'regression', 'benched', 'slow-ok', 'contract', 'integration', 'e2e'].map(
+  (name) => ({ name }),
+);
+
+/*
+ * Unit files that must keep a module registry of their own.
+ *
+ * The `unit` project shares one module registry per worker (`isolate: false`): a file no longer
+ * re-imports the codebase it tests, and import was ~70% of the layer's wall-clock. That is only safe
+ * for a file that leaves modules and globals as it found them. A file that mocks a module, stubs a
+ * global or spies on an export changes what the NEXT file in the same worker imports — measured: a
+ * `vi.mock('yaml')` leaked into another file's markdown render and failed it.
+ *
+ * So those files are found by reading them, here, on every run — not listed by hand — and run in
+ * `unit-isolated` with the default per-file isolation. A new mocking file is routed automatically.
+ */
+const UNIT_GLOB_ROOTS = ['core', 'daemon', 'ipc-contract', 'persistence', 'platform-windows', 'ui'].map(
+  (p) => `packages/${p}/tests/unit`,
+);
+const NEEDS_OWN_REGISTRY = /\bvi\.(mock|doMock|unmock|doUnmock|stubGlobal|stubEnv|resetModules|spyOn)\(/;
+const isolatedUnitFiles = UNIT_GLOB_ROOTS.flatMap((dir) => {
+  const abs = fileURLToPath(new URL(`./${dir}/`, import.meta.url));
+  if (!existsSync(abs)) return [];
+  return readdirSync(abs, { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.test.ts'))
+    .filter((f) => NEEDS_OWN_REGISTRY.test(readFileSync(join(abs, f), 'utf8')))
+    .map((f) => `${dir}/${f.replace(/\\/g, '/')}`);
+});
+
 export default defineConfig({
   resolve: { alias },
   esbuild,
@@ -91,6 +127,9 @@ export default defineConfig({
     // folder (created here when a layer is run directly, or inherited from the
     // top-level wrapper). Runs once, before any worker is forked.
     globalSetup: ['./scripts/vitest-global-setup.mjs'],
+    // The test-discipline tags `td` filters on (`.test-discipline/adapters.json`). Vitest refuses a
+    // `--tags-filter` naming an undeclared tag, even when no test carries it yet.
+    tags: TD_TAGS,
     projects: [
       {
         resolve: { alias },
@@ -98,7 +137,13 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['packages/**/tests/unit/**/*.test.ts'],
+          exclude: [...isolatedUnitFiles, '**/node_modules/**'],
           environment: 'node',
+          // One module registry per worker; see `isolatedUnitFiles` for what is excluded and why.
+          // Threads rather than forks: measured faster here, and with forks three files that pass
+          // isolated failed on state another file left behind.
+          pool: 'threads',
+          isolate: false,
           /*
            * 15 s, STATED rather than inherited — #355's fix, applied to the layer that never got it.
            *
@@ -130,6 +175,17 @@ export default defineConfig({
         resolve: { alias },
         esbuild,
         test: {
+          // The unit files that mock modules or stub globals, each in its own registry as before.
+          name: 'unit-isolated',
+          include: isolatedUnitFiles.length > 0 ? isolatedUnitFiles : ['no-isolated-unit-files'],
+          environment: 'node',
+          testTimeout: 15_000,
+        },
+      },
+      {
+        resolve: { alias },
+        esbuild,
+        test: {
           // The component layer: a renderer component rendered into a DOM and asked
           // what it produces — markup, computed style, focus movement inside it,
           // keyboard handling, accessibility attributes. No application, no window,
@@ -147,6 +203,10 @@ export default defineConfig({
           name: 'component',
           include: ['packages/**/tests/component/**/*.test.ts'],
           environment: 'jsdom',
+          // vmThreads reuses one jsdom-capable worker per thread and runs each file in a fresh VM
+          // context, instead of building the environment per file: setting up jsdom was ~half of
+          // this layer's time. Measured locally, same tree: 416 s on the default pool, 156 s here.
+          pool: 'vmThreads',
           setupFiles: ['./packages/ui/tests/component/setup.ts'],
           /*
            * 15 s, STATED rather than inherited (#355).
