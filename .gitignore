@@ -53,3 +53,7 @@ packages/ui/tests/.tsc-notice-guard/
 
 # speckit-autopilot run state (ledger, brief, todo lists) — local to one run, never source.
 .claude/.speckit-autopilot/
+/.test-discipline/*
+!/.test-discipline/adapters.json
+!/.test-discipline/budgets.json
+!/.test-discipline/td/
