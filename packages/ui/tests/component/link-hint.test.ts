@@ -79,12 +79,8 @@ describe('LinkHint — shown on a plain click (FR-165)', () => {
     expect(Number.parseFloat(el.style.top)).toBeGreaterThanOrEqual(0);
   });
 
-  it('none where that kind is disabled (FR-165f) — the caller simply never calls showLinkHint', () => {
-    // FR-165f is a property of the CALLER (T271 wires the plain-click paths), not of this component:
-    // with nothing shown, nothing renders — the same first assertion above, restated for the record.
-    mount();
-    expect(screen.queryByTestId('link-hint')).toBeNull();
-  });
+  // DELETED: 'none where that kind is disabled (FR-165f)' — it restated 'renders nothing until a hint
+  // is shown' (FR-165f is the CALLER's, T271).
 });
 
 describe('LinkHint — never on hover, Ctrl+click or drag (FR-165e)', () => {
@@ -148,23 +144,10 @@ describe('LinkHint — what hides it (FR-165d)', () => {
     expect(screen.queryByTestId('link-hint')).toBeNull();
   });
 
-  it('a second hint replaces without ever showing two, which is FR-166’s hide-the-first half', () => {
-    mount();
-    act(() => showLinkHint({ text: 'first', anchor: ANCHOR }, 60_000));
-    act(() => showLinkHint({ text: 'second', anchor: ANCHOR }, 60_000));
-    expect(screen.getAllByTestId('link-hint')).toHaveLength(1);
-  });
-
-  it('does NOT hide while output streams and scrolls a terminal — no wheel, no scroll key, no Ctrl', () => {
-    mount();
-    act(() => showLinkHint({ text: 'x', anchor: ANCHOR }, 60_000));
-    // Simulate a terminal auto-scrolling its viewport on output: a native 'scroll' event on some
-    // element, never a 'wheel' and never a keydown. The hint must still be up.
-    act(() => {
-      fireEvent.scroll(document.createElement('div'));
-    });
-    expect(screen.queryByTestId('link-hint')).not.toBeNull();
-  });
+  // DELETED: 'a second hint replaces without ever showing two' (the FR-166 test above asserts the
+  // same count) and 'does NOT hide while output streams and scrolls a terminal' (it scrolls a
+  // DETACHED node, which the capture listener never sees; the attached-viewport test below is the
+  // real one).
 
   /*
    * Review round four, terminal I4 / editor L2 — FR-165d names THREE user scrolls: "wheel,

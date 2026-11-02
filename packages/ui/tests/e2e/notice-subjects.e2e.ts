@@ -172,36 +172,12 @@ test.beforeEach(async () => {
  * The panel side's equivalent wiring — a daemon name adjustment reaching a notice — is
  * `panel-name-unique.e2e.ts`, which is where the `panelName.claim` round trip belongs.
  */
-test('a file failure names the file, not "this item"', { tag: ['@extended', '@failure'] }, async () => {
-  const win = shared.win;
-  const root = seedRoot('throng-subj-file-', ['alpha.txt', 'beta.txt']);
-  try {
-    await settle(win);
-    await createProject(win, 'SubjFile', root);
-    const tree = win.getByTestId('file-explorer-tree');
-    await expect(tree.getByText('alpha.txt', { exact: true }).first()).toBeVisible({
-      timeout: 15_000,
-    });
-
-    await renameInTree(win, 'alpha.txt', 'beta.txt');
-    await expect(explorerNotices(win)).toHaveCount(1, { timeout: 15_000 });
-    const notice = explorerNotices(win).first();
-
-    // RED — the notice names the file it is about.
-    await expect(notice, 'the notice does not name the file').toContainText('alpha.txt');
-    // …in the HEADING, above the message (FR-020), not smuggled into the prose.
-    const heading = notice.locator('.notice__title');
-    await expect(heading).toContainText('alpha.txt');
-    // The message states what went wrong and nothing else (FR-023): it must not restate the name.
-    await expect(notice.locator('.notice__message')).toHaveText(
-      'A file or folder with this name already exists.',
-    );
-    // FR-058's generic stand-in is gone from the whole notice, not merely from the message.
-    expect(await notice.innerText()).not.toMatch(/this item|the item|this file/i);
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MERGED (test-suite audit, pass 2): "a file failure names the file, not 'this item'" raised the identical
+ * alpha.txt -> beta.txt collision as the long-subject test below, so its heading, message and
+ * no-"this item" assertions now run on that test's first notice. The real-filesystem collision it
+ * kept (the message is produced by the OS, not composed by throng) is still exercised there.
+ */
 
 /**
  * FR-022 — a panel is named `Project — Tab — Panel`, wherever it is named at all.
@@ -302,6 +278,18 @@ test('a long subject is truncated and nothing else about the notice changes', { 
 
     await renameInTree(win, 'alpha.txt', 'beta.txt');
     await expect(explorerNotices(win)).toHaveCount(1, { timeout: 15_000 });
+
+    // FR-025 (merged from "a file failure names the file, not 'this item'"): the first notice names
+    // the file, in the HEADING above the message (FR-020), and the message states only what went wrong.
+    const first = explorerNotices(win).first();
+    await expect(first.locator('.notice__title'), 'the heading does not name the file').toContainText('alpha.txt');
+    await expect(first.locator('.notice__message'), 'the message restates the name or changed (FR-023)').toHaveText(
+      'A file or folder with this name already exists.',
+    );
+    // FR-058's generic stand-in is gone from the whole notice, not merely from the message.
+    expect(await first.innerText(), 'a generic stand-in survives in the notice').not.toMatch(
+      /this item|the item|this file/i,
+    );
     await renameInTree(win, long, 'beta.txt');
     // STACKING is unchanged: two failures about two files are two notices, even though their
     // messages are identical. Before subjects existed these two WERE one event.

@@ -22,9 +22,10 @@
  * row rather than passing on an absence. The `not.toContainElement` assertion is the one that could
  * pass vacuously, which is why it first proves the subsection AND the row are both present.
  */
-import { render, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { createElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
@@ -35,28 +36,44 @@ const GROUP = 'Editor';
 /** The 040 status-bar subsection — the heading this setting must NOT end up under. */
 const STATUS_BAR_ID = `settings-subgroup-${GROUP}-Status Bar`;
 
-function mount(): void {
-  render(
-    createElement(
-      NotificationProvider,
-      null,
+/*
+ * One mount for every test here: all six only READ the rendered form, and a SettingsTab is the costly
+ * part. It is mounted on its own root, outside Testing Library's auto-cleanup, which would otherwise
+ * unmount a tree rendered once in `beforeAll` after the first test.
+ */
+let container: HTMLElement;
+let root: Root;
+
+beforeAll(() => {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root.render(
       createElement(
-        ResetNoticeProvider,
+        NotificationProvider,
         null,
-        createElement(ConfirmProvider, null, createElement(SettingsTab, {})),
+        createElement(
+          ResetNoticeProvider,
+          null,
+          createElement(ConfirmProvider, null, createElement(SettingsTab, {})),
+        ),
       ),
-    ),
-  );
-}
+    );
+  });
+});
+
+afterAll(() => {
+  act(() => root.unmount());
+  container.remove();
+});
 
 describe('the gutter toggle is reachable from the visual editor (FR-053)', () => {
   it('renders a row for editor.showGutter', () => {
-    mount();
     expect(screen.getByTestId(`setting-${KEY}`)).toBeInTheDocument();
   });
 
   it('renders it as an editable checkbox, ticked, because the gutter ships on', () => {
-    mount();
     const control = screen.getByTestId(`control-${KEY}`) as HTMLInputElement;
     expect(control.tagName).toBe('INPUT');
     expect(control.type).toBe('checkbox');
@@ -66,7 +83,6 @@ describe('the gutter toggle is reachable from the visual editor (FR-053)', () =>
   });
 
   it('shows the hand-written label beside it', () => {
-    mount();
     const row = screen.getByTestId(`setting-${KEY}`);
     // The row carries prose a person wrote, not the key echoed back at the reader.
     expect(row.textContent ?? '').toMatch(/gutter/i);
@@ -76,14 +92,12 @@ describe('the gutter toggle is reachable from the visual editor (FR-053)', () =>
 
 describe('it sits under Editor, loose — not in the Status Bar subsection (FR-040)', () => {
   it('renders inside the Editor group section', () => {
-    mount();
     expect(screen.getByTestId(`settings-group-${GROUP}`)).toContainElement(
       screen.getByTestId(`setting-${KEY}`),
     );
   });
 
   it('is not inside the Status Bar subsection', () => {
-    mount();
     // Both halves proved present FIRST, so this cannot pass because either one failed to render —
     // which is how a containment assertion goes vacuous.
     const subsection = screen.getByTestId(STATUS_BAR_ID);
@@ -92,7 +106,6 @@ describe('it sits under Editor, loose — not in the Status Bar subsection (FR-0
   });
 
   it('renders ABOVE the Status Bar subsection, with the other ungrouped Editor rows (FR-036b)', () => {
-    mount();
     const row = screen.getByTestId(`setting-${KEY}`);
     const position = row.compareDocumentPosition(screen.getByTestId(STATUS_BAR_ID));
     expect(

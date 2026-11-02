@@ -112,7 +112,7 @@ function mount() {
   // REAL resolver so the label is the one production would draw for `main.rs`.
   setPanelLanguage(PANEL, resolveLanguage({ fileName: 'main.rs' }));
 
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     // ANTI-VACUITY CONTROL: drop this `ServicesProvider` element and `useServices` throws inside
     // `LanguagePicker`, failing all four tests. See the file header.
@@ -164,16 +164,8 @@ describe('opening it', () => {
 });
 
 describe('dismissing it', () => {
-  it('closes when you click anywhere off the strip', async () => {
-    // MIGRATED FROM `editor-language-override.e2e.ts:349`, first half.
-    const { user } = mount();
-    await openPicker(user);
-
-    await user.click(screen.getByTestId('outside'));
-
-    await waitFor(() => expect(picker()).toBeNull());
-  });
-
+  // "Closes when you click anywhere off the strip" (migrated from `editor-language-override.e2e.ts:349`, first half)
+  // is the outside click in the slot-release test below, which asserts the picker is gone.
   it('still TOGGLES from its own button — it does not close and instantly reopen', async () => {
     /*
      * MIGRATED FROM the same test's second half, and the reason the listener watches the whole STRIP
@@ -264,7 +256,7 @@ describe('dismissing it', () => {
 describe('opening the picker does not dim the window', () => {
   it('draws no scrim while the picker is open', async () => {
     setPanelLanguage(PANEL, resolveLanguage({ fileName: 'main.rs' }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       createElement(
         ServicesProvider,
@@ -301,31 +293,18 @@ describe('the language picker holds the shared overlay slot (FR-071)', () => {
     act(() => release?.());
   });
 
-  it('takes the slot when it opens, so the NEXT overlay can displace it', async () => {
+  it('takes the slot when it opens and releases it when it closes on its own, leaving nothing to dismiss', async () => {
     /*
-     * The other half, and the one that makes the first half non-trivial: a picker that closed on any
-     * claim but never claimed anything itself would pass the test above while leaving the slot empty
-     * — so the overlay after it would find nothing to dismiss and the two would stack, which is the
-     * original defect.
+     * Taking the slot is the half that makes the claim test above non-trivial: a picker that closed on any
+     * claim but never claimed anything itself would leave the slot empty, so the overlay after it would find
+     * nothing to dismiss and the two would stack, which is the original defect. A picker that kept the slot
+     * after closing would make the NEXT overlay dismiss a corpse — and `transient-overlay.test.ts` proves a
+     * stale release is a no-op, not that anyone releases.
      */
     const { user } = mount();
-    expect(transientOverlayOpen(), 'nothing should hold the slot before the picker opens').toBe(
-      false,
-    );
-
+    expect(transientOverlayOpen(), 'nothing should hold the slot before the picker opens').toBe(false);
     await openPicker(user);
-
-    expect(transientOverlayOpen()).toBe(true);
-  });
-
-  it('releases the slot when it closes on its own, leaving nothing to dismiss', async () => {
-    /*
-     * A picker that kept the slot after closing would make the NEXT overlay dismiss a corpse — and
-     * `transient-overlay.test.ts` proves a stale release is a no-op, not that anyone releases.
-     */
-    const { user } = mount();
-    await openPicker(user);
-    expect(transientOverlayOpen()).toBe(true);
+    expect(transientOverlayOpen(), 'opening takes the slot').toBe(true);
 
     await user.click(screen.getByTestId('outside'));
 

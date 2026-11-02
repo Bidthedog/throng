@@ -113,7 +113,7 @@ function snapshot(db: ThrongDatabase): { projects: unknown[]; categories: unknow
 }
 
 describe('migration v9 (project categories)', () => {
-  it('is version 9, and a fresh database reaches it with the new table and column', () => {
+  it('is version 9, and a fresh database reaches it with the new table and column', { tags: ['regression'] }, () => {
     expect(MIGRATION_V9_VERSION).toBe(9);
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
@@ -140,7 +140,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('makes "one default per owner" a database fact: a second default insert fails', () => {
+  it('makes "one default per owner" a database fact: a second default insert fails', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -159,7 +159,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('upgrades a v8 store: all three projects land in "In Progress" in their old position order', () => {
+  it('upgrades a v8 store: all three projects land in "In Progress" in their old position order', { tags: ['regression'] }, () => {
     const db = openV8Db();
     try {
       // Positions deliberately NOT in creation or id order, so an order rebuilt from anything but
@@ -190,7 +190,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('seeds one default per owner, and each owner\'s projects join their own owner\'s default', () => {
+  it('seeds one default per owner, and each owner\'s projects join their own owner\'s default', { tags: ['regression'] }, () => {
     const db = openV8Db();
     try {
       seedV8Project(db, 'alice', 'a1', 0);
@@ -209,7 +209,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('is idempotent: re-running v9 leaves every row identical (constitution, migrations)', () => {
+  it('is idempotent: re-running v9 leaves every row identical (constitution, migrations)', { tags: ['regression'] }, () => {
     const db = openV8Db();
     try {
       seedV8Project(db, 'alice', 'p-a', 2);
@@ -232,7 +232,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('completes an interrupted backfill: a default row exists, projects still carry \'\'', () => {
+  it('completes an interrupted backfill: a default row exists, projects still carry \'\'', { tags: ['regression'] }, () => {
     const path = freshDbPath();
     let db = openV8Db(path);
     seedV8Project(db, 'alice', 'p-a', 2);
@@ -262,7 +262,7 @@ describe('migration v9 (project categories)', () => {
     }
   });
 
-  it('heals a store stamped 9 with the table and projects.category_id missing, through reconcileSchema', () => {
+  it('heals a store stamped 9 with the table and projects.category_id missing, through reconcileSchema', { tags: ['regression'] }, () => {
     const path = freshDbPath();
     let db = openV8Db(path);
     seedV8Project(db, 'alice', 'p-a', 0);

@@ -149,7 +149,7 @@ test('a TAB-indented file keeps taking TABS, though the setting says spaces (FR-
  * MOVED / DELETED (034 FR-045) — two tests.
  *
  * 1. `Tab and Shift+Tab indent and outdent EVERY line a selection touches` → the component layer.
- * The replacements are `packages/ui/tests/component/editor-command-semantics.test.ts` (14 tests).
+ * The replacements are `packages/ui/tests/unit/editor-command-semantics.test.ts` (14 tests).
  * That file drives the REAL commands from `commands.ts` over a REAL `EditorState` — real facets,
  * the real `columnBlockField`, real transactions — behind a two-member stand-in for the view,
  * because every one of these commands touches only `view.state` and `view.dispatch`.

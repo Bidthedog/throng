@@ -28,7 +28,7 @@ describe('preview.goToHeading (Ctrl+G) opens the pop-down', () => {
   it('opens on the focused preview, listing its headings', async () => {
     m = await mountMarkdownPreview(DOC);
     await screen.findByTestId(`preview-markdown-${m.id}`, {}, COLD);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await press(user, 'g');
 
@@ -44,7 +44,7 @@ describe('preview.goToHeading (Ctrl+G) opens the pop-down', () => {
   it('says "No headings" for a document with none', async () => {
     m = await mountMarkdownPreview(NO_HEADINGS_DOC);
     await screen.findByTestId(`preview-markdown-${m.id}`, {}, COLD);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await press(user, 'g');
 
@@ -83,7 +83,7 @@ describe('jumping records history exactly as a followed same-document heading (0
   it('Enter on a row calls preview.navigate with the heading intent, and closes the pop-down', async () => {
     m = await mountMarkdownPreview(DOC);
     await screen.findByTestId(`preview-markdown-${m.id}`, {}, COLD);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'g');
     await screen.findByTestId(`heading-outline-${m.id}`);
 
@@ -106,7 +106,7 @@ describe('jumping records history exactly as a followed same-document heading (0
   it('clicking a row does the same', async () => {
     m = await mountMarkdownPreview(DOC);
     await screen.findByTestId(`preview-markdown-${m.id}`, {}, COLD);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'g');
     await screen.findByTestId(`heading-outline-${m.id}`);
 

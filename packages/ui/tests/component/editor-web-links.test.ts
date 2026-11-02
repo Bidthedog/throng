@@ -1,5 +1,4 @@
 import { waitFor } from '@testing-library/react';
-import { EditorSelection } from '@codemirror/state';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LinkResolution, LinkResolutionRequest } from '@throng/core';
 import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
@@ -32,7 +31,6 @@ const DOC = [
 const IN_URL = DOC.indexOf(URL_TEXT) + 4;
 const JS_AT = DOC.indexOf('javascript:') + 3;
 const MAILTO_AT = DOC.indexOf('mailto:') + 3;
-const PLAIN_AT = DOC.indexOf('plain words') + 2;
 
 let harness: EditorHarness | undefined;
 
@@ -151,42 +149,12 @@ describe('G11 — Ctrl+click over a web link opens it ONCE in the system browser
   });
 });
 
-describe('G12 — a plain click over a web link keeps its editor meaning (FR-103)', () => {
-  it('opens nothing', async () => {
-    const m = await mount();
-    m.pointAt(IN_URL);
-    m.mouse('mousedown');
-    m.mouse('mouseup');
-    await new Promise((r) => setTimeout(r, 20));
-    expect(m.openExternal).not.toHaveBeenCalled();
-  });
-});
-
-describe('G14 — a Ctrl+click that DRAGS from a web link selects (FR-103, FR-040)', () => {
-  it('selects from the press to the release, and opens nothing', async () => {
-    const m = await mount();
-    m.pointAt(IN_URL);
-    m.mouse('mousedown', { ctrlKey: true });
-    m.pointAt(IN_URL + 8);
-    m.mouse('mouseup', { ctrlKey: true, clientX: 200 });
-
-    await new Promise((r) => setTimeout(r, 20));
-    expect(m.openExternal, 'a drag is a selection, never an activation').not.toHaveBeenCalled();
-    const main = m.h.view().state.selection.main;
-    expect({ from: main.from, to: main.to }).toEqual({ from: IN_URL, to: IN_URL + 8 });
-  });
-});
-
-describe('G4 — a Ctrl+click off any link is not claimed as a follow (FR-041)', () => {
-  it('opens nothing, with a web link on the same document', async () => {
-    const m = await mount();
-    m.pointAt(PLAIN_AT);
-    m.mouse('mousedown', { ctrlKey: true });
-    m.mouse('mouseup', { ctrlKey: true });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(m.openExternal).not.toHaveBeenCalled();
-  });
-});
+/*
+ * MOVED DOWN (pass 2): the G12 plain click, G14 Ctrl+drag and G4 Ctrl+click-off-link cases are pure
+ * handler decisions, proved in `editor-link-gestures.test.ts` (G2 `is not claimed and follows
+ * nothing`, G3 `selects from the press to the release instead of following`, G4 `does not claim
+ * the press when the position is outside every link`). The web-link wiring stays proved by G11 below.
+ */
 
 describe('G13 / G9 — the Open Link chord over a web link (FR-103, FR-044)', () => {
   it('one caret inside the web link, no selection: the chord opens it', async () => {
@@ -198,21 +166,9 @@ describe('G13 / G9 — the Open Link chord over a web link (FR-103, FR-044)', ()
     expect(m.openExternal).toHaveBeenCalledWith(URL_TEXT);
   });
 
-  it('with a selection, the chord is not claimed — Ctrl+Enter inserts a line as today (G9)', async () => {
-    const m = await mount();
-    m.h.view().dispatch({ selection: { anchor: IN_URL, head: IN_URL + 3 } });
-    expect(followLinkInPanel('p-ed', m.h.view())).toBe(false);
-    expect(m.openExternal).not.toHaveBeenCalled();
-  });
-
-  it('with two carets, the chord is not claimed (G9)', async () => {
-    const m = await mount();
-    m.h.view().dispatch({
-      selection: EditorSelection.create([EditorSelection.cursor(IN_URL), EditorSelection.cursor(PLAIN_AT)]),
-    });
-    expect(followLinkInPanel('p-ed', m.h.view())).toBe(false);
-    expect(m.openExternal).not.toHaveBeenCalled();
-  });
+  // MOVED DOWN (pass 2): "with a selection / two carets the chord is not claimed" (G9) is the guard
+  // in `followLinkAtCaret`, proved in `editor-link-chord.test.ts` ("a SELECTION claims nothing",
+  // "TWO carets claim nothing").
 });
 
 describe('contract §6.1 — a web span is never sent to main to be resolved', () => {

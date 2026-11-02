@@ -94,20 +94,8 @@ afterEach(() => {
 });
 
 describe('a written settings document is adopted before the watcher says anything', () => {
-  it('shows the written value with NO onChange broadcast at all', async () => {
-    mount();
-    await waitFor(() => expect(screen.getByTestId('autosave')).toHaveTextContent('false'));
-
-    await writeConfig(
-      { kind: 'settings' },
-      JSON.stringify({
-        ...DEFAULT_APP_SETTINGS,
-        editor: { ...DEFAULT_APP_SETTINGS.editor, autoSave: true },
-      }),
-    );
-
-    await waitFor(() => expect(screen.getByTestId('autosave')).toHaveTextContent('true'));
-  });
+  // DELETED (pass 2): "shows the written value with NO onChange broadcast at all" — the next test
+  // waits for the autosave readout to turn 'true' after the same first write, with no broadcast.
 
   it('so a SECOND edit composes from the first, which is the #50 defect itself', async () => {
     /*

@@ -82,38 +82,15 @@ describe('the popover names a panel the way the panel names itself', () => {
     expect(names([terminalPanel()])).toEqual(['ISSUE MANAGEMENT']);
   });
 
-  it('falls back to the flavour while the program has announced nothing', () => {
-    // Not a bug — the flavour is the secondary source, and it names the panel in the gap before
-    // any announcement and for ever if none comes.
-    expect(names([terminalPanel()])).toEqual(['Windows PowerShell']);
-  });
-
-  it("gives an editor its FILE name, not the panel placeholder", () => {
-    setEditorState('p-ed', { filePath: 'C:/proj/src/composition-root.ts' });
-
-    expect(names([editorPanel()])).toEqual(['composition-root']);
-  });
+  // DELETED: 'falls back to the flavour', 'gives an editor its FILE name', 'names every panel in a
+  // tab, in layout order' and 'still bounds the name' — the #304 block below asserts the flavour
+  // fallback and the editor file stem for a two-panel tab in layout order (`rows([...])`), and
+  // 'bounds the NAME only' asserts the 400-character title is cut to MAX.
 
   it("uses the panel's persisted path before the live editor has registered", () => {
     // `setPanelType(editor, …)` writes the path onto the panel synchronously while the live state
     // registers a beat later, so a freshly opened editor has only the config to name itself from.
     expect(names([editorPanel()])).toEqual(['composition-root']);
-  });
-
-  it('names every panel in a tab, in layout order', () => {
-    setTerminalTitle('p-term', 'ISSUE MANAGEMENT');
-    setEditorState('p-ed', { filePath: 'C:/proj/src/composition-root.ts' });
-
-    expect(names([terminalPanel(), editorPanel()])).toEqual([
-      'ISSUE MANAGEMENT',
-      'composition-root',
-    ]);
-  });
-
-  it('still bounds the name, so a 400-character window title cannot widen the surface', () => {
-    setTerminalTitle('p-term', 'x'.repeat(400));
-
-    expect(names([terminalPanel()])[0]).toHaveLength(MAX);
   });
 });
 

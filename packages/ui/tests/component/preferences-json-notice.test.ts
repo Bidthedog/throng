@@ -49,7 +49,7 @@ function mount(problems: readonly JsonProblem[], refusals = 0) {
       ...handlers,
     }),
   );
-  return { ...handlers, user: userEvent.setup() };
+  return { ...handlers, user: userEvent.setup({ delay: null }) };
 }
 
 describe('a valid document (FR-017)', () => {

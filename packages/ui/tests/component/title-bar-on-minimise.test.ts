@@ -36,14 +36,7 @@ describe('onMinimise', () => {
     expect(bridge.minimize).not.toHaveBeenCalled();
   });
 
-  it('leaves every caller without it on the OS minimise', () => {
-    const bridge = stubWindowBridge();
-    render(createElement(TitleBar, { identity: 'throng' }));
-
-    fireEvent.click(screen.getByTestId('window-min'));
-
-    expect(bridge.minimize).toHaveBeenCalledTimes(1);
-  });
+  // A caller without `onMinimise` stays on the OS minimise: `title-bar.test.ts` "relays each control to the preload bridge".
 
   it('does not touch Maximise or Close', () => {
     const bridge = stubWindowBridge();

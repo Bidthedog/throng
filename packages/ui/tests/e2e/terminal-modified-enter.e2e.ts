@@ -1,12 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { release } from 'node:os';
-import { skipIfHostCannotDeliverReencodedKeys } from './helpers/console-caps.js';
-import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test, expect, type Page } from '@playwright/test';
-import { FILE_OP_TIMEOUT_MS, TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp } from './harness.js';
+import { basename } from 'node:path';
+import { test, expect } from '@playwright/test';
+import { TERMINAL_OUTPUT_TIMEOUT_MS, createProject, firstPanelId, runApp } from './harness.js';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 /**
@@ -27,8 +23,6 @@ import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
  * child's attempt to turn win32-input off once a console shell has enabled it. The kitty case uses
  * cmd only because it is always present and can host `node`.
  */
-
-const KITTY = fileURLToPath(new URL('./fixtures/kitty-echo.mjs', import.meta.url)); // enables kitty
 
 // Both cases leave a shell sitting at a prompt with the project root as its CWD, which locks the
 // directory on Windows until the process has fully gone. Removing it inline would race that lock and
@@ -140,32 +134,7 @@ function conhostChildren(parentPid: number): number[] {
   }
 }
 
-/** Open a terminal on `cmd`, run `node <fixture>`, and return the terminal locator + a byte reader. */
-async function runFixture(win: Page, root: string, ready: string) {
-  await createProject(win, 'ME', root);
-  const pid = await firstPanelId(win);
-  await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
-  await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  const term = win.getByTestId(`terminal-${pid}`);
-  await expect(term).toBeVisible();
-  await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS }); // prompt up before typing
-  await term.click();
-  await win.keyboard.type('node k.mjs', { delay: 40 });
-  await win.keyboard.press('Enter');
-  await expect(term).toContainText(ready, { timeout: 30000 });
-  await term.click();
-  return term;
-}
-
-async function readCapture(root: string): Promise<string> {
-  const capFile = join(root, 'cap.bin');
-  await expect.poll(() => readFileSync(capFile).toString('latin1'), { timeout: FILE_OP_TIMEOUT_MS }).toContain('d');
-  return readFileSync(capFile).toString('latin1');
-}
-const between = (got: string, l: string, r: string) => got.slice(got.indexOf(l) + 1, got.indexOf(r));
-
-test('at a PowerShell prompt, a modified Enter inserts a soft line break and the cursor advances', { tag: ['@extended', '@terminal'] }, async () => {
+test('at a PowerShell prompt, a modified Enter inserts a soft line break and the cursor advances', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.skip(
     !(await negotiatesWin32Input()),
     "this console host never requests win32-input-mode, so there is no key event to send and throng correctly falls back to a bare LF — the cursor advance it buys is not available here to observe (seen on windows-2022 / build 20348)",
@@ -196,41 +165,7 @@ test('at a PowerShell prompt, a modified Enter inserts a soft line break and the
   });
 });
 
-test('a program that negotiates the kitty protocol gets a distinct CSI-u sequence', { tag: ['@extended', '@terminal'] }, async () => {
-  skipIfHostCannotDeliverReencodedKeys();
-  const root = tmpDir('throng-me-kitty-');
-  copyFileSync(KITTY, join(root, 'k.mjs'));
-  await runApp(async (_app, win) => {
-    await runFixture(win, root, 'KITTY_ECHO_READY');
-    // a <Shift+Enter> b <Ctrl+Enter> c <Enter> d
-    await win.keyboard.type('a', { delay: 40 });
-    await win.keyboard.press('Shift+Enter');
-    await win.keyboard.type('b', { delay: 40 });
-    await win.keyboard.press('Control+Enter');
-    await win.keyboard.type('c', { delay: 40 });
-    await win.keyboard.press('Enter');
-    await win.keyboard.type('d', { delay: 40 });
-
-    const got = await readCapture(root);
-    /*
-     * The whole capture and throng's own decisions go in the failure message, because the slice
-     * alone says `Received: ""` and cannot distinguish "throng sent nothing" from "throng sent the
-     * legacy byte and the slice missed it". Diagnostics record, per panel, the last keypresses with
-     * what throng decided and the exact bytes it transmitted.
-     */
-    const diag = await win.evaluate(() => {
-      const f = (window as unknown as { __throngTerminalDiagnostics?: () => unknown })
-        .__throngTerminalDiagnostics;
-      try {
-        return f ? JSON.stringify(f()) : 'no diagnostics helper on window';
-      } catch (e) {
-        return `diagnostics threw: ${String(e)}`;
-      }
-    });
-    const detail = `build=${release()} capture=${JSON.stringify(got)} diagnostics=${String(diag).slice(0, 4000)}`;
-
-    expect(between(got, 'a', 'b'), detail).toBe('\x1b[13;2u'); // Shift+Enter — distinct, NO trailing \r
-    expect(between(got, 'b', 'c')).toBe('\x1b[13;5u'); // Ctrl+Enter — distinct
-    expect(between(got, 'c', 'd')).toBe('\r'); // plain Enter — unchanged
-  });
-});
+// MERGED into terminal-kitty-editing-keys.e2e.ts ('Ctrl+Backspace and a modified Enter reach a kitty program ...'):
+// the kitty case (Shift+Enter / Ctrl+Enter as distinct CSI-u, plain Enter unchanged) used the same fixture, shell and
+// capture file, and that file shares one app. This file keeps its own app per test: the PowerShell case is a real
+// win32-input probe plus a PSReadLine render.

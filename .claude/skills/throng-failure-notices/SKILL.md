@@ -58,7 +58,7 @@ Tests that pin the behaviour. The pure model is proven at the unit layer, in
 about it but which elements to emit. The renderer's own: `notice-models`, `notice-suppression`,
 `notice-subject-required` (the FR-058 source guard), `exit-notice-severity`, `exit-store`,
 `file-changed-notice`, `panel-retry`. E2E: `daemon-death-notice`, `notice-stacking`,
-`notice-consolidation`, `notice-logging`, `notice-a11y`, `panel-failure-banner`, `failure-copy`,
+`notice-consolidation`, `notice-logging`, `panel-failure-banner`, `failure-copy`,
 `notification-prefs`.
 
 ## Rules

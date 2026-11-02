@@ -39,7 +39,7 @@
  * a section or a control is ABSENT after a search — and in a tree that rendered nothing, every one
  * of them passes. Four tests at this layer on this branch could not fail for exactly that reason.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -77,7 +77,7 @@ function mount(): { user: ReturnType<typeof userEvent.setup> } {
       createElement(ConfirmProvider, null, createElement(ThemesTab)),
     ),
   );
-  return { user: userEvent.setup() };
+  return { user: userEvent.setup({ delay: null }) };
 }
 
 /**
@@ -111,7 +111,7 @@ function mountLive(): { user: ReturnType<typeof userEvent.setup>; written: strin
       createElement(ConfigProvider, null, createElement(ConfirmProvider, null, createElement(ThemesTab))),
     ),
   );
-  return { user: userEvent.setup(), written };
+  return { user: userEvent.setup({ delay: null }), written };
 }
 
 const search = (): HTMLElement => screen.getByTestId('themes-search');
@@ -127,74 +127,48 @@ const iconCells = (): HTMLElement[] =>
  * its own registry, and that the empty and clear states exist at all.
  *
  * The filter is debounced by 150 ms, which is why every search below is awaited.
+ *
+ * The icon section is PART of the theme, so it is part of the search. It used to sit outside the
+ * filtered groups and simply ignore the query: search for "terminal" and you got two matching colour
+ * rows and, still, the entire icon grid underneath. A section that ignores the filter is worse than
+ * one with no filter at all, because it looks like a result.
  */
-describe('the Themes typeahead (FR-021, SC-024)', () => {
-  it('narrows the token rows to the ones that match', async () => {
+describe('the Themes typeahead, icon section included (FR-021, SC-024)', () => {
+  it('narrows the token rows, says so when nothing matches, drops or narrows the icon section, and restores everything when cleared', async () => {
+    // Chained from six tests on six mounts (audit, component-2a); each step ends clearing the box.
     const { user } = mount();
-    // Both present first — the control that stops the absence assertion below being vacuous.
+    // Both present first — the control that stops the absence assertions below being vacuous.
     expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
     expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible();
+    // The icon section renders the whole grid when no search is active.
+    expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
+    const unfiltered = iconCells().length;
+    expect(unfiltered).toBeGreaterThan(5);
 
+    // Narrows the token rows to the ones that match.
     await user.type(search(), 'terminal');
-
     await waitFor(() => expect(screen.queryByTestId('theme-row-colours.editorBg')).toBeNull());
     expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
-  });
+    await user.click(screen.getByTestId('themes-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible());
 
-  it('says so when nothing matches, rather than showing a blank tab', async () => {
-    const { user } = mount();
-    expect(screen.getByTestId('theme-row-colours.terminalBg')).toBeVisible();
-
+    // Says so when nothing matches, rather than showing a blank tab — and the icon section
+    // DISAPPEARS entirely for a query that matches no icon and no colour.
     await user.type(search(), 'zzzznothing');
-
     await waitFor(() => expect(screen.getByTestId('themes-search-empty')).toBeVisible());
     expect(screen.queryByTestId('theme-row-colours.terminalBg')).toBeNull();
-  });
+    expect(screen.queryByTestId('settings-group-Icons')).toBeNull();
 
-  it('brings every row back when the search is cleared', async () => {
-    const { user } = mount();
-    await user.type(search(), 'zzzznothing');
-    await waitFor(() => expect(screen.getByTestId('themes-search-empty')).toBeVisible());
-
-    // The clear CANCELS the pending filter rather than queueing behind it, so it is immediate.
+    // Brings every row back when the search is cleared. The clear CANCELS the pending filter rather
+    // than queueing behind it, so it is immediate.
     await user.click(screen.getByTestId('themes-search-clear'));
-
     expect(search()).toHaveValue('');
     await waitFor(() => expect(screen.getByTestId('theme-row-colours.editorBg')).toBeVisible());
     expect(screen.queryByTestId('themes-search-empty')).toBeNull();
-  });
-});
-
-/**
- * The icon section is PART of the theme, so it is part of the search.
- *
- * It used to sit outside the filtered groups and simply ignore the query: search for "terminal" and
- * you got two matching colour rows and, still, the entire icon grid underneath. A section that
- * ignores the filter is worse than one with no filter at all, because it looks like a result.
- */
-describe('the icon section is not exempt from the search (FR-021)', () => {
-  it('renders the whole grid when no search is active', () => {
-    mount();
-    expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
-    expect(iconCells().length).toBeGreaterThan(5);
-  });
-
-  it('DISAPPEARS entirely for a query that matches no icon and no colour', async () => {
-    const { user } = mount();
     expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
 
-    await user.type(search(), 'zzzznothing');
-
-    await waitFor(() => expect(screen.queryByTestId('settings-group-Icons')).toBeNull());
-    expect(screen.getByTestId('themes-search-empty')).toBeVisible();
-  });
-
-  it('keeps the section but NARROWS the grid for a query that matches an icon token', async () => {
-    const { user } = mount();
-    const unfiltered = iconCells().length;
-
+    // Keeps the icon section but NARROWS the grid for a query that matches an icon token.
     await user.type(search(), 'destroy');
-
     await waitFor(() => expect(screen.queryByTestId('icon-cell-rename')).toBeNull());
     expect(screen.getByTestId('settings-group-Icons')).toBeVisible();
     expect(screen.getByTestId('icon-cell-destroy')).toBeVisible();
@@ -226,7 +200,8 @@ describe('the icon section is not exempt from the search (FR-021)', () => {
  * control, and nonsense on screen. Which is what a DOM can look at.
  */
 describe('every typography role offers every attribute', () => {
-  it('renders a control for each of the seven attributes of a non-editor role', () => {
+  it('renders all seven attributes of a non-editor role, has RETIRED the dialog role, and sheds casing and decoration on the EDITOR role', () => {
+    // Merged from three read-only tests on one mount (audit, component-2a).
     mount();
     for (const key of [
       'typography.tab.italic',
@@ -239,17 +214,12 @@ describe('every typography role offers every attribute', () => {
     ]) {
       expect(screen.getByTestId(`control-${key}`), `${key} is not editable`).toBeVisible();
     }
-  });
 
-  it('has RETIRED the dialog role — the preferences window inherits the base application font', () => {
-    mount();
-    // Preceded by a positive on the same registry, so "absent" cannot mean "nothing rendered".
-    expect(screen.getByTestId('control-typography.tab.family')).toBeVisible();
+    // The dialog role is retired — the preferences window inherits the base application font. The
+    // positive on the same registry (`typography.tab.family`, above) makes "absent" mean something.
     expect(screen.queryByTestId('control-typography.dialog.family')).toBeNull();
-  });
 
-  it('sheds casing and decoration on the EDITOR role — source text is not prose', () => {
-    mount();
+    // Source text is not prose.
     expect(screen.getByTestId('control-typography.editor.sizePx')).toBeVisible();
     for (const gone of ['case', 'italic', 'underline', 'strikethrough']) {
       expect(
@@ -386,6 +356,8 @@ function mountWithPack(
     overrides?: Record<string, { glyph: string }>;
     /** Glyphs the ACTIVE THEME defines itself — rung 3, distinct from throng's defaults at rung 4. */
     themeGlyphs?: Record<string, string>;
+    /** Packs the loader reported as unavailable (`error` set) — listed, not dropped. */
+    brokenPacks?: Array<{ name: string; error: string }>;
   } = {},
 ) {
   const written: string[] = [];
@@ -411,7 +383,10 @@ function mountWithPack(
           // An ARRAY, not a map. `toPackMap` (config-store.tsx:59) returns {} for anything that
           // is not one, so a map here reaches the grid as no packs at all — which is exactly how
           // the first draft of this failed, with overrides working and the dropdown empty.
-          iconPacks: [MY_PACK],
+          iconPacks: [
+            MY_PACK,
+            ...(options.brokenPacks ?? []).map((p) => ({ name: p.name, tokens: {}, assets: {}, error: p.error })),
+          ],
         }),
       onChange: () => () => {},
       write: (_id: unknown, json: string) => {
@@ -427,7 +402,7 @@ function mountWithPack(
       createElement(ConfigProvider, null, createElement(ConfirmProvider, null, createElement(ThemesTab))),
     ),
   );
-  return { user: userEvent.setup(), written };
+  return { user: userEvent.setup({ delay: null }), written };
 }
 
 /**
@@ -489,16 +464,28 @@ describe('a user pack re-skins its tokens and falls back for the rest (migrated 
     expect(cellText('terminal')).not.toBe(THRONG_THEME.icons.terminal);
   });
 
-  it('shows throng’s glyphs again when the pack is deselected', async () => {
-    // The migrated tests only ever selected. A pack that could not be removed would pass both.
-    mountWithPack({ iconPack: PACK_NAME });
-    await waitFor(() => expect(cellText('folder')).toBe('FF'));
-    cleanup();
+  it('lists a BROKEN pack as disabled with its reason as the title, beside the good one (FR-004a / SC-011)', async () => {
+    /*
+     * Migrated from icon-packs.e2e.ts "a BROKEN pack degrades". The loader half (an unparseable manifest
+     * is reported unavailable WITH a reason, and does not stop the others) is
+     * `unit/icon-pack-service.test.ts` "reports a pack with an unparseable manifest as unavailable" and
+     * "one broken pack does not stop the others loading". This is the half between: the picker keeps the
+     * option, disables it and explains it. Mutation: dropping `disabled` or `title` in icon-section.tsx.
+     */
+    const reason = 'pack.json could not be parsed';
+    mountWithPack({ brokenPacks: [{ name: 'brokenpack', error: reason }] });
 
-    mountWithPack();
-    await screen.findByTestId('icon-cell-folder');
-    expect(cellText('folder')).not.toBe('FF');
+    const option = await screen.findByTestId('icon-pack-option-brokenpack');
+    expect(option, 'the broken pack is not selectable').toBeDisabled();
+    expect(option, 'the reason travels with the option').toHaveAttribute('title', reason);
+    const good = [...screen.getByTestId('icon-pack-select').querySelectorAll('option')].find(
+      (o) => o.textContent?.trim() === PACK_NAME,
+    );
+    expect(good, 'a good pack still loads beside it').not.toBeDisabled();
   });
+
+  // DELETED: "shows throng's glyphs again when the pack is deselected" — its second half (no pack selected, `folder`
+  // is not the pack's 'FF') is asserted by "an override applies with NO pack selected too" below.
 });
 
 describe('a per-token override wins over the pack (migrated from icon-packs.e2e.ts:66)', () => {
@@ -630,7 +617,7 @@ function mountThemeStore(
       createElement(ConfigProvider, null, createElement(ConfirmProvider, null, createElement(ThemesTab))),
     ),
   );
-  return { user: userEvent.setup(), calls, listedNow: () => [...listed] };
+  return { user: userEvent.setup({ delay: null }), calls, listedNow: () => [...listed] };
 }
 
 const themeOptions = (): string[] =>
@@ -686,6 +673,28 @@ describe('Restore All is confirmed before it destroys anything (FR-004)', () => 
     // …and it says nothing was changed, which is the fact a user needs in order to decide what to do
     // next. A bare "failed" leaves them wondering whether half the themes moved.
     expect(strip.textContent).toMatch(/No theme was changed/i);
+  });
+});
+
+describe('a built-in name stays reserved when its theme is gone from disk (FR-007)', () => {
+  /*
+   * Migrated from preferences-themes.e2e.ts "US3: a DELETED built-in name is still reserved". The tab
+   * must hand the dialog `reservedThemeNames()`, not the themes it listed from disk. The listing here
+   * has no Debian, so the reserved set alone has to refuse it.
+   * Mutation: `reserved` = the listed themes only (themes-tab.tsx:185) turns this red.
+   */
+  it('refuses a built-in name the listing no longer contains', async () => {
+    const { user } = mountThemeStore({ themes: ['throng', 'MyCustom'] });
+    await waitFor(() => expect(themeOptions()).toContain('MyCustom'));
+    expect(themeOptions(), 'Debian is absent from the listing').not.toContain('Debian');
+
+    await user.click(screen.getByTestId('theme-clone'));
+    const input = await screen.findByTestId('theme-name-input');
+    await user.clear(input);
+    await user.type(input, 'Debian');
+
+    expect(screen.getByTestId('theme-name-error'), 'refused as reserved').toBeVisible();
+    expect(screen.getByTestId('theme-name-confirm')).toBeDisabled();
   });
 });
 

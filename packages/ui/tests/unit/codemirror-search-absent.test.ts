@@ -89,6 +89,16 @@ function searchImports(src: string): string[] {
 describe('FR-028 — no second go-to-line or find surface is installed', () => {
   const uiFiles = walk(UI_SRC);
   const coreFiles = walk(CORE_SRC);
+  // Two tests sweep the same ui files; read and parse each once.
+  const importsCache = new Map<string, string[]>();
+  const importsOf = (file: string): string[] => {
+    let found = importsCache.get(file);
+    if (!found) {
+      found = searchImports(readFileSync(file, 'utf8'));
+      importsCache.set(file, found);
+    }
+    return found;
+  };
 
   it('reads both source trees at all — the sweep below is not vacuous', () => {
     expect(uiFiles.length).toBeGreaterThan(100);
@@ -103,7 +113,7 @@ describe('FR-028 — no second go-to-line or find surface is installed', () => {
       [CORE_SRC, coreFiles],
     ] as const) {
       for (const file of files) {
-        const bindings = searchImports(readFileSync(file, 'utf8'));
+        const bindings = importsOf(file);
         if (bindings.length === 0) continue;
         const rel = file.slice(root.length).replace(/\\/g, '/');
         const allowed = ALLOWED.get(rel) ?? [];
@@ -133,7 +143,7 @@ describe('FR-028 — no second go-to-line or find surface is installed', () => {
     // the package directly again, that is a second definition of the match vocabulary appearing —
     // FR-039/FR-040's exact failure — and it fails here before it fails anywhere visible.
     const reaching = uiFiles
-      .filter((f) => searchImports(readFileSync(f, 'utf8')).length > 0)
+      .filter((f) => importsOf(f).length > 0)
       .map((f) => f.slice(UI_SRC.length).replace(/\\/g, '/'));
     expect(reaching).toEqual([]);
   });

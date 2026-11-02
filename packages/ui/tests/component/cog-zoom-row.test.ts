@@ -34,7 +34,7 @@ afterEach(() => {
 
 async function openCog(): Promise<{ bridge: ZoomBridge; user: ReturnType<typeof userEvent.setup> }> {
   const bridge = stubZoomBridge();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     createElement(ContextMenuProvider, {
       children: createElement(TitleBar, { identity: 'throng', showCog: true }),
@@ -45,18 +45,8 @@ async function openCog(): Promise<{ bridge: ZoomBridge; user: ReturnType<typeof 
 }
 
 describe('046 iterate round 2 (T154, FR-113) — the Zoom row is gone from the cog menu', () => {
-  it('draws none of the three zoom controls', async () => {
-    await openCog();
-    expect(screen.queryByTestId('cog-menu-zoom-out')).toBeNull();
-    expect(screen.queryByTestId('cog-menu-zoom-reset')).toBeNull();
-    expect(screen.queryByTestId('cog-menu-zoom-in')).toBeNull();
-  });
-
-  it('draws no "Zoom" row at all, and no viewState-sectioned item', async () => {
-    await openCog();
-    expect(screen.queryByTestId('menu-item-Zoom')).toBeNull();
-    expect(screen.queryByText('Zoom')).toBeNull();
-  });
+  // DELETED (pass 2): "draws none of the three zoom controls" and "draws no Zoom row": the exact
+  // six-menuitem list below leaves no room for a zoom control or a Zoom row.
 
   it('never calls the zoom bridge just by opening the menu', async () => {
     const { bridge } = await openCog();

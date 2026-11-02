@@ -329,7 +329,10 @@ describe('D2 twice — New Editor, close, follow the same link again (corpus pro
   }
 
   /** Follow, wait for the ONE new panel it opens, read its caret once it has settled, then close it. */
-  async function followAndClose(follow: () => unknown): Promise<{ line: number; column: number }> {
+  async function followAndClose(
+    follow: () => unknown,
+    expected: { line: number; column: number },
+  ): Promise<{ line: number; column: number }> {
     const before = openedIds();
     await follow();
     let id = '';
@@ -339,8 +342,16 @@ describe('D2 twice — New Editor, close, follow the same link again (corpus pro
       id = added[0]!;
       expect(viewOf(id).state.doc.toString()).toBe(c.text);
     });
-    // Long enough for the reveal (it polls every 25 ms) AND for anything that would move the caret after it.
-    await new Promise((r) => setTimeout(r, 300));
+    // Wait for the reveal (it polls every 25 ms) to land the caret, then hold a window of three reveal
+    // polls to see that nothing moves it afterwards. A caret that never arrives is returned as it is
+    // after the bound, so the assertion on `first`/`second` names what it was instead.
+    const sameAs = (c: { line: number; column: number }): boolean =>
+      c.line === expected.line && c.column === expected.column;
+    const deadline = Date.now() + 3000;
+    while (!sameAs(caret(viewOf(id))) && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    await new Promise((r) => setTimeout(r, 75));
     const at = caret(viewOf(id));
     act(() => {
       disposeEditor(id);
@@ -365,8 +376,8 @@ describe('D2 twice — New Editor, close, follow the same link again (corpus pro
           h.view().dispatch({ selection: { anchor: at } });
           expect(followLinkInPanel('p-ed', h.view()), 'the chord claims the link').toBe(true);
         });
-      const first = await followAndClose(chord);
-      const second = await followAndClose(chord);
+      const first = await followAndClose(chord, expected);
+      const second = await followAndClose(chord, expected);
       expect({ first, second }).toEqual({ first: expected, second: expected });
     });
 
@@ -381,8 +392,8 @@ describe('D2 twice — New Editor, close, follow the same link again (corpus pro
           deps: captured.terminal!.linkActions as LinkFollowDeps,
         });
       };
-      const first = await followAndClose(viaTerminal);
-      const second = await followAndClose(viaTerminal);
+      const first = await followAndClose(viaTerminal, expected);
+      const second = await followAndClose(viaTerminal, expected);
       expect({ first, second }).toEqual({ first: expected, second: expected });
     });
   }

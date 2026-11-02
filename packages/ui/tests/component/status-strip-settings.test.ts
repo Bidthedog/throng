@@ -122,26 +122,12 @@ afterEach(() => {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('editor.statusBar.showCursorPosition governs line and column, and nothing else (FR-030)', () => {
-  it('removes line and column and leaves the counts', async () => {
-    const h = panelWith({ statusBar: { showCursorPosition: false } });
-    await settled(h);
-
-    // The counts arrive through the real 200 ms-debounced store, so they are waited for rather than
-    // poked in — a bar reading the wrong document key fails here.
-    await waitFor(() => expect(readout('chars')).not.toBeNull());
-    expect(readout('words')).not.toBeNull();
-    expect(readout('line'), 'line is off').toBeNull();
-    expect(readout('column'), 'column is off').toBeNull();
-  });
-
-  it('reads the preference even when the settings channel provably loses (#345)', async () => {
+  it('removes line and column and leaves the counts — even when the settings channel provably loses (#345)', async () => {
     /*
-     * The regression test for the wait above, and the reason it is a separate `it` rather than a
-     * delay added to the one before it: the delay has to be big enough to outlast the 200 ms metrics
-     * debounce, which is what accidentally covered this file for as long as it did. At
-     * `configDelayTicks: 20` the same assertions fail without `settled()` — measured — and pass with
-     * it. Left as the ordinary path, the delay would just make every run of this file slower for a
-     * guarantee one test can hold.
+     * At `configDelayTicks: 20` the assertions fail without `settled()` — measured — and pass with it. This is
+     * the harsher form of the plain case (no delay), which it therefore subsumes. The counts arrive through the
+     * real 200 ms-debounced store, so they are waited for rather than poked in — a bar reading the wrong
+     * document key fails here.
      */
     const h = panelWith({ statusBar: { showCursorPosition: false } }, 20);
     await settled(h);

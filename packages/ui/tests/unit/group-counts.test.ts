@@ -7,7 +7,7 @@
  * FoldKey — built from the descriptor's own strings, never from a test id (research R4).
  */
 import { describe, expect, it } from 'vitest';
-import type { FieldDescriptor } from '@throng/core';
+import { SETTINGS_METADATA, type FieldDescriptor } from '@throng/core';
 import { foldKey, groupCounts, groupDescriptors } from '../../src/renderer/preferences/group-descriptors.js';
 
 const d = (key: string, group: string, subgroup?: string, subsection?: string): FieldDescriptor =>
@@ -60,5 +60,18 @@ describe('groupCounts', () => {
 
   it('returns an empty map for no groups', () => {
     expect(groupCounts([]).size).toBe(0);
+  });
+
+  it('counts every row of the shipped registry under its section (moved down from the Settings tab)', () => {
+    // The rendered count is `formatGrouped(count)` — digit grouping is asserted in
+    // preferences-fold-heading.test.ts; what is left is that the number fed to it is right.
+    const real = groupCounts(groupDescriptors(SETTINGS_METADATA));
+    const sections = [...new Set(SETTINGS_METADATA.map((x) => x.group))];
+    expect(sections.length).toBeGreaterThan(1);
+    for (const section of sections) {
+      expect(real.get(foldKey(section)), section).toBe(
+        SETTINGS_METADATA.filter((x) => x.group === section).length,
+      );
+    }
   });
 });

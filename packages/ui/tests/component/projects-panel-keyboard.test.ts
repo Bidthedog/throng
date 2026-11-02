@@ -365,7 +365,7 @@ describe('the roving tabindex recovers when its row disappears (R finding 6)', (
 describe('a nested control keeps its OWN Enter — the tree does not hijack it into a switch (R finding 2)', () => {
   it('Enter on the Edit button opens the edit form, not a switch', async () => {
     const { switched } = await mount();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     rowEl('project-edit-p1').focus();
 
     await user.keyboard('{Enter}');
@@ -376,7 +376,7 @@ describe('a nested control keeps its OWN Enter — the tree does not hijack it i
 
   it('Enter on the Remove button opens the confirm dialog, not a switch', async () => {
     const { switched } = await mount();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     rowEl('project-delete-p1').focus();
 
     await user.keyboard('{Enter}');

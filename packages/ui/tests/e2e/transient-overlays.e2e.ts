@@ -194,7 +194,7 @@ const PAIRS: Array<[Overlay, Overlay]> = [
 ];
 
 for (const [a, b] of PAIRS) {
-  test(`opening ${NAME[b]} while ${NAME[a]} is open leaves exactly one overlay (SC-017, FR-071)`, { tag: ['@extended', '@window'] }, async () => {
+  test(`opening ${NAME[b]} while ${NAME[a]} is open leaves exactly one overlay (SC-017, FR-071)`, { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
     const win = shared.win;
     await prepare();
 
@@ -238,53 +238,10 @@ for (const [a, b] of PAIRS) {
  * Each triple therefore asserts the survivor's input holds the caret, AND keeps the "exactly one
  * overlay" assertion alongside it, so a repair that simply refuses to open the third cannot pass.
  */
-const TRIPLES: Array<[Overlay, Overlay, Overlay]> = [
-  // The reported one, in the order it was reported. It stays because a reported defect's
-  // reproduction is the deliverable, not scaffolding — it is the thing that stops the bug coming
-  // back, and it is the one ordering a user actually performed.
-  ['quickopen', 'tabpicker', 'gotoline'],
-  // Two further orderings were here, added because the report said "regardless of which order I
-  // press them in". They are the same one-slot claim with a longer run-up, and the arbitrary-
-  // incumbent case they were reaching for is proved directly at unit
-  // (`transient-overlay.test.ts` — "claiming while another holds the slot calls the incumbent's
-  // dismiss exactly once"). Removed by 034 FR-045; the reported ordering is kept.
-];
-
-for (const [a, b, c] of TRIPLES) {
-  test(`${NAME[a]}, then ${NAME[b]}, then ${NAME[c]} — the third holds the caret (FR-071, FR-072)`, { tag: ['@extended', '@window'] }, async () => {
-    const win = shared.win;
-    await prepare();
-
-    // The first two are a PRECONDITION, not the subject: `openOverlay` waits for each to be both on
-    // screen and holding the caret, so a failure below cannot be blamed on an unsettled predecessor.
-    await openOverlay(a);
-    await expect.poll(() => overlaysOnScreen(win)).toEqual([a]);
-    await openOverlay(b);
-    await expect.poll(() => overlaysOnScreen(win)).toEqual([b]);
-
-    await win.keyboard.press(CHORD[c]);
-    await expect(win.getByTestId(c), `${NAME[c]} did not open on ${CHORD[c]}`).toBeVisible();
-
-    /*
-     * THE assertion of this block. Ordered after visibility and before the set, because it is the
-     * one that is expected to fail: the third overlay IS drawn, and the set IS exactly one — what
-     * the user lost is the keyboard, so the first thing they typed went into the document behind.
-     */
-    await expect(
-      win.getByTestId(`${c}-input`),
-      `${NAME[c]} is the third overlay and opened without the caret`,
-    ).toBeFocused();
-
-    // Still exactly one overlay, and one scrim: a "fix" that closed the third rather than focusing
-    // it would satisfy the assertion above by making it unreachable, and must not pass here.
-    await expect
-      .poll(() => overlaysOnScreen(win), {
-        message: `${NAME[c]} did not replace ${NAME[b]} — both are on screen`,
-      })
-      .toEqual([c]);
-    await expect(win.locator('.modal-overlay')).toHaveCount(1);
-  });
-}
+// DELETED (pass 2): "Quick Open, then the tab picker, then Go To Line - the third holds the caret". It was the
+// only triple left, and the four-overlay chain below ends with the same three steps (Quick Open, tab picker,
+// Go To Line) and asserts the same things at the end: the third holds the caret, the set is exactly one overlay,
+// and one scrim. The chain is a superset (it starts one overlay earlier, on the language picker).
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────
  * The fourth overlay — one directional case (D1)
@@ -333,7 +290,7 @@ for (const [a, b, c] of TRIPLES) {
  * does not run out. It starts on the language picker because that is the one overlay opened by
  * pointer rather than chord, so the chain also crosses that boundary.
  */
-test('four overlays in a chain — the last one still holds the caret (FR-071, FR-072)', { tag: ['@extended', '@window'] }, async () => {
+test('four overlays in a chain — the last one still holds the caret (FR-071, FR-072)', { tag: ['@extended', '@window', '@reserve:focus'] }, async () => {
   const win = shared.win;
   await prepare();
 

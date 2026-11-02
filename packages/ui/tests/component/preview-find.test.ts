@@ -201,7 +201,7 @@ const press = (user: ReturnType<typeof userEvent.setup>, key: string): Promise<v
 describe('Find mounted on a preview panel (T025)', () => {
   it('Ctrl+F opens the bar on a focused preview, with focus in the query (FR-007)', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     expect(screen.queryByTestId(`find-bar-${mounted.id}`)).toBeNull();
 
     await press(user, 'f');
@@ -215,7 +215,7 @@ describe('Find mounted on a preview panel (T025)', () => {
 
   it('typing paints matches and shows the editor bar\'s N of M count format', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'f');
     await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
 
@@ -226,7 +226,7 @@ describe('Find mounted on a preview panel (T025)', () => {
 
   it('find next/previous step and wrap through the store', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'f');
     await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
     await user.type(screen.getByTestId('find-input'), 'foo');
@@ -240,7 +240,7 @@ describe('Find mounted on a preview panel (T025)', () => {
 
   it('re-render re-runs the active query from the body\'s onDrawn (FR-005)', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'f');
     await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
     await user.type(screen.getByTestId('find-input'), 'foo');
@@ -266,7 +266,7 @@ describe('Find mounted on a preview panel (T025)', () => {
 
   it('closing clears the session and hides the bar', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'f');
     await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
     await user.type(screen.getByTestId('find-input'), 'foo');
@@ -289,7 +289,7 @@ describe('Find mounted on a preview panel (T025)', () => {
 describe('a preview navigated onto ANOTHER file closes its find bar (MT-02)', () => {
   it('closes the bar, and re-opening it starts with an empty query', async () => {
     const mounted = await mountPreviewWithFind();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await press(user, 'f');
     await waitFor(() => expect(screen.getByTestId(`find-bar-${mounted.id}`)).toBeVisible());
     await user.type(screen.getByTestId('find-input'), 'foo');
@@ -694,7 +694,7 @@ describe('the match-frame layer on a mounted preview panel (FR-074, R16)', () =>
     } as DOMRect);
     try {
       const mounted = await mountPreviewWithFind();
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       const layer = screen.getByTestId(`preview-match-frames-${mounted.id}`);
       const body = screen.getByTestId(`preview-body-${mounted.id}`);
 

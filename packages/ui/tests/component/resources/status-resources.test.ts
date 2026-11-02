@@ -9,8 +9,6 @@
  * "mounts before the daemon indicator" test fails; every other test mounts the item directly, so they
  * would not notice — that test is the one that pins the mount.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +22,7 @@ import { StatusResources } from '../../../src/renderer/resources/status-resource
 import { __resetMonitorStore } from '../../../src/renderer/resources/monitor-store.js';
 import type { ThrongBridge } from '../../../src/renderer/state/bridge.js';
 import { installResourcesBridge } from '../helpers/resource-bridge.js';
-import { GIB, MACHINE, MIB, metrics, summary } from '../helpers/resource-fixtures.js';
+import { GIB, MACHINE, metrics, summary } from '../helpers/resource-fixtures.js';
 
 /* ── layout stubs: jsdom measures nothing ─────────────────────────────────────────────────────── */
 
@@ -225,16 +223,8 @@ describe('status-bar resource item (055 US1)', () => {
     expect(screen.getByTestId('status-resources-gpu')).not.toHaveAttribute('data-band');
   });
 
-  it('colours the bands from the theme tokens warning and danger, with no literal colour (FR-046, FR-067)', async () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
-    const rules = css.match(/\.status-resources[^{]*\{[^}]*\}/g) ?? [];
-    expect(rules.length).toBeGreaterThan(0);
-    const warning = rules.find((r) => r.includes("data-band='warning'") || r.includes('data-band="warning"'));
-    const critical = rules.find((r) => r.includes("data-band='critical'") || r.includes('data-band="critical"'));
-    expect(warning).toContain('var(--throng-colour-warning)');
-    expect(critical).toContain('var(--throng-colour-danger)');
-    for (const rule of rules) expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
-  });
+  // The band colours from the theme tokens warning and danger (FR-046, FR-067) are a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
 
   it('drops GPU, then I/O, then memory, then CPU as the bar narrows, and restores them in reverse (FR-045)', async () => {
     installResourcesBridge(summary(TOTAL));
@@ -295,17 +285,8 @@ describe('status-bar resource item (055 US1)', () => {
     expect(screen.getByTestId('status-resources-cpu')).toHaveTextContent(`${formatGrouped(40)}%`);
   });
 
-  it('is named for assistive technology; its hover title is the popover (themeable icon control, FR-115)', async () => {
-    installResourcesBridge(summary(metrics({ cpu: 1, memory: 100 * MIB })));
-    mountItem();
-    await waitFor(() => expect(ids()).toHaveLength(4));
-    const item = screen.getByTestId('status-resources');
-    expect(item.tagName).toBe('BUTTON');
-    expect(item).toHaveAttribute('aria-label', 'Open Resource Monitor');
-    expect(item).not.toHaveAttribute('title');
-    openPopover();
-    expect(screen.getByTestId('status-popover-action')).toHaveTextContent(/^Click to open the Resource Monitor/);
-  });
+  // Named for assistive technology, no native title, popover as the hover title (themeable icon control, FR-115):
+  // `status-popover.test.ts` "has no title on the item ... named Open Resource Monitor" and "first line names the click action".
 });
 
 /* ── the real bar: the mount, and the daemon indicator beside it ─────────────────────────────── */

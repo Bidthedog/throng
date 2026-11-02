@@ -613,3 +613,24 @@ describe('the Unload settings in the registry after FR-111 (046 US4)', () => {
     expect(description).toMatch(/end/i);
   });
 });
+
+/**
+ * The Attention settings the preferences form draws (057 US4 — FR-061, FR-081, FR-082, FR-090).
+ * Re-layered from `packages/ui/tests/component/preferences-attention.test.ts` (audit, component-2a):
+ * the guard that the registry holds what the form is asserted to draw never needed a DOM.
+ */
+describe('the Attention settings in the registry (057 US4)', () => {
+  const attentionGroup = SETTINGS_METADATA.filter((d) => d.group === 'Attention');
+  const terminalAttention = SETTINGS_METADATA.filter((d) => d.group === 'Terminal' && d.subgroup === 'Attention');
+
+  it('keeps the clear delay and the taskbar badge in Attention (FR-108/FR-111: the notification choices moved to Notifications)', () => {
+    expect(attentionGroup.map((d) => d.key).sort()).toEqual(['attention.clearDelayMs', 'attention.taskbarBadge']);
+  });
+
+  it('holds the master switch, seven signals and the quiet time under Terminal › Attention', () => {
+    const keys = terminalAttention.map((d) => d.key);
+    expect(keys.filter((k) => k.startsWith('terminals.attention.signals.'))).toHaveLength(7);
+    expect(keys).toContain('terminals.attention.enabled');
+    expect(keys).toContain('terminals.attention.quietSeconds');
+  });
+});

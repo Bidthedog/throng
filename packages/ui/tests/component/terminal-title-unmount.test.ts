@@ -43,16 +43,12 @@ const PANEL = 'p-term-1';
 const TITLE = 'ISSUE MANAGEMENT';
 
 /**
- * Every built-in flavour (`core/src/terminal/defaults.ts`), plus a user-defined one.
- *
- * The defect is flavour-independent — one `clearTerminalTitle` in one cleanup — but the way it
- * SHOWS is not, which is why it went unnoticed. `cmd` re-announces its title at every prompt, so a
- * remount repopulates the header almost immediately and the loss is invisible; a program that
- * announces once has nothing to repeat and the header stays wrong for the life of the session.
- * Asserting the invariant per flavour is what stops a future flavour-specific title path
- * reintroducing it for only some of them.
+ * One flavour. The defect is flavour-independent — one `clearTerminalTitle` in one cleanup — and
+ * `useTerminal` hands `flavourId` only to the attach call (`use-terminal.ts`: the `attach` options and
+ * the effect's dependency list); there is no title branch on it, so the other four built-in flavours
+ * and a user-defined one exercised the same code.
  */
-const FLAVOURS = ['windows-powershell', 'pwsh', 'cmd', 'git-bash', 'my-custom-shell'] as const;
+const FLAVOURS = ['cmd'] as const;
 
 function noop(): void {
   /* nothing */

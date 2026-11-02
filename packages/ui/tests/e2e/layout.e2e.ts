@@ -58,19 +58,12 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-// Collapse/expand is animated (grid columns transition), and the layout is pinned
+// The layout is pinned
 // so the bottom status bar (fixed height) and the right pane (fixed width, on the
 // right) stay in place during window resizes — no smear/ghost.
 
-test('the side panes animate (grid-template-columns transition)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  await runApp(async (_app, win) => {
-    await expect(win.getByTestId('throng-shell')).toBeVisible();
-    const transition = await win.evaluate(
-      () => getComputedStyle(document.querySelector('[data-testid="throng-shell"]')!).transitionProperty,
-    );
-    expect(transition).toContain('grid-template-columns');
-  });
-});
+// MOVED DOWN: "the side panes animate (grid-template-columns transition)" - unit/side-pane-transition-css.test.ts
+// asserts `.throng-shell` declares `transition: grid-template-columns` (red-proven against theme.css).
 
 test('status bar is fixed-height at the bottom and the right pane is pinned right, across resizes', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await runApp(async (app: ElectronApplication, win) => {

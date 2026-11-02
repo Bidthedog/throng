@@ -68,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -180,17 +181,6 @@ describe('a real edit still reports and still arms the save', () => {
     expect(h.dispatched.length, 'the existing report path must be untouched').toBe(before + 1);
   });
 
-  it('still arms the auto-save timer', async () => {
-    const h = await mounted();
-    const spy = vi.spyOn(globalThis, 'setTimeout');
-
-    act(() => {
-      h.view().dispatch({ changes: { from: 0, insert: 'X' } });
-    });
-
-    expect(autoSaveTimers(spy)).toHaveLength(1);
-  });
-
   it('still arms it when the settings channel loses its race with the document (#335)', async () => {
     /*
      * The regression test for the flake, and the reason it can be one: `configDelayTicks` pushes
@@ -216,14 +206,10 @@ describe('a real edit still reports and still arms the save', () => {
     ).toHaveLength(1);
   });
 
-  it('holds the requested settings by the time the document is mounted (#335)', async () => {
-    // The precondition itself, asserted directly. Without it the test above could go green for
-    // the wrong reason — a debounce that happened to match, or a default that changed.
-    const h = await mounted(5);
-
-    expect(h.settings().editor.autoSave).toBe(true);
-    expect(h.settings().editor.autoSaveDebounceMs).toBe(AUTO_SAVE_MS);
-  });
+  // DELETED (pass 2): "still arms the auto-save timer" (no delay) and "holds the requested settings"
+  // (#335 precondition). The test above asserts the same single timer at the distinctive
+  // AUTO_SAVE_MS debounce, which it can only see if the requested settings landed, and `mounted()`
+  // already waits on `settingsLoaded()`.
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -293,8 +279,18 @@ async function mountedFiring(settings?: { autoSave?: boolean; absPath?: string |
   return h;
 }
 
-/** Comfortably past the debounce, without being a race if the machine is busy. */
+/** Comfortably past the debounce — on a fake clock, so it costs nothing and cannot race a busy machine. */
 const PAST_FAST_SAVE_MS = FAST_SAVE_MS * 8;
+
+/**
+ * Let the debounce elapse. Called after `mountedFiring()` (whose `waitFor` polling would wait forever on a
+ * fake clock), once the edit has been acknowledged.
+ */
+async function pastTheDebounce(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(PAST_FAST_SAVE_MS);
+  });
+}
 
 /**
  * Acknowledge every edit this view has dispatched, exactly as UI main does.
@@ -364,14 +360,13 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
   it('never fires at all when auto-save is OFF', async () => {
     // The control. Without it, a timer that fired for EVERY document would satisfy the case above.
     const h = await mountedFiring({ autoSave: false });
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
     });
     ackEdits(h, 0);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    await pastTheDebounce();
 
     expect(h.calls.save, 'a disabled setting must write nothing (FR-061)').not.toHaveBeenCalled();
   });
@@ -382,6 +377,7 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
      * pass the first case and write twice here — once for each keystroke, on the user's file.
      */
     const h = await mountedFiring();
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'A' } });
@@ -392,10 +388,9 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
     // Both, including the one the replica buffered behind the first (see `ackEdits`).
     ackEdits(h, ackEdits(h, 0));
 
-    await waitFor(() => expect(h.calls.save).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    // The window elapses once and the save fires — and nothing more is armed afterwards.
+    await pastTheDebounce();
+    await pastTheDebounce();
     expect(h.calls.save, 'the second edit must RE-arm the timer, not add one').toHaveBeenCalledTimes(1);
   });
 
@@ -413,14 +408,13 @@ describe('auto-save writes the edit without Ctrl+S (006 FR-060)', () => {
     const chooseSavePath = vi.fn(() => Promise.resolve(null));
     (Reflect.get(window, 'throng') as { editor: Record<string, unknown> }).editor.chooseSavePath =
       chooseSavePath;
+    vi.useFakeTimers();
 
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'AUTO ' } });
     });
     ackEdits(h, 0);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, PAST_FAST_SAVE_MS));
-    });
+    await pastTheDebounce();
 
     expect(h.calls.save, 'an unpathed document has nowhere confined to go').not.toHaveBeenCalled();
     expect(chooseSavePath, 'and no dialog may appear unasked').not.toHaveBeenCalled();
@@ -553,24 +547,10 @@ describe('opening a file into a panel publishes its counts where the bar looks',
    */
   const OPENED = 'C:/proj/opened.txt';
 
-  it('shows the opened file’s counts on the bar', async () => {
+  it('shows the opened file’s counts on the bar, and follows a SECOND file opened into the same panel', async () => {
     // Mounted UNTITLED, then a file opened into it — the ordinary route, and the one where the
-    // panel's layout config lags the editor state.
-    const h = mountEditor({ panelId: PANEL, doc: { text: '', version: 1, absPath: null } });
-    await waitFor(() => expect(h.view().state.doc.toString()).toBe(''));
-
-    await h.openFile({ absPath: OPENED, text: 'one two three\nfour\n', version: 2 });
-
-    await waitFor(
-      () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('19 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('4 words');
-      },
-      { timeout: 3000 },
-    );
-  });
-
-  it('follows a SECOND file opened into the same panel', async () => {
+    // panel's layout config lags the editor state. (Merged with the first-file case: its counts are
+    // the first waitFor below.)
     /*
      * The other half, and the one a "schedule once at mount" fix would miss: a panel is reused for
      * file after file, and each one is a different document with different counts. A bar still
@@ -581,9 +561,13 @@ describe('opening a file into a panel publishes its counts where the bar looks',
     await waitFor(() => expect(h.view().state.doc.toString()).toBe(''));
 
     await h.openFile({ absPath: OPENED, text: 'one two three\nfour\n', version: 2 });
-    await waitFor(() => expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('19 chars'), {
-      timeout: 3000,
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`), 'the first file’s chars').toHaveTextContent('19 chars');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`), 'the first file’s words').toHaveTextContent('4 words');
+      },
+      { timeout: 3000 },
+    );
 
     await h.openFile({ absPath: 'C:/proj/second.txt', text: 'aa bb\n', version: 3 });
 
@@ -628,11 +612,18 @@ describe('disposing an editor forgets the document it was counting', () => {
   /**
    * Long enough for a schedule armed at teardown to have fired.
    *
-   * A sleep rather than a waited condition, deliberately: the claim is an ABSENCE at a known
-   * deadline (`METRICS_DEBOUNCE_MS` is 200), and there is no event that says "the scan you cancelled
-   * did not happen". Waiting past the deadline is the only honest way to ask.
+   * A fake-clock advance rather than a waited condition, deliberately: the claim is an ABSENCE at a
+   * known deadline (`METRICS_DEBOUNCE_MS` is 200), and there is no event that says "the scan you
+   * cancelled did not happen". Advancing past the deadline is the only honest way to ask, and on a
+   * fake clock it costs nothing. Call it after `vi.useFakeTimers()` (the file's `afterEach` restores
+   * the real clock).
    */
   const PAST_THE_DEBOUNCE = 300;
+  const pastTheMetricsDebounce = async (): Promise<void> => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PAST_THE_DEBOUNCE);
+    });
+  };
 
   afterEach(() => {
     removeEditorState('p-other-view');
@@ -644,14 +635,16 @@ describe('disposing an editor forgets the document it was counting', () => {
     await h.openFile({ absPath: DISPOSED, text: 'one two three\nfour\n', version: 2 });
     await waitFor(() => expect(documentMetrics(DOC_KEY)).not.toBeNull(), { timeout: 3000 });
 
-    // An edit arms a FRESH scan, holding the update alive behind a thunk…
+    // An edit arms a FRESH scan, holding the update alive behind a thunk — on the fake clock, so the
+    // scan is a timer the advance below really reaches (armed on the real clock it would be missed)…
+    vi.useFakeTimers();
     act(() => {
       h.view().dispatch({ changes: { from: 0, insert: 'Z' } });
     });
     // …and the panel is destroyed before it can run.
     disposeEditor(PANEL);
 
-    await new Promise((resolve) => setTimeout(resolve, PAST_THE_DEBOUNCE));
+    await pastTheMetricsDebounce();
 
     expect(
       documentMetrics(DOC_KEY),
@@ -675,9 +668,10 @@ describe('disposing an editor forgets the document it was counting', () => {
 
     // A second view of the SAME document, in another panel that is not going anywhere.
     setEditorState('p-other-view', { filePath: DISPOSED });
+    vi.useFakeTimers();
     disposeEditor(PANEL);
 
-    await new Promise((resolve) => setTimeout(resolve, PAST_THE_DEBOUNCE));
+    await pastTheMetricsDebounce();
 
     expect(
       documentMetrics(DOC_KEY),

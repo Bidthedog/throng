@@ -123,7 +123,7 @@ afterEach(() => {
 
 describe('the untyped placeholder gains a content menu carrying Split alone (FR-015)', () => {
   it('right-clicking inside it opens Split, and Split ▸ Split Down splits that panel', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mountTabGroup();
     await user.pointer({ keys: '[MouseRight]', target: await screen.findByTestId('panel-body-p1') });
 
@@ -148,7 +148,7 @@ describe('the untyped placeholder gains a content menu carrying Split alone (FR-
 
 describe('a DORMANT terminal’s body has a content menu carrying Split (FR-015, T062)', () => {
   it('right-clicking inside the dormant placeholder opens Split, and Split ▸ Split Right splits that panel', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mountTabGroup();
     await screen.findByTestId('panel-body-p1');
     // A terminal panel left dormant (Manual reload mode): typed and dormant in ONE batch, so no xterm ever
@@ -178,7 +178,7 @@ describe('a DORMANT terminal’s body has a content menu carrying Split (FR-015,
 
 describe('the header menu offers Split, reachable and chosen from the keyboard (US2 scenario 2)', () => {
   it('Shift+F10-style menu → arrow to Split → Enter → arrow to Split Left → Enter', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mountTabGroup();
     const handle = await screen.findByTestId('panel-handle-p1');
     // The window dispatcher's menu.open route: a synthetic contextmenu flagged as keyboard-originated.
@@ -213,7 +213,7 @@ describe('the header menu offers Split, reachable and chosen from the keyboard (
   });
 
   it('the header menu’s Split ▸ Split Right gives the same result as the + menu', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mountTabGroup();
     await user.pointer({ keys: '[MouseRight]', target: await screen.findByTestId('panel-handle-p1') });
     await user.click(await screen.findByTestId('menu-item-Split'));
@@ -228,7 +228,7 @@ describe('the header menu offers Split, reachable and chosen from the keyboard (
 
 describe('an editor’s content menu offers Split and splits that editor (FR-015)', () => {
   it('right-click inside the document → Split ▸ Split Right', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const holder: { ws: ReturnType<typeof useWorkspace> | null } = { ws: null };
     const EditorProbe = (): null => {
       holder.ws = useWorkspace();

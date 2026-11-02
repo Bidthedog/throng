@@ -232,8 +232,10 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
     await app.evaluate(({ clipboard }) => {
       const w = globalThis as unknown as { __clipWrites?: string[] };
       w.__clipWrites = [];
-      const orig = clipboard.writeText.bind(clipboard);
-      clipboard.writeText = (text: string, type?: 'selection' | 'clipboard') => {
+      // Electron's writeText takes an optional clipboard type the evaluate's typing does not carry.
+      const cb = clipboard as unknown as { writeText: (text: string, type?: 'selection' | 'clipboard') => void };
+      const orig = cb.writeText.bind(cb);
+      cb.writeText = (text, type) => {
         w.__clipWrites!.push(text);
         return orig(text, type);
       };

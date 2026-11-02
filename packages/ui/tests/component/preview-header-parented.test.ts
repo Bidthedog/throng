@@ -209,21 +209,8 @@ describe('the title names the file, parented or not (054 FR-005a, superseding 04
   });
 });
 
-describe('a long file name is shortened in its NAME part only (FR-032)', () => {
-  it('marks the name truncated and keeps " - Preview" whole', async () => {
-    const { id, push } = await mountPreview();
-    push(update({ revision: 2, content: null, filePath: `D:/proj/${'P'.repeat(120)}.md` }));
-
-    const t = title(id);
-    const name = t.querySelector('.panel-box__title-name');
-    const suffix = t.querySelector('.panel-box__title-suffix');
-    expect(name).toHaveClass('panel-box__title-name--truncated');
-    expect(name?.textContent?.length).toBeLessThan(120);
-    expect(name?.textContent?.startsWith('PPP')).toBe(true);
-    expect(suffix?.textContent).toBe(' - Preview');
-    expect(t).not.toHaveClass('panel-box__title--truncated');
-  });
-});
+// DELETED: "a long file name is shortened in its NAME part only (FR-032)" — preview-panel-mount.test.ts
+// ("puts the truncation marker on the name part, never after the suffix") asserts the same marker and suffix.
 
 describe('the unsaved dot is the source document’s, exactly while it is dirty (FR-040, FR-041)', () => {
   it('shows while an update says dirty, and clears when one says clean', async () => {

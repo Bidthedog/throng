@@ -153,24 +153,10 @@ describe('FR-060 — `detectInTerminals` off: a detected path stops being a link
     expect(t.followed).toEqual([]);
   });
 
-  it('and back on again without the provider being re-registered', () => {
-    const t = terminalProvider();
-    detectInTerminals = false;
-    expect(t.links()).toEqual([]);
-    detectInTerminals = true;
-    expect(t.links(), 'the switch is read per call, so the next hover works').toHaveLength(1);
-  });
-
-  it('a Ctrl+click over where the path WAS does nothing', () => {
-    const t = terminalProvider();
-    const link = t.links()[0]!;
-    detectInTerminals = false;
-    // xterm asks for the row again before it dispatches; with no link there is nothing to activate.
-    expect(t.links()).toEqual([]);
-    // Even the stale handle, held from before the switch moved, follows nothing new.
-    expect(t.followed).toEqual([]);
-    expect(link.text).toBe('src/foo.ts');
-  });
+  // DELETED: 'and back on again without the provider being re-registered' (link-setting-live.test.ts
+  // 'SC-008 ... off, then on again, with the panel built before either change' covers it per panel
+  // type) and 'a Ctrl+click over where the path WAS does nothing' (it re-asserts `links()` is empty
+  // with detection off, which the first test asserts, then checks `followed` that nothing activated).
 });
 
 describe('FR-060 (round five) — and a WEB url on the same row goes with it', () => {
@@ -396,11 +382,7 @@ describe('FR-060 — `detectInEditors` off: the same, in a document', () => {
     expect(linkAtPosition(scanView().state, LINK_AT, deps)).toBeNull();
   });
 
-  it('and back on again, on the deps the view was built with', () => {
-    const deps = editorDeps();
-    detectInEditors = false;
-    expect(followLinkAtCaret(scanView(), deps)).toBe(false);
-    detectInEditors = true;
-    expect(followLinkAtCaret(scanView(), deps), 'live, with nothing remounted').toBe(true);
-  });
+  // DELETED: 'and back on again, on the deps the view was built with' — the round-five block above
+  // ('and back on again, live, brings both kinds back') and link-setting-live.test.ts's SC-008 test
+  // both flip the switch back on with nothing remounted and assert the link follows again.
 });

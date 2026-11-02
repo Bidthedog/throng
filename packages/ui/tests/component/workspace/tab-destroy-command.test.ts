@@ -157,25 +157,8 @@ describe('requestTabDestroy', () => {
     expect(dialog).toHaveTextContent('Second');
   });
 
-  it('destroys the tab once the confirmations settings ask for are accepted, and not before', async () => {
-    const user = userEvent.setup();
-    await mount(twoTabs());
-
-    act(() => {
-      requestTabDestroy('t2');
-    });
-    await screen.findByTestId('confirm-dialog');
-    expect(tabIds()).toEqual(['t1', 't2']);
-
-    // `destroyTab` ships at the double level: a dialog, then the “absolutely sure” one.
-    await user.click(screen.getByTestId('confirm-accept'));
-    await user.click(await screen.findByTestId('confirm-accept'));
-
-    await waitFor(() => expect(tabIds()).toEqual(['t1']));
-  });
-
   it('leaves the tab alone when the user cancels', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await mount(twoTabs());
     act(() => {
       requestTabDestroy('t2');
@@ -198,13 +181,16 @@ describe('requestTabDestroy', () => {
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
-  it('stops answering for a tab once it is gone', async () => {
-    const user = userEvent.setup();
+  it('destroys the tab once the confirmations settings ask for are accepted, and not before; then stops answering for it', async () => {
+    const user = userEvent.setup({ delay: null });
     await mount(twoTabs());
     act(() => {
       requestTabDestroy('t2');
     });
-    await user.click(await screen.findByTestId('confirm-accept'));
+    await screen.findByTestId('confirm-dialog');
+    expect(tabIds(), 'nothing is destroyed before the dialog is accepted').toEqual(['t1', 't2']);
+    // `destroyTab` ships at the double level: a dialog, then the “absolutely sure” one.
+    await user.click(screen.getByTestId('confirm-accept'));
     await user.click(await screen.findByTestId('confirm-accept'));
     await waitFor(() => expect(tabIds()).toEqual(['t1']));
 

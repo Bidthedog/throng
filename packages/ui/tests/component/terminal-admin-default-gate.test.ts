@@ -141,7 +141,7 @@ function Host(): ReactElement | null {
 }
 
 function mount(): { user: ReturnType<typeof userEvent.setup> } {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const services = servicesOver(fakeDaemon().bridge);
   render(
     createElement(

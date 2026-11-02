@@ -8,7 +8,7 @@
  * preserved", made three claims, and two were already held lower:
  *
  *   - the precedence decision — `core/tests/unit/language-precedence.test.ts` and
- *     `ui/tests/integration/language-detect.integration.test.ts` (the stale id falls through);
+ *     `ui/tests/unit/language-detect.test.ts` (the stale id falls through);
  *   - the store keeps the id — `daemon/tests/integration/document-ipc.integration.test.ts`.
  *
  * The third was not: that OPENING the file does not "repair" the stored id on the way. The daemon

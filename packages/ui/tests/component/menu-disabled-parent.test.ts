@@ -104,7 +104,7 @@ function build(flavours: readonly FlavourOption[] | undefined): MenuAction[] {
  */
 async function openInLevel(flavours: readonly FlavourOption[] | undefined) {
   const onClose = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     createElement(ContextMenu, {
       x: 10,

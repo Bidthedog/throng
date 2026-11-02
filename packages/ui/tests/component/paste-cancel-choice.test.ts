@@ -39,23 +39,9 @@ describe('the cancel choice (050 T054)', () => {
     expect(screen.getByTestId('paste-rollback').textContent).toBe('Roll back');
   });
 
-  it('Keep finished sends finishCancel(jobId, keep)', async () => {
-    render(host());
-    transfer.cancelChoice({ jobId: 'job-7' });
-
-    await userEvent.click(screen.getByTestId('paste-keep'));
-
-    expect(transfer.api.finishCancel).toHaveBeenCalledWith('job-7', 'keep');
-  });
-
-  it('Roll back sends finishCancel(jobId, rollback)', async () => {
-    render(host());
-    transfer.cancelChoice({ jobId: 'job-7' });
-
-    await userEvent.click(screen.getByTestId('paste-rollback'));
-
-    expect(transfer.api.finishCancel).toHaveBeenCalledWith('job-7', 'rollback');
-  });
+  // DELETED: 'Keep finished sends finishCancel(jobId, keep)' and 'Roll back sends ...(rollback)' —
+  // 'is asked of the right run when two cancels follow each other' (below) clicks each button and
+  // asserts the exact finishCancel arguments in order.
 
   it('Escape sends keep — the answer that undoes nothing', async () => {
     render(host());

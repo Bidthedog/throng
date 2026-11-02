@@ -45,20 +45,8 @@ async function mount(): Promise<MountedPreviewWindow> {
   return m;
 }
 
-describe('an accepted file navigates the dropped-on panel (contract §4 step 3)', () => {
-  it('a .md file — a provider claims it — navigates with intent drop', async () => {
-    const mounted = await mount();
-    const other = `${ROOT}/other.md`;
-
-    await osDrop([other]);
-
-    await waitFor(() =>
-      expect(mounted.preview.navigate).toHaveBeenCalledWith(
-        expect.objectContaining({ panelId: mounted.id, target: { absPath: other }, intent: { kind: 'drop' } }),
-      ),
-    );
-  });
-});
+// DELETED: "a .md file navigates with intent drop" — the first of three OS files below navigates with the same
+// `intent: { kind: 'drop' }` and `target: { absPath }`; the (MT-03) drops below also assert `navigate` for one file.
 
 /*
  * Reported in review (MT-03, 2026-09-28): "dragging a file into an existing preview panel should

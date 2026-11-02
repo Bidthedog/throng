@@ -136,7 +136,7 @@ function Host(): ReactElement {
 
 /** Mount the application, raise the delete confirmation, and settle on it being on screen. */
 async function open(): Promise<ReturnType<typeof userEvent.setup>> {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(createElement(ConfirmProvider, null, createElement(Host, null)));
   await user.click(screen.getByTestId('ask'));
   // Waiting for the dialog rather than assuming it: this is the assertion the anti-vacuity control

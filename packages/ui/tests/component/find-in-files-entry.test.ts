@@ -306,33 +306,15 @@ describe('an input is always focused with its contents selected (FR-031c)', () =
     expect(focusedAndSelected(replacement())).toBe(true);
   });
 
-  it('focuses the SEARCH input for find in files on a panel replace had disclosed', () => {
-    /*
-     * The reason `focusTarget` is carried by the invocation rather than derived from the panel's
-     * disclosure state: the chord decides, and reading the panel would make the answer depend on
-     * whatever the previous invocation happened to leave behind.
-     *
-     * FR-077 now also hides the row on the way past, so the two facts agree — but they are still two
-     * facts, and this asserts the one about FOCUS. A future change that stopped hiding the row must
-     * not silently take the caret with it.
-     */
-    mountPanel();
-    invoke(workspace(layout(true)), { replace: true });
-    invoke(workspace(layout(true)), { replace: false });
-
-    expect(document.activeElement).toBe(term());
-  });
+  // DELETED (pass 2): "focuses the SEARCH input for find in files on a panel replace had disclosed" —
+  // the FR-077 test 'puts the caret in the SEARCH input, contents selected' has the same arrangement
+  // and asserts `focusedAndSelected(term())`, a superset. (The chord, not the panel's disclosure state,
+  // decides the focus target; that test still carries that claim.)
 });
 
 describe('replace in files is the same command with replace pre-enabled (FR-029d)', () => {
-  it('turns the toggle ON in a reused panel that had it off', () => {
-    mountPanel();
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(false);
-
-    invoke(workspace(layout(true)), { replace: true });
-
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(true);
-  });
+  // DELETED (pass 2): "turns the toggle ON in a reused panel that had it off" — the FR-077 round trip
+  // below starts from off and asserts the toggle turns on.
 
   it('honours FR-021/FR-022 identically — a tab with no panel gets a new one', () => {
     const spies = workspace(layout(false));
@@ -367,26 +349,19 @@ describe('replace in files is the same command with replace pre-enabled (FR-029d
  * the search input — the same answer the FR-031c block above already gives for every find route.
  */
 describe('find in files leaves a reused panel with replace OFF (FR-077)', () => {
-  it('turns the toggle off in a panel that had it on', () => {
-    mountPanel();
-    invoke(workspace(layout(true)), { replace: true });
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(true);
-
-    invoke(workspace(layout(true)), { replace: false });
-
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(false);
-  });
+  // DELETED (pass 2): "turns the toggle off in a panel that had it on" — the round trip below asserts it.
 
   it('mirrors FR-029d exactly — the same command, the other direction', () => {
     // Stated as a round trip rather than as two tests, because symmetry is the requirement: whatever
     // state the panel is in, the chord that was pressed decides the disclosure.
     mountPanel();
     const spies = workspace(layout(true));
+    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled, 'a reused panel starts with replace off').toBe(false);
 
     invoke(spies, { replace: true });
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(true);
+    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled, 'replace in files turns it ON').toBe(true);
     invoke(spies, { replace: false });
-    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(false);
+    expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled, 'find in files turns it OFF').toBe(false);
     invoke(spies, { replace: true });
     expect(getFindInFilesPanel(PANEL_ID)?.replaceEnabled).toBe(true);
   });

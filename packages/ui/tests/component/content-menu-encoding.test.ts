@@ -14,11 +14,6 @@ import { ENCODING_CHOICES } from '@throng/core';
 import { removeEditorState } from '../../src/renderer/editor/editor-state.js';
 import { removePanelLanguage } from '../../src/renderer/editor/editor-language.js';
 import { __resetDocumentFormats } from '../../src/renderer/editor/document-format-store.js';
-import {
-  encodingMenuItems,
-  insertLineBreakItems,
-  lineEndingMenuItems,
-} from '../../src/renderer/editor/content-menu.js';
 import { mountEditor } from './helpers/mount-editor.js';
 
 const PANEL = 'p-enc-menu';
@@ -72,22 +67,8 @@ async function openSubmenu(h: Awaited<ReturnType<typeof mount>>, testId: string)
   return parent;
 }
 
-describe('the builders (059 FR-055, FR-057, FR-061)', () => {
-  it('every row declares the viewState section', () => {
-    const items = [
-      ...encodingMenuItems({
-        current: { encoding: 'utf8', hasBom: false },
-        canReopen: true,
-        change: () => {},
-        openReopenPicker: () => {},
-      }),
-      ...lineEndingMenuItems({ lineEnding: 'lf', mixed: false, convert: () => {} }),
-      ...insertLineBreakItems({ insert: () => {} }),
-    ];
-    expect(items.map((i) => i.testId)).toEqual([...ENCODING_ROWS, ...LINE_ENDING_ROWS]);
-    for (const item of items) expect(item.section).toBe('viewState');
-  });
-});
+// MOVED DOWN (pass 2): "the builders: every row declares the viewState section" renders nothing; it is
+// `unit/content-menu-encoding-builders.test.ts`.
 
 describe('the Encoding and Line Endings items (059 FR-058)', () => {
   it('sit beside Set Language, each naming the current state', async () => {

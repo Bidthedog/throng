@@ -31,7 +31,15 @@ function beginDrag(panelId = 'p1'): void {
   fireEvent.pointerMove(document, { isPrimary: true, clientX: 50, clientY: 10 });
 }
 
-const afterDrag = (): Promise<void> => new Promise((r) => setTimeout(r, 80));
+/**
+ * Let the drag's trailing async work (pointer listeners removed, the ghost's stop, React's follow-up
+ * render) drain: a few macrotask ticks inside `act` instead of an 80 ms sleep (pass 2).
+ */
+const afterDrag = async (): Promise<void> => {
+  for (let tick = 0; tick < 5; tick += 1) {
+    await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+  }
+};
 
 describe('Escape cancels a panel drag (FR-080..082)', () => {
   it('tears down as a drop does, changes nothing, and the next drag is a first one', async () => {

@@ -6,8 +6,6 @@
  *
  * Layer: component — the real `Breakdown` and `ToolbarControls` over the real session store.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -125,10 +123,7 @@ describe('column headers over the rows (FR-092, FR-099)', () => {
     expect(chosen()).toEqual(['gpu']);
   });
 
-  it('is sticky, so it stays over the rows when the list scrolls', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
-    expect(/\.breakdown__columns\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position:\s*sticky/);
-  });
+  // The header being sticky over the scrolling rows is a stylesheet claim: `unit/resources/monitor-stylesheet.test.ts`.
 });
 
 describe('ordering by Network (FR-099, FR-113)', () => {

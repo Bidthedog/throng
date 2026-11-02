@@ -163,7 +163,7 @@ async function captured(root: string, left: string, right: string): Promise<stri
   return got.slice(got.indexOf(left) + 1, got.indexOf(right));
 }
 
-test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+test('Ctrl+Backspace and a modified Enter reach a kitty program in the encoding its flags asked for', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(120_000);
   const root = mkdtempSync(join(tmpdir(), 'throng-kitty-bksp-'));
   copyFileSync(KITTY, join(root, 'k.mjs'));
@@ -190,36 +190,37 @@ test('Ctrl+Backspace reaches a kitty program in the encoding its flags asked for
        * report-all-keys flag, which it does not yet do. This fence pins what throng sends
        * TODAY, so the next change to it is deliberate rather than incidental.
        */
-      expect(seq).toBe(String.fromCharCode(8));
+      expect(seq, 'Ctrl+Backspace is the legacy ^H under DISAMBIGUATE only').toBe(String.fromCharCode(8));
+
+      /*
+       * MERGED from terminal-modified-enter.e2e.ts (#90): the same fixture, project and terminal also
+       * carry the modified-Enter claim. A kitty program gets a DISTINCT CSI-u for Shift+Enter and
+       * Ctrl+Enter (no trailing `\r` — the original bug) and plain Enter stays `\r`. Fresh marker
+       * letters, because `captured` slices from the FIRST occurrence of its markers and a..b are spent.
+       * The encoding itself is core/tests/unit/kitty-keyboard.test.ts; this proves it reaches the program.
+       */
+      await win.keyboard.type('e', { delay: 40 });
+      await win.keyboard.press('Shift+Enter');
+      await win.keyboard.type('f', { delay: 40 });
+      await win.keyboard.press('Control+Enter');
+      await win.keyboard.type('g', { delay: 40 });
+      await win.keyboard.press('Enter');
+      await win.keyboard.type('h', { delay: 40 });
+      await captured(root, 'e', 'h'); // wait for the last marker
+      expect(await captured(root, 'e', 'f'), 'Shift+Enter — distinct, NO trailing \\r').toBe('\x1b[13;2u');
+      expect(await captured(root, 'f', 'g'), 'Ctrl+Enter — distinct').toBe('\x1b[13;5u');
+      expect(await captured(root, 'g', 'h'), 'plain Enter — unchanged').toBe('\r');
     });
   } finally {
     cleanupTemp(root);
   }
 });
 
-test('Ctrl+End reaches a kitty program instead of being taken for scrollback', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-kitty-end-'));
-  copyFileSync(KITTY, join(root, 'k.mjs'));
-  try {
-    await runApp(async (_app, win) => {
-      await runKittyFixture(win, root);
-      await win.keyboard.type('a', { delay: 40 });
-      await win.keyboard.press('Control+End');
-      await win.keyboard.type('b', { delay: 40 });
-
-      const seq = await captured(root, 'a', 'b');
-      // throng binds Ctrl+End to `terminal.scrollToBottom` and reserves it unconditionally, so the
-      // program never sees it — "doesn't register at all". On the ALTERNATE screen there is no
-      // scrollback to scroll, so the binding has nothing to do there and the key belongs to the
-      // program. (The kitty fixture is on the normal screen, so this asserts the general rule: a
-      // reserved scrollback chord must still reach a program that asked for enhanced reporting.)
-      expect(seq.length).toBeGreaterThan(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * DELETED: 'Ctrl+End reaches a kitty program instead of being taken for scrollback'. Subsumed by
+ * 'Ctrl+End still reaches the program after switching tabs and back' below, which asserts the same
+ * chord reaches the program BEFORE the tab switch as well as after it.
+ */
 
 /**
  * The one that explains "it worked once, then stopped".
@@ -336,64 +337,14 @@ test('Ctrl+End survives a tab switch even when the program negotiated nothing', 
   }
 });
 
-/**
- * Escape, under a program that asked to DISAMBIGUATE escape codes.
+/*
+ * DELETED: 'Escape reaches a kitty program as the bare byte every working terminal sends'. Subsumed by
+ * 'a kitty negotiation survives the program leaving and re-entering the alternate screen' below, whose
+ * "before the churn" half asserts the same bare 0x1b for Escape and asserts it again after the churn.
  *
- * Reported from a real Claude Code session in a throng PowerShell terminal: pressing Escape on the
- * agent list re-enters the selected session instead of leaving claude, and only sometimes — the
- * signature of a program waiting to see whether more bytes follow.
- *
- * The user's diagnostics named the cause. At that keypress throng's own state read `kitty: true`:
- * claude had negotiated the kitty keyboard protocol. Disambiguating escape codes is the ONE thing
- * that flag is for, and Escape is the key it exists for — `0x1b` is both the Escape key and the
- * first byte of every escape sequence, so a bare `0x1b` is precisely the ambiguity the program
- * asked to be rid of. Under the flag it must be reported as `CSI 27 u`.
- *
- * throng sends the bare byte, so the keypress is indistinguishable from the start of a sequence and
- * the program is entitled to read it as something else. Intermittent because it depends on what
- * arrives next and how long the program waits.
- *
- * The alternate-screen fixture deliberately: it is the combination the user is in — a full-screen
- * program that has ALSO negotiated the keyboard.
+ * What the bare byte is pinned to: Windows Terminal ignores the kitty push and sends 0x1b, and it is the
+ * terminal Claude Code works in; throng used to send `CSI 27 u`, which no working terminal does.
  */
-test('Escape reaches a kitty program as the bare byte every working terminal sends', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  test.setTimeout(120_000);
-  const root = mkdtempSync(join(tmpdir(), 'throng-kitty-esc-'));
-  copyFileSync(KITTY_ALT, join(root, 'k.mjs'));
-  try {
-    await runApp(async (_app, win) => {
-      await runKittyFixture(win, root, 'KITTY_ALT_READY');
-      await step(win, 'the fixture is up: a full-screen program that negotiated the kitty keyboard');
-
-      await win.keyboard.type('a', { delay: TYPE_DELAY });
-      await step(win, "typed 'a' — the marker BEFORE the keypress under test");
-
-      await win.keyboard.press('Escape');
-      await step(win, 'pressed Escape — this is the one that must arrive as CSI 27 u');
-
-      await win.keyboard.type('b', { delay: TYPE_DELAY });
-      await step(win, "typed 'b' — the marker AFTER; whatever sits between them is what the program got");
-
-      const seq = await captured(root, 'a', 'b');
-      console.log(`[step] the program received ${JSON.stringify(seq)} for Escape`);
-      /*
-       * The BARE byte, not the CSI-u form the specification prescribes.
-       *
-       * Captured from both terminals with the kitty flags pushed exactly as claude pushes them:
-       *
-       *   Windows Terminal   1b                 <- the push is ignored outright
-       *   throng (before)    1b 5b 32 37 75     <- `CSI 27 u`
-       *
-       * Windows Terminal does not implement the protocol, and it is the terminal Claude Code works
-       * in. Sending the conformant report was the one thing throng did that no working terminal
-       * does, so this fence pins the legacy byte deliberately.
-       */
-      expect(seq).toBe(String.fromCharCode(27));
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
 
 /**
  * The negotiation must survive the program's OWN screen churn.

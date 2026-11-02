@@ -248,7 +248,7 @@ describe('the disclosure control 043 adds obeys the icon rule (FR-011)', () => {
   });
 
   it('names its action in a hover title, and names the OTHER action once expanded', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const control = screen.getByTestId('find-toggle-replace');
 
     const collapsedTitle = control.getAttribute('title') ?? '';

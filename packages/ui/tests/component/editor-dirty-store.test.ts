@@ -40,8 +40,9 @@ import {
  *
  * What stays end-to-end is the SAVE. `Ctrl+S` reaching a stubbed OS dialog, writing bytes, and the
  * document authority reporting itself clean afterwards is a round trip through main, and
- * `editor-indicators.e2e.ts` keeps a test for it. Below, `dirty: false` stands for the answer that
- * round trip produces — which is the honest boundary, and it is why the E2E is not deleted.
+ * `editor-basics.e2e.ts`'s first test holds it (it types, sees the dot, saves with Ctrl+S and sees it
+ * clear). Below, `dirty: false` stands for the answer that round trip produces — which is the honest
+ * boundary, and it is why an E2E still owns the save.
  */
 
 const seeded: string[] = [];
@@ -102,7 +103,7 @@ describe('a dirty document lights every dot, and a save clears every dot', () =>
   it('clears all four when the document reports itself saved', () => {
     /*
      * `dirty: false` is what the save round trip produces. What Ctrl+S does to reach it — the OS
-     * dialog, the bytes, the authority — is `editor-indicators.e2e.ts`'s, and stays there.
+     * dialog, the bytes, the authority — is `editor-basics.e2e.ts`'s first test.
      */
     seed('p1', { filePath: 'C:/proj/doc.txt', ownerProjectId: 'proj-1', dirty: true });
     const { result, rerender } = dots(['p1']);

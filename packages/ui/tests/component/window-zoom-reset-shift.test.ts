@@ -157,6 +157,16 @@ describe('zoom.reset / panel.zoomReset — the FR-080 routing split under the ti
       expect(resetZoom, 'panel.zoomReset must reach the per-panel store').toHaveBeenCalledWith('p1');
       expect(zoomReset, 'panel.zoomReset must NOT reach the app-wide reset').not.toHaveBeenCalled();
     });
+  }
+
+  /*
+   * The remaining cases are negatives and the main-row chord. All five chords have scope EVERYWHERE
+   * (`window-dispatcher.tsx` gates only on `COMMAND_SCOPES`), so the result does not depend on what has focus:
+   * the capture claim above is what needs every context. They run in the terminal only.
+   */
+  {
+    const label = 'a terminal';
+    const getEl = (): HTMLElement => terminalEl;
 
     it(`the main-row Ctrl+Shift+Alt+0 (Digit0) no longer resets the window zoom (FR-114), with focus in ${label}`, async () => {
       await mount();
@@ -280,15 +290,8 @@ describe('zoom.in / zoom.out / panel.zoomIn / panel.zoomOut / panel.zoomReset re
     expect(resetZoom).toHaveBeenCalledWith('p1');
   });
 
-  // Re-pinned in place for FR-127 (supersedes FR-114 for the panel reset): the main-row key is
-  // panel.zoomReset's second shipped chord.
-  it('the main-row Ctrl+Alt+0 (Digit0, key "0") reaches the per-panel store, never the window (FR-127)', async () => {
-    await mount();
-    terminalEl.focus();
-    press(terminalEl, '0', { code: 'Digit0', ctrlKey: true, altKey: true });
-    expect(resetZoom).toHaveBeenCalledWith('p1');
-    expect(zoomReset).not.toHaveBeenCalled();
-  });
+  // The main-row Ctrl+Alt+0 (FR-127) is pressed above via `pressChord` (terminal context), asserting resetZoom('p1')
+  // and no window reset.
 });
 
 /**
@@ -299,24 +302,17 @@ describe('zoom.in / zoom.out / panel.zoomIn / panel.zoomOut / panel.zoomReset re
  * `getModifierState('NumLock')` answers, as a real keyboard's event does.
  */
 describe('Ctrl+Shift+Alt+Numpad0 resets the WINDOW whatever the NumLock state (FR-120)', () => {
-  const contexts: Array<[string, () => HTMLElement]> = [
-    ['a terminal', () => terminalEl],
-    ['an editor', () => editorEl],
-    ['a find input', () => findEl],
-  ];
   const NUMLOCK_ON_TIER1 = { code: 'Numpad0', ctrlKey: true, altKey: true, shiftKey: false, modifierNumLock: true } as KeyboardEventInit;
 
-  for (const [label, getEl] of contexts) {
-    it(`NumLock ON: the measured shape resets the APP-WIDE zoom, never the panel, with focus in ${label}`, async () => {
-      await mount();
-      const el = getEl();
-      el.focus();
-      const notPrevented = press(el, 'Insert', NUMLOCK_ON_TIER1);
-      expect(notPrevented, 'the chord must be captured by the window listener').toBe(false);
-      expect(zoomReset, 'zoom.reset must reach the APP-WIDE reset').toHaveBeenCalledTimes(1);
-      expect(resetZoom, 'the NumLock-ON tier-1 press must NOT reset the panel').not.toHaveBeenCalled();
-    });
-  }
+  // Terminal only: the editor and find-input contexts of the capture claim are covered by the first describe.
+  it('NumLock ON: the measured shape resets the APP-WIDE zoom, never the panel, with focus in a terminal', async () => {
+    await mount();
+    terminalEl.focus();
+    const notPrevented = press(terminalEl, 'Insert', NUMLOCK_ON_TIER1);
+    expect(notPrevented, 'the chord must be captured by the window listener').toBe(false);
+    expect(zoomReset, 'zoom.reset must reach the APP-WIDE reset').toHaveBeenCalledTimes(1);
+    expect(resetZoom, 'the NumLock-ON tier-1 press must NOT reset the panel').not.toHaveBeenCalled();
+  });
 
   it('NumLock OFF: the measured shape (key "Insert", Shift reported) resets the APP-WIDE zoom', async () => {
     await mount();

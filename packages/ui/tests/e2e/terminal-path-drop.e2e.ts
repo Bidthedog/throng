@@ -19,7 +19,7 @@ function treeDrop(win: Page, panelId: string, paths: string[]): Promise<void> {
   );
 }
 
-test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', { tag: ['@extended', '@terminal'] }, async () => {
+test('dropping tree paths onto a terminal inserts them at the prompt, quoted and space-joined (#155)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-tdrop-'));
   try {
     await runApp(async (_app, win) => {
@@ -33,10 +33,8 @@ test('dropping tree paths onto a terminal inserts them at the prompt, quoted and
       // Let the shell reach its first prompt.
       await expect(term).toContainText('>', { timeout: 10_000 });
 
-      // A whitespace-free path is inserted bare and echoed by the shell.
-      await treeDrop(win, pid, ['C:\\tmp\\alpha.txt']);
-      await expect(term).toContainText('C:\\tmp\\alpha.txt', { timeout: 8000 });
-
+      // (The bare, whitespace-free path is core/tests/unit/terminal-drop-paths.test.ts; what only a
+      // real shell shows is that the dropped text reaches its input line, quoted and joined.)
       // A path with spaces arrives double-quoted; two items join with a single space.
       await treeDrop(win, pid, ['C:\\my dir\\b.txt', 'C:\\c.txt']);
       await expect(term).toContainText('"C:\\my dir\\b.txt" C:\\c.txt', { timeout: 8000 });

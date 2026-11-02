@@ -257,17 +257,10 @@ afterEach(() => {
 });
 
 describe('project.next / project.previous cycle the SAME switchProject a click calls (FR-010 – FR-013)', () => {
-  it('with no active project, Next goes to the FIRST reachable project (R5)', async () => {
+  it('with no active project, Next goes to the FIRST reachable project (R5), then steps forward, stops at the end with no notice, and SKIPS the minimised category (FR-011)', async () => {
     const { active } = await mount();
-
     // 046 iterate round 1 (FR-102): project.next's shipped chord moved to tier 1.
     expect(press('PageDown', { ctrlKey: true, shiftKey: true, altKey: true })).toBe(false); // prevented — never reaches a terminal
-    await waitFor(() => expect(active()).toBe('p1'));
-  });
-
-  it('steps forward, stops at the end with no notice, and SKIPS the minimised category (FR-011)', async () => {
-    const { active } = await mount();
-    press('PageDown', { ctrlKey: true, shiftKey: true, altKey: true });
     await waitFor(() => expect(active()).toBe('p1'));
 
     press('PageDown', { ctrlKey: true, shiftKey: true, altKey: true });
@@ -337,19 +330,7 @@ describe('focus.explorer reveals the right pane, sets the active pane, and focus
     await waitFor(() => expect(getActivePane()).toBe('files'));
   });
 
-  it('focuses the selected/first row of the tree once it mounts (pending-safe)', async () => {
-    localStorage.setItem('throng.explorerVisible', 'false');
-    const { active } = await mount();
-    // p1 becomes the active project, so the tree that mounts on reveal is a REAL one.
-    press('PageDown', { ctrlKey: true, shiftKey: true, altKey: true });
-    await waitFor(() => expect(active()).toBe('p1'));
-
-    press('M', { ctrlKey: true, shiftKey: true, altKey: true });
-
-    await waitFor(() =>
-      expect(document.activeElement?.closest('[data-testid="file-explorer-tree"]')).not.toBeNull(),
-    );
-  });
+  // Focusing the tree once it mounts is the focus wait inside the F2 test below (and the parked-request test).
 
   it('review finding 4 — a request parked before the tree has SIZE survives to be honoured once it does', async () => {
     globalThis.ResizeObserver = DeferredResizeObserver;

@@ -198,7 +198,7 @@ afterEach(() => {
 
 describe('FR-132 — Confirm on the type form puts the caret in the new editor', () => {
   it('Confirm CLICKED: DOM focus lands in the editor\'s content', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await mount();
     await user.selectOptions(screen.getByTestId(`panel-type-select-${PANEL}`), 'editor');
 
@@ -211,7 +211,7 @@ describe('FR-132 — Confirm on the type form puts the caret in the new editor',
   });
 
   it('Confirm pressed from the KEYBOARD: DOM focus lands in the editor\'s content', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await mount();
     await user.selectOptions(screen.getByTestId(`panel-type-select-${PANEL}`), 'editor');
 

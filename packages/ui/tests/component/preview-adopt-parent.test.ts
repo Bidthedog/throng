@@ -74,26 +74,8 @@ describe('becoming parented, in place (FR-013a)', () => {
     expect(document.querySelectorAll('.panel-box')).toHaveLength(panelsBefore);
   });
 
-  it('keeps naming the file in its title, not the parent editor (054 FR-005a)', async () => {
-    await mountStandalone();
-    expect(title()).toBe(STANDALONE_TITLE);
-
-    panel().push(previewUpdate({ panelId: panel().id, revision: 2, content: null, parent: parentOf }));
-
-    expect(title()).toBe(STANDALONE_TITLE);
-  });
-
-  it('wears the source document’s unsaved dot exactly while main says dirty (FR-040)', async () => {
-    await mountStandalone();
-    panel().push(previewUpdate({ panelId: panel().id, revision: 2, content: null, parent: parentOf }));
-    expect(dot()).toBeNull();
-
-    panel().push(previewUpdate({ panelId: panel().id, revision: 3, content: null, parent: parentOf, dirty: true }));
-    expect(dot()).toBeInTheDocument();
-
-    panel().push(previewUpdate({ panelId: panel().id, revision: 4, content: null, parent: parentOf, dirty: false }));
-    expect(dot()).toBeNull();
-  });
+  // DELETED: the parented title and the unsaved-dot sequence — preview-header-parented.test.ts asserts both
+  // ("reads `<file name> - Preview`…", "shows while an update says dirty, and clears when one says clean").
 
   it('follows the live buffer the parented update carries, without remounting the body', async () => {
     await mountStandalone();
@@ -148,10 +130,6 @@ describe('falling back when the parent closes (FR-013b)', () => {
     expect(labels).toContain('Open in Editor');
     expect(labels).not.toContain('Go to Editor');
   });
-
-  it('a standalone preview never wears the dot, even if an update were to say dirty (FR-043)', async () => {
-    await mountStandalone();
-    panel().push(previewUpdate({ panelId: panel().id, revision: 2, content: null, parent: null, dirty: true }));
-    expect(dot()).toBeNull();
-  });
+  // DELETED: "a standalone preview never wears the dot" — preview-header-parented.test.ts ("a standalone preview
+  // never shows it (FR-043)").
 });

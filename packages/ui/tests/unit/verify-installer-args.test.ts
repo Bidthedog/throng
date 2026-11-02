@@ -588,7 +588,7 @@ describe('the harness cannot hang without saying where (058 FR-028)', () => {
     // the run never resolved. The runner must answer at its own deadline.
     const script = "require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},20000)'],{stdio:'inherit'});setTimeout(()=>{},20000)";
     const started = Date.now();
-    const r = await systemRunner(process.execPath, ['-e', script], { timeoutMs: 1500 });
+    const r = await systemRunner(process.execPath, ['-e', script], { timeoutMs: 800 }); // long enough for the grandchild to be spawned and hold the pipes first
     expect(r.code).toBe(-1);
     expect(r.stderr).toMatch(/timed out/);
     expect(Date.now() - started).toBeLessThan(15_000);

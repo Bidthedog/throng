@@ -128,16 +128,9 @@ describe('the panel opens its own content menu (T075, FR-025a)', () => {
     }
   });
 
-  it('still runs and cancels without the menu — through the toolbar control', () => {
-    renderFindInFilesPanel();
-    fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
-
-    fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
-    expect(bridge.start).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByTestId(`fif-cancel-${PANEL_ID}`));
-    expect(bridge.cancel).toHaveBeenCalledWith(PANEL_ID);
-  });
+  // DELETED (pass 2): "still runs and cancels without the menu" — find-in-files-busy.test.ts ("clicking
+  // the control is what cancels") asserts the cancel click reaches the bridge, and
+  // find-in-files-exclusions.test.ts asserts the run click starts a scan.
 
   it('toggles replace from the toolbar, which enables the commit rows in the menu', () => {
     renderFindInFilesPanel();

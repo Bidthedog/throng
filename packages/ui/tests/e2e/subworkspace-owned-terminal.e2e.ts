@@ -184,7 +184,9 @@ test('a sub-workspace-owned Panel cannot be dragged out; the ghost shows a warni
      * event, so every attempt is a fresh chance for the throttle to have cleared) and read the hint
      * after each one, until it reports the warning.
      */
-    let hint: { text: string; warn: boolean; show: boolean } | null = null;
+    // Asserted, not annotated: an annotated `= null` narrows `hint` to null, and the closure that assigns it
+    // leaves it `never` after the poll.
+    let hint = null as { text: string; warn: boolean; show: boolean } | null;
     await expect
       .poll(
         async () => {

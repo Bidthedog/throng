@@ -12,12 +12,8 @@ describe('WindowsShellDetection', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('returns only shells whose executable actually exists', async () => {
-    const shells = await new WindowsShellDetection().detectInstalledShells();
-    for (const shell of shells) {
-      expect(existsSync(shell.file)).toBe(true);
-    }
-  });
+  // DELETED: 'returns only shells whose executable actually exists'. The contract run above is given
+  // fileExists and asserts every returned file exists (shell-detection-contract.ts).
 
   it('detects Command Prompt, which is always present on Windows', async () => {
     const shells = await new WindowsShellDetection().detectInstalledShells();

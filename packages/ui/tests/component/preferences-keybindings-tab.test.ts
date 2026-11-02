@@ -57,7 +57,6 @@ import {
   DEFAULT_KEYBINDINGS,
   KEYBINDINGS_METADATA,
   resetBindingValue,
-  resolveAction,
   THRONG_THEME,
   type Keybindings,
 } from '@throng/core';
@@ -91,7 +90,7 @@ function mountTab(): { user: ReturnType<typeof userEvent.setup> } {
       ),
     ),
   );
-  return { user: userEvent.setup() };
+  return { user: userEvent.setup({ delay: null }) };
 }
 
 /** The scope pills of one command's row. */
@@ -144,14 +143,9 @@ describe('where a command is live (FR-017b0)', () => {
     expect(chordText('file.cut')).toContain('Ctrl+X');
   });
 
-  it('raises no clash warning for the duplicate, because neither steals from the other', () => {
-    mountTab();
-    // Positive first: without it, "no conflict is shown" is satisfied by a tree that rendered
-    // nothing at all, which is the vacuity trap this layer is most prone to.
-    expect(screen.getByTestId('keybindings-tab')).toBeVisible();
-    expect(screen.getByTestId('binding-file.cut')).toBeVisible();
-    expect(screen.queryByTestId('capture-conflict')).toBeNull();
-  });
+  // DELETED (zero value): "raises no clash warning for the duplicate". It captured nothing, so the capture modal
+  // was never mounted; it stayed green under findConflict always returning 'file.cut' and under findConflict
+  // dropping its scope filter. The scope-aware clash is proven by "a clash between commands whose scopes intersect".
 
   it('reads "Everywhere" as ONE pill for a window-level command', () => {
     // Listing all three contexts says the same thing less clearly and would drown the rows that
@@ -224,7 +218,9 @@ describe('a clash between commands whose scopes intersect', () => {
  * immediately.
  */
 describe('the key bindings typeahead (FR-017, SC-019)', () => {
-  it('narrows by NAME', async () => {
+  it('narrows by NAME and by CHORD, says so when nothing matches, and brings the whole list back when cleared', async () => {
+    // Chained from four tests on four mounts (audit, component-2a); each step ends by clearing, so the
+    // next starts from the whole list.
     const { user } = mountTab();
     expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
     // The control must share NO token with the query. `focus.left` looks like the obvious choice
@@ -232,20 +228,17 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
     // `editor.cutLine` is in 'Editor' and carries no 'zoom' in key, label, description or chords.
     expect(screen.getByTestId('binding-editor.cutLine')).toBeVisible();
 
+    // By NAME.
     await user.type(search(), 'zoom');
-
     await waitFor(() => expect(screen.queryByTestId('binding-editor.cutLine')).toBeNull());
     expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-  });
+    await user.click(screen.getByTestId('keybindings-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('binding-editor.cutLine')).toBeVisible());
 
-  it('narrows by CHORD — what you actually remember when you want to know what a key does', async () => {
-    const { user } = mountTab();
-    expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-
-    // `focus.left` ships bound to exactly this and its name contains no part of it.
+    // By CHORD — what you actually remember when you want to know what a key does. `focus.left`
+    // ships bound to exactly this and its name contains no part of it.
     // 046 iterate round 1 (FR-102): focus.left's shipped chord moved to tier 1.
     await user.type(search(), 'Ctrl+Shift+Alt+ArrowLeft');
-
     // BOTH assertions inside the wait. Waiting only on `focus.left` being visible waits for
     // something already true of the UNFILTERED list, so it returns on the first tick and the
     // absence below is then read before the 150 ms debounce has applied — green or red by timing.
@@ -253,28 +246,17 @@ describe('the key bindings typeahead (FR-017, SC-019)', () => {
       expect(screen.getByTestId('binding-focus.left')).toBeVisible();
       expect(screen.queryByTestId('binding-zoom.in')).toBeNull();
     });
-  });
+    await user.click(screen.getByTestId('keybindings-search-clear'));
+    await waitFor(() => expect(screen.getByTestId('binding-zoom.in')).toBeVisible());
 
-  it('says so when a query matches nothing, rather than showing an empty page', async () => {
-    const { user } = mountTab();
-    // The anti-vacuity control for the two absence assertions that follow.
-    expect(screen.getByTestId('binding-zoom.in')).toBeVisible();
-
+    // Says so when a query matches nothing, rather than showing an empty page.
     await user.type(search(), 'zzzznothing');
-
     await waitFor(() => expect(screen.getByTestId('keybindings-search-empty')).toBeVisible());
     expect(screen.queryByTestId('binding-zoom.in')).toBeNull();
-  });
-
-  it('brings the whole list back when the search is cleared', async () => {
-    const { user } = mountTab();
-    await user.type(search(), 'zzzznothing');
-    await waitFor(() => expect(screen.getByTestId('keybindings-search-empty')).toBeVisible());
 
     // The clear is IMMEDIATE, never debounced — it cancels the pending filter rather than joining
-    // the queue behind it.
+    // the queue behind it — and brings the whole list back.
     await user.click(screen.getByTestId('keybindings-search-clear'));
-
     expect(search()).toHaveValue('');
     await waitFor(() => expect(screen.getByTestId('binding-zoom.in')).toBeVisible());
     expect(screen.queryByTestId('keybindings-search-empty')).toBeNull();
@@ -400,22 +382,14 @@ describe('the tab hands the write path the map it built (FR-033)', () => {
     // 046 iterate round 1 (FR-102): view.toggleProjects' shipped chord moved to tier 1, and to J by
     // iterate round 3 (FR-117).
     expect(lastMap(docs)?.['view.toggleProjects']).toEqual(['Ctrl+Shift+Alt+J', 'Ctrl+K']);
-  });
 
-  it('carries the document VERSION through, so the write is not a downgrade', async () => {
     /*
-     * Not in the E2E, and reachable only from here: the E2E read `bindings` out of the file and
-     * never looked at the rest of the document. The tab composes `{ version, bindings }` by hand,
-     * so dropping the version is a one-character change that no assertion on `bindings` can see.
+     * The document VERSION is carried through, so the write is not a downgrade (merged from its own
+     * test in the audit, component-2a — it was the same double-click, capture and write). Not in the
+     * E2E, and reachable only from here: the E2E read `bindings` out of the file and never looked at
+     * the rest of the document. The tab composes `{ version, bindings }` by hand, so dropping the
+     * version is a one-character change that no assertion on `bindings` can see.
      */
-    const { docs } = recordWrites();
-    const { user } = mountTab();
-
-    await user.dblClick(screen.getByTestId('binding-view.toggleProjects'));
-    await screen.findByTestId('capture-modal');
-    press('k', { ctrlKey: true });
-
-    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
     expect(docs[docs.length - 1].version).toBe(DEFAULT_KEYBINDINGS.version);
   });
 
@@ -469,6 +443,37 @@ describe('removing one chord removes only that chord (FR-033b)', () => {
       if (other === action) continue;
       expect(map[other], `${other} must not have moved`).toEqual(expected);
     }
+  });
+});
+
+describe('the chord pill context menu is the SHARED menu and removes the chord (FR-019)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'throng');
+  });
+
+  it('opens on right-click with the shared class and one icon, and Remove writes that action without the chord', async () => {
+    /*
+     * Migrated from menus.e2e.ts "the Key Bindings chord menu is the SHARED menu, and still removes the
+     * chord". The menu is the shared `context-menu` component (class, an icon the bespoke one never had)
+     * and Remove hands the write path the action's chords minus the one clicked. The file write itself is
+     * `integration/config-store.integration.test.ts`. Mutation: Remove leaving the chord in place, or the
+     * menu dropping the shared class, turns this red.
+     */
+    const { docs } = recordWrites();
+    const { user } = mountTab();
+    const action = 'view.toggleProjects';
+    const shipped = DEFAULT_KEYBINDINGS.bindings[action] as string[];
+
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`binding-${action}-pill-0`) });
+
+    const menu = await screen.findByTestId('binding-context-menu');
+    expect(menu, 'it is the shared menu component').toHaveClass('context-menu');
+    expect(menu.querySelectorAll('.icon'), 'it carries an icon').toHaveLength(1);
+
+    await user.click(screen.getByTestId('binding-context-remove'));
+
+    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
+    expect(lastMap(docs)?.[action], 'the clicked chord is gone, the rest stay').toEqual(shipped.slice(1));
   });
 });
 
@@ -622,36 +627,9 @@ describe('the four 046 side-pane commands (T036, FR-022, FR-070)', () => {
     }
   });
 
-  it('a rebinding changes what the chord RESOLVES to — no reload, the same document the write produced', async () => {
-    /*
-     * "Live dispatch with no reload" restated as what actually makes that true: `KeybindingsHandler`
-     * resolves every keydown against `useKeybindings()`, a React context value — so the document
-     * this write produces is what the NEXT keydown resolves against, with nothing to restart. That is
-     * asserted here at the layer that owns it, `resolveAction`, rather than by mounting the whole
-     * window: the tab's job ends at handing over the right document, and core's resolver is what
-     * "live" actually means once it has one.
-     */
-    const { docs } = recordWrites();
-    const { user } = mountTab();
-
-    // F9 is unbound in the shipped table, so the ADD is unambiguous.
-    await user.dblClick(screen.getByTestId('binding-focus.projects'));
-    await screen.findByTestId('capture-modal');
-    press('F9');
-
-    await waitFor(() => expect(docs.length).toBeGreaterThan(0));
-    const written = lastMap(docs);
-    // 046 iterate round 1 (FR-102): focus.projects' shipped chord moved to tier 1, and to B by
-    // iterate round 3 (FR-117).
-    expect(written?.['focus.projects']).toEqual(['Ctrl+Shift+Alt+B', 'F9']);
-
-    // Before the rebind: F9 resolved to nothing, in every scope this command lives in.
-    expect(resolveAction(DEFAULT_KEYBINDINGS, { key: 'F9' }, 'terminal')).not.toBe('focus.projects');
-    // The document the tab just wrote: the SAME F9 now resolves to focus.projects — from a terminal
-    // too (FR-020's EVERYWHERE scope), with no window reload standing between the write and this.
-    const nextDoc = { version: DEFAULT_KEYBINDINGS.version, bindings: written! };
-    expect(resolveAction(nextDoc, { key: 'F9' }, 'terminal')).toBe('focus.projects');
-  });
+  // MOVED DOWN: "a rebinding changes what the chord RESOLVES to" — the resolver half is now
+  // packages/core/tests/unit/keybindings-scope.test.ts ("resolves a newly added chord from the rebound
+  // document"); the tab's write half repeats "a bare single key binds" and "a captured chord reaches writeConfig".
 });
 
 /**
@@ -739,7 +717,7 @@ describe('zoom.reset ships its tier-1 default chord (046 US3, T048, FR-025/026, 
 
   it('resetting a user override restores the one default chord', async () => {
     mountTabLive({ 'zoom.reset': ['Ctrl+9'] });
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await waitFor(() => expect(screen.getByTestId('binding-zoom.reset-pill-0')).toHaveTextContent('Ctrl+9'));
     expect(screen.getByTestId('binding-reset-zoom.reset')).toBeEnabled();

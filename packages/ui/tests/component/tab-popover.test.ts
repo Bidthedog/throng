@@ -293,20 +293,8 @@ describe('whether the popover repeats the tab name (#296)', () => {
     expect(popover.firstElementChild).toBe(screen.getByTestId('tabstrip-popover-count'));
   });
 
-  it('keeps the FULL name when tabs.maxNameLength shortened it (FR-037)', () => {
-    const long = 'A very long tab name indeed';
-    mount('t-1', popoverTabName(long, true, false), ['Panel 1']);
-
-    expect(screen.getByTestId('tabstrip-popover-name')).toHaveTextContent(long);
-  });
-
-  it('keeps the FULL name when tabs.maxWidth ellipsised the chip — FR-050b holds', () => {
-    const long = 'A very long tab name indeed';
-    mount('t-1', popoverTabName(long, false, true), ['Panel 1']);
-
-    expect(screen.getByTestId('tabstrip-popover-name')).toHaveTextContent(long);
-  });
-
+  // Keeping the FULL name when tabs.maxNameLength (FR-037) or tabs.maxWidth (FR-050b) shortened the chip is the
+  // decision below (`popoverTabName` returns the name) plus "names the tab ..." above (a name renders).
   it('is decided by EITHER mechanism, not both at once', () => {
     // Stated because the two are independent: a name can be shortened without the chip ellipsising
     // and vice versa, and requiring both would drop the name in exactly the cases it is needed.

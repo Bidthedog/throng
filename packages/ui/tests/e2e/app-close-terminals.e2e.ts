@@ -14,73 +14,11 @@ async function requestClose(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
 }
 
-test('closing with a running terminal shows the three-choice warning; Cancel keeps it open', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-close-'));
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'Close', root);
-      const pid = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
+// MERGED: "closing with a running terminal shows the three-choice warning; Cancel keeps it open" now lives
+// in the multi-terminal test below (Cancel step before Terminate), and "Terminate all closes the app" is
+// the tail of that same test.
 
-      const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toBeVisible();
-      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
-
-      // Request the app close → the warning appears (a terminal is running).
-      await requestClose(app);
-      const dialog = win.getByTestId('app-close-dialog');
-      await expect(dialog).toBeVisible({ timeout: 10000 });
-      await expect(win.getByTestId('app-close-message')).toContainText('1 terminal');
-      await expect(win.getByTestId('app-close-leave')).toBeVisible();
-      await expect(win.getByTestId('app-close-terminate')).toBeVisible();
-      await expect(win.getByTestId('app-close-cancel')).toBeVisible();
-
-      // Cancel → the warning closes and the app stays open with its terminal.
-      await win.getByTestId('app-close-cancel').click();
-      await expect(dialog).toBeHidden();
-      await expect(term).toBeVisible();
-
-      // Exit the shell so teardown closes cleanly (no running terminals).
-      await term.click();
-      await win.keyboard.type('exit');
-      await win.keyboard.press('Enter');
-      await expect(win.getByTestId(`panel-type-form-${pid}`)).toBeVisible({ timeout: 15000 });
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('“Terminate all” closes the app', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-close2-'));
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'Close2', root);
-      const pid = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      const term = win.getByTestId(`terminal-${pid}`);
-      await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
-
-      await requestClose(app);
-      await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10000 });
-
-      // Terminate all → the daemon kills the sessions and the app quits. (The
-      // transient "Closing your terminals…" overlay races the fast quit; the closing
-      // overlay text is asserted in the plain-close case below.)
-      const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });
-      await win.getByTestId('app-close-terminate').click();
-      await closed;
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('warns with the right count when several terminals run (incl. a busy one)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+test('warns with the right count when several terminals run (incl. a busy one); Cancel keeps the app open, Terminate all quits', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-close-many-'));
   try {
     await runApp(async (app, win) => {
@@ -119,6 +57,18 @@ test('warns with the right count when several terminals run (incl. a busy one)',
       await expect(details.getByTestId('app-close-term-row')).toHaveCount(2);
       await expect(details).toContainText('Many'); // project name
       await expect(details).toContainText('Command Prompt'); // cmd flavour label
+
+      // The three choices are offered; Cancel → the warning closes and the app stays open with its terminals.
+      await expect(win.getByTestId('app-close-leave')).toBeVisible();
+      await expect(win.getByTestId('app-close-terminate')).toBeVisible();
+      await expect(win.getByTestId('app-close-cancel')).toBeVisible();
+      await win.getByTestId('app-close-cancel').click();
+      await expect(win.getByTestId('app-close-dialog')).toBeHidden();
+      await expect(win.getByTestId(`terminal-${a}`)).toBeVisible();
+
+      // Ask again → the warning returns.
+      await requestClose(app);
+      await expect(win.getByTestId('app-close-dialog')).toBeVisible({ timeout: 10000 });
 
       // Terminate all → the app quits (clean teardown, no lingering terminals).
       const closed = app.waitForEvent('close', { timeout: APP_CLOSE_TIMEOUT_MS });

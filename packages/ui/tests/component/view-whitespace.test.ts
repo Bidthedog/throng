@@ -159,6 +159,7 @@ describe('what it draws (059 FR-059, US6 AC2)', () => {
     await mount({ ...ON, doc: { text: 'a  b\tc\t\n' } });
     expect(marks('cm-ws-space')).toHaveLength(2);
     expect(marks('cm-ws-tab')).toHaveLength(2);
+    expect(marks('cm-ws-bom'), 'no BOM mark on a document without one').toHaveLength(0);
   });
 
   it('a line-break symbol on every line that has one, naming a uniform document’s ending', async () => {
@@ -168,13 +169,7 @@ describe('what it draws (059 FR-059, US6 AC2)', () => {
     expect(eols.every((e) => (e.textContent ?? '').length > 0)).toBe(true);
   });
 
-  it('LF, CR and CRLF draw three different symbols', async () => {
-    const h = await mount({ ...ON, doc: { text: 'a\nb\nc\n' } });
-    act(() => h.pushSync({ lineFormat: { lineEnding: 'crlf', mixed: true, lineEndings: ['lf', 'cr', 'crlf'] } }));
-    await waitFor(() => expect(marks('cm-ws-eol').map((e) => e.dataset.ending)).toEqual(['lf', 'cr', 'crlf']));
-    const symbols = new Set(marks('cm-ws-eol').map((e) => e.textContent));
-    expect(symbols.size).toBe(3);
-  });
+  // LF, CR and CRLF draw three different symbols: the line-break test below reads their text as 'LF', 'CR', 'CR LF'.
 
   it('each line’s OWN ending on a mixed document, from the authority’s per-line record (US6 independent test)', async () => {
     const h = await mount({ ...ON, doc: { text: 'one\ntwo\nthree\n' } });
@@ -251,11 +246,6 @@ describe('what it draws (059 FR-059, US6 AC2)', () => {
     expect(firstLine?.firstElementChild).toBe(bom[0]);
   });
 
-  it('no BOM mark on a document without one', async () => {
-    await mount({ ...ON, doc: { text: 'hi\n' } });
-    expect(marks('cm-ws-bom')).toHaveLength(0);
-  });
-
   it('the BOM mark follows a Change Encoding relay', async () => {
     const h = await mount({ ...ON, doc: { text: 'hi\n' } });
     act(() => h.pushSync({ encoding: 'utf8', hasBom: true }));
@@ -294,6 +284,7 @@ describe('the hover-name popover (059 FR-067)', () => {
 
   it('shows after 500 ms over a marker — not before — above the pointer, and follows it', async () => {
     await mount({ ...ON, doc: { text: 'a\u001bb\n' } });
+    expect(editorRoot().classList.contains('cm-ws-hover-names'), 'on by default, marking the editor for the help cursor').toBe(true);
     vi.useFakeTimers();
     const esc = marks('cm-ws-control')[0]!;
     fireEvent.mouseMove(esc, { clientX: 100, clientY: 200 });
@@ -334,11 +325,6 @@ describe('the hover-name popover (059 FR-067)', () => {
     expect(popover()).not.toBeNull();
     fireEvent.keyDown(editorRoot(), { key: 'a' });
     expect(popover()).toBeNull();
-  });
-
-  it('is on by default, marking the editor for the help cursor', async () => {
-    await mount({ ...ON, doc: { text: 'a\u001bb\n' } });
-    expect(editorRoot().classList.contains('cm-ws-hover-names')).toBe(true);
   });
 
   it('with editor.whitespaceHoverNames off: no popover and no help-cursor class', async () => {

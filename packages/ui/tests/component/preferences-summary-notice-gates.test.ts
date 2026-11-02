@@ -138,8 +138,16 @@ const durationSlider = (): HTMLInputElement =>
 const DISMISS_ONLY = { summaryNoticeMode: 'dismiss', summaryNoticeTimeoutMs: 5000 };
 const TIMED = { summaryNoticeMode: 'timed', summaryNoticeTimeoutMs: 5000 };
 
-describe('the replace summary duration is inert unless its own mode is Display for (FR-082b, 030 FR-011)', () => {
-  it('greys out BOTH halves of the duration control under Dismiss only', async () => {
+/*
+ * Nine tests became two mounts (audit, component-2a): one DISMISS_ONLY mount carrying every
+ * assertion that starts from it, one TIMED mount. No assertion was dropped.
+ */
+describe('the replace summary gates (FR-082b, 030 FR-008, 030 FR-011)', () => {
+  const choose = (value: string): void => {
+    fireEvent.change(modeControl(), { target: { value } });
+  };
+
+  it('under Dismiss only: the duration is inert, the mode is not, and silencing is confirmed, stated and declinable', async () => {
     await mount(DISMISS_ONLY);
 
     expect(
@@ -148,29 +156,8 @@ describe('the replace summary duration is inert unless its own mode is Display f
     ).toBe(true);
     // Both halves or neither: a disabled thumb beside a live text box is not an inert control.
     expect(durationSlider().disabled).toBe(true);
-  });
-
-  it('leaves both halves live under Display for', async () => {
-    await mount(TIMED);
-
-    expect(durationField().disabled).toBe(false);
-    expect(durationSlider().disabled).toBe(false);
-  });
-
-  it('never greys out the MODE itself — that is the control the dependency reads', async () => {
-    await mount(DISMISS_ONLY);
-
+    // Never greys out the MODE itself — that is the control the dependency reads.
     expect(modeControl().disabled).toBe(false);
-  });
-});
-
-describe('silencing the replace summary is confirmed (FR-082b, 030 FR-008)', () => {
-  const choose = (value: string): void => {
-    fireEvent.change(modeControl(), { target: { value } });
-  };
-
-  it('asks before Never display takes effect', async () => {
-    await mount(DISMISS_ONLY);
 
     choose('never');
 
@@ -184,36 +171,17 @@ describe('silencing the replace summary is confirmed (FR-082b, 030 FR-008)', () 
       screen.queryByTestId('confirm-dialog'),
       'Never display silenced a notice that reports failures with no consent at all (030 FR-008)',
     ).not.toBeNull();
-  });
-
-  it('states the consequence — that the outcome will reach only the log', async () => {
-    await mount(DISMISS_ONLY);
-
-    choose('never');
 
     // The MESSAGE, not the dialog: the title says "Never display …?", so any assertion run over the
     // whole dialog matches the option's own name and proves nothing about what the user was told.
     const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
     expect(message.textContent ?? '').toMatch(/report nothing/i);
     expect(message.textContent ?? '').toMatch(/log/i);
-  });
-
-  it('says that a silenced type still reaches the OS while its OS Notify is on (057 FR-110)', async () => {
-    await mount(DISMISS_ONLY);
-
-    choose('never');
-
-    const message = within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-message');
+    // A silenced type still reaches the OS while its OS Notify is on (057 FR-110).
     expect(message.textContent ?? '').toMatch(/OS Notify/);
     expect(message.textContent ?? '').toMatch(/still/i);
-  });
 
-  it('writes NOTHING when the dialog is declined', async () => {
-    await mount(DISMISS_ONLY);
-
-    choose('never');
-    const dialog = screen.getByTestId('confirm-dialog');
-    fireEvent.click(within(dialog).getByTestId('confirm-cancel'));
+    fireEvent.click(within(screen.getByTestId('confirm-dialog')).getByTestId('confirm-cancel'));
     await act(async () => {
       await Promise.resolve();
     });
@@ -225,25 +193,24 @@ describe('silencing the replace summary is confirmed (FR-082b, 030 FR-008)', () 
      * right until the patch came back.
      */
     expect(writes, `a declined silencing still wrote: ${writes.join(' | ')}`).toEqual([]);
-  });
 
-  it('does NOT ask for Display for or Dismiss only — a prompt on every change is a prompt nobody reads', async () => {
-    // The discriminating half. A form that confirmed every commit would satisfy all three tests
-    // above and be a worse control than the one it replaced.
-    await mount(DISMISS_ONLY);
-
+    // Does NOT ask for Display for or Dismiss only — a prompt on every change is a prompt nobody
+    // reads. The discriminating half: a form that confirmed every commit would satisfy the
+    // assertions above and be a worse control than the one it replaced.
     choose('timed');
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-
     choose('dismiss');
     expect(screen.queryByTestId('confirm-dialog')).toBeNull();
   });
 
-  it('does NOT ask when the DURATION beside it changes', async () => {
-    // The other half of the same discrimination, and the one that catches a gate keyed to the pair
-    // rather than to the mode: a duration is not a silencing, whatever its value.
+  it('under Display for: the duration is live, and changing it asks for no confirmation', async () => {
     await mount(TIMED);
 
+    expect(durationField().disabled).toBe(false);
+    expect(durationSlider().disabled).toBe(false);
+
+    // The other half of the discrimination, and the one that catches a gate keyed to the pair
+    // rather than to the mode: a duration is not a silencing, whatever its value.
     fireEvent.change(durationField(), { target: { value: '9000' } });
     fireEvent.blur(durationField());
 

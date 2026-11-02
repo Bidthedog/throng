@@ -100,7 +100,8 @@ function spyOnLayoutReads(): { count: () => number } {
   return { count: () => reads };
 }
 
-describe('a frame update with a 200-process hierarchy (SC-003, XII)', () => {
+// Tier: regression — all four are cost assertions at 200 processes (layout reads per row, remounts, render priority).
+describe('a frame update with a 200-process hierarchy (SC-003, XII)', { tags: ['regression'] }, () => {
   it('renders all two hundred rows — the case below is the worst one, not a small one', () => {
     mountExpanded();
     act(() => ingestFrame(frame(2, hierarchy(10, 20, 2))));

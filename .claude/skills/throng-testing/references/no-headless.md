@@ -25,14 +25,11 @@ the other 75% hidden?* — so here are the reasons that actually carry the weigh
 - **The drag ghost is a real OS window.** `drag-ghost.e2e.ts` asserts `w.isVisible()` on it and reads
   its painted style, and `ghost-window.ts` positions it off the **real cursor** via
   `screen.getCursorScreenPoint()` — which Playwright's synthetic mouse never moves.
-- **The cost is launch, not paint.** A run performs **382 Electron launches** — measured 2026-08-18
-  at 229 spec files / 640 declarations by `node scripts/count-e2e-launches.mjs`, down from 592 on
-  the pre-034 baseline `d55054b` — against a ~5s launch budget (001 SC-001, asserted by
-  `performance.e2e.ts`); the worker benchmark below concludes the constraint is
-  per-worker Electron + daemon **processes**, and CI's floor is a ~3–4 min `npm ci` + build toll
-  *before a test runs* (#103 — paid three times, once per shard, until spec 034 deleted sharding and
-  made it one). **Nothing in this repo measures compositing cost at all** — so hiding windows targets
-  a cost that has never been shown to exist.
+- **The cost is launch, not paint.** A run's cost is its Electron launches
+  (`node scripts/count-e2e-launches.mjs` counts them) and the per-worker Electron + daemon
+  **processes** behind each, plus CI's fixed `npm ci` + build toll *before a test runs* (#103).
+  **Nothing in this repo measures compositing cost at all** — so hiding windows targets a cost that
+  has never been shown to exist.
 
 The trade being refused is therefore: **maintain a second harness, plus a production `show: false`
 branch that only test runs take, to speed up a minority slice of a suite whose cost is process

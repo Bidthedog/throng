@@ -185,10 +185,10 @@ async function captureOpens(app: ElectronApplication): Promise<{
  * output — the test proceeds before the link exists and clicks on the typed text instead. That is
  * exactly how the first draft of this spec failed for the wrong reason.
  */
-function writeLinkScript(root: string, uri: string, text: string): void {
+function writeLinkScript(root: string, uri: string, text: string, name = 'lnk.ps1'): void {
   const esc = '$e';
   writeFileSync(
-    join(root, 'lnk.ps1'),
+    join(root, name),
     `$e=[char]27\nWrite-Host ("${esc}" + "]8;;${uri}" + "${esc}" + "\\" + "${text}" + "${esc}" + "]8;;" + "${esc}" + "\\")\n`,
   );
 }
@@ -310,32 +310,11 @@ async function clickLink(win: Page, text: string, opts: { ctrl: boolean }): Prom
  * below whose text is NOT the url (`CLICKTHELABEL`, the alt screen, the mouse-owning program) are
  * `skipIfElevated`, and every GitHub runner is elevated, which is why they have never failed there.
  */
-test('Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-link1-'));
-  const url = 'https://example.com/osc8-same-text';
-  try {
-    writeLinkScript(root, url, url);
-    await runApp(async (app, win) => {
-      await createProject(win, 'LinkOnce', root);
-      const term = await openTerminal(win, root);
-      const opens = await captureOpens(app);
-      await runScript(win, term, url);
-      await opens.reset();
+// MERGED: 'Ctrl+clicking an OSC 8 link whose text IS the url opens the browser exactly once' is now the
+// second half of the PLAIN-TEXT test below (same project and terminal; it runs a second script of its own
+// name, `lnk-osc8.ps1`, then clicks and fences the same way).
 
-      await clickLink(win, url, { ctrl: true });
-
-      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([url]);
-      // A SECOND, later open would still be caught — fenced on a real round-trip through the
-      // same terminal rather than a guessed idle period. See fenceOnEcho's doc comment.
-      await fenceOnEcho(win, term, 'LINKFENCE1');
-      expect(await opens.urls()).toEqual([url]);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
+test('Ctrl+clicking a PLAIN-TEXT url, and an OSC 8 link whose text IS the url, each open exactly once', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-link2-'));
   // Balanced parentheses belong to the url (#198: Wikipedia's `Bash_(Unix_shell)` opened as `Bash_`).
   const url = 'https://example.com/wiki/Plain_(text_url)';
@@ -354,6 +333,18 @@ test('Ctrl+clicking a PLAIN-TEXT url opens exactly once', { tag: ['@extended', '
       // A SECOND, later open would still be caught — see fenceOnEcho's doc comment.
       await fenceOnEcho(win, term, 'LINKFENCE2');
       expect(await opens.urls()).toEqual([url]);
+
+      // The OSC 8 shape (a link whose text is the url, so two mechanisms could match it): its own
+      // script name, because runScript waits for the NAME to be echoed and `lnk.ps1` is already shown.
+      const osc8Url = 'https://example.com/osc8-same-text';
+      writeLinkScript(root, osc8Url, osc8Url, 'lnk-osc8.ps1');
+      await runScript(win, term, osc8Url, 'lnk-osc8.ps1');
+      await opens.reset();
+      await clickLink(win, osc8Url, { ctrl: true });
+      await expect.poll(() => opens.urls(), { timeout: 5000 }).toEqual([osc8Url]);
+      await fenceOnEcho(win, term, 'LINKFENCE1');
+      expect(await opens.urls()).toEqual([osc8Url]);
+      await opens.reset();
 
       /*
        * ══ 045 T186 — a Ctrl+click on the SECOND row of a wrapped link opens it exactly once ══

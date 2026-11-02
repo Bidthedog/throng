@@ -197,21 +197,12 @@ test.describe('the two tests that only need an app', () => {
     }
   });
 
-  test('creates a project, makes it active, and opens its workspace', { tag: ['@core', '@window'] }, async () => {
-    // A claim about the WHOLE app — no projects at all — and it is true here because this test runs
-    // FIRST on the shared app, which is virgin. Kept verbatim rather than narrowed to "Subnet Vault
-    // is absent": the empty state rendering on a fresh install is real coverage and narrowing it
-    // would be a loss, not a fix. Anything inserted above this test breaks it, and that failure is
-    // the correct one — at that point this test needs its own app.
-    await expect(win.getByTestId('projects-empty')).toBeVisible();
-
-    await createProject(win, 'Subnet Vault', 'C:/code/subnet');
-
-    await expect(projectItem(win, 'Subnet Vault')).toHaveAttribute('data-active', 'true');
-    // The active project's workspace (tab group) opens in the Workspace Pane.
-    await expect(win.getByTestId('tab-strip')).toBeVisible();
-    await expect(win.locator('.panel-box')).toHaveCount(1);
-  });
+  /*
+   * DELETED (test-suite audit) — "creates a project, makes it active, and opens its workspace". The
+   * empty state on a fresh list is `component/projects-panel-keyboard.test.ts` (`projects-empty`); a
+   * created project being active with its workspace open is asserted by the next test (Beta is active
+   * and the tab strip is up straight after creating it) and by the restart test below.
+   */
 
   test('switches the active project and swaps the workspace + accent', { tag: ['@core', '@window', '@reserve:layout'] }, async () => {
     await createProject(win, 'Alpha', 'C:/code/alpha', '#ff0000');
@@ -235,37 +226,12 @@ test.describe('the two tests that only need an app', () => {
 });
 
 /*
- * OWN APP — because its CONCLUSION is a claim about the whole app (034 FR-045).
- *
- * `projects-empty` and `workspace-no-project` together say "there are now no projects anywhere",
- * which is the "valid state" this test is named for. On a shared app three earlier projects would
- * still be there, and the only conversion available would be to stop asserting it. That is coverage
- * lost, so the launch is kept and the body is untouched.
+ * DELETED (test-suite audit) — "edits and deletes a project, leaving a valid state". The edit form is
+ * `component/projects-panel-form.test.ts` (the create/edit form, root refusal on edit), and the
+ * double-confirmed removal is the same file's "removing a project names the Remove verb…" group
+ * (confirm first, cancel keeps the row, accepting removes it); `removal-verbs.e2e.ts` keeps the daemon
+ * half.
  */
-test('edits and deletes a project, leaving a valid state', { tag: ['@core', '@window'] }, async () => {
-  const harness = await startHarness();
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(harness.pipeName);
-    const win = await app.firstWindow();
-
-    await createProject(win, 'Working Title', 'C:/code/wt');
-    await projectItem(win, 'Working Title').locator('[data-testid^="project-edit-"]').click();
-    await win.getByTestId('project-name-input').fill('Renamed Project');
-    await win.getByTestId('project-save').click();
-    await expect(projectItem(win, 'Renamed Project')).toBeVisible();
-
-    await projectItem(win, 'Renamed Project').locator('[data-testid^="project-delete-"]').click();
-    await win.getByTestId('confirm-accept').click(); // Destroy Project: summary…
-    await win.getByTestId('confirm-accept').click(); // …then the wry confirmation (FR-024)
-    await expect(win.getByTestId('projects-empty')).toBeVisible();
-    await expect(win.getByTestId('workspace-no-project')).toBeVisible();
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(harness.daemon);
-    cleanupTemp(harness.dataDir);
-  }
-});
 
 /*
  * OWN APP AND OWN DAEMON — by construction (034 FR-045).

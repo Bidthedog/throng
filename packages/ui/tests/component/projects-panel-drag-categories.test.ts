@@ -480,12 +480,6 @@ describe('whole-row project drag (FR-075)', () => {
     );
   });
 
-  it('a double-click on the name still renames (002 FR-041)', async () => {
-    const server = twoProjectFixture();
-    await mount(server);
-
-    fireEvent.doubleClick(screen.getByTestId('project-item-p1').querySelector('.project-item__name')!);
-
-    expect(await screen.findByTestId('project-rename-input-p1')).toBeInTheDocument();
-  });
+  // DELETED: "a double-click on the name still renames (002 FR-041)" — the Edit/Remove/rename-input test above
+  // double-clicks the name and awaits `project-rename-input-p1` the same way.
 });

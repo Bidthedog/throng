@@ -48,6 +48,23 @@ four times in this repo's own migration work.
 FR-047: a partial replacement is not a replacement. If the component test covers four
 of a test's five claims, the test is NARROWED to the fifth — it is not deleted.
 
+## Paying for a new declaration
+
+`e2e-budget.json` may fall and **must not rise** (Principle V). The build cannot catch a rise:
+`e2e-budget.test.ts` asserts equality both ways, so a budget re-seeded *upward* is green. A spec that
+needs a new E2E declaration pays for it in the same change, by demoting or de-duplicating an
+existing one under the replacement rule above.
+
+- **Look for an existing declaration first.** The counter is a per-line regex over `test(`
+  declarations, so a new case inside a declaration that already launches this app, this shell and
+  this fixture moves no ratchet and costs no extra launch. Ask "does an E2E that already sets this
+  up exist?" before "does this need an E2E?".
+- **Record where a demoted assertion went** — the lower-layer file and test name — in the spec's
+  tasks or the PR, so the next reader can find the claim.
+- **Some input cannot be driven at all.** Playwright cannot press a mouse's X1/X2 (back/forward)
+  buttons, and its key events carry whatever modifier state the test sets, so it cannot show what
+  Chromium reports for AltGr. Those are hand checks in the spec's quickstart, not E2E declarations.
+
 ## The third tag: which reserve entry makes this irreducible
 
 Spec 035 added a third class of tag. A significance tag says which lane a test runs in

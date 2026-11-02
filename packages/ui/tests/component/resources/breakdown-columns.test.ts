@@ -8,8 +8,6 @@
  * columns fit a width is core's `fitColumns` (its own unit test); what is claimed here is that the list
  * draws exactly that set — headers, cells and the Total alike — and says what it left out.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -131,12 +129,6 @@ describe('columns that do not fit drop off the right (FR-106)', () => {
     expect(template.trim().split(/\s+(?![^(]*\))/)).toHaveLength(1 + headerIds().length);
   });
 
-  it('never scrolls sideways: the list hides horizontal overflow, and every grid reads the template', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
-    expect(/\.breakdown\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/overflow-x:\s*hidden/);
-    for (const selector of ['.breakdown__columns', '.breakdown-row', '.breakdown-total']) {
-      const body = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-      expect(body, selector).toMatch(/grid-template-columns:\s*var\(--breakdown-columns/);
-    }
-  });
+  // "Never scrolls sideways" (overflow-x hidden, every grid reads the template) is a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
 });

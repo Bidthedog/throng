@@ -43,7 +43,7 @@ descriptor in the matching metadata registry, the shipped default, the editor co
 **Persistence and reload — `packages/ui/src/main/`**
 `config-store.ts`, `config-watcher.ts`, `config-write-ipc.ts`. Writes are atomic and ordered; see
 `config-store-atomic.test.ts`, `config-write-durability.test.ts`, `write-config-ordering.test.ts`,
-`config-hotreload.e2e.ts`, `config-write-failure.e2e.ts`. `THRONG_CONFIG_ROOT` relocates the whole
+`theme-tokens.e2e.ts` (a theme file hot-reloaded into the running app), `config-write-failure.e2e.ts`. `THRONG_CONFIG_ROOT` relocates the whole
 config root, `THRONG_HOTRELOAD_DEBOUNCE_MS` tightens the watcher for tests.
 
 **Editors — `packages/ui/src/renderer/preferences/`**

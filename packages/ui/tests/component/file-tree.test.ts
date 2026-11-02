@@ -281,7 +281,7 @@ interface MountOptions {
 }
 
 async function mount(options: MountOptions = {}) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { files, listed } = fakeFiles(options.listing);
   const projectId = `project-${(projectSeq += 1)}`;
   const onHide = vi.fn();
@@ -665,7 +665,7 @@ describe('Expand steps one level at a time (004 FR-031/032, migrated from explor
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('a cut item is marked, and Escape unmarks it (migrated from explorer.e2e.ts:426)', () => {
-  it('marks the row with tree-row--cut when Cut is chosen from its menu', async () => {
+  it('marks the row with tree-row--cut when Cut is chosen from its menu, and clears the mark on Escape', async () => {
     /*
      * This asserts the same observable the E2E did — `.tree-row--cut` — because the E2E asserted a
      * CLASS too, not a colour. The greying itself is `explorer.css` painting that class, and
@@ -685,21 +685,13 @@ describe('a cut item is marked, and Escape unmarks it (migrated from explorer.e2
       expect(cut).toHaveLength(1);
       expect(cut[0].querySelector('.tree-label')).toHaveTextContent('a.txt');
     });
-  });
 
-  it('clears the mark on Escape', async () => {
     /*
      * Escape is handled by `useExplorerKeybindings` on the `.explorer` container
      * (`explorer-keybindings.ts:33`), which is why the key goes to the tree and not to the row: the
      * handler is deliberately scoped to the pane so that Ctrl+X here cuts a FILE while the same
      * chord in an editor cuts a LINE (016 FR-017b0).
      */
-    const { tree, user } = await mount();
-
-    await user.pointer({ keys: '[MouseRight]', target: within(tree).getByText('a.txt') });
-    await user.click(await screen.findByTestId('menu-item-Cut'));
-    await waitFor(() => expect(tree.querySelectorAll('.tree-row--cut')).toHaveLength(1));
-
     await user.click(within(tree).getByText('a.txt'));
     await user.keyboard('{Escape}');
 

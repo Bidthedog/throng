@@ -15,7 +15,7 @@ import type { ResourceNode } from '@throng/core';
 import { Breakdown, __onRowDrawn } from '../../../src/renderer/resources/breakdown.js';
 import { MonitorLocation } from '../../../src/renderer/resources/monitor-location.js';
 import { __resetSession, getSelection, getView, ingestFrame, requestCatchUp, setSelection, setView, startSession } from '../../../src/renderer/resources/monitor-session.js';
-import { MIB, frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
+import { MIB, frame, metrics, node, proc } from '../helpers/resource-fixtures.js';
 
 const counted = vi.hoisted(() => ({ figureOf: 0, rowRenders: [] as string[] }));
 vi.mock('../../../src/renderer/resources/figures.js', async (importOriginal) => {
@@ -237,17 +237,7 @@ describe('the hold survives moving about (FR-090)', () => {
   const base = { p11: [1, 1], p21: [5, 5], p22: [9, 9], p12: [8, 8] } as const;
   const mutable = (f: typeof base) => ({ p11: [...f.p11], p21: [...f.p21], p22: [...f.p22], p12: [...f.p12] }) as Parameters<typeof family>[0];
 
-  it('after a drill with the pointer over it: the new level ranks once, then holds', () => {
-    mountOn(family(mutable(base)));
-    fireEvent.mouseEnter(breakdown());
-
-    fireEvent.doubleClick(row('x:11:1'));
-    expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
-
-    // The two children swap rank; the pointer is still over the list, so nothing moves.
-    feed(family({ ...mutable(base), p21: [9, 9], p22: [5, 5] }));
-    expect(rowOrder()).toEqual(['x:22:1', 'x:21:1']);
-  });
+  // "The new level ranks once, then holds" is the second half of the next test (rank, then feed swapped figures, order holds).
 
   it('after a drill with the pointer over it: the new level shows the latest figures, not those from when the pointer arrived', () => {
     mountOn(family(mutable(base)));
@@ -440,12 +430,4 @@ describe('the filter follows the field, not the other way round (D1, SC-010)', (
   });
 });
 
-describe('the sample hierarchy still opens at the root (guard for the first view)', () => {
-  it('lists each component once, and no project (FR-103)', () => {
-    tick = 0;
-    feed(sampleHierarchy());
-    render(createElement(Fragment, null, createElement(MonitorLocation), createElement(Breakdown)));
-    expect(screen.getAllByTestId('breakdown-row-c:projects')).toHaveLength(1);
-    expect(screen.queryByTestId('breakdown-row-p:p1')).toBeNull();
-  });
-});
+// The first view (each component once, no project; FR-103) is `breakdown.test.ts` "lists the four components and nothing else".

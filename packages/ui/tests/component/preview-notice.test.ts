@@ -152,20 +152,9 @@ describe('Try again is Refresh (FR-028)', () => {
   });
 });
 
-describe('Copy details', () => {
-  it('puts the message and the path on the clipboard — never a raw error', async () => {
-    await mountDoc();
-    pushNotice(2, { kind: 'too-large' });
-
-    fireEvent.click(within(banner()).getByTitle('Copy details'));
-
-    await waitFor(() => expect(panel().clipboardWrite).toHaveBeenCalledTimes(1));
-    const written = (panel().clipboardWrite.mock.calls[0] as unknown as [{ text: string }])[0].text;
-    expect(written).toMatch(/too large/i);
-    expect(written).toContain('README.md');
-    expect(written).not.toContain('too-large');
-  });
-});
+// DELETED: "Copy details puts the message and the path on the clipboard" — preview-header-actions.test.ts ("Copy details
+// writes the notice's message and path through the clipboard bridge") asserts the same text, and that the banner's own
+// Copy details writes identical text.
 
 describe('no-provider offers Close, which closes the panel (FR-027)', () => {
   it('one banner saying the file type has no preview, with Close as its ONLY action', async () => {

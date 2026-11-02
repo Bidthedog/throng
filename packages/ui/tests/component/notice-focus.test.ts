@@ -18,7 +18,8 @@
  * one E2E, in `notice-focus-chord.e2e.ts`, which builds the shell and the notice it needs; the
  * manifest guard finds it through `window-chords.ts`'s `COVERED_ELSEWHERE`.
  */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -70,9 +71,7 @@ async function mount(): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 
@@ -147,21 +146,8 @@ describe('focus.notice reaches the most recent notice (FR-020)', () => {
 });
 
 describe('Escape returns focus where it came from (FR-022)', () => {
-  it('lands on the element focused BEFORE the binding was pressed', async () => {
-    const probe = await mount();
-    act(() => probe.notify!(raise('n-a', 'Alpha')));
-    const origin = screen.getByTestId('origin');
-    origin.focus();
-
-    act(() => focusMostRecentNotice());
-    expect(document.activeElement).not.toBe(origin);
-
-    act(() => {
-      listOf('n-a').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-
-    expect(document.activeElement).toBe(origin);
-  });
+  // DELETED: 'lands on the element focused BEFORE the binding was pressed' — the next test is the
+  // same press and Escape with a second notice and a Tab in between, asserting the same origin.
 
   it('still lands there after the user has tabbed on to another notice (FR-022a)', async () => {
     // The origin is captured when the binding is pressed and is NOT re-captured by Tab. Otherwise
@@ -274,23 +260,8 @@ describe('the newest notice wins even when it carries no casualty list (FR-020, 
     testId: id,
   });
 
-  it('reaches a notice that carries no list — the commonest kind there is', async () => {
-    const probe = await mount();
-    act(() => probe.notify!(plain('n-plain')));
-
-    const origin = screen.getByTestId('origin');
-    origin.focus();
-    act(() => focusMostRecentNotice());
-
-    expect(
-      document.activeElement,
-      'the binding did nothing — a notice was on screen and FR-024 does not apply',
-    ).not.toBe(origin);
-    expect(
-      screen.getByTestId('n-plain').contains(document.activeElement),
-      'focus landed outside the notice it was supposed to reach',
-    ).toBe(true);
-  });
+  // DELETED: 'reaches a notice that carries no list' — the next test raises the same list-less notice
+  // as the newest and asserts focus landed inside it ('n-plain' contains the active element).
 
   it('does NOT skip back to an older notice that happens to carry one', async () => {
     const probe = await mount();

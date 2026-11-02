@@ -112,14 +112,8 @@ describe('which ranges are painted (FR-014, FR-014a, FR-015)', () => {
     expect(painted(PREVIEW_OCCURRENCE_HIGHLIGHT)).toEqual(['P:11:alpha']);
   });
 
-  it('does not match inside aria-hidden content (what preview find excludes)', () => {
-    const host = hostWith(BODY);
-    occurrencesOver(host);
-    selectText(host.querySelector('p')!.firstChild!, 0, 5);
-    flush();
-    const ranges = registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT)!.ranges;
-    expect(ranges.every((r) => !host.querySelector('[aria-hidden="true"]')!.contains(r.startContainer))).toBe(true);
-  });
+  // DELETED: "does not match inside aria-hidden content" — BODY ends with an aria-hidden <p>alpha</p>, so the
+  // exact `['P:11:alpha']` above already fails if that copy were painted.
 
   it('reads text continuously across formatting: a bold "i" then a plain "d" is the word "id" (FR-014a)', () => {
     const host = hostWith(BODY);
@@ -248,7 +242,7 @@ describe('the setting (FR-019)', () => {
  * Principle XII / SC-005: the frame's work — offset mapping, matching, range building, painting — on a rendered
  * 10,000-line document with a word of ≥ 2,000 occurrences, and the `selectionchange` handler itself only schedules.
  */
-describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', () => {
+describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', { tags: ['regression'] }, () => {
   it('the frame completes well inside 100 ms, and the handler only schedules', () => {
     const html = Array.from({ length: 10_000 }, (_, i) => (i % 4 === 0 ? `<p>needle ${i} and needle again</p>` : `<p>plain line ${i}</p>`)).join('\n');
     const host = hostWith(html);
@@ -362,7 +356,7 @@ describe('on a mounted preview panel', () => {
       const node = Array.from(body.querySelectorAll('p')).find((p) => p.textContent?.includes('alpha beta'))?.firstChild;
       if (!node) throw new Error('not drawn yet');
       return node;
-    });
+    }, COLD);
 
     act(() => selectText(text, 0, 5));
     await waitFor(() => expect(registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT) ?? registry.get(PREVIEW_OCCURRENCE_INACTIVE_HIGHLIGHT)).toBeTruthy());

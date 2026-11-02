@@ -83,7 +83,9 @@ const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
  * message that reaches a developer is only ever about a real type error.
  */
 function buildCore(force: boolean): void {
-  const args = [TSC, '-b', join(REPO, 'packages', 'core')];
+  // ipc-contract too: the renderer graph the fixture pulls in imports it, and the PR's unit job runs
+  // on a checkout with no build at all.
+  const args = [TSC, '-b', join(REPO, 'packages', 'core'), join(REPO, 'packages', 'ipc-contract')];
   if (force) args.push('--force');
   try {
     execFileSync(process.execPath, args, { encoding: 'utf8', stdio: 'pipe', cwd: REPO });

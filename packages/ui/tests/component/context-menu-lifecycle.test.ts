@@ -85,7 +85,7 @@ function open() {
       createElement(ContextMenu, { x: 10, y: 10, items: items(), onClose, submenuDelayMs: 60_000 }),
     ),
   );
-  return { onClose, user: userEvent.setup() };
+  return { onClose, user: userEvent.setup({ delay: null }) };
 }
 
 describe('a menu closes when the user leaves it (FR-017, FR-017a)', () => {
@@ -195,7 +195,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
         submenuDelayMs: 60_000,
       }),
     );
-    return { onClose, user: userEvent.setup() };
+    return { onClose, user: userEvent.setup({ delay: null }) };
   };
 
   const focused = (): string | null | undefined =>
@@ -248,7 +248,7 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
         submenuDelayMs: 60_000,
       }),
     );
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     // 046 iterate round 2 (FR-113) — Settings is the very first row now, no Zoom row ahead of it.
     await user.keyboard('{ArrowDown}{Enter}');
@@ -263,34 +263,9 @@ describe('the cog menu is the shared menu, and is keyboard-navigable (FR-013a)',
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('offers exactly Settings / Key Bindings / Themes / Open Logs Folder / Resource Monitor / About throng', () => {
-    /*
-     * MIGRATED FROM `packages/ui/tests/e2e/titlebar-chrome.e2e.ts:107` (035 FR-001).
-     *
-     * The E2E asserted the same NAMES off the rendered menu, and its own comment says why it
-     * asserted names rather than whole rows: *"keeps the test about WHICH COMMANDS the cog offers…
-     * a decorative change should not redden this, but a command appearing or vanishing must."*
-     *
-     * 046 iterate round 1 (FR-074, FR-107) had superseded the four Navigate rows this test used to
-     * pin (Next/Previous Project, Focus File Explorer/Projects) with a Zoom row. 046 iterate round 2
-     * (FR-113) removes that Zoom row too, so this is back to exactly the five Application rows.
-     */
-    openCog();
-    const labels = screen
-      .getAllByRole('menuitem')
-      .map((el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
-
-    // 057 FR-082 added Go to Next Marked Panel here; FR-106 (round 3) supersedes that and moves it to a
-    // marked project's context menu. 055 (FR-056) adds Resource Monitor, so these are six.
-    expect(labels).toHaveLength(6);
-    expect(labels[0]).toMatch(/Settings/);
-    expect(labels[1]).toMatch(/Key Bindings/);
-    expect(labels[2]).toMatch(/Themes/);
-    expect(labels[3]).toMatch(/Open Logs Folder/);
-    // 055 FR-056 — after Open Logs Folder, before About.
-    expect(labels[4]).toMatch(/Resource Monitor/);
-    expect(labels[5]).toMatch(/About throng/);
-  });
+  // DELETED (pass 2): "offers exactly Settings / Key Bindings / Themes / Open Logs Folder / Resource
+  // Monitor / About throng" (migrated from titlebar-chrome.e2e.ts:107). `cog-zoom-row.test.ts` asserts
+  // the exact six menuitem testids in order ("offers exactly the six Application rows").
 });
 
 describe('a row draws what its builder gave it', () => {
@@ -367,7 +342,7 @@ describe('exactly one menu is open at a time (FR-017)', () => {
      * rendered on top of the old one would satisfy the positive one.
      */
     render(createElement(ContextMenuProvider, null, createElement(Host)));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await user.click(screen.getByTestId('open-panel-menu'));
     await listenersAttached();
@@ -389,7 +364,7 @@ describe('exactly one menu is open at a time (FR-017)', () => {
      * menu, which is why the controller exposes this at all.
      */
     render(createElement(ContextMenuProvider, null, createElement(Host)));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     expect(screen.getByTestId('is-open')).toHaveTextContent('false');
 
     await user.click(screen.getByTestId('open-panel-menu'));

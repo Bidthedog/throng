@@ -45,22 +45,7 @@ async function openWindow(): Promise<void> {
 }
 
 describe('a context menu opened from a row', () => {
-  it('keeps focus', async () => {
-    await openWindow();
-    const row = screen.getByTestId('breakdown-row-p:p1');
-    row.focus();
-
-    fireEvent.contextMenu(row);
-
-    const menu = await screen.findByRole('menu');
-    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
-    // And it stays there across the next tick.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(menu.contains(document.activeElement)).toBe(true);
-  });
-
+  // The menu keeps focus: waited for below, and the arrow keys and Enter that follow land on its items.
   it('Enter chooses the menu item, and does not drill into the row', async () => {
     await openWindow();
     const row = screen.getByTestId('breakdown-row-p:p1');

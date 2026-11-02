@@ -65,16 +65,18 @@ afterEach(() => {
 
 /** Render, search, deliver rows, disclose replace and type a replacement. */
 async function ready(): Promise<ReturnType<typeof userEvent.setup>> {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+  await user.click(screen.getByTestId(`fif-term-${PANEL_ID}`));
+  await user.paste('needle');
 
   // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
 
   await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 3 });
   await user.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
-  await user.type(screen.getByTestId(`fif-replacement-${PANEL_ID}`), 'thread');
+  await user.click(screen.getByTestId(`fif-replacement-${PANEL_ID}`));
+  await user.paste('thread');
   return user;
 }
 
@@ -112,20 +114,9 @@ describe('a narrow granularity aims at the row the menu was opened from (FR-049)
     expect(stub.commit).not.toHaveBeenCalled();
   });
 
-  it('is offered no target when the menu is opened from the toolbar', async () => {
-    const user = await ready();
-    await rightClick(user, 'fif-row-src/a.ts-6');
-    await user.keyboard('{Escape}');
-
-    await rightClick(user, `fif-term-${PANEL_ID}`);
-
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    await user.click(screen.getByTestId('menu-item-Replace in File'));
-    expect(stub.commit).not.toHaveBeenCalled();
-  });
+  // MERGED (pass 2): "is offered no target when opened from the toolbar" — the heading case above
+  // asserts the same disabled item and no commit (both origins bubble to the one panel handler, see
+  // the header), and the toolbar origin's bare labels are asserted in the label test below.
 
   it('forgets the position when the search is re-run — those offsets describe an abandoned scan', async () => {
     const user = await ready();
@@ -158,32 +149,31 @@ describe('a narrow granularity aims at the row the menu was opened from (FR-049)
 });
 
 describe('the label names the file the write is aimed at', () => {
-  it('names the pointed-at file rather than saying "File"', async () => {
+  // One render, four read-only menu openings (merged from three tests that each ran `ready()`).
+  it('names the pointed-at file rather than saying "File", on every row, and falls back to the bare label with no target', async () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
-    expect(labelOf('Replace in File')).toBe('Replace in src/a.ts');
+    expect(labelOf('Replace in File'), 'a.ts, first match').toBe('Replace in src/a.ts');
 
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/b.ts-40');
-    expect(labelOf('Replace in File')).toBe('Replace in src/b.ts');
-  });
+    expect(labelOf('Replace in File'), 'b.ts').toBe('Replace in src/b.ts');
 
-  it('names it on the one-match row too, which is aimed at a file just as squarely', async () => {
-    const user = await ready();
+    await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/a.ts-80');
     /*
      * The FILE, not the match's line. A line number is a displayed quantity and would have to come
      * through `formatGrouped`, which `find-in-files-grouping-view-only.test.ts` forbids in a menu
      * builder — and which match is already answered by the row carrying `aria-current`.
      */
-    expect(labelOf('Replace Match')).toBe('Replace Match in src/a.ts');
-  });
+    expect(labelOf('Replace Match'), 'the one-match row is aimed at a file just as squarely').toBe(
+      'Replace Match in src/a.ts',
+    );
 
-  it('falls back to the bare label when there is no target to name', async () => {
-    const user = await ready();
+    await user.keyboard('{Escape}');
     await rightClick(user, `fif-term-${PANEL_ID}`);
-    expect(labelOf('Replace in File')).toBe('Replace in File');
-    expect(labelOf('Replace Match')).toBe('Replace Match');
+    expect(labelOf('Replace in File'), 'no target to name: bare label').toBe('Replace in File');
+    expect(labelOf('Replace Match'), 'no target to name: bare label').toBe('Replace Match');
   });
 });
 
@@ -207,12 +197,14 @@ describe('the menu while a scan is running (060 FR-003)', () => {
 
   /** Like `ready()`, but the scan has delivered rows and is still going. */
   async function readyRunning(): Promise<ReturnType<typeof userEvent.setup>> {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderFindInFilesPanel();
-    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+    await user.click(screen.getByTestId(`fif-term-${PANEL_ID}`));
+    await user.paste('needle');
     await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
     await user.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
-    await user.type(screen.getByTestId(`fif-replacement-${PANEL_ID}`), 'thread');
+    await user.click(screen.getByTestId(`fif-replacement-${PANEL_ID}`));
+    await user.paste('thread');
     stub.emit({ panelId: PANEL_ID, generation: 1, status: 'running', rows: ROWS, totalMatches: 3 });
     return user;
   }
@@ -257,54 +249,46 @@ describe('a commit that cannot be carried out says so (FR-058)', () => {
     await user.click(screen.getByTestId('menu-item-Replace All'));
   };
 
-  it('reports a rejected commit instead of doing nothing visible at all', async () => {
-    stub.commit.mockRejectedValue(new Error('EPERM: operation not permitted'));
+  it.each([
+    {
+      name: 'a rejected commit, instead of doing nothing visible at all',
+      arrange: (): void => {
+        stub.commit.mockRejectedValue(new Error('EPERM: operation not permitted'));
+      },
+      confirm: false,
+      text: 'EPERM',
+    },
+    {
+      // A channel that changed under the renderer answers this way, and it used to fall straight
+      // through the `committed` check — no notice, no marking, no visible change.
+      name: 'an answer whose shape it does not recognise',
+      arrange: (): void => {
+        stub.commit.mockResolvedValue({ status: 'ok' });
+      },
+      confirm: false,
+      text: '',
+    },
+    {
+      name: 'a rejection of the CONFIRMED re-ask as well',
+      arrange: (): void => {
+        stub.commit
+          .mockResolvedValueOnce({ committed: false, reason: 'needsConfirmation', unopenedFileCount: 2 })
+          .mockRejectedValue(new Error('EBUSY: resource busy'));
+      },
+      confirm: true,
+      text: 'EBUSY',
+    },
+  ])('reports $name', async ({ arrange, confirm, text }) => {
+    arrange();
     const user = await ready();
     await commitAll(user);
+    if (confirm) await user.click(await screen.findByTestId('confirm-accept'));
 
     const notices = await screen.findAllByTestId('fif-commit-outcome');
     // ONE card, and the same one a successful commit uses: one condition, one surface.
     expect(notices).toHaveLength(1);
     expect(notices[0]?.className).toContain('notice--error');
-    expect(notices[0]?.textContent ?? '').toContain('EPERM');
-  });
-
-  it('reports an answer whose shape it does not recognise', async () => {
-    // A channel that changed under the renderer answers this way, and it used to fall straight
-    // through the `committed` check — no notice, no marking, no visible change.
-    stub.commit.mockResolvedValue({ status: 'ok' });
-    const user = await ready();
-    await commitAll(user);
-
-    const notices = await screen.findAllByTestId('fif-commit-outcome');
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.className).toContain('notice--error');
-  });
-
-  it('reports a rejection of the CONFIRMED re-ask as well', async () => {
-    stub.commit
-      .mockResolvedValueOnce({ committed: false, reason: 'needsConfirmation', unopenedFileCount: 2 })
-      .mockRejectedValue(new Error('EBUSY: resource busy'));
-    const user = await ready();
-    await commitAll(user);
-    await user.click(await screen.findByTestId('confirm-accept'));
-
-    const notices = await screen.findAllByTestId('fif-commit-outcome');
-    expect(notices).toHaveLength(1);
-    expect(notices[0]?.textContent ?? '').toContain('EBUSY');
-  });
-
-  it('still says nothing when the user cancelled — there is no outcome to report', async () => {
-    stub.commit.mockResolvedValue({
-      committed: false,
-      reason: 'needsConfirmation',
-      unopenedFileCount: 2,
-    });
-    const user = await ready();
-    await commitAll(user);
-    await user.click(await screen.findByTestId('confirm-cancel'));
-
-    expect(screen.queryByTestId('fif-commit-outcome')).toBeNull();
+    expect(notices[0]?.textContent ?? '').toContain(text);
   });
 });
 
@@ -338,21 +322,16 @@ describe('a narrow commit row with nothing pending is drawn disabled (T233)', ()
     await screen.findAllByTestId('fif-commit-outcome');
   }
 
-  it('Replace Match is disabled on a row that has already been committed', async () => {
-    const user = await ready();
-    await commitMatch(user, 'fif-row-src/b.ts-40');
-
-    await rightClick(user, 'fif-row-src/b.ts-40');
-
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it('and clicking it sends NOTHING — the second write that corrupted the file', async () => {
+  it('Replace Match is disabled on a row that has already been committed, and clicking it sends NOTHING — the second write that corrupted the file', async () => {
     const user = await ready();
     await commitMatch(user, 'fif-row-src/b.ts-40');
     expect(stub.commit).toHaveBeenCalledTimes(1);
 
     await rightClick(user, 'fif-row-src/b.ts-40');
+    expect(
+      screen.getByTestId('menu-item-Replace Match'),
+      'drawn disabled on a committed row',
+    ).toHaveAttribute('aria-disabled', 'true');
     await user.click(screen.getByTestId('menu-item-Replace Match'));
 
     expect(stub.commit).toHaveBeenCalledTimes(1);

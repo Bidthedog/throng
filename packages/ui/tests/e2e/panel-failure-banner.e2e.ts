@@ -79,13 +79,6 @@ function control(win: Page, panelId: string, name: string): Locator {
   return banner(win, panelId).getByRole('button', { name, exact: true });
 }
 
-/** The banner's controls, in DOM order, as the names a keyboard or screen-reader user hears. */
-async function controlNames(win: Page, panelId: string): Promise<string[]> {
-  return banner(win, panelId)
-    .locator('button')
-    .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? el.getAttribute('title') ?? ''));
-}
-
 /**
  * SETUP GATE — WAIT until the panel has reached its failure state, before acting on it.
  *
@@ -372,7 +365,7 @@ test.afterAll(async () => {
  * T056a / T069apre — ALL THREE controls are reachable and OPERABLE by keyboard, in the order they
  * are displayed (FR-042a, the banner half of SC-009a).
  *
- * Focus first, then Tab, then a real key on the control — the idiom `notice-a11y.e2e.ts` uses. Each
+ * Focus first, then Tab, then a real key on the control — the idiom `notice-consolidation.e2e.ts` uses. Each
  * step answers a different question, and none of them answers the others:
  *   • focus() lands        → the control is focusable at all
  *   • Tab walks the set    → the DISPLAYED order IS the tab order, and no control traps focus
@@ -591,11 +584,9 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
       await inFailureState(win, brokenPid, 'editor');
       await expect(banner(win, brokenPid)).toBeVisible();
 
-      // ═══ 2 — NOT DISMISSIBLE (FR-046), as the complete list of what the banner offers. ═══
-      expect(
-        await controlNames(win, brokenPid),
-        'the banner offers a way to close itself while its condition still holds',
-      ).toEqual(['Try again', 'Copy details', 'Clear panel type']);
+      // ═══ 2 — NOT DISMISSIBLE (FR-046). The complete control list is component/panel-failure-banner.test.ts's
+      // ('offers exactly three controls, and none of them closes the banner'); the later steps here prove the
+      // banner stays up through a failing retry. ═══
 
       // ═══ 1 — a retry that FAILS says so, and the banner stays. ═══
       //
@@ -664,71 +655,10 @@ test('retry clears the banner on success, reports failure on failure, and a hidd
   }
 });
 
-/**
- * T056 — THE BANNER IS NOT A NOTIFICATION, AND THE PREFERENCES CANNOT SILENCE IT (FR-005a/FR-041).
- *
- * US1 gave the user a switch that turns a whole severity off. The banner must be outside its reach:
- * it is a statement about a panel's condition, not an announcement of an event, and a panel that
- * silently pretended to be fine is precisely the failure 027/#161 reported.
- *
- * Seeded through the CONFIG ROOT rather than through the Preferences window — deliberately. Driving
- * the preferences UI would make this test depend on US1's controls to make a claim about US4's
- * component, and would open a second window whose focus theft is the very thing `parallel-plan.json`
- * exists to contain. All four severities, not just `error`: the point is that no setting reaches it.
- *
- * The absent notice is asserted SECOND, after the banner is on screen, so a run where nothing at all
- * happened cannot read as a pass.
+/*
+ * MOVED DOWN / MERGED (test-suite audit, pass 2): "the banner appears with every severity set to Never display" is
+ * `failure-copy.e2e.ts` "the banner copies its message, subject, path and system error with no notice on screen",
+ * which has the same arrangement (all four severities `never`, a ghost-root failing terminal, the banner shown,
+ * zero `.notice`) and now also asserts the FR-041 pointer sentence. The sentence's text is
+ * `unit/notice-text.test.ts`.
  */
-test('the banner appears with every severity set to Never display', { tag: ['@extended', '@window'] }, async () => {
-  test.setTimeout(240_000);
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-pfb-cfg-'));
-  writeFileSync(
-    join(cfgRoot, 'settings.json'),
-    JSON.stringify({
-      version: 1,
-      notifications: {
-        error: { mode: 'never', timeoutMs: 30000 },
-        warning: { mode: 'never', timeoutMs: 30000 },
-        info: { mode: 'never', timeoutMs: 30000 },
-        success: { mode: 'never', timeoutMs: 30000 },
-      },
-    }),
-    'utf8',
-  );
-  try {
-    await runOwnApp(
-      async (_app, win) => {
-        await settle(win);
-        await createProject(win, 'Silenced', ghostRoot('silenced'));
-        const pid = await firstPanelId(win);
-        await failingTerminalOn(win, pid);
-
-        // The banner is there, whole — headline, pointer and all three controls.
-        await expect(banner(win, pid)).toBeVisible({ timeout: 90_000 });
-        expect(await controlNames(win, pid)).toEqual([
-          'Try again',
-          'Copy details',
-          'Clear panel type',
-        ]);
-
-        /*
-         * T069pre — THE FINAL POINTER SENTENCE, ASSERTED WHERE IT HAS TO BE TRUE.
-         *
-         * FR-041 forbids a pointer from promising a route that may not exist, and this is the case
-         * that decides it: every severity is *Never display*, so there is no notice and never was
-         * one. The sentence leads with Copy for exactly that reason — and the assertion below proves
-         * the notice really is absent, so this is the sentence being read in the state it was
-         * written for rather than in a comfortable one.
-         */
-        await expect(banner(win, pid)).toContainText('Copy the details here, or see the notification.');
-
-        // …and it is genuinely alone: every severity is off, so no notice is on screen to have
-        // carried the news instead. This is what FR-041 forbids the pointer from promising.
-        await expect(win.getByTestId('notices').locator('.notice')).toHaveCount(0);
-      },
-      { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-    );
-  } finally {
-    cleanupTemp(cfgRoot);
-  }
-});

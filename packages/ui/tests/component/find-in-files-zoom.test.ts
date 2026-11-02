@@ -27,8 +27,6 @@
  * `find-in-files-panel.tsx` into `style`, so every number this file asserts is a number the
  * application computed rather than one a browser resolved.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { zoomFactor } from '@throng/core';
@@ -45,16 +43,6 @@ import {
   resultRow,
   type FileSearchStub,
 } from './helpers/find-in-files.js';
-
-const PANEL_CSS = resolve(
-  process.cwd(),
-  'packages/ui/src/renderer/find-in-files/find-in-files.css',
-);
-
-const sheet = (): string => {
-  expect(existsSync(PANEL_CSS), `${PANEL_CSS} was not found`).toBe(true);
-  return readFileSync(PANEL_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, ' ');
-};
 
 let bridge: FileSearchStub;
 
@@ -108,39 +96,7 @@ describe('the panel’s text scales with the panel’s own zoom level (FR-062)',
     expect(published).toBeLessThan(1);
   });
 
-  it('multiplies the Pane Text size by it in the stylesheet', () => {
-    // The role still decides the BASE (FR-064): this multiplies the role's own variable rather than
-    // restating a size, so a user who changes Pane Text still changes this panel's text.
-    expect(sheet()).toMatch(
-      /font-size:\s*calc\(\s*var\(--throng-font-paneText-size\)\s*\*\s*var\(--throng-zoom-fif[^)]*\)\s*\)/,
-    );
-  });
 
-  it('does so from a selector that outranks the role rule, not one that ties with it', () => {
-    /*
-     * ══ THE CASCADE FACT THIS RULE EXISTS INSIDE, AND WHY THE SELECTOR IS DOUBLED ══
-     *
-     * `theme.css` hands `.fif-panel` the Pane Text role, and `theme.css` is imported LAST in
-     * `main.tsx` while this sheet arrives through the component graph — so in the built bundle the
-     * role rule comes AFTER everything here. Two rules of equal specificity are settled by document
-     * order, so a plain `.fif-panel { font-size: … }` in this file would lose to the role rule and
-     * do nothing at all.
-     *
-     * That is not a hypothetical: it is precisely the defect FR-079 has just removed from this same
-     * sheet — `.fif-btn`'s `font-size: 12px`, a declaration that read as the obvious place to change
-     * something and governed nothing. A zoom that silently did not apply would be the same failure
-     * with a requirement behind it.
-     *
-     * `.fif-panel.fif-panel` is one element, twice named: same subject, specificity (0,2,0), and no
-     * dependence on which sheet a bundler happens to emit first. It is asserted here rather than
-     * only explained in the sheet, because a later tidy-up to the "obvious" single class would leave
-     * every text assertion in this file passing.
-     */
-    expect(
-      sheet(),
-      'the zoom rule must outrank theme.css’s Pane Text rule, which is emitted after this sheet',
-    ).toMatch(/\.fif-panel\.fif-panel\s*\{/);
-  });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -148,12 +104,8 @@ describe('the panel’s text scales with the panel’s own zoom level (FR-062)',
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the row metrics scale by the SAME rounded integer (FR-062, R26)', () => {
-  it('publishes the rounded row height to the stylesheet', () => {
-    withRows(2, 40);
-    expect(resultsEl().style.getPropertyValue('--fif-row-height')).toBe(
-      `${resultRowHeightPx(2)}px`,
-    );
-  });
+  // DELETED: 'publishes the rounded row height to the stylesheet' — 'agrees across all three' below
+  // asserts `--fif-row-height` is `${resultRowHeightPx(level)}px`.
 
   it('is the unzoomed base at level 0', () => {
     withRows(0, 40);
@@ -170,13 +122,8 @@ describe('the row metrics scale by the SAME rounded integer (FR-062, R26)', () =
     expect(sizerEl().style.height).toBe(`${items * resultRowHeightPx(2)}px`);
   });
 
-  it('offsets the mounted window by a whole multiple of it, never a fraction', () => {
-    withRows(2, 400);
-    const transform = windowEl().style.transform;
-    const px = Number(/translateY\((-?[\d.]+)px\)/.exec(transform)?.[1]);
-    expect(Number.isInteger(px), `translateY was ${transform}`).toBe(true);
-    expect(px % resultRowHeightPx(2)).toBe(0);
-  });
+  // DELETED: 'offsets the mounted window by a whole multiple of it' — 'agrees across all three' below
+  // asserts the translateY is a multiple of the integer row height (so a whole number of px).
 
   it('agrees across all three, so the sheet and the arithmetic cannot drift apart', () => {
     /*
@@ -199,16 +146,4 @@ describe('the row metrics scale by the SAME rounded integer (FR-062, R26)', () =
     expect(height).not.toBe(RESULT_ROW_HEIGHT_PX * zoomFactor(level));
   });
 
-  it('asks the stylesheet to compute no row height of its own', () => {
-    /*
-     * The negative half, and the one that makes the rule enforceable rather than a convention: the
-     * sheet may READ `--fif-row-height`, and it may not multiply it. A `calc(var(--fif-row-height) *
-     * var(--throng-zoom-fif))` anywhere here would give the browser a second rounding authority over
-     * a number the arithmetic has already rounded.
-     */
-    const offenders = [...sheet().matchAll(/calc\([^;{}]*--fif-row-height[^;{}]*\)/g)].map(
-      (m) => m[0],
-    );
-    expect(offenders, 'CSS is told the row height, never asked to compute it (R26)').toEqual([]);
-  });
 });

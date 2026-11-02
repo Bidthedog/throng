@@ -162,7 +162,7 @@ describe('a movedOut sync (FR-035)', () => {
     expect(screen.getByTestId('dirty-close-discard')).toBeInTheDocument();
     expect(screen.getByTestId('dirty-close-save')).toHaveTextContent(/Save As/);
     expect(dialog).not.toHaveTextContent(/Save & close/);
-    await userEvent.setup().click(screen.getByTestId('dirty-close-cancel'));
+    await userEvent.setup({ delay: null }).click(screen.getByTestId('dirty-close-cancel'));
   });
 
   it('becomes an ordinary editor again when a sync says movedOut: false (undo)', async () => {

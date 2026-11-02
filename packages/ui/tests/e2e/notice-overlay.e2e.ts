@@ -46,7 +46,7 @@ test('a persistent error notice wins the hit-test over what it covers (#313, sup
      * It is an ERROR under the shipped default (`dismiss`): it waits for the user rather than timing
      * out while they read it. That `NotificationProvider` arms no timer at all for `mode: 'dismiss'`
      * — at any severity, for any duration, an hour included — is proven with a fake clock in
-     * `packages/ui/tests/component/notice-dismissal-timer.test.ts` ("Dismiss only never arms a timer,
+     * `packages/ui/tests/component/notice-display-override.test.ts` ("Dismiss only never arms a timer,
      * whatever the severity", 034 FR-045/SC-008). This spec no longer waits real seconds to gesture at
      * the same fact; it keeps the part only Electron can prove — the hit-test below.
      */

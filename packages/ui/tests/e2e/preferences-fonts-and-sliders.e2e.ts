@@ -207,10 +207,21 @@ test('a role WEIGHT is a slider on the real 100-900 scale (021 follow-up)', { ta
   );
 });
 
-test('the preferences window inherits the BASE application font (no separate dialog font)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
+/*
+ * MERGED (pass 2): "Revert this theme undoes THIS SITTING’s edits, and only offers itself when there are
+ * any" is the second half of this test — same window, same BASE font size slider, one app run.
+ */
+test('the preferences window inherits the BASE application font (no separate dialog font), and Revert this theme undoes that edit', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemesTab(app, win);
+      // Nothing has changed, so there is nothing to revert — and a no-op affordance is noise.
+      await expect(prefs.getByTestId('theme-revert'), 'Revert is not offered before any edit').toHaveCount(0);
+
+      const size = prefs.getByTestId('control-fonts.baseSizePx');
+      const original = await size.inputValue();
+      expect(original).not.toBe('18');
+
       // The `dialog` role was retired: the preferences window is no longer themed apart from the app, so
       // changing the BASE font size moves the window with everything else.
       await setSlider(prefs.getByTestId('control-fonts.baseSizePx-slider'), '18');
@@ -222,27 +233,11 @@ test('the preferences window inherits the BASE application font (no separate dia
           }),
         )
         .toBe('18px');
-    },
-  );
-});
-
-test('Revert this theme undoes THIS SITTING’s edits, and only offers itself when there are any', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemesTab(app, win);
-      // Nothing has changed, so there is nothing to revert — and a no-op affordance is noise.
-      await expect(prefs.getByTestId('theme-revert')).toHaveCount(0);
-
-      const size = prefs.getByTestId('control-fonts.baseSizePx');
-      const original = await size.inputValue();
-      expect(original).not.toBe('20');
-
-      await setSlider(prefs.getByTestId('control-fonts.baseSizePx-slider'), '20');
       await expect
         .poll(() => (readTheme(cfg, 'throng') as { fonts?: { baseSizePx?: number } }).fonts?.baseSizePx, {
           timeout: 5000,
         })
-        .toBe(20);
+        .toBe(18);
 
       // NOW it is offered.
       await prefs.getByTestId('theme-revert').click();

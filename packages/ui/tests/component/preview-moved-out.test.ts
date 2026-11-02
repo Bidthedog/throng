@@ -9,10 +9,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PREVIEW_KIND, collectPanels, type Panel } from '@throng/core';
+import { collectPanels, type Panel } from '@throng/core';
 import { runPreviewEditorRoute } from '../../src/renderer/preview/open-in-editor.js';
-import { previewContentMenu } from '../../src/renderer/preview/content-menu.js';
-import { panelHeaderMenu } from '../../src/renderer/workspace/panel-header-menu.js';
 import { PreviewPathSync } from '../../src/renderer/preview/preview-path-sync.js';
 import { __resetPreviewStore } from '../../src/renderer/preview/preview-store.js';
 import { COLD, README, mountMarkdownPreview, previewUpdate, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
@@ -130,29 +128,7 @@ describe('remounted moved out WITHOUT the store being reset (R26, US2 AS11)', ()
     expect(await screen.findByTestId(`preview-editor-${m.id}`)).toBeDisabled();
   });
 
-  it('disables the header menu and content menu rows', () => {
-    const keybindings = { bindings: {} };
-    const header = panelHeaderMenu({
-      panel: { type: 'panel', id: 'x', kind: PREVIEW_KIND, title: 'P', config: { filePath: NEW, movedOut: true } },
-      panelVerb: 'Destroy',
-      keybindings,
-      otherTabs: [],
-      editor: null,
-      panelFailure: false,
-      detach: null,
-      preview: { providerKind: 'text', parented: false },
-      actions: new Proxy({}, { get: () => () => {} }),
-    } as never) as unknown as { label?: string; disabled?: boolean }[];
-    expect(header.find((i) => i.label === 'Open in Editor')?.disabled).toBe(true);
-
-    const content = previewContentMenu({
-      selectionEmpty: true,
-      editorRoute: { parented: false, run: () => {}, disabled: true },
-      find: { run: () => {} },
-      goToHeading: { run: () => {} },
-    } as never) as unknown as { label?: string; disabled?: boolean }[];
-    expect(content.find((i) => i.label === 'Open in Editor')?.disabled).toBe(true);
-  });
+  // MOVED DOWN: "disables the header menu and content menu rows" — packages/ui/tests/unit/preview-content-menu.test.ts.
 
   it('becomes the preview again when main reports the file back in the project', async () => {
     m = await remountMovedOut([createElement(PreviewPathSync, { key: 'sync' })]);

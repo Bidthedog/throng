@@ -132,9 +132,11 @@ describe('the preview status bar looks like the editor’s (FR-015a)', () => {
 
     mounted.setSettings({ editor: { showStatusBar: true } });
     await waitFor(() => expect(bar(mounted.id)).not.toBeNull());
+    expect(screen.getByTestId(`preview-sync-scroll-${mounted.id}`), 'the toggle comes back with the bar').toBeInTheDocument();
 
     mounted.setSettings({ editor: { showStatusBar: false } });
     await waitFor(() => expect(bar(mounted.id)).toBeNull());
+    expect(screen.queryByTestId(`preview-sync-scroll-${mounted.id}`), 'the toggle goes with the bar').toBeNull();
   });
 });
 
@@ -279,14 +281,5 @@ describe('the scroll-sync toggle (FR-122c)', () => {
     expect(button(id)).toHaveAccessibleName('Open in Editor');
   });
 
-  it('G2 — goes with the whole bar, and comes back with it', async () => {
-    const mounted = await mountText();
-    const { id } = mounted;
-    await screen.findByTestId(`preview-sync-scroll-${id}`);
-    mounted.setSettings({ editor: { showStatusBar: false } });
-    await waitFor(() => expect(bar(id)).toBeNull());
-    expect(toggle(id)).toBeNull();
-    mounted.setSettings({ editor: { showStatusBar: true } });
-    await waitFor(() => expect(toggle(id)).not.toBeNull());
-  });
+  // MERGED: "G2 — goes with the whole bar, and comes back with it" is now asserted in "follows editor.showStatusBar, live".
 });

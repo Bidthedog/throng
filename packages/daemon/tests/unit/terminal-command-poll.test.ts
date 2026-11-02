@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { ChildProcess, IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
@@ -70,7 +70,19 @@ class FakeHost implements IPtyHost {
 
 const noopLock = { acquire: async () => ({ path: 'x' }), release: async () => {} };
 const launch = { file: 'C:/cmd.exe', args: [], cwd: 'C:/proj' };
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+// The poll runs on timers, and the fake host answers from memory, so a fake clock walks the same
+// intervals in microseconds. `Date` stays real: capture compares a child's start against the shell's.
+const sleep = async (ms: number): Promise<void> => {
+  await vi.advanceTimersByTimeAsync(ms);
+};
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function makeService(pollMs: number) {
   const host = new FakeHost();

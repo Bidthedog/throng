@@ -2,7 +2,54 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { commitTabRename, createProject, firstPanelId, panelGrip, panelIds, runApp, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import {
+  commitTabRename,
+  createProject as newProject,
+  firstPanelId,
+  panelGrip,
+  panelIds,
+  openApp,
+  runApp as runOwnApp,
+  cleanupTemp,
+  splitPanelViaMenu,
+  type OpenApp,
+} from './harness.js';
+
+/*
+ * ONE app for the drag tests, not one per test. Only the theme-accent test seeds a config root BEFORE
+ * launch, so it keeps its own app via `runOwnApp`; the rest share `shared`.
+ *
+ *   runApp        runs the body against the shared window (refuses launch options).
+ *   createProject appends a counter, because a shared app accumulates projects and duplicate names
+ *                 make `.project-item` ambiguous.
+ *
+ * Serial mode is required - shared window, shared database - and a failure skips the rest rather
+ * than running them against whatever state the failure left behind. Every drag ends with the button
+ * released and the ghost hidden, so a test leaves no drag in flight for the next one.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+test.beforeAll(async () => {
+  shared = await openApp();
+});
+test.afterAll(async () => {
+  await shared?.close();
+});
+
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: unknown,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win);
+};
+
+let projectSeq = 0;
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
 // US1 / SC-001: a translucent ghost follows the cursor during a drag. It is a
 // real frameless/transparent OS window (so it can paint at and beyond the app
@@ -57,9 +104,9 @@ test.afterAll(() => {
 test('the drag ghost and the New Tab (+) affordance follow the theme accent', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const cfgRoot = seedThemeAccent('#ff00aa'); // a distinctive magenta, unlike any default
   const ACCENT = 'rgb(255, 0, 170)';
-  await runApp(
+  await runOwnApp(
     async (app, win) => {
-      await createProject(win, 'Themed', 'C:/c/themed');
+      await newProject(win, 'Themed', 'C:/c/themed');
       await expect(win.getByTestId('tab-strip')).toBeVisible();
 
       // The New Tab (+) hover uses the THEME accent, not the active project's
@@ -149,40 +196,8 @@ test('Escape during a panel drag hides the ghost and leaves the layout alone', {
   });
 });
 
-test('Escape cancels a drag that starts from a TERMINAL panel, whose textarea swallows Escape', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
-  // A REAL folder: a terminal starts in the project root, and a root that does not exist raises a
-  // "could not be found" notice that sits over the panel's Confirm button.
-  const root = mkdtempSync(join(tmpdir(), 'throng-escterm-'));
-  try {
-    await runApp(async (app, win) => {
-      await createProject(win, 'EscTerm', root);
-      const pid = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
-      await splitPanelViaMenu(win, pid);
-      await expect(win.locator('.panel-box')).toHaveCount(2);
-      const idsBefore = await panelIds(win);
-
-      // Pressing the terminal's header focuses xterm's textarea, which stops Escape bubbling — the
-      // cancel has to be taken before it gets there (FR-080).
-      const box = await panelGrip(win, pid).boundingBox();
-      if (!box) throw new Error('no panel handle');
-      await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await win.mouse.down();
-      await win.mouse.move(box.x + 60, box.y + 60, { steps: 8 });
-      await expect.poll(() => app.evaluate(ghostVisible), { timeout: 3000 }).toBe(true);
-      await win.keyboard.press('Escape');
-      await expect.poll(() => app.evaluate(ghostVisible), { timeout: 3000 }).toBe(false);
-      await win.mouse.up();
-      await expect(win.getByTestId('outer-edge-zones')).toHaveCount(0);
-      expect(await panelIds(win)).toEqual(idsBefore);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+// MOVED DOWN: "Escape cancels a drag that starts from a TERMINAL panel, whose textarea swallows Escape" -
+// component/drag-cancel.test.ts ('cancels even when the focused element swallows Escape, as a terminal does').
 
 test('Escape during a tab drag hides the ghost and keeps the tab order', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
   await runApp(async (app, win) => {
@@ -211,5 +226,67 @@ test('Escape during a tab drag hides the ghost and keeps the tab order', { tag: 
     expect(await order()).toEqual(before);
     await drag();
     expect(await order()).toEqual(before);
+  });
+});
+
+// Probe: dragging a Panel/Tab must not spew Chromium widget-rejection errors from
+// the drag-ghost OS window (`Message N rejected by interface blink.mojom.Widget`).
+// (Folded in from ghost-drag-noise.e2e.ts.)
+test('dragging does not emit blink.mojom.Widget rejections', { tag: ['@extended', '@window', '@reserve:osdrag'] }, async () => {
+  await runApp(async (app, win) => {
+    const stderr: string[] = [];
+    const proc = app.process();
+    proc.stderr?.setEncoding('utf8');
+    proc.stderr?.on('data', (c: string) => stderr.push(c));
+
+    await createProject(win, 'GhostNoise', 'C:/c/ghostnoise');
+    await expect(win.locator('.panel-box')).toHaveCount(1);
+    const pid = await firstPanelId(win);
+
+    // Start + wiggle + end a Panel drag several times (each triggers ghost start/stop).
+    for (let i = 0; i < 5; i += 1) {
+      const handle = panelGrip(win, pid);
+      const box = await handle.boundingBox();
+      if (!box) throw new Error('no handle box');
+      await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await win.mouse.down();
+      await win.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2 + 12, { steps: 4 });
+      await win.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 40, { steps: 6 });
+      await win.mouse.up();
+      // sleep-justified: the thing under test is Chromium's own native drag-ghost widget teardown
+      // sleep-justified: writing (or not) a `blink.mojom.Widget` rejection to the app's stderr - a
+      // sleep-justified: process-level, native-window race with nothing on the DOM or app state to
+      // sleep-justified: observe, so there is no condition to await between repetitions.
+      await win.waitForTimeout(250);
+    }
+
+    const joined = stderr.join('');
+    const hits = (joined.match(/blink.mojom.Widget/g) ?? []).length;
+    console.log(`[probe] blink.mojom.Widget hits: ${hits}`);
+    expect(hits, joined).toBe(0);
+  });
+});
+
+// Moved here from performance.e2e.ts: it measures drag feedback, and shares this file's app.
+test('shows drop-target feedback promptly once a Panel drag starts (NFR-001/SC-012)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+  await runApp(async (_app, win) => {
+    await createProject(win, 'Feedback', 'C:/c/feedback');
+    const firstId = await firstPanelId(win);
+    await splitPanelViaMenu(win, firstId);
+    await expect(win.locator('.panel-box')).toHaveCount(2);
+
+    const ids = await panelIds(win);
+    const [a, b] = ids;
+
+    const handle = panelGrip(win, b);
+    const box = await handle.boundingBox();
+    if (!box) throw new Error('handle has no box');
+    await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await win.mouse.down();
+    // Pass the activation distance; edge drop-zones for the other panel must
+    // appear quickly (NFR-001 target 100 ms; the bound absorbs polling overhead).
+    await win.mouse.move(box.x + box.width / 2 + 8, box.y + box.height / 2 + 8, { steps: 2 });
+    await expect(win.getByTestId(`edge-right-${a}`)).toBeVisible({ timeout: 200 });
+    await win.mouse.up();
   });
 });

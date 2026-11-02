@@ -24,7 +24,8 @@
  * joined. This announcement names the recurring SUBJECT and says the condition recurred, and nothing
  * more. The separate `announceGrowth` region already handles a notice that genuinely GREW.
  */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AffectedCasualty, DisplayMode } from '@throng/core';
@@ -78,9 +79,7 @@ async function mount(): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 

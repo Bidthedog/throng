@@ -334,19 +334,9 @@ describe('FR-110 — every gesture, in both panel types, performs the click rule
     }
   });
 
-  it('FR-111: no gesture ever reaches `window.throng.links.open`, on any row', async () => {
-    const opened: string[] = [];
-    for (const row of TABLE) {
-      for (const [gesture, drive] of GESTURES) {
-        live = { previewRegistry: REGISTRY, previewSettings: previewSettings(row.previews) };
-        osCalls.length = 0;
-        const s = surface();
-        await drive(row.resolved, row.text, s);
-        if (osCalls.some((c) => c.startsWith('osDefaultProgram:'))) opened.push(`${row.name} / ${gesture}`);
-      }
-    }
-    expect(opened).toEqual([]);
-  });
+  // DELETED: 'FR-111: no gesture ever reaches `window.throng.links.open`' — implied by 'over every
+  // row of the table', which asserts the EXACT outcome per row and gesture (no expected value
+  // contains `osDefaultProgram:`); link-out-of-project.test.ts spies the real `links.open` too.
 });
 
 /* ── FR-110 / FR-112: no link-specific preference is consulted ─────────────────────────────── */

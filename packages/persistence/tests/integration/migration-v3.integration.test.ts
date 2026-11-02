@@ -23,7 +23,7 @@ function columns(db: ThrongDatabase, table: string): string[] {
 }
 
 describe('migration v3 (project ordering)', () => {
-  it('adds a projects.position column when migrating to the latest version', () => {
+  it('adds a projects.position column when migrating to the latest version', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -34,7 +34,7 @@ describe('migration v3 (project ordering)', () => {
     }
   });
 
-  it('is idempotent (re-run is a no-op)', () => {
+  it('is idempotent (re-run is a no-op)', { tags: ['regression'] }, () => {
     const path = freshDbPath();
     let db = openDatabase({ databasePath: path });
     runMigrations(db);

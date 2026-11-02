@@ -177,7 +177,7 @@ function Host(): ReactElement | null {
 }
 
 function mount() {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const bridge = fakePreviewBridge();
   const destroyedListeners: ((id: string) => void)[] = [];
   Reflect.set(window, 'throng', {

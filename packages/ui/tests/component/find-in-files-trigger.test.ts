@@ -187,19 +187,9 @@ describe('with as-you-type on, a settled edit starts a scan (FR-043b)', () => {
     config.settings = settings({ trigger: 'asYouType' });
   });
 
-  it('is what the application SHIPS with, so an untouched install behaves this way (FR-074)', () => {
-    // Deliberately does not override the trigger: the point is what `DEFAULT_APP_SETTINGS` says.
-    // `settings({})` still pins `settleMs` — the interval is a fixture value here, and its shipped
-    // figure is FR-075's, asserted in `settings-metadata.test.ts` where the descriptor lives.
-    config.settings = settings({});
-    expect(DEFAULT_APP_SETTINGS.search.inFiles.trigger).toBe('asYouType');
-
-    mount();
-    type('needle');
-    tick(SETTLE_MS + 10);
-
-    expect(startedTerms()).toEqual(['needle']);
-  });
+  // DELETED: 'is what the application SHIPS with (FR-074)' — the shipped default is asserted in core
+  // `settings-metadata.test.ts:410` (`DEFAULT_APP_SETTINGS.search.inFiles.trigger` is 'asYouType'),
+  // and the behaviour under that value is the next test.
 
   it('waits for typing to settle, then starts exactly one scan', () => {
     mount();

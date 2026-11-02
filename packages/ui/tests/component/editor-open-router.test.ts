@@ -427,7 +427,7 @@ describe('Quick Open’s choice goes through the router (T135)', () => {
   }
 
   it('picking a Markdown file with Preview set asks preview.open, and opens no editor', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await mountChrome(PREVIEW, quickOpen(PROJECT));
     const input = await screen.findByTestId('quickopen-input');
     await user.click(input);
@@ -439,7 +439,7 @@ describe('Quick Open’s choice goes through the router (T135)', () => {
   });
 
   it('picking a file no provider claims still opens it in an editor', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await mountChrome(PREVIEW, quickOpen(PROJECT));
     const input = await screen.findByTestId('quickopen-input');
     await user.click(input);

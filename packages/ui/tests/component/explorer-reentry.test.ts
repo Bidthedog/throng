@@ -319,7 +319,7 @@ describe('a renamed folder is still remembered as open (026 / #197)', () => {
      * from a tree where the renamed folder is no longer open, and writes the expansion OUT. That is
      * why both halves are asserted: the new path present, and the old one gone.
      */
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const tree = await mountAt(PROJECT_A, ROOT_A);
 
     await expandAndRename(tree, user);
@@ -334,7 +334,7 @@ describe('a renamed folder is still remembered as open (026 / #197)', () => {
      * keyed by `projectId` and B's own mount writes its own key, so a restore that read the wrong
      * key — or a fixture that never actually left A — shows up here and nowhere else.
      */
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const treeA = await mountAt(PROJECT_A, ROOT_A);
     await expandAndRename(treeA, user);
 
@@ -361,7 +361,7 @@ describe('a renamed folder is still remembered as open (026 / #197)', () => {
      * two are different steps: `loadPersisted` → `fetchChildren(rel, silent)` → `initialOpenState`
      * (`:431-452`) is what turns a remembered path back into rows.
      */
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const tree = await mountAt(PROJECT_A, ROOT_A);
     await expandAndRename(tree, user);
     leave();
@@ -384,7 +384,7 @@ describe('a renamed folder is still remembered as open (026 / #197)', () => {
      * `silent` branch logs precisely so an intermittent restore failure leaves evidence).
      * The E2E could see only the first half.
      */
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const tree = await mountAt(PROJECT_A, ROOT_A);
     await user.click(twisty(tree, 'Docs'));
     await waitFor(() => expect(rowLabels(tree)).toContain('note.txt'));

@@ -78,26 +78,8 @@ describe('each readout is named by what its figure IS (FR-015)', () => {
     expect(readout('words')).toHaveAccessibleName('208 words');
   });
 
-  it('never announces the ABBREVIATION, which is what the requirement names', () => {
-    // The literal wording of FR-015: "line 412", not "Ln 412" and not "412". Asserted as a negative
-    // as well as a positive, because a name that merely differs from the visible text is not
-    // automatically a good one.
-    strip({ line: 412, column: 7, text: FIXTURE });
-
-    // `?? ''` so a MISSING label fails the positive assertions above rather than throwing here on
-    // a null — the negative is about what the name says, not about whether there is one.
-    expect(readout('line').getAttribute('aria-label') ?? '').not.toMatch(/\bLn\b/);
-    expect(readout('column').getAttribute('aria-label') ?? '').not.toMatch(/\bCol\b/);
-  });
-
-  it('never announces a bare number with no subject', () => {
-    strip({ line: 412, column: 7, text: FIXTURE });
-
-    for (const id of ['line', 'column', 'chars', 'words']) {
-      const name = readout(id).getAttribute('aria-label') ?? '';
-      expect(name, `${id} must say what its figure is`).toMatch(/[a-z]{3,}/);
-    }
-  });
+  // Never the abbreviation ("Ln 412"), never a bare number: `toHaveAccessibleName` above is an exact match on
+  // "line 412", "column 7", "63 characters selected" and so on, which rules both out.
 
   it('reads a singular figure in the singular', () => {
     /*

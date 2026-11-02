@@ -43,7 +43,7 @@ function mount(overrides: Partial<Parameters<typeof PreferencesToolbar>[0]> = {}
       ...overrides,
     }),
   );
-  return { ...handlers, user: userEvent.setup() };
+  return { ...handlers, user: userEvent.setup({ delay: null }) };
 }
 
 describe('the per-tab reset (015, FR-011)', () => {

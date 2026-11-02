@@ -110,10 +110,14 @@ describe('G7 — after the retries are spent, the last read is broadcast anyway'
 
     const started = Date.now();
     await readConfigWithRetry(store, { attempts: 3, intervalMs: 40 });
+    const elapsed = Date.now() - started;
 
     // Two pauses between three attempts. Asserted as a floor rather than a range, because a loaded
     // machine can take longer and that is not a defect.
-    expect(Date.now() - started).toBeGreaterThanOrEqual(70);
+    expect(elapsed, 'both pauses are spent').toBeGreaterThanOrEqual(70);
+    // And a ceiling far above that, which catches an unbounded retry without policing machine load:
+    // without one a permanently corrupt file would make every read slow forever rather than once.
+    expect(elapsed, `exhausting the retries took ${elapsed} ms`).toBeLessThan(2_000);
   });
 
   it('treats a document that parses to a NON-OBJECT as unreadable too', async () => {

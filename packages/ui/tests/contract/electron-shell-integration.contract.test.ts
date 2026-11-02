@@ -13,7 +13,7 @@ import {
  *
  * The shared suite's three disk-dependent cases are opt-in: a harness earns them by supplying
  * `fixtures`, and one that supplies none skips them. That is why this file exists rather than the
- * cases simply being added to `tests/integration/electron-shell-integration.test.ts`, whose harness
+ * cases simply being added to `tests/unit/electron-shell.test.ts`, whose harness
  * is a pure fake with no disk behind it — "rejects for a path that does not exist" cannot be
  * asserted against a subject that never looks, and a skipped case is not a passing one.
  *

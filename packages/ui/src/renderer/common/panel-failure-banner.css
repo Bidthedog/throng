@@ -2,9 +2,9 @@
  *
  * NOT ONE LITERAL COLOUR. Every colour comes from a theme token, which is what makes the banner
  * legible in all fifteen shipped themes rather than in the one it was authored against.
- * `default-themes.e2e.ts` enforces this by reading the rendered element's OWN class list and
- * auditing every stylesheet rule that mentions any of those classes — so a hard-coded `#3a1d22`
- * here fails the build, and so does a rule that matches nothing.
+ * `packages/ui/tests/unit/banner-css-no-literal-colour.test.ts` enforces this by auditing every
+ * renderer stylesheet rule whose selector mentions `.panel-failure` — so a hard-coded `#3a1d22`
+ * here fails the build, and so does a selector that matches no rule at all.
  *
  * The error pair is the same one the error notice uses, so a failure reads as a failure in every
  * theme rather than as a hint in some of them.

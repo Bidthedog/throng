@@ -1,6 +1,6 @@
 import { createServer, type Server, type Socket } from 'node:net';
 import process from 'node:process';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PtyAgentHost } from '../../src/pty-agent-host.js';
 import { encodeLine, type AgentCommand, type AgentEvent } from '../../src/pty-agent-protocol.js';
 
@@ -17,6 +17,7 @@ let server: Server | undefined;
 let host: PtyAgentHost | undefined;
 
 afterEach(async () => {
+  vi.useRealTimers();
   await host?.dispose?.();
   host = undefined;
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
@@ -82,9 +83,14 @@ describe('051 — PtyAgentHost.end', () => {
     const pipe = await fakeAgent(() => {});
     const h = connectHost(pipe);
     const handle = h.start(startOpts);
+    // Installed after the pipe host and terminal exist: the connection runs on real sockets, and the
+    // give-up timer is armed synchronously inside end(), so only it runs on the fake clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const started = Date.now();
-    await expect(h.end(handle, 100)).rejects.toThrow(/did not answer/);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1050);
+    const rejected = expect(h.end(handle, 100)).rejects.toThrow(/did not answer/);
+    await vi.advanceTimersByTimeAsync(1100);
+    await rejected;
+    expect(Date.now() - started, 'gives up one second past the limit').toBeGreaterThanOrEqual(1050);
   });
 
   it('returns the same promise for a second end, and resolves for a terminal it does not hold', async () => {
@@ -114,6 +120,9 @@ describe('051 FR-015a — PtyAgentHost.forceEnd', () => {
     const pipe = await fakeAgent(() => {});
     const h = connectHost(pipe);
     const handle = h.start(startOpts);
-    await expect(h.forceEnd(handle, 100)).resolves.toEqual({ survivors: [] });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }); // see the end() test above
+    const forced = expect(h.forceEnd(handle, 100)).resolves.toEqual({ survivors: [] });
+    await vi.advanceTimersByTimeAsync(1100);
+    await forced;
   });
 });

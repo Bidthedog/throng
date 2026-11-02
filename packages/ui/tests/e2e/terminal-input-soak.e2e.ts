@@ -45,7 +45,7 @@ test.describe('terminal input soak (opt-in: THRONG_INPUT_SOAK=1)', () => {
   test.skip(!SOAK, 'long-running: set THRONG_INPUT_SOAK=1 to run it');
 
   for (const flavour of FLAVOURS) {
-    test(`no keystroke is lost over ${REPS} click-and-type rounds (${flavour})`, { tag: ['@extended', '@terminal'] }, async () => {
+    test(`no keystroke is lost over ${REPS} click-and-type rounds (${flavour})`, { tag: ['@extended', '@terminal', '@reserve:input'] }, async () => {
       test.setTimeout(REPS * 8_000 + 120_000);
       const root = mkdtempSync(join(tmpdir(), `throng-soak-${flavour}-`));
       console.log(`[soak] ${flavour}: ${REPS} repetitions`);

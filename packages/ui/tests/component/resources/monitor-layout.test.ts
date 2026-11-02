@@ -7,8 +7,6 @@
  * Layer: component — the real window root and real body over the real session; the bridge is faked. jsdom
  * has no layout, so a drag is given the columns' box the way a real window would report it.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Fragment, Profiler, createElement } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -92,19 +90,10 @@ describe('the first row (FR-121): <filter> | Updated … (n s ago) | ?', () => {
     expect(screen.queryByTestId('monitor-help-panel')).toBeNull();
   });
 
-  it('lays the row out in three columns: the filter at the left, the line centred, the help right-aligned', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(/\r\n/g, '\n');
-    const row = /\.monitor-body__top\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(row).toMatch(/display:\s*grid/);
-    expect(row).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\)/);
-    expect(/\.monitor-body__updated\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/text-align:\s*center/);
-    expect(/\.monitor-body__help\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/justify-self:\s*end/);
-  });
+  // The three-column top row (filter left, line centred, help right) is a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
 
-  it('still says it is collecting before the first reading', async () => {
-    render(createElement(MonitorApp));
-    expect(await screen.findByTestId('monitor-loading')).toHaveTextContent('Collecting the first reading…');
-  });
+  // "Still says it is collecting before the first reading" is `liveness.test.ts` "before the first capture".
 });
 
 describe('the divider (FR-111, scenario 32)', () => {
@@ -231,12 +220,7 @@ describe('the divider (FR-111, scenario 32)', () => {
       expect(divider()).toHaveAttribute('aria-valuenow', String(Math.round(openingSplitRatio(800) * 100)));
     });
 
-    it('keeps a restored position, whatever the width', async () => {
-      restoreView({ splitRatio: 0.6 });
-      await openWindow();
-      expect(divider()).toHaveAttribute('aria-valuenow', '60');
-    });
-
+    // A restored position (0.6) is kept: the "reopened" test below restores 0.6 and asserts aria-valuenow 60.
     it('keeps a position the user chose, even a default-looking one', async () => {
       restoreView({ splitRatio: 0.45 });
       await openWindow();

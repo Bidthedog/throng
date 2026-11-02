@@ -118,7 +118,7 @@ function mount(site: Site, initialValue: string, limit: number) {
   return {
     onCommit,
     onCancel,
-    user: userEvent.setup(),
+    user: userEvent.setup({ delay: null }),
     input: (): HTMLInputElement => screen.getByTestId(site.testId) as HTMLInputElement,
     counter: (): HTMLElement | null => screen.queryByTestId(site.counterTestId),
     /** Change the limit underneath an open box, which is exactly what hot-reload does (C5). */
@@ -142,7 +142,10 @@ function fill(input: HTMLInputElement, value: string): void {
   fireEvent.change(input, { target: { value } });
 }
 
-describe.each(CALL_SITES)('$where', (site) => {
+// ONE call site, not both: the two differ only in four cosmetic strings (see CALL_SITES). The parity
+// test at the foot mounts BOTH and compares the cut and counter, and the unit guard
+// `name-limit-call-sites.test.ts` checks that these are the only two call sites on the same setting.
+describe.each([CALL_SITES[0]])('$where', (site) => {
   it('opens focused, with its text selected, so typing replaces the old name', () => {
     // The E2E never asserted this — it relied on it, by typing straight after a double-click. A field
     // that opened unfocused would have made every one of those tests fail somewhere less obvious.

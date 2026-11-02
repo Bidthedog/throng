@@ -83,16 +83,7 @@ describe('throng:config:resetBinding', () => {
     expect(after.bindings['zoom.in']).toEqual(['Ctrl+Q']); // the user's OTHER rebinding survives
   });
 
-  it('refuses an action with no shipped default and writes nothing', async () => {
-    const root = freshRoot();
-    const store = wire(root);
-    await store.write({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS);
-
-    const res = await invoke<{ ok: boolean; reason?: string }>('throng:config:resetBinding', 'user.inventedThis');
-
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('no-default');
-  });
+  // The refusal ("no-default", writes nothing) is asserted on the service in shipped-defaults-reset.test.ts.
 });
 
 describe('throng:config:resetSetting', () => {
@@ -116,16 +107,7 @@ describe('throng:config:resetSetting', () => {
     expect(after.editor.autoSaveDebounceMs).toBe(9999); // sibling leaf untouched
   });
 
-  it('refuses a path with no shipped default and writes nothing', async () => {
-    const root = freshRoot();
-    const store = wire(root);
-    await store.write({ kind: 'settings' }, DEFAULT_APP_SETTINGS);
-
-    const res = await invoke<{ ok: boolean; reason?: string }>('throng:config:resetSetting', 'nonsense.madeUpKey');
-
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('no-default');
-  });
+  // The refusal ("no-default", writes nothing) is asserted on the service in shipped-defaults-reset.test.ts.
 });
 
 describe('throng:config:resetPreferences', () => {

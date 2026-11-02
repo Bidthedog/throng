@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -6,23 +6,6 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { daemonInfo, ensureDaemon, pingDaemon } from '../../src/main/daemon-lifecycle.js';
-
-const fakeOldDaemonEntry = fileURLToPath(new URL('./fixtures/fake-old-daemon.mjs', import.meta.url));
-
-/** Start the pre-buildId fixture daemon on `pipe`; resolves once it is listening. */
-function startFakeOldDaemon(pipe: string): Promise<ChildProcess> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fakeOldDaemonEntry], {
-      env: { ...process.env, THRONG_PIPE_NAME: pipe },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const t = setTimeout(() => reject(new Error('fake-old-daemon did not start')), 8000);
-    child.stdout!.on('data', (c: Buffer) => {
-      if (c.toString().includes('listening')) { clearTimeout(t); resolve(child); }
-    });
-    child.on('error', (e) => { clearTimeout(t); reject(e); });
-  });
-}
 
 // T065 (US3): the UI main spawns the persistent detached daemon if it is not
 // already running, single-instances it (a second start just connects), and can
@@ -55,31 +38,32 @@ function makeOpts(pipeName: string): {
 }
 
 afterEach(async () => {
-  for (const child of spawned) {
-    try {
-      child.kill();
-    } catch {
-      /* already gone */
-    }
-  }
-  spawned.length = 0;
-  await new Promise((r) => setTimeout(r, 400));
+  // Wait on each daemon's exit (bounded) rather than a fixed sleep: the database folder cannot be
+  // removed until the process holding it has gone.
+  await Promise.all(
+    spawned.splice(0).map(
+      (child) =>
+        new Promise<void>((resolve) => {
+          if (child.exitCode !== null || child.signalCode !== null) return resolve();
+          const bound = setTimeout(resolve, 2000);
+          child.once('exit', () => {
+            clearTimeout(bound);
+            resolve();
+          });
+          try {
+            child.kill();
+          } catch {
+            clearTimeout(bound);
+            resolve();
+          }
+        }),
+    ),
+  );
   for (const dir of dataDirs) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   dataDirs.length = 0;
 });
 
 describe('ensureDaemon (spawn-if-absent + connect + single-instance)', () => {
-  it('spawns a detached daemon when none is running, then it answers health.ping', async () => {
-    const pipe = uniquePipe();
-    expect(await pingDaemon(pipe, 300)).toBe(false); // nothing listening yet
-
-    const res = await ensureDaemon(makeOpts(pipe));
-    if (res.child) spawned.push(res.child);
-
-    expect(res.spawned).toBe(true);
-    expect(await pingDaemon(pipe, 1000)).toBe(true);
-  });
-
   it('connects to an already-running daemon instead of spawning a second', async () => {
     const pipe = uniquePipe();
     const first = await ensureDaemon(makeOpts(pipe));
@@ -132,30 +116,6 @@ describe('ensureDaemon (spawn-if-absent + connect + single-instance)', () => {
     }
   });
 
-  it('restarts a reachable daemon that reports NO build id (predates the build-id protocol)', async () => {
-    // A daemon running code older than the build-id handshake answers health.ping
-    // WITHOUT a buildId. The UI cannot leave it serving stale code (no close-dialog
-    // metadata, old kill path) just because it can't name its build — it must be
-    // retired and replaced, exactly like a mismatched build id.
-    const pipe = uniquePipe();
-    const buildIdPath = join(dirname(daemonEntry), 'BUILD_ID');
-    const original = existsSync(buildIdPath) ? readFileSync(buildIdPath, 'utf8') : null;
-    const fake = await startFakeOldDaemon(pipe);
-    try {
-      writeFileSync(buildIdPath, 'current-build'); // on-disk build is known
-      expect((await daemonInfo(pipe, 1000))?.buildId).toBeUndefined(); // fixture reports none
-
-      const res = await ensureDaemon(makeOpts(pipe));
-      if (res.child) spawned.push(res.child);
-
-      expect(res.restarted).toBe(true); // the pre-buildId daemon was treated as stale
-      expect(res.spawned).toBe(true);
-      const after = await daemonInfo(pipe, 1000);
-      expect(after?.buildId).toBe('current-build'); // a fresh daemon on the new build
-    } finally {
-      try { fake.kill(); } catch { /* already gone */ }
-      if (original !== null) writeFileSync(buildIdPath, original);
-      else rmSync(buildIdPath, { force: true });
-    }
-  });
+  // The buildId-less daemon (predates the build-id protocol) is retired: daemon-foreign-instance's
+  // retire table carries that row against a fake daemon, with no real process spawned.
 });

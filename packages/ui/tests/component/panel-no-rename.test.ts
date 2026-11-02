@@ -13,8 +13,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDefaultLayout,
   DEFAULT_APP_SETTINGS,
-  DEFAULT_KEYBINDINGS,
-  type Tab,
   type WorkspaceLayout,
 } from '@throng/core';
 import type { ThrongBridge } from '../../src/renderer/state/bridge.js';
@@ -33,7 +31,6 @@ import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { TabGroup } from '../../src/renderer/workspace/tab-group.js';
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
-import { resolveScoped } from '../../src/renderer/keybindings/scope.js';
 
 const PROJECT = 'proj-no-rename';
 
@@ -106,7 +103,7 @@ afterEach(() => {
 
 describe('no panel menu offers a rename (FR-030, FR-031)', () => {
   it('the header menu has neither Rename nor Reset Name, and still has its other rows', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.pointer({ keys: '[MouseRight]', target: await screen.findByTestId('panel-handle-p1') });
     const menu = await screen.findByTestId('context-menu');
@@ -140,28 +137,7 @@ describe('no gesture on a panel opens a text box (US5 scenario 2)', () => {
   });
 });
 
-describe('F2 is not a panel command (FR-037)', () => {
-  const tab = (kind: string): Tab =>
-    ({
-      id: 't1',
-      title: 'T',
-      activePanelId: 'p1',
-      root: { type: 'panel', id: 'p1', kind, title: 'P' },
-    }) as unknown as Tab;
-
-  it.each(['terminal', 'editor', 'preview', 'findInFiles'])(
-    'with a %s panel active nothing consumes F2, so the focused surface receives it',
-    (kind) => {
-      const resolved = resolveScoped(
-        DEFAULT_KEYBINDINGS,
-        { key: 'F2' },
-        { tabs: [tab(kind)], activeTabId: 't1' },
-        { transientFocus: false, overlayOpen: false },
-      );
-      expect(resolved).toBeNull();
-    },
-  );
-});
+// F2 is not a panel command (FR-037): unit/f2-not-a-panel-command.test.ts (pure key resolution).
 
 describe('tab renaming is unchanged (FR-038)', () => {
   it('double-clicking a tab still opens its name box', async () => {

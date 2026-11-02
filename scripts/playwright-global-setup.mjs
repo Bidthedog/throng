@@ -6,11 +6,16 @@
  * so this is a no-op. Ownership is handed to the paired globalTeardown via env
  * (both hooks run in the same Playwright main process).
  */
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureRunDir, sweepStaleRunDirs } from './test-run-dir.mjs';
+
+/** A cold launch took about 8 s on a hosted runner (gate run 41326945782). */
+const WARM_UP_MS = 10_000;
 
 export default async function () {
   const { dir, owned } = ensureRunDir();
@@ -48,41 +53,30 @@ export default async function () {
   // warms the OS file cache so every spec starts warm (a warm launch is ~2s). This is
   // best-effort: a warm-up failure must never block the suite. Skipped locally, where
   // the cache is already warm and this would just add a few seconds per run.
-  if (process.env.CI) {
+  // run-e2e-local.mjs sets THRONG_E2E_WARM for its second tier, which the first has already warmed.
+  if (process.env.CI && !process.env.THRONG_E2E_WARM) {
+    // A plain child process rather than Playwright's _electron.launch: an app launched that way is
+    // registered with Playwright's main process, which then waits on it at exit until a 30 s guard
+    // fires. Merely reading Electron off disk during launch warms the OS file cache, so a fixed window
+    // is enough and nothing needs to answer. Best-effort throughout.
     const mainEntry = fileURLToPath(new URL('../packages/ui/dist/main/main.js', import.meta.url));
-    // Hard deadline: whatever happens, warming NEVER blocks the suite for more than
-    // this. It RESOLVES (never rejects) so the race below just falls through. Merely
-    // reading Electron's binary off disk during launch warms the OS file cache, so a
-    // warm-up that times out before the window shows is still useful.
-    const after = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref());
-    let app;
-    let userData;
+    const userData = mkdtempSync(join(tmpdir(), 'throng-warmup-'));
     try {
-      const { _electron } = await import('@playwright/test');
-      userData = mkdtempSync(join(tmpdir(), 'throng-warmup-'));
-      const launch = (async () => {
-        app = await _electron.launch({
-          args: [mainEntry, `--user-data-dir=${userData}`],
-          env: { ...process.env, THRONG_CONFIG_ROOT: mkdtempSync(join(tmpdir(), 'throng-warmcfg-')) },
-        });
-        await app.firstWindow();
-      })();
-      await Promise.race([launch, after(90_000)]);
+      const electron = createRequire(import.meta.url)('electron');
+      const child = spawn(electron, [mainEntry, `--user-data-dir=${userData}`], {
+        stdio: 'ignore',
+        env: { ...process.env, THRONG_CONFIG_ROOT: mkdtempSync(join(tmpdir(), 'throng-warmcfg-')) },
+      });
+      child.on('error', () => {});
+      await new Promise((resolve) => setTimeout(resolve, WARM_UP_MS));
+      if (child.pid !== undefined) spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
     } catch {
       // Ignore — worst case the first spec bears the cold start and recovers on retry.
-    } finally {
-      try {
-        if (app) await Promise.race([app.close(), after(15_000)]);
-      } catch {
-        /* best-effort */
-      }
-      if (userData) {
-        try {
-          rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-        } catch {
-          /* best-effort */
-        }
-      }
+    }
+    try {
+      rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {
+      /* best-effort */
     }
   }
 }

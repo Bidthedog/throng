@@ -1,0 +1,292 @@
+/**
+ * 043 T170/T171 (FR-062a, Constitution VI) — the panel header menu offers Zoom only where zoom works.
+ *
+ * ══ THIS IS A DEFECT AGAINST A RULE THAT ALREADY EXISTED ══
+ *
+ * Constitution VI's disabled-versus-absent rule: a command that is not merely *unavailable right now*
+ * but *never meaningful here* must be ABSENT, not present and inert. The Zoom submenu is built
+ * unconditionally in `panel-header-menu.ts`, before the first `panel.kind` branch — so it appears on
+ * every panel, while only `editor-panel.tsx` and `terminal-panel.tsx` read `panelZoomLevel` and do
+ * anything with it. On the other kinds all three commands change a persisted integer that nothing
+ * renders: the user picks Zoom In, the panel does not zoom, and nothing says why.
+ *
+ * Two kinds are affected, which is the whole reason FR-062a is worded generally. FR-062 makes zoom
+ * real on the Find in Files panel; citing that rule to fix one panel while leaving the identical
+ * violation on the UNTYPED placeholder beside it would make the rule mean "this panel" (plan D2,
+ * research R26).
+ *
+ * ══ WHY THE TABLE IS WRITTEN OUT RATHER THAN DERIVED ══
+ *
+ * The interesting claim is a correspondence between two files — the menu offers Zoom exactly where a
+ * panel component consumes it — and a test that derived one side from the other could only ever
+ * prove the derivation. So the set of kinds that CONSUME zoom is restated here by hand, with the
+ * consumer named for each, and the menu is checked against it. When a kind gains or loses a zoom
+ * consumer, this table is what has to move with it.
+ *
+ * ══ WHY IT IS AT THIS TIER ══
+ *
+ * `panelHeaderMenu` is pure, so the assertion itself would sit happily at unit. It lives here beside
+ * the other panel-header component tests because the follow-on claim in this file — that a Find in
+ * Files panel's header offers no route into a rename at all (FR-061) — is about a rendered header,
+ * and splitting one requirement's evidence across two tiers is how half of it stops being run.
+ */
+import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_KEYBINDINGS,
+  FIND_IN_FILES_KIND,
+  PREVIEW_KIND,
+  type Panel,
+  type PanelKind,
+} from '@throng/core';
+import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
+import {
+  panelHeaderMenu,
+  type PanelHeaderMenuActions,
+} from '../../src/renderer/workspace/panel-header-menu.js';
+
+const noop = (): void => {};
+
+/** Every action the builder can call. Required fields, so a new row is a compile error here. */
+const panelActions: PanelHeaderMenuActions = {
+  split: noop,
+  zoomIn: noop,
+  zoomOut: noop,
+  resetZoom: noop,
+  save: noop,
+  saveAs: noop,
+  revert: noop,
+  reloadFromDisk: noop,
+  reloadTerminal: noop,
+  revealInTree: noop,
+  openInOsExplorer: noop,
+  tryAgain: noop,
+  copyDetails: noop,
+  clearPanelType: noop,
+  redraw: noop,
+  sendToNewTab: noop,
+  sendToTab: noop,
+  find: noop,
+  replace: noop,
+  replaceAll: noop,
+  destroy: noop,
+  openPreview: noop,
+  navigateBack: noop,
+  navigateForward: noop,
+  refreshPreview: noop,
+  openInEditor: noop,
+  goToEditor: noop,
+  toggleSyncScroll: noop,
+  flag: noop,
+};
+
+const panel = (over: Partial<Panel> = {}): Panel => ({
+  type: 'panel',
+  id: 'p1',
+  originProjectId: 'proj',
+  title: 'Panel 3',
+  ...over,
+});
+
+const menuFor = (kind: PanelKind | undefined): MenuAction[] =>
+  panelHeaderMenu({
+    panel: panel(kind === undefined ? {} : { kind }),
+    panelVerb: 'Destroy',
+    keybindings: DEFAULT_KEYBINDINGS,
+    otherTabs: [],
+    editor: kind === 'editor' ? { dirty: false, hasFilePath: true } : null,
+    panelFailure: false,
+    detach: null,
+    preview: kind === PREVIEW_KIND ? { providerKind: 'text', parented: false } : null,
+    actions: panelActions,
+  });
+
+const labels = (items: MenuAction[]): string[] => items.map((i) => i.label ?? '(no label)');
+
+/** The Zoom submenu's own rows, or `null` when the submenu is not offered at all. */
+const zoomSubmenu = (items: MenuAction[]): string[] | null => {
+  const zoom = items.find((i) => i.label === 'Zoom');
+  if (!zoom) return null;
+  return (zoom.submenu ?? []).map((i) => i.label ?? '(no label)');
+};
+
+/**
+ * Which panel kinds actually render their zoom level, and where.
+ *
+ * `Panel.zoom` is persisted for every panel and the three chords resolve to whichever panel is
+ * active, so "does the panel zoom" is never a question about the store — it is a question about
+ * whether any component reads `panelZoomLevel(panel)` and does something visible with the answer.
+ */
+const KINDS: { kind: PanelKind | undefined; what: string; zooms: boolean; consumer: string }[] = [
+  {
+    kind: undefined,
+    what: 'the untyped placeholder',
+    zooms: false,
+    consumer: 'nothing — the panel is a "Select Panel Type" screen with no body text of its own',
+  },
+  {
+    kind: 'editor',
+    what: 'an editor panel',
+    zooms: true,
+    consumer: 'editor-panel.tsx publishes --throng-zoom-editor; editor.css multiplies with it',
+  },
+  {
+    kind: 'terminal',
+    what: 'a terminal panel',
+    zooms: true,
+    consumer: 'terminal-panel.tsx rounds the font size by the factor before xterm measures cells',
+  },
+  {
+    kind: FIND_IN_FILES_KIND,
+    what: 'a Find in Files panel',
+    /*
+     * TRUE from 043 T177, and FALSE before it. This row is the one the phase moves twice, and both
+     * moves are the requirement rather than an accommodation of the code:
+     *
+     *   - at T170 it was `false`, and the assertion below was RED. The submenu was offered on a
+     *     panel where all three commands moved a persisted integer nothing rendered, which is the
+     *     Constitution VI defect FR-062a names;
+     *   - at T177 FR-062 made the panel honour its zoom in both its text and its row metrics, so
+     *     FR-062a's rule points the other way and the submenu MUST be offered.
+     *
+     * Written down rather than quietly flipped, because "the test moved to match the code" and "the
+     * requirement changed what the code must do" look identical in a diff and are not the same
+     * thing.
+     */
+    zooms: true,
+    consumer:
+      'find-in-files-panel.tsx publishes --throng-zoom-fif for the text; results-list.tsx rounds the row height by the same factor',
+  },
+  {
+    kind: PREVIEW_KIND,
+    what: 'a preview panel',
+    // 044 FR-034 — a preview's zoom is its own, per panel, and it is offered (043 FR-062a).
+    zooms: true,
+    consumer: 'preview-panel.tsx publishes --throng-zoom-preview; preview.css multiplies the body text with it',
+  },
+];
+
+describe('the Zoom submenu is offered only where zoom is implemented (FR-062a, Constitution VI)', () => {
+  for (const { kind, what, zooms, consumer } of KINDS) {
+    it(`${zooms ? 'offers' : 'omits'} Zoom on ${what}`, () => {
+      const items = menuFor(kind);
+      if (zooms) {
+        expect(zoomSubmenu(items), `${what} implements zoom (${consumer})`).toEqual([
+          'Zoom In',
+          'Zoom Out',
+          'Reset Zoom',
+        ]);
+      } else {
+        expect(
+          zoomSubmenu(items),
+          `${what} implements no zoom (${consumer}), so all three commands are permanently inert`,
+        ).toBeNull();
+      }
+    });
+  }
+
+  // DELETED: 'omits the submenu entirely rather than disabling its rows' — the `kind: undefined` row
+  // of the table above asserts zoomSubmenu() is null, i.e. no 'Zoom' item exists at all.
+
+  it('runs the matching zoom action for each row, on every kind that zooms (the menu route to zoom)', () => {
+    // Moved down from panel-zoom.e2e.ts 'the panel right-click menu zooms that panel in and out': the
+    // menu route is each row invoking ITS action. The level arithmetic is the store's and core's.
+    for (const { kind, what } of KINDS.filter((k) => k.zooms)) {
+      const fired: string[] = [];
+      const items = panelHeaderMenu({
+        panel: panel({ kind }),
+        panelVerb: 'Destroy',
+        keybindings: DEFAULT_KEYBINDINGS,
+        otherTabs: [],
+        editor: kind === 'editor' ? { dirty: false, hasFilePath: true } : null,
+        panelFailure: false,
+        detach: null,
+        preview: kind === PREVIEW_KIND ? { providerKind: 'text', parented: false } : null,
+        actions: {
+          ...panelActions,
+          zoomIn: () => fired.push('in'),
+          zoomOut: () => fired.push('out'),
+          resetZoom: () => fired.push('reset'),
+        },
+      });
+      const rows = items.find((i) => i.label === 'Zoom')?.submenu ?? [];
+      const click = (label: string): void => rows.find((r) => r.label === label)?.onClick?.();
+      click('Zoom In');
+      expect(fired, `${what}: Zoom In`).toEqual(['in']);
+      click('Zoom Out');
+      expect(fired, `${what}: Zoom Out`).toEqual(['in', 'out']);
+      click('Reset Zoom');
+      expect(fired, `${what}: Reset Zoom`).toEqual(['in', 'out', 'reset']);
+    }
+  });
+
+  it('leaves the panels that DO zoom with all three commands and their chords', () => {
+    // The other direction, so the gate cannot be satisfied by removing Zoom everywhere. The chords
+    // are checked too: this menu is the panel's canonical index of what it can do, and an item that
+    // does not name its key teaches nobody the key.
+    for (const { kind, what, zooms } of KINDS.filter((k) => k.zooms)) {
+      const zoom = menuFor(kind).find((i) => i.label === 'Zoom');
+      expect(zooms).toBe(true);
+      expect(zoom, `${what} lost its Zoom submenu`).toBeDefined();
+      const shortcuts = (zoom?.submenu ?? []).map((i) => i.shortcut);
+      expect(shortcuts.filter((s) => typeof s === 'string' && s.length > 0)).toHaveLength(3);
+    }
+  });
+});
+
+/**
+ * 048 FR-030 — NO panel kind offers a rename in its header menu, and says so by ABSENCE.
+ *
+ * This block was 043 FR-061's "a Find in Files panel is not renamable" — one deliberate exception to
+ * the app-wide rule that every panel is renamable. 048 made the exception the rule: a panel is named
+ * by what it holds, so Rename and Reset Name are gone from every kind. Absent, not disabled
+ * (Constitution VI): renaming is never meaningful, and a greyed row invites the user to work out what
+ * would re-enable it.
+ */
+describe('no panel kind offers a rename in its header menu (048 FR-030)', () => {
+  it('omits Rename and Reset Name on every kind, rather than disabling them', () => {
+    for (const { kind, what } of KINDS) {
+      const items = menuFor(kind);
+      expect(items.filter((i) => i.label === 'Rename' || i.label === 'Reset Name'), `${what} offers a rename`).toEqual(
+        [],
+      );
+    }
+  });
+
+  it('leaves a Find in Files panel a menu that still does something, with no dangling divider', () => {
+    /*
+     * The menu's FIRST section is Create (Split) for this kind — it has no Content row. That is
+     * `menu-sections.test.ts`'s business (this panel's header is in its table); what is asserted here
+     * is the cheaper half — the menu is not left empty, and the rows a user still needs are on it.
+     */
+    const l = labels(menuFor(FIND_IN_FILES_KIND));
+    expect(l).toContain('Split');
+    expect(l).toContain('Send to Tab');
+    expect(l).toContain('Destroy Panel');
+    // Zoom stays: FR-062 gave this panel real zoom, so FR-062a requires the commands.
+    expect(l).toContain('Zoom');
+  });
+});
+
+/**
+ * 044 FR-030 / FR-034 — a preview panel is not renamable, and its zoom is live.
+ *
+ * The header chord and double-click halves of FR-030 are rendered-header claims and live in
+ * `preview-panel-mount.test.ts`; this file keeps the menu half beside Find in Files', whose ground it
+ * shares.
+ */
+describe('a preview panel offers live zoom and no rename in its header menu (044 FR-030, FR-034)', () => {
+  it('offers Zoom In, Zoom Out and Reset Zoom, each with its chord', () => {
+    const zoom = menuFor(PREVIEW_KIND).find((i) => i.label === 'Zoom');
+    // 046 iterate round 1 (FR-102/FR-105): panel.zoomIn's stored token is now literally 'Ctrl+Alt++'
+    // (the same-binding `+` key), not the `=` it displayed before this round.
+    expect((zoom?.submenu ?? []).map((i) => [i.label, i.shortcut])).toEqual([
+      ['Zoom In', 'Ctrl+Alt++'],
+      ['Zoom Out', 'Ctrl+Alt+-'],
+      ['Reset Zoom', 'Ctrl+Alt+Numpad0'],
+    ]);
+  });
+
+  // DELETED: 'runs the store’s zoom actions' and 'omits Rename and Reset Name' for a preview — the
+  // same file proves both over every kind including PREVIEW_KIND ('runs the matching zoom action for
+  // each row, on every kind that zooms'; 'omits Rename and Reset Name on every kind').
+});

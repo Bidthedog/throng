@@ -103,7 +103,7 @@ afterEach(() => {
 
 describe('grouping switches over results already found (FR-033)', () => {
   it('regroups without starting a second scan', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     emitResults();
     expect(headings()).toEqual(['lib/deep/c.ts', 'src/a.ts']);
@@ -118,7 +118,7 @@ describe('grouping switches over results already found (FR-033)', () => {
   });
 
   it('nests file headings under folder headings under per file and folder', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     emitResults();
 
@@ -175,7 +175,7 @@ describe('the grouping a panel opens in (FR-033a, FR-033b, FR-033c)', () => {
   // and that linking is pinned in find-in-files-grouping-linked.test.ts.
 
   it('keeps a collapsed group collapsed across a regrouping and back', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     emitResults();
     await user.click(screen.getByTestId('fif-group-toggle-src/a.ts'));
@@ -225,7 +225,7 @@ describe('double-clicking a group heading toggles it (FR-071)', () => {
   const expanded = (key: string): boolean => toggle(key).getAttribute('aria-expanded') === 'true';
 
   async function withResults(): Promise<ReturnType<typeof userEvent.setup>> {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     emitResults();
     return user;

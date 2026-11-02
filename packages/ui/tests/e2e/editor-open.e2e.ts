@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
@@ -66,15 +66,6 @@ function makeProject(): string {
   return root;
 }
 
-/** A project whose open document can be deleted underneath the editor. */
-function makeDirtyProject(): string {
-  const root = mkdtempSync(join(tmpdir(), 'throng-newed-'));
-  writeFileSync(join(root, 'CLAUDE.md'), 'CLAUDE-DOC-CONTENT\n');
-  writeFileSync(join(root, 'gone.txt'), 'GONE-BODY\n');
-  writeFileSync(join(root, 'target.txt'), 'TARGET-BODY-99\n');
-  return root;
-}
-
 async function newEditor(win: Page): Promise<string> {
   const pid = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
@@ -83,7 +74,20 @@ async function newEditor(win: Page): Promise<string> {
   return pid;
 }
 
-test('clicking a file opens it into the editor; another file replaces a clean doc', { tag: ['@extended', '@editor'] }, async () => {
+/*
+ * MERGED (pass 2): 'clicking a file opens it into the editor; another file replaces a clean doc' is
+ * now the first half of the test below, which opened alpha anyway. It also carries the header-name
+ * assertion that left `panel-auto-naming.e2e.ts` ('a New Tab panel takes its name from the file its
+ * editor opens', #218): the header names the editor by its file's stem.
+ *
+ * MOVED DOWN (pass 2): '"Open in new editor" from the unsaved prompt opens the CLICKED file (not
+ * CLAUDE.md)' is `component/editor-open-routing.test.ts` 'from the TREE route, "new" opens the CLICKED
+ * file even when the dirty last-active editor holds a deleted file'. Red-proven there: pointing the
+ * `new` branch of `replaceInEditorPanel` (open-into-panel.ts) at another path fails it and the
+ * drop-route sibling. The routing is pure; only the soft-detection watcher marking the editor dirty on
+ * a deleted file needed the real app, and that is `editor-missing-aggregate.e2e.ts`.
+ */
+test('clicking a file opens it, another file replaces a clean doc, and a dirty editor asks before it is replaced; cancel is a no-op', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -92,15 +96,19 @@ test('clicking a file opens it into the editor; another file replaces a clean do
       await win.getByTestId(`editor-${pid}`).click(); // make it the active editor
 
       const tree = win.getByTestId('file-explorer-tree');
-      await tree.getByText('alpha.txt', { exact: true }).click();
       const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-      await expect(content).toContainText('ALPHA-CONTENT', { timeout: 8000 });
-      await expect(win.getByTestId(`panel-file-${pid}`)).toContainText('alpha.txt');
 
-      // A clean editor takes the next file, replacing the document (no 2nd editor).
+      // (merged) Open alpha into the editor.
+      await tree.getByText('alpha.txt', { exact: true }).click();
+      await expect(content, 'clicking a file opens it into the editor').toContainText('ALPHA-CONTENT', { timeout: 8000 });
+      await expect(win.getByTestId(`panel-file-${pid}`), 'the file pill names the opened file').toContainText('alpha.txt');
+      // (merged from panel-auto-naming, #218) The header names an editor by its file's stem.
+      await expect(win.getByTestId(`panel-title-${pid}`), 'the header takes its name from the file').toHaveText('alpha', { timeout: 15_000 });
+
+      // (merged) A clean editor takes the next file, replacing the document (no 2nd editor).
       await tree.getByText('beta.txt', { exact: true }).click();
-      await expect(content).toContainText('BETA-CONTENT', { timeout: 8000 });
-      await expect(content).not.toContainText('ALPHA-CONTENT');
+      await expect(content, 'a clean editor takes the next file').toContainText('BETA-CONTENT', { timeout: 8000 });
+      await expect(content, 'the clean document is replaced, not kept').not.toContainText('ALPHA-CONTENT');
       /*
        * Exactly one editor panel — no duplicate buffer.
        *
@@ -108,39 +116,21 @@ test('clicking a file opens it into the editor; another file replaces a clean do
        * the "Open in new editor" test below that deliberately ends with two: each test creates its
        * own project, and creating one swaps the workspace.
        */
-      await expect(win.locator('.editor-panel')).toHaveCount(1);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+      await expect(win.locator('.editor-panel'), 'no duplicate buffer: still one editor').toHaveCount(1);
 
-test('opening a file into a dirty editor shows the four-choice prompt; cancel is a no-op', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'OpenProj', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).click();
-
-      const tree = win.getByTestId('file-explorer-tree');
-      const content = win.getByTestId(`editor-${pid}`).locator('.cm-content');
-
-      // Open alpha, then make an unsaved edit.
-      await tree.getByText('alpha.txt', { exact: true }).click();
-      await expect(content).toContainText('ALPHA-CONTENT', { timeout: 8000 });
+      // Make an unsaved edit in beta.
       await content.click();
       await win.keyboard.type('EDIT');
       await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
 
       // Opening another file into the dirty editor prompts (US9).
-      await tree.getByText('beta.txt', { exact: true }).click();
-      await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible();
+      await tree.getByText('alpha.txt', { exact: true }).click();
+      await expect(win.getByTestId('unsaved-open-dialog'), 'a dirty editor asks before it is replaced').toBeVisible();
 
       // The document NAMES in the question are set apart from the sentence around them — they are
       // what the decision is about, and the one part that must be readable at a glance (024 follow-up).
       const names = win.getByTestId('unsaved-open-dialog').locator('.modal__name');
-      await expect(names).toHaveCount(2); // the dirty editor, and the file arriving
+      await expect(names, 'the dirty editor and the arriving file are both named').toHaveCount(2);
       const emphasis = await names.first().evaluate((el) => {
         const own = getComputedStyle(el as HTMLElement);
         const around = getComputedStyle((el as HTMLElement).parentElement!);
@@ -149,57 +139,20 @@ test('opening a file into a dirty editor shows the four-choice prompt; cancel is
           larger: parseFloat(own.fontSize) > parseFloat(around.fontSize),
         };
       });
-      expect(emphasis).toEqual({ bolder: true, larger: true });
+      expect(emphasis, 'the names are bolder and larger than the sentence').toEqual({ bolder: true, larger: true });
 
-      // Cancel → nothing changes: editor still shows the edited alpha, still dirty.
+      // Cancel → nothing changes: editor still shows the edited beta, still dirty.
       await win.getByTestId('unsaved-open-cancel').click();
       await expect(win.getByTestId('unsaved-open-dialog')).toHaveCount(0);
-      await expect(content).toContainText('EDIT');
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible();
+      await expect(content, 'cancel keeps the edited buffer').toContainText('EDIT');
+      await expect(win.getByTestId(`panel-unsaved-${pid}`), 'cancel leaves the editor dirty').toBeVisible();
 
-      // Try again → Discard & open → beta replaces the buffer (edits dropped).
-      await tree.getByText('beta.txt', { exact: true }).click();
+      // Try again → Discard & open → alpha replaces the buffer (edits dropped).
+      await tree.getByText('alpha.txt', { exact: true }).click();
       await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible();
       await win.getByTestId('unsaved-open-discard').click();
-      await expect(content).toContainText('BETA-CONTENT', { timeout: 8000 });
-      await expect(content).not.toContainText('EDIT');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-// Repro: a dirty editor whose file was DELETED is active; clicking another file shows
-// the unsaved-changes prompt; "Open in new editor" MUST open the CLICKED file — not
-// some other file (bug: it opened CLAUDE.md / the wrong file).
-test('"Open in new editor" from the unsaved prompt opens the CLICKED file (not CLAUDE.md)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = makeDirtyProject();
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'NewEd', root);
-      const pid = await newEditor(win);
-      await win.getByTestId(`editor-${pid}`).click();
-      const tree = win.getByTestId('file-explorer-tree');
-
-      // Open gone.txt, then delete it EXTERNALLY (as the user did in Explorer) →
-      // the soft-detection watcher marks the editor dirty + file-missing.
-      await tree.getByText('gone.txt', { exact: true }).click();
-      await expect(win.getByTestId(`editor-${pid}`).locator('.cm-content')).toContainText('GONE-BODY', {
-        timeout: 8000,
-      });
-      unlinkSync(join(root, 'gone.txt'));
-      await expect(win.getByTestId(`panel-unsaved-${pid}`)).toBeVisible({ timeout: 8000 });
-
-      // Click target.txt → the unsaved prompt → "Open in new editor".
-      await tree.getByText('target.txt', { exact: true }).click();
-      await expect(win.getByTestId('unsaved-open-dialog')).toBeVisible({ timeout: 8000 });
-      await win.getByTestId('unsaved-open-new').click();
-
-      // A second editor exists and shows TARGET's content — NOT CLAUDE.md, NOT gone's.
-      await expect(win.locator('.editor-panel')).toHaveCount(2, { timeout: 8000 });
-      const contents = win.locator('.editor-panel .cm-content');
-      await expect(contents.filter({ hasText: 'TARGET-BODY-99' })).toHaveCount(1, { timeout: 8000 });
-      await expect(win.locator('.cm-content', { hasText: 'CLAUDE-DOC-CONTENT' })).toHaveCount(0);
+      await expect(content, 'discard opens the clicked file').toContainText('ALPHA-CONTENT', { timeout: 8000 });
+      await expect(content, 'discard drops the edits').not.toContainText('EDIT');
     });
   } finally {
     cleanupTemp(root);

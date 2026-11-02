@@ -46,7 +46,7 @@ const arrayField = {
 
 describe('NumberControl', () => {
   it('is aria-invalid after a non-number is committed, and valid again after editing', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(SettingControl, { descriptor: numberField, value: 5, onCommit: vi.fn() }));
     const input = screen.getByTestId('control-x.count');
     expect(invalidOf(input)).toBe(false);
@@ -61,7 +61,7 @@ describe('NumberControl', () => {
 
 describe('TextControl', () => {
   it('is aria-invalid while the descriptor rejects the text, and valid once edited', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(SettingControl, { descriptor: textField, value: 'ok', onCommit: vi.fn() }));
     const input = screen.getByTestId('control-x.name');
     expect(invalidOf(input)).toBe(false);
@@ -91,7 +91,7 @@ describe('JsonArrayControl', () => {
 
 describe('the colour field', () => {
   it('is aria-invalid for an unparseable colour committed on blur', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(ColourField, { value: '#112233', onCommit: vi.fn(), testId: 'colour' }));
     const hex = screen.getByTestId('colour-hex');
     expect(invalidOf(hex)).toBe(false);
@@ -111,7 +111,7 @@ describe('MapControl', () => {
   } as FieldDescriptor;
 
   it('marks the new-key input aria-invalid while a refused key shows its error', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(MapControl, { descriptor: byExtension, value: {}, onCommit: vi.fn() }));
     const input = screen.getByTestId(`map-new-key-${byExtension.key}`);
     expect(invalidOf(input)).toBe(false);
@@ -156,7 +156,7 @@ describe('MapControl', () => {
   });
 
   it('does not mark the new-id input invalid for a DRAFT row’s error (only for the id itself)', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const records = {
       key: 'x.flavours',
       label: 'Flavours',
