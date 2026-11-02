@@ -267,7 +267,7 @@ library's worth of code; VIII).
 | Status-bar item and overflow, modal (exclusivity, Esc/X, maximise, minimise, restore-on-reopen), keyboard navigation, filters, confirmations, ended entries, colour bands | **component** (jsdom; charts stubbed at the module seam) |
 | Status bar shows real totals and the modal opens with a real terminal tree (`@core @window`); Kill All Below on a real tree (`@extended @terminal`); SC-009 calibration (`@extended`); collector leaves no orphan (`@extended @terminal`, extending `terminal-no-orphans.e2e.ts`) | **E2E** — four specs, each because a real process tree or a real window is what is under test |
 
-SC-003 and SC-004 are measured: an integration benchmark of the collector's CPU over 60 s of summary mode
+SC-003 and SC-004 are measured: an integration benchmark of the collector's CPU over 30 s of summary mode
 (SC-004) and a component-level long-task measurement of the modal updating a 200-process hierarchy (XII).
 
 ## R14 — The monitor window (Session 2026-10-15; supersedes R12's exclusive modal and its FLIP minimise)
