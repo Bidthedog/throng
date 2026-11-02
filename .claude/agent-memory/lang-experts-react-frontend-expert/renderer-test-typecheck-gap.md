@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-`packages/ui/tsconfig.json` includes only `src/main` + `src/preload`; `packages/ui/tsconfig.renderer.json`
+`packages/ui/tsconfig.json` includes only `src/main`, `src/preload` and `src/collector`; `packages/ui/tsconfig.renderer.json`
 includes only `src/renderer`. Nothing typechecks `packages/ui/tests/**` (component, unit, e2e), and vitest
 strips types without checking them.
 
