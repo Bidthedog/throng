@@ -49,7 +49,7 @@ order and figures while pointed at (FR-095).*
 
 **Project Type**: Desktop application, npm-workspaces monorepo.
 
-**Performance Goals**: SC-004 — collector < 1% of one core in summary mode (benchmarked over 60 s).
+**Performance Goals**: SC-004 — collector < 1% of one core in summary mode (benchmarked over 30 s).
 SC-002 — modal visible in < 100 ms, first full hierarchy < 2 s at 10 terminals × 20 processes. SC-003 —
 ≤ 5% keystroke/frame regression with the modal open, no input delayed > 50 ms (long-task measurement on a
 200-process hierarchy).
