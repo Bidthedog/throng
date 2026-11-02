@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * 051 R2/R5/R8 — `NodePtyHost` ends a terminal without stopping its caller (FR-010), with a definite
@@ -111,6 +111,10 @@ beforeEach(() => {
   execFile.mockReset();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('051 R2 — end()', () => {
   it('makes no synchronous OS call to start or end a terminal (FR-010)', async () => {
     scriptOs({});
@@ -161,14 +165,20 @@ describe('051 R2 — end()', () => {
     await expect(host.end(handle, 200)).rejects.toThrow(/did not end within/);
     clearInterval(timer);
     expect(Date.now() - started).toBeGreaterThanOrEqual(190);
-    expect(ticks).toBeGreaterThanOrEqual(10);
+    // The claim is that the wait does not BLOCK the loop, not how fast a starved loop ticks: a
+    // blocking wait lets the 10 ms interval fire at most once, after it returns. A floor of 10 failed
+    // with 5 ticks under a full parallel unit run on a loaded machine.
+    expect(ticks).toBeGreaterThanOrEqual(2);
   });
 
   it('rejects with the OS refusal when the shell does not exit', async () => {
     scriptOs({ taskkill: (_a, cb) => cb(Object.assign(new Error('failed'), { code: 1 }), '', 'ERROR: Access is denied.') });
     const { host, start } = await newHost();
     const handle = start();
-    await expect(host.end(handle, 150)).rejects.toThrow(/Access is denied/);
+    vi.useFakeTimers(); // the 150 ms limit is a timer in the host, not a wait the claim depends on
+    const refused = expect(host.end(handle, 150)).rejects.toThrow(/Access is denied/);
+    await vi.advanceTimersByTimeAsync(150);
+    await refused;
   });
 
   it('returns the same promise for a second end of the same terminal', async () => {
@@ -215,12 +225,16 @@ describe('#465 — shells are ended one at a time', () => {
       taskkill: (args, cb) =>
         args.includes(String(a.pid)) ? cb(Object.assign(new Error('failed'), { code: 1 }), '', 'ERROR: Access is denied.') : cb(null),
     });
+    vi.useFakeTimers(); // A's 300 ms limit is a host timer; advance it instead of waiting it out
     const endA = host.end(a, 300);
+    const rejectedA = expect(endA).rejects.toThrow(/Access is denied/);
     const endB = host.end(b, 2000);
-    await vi.waitFor(() => expect(taskkillCalls()).toContain(`/PID ${b.pid} /T /F`));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(taskkillCalls(), "B's kill runs although A's was refused").toContain(`/PID ${b.pid} /T /F`);
     pty.procs.get(b.pid)!.exit();
     await expect(endB).resolves.toBeUndefined();
-    await expect(endA).rejects.toThrow(/Access is denied/);
+    await vi.advanceTimersByTimeAsync(300);
+    await rejectedA;
   });
 });
 
@@ -232,7 +246,10 @@ describe('051 — review findings 2, 4, 5', () => {
     });
     const { host, pty, start } = await newHost();
     const handle = start();
-    await expect(host.end(handle, 300)).rejects.toThrow();
+    vi.useFakeTimers(); // the 300 ms limit is a host timer
+    const failed = expect(host.end(handle, 300)).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(300);
+    await failed;
     const before = taskkillCalls().filter((c) => c.startsWith(`/PID ${handle.pid} `)).length;
     refuse = false;
     const again = host.end(handle, 2000);
@@ -298,8 +315,10 @@ describe('051 FR-014 — an end reaches what is attached, not only the shell tre
       if (args.includes('-e')) return; // never answers
       return cb(null, '');
     });
+    vi.useFakeTimers(); // the host gives a hung helper ATTACHED_READ_LIMIT_MS (1000) before ending the shell anyway
     const ending = host.end(handle, 4000);
-    await vi.waitFor(() => expect(taskkillCalls()).toContain(`/PID ${handle.pid} /T /F`), { timeout: 2000 });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(taskkillCalls(), 'the shell is ended although the helper never answered').toContain(`/PID ${handle.pid} /T /F`);
     pty.procs.get(handle.pid)!.exit();
     await expect(ending).resolves.toBeUndefined();
   });

@@ -89,15 +89,7 @@ describe('each readout renders as a label with its figure (FR-012)', () => {
     expect(readout('words')).toHaveTextContent('208 words');
   });
 
-  it('never renders a bare number without its word', () => {
-    // The failure this guards: a "compact" rewrite that drops the labels and leaves `412 7 1,204`,
-    // which is five numbers and no way to tell which is which.
-    strip({ line: 412, column: 7, text: 'one two' });
-
-    for (const id of ['line', 'column', 'chars', 'words']) {
-      expect(readout(id).textContent, `${id} must carry its word`).toMatch(/[A-Za-z]/);
-    }
-  });
+  // Never a bare number without its word: the exact strings above ("Ln 412", "Col 7", "1,204 chars") rule it out.
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -116,10 +108,7 @@ describe('the selected segment is absent with no selection (FR-005)', () => {
     expect(screen.queryByText(/selected/)).toBeNull();
   });
 
-  it('appears the moment a selection does', () => {
-    strip({ line: 1, column: 1, selected: 63, text: 'one two' });
-    expect(readout('selected')).toHaveTextContent('63 selected');
-  });
+  // It appears the moment a selection does: the five-readout test above renders "63 selected".
 
   it('renders a 0 rather than treating it as no selection', () => {
     /*
@@ -154,25 +143,8 @@ describe('the bar is split by alignment (FR-013)', () => {
    * groups do not overlap and that width pressure lands between them is measured, and lives in
    * `editor-status-bar.e2e.ts`.
    */
-  it('puts every readout in the leading group', () => {
-    strip({ line: 412, column: 7, selected: 63, text: 'one two' });
-    const leading = screen.getByTestId(`editor-status-readouts-${PANEL}`);
-
-    for (const id of ['line', 'column', 'selected', 'chars', 'words']) {
-      expect(leading, `${id} belongs with the readouts`).toContainElement(readout(id));
-    }
-  });
-
-  it('keeps the language indicator and the wrap toggle in the trailing group (016 FR-010c)', () => {
-    // 016 FR-010c already requires the language indicator to be "a right-aligned label in a status
-    // strip along the bottom of the Editor Panel". The split preserves that rather than moving it.
-    strip({ line: 1, column: 1, text: 'one two' });
-    const trailing = screen.getByTestId(`editor-status-controls-${PANEL}`);
-
-    expect(trailing).toContainElement(screen.getByTestId(`editor-language-${PANEL}`));
-    expect(trailing).toContainElement(screen.getByTestId(`editor-word-wrap-${PANEL}`));
-  });
-
+  // Readouts in the leading group, language and wrap toggle in the trailing one (016 FR-010c): `status-strip-fit-wiring.test.ts`
+  // "the two alignment groups" asserts the membership.
   it('does not put a readout in with the controls', () => {
     // The mirror image, and the one a careless refactor breaks: a readout appended to the trailing
     // group would still render, still read correctly, and be on the wrong side of the bar.

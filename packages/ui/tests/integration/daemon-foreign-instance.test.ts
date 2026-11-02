@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:net';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureDaemon } from '../../src/main/daemon-lifecycle.js';
+import { ensureDaemon, type EnsureDaemonOptions } from '../../src/main/daemon-lifecycle.js';
 
 /**
  * #192 — a dev or E2E instance MUST NOT kill another instance's daemon.
@@ -24,6 +24,8 @@ import { ensureDaemon } from '../../src/main/daemon-lifecycle.js';
  *
  * So the promise is made unconditional here instead: a daemon reports which entry it is running, and
  * one that is not ours is left alone whatever its build id says.
+ *
+ * Layer: integration — the fake daemon speaks the real named-pipe JSON-RPC that `ensureDaemon` pings.
  */
 
 const servers: Server[] = [];
@@ -53,6 +55,17 @@ async function fakeDaemon(pipeName: string, pong: Record<string, unknown>): Prom
 }
 
 /**
+ * A `process.kill` spy that behaves like a kill that worked: the fake daemon stops listening, so
+ * `ensureDaemon`'s wait-for-the-pipe-to-free loop exits at once instead of running out its 5 s.
+ */
+function killSpyFreeing(server: Server): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(process, 'kill').mockImplementation(() => {
+    server.close();
+    return true;
+  });
+}
+
+/**
  * A daemon entry on disk, STAMPED with a build id.
  *
  * `currentBuildId` reads BUILD_ID beside the entry and returns null without one — and a null on-disk
@@ -72,6 +85,14 @@ function entryFile(buildId: string, layout: 'source' | 'packaged' = 'source'): s
 
 let seq = 0;
 const pipe = (): string => `\\\\.\\pipe\\throng-192-${process.pid}-${seq++}`;
+
+/** Options for a case that is expected to RETIRE the daemon; the replacement spawn may fail. */
+const retiringOptions = (pipeName: string, daemonEntry: string): EnsureDaemonOptions => ({
+  pipeName,
+  daemonEntry,
+  pingTimeoutMs: 500,
+  readyTimeoutMs: 100,
+});
 
 describe('ensureDaemon and another instance (#192)', () => {
   it('leaves a daemon started from a DEVELOPMENT tree alone, however stale it looks', async () => {
@@ -110,44 +131,112 @@ describe('ensureDaemon and another instance (#192)', () => {
   }, 30_000);
 
   /*
-   * 058 FR-021a (research D7): each user has ONE daemon, shared by every copy. Starting a copy of a
-   * different build replaces it — ending its terminals, with no prompt — exactly as a stale build of
-   * our own is replaced. Under #192 as first written that daemon was "foreign" and left squatting on
-   * the pipe, so the new copy could start no daemon at all.
+   * Every row is a daemon `ensureDaemon` must RETIRE. The kill spy frees the fake's pipe, so the
+   * replacement spawn (of a stub entry that exits) is what ends the run, not a 5 s wait; only the
+   * attempted kill, and that the daemon was not reported foreign, matter.
    */
-  it('retires a different-build daemon from ANOTHER PACKAGED copy on our pipe (058 FR-021a)', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-current-build', 'packaged');
-    const theirs = entryFile('other-copy-build', 'packaged');
-    await fakeDaemon(pipeName, {
-      status: 'ok',
+  interface RetireCase {
+    name: string;
+    pid: number;
+    /** Builds our entry and the pong the daemon on our pipe answers with. */
+    build: () => { ours: string; pong: Record<string, unknown> };
+    replaceForeign?: boolean;
+  }
+  const retireCases: RetireCase[] = [
+    {
+      // 058 FR-021a (research D7): each user has ONE daemon, shared by every copy. Starting a copy of
+      // a different build replaces it — ending its terminals, with no prompt — exactly as a stale
+      // build of our own is replaced. Under #192 as first written that daemon was "foreign" and left
+      // squatting on the pipe, so the new copy could start no daemon at all.
+      name: 'a different-build daemon from ANOTHER PACKAGED copy on our pipe (058 FR-021a)',
       pid: 999_996,
-      buildId: 'other-copy-build',
-      daemonEntry: theirs,
-      packaged: true,
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      build: () => ({
+        ours: entryFile('our-current-build', 'packaged'),
+        pong: {
+          status: 'ok',
+          pid: 999_996,
+          buildId: 'other-copy-build',
+          daemonEntry: entryFile('other-copy-build', 'packaged'),
+          packaged: true,
+        },
+      }),
+    },
+    {
+      name: 'a pre-058 RELEASE daemon (no packaged field, entry under resources\\app) (058 D7)',
+      pid: 999_995,
+      build: () => ({
+        ours: entryFile('our-current-build', 'packaged'),
+        pong: { status: 'ok', pid: 999_995, buildId: 'pre-058-build', daemonEntry: entryFile('pre-058-build', 'packaged') },
+      }),
+    },
+    {
+      name: 'OUR daemon when its build is stale — the mechanism is not disabled',
+      pid: 999_999,
+      build: () => {
+        const ours = entryFile('our-current-build');
+        return { ours, pong: { status: 'ok', pid: 999_999, buildId: 'old-build-of-ours', daemonEntry: ours } };
+      },
+    },
+    {
+      // No `daemonEntry`: necessarily older code than the #192 guard, so it can only be ours to
+      // replace. Treating it as foreign would make the mechanism unable to replace the daemons it
+      // exists for.
+      name: 'a daemon that reports no entry at all — it predates the handshake',
+      pid: 999_998,
+      build: () => ({
+        ours: entryFile('our-current-build'),
+        pong: { status: 'ok', pid: 999_998, buildId: 'ancient' },
+      }),
+    },
+    {
+      // Predates the build-id protocol itself (formerly daemon-lifecycle's fake-old-daemon case): it
+      // cannot be left serving stale code just because it cannot name its build.
+      name: 'a daemon that reports NO build id and no entry (predates the build-id protocol)',
+      pid: 999_988,
+      build: () => ({ ours: entryFile('current-build'), pong: { status: 'ok', pid: 999_988 } }),
+    },
+    {
+      // #533 — a dev build may replace another dev checkout's daemon, but only on the user's say-so.
+      name: 'another dev checkout’s daemon when asked to (#533)',
+      pid: 999_990,
+      replaceForeign: true,
+      build: () => ({
+        ours: entryFile('our-dev-build'),
+        pong: {
+          status: 'ok',
+          pid: 999_990,
+          buildId: 'other-checkout-build',
+          daemonEntry: entryFile('other-checkout-build'),
+          packaged: false,
+        },
+      }),
+    },
+    {
+      // The two sides come from different worlds: `process.argv[1]` as the OS spelled it, versus a
+      // path resolved from the app's install root. A case or separator difference must not make our
+      // own daemon look like a stranger — that would leave a stale daemon running for ever.
+      name: 'OUR stale daemon though it spells its own entry differently',
+      pid: 999_987,
+      build: () => {
+        const ours = entryFile('our-current-build');
+        return {
+          ours,
+          pong: { status: 'ok', pid: 999_987, buildId: 'stale', daemonEntry: ours.replace(/\\/g, '/').toUpperCase() },
+        };
+      },
+    },
+  ];
 
-    const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
-      () => undefined,
-    );
+  it.each(retireCases)('retires $name', async ({ pid, build, replaceForeign }) => {
+    const pipeName = pipe();
+    const { ours, pong } = build();
+    const server = await fakeDaemon(pipeName, pong);
+    const kill = killSpyFreeing(server);
+
+    const res = await ensureDaemon({ ...retiringOptions(pipeName, ours), replaceForeign }).catch(() => undefined);
 
     expect(res?.foreign).not.toBe(true);
-    expect(kill).toHaveBeenCalledWith(999_996);
-  }, 30_000);
-
-  it('retires a pre-058 RELEASE daemon (no packaged field, entry under resources\\app) (058 D7)', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-current-build', 'packaged');
-    const theirs = entryFile('pre-058-build', 'packaged');
-    await fakeDaemon(pipeName, { status: 'ok', pid: 999_995, buildId: 'pre-058-build', daemonEntry: theirs });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 500, readyTimeoutMs: 500 }).catch(
-      () => undefined,
-    );
-
-    expect(kill).toHaveBeenCalledWith(999_995);
+    expect(kill).toHaveBeenCalledWith(pid);
   }, 30_000);
 
   /*
@@ -206,47 +295,6 @@ describe('ensureDaemon and another instance (#192)', () => {
     expect(kill).not.toHaveBeenCalled();
   }, 30_000);
 
-  it('still retires OUR daemon when its build is stale — the mechanism is not disabled', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-current-build');
-    await fakeDaemon(pipeName, {
-      status: 'ok',
-      pid: 999_999,
-      buildId: 'old-build-of-ours',
-      daemonEntry: ours,
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    // It tries to kill, waits for the pipe to free (our fake never leaves), then fails to spawn.
-    // Only the attempted kill matters: the guard must not have swallowed the case it sits in front of.
-    await ensureDaemon({
-      pipeName,
-      daemonEntry: ours,
-      pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
-    }).catch(() => undefined);
-
-    expect(kill).toHaveBeenCalledWith(999_999);
-  }, 30_000);
-
-  it('retires a daemon that reports no entry at all — it predates the handshake', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-current-build');
-    // No `daemonEntry`: necessarily older code than this guard, so it can only be ours to replace.
-    // Treating it as foreign would make the mechanism unable to replace the daemons it exists for.
-    await fakeDaemon(pipeName, { status: 'ok', pid: 999_999, buildId: 'ancient' });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    await ensureDaemon({
-      pipeName,
-      daemonEntry: ours,
-      pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
-    }).catch(() => undefined);
-
-    expect(kill).toHaveBeenCalledWith(999_999);
-  }, 30_000);
-
   /*
    * #533 — a dev build that leaves another checkout's daemon alone must still be able to SAY whose it
    * is, and replace it when the user asks. Left silent, the first call the older daemon does not know
@@ -268,31 +316,6 @@ describe('ensureDaemon and another instance (#192)', () => {
     const res = await ensureDaemon({ pipeName, daemonEntry: ours, pingTimeoutMs: 2000, readyTimeoutMs: 2000 });
 
     expect(res).toEqual({ spawned: false, foreign: true, foreignEntry: theirs });
-  }, 30_000);
-
-  it('replaces another dev checkout’s daemon when asked to (#533)', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-dev-build');
-    const theirs = entryFile('other-checkout-build');
-    await fakeDaemon(pipeName, {
-      status: 'ok',
-      pid: 999_990,
-      buildId: 'other-checkout-build',
-      daemonEntry: theirs,
-      packaged: false,
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    // The fake never leaves the pipe, so the spawn that follows fails; only the retirement matters.
-    await ensureDaemon({
-      pipeName,
-      daemonEntry: ours,
-      pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
-      replaceForeign: true,
-    }).catch(() => undefined);
-
-    expect(kill).toHaveBeenCalledWith(999_990);
   }, 30_000);
 
   it('never replaces a packaged copy’s daemon from a dev build, even when asked (#533, 058 FR-018a)', async () => {
@@ -318,29 +341,5 @@ describe('ensureDaemon and another instance (#192)', () => {
 
     expect(kill).not.toHaveBeenCalled();
     expect(res.foreign).toBe(true);
-  }, 30_000);
-
-  it('recognises its own entry through a different spelling of the same path', async () => {
-    const pipeName = pipe();
-    const ours = entryFile('our-current-build');
-    // The two sides come from different worlds: `process.argv[1]` as the OS spelled it, versus a path
-    // resolved from the app's install root. A case or separator difference must not make our own
-    // daemon look like a stranger — that would leave a stale daemon running for ever.
-    await fakeDaemon(pipeName, {
-      status: 'ok',
-      pid: 999_999,
-      buildId: 'stale',
-      daemonEntry: ours.replace(/\\/g, '/').toUpperCase(),
-    });
-    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
-
-    await ensureDaemon({
-      pipeName,
-      daemonEntry: ours,
-      pingTimeoutMs: 500,
-      readyTimeoutMs: 500,
-    }).catch(() => undefined);
-
-    expect(kill).toHaveBeenCalledWith(999_999);
   }, 30_000);
 });

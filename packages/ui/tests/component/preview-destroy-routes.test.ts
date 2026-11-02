@@ -149,7 +149,7 @@ const allPanels = (): Panel[] =>
   (captured.ws?.layout?.tabs ?? []).flatMap((t) => collectPanels(t.root) as Panel[]);
 
 function mount(layout: WorkspaceLayout, opts: { sub?: boolean; attachFails?: boolean } = {}) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const bridge = {
     attach: vi.fn((req: PreviewAttachRequest) =>
       Promise.resolve(

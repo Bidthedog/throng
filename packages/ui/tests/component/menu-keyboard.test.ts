@@ -64,7 +64,7 @@ function open(onClose = vi.fn()) {
   render(
     createElement(ContextMenu, { x: 10, y: 10, items: items(), onClose, submenuDelayMs: 0 }),
   );
-  return { onClose, user: userEvent.setup() };
+  return { onClose, user: userEvent.setup({ delay: null }) };
 }
 
 /** Arrow-Down until the focused element carries the given test id (bounded, like the spec it replaces). */
@@ -170,7 +170,7 @@ describe('the same rule at THREE levels', () => {
   ];
 
   it('ArrowRight opens each level and lands on the first child of the third', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       createElement(ContextMenu, {
         x: 10,
@@ -214,7 +214,7 @@ describe('the same rule at THREE levels', () => {
         ],
       },
     ];
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(ContextMenu, { x: 10, y: 10, items, onClose, submenuDelayMs: 0 }));
 
     await focusItemByArrows(user, 'menu-item-Open In');
@@ -227,7 +227,7 @@ describe('the same rule at THREE levels', () => {
   });
 
   it('ArrowLeft walks back out one level at a time', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       createElement(ContextMenu, {
         x: 10,
@@ -310,7 +310,7 @@ describe('opening a menu chooses nothing for you (FR-018b)', () => {
         submenuDelayMs: 0,
       }),
     );
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await user.keyboard('{Enter}');
 

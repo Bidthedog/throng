@@ -188,6 +188,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
@@ -213,17 +214,28 @@ async function mountLoaded(): Promise<ReturnType<typeof fakeBridge>> {
     }
   });
   // Anything still settling from the mount lands before the count starts.
-  await act(() => new Promise((r) => setTimeout(r, 250)));
+  await act(() => new Promise((r) => setTimeout(r, 0)));
   return world;
+}
+
+/**
+ * Run `ms` of a fake clock: the watcher's 80 ms coalescing window, and the re-reads it starts, play out
+ * without the test sleeping through them. Installed AFTER `mountLoaded()`, whose `findBy*`/`waitFor`
+ * polling would wait forever on a fake clock.
+ */
+async function afterWatcherWindow(ms = 250): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
 }
 
 describe('#482 — a change in one folder re-reads that folder only', () => {
   it('(control) a report that names no directories still re-reads every loaded folder', async () => {
     const world = await mountLoaded();
     const from = world.listed.length;
+    vi.useFakeTimers();
     world.changedUnnamed('a/b');
-    await waitFor(() => expect(world.listed.slice(from)).toContain('e'));
-    await act(() => new Promise((r) => setTimeout(r, 250)));
+    await afterWatcherWindow();
     expect(world.listed.slice(from).sort()).toEqual(['', 'a', 'a/b', 'c', 'c/d', 'e']);
   });
 
@@ -231,9 +243,10 @@ describe('#482 — a change in one folder re-reads that folder only', () => {
     const world = await mountLoaded();
     world.remove('c/d');
     const from = world.listed.length;
+    vi.useFakeTimers();
     world.changed('c'); // deleting a folder is an event on its PARENT
-    await waitFor(() => expect(world.listed.slice(from)).toContain('c/d'));
-    await act(() => new Promise((r) => setTimeout(r, 250)));
+    await afterWatcherWindow();
+    expect(world.listed.slice(from)).toContain('c/d');
     expect(notices(), 'the deleted expanded folder raised no notice').toHaveLength(1);
     expect(world.listed.slice(from).sort(), 'the targeted re-read spread to untouched folders').toEqual([
       'c',
@@ -244,9 +257,10 @@ describe('#482 — a change in one folder re-reads that folder only', () => {
   it('a file changing in a/b re-lists a/b, not every loaded folder', async () => {
     const world = await mountLoaded();
     const from = world.listed.length;
+    vi.useFakeTimers();
     world.changed('a/b');
-    await waitFor(() => expect(world.listed.slice(from)).toContain('a/b'));
-    await act(() => new Promise((r) => setTimeout(r, 250)));
+    await afterWatcherWindow();
+    expect(world.listed.slice(from)).toContain('a/b');
 
     expect(
       world.listed.slice(from).sort(),

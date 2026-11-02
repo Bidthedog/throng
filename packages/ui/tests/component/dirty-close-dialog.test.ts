@@ -44,7 +44,7 @@ function mount() {
       createElement(Fragment, null, createElement(DirtyCloseDialog, null)),
     ),
   );
-  return { user: userEvent.setup() };
+  return { user: userEvent.setup({ delay: null }) };
 }
 
 /** Raise the prompt and hand back the pending choice, without awaiting it. */

@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_APP_SETTINGS } from '@throng/core';
 import { FileConfigStore } from '../../src/main/config-store.js';
-import { writeConfigDoc, writeConfigPatch } from '../../src/main/config-write-ipc.js';
+import { writeConfigPatch } from '../../src/main/config-write-ipc.js';
 
 const tempDirs: string[] = [];
 
@@ -83,34 +83,7 @@ describe('two windows, different keys (G2 — the #249 shape)', () => {
     expect(after.newProject.lastProjectFolder).toBe('D:/second');
   });
 
-  it('survives many writers at once, each owning one key', async () => {
-    /*
-     * A map-shaped setting is what makes this test possible with REAL keys.
-     * `editor.languageByExtension` is a `Record<string, string>` of user extension→language
-     * mappings, shipped EMPTY and open to any key — so it is a place forty distinct, genuine
-     * settings paths exist, and the exercise runs through exactly the parse-and-normalise the
-     * product runs rather than through synthetic keys the schema would strip.
-     */
-    const { store, root } = freshStore(DEFAULT_APP_SETTINGS);
-    const extensions = Array.from({ length: 40 }, (_, i) => `.ext${i}`);
-
-    await Promise.all(
-      extensions.map((extension, i) =>
-        writeConfigPatch(store, { kind: 'settings' }, [
-          { path: ['editor', 'languageByExtension', extension], value: `language-${i}` },
-        ]),
-      ),
-    );
-
-    const after = readSettings(root) as {
-      editor: { languageByExtension: Record<string, string> };
-    };
-    for (const [i, extension] of extensions.entries()) {
-      expect(after.editor.languageByExtension[extension], `${extension} was lost`).toBe(
-        `language-${i}`,
-      );
-    }
-  });
+  // Many writers at once: config-write-soak.test.ts (500 + 500 writers, SC-004).
 });
 
 describe('two windows, the same key (G3, disk half)', () => {
@@ -126,56 +99,10 @@ describe('two windows, the same key (G3, disk half)', () => {
     ]);
     expect((readSettings(root) as { appearance: { theme: string } }).appearance.theme).toBe('Second');
   });
-
-  it('never produces a value neither writer asked for', async () => {
-    const { store, root } = freshStore(DEFAULT_APP_SETTINGS);
-    await Promise.all(
-      Array.from({ length: 20 }, (_, i) =>
-        writeConfigPatch(store, { kind: 'settings' }, [
-          { path: ['appearance', 'theme'], value: `Theme${i}` },
-        ]),
-      ),
-    );
-    const theme = (readSettings(root) as { appearance: { theme: string } }).appearance.theme;
-    expect(theme).toMatch(/^Theme\d+$/);
-  });
 });
 
-describe('mixed channels (G12)', () => {
-  it('a patch and a whole-document write do not interleave', async () => {
-    // Revert All writes settings by patch and keybindings/themes wholesale, so mixing the two
-    // channels is a real thing the product does — not a synthetic case.
-    const { store, root } = freshStore(DEFAULT_APP_SETTINGS);
-    const wholeDocument = {
-      ...DEFAULT_APP_SETTINGS,
-      appearance: { theme: 'FromDocument' },
-      newProject: { ...DEFAULT_APP_SETTINGS.newProject, lastProjectFolder: 'D:/from-document' },
-    };
-
-    await Promise.all([
-      writeConfigDoc(store, { kind: 'settings' }, JSON.stringify(wholeDocument)),
-      writeConfigPatch(store, { kind: 'settings' }, [
-        { path: ['appearance', 'theme'], value: 'FromPatch' },
-      ]),
-    ]);
-
-    const after = readSettings(root) as {
-      appearance: { theme: string };
-      newProject: { lastProjectFolder: string };
-    };
-
-    /*
-     * Two whole outcomes are acceptable; a blend is not.
-     *
-     * `lastProjectFolder` is the tell. If the patch ran second it must have read the DOCUMENT
-     * writer's result, so the folder is `D:/from-document` either way. A folder of `''` — the
-     * seeded default — would mean the patch read the original file and wrote it back over a
-     * document that had already replaced it, which is the interleave.
-     */
-    expect(after.newProject.lastProjectFolder).toBe('D:/from-document');
-    expect(['FromPatch', 'FromDocument']).toContain(after.appearance.theme);
-  });
-});
+// The mixed-channel case (a patch racing a whole-document write, no blend) is asserted in
+// config-write-serialisation.test.ts, with the extra saveAllScope tell.
 
 describe('the guarantee under a corrupt file', () => {
   it('a refused patch does not disturb a concurrent one', async () => {

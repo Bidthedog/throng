@@ -59,7 +59,7 @@ describe('the heading element (F1, F2)', () => {
   it('carries a hover title naming the action: Fold while open, Unfold while folded', async () => {
     render(createElement(Host));
     expect(toggle()).toHaveAttribute('title', 'Fold section');
-    await userEvent.setup().click(toggle());
+    await userEvent.setup({ delay: null }).click(toggle());
     expect(toggle()).toHaveAttribute('title', 'Unfold section');
   });
 
@@ -72,14 +72,14 @@ describe('the heading element (F1, F2)', () => {
     const { container } = render(createElement(Host));
     const chevron = (): Element => container.querySelector('.fold-heading__chevron')!;
     expect(chevron()).toHaveClass('fold-heading__chevron--open');
-    await userEvent.setup().click(toggle());
+    await userEvent.setup({ delay: null }).click(toggle());
     expect(chevron()).not.toHaveClass('fold-heading__chevron--open');
   });
 });
 
 describe('hide, never unmount (F3)', () => {
   it('sets hidden on the content container and keeps the children mounted', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(Host));
     await user.type(screen.getByTestId('draft'), 'half-typed');
     await user.click(toggle());
@@ -138,7 +138,7 @@ describe('the warning marker (F2, F7, FR-007)', () => {
   it('shows when folded with an invalid row inside, with a title and accessible name', async () => {
     render(createElement(Host, { initial: false }));
     flag('true');
-    await userEvent.setup().click(toggle());
+    await userEvent.setup({ delay: null }).click(toggle());
     const marker = await screen.findByTestId('sec-invalid');
     expect(marker).toHaveAttribute('title', 'Contains an invalid entry');
     expect(marker).toHaveAttribute('aria-label', 'Contains an invalid entry');
@@ -174,10 +174,7 @@ describe('the warning marker (F2, F7, FR-007)', () => {
     await waitFor(() => expect(screen.queryByTestId('sec-invalid')).toBeNull());
   });
 
-  it('is absent when nothing inside is invalid', () => {
-    render(createElement(Host, { initial: true }));
-    expect(screen.queryByTestId('sec-invalid')).toBeNull();
-  });
+  // DELETED: "is absent when nothing inside is invalid" — "appears and clears live" asserts it is absent while folded and clean.
 });
 
 describe('the folded observer does work proportional to what changed (Principle XII)', () => {
@@ -252,12 +249,12 @@ describe('the folded observer does work proportional to what changed (Principle 
 describe('operation (FR-004)', () => {
   it('folds when the heading NAME text is clicked, not only the chevron', async () => {
     render(createElement(Host));
-    await userEvent.setup().click(screen.getByText('Editor'));
+    await userEvent.setup({ delay: null }).click(screen.getByText('Editor'));
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('toggles on Enter and on Space while focused', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(createElement(Host));
     toggle().focus();
     await user.keyboard('{Enter}');
@@ -273,10 +270,7 @@ describe('operation (FR-004)', () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('does not put hidden rows in the tab order (they are inside [hidden])', () => {
-    render(createElement(Host, { initial: true }));
-    expect(screen.getByTestId('draft').closest('[hidden]')).not.toBeNull();
-  });
+  // DELETED: "does not put hidden rows in the tab order" — "hide, never unmount" asserts the content container carries [hidden].
 });
 
 describe('FoldAllButtons', () => {

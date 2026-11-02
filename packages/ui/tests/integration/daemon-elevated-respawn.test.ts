@@ -55,15 +55,27 @@ function makeOpts(pipeName: string, appElevated?: boolean): Parameters<typeof en
 }
 
 afterEach(async () => {
-  for (const child of spawned) {
-    try {
-      child.kill();
-    } catch {
-      /* already gone */
-    }
-  }
-  spawned.length = 0;
-  await new Promise((r) => setTimeout(r, 400));
+  // Wait on each daemon's exit (bounded) rather than a fixed sleep: the database folder cannot be
+  // removed until the process holding it has gone.
+  await Promise.all(
+    spawned.splice(0).map(
+      (child) =>
+        new Promise<void>((resolve) => {
+          if (child.exitCode !== null || child.signalCode !== null) return resolve();
+          const bound = setTimeout(resolve, 2000);
+          child.once('exit', () => {
+            clearTimeout(bound);
+            resolve();
+          });
+          try {
+            child.kill();
+          } catch {
+            clearTimeout(bound);
+            resolve();
+          }
+        }),
+    ),
+  );
   for (const dir of dataDirs) rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   dataDirs.length = 0;
 });
@@ -93,18 +105,6 @@ describe('ensureDaemon — elevated-daemon respawn (FR-025b)', () => {
     const after = await daemonInfo(pipe, 1000);
     expect(after?.pid).not.toBe(oldPid); // a different, freshly-spawned daemon
   });
-
-  it('a non-elevated app reuses the running daemon (no respawn)', async () => {
-    const pipe = uniquePipe();
-    const first = await ensureDaemon(makeOpts(pipe));
-    if (first.child) spawned.push(first.child);
-    expect(first.spawned).toBe(true);
-    const oldPid = (await daemonInfo(pipe, 1000))?.pid;
-
-    const second = await ensureDaemon(makeOpts(pipe, false));
-    if (second.child) spawned.push(second.child);
-
-    expect(second.spawned).toBe(false); // reused — nothing to elevate
-    expect((await daemonInfo(pipe, 1000))?.pid).toBe(oldPid);
-  });
+  // A non-elevated app reusing the running daemon: daemon-lifecycle's reuse case, and
+  // terminal-elevation.test.ts (core unit) for shouldRespawnDaemonElevated(false, *).
 });

@@ -75,19 +75,8 @@ const rowIds = (): string[] =>
   screen.queryAllByTestId(/^fif-row-/).map((el) => el.getAttribute('data-testid') ?? '');
 
 describe('per-file staleness (FR-045a, US3 scenario 14)', () => {
-  it('marks THAT file and no other', () => {
-    renderFindInFilesPanel();
-    emitResults();
-
-    emitStale(['src/a.ts']);
-
-    expect(screen.getByTestId('fif-group-header-src/a.ts').dataset.stale).toBe('true');
-    expect(screen.getByTestId('fif-group-stale-src/a.ts')).toBeInTheDocument();
-    expect(screen.getByTestId('fif-group-header-lib/b.ts').dataset.stale).toBeUndefined();
-    expect(screen.getByTestId('fif-group-header-src/c.ts').dataset.stale).toBeUndefined();
-    // A panel-level "something changed" indicator is explicitly NOT sufficient (FR-045a).
-    expect(screen.queryAllByTestId(/^fif-group-stale-/)).toHaveLength(1);
-  });
+  // DELETED: 'marks THAT file and no other' — 'marks the changed file on its heading under %s
+  // grouping' below asserts the same headings, the in-words marker and the single-marker count.
 
   it('accumulates across pushes rather than replacing the last one', () => {
     renderFindInFilesPanel();
@@ -100,17 +89,9 @@ describe('per-file staleness (FR-045a, US3 scenario 14)', () => {
     expect(screen.getByTestId('fif-group-header-lib/b.ts').dataset.stale).toBe('true');
   });
 
-  it('survives a regrouping — staleness belongs to the FILE, not to the heading', () => {
-    renderFindInFilesPanel();
-    emitResults();
-    emitStale(['src/a.ts']);
-
-    fireEvent.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
-
-    expect(screen.getByTestId('fif-group-header-src/a.ts').dataset.stale).toBe('true');
-    // A FOLDER is not a file, so its heading is never the thing marked (core's `markStale`).
-    expect(screen.getByTestId('fif-group-header-src').dataset.stale).toBeUndefined();
-  });
+  // DELETED: 'survives a regrouping' — 'marks the changed file on its heading under fileAndFolder
+  // grouping' and 'marks nothing anywhere when a folder heading is what sits above the file' below
+  // regroup after the push and assert the same two headings.
 });
 
 describe('a stale marking changes nothing else (FR-045b, US3 scenario 15)', () => {
@@ -126,39 +107,9 @@ describe('a stale marking changes nothing else (FR-045b, US3 scenario 15)', () =
     expect(rowIds()).toEqual(rowsBefore);
   });
 
-  it('disables and greys no row — the marking lives on the heading alone', () => {
-    renderFindInFilesPanel();
-    emitResults();
-    emitStale(['src/a.ts']);
-
-    for (const row of screen.queryAllByTestId(/^fif-row-/)) {
-      expect(row.dataset.stale).toBeUndefined();
-      expect(row.getAttribute('aria-disabled')).toBeNull();
-      expect(row.className).not.toContain('stale');
-      expect(row.className).not.toContain('disabled');
-    }
-    // Nor is the group's own toggle taken away: a stale group still collapses and expands.
-    expect(screen.getByTestId('fif-group-toggle-src/a.ts')).not.toBeDisabled();
-  });
-
-  it('still opens a row in the stale file, exactly as an unstale one', () => {
-    const opened: ResultOpenRequest[] = [];
-    registerResultOpener((req) => {
-      opened.push(req);
-    });
-    try {
-      renderFindInFilesPanel();
-      emitResults();
-      emitStale(['src/a.ts']);
-
-      fireEvent.doubleClick(screen.getByTestId('fif-row-src/a.ts-0'));
-      fireEvent.doubleClick(screen.getByTestId('fif-row-lib/b.ts-20'));
-
-      expect(opened.map((r) => r.relPath)).toEqual(['src/a.ts', 'lib/b.ts']);
-    } finally {
-      registerResultOpener(null);
-    }
-  });
+  // DELETED: 'disables and greys no row' and 'still opens a row in the stale file' — the FR-045b test
+  // under 'per-file staleness under every grouping' below asserts the same (aria-disabled, class,
+  // opens a stale row) and now also the group toggle.
 });
 
 /**
@@ -256,6 +207,8 @@ describe('per-file staleness under every grouping (043 T146, SC-012, FR-045a)', 
         expect(row.className).not.toContain('stale');
         expect(row.className).not.toContain('disabled');
       }
+      // Nor is the group's own toggle taken away: a stale group still collapses and expands.
+      expect(screen.getByTestId('fif-group-toggle-src/a.ts')).not.toBeDisabled();
       fireEvent.doubleClick(screen.getByTestId('fif-row-src/a.ts-0'));
       expect(opened.map((r) => r.relPath)).toEqual(['src/a.ts']);
     } finally {

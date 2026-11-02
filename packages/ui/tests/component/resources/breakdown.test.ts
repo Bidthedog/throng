@@ -6,12 +6,10 @@
  * Layer: component — the real `Breakdown` over the real session store, fed frames the way the window's
  * shell feeds them.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement, Fragment } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { COMPONENT_DESCRIPTIONS, NOT_MEASURED, ROLE_DESCRIPTIONS, formatGrouped, unavailable, type ResourceNode } from '@throng/core';
+import { COMPONENT_DESCRIPTIONS, ROLE_DESCRIPTIONS, formatGrouped, unavailable, type ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { MonitorLocation } from '../../../src/renderer/resources/monitor-location.js';
 import {
@@ -79,21 +77,9 @@ describe('the first view (FR-103, FR-020c)', () => {
     expect(row('p:p1').className).not.toContain('breakdown-row--unloaded');
   });
 
-  it('gives an unloaded project’s row the project list’s grey italic style, from theme tokens', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
-    const rule = /\.breakdown-row--unloaded[^{]*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(rule).toMatch(/font-style:\s*italic/);
-    expect(rule).toMatch(/color:\s*var\(--throng-colour-textMuted\)/);
-  });
+  // The unloaded row's grey italic style from theme tokens is a stylesheet claim: `unit/resources/monitor-stylesheet.test.ts`.
 
-  it('lists a project with nothing measured, though it takes no share of anything', () => {
-    feed(sampleHierarchy());
-    mount();
-    act(() => setView({ focusPath: ['root', 'c:projects'] }));
-
-    expect(row('p:p2')).toBeInTheDocument();
-    expect(row('p:p1')).toBeInTheDocument();
-  });
+  // A project with nothing measured is still listed: the ordering test above asserts both p:p1 and p:p2 rows.
 });
 
 describe('drilling and the breadcrumb (FR-060, FR-096)', () => {
@@ -333,7 +319,6 @@ describe('the rows', () => {
     const gpu = within(row('n:n2')).getByTestId('breakdown-row-n:n2-gpu');
     expect(gpu).toHaveTextContent(/^-$/);
     expect(gpu).toHaveAttribute('title', 'GPU: Not measured');
-    expect(NOT_MEASURED).toBeDefined();
   });
 });
 
@@ -411,21 +396,8 @@ describe('the Total row (FR-104, US2 scenario 24)', () => {
 });
 
 describe('colour (FR-067)', () => {
-  it('draws nothing from a literal colour: the 055 stylesheet names theme variables only', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8');
-    const start = css.indexOf('══ 055 — the Resource Monitor');
-    const end = css.indexOf('── 055 end ──');
-    expect(start).toBeGreaterThan(0);
-    expect(end).toBeGreaterThan(start);
-    const section = css.slice(start, end);
-    // A colour-bearing declaration never holds a hex, rgb()/hsl() or a named colour.
-    const colourDecls = [...section.matchAll(/(?:^|[;{\s])((?:color|background(?:-color)?|fill|stroke|border(?:-[a-z]+)*|outline(?:-color)?|text-decoration-color)\s*:[^;}]*)/gm)].map((m) => m[1] ?? '');
-    expect(colourDecls.length).toBeGreaterThan(10);
-    for (const decl of colourDecls) {
-      expect(decl, decl).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/);
-      expect(decl, decl).not.toMatch(/:\s*(red|green|blue|white|black|gray|grey|orange|yellow)\b/i);
-    }
-  });
+  // "Draws nothing from a literal colour" (the 055 stylesheet names theme variables only) is a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
 
   it('rows carry no inline colour: their only inline style is how deep they are nested', () => {
     feed(sampleHierarchy());

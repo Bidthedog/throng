@@ -56,7 +56,7 @@ function mount(resolution: LanguageResolution, calls: Call[] = []) {
       createElement(StatusStrip, { panelId: PANEL, projectId: PROJECT, relPath: REL }),
     ),
   );
-  return { calls, user: userEvent.setup() };
+  return { calls, user: userEvent.setup({ delay: null }) };
 }
 
 const strip = (): HTMLElement => screen.getByTestId(`editor-language-${PANEL}`);

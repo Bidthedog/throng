@@ -72,7 +72,7 @@ function emptyProjectsClient(): ProjectsClient {
 }
 
 async function mount() {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     createElement(ProjectsProvider, {
       client: emptyProjectsClient(),
@@ -327,7 +327,7 @@ describe('the project-settings control WITH a project open (US8, FR-041, FR-043a
    * `ws.layout`, and null skips the layout load, so a fake daemon does not have to invent one.
    */
   async function mountWithProject() {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const services = fakeServices();
 
     Reflect.set(window, 'throng', {

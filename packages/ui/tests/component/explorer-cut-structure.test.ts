@@ -34,7 +34,7 @@ const listing = (): Record<string, ReturnType<typeof entry>[]> => ({
 
 async function selectBothAndSend(mode: 'cut' | 'copy') {
   const m = await mountExplorer(standardHost, { listing: listing() });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   // Open `test`, so both `test.md` rows exist.
   await user.click(within(m.tree).getByTestId('tree-twisty-test'));
   await waitFor(() => expect(within(m.tree).getAllByText('test.md')).toHaveLength(2));

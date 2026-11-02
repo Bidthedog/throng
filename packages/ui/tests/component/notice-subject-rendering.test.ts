@@ -1,4 +1,5 @@
-import { render, waitFor, act } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { NoticeSubject } from '@throng/core';
@@ -84,9 +85,7 @@ async function mount(children?: ReactNode): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 

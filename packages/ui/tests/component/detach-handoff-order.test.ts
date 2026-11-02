@@ -10,7 +10,6 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, useEffect, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  collectPanels,
   createDefaultLayout,
   type PanelSnapshot,
   type SubWorkspace,
@@ -270,6 +269,5 @@ describe('hand-off symmetry (049 T012, US6 scenario 3)', () => {
     // …round-trip into another window's the same way.
     await claimAndSeedPanelState(['p1']);
     expect(peekEditorViewState('p1')).toEqual(EDITOR);
-    expect(collectPanels).toBeDefined();
   });
 });

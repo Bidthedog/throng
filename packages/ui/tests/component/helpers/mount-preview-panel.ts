@@ -342,7 +342,7 @@ export async function mountMarkdownPreview(
       ),
     ),
   );
-  await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
+  await waitFor(() => expect(captured.ws?.layout).toBeTruthy(), COLD);
   const layout = captured.ws!.layout as WorkspaceLayout;
   const id = (collectPanels(layout.tabs[0].root) as Panel[]).find((p) => opts.layout === undefined || p.kind === PREVIEW_KIND)!.id;
   if (opts.layout === undefined) act(() => captured.ws!.setPanelType(id, PREVIEW_KIND, { filePath, ...opts.config }));

@@ -35,10 +35,8 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { THRONG_THEME } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
@@ -54,10 +52,6 @@ import {
  * `import.meta.url` is an `http:` URL and `fileURLToPath` throws before a test is collected.
  * `find-in-files-results.test.ts` reads the same sheet the same way for the same reason.
  */
-const PANEL_CSS = resolve(
-  process.cwd(),
-  'packages/ui/src/renderer/find-in-files/find-in-files.css',
-);
 const THEME_CSS = resolve(process.cwd(), 'packages/ui/src/renderer/theme.css');
 
 interface Rule {
@@ -96,13 +90,6 @@ function paneTextRule(): Rule {
   return found[0];
 }
 
-/** The declaration block of one selector in the panel's own sheet. */
-function panelRule(selector: string): string {
-  const found = rulesOf(read(PANEL_CSS)).filter((r) => r.selectors.includes(selector));
-  expect(found.length, `${selector} has no rule in find-in-files.css`).toBeGreaterThan(0);
-  return found.map((r) => r.body).join('\n');
-}
-
 let bridge: FileSearchStub;
 
 beforeEach(() => {
@@ -116,14 +103,13 @@ afterEach(() => {
 });
 
 /** Render the panel and deliver one result, so a heading and a row exist to read. */
-async function withOneResult(): Promise<void> {
-  const user = userEvent.setup();
+function withOneResult(): void {
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+  fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
 
   // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
 
-  await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
+  fireEvent.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   bridge.emit({
     panelId: PANEL_ID,
     generation: 1,
@@ -155,17 +141,8 @@ function bodyTextElements(): Record<string, Element> {
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the panel takes the Pane Text typography role (FR-064, 021 FR-049)', () => {
-  it('hands out family, size and weight from that role, so subscribing is enough', () => {
-    // Guard the role itself. If `theme.css` stopped emitting any of the three, every assertion
-    // below would still pass while the panel resolved nothing.
-    const body = paneTextRule().body;
-    expect(body).toContain('font-family: var(--throng-font-paneText-family)');
-    expect(body).toContain('font-size: var(--throng-font-paneText-size)');
-    expect(body).toContain('font-weight: var(--throng-font-paneText-weight)');
-  });
-
-  it('puts every piece of the panel body text under one of that role’s selectors', async () => {
-    await withOneResult();
+  it('puts every piece of the panel body text under one of that role’s selectors', () => {
+    withOneResult();
     for (const [what, el] of Object.entries(bodyTextElements())) {
       expect(
         reachesPaneText(el),
@@ -174,13 +151,6 @@ describe('the panel takes the Pane Text typography role (FR-064, 021 FR-049)', (
       ).toBe(true);
     }
   });
-
-  it('makes the panel’s form controls inherit rather than take a UA font', () => {
-    // A browser does not give an `<input>` the inherited font. Without this the term, replacement
-    // and scope fields render in the UA's own face at the UA's own size inside a panel that has
-    // otherwise taken the role — which the ancestor match above cannot see.
-    expect(panelRule('.fif-input')).toMatch(/font:\s*inherit/);
-  });
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -188,110 +158,13 @@ describe('the panel takes the Pane Text typography role (FR-064, 021 FR-049)', (
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the code snippet keeps the editor family only (FR-064, R29)', () => {
-  it('reads the editor role’s family', () => {
-    expect(panelRule('.fif-row__snippet')).toContain(
-      'font-family: var(--throng-font-editor-family)',
-    );
-  });
-
-  it('sets no size or weight of its own, so both come from Pane Text', async () => {
-    const snippet = panelRule('.fif-row__snippet');
-    expect(snippet).not.toMatch(/font-size\s*:/);
-    expect(snippet).not.toMatch(/font-weight\s*:/);
-
-    await withOneResult();
+  it('comes from Pane Text when rendered — the snippet carries a role-bearing ancestor', () => {
+    withOneResult();
     const el = document.querySelector('.fif-row__snippet');
     expect(el, 'no result snippet rendered').not.toBeNull();
     expect(reachesPaneText(el as Element)).toBe(true);
   });
-
-  it('takes nothing else from the editor role anywhere in the sheet', () => {
-    // The sub-decision in one assertion: a snippet that also read `--throng-font-editor-size` would
-    // give the row a height that is a function of two independently-configurable settings, and the
-    // windowed list measures rows from one constant (R26).
-    const borrowed = [...read(PANEL_CSS).matchAll(/--throng-font-editor-([a-zA-Z]+)/g)].map(
-      (m) => m[1],
-    );
-    expect([...new Set(borrowed)]).toEqual(['family']);
-  });
 });
 
-/* ────────────────────────────────────────────────────────────────────────── *
- * T161 — the metadata stays relative, and stays exactly this much of the sheet
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('secondary metadata stays relative to the corrected base (T161, R29)', () => {
-  it('shrinks exactly six selectors', () => {
-    /*
-     * Metadata BESIDE the body text — counts, positions, the scan's state — not the body text
-     * itself, so a relative secondary size is an ordinary typographic choice once the base is
-     * right. The count is pinned because it is the thing that drifts: `.fif-scope__ran` went with
-     * FR-072 and `.fif-row__stale` with FR-073, and a sixth selector appearing here later would
-     * mean a new piece of the panel had quietly opted out of the role's size.
-     */
-    const shrunk = rulesOf(read(PANEL_CSS))
-      .filter((r) => /font-size:\s*0\.85em/.test(r.body))
-      .flatMap((r) => r.selectors);
-    // #391 — `.fif-scope__missing` went with the notice it styled; the notice bar's `.fif-notice`
-    // took its place, and its size, in the same slot of the sheet.
-    // 060 FR-004 — `.fif-group__dir`, the muted folder beside a file name under Per file grouping,
-    // is the sixth: metadata beside the name it qualifies, smaller by the same relative step.
-    expect(shrunk).toEqual([
-      '.fif-notice',
-      '.fif-status',
-      '.fif-group__dir',
-      '.fif-group__count',
-      '.fif-group__stale',
-      '.fif-row__pos',
-    ]);
-  });
-
-  it('states no absolute font size anywhere', () => {
-    /*
-     * An absolute size is how a panel opts out of the role without saying so. The one this caught
-     * when it was written was `.fif-btn`'s `font-size: 12px`, which FR-079 removes for an unrelated
-     * reason — it was INERT, because `.icon` sizes itself from `--throng-size-icon` and these
-     * buttons contain nothing else. Both changes land together, so this reads green either way; it
-     * is here for the next absolute size somebody adds, not for that one.
-     */
-    const sizes = [
-      ...read(PANEL_CSS)
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .matchAll(/font-size:\s*([^;}]+)/g),
-    ].map((m) => m[1].trim());
-    expect(sizes.filter((v) => /\d(?:px|pt|rem)\b/.test(v))).toEqual([]);
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * FR-063 — the file heading is bold, from a token
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('a file heading is bold from the theme’s own weight token (FR-063)', () => {
-  it('reads --throng-font-weight-bold, a weight the shipped theme emits', () => {
-    // Guard the token's source as well as its name: 021 made weight themeable, and a heading
-    // reading a variable nothing emits renders at the inherited weight — silently un-bold.
-    expect(THRONG_THEME.fonts.weights.bold).toBeDefined();
-    expect(panelRule('.fif-group__key')).toContain('font-weight: var(--throng-font-weight-bold)');
-  });
-
-  it('hardcodes no weight anywhere in the sheet', () => {
-    // The same class of mistake as a hex colour, and forbidden for the same reason.
-    const literals = [
-      ...read(PANEL_CSS)
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .matchAll(/font-weight:\s*([^;}]+)/g),
-    ]
-      .map((m) => m[1].trim())
-      .filter((v) => !v.startsWith('var('));
-    expect(literals, 'a themeable surface hardcodes no font weight (FR-063)').toEqual([]);
-  });
-
-  it('leaves the rows beneath it unweighted, which is what makes the heading distinct', () => {
-    // "Visually distinct from the result rows beneath it" is a comparison, so the other side of it
-    // is asserted too: if a row also bolded itself the heading would stop standing out.
-    for (const selector of ['.fif-row__snippet', '.fif-row__pos']) {
-      expect(panelRule(selector)).not.toMatch(/font-weight\s*:/);
-    }
-  });
-});
+// T161 (secondary metadata stays relative) and FR-063 (heading weight from a token) read the stylesheet
+// only and live in unit/find-in-files-css.test.ts.

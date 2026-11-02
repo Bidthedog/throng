@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 describe('a >10,000-character line (FR-008a, migrated from editor-highlighting.e2e.ts:201)', () => {
-  it('carries the plain-line marker, and an ordinary line does not', async () => {
+  it('carries the plain-line marker (an ordinary line does not) and is still a document — it takes an edit', async () => {
     const h = mountEditor({ doc: { text: DOC, version: 1, absPath: 'C:/proj/bundle.min.js' } });
     await waitFor(() => expect(h.text()).toContain('const readable'));
 
@@ -55,16 +55,12 @@ describe('a >10,000-character line (FR-008a, migrated from editor-highlighting.e
       expect(seen.some((l) => l.long && l.plain), 'the long line is not exempted').toBe(true);
       expect(seen.some((l) => !l.long && !l.plain), 'a normal line was wrongly exempted').toBe(true);
     });
-  });
 
-  it('is still a document rather than a picture of one — it takes an edit', async () => {
     /*
      * The other half, and the one that makes the exemption acceptable at all: the line is still
      * parsed and still editable; only the PAINTING is skipped. A guard that achieved its speed by
      * making the line read-only would satisfy the marker assertion above perfectly.
      */
-    const h = mountEditor({ doc: { text: DOC, version: 1, absPath: 'C:/proj/bundle.min.js' } });
-    await waitFor(() => expect(h.text()).toContain('const readable'));
     const view = h.view();
     const end = view.state.doc.length;
 
@@ -73,15 +69,9 @@ describe('a >10,000-character line (FR-008a, migrated from editor-highlighting.e
     expect(view.state.doc.toString()).toContain('// still editable');
   });
 
-  it('marks the long line even when it is the ONLY line', async () => {
-    // The migrated test always had a short line beside the long one, so "every line is marked" and
-    // "the long line is marked" were indistinguishable from its assertions alone. This pins the
-    // presence half on its own; the test above pins the absence half.
-    const h = mountEditor({ doc: { text: LONG, version: 1, absPath: 'C:/proj/one.min.js' } });
-    await waitFor(() => expect(h.text().length).toBeGreaterThan(10_000));
-
-    await waitFor(() => expect(lines().every((l) => l.plain)).toBe(true));
-  });
+  // DELETED: "marks the long line even when it is the ONLY line" — the first test already asserts
+  // presence (`long && plain`) AND absence (`!long && !plain`) against one render, so a plugin that
+  // marked every line fails there; a 12k-char mount cost ~3.7 s for the same presence claim.
 
   it('marks NOTHING in an ordinary file', async () => {
     // …and the mirror. Without this, a plugin that marked every line would pass the case above.

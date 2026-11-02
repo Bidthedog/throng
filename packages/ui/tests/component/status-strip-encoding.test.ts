@@ -221,11 +221,8 @@ describe('the encoding lists are grouped: Unicode, then Windows Code Pages (059 
     await waitFor(() => expect(screen.queryByTestId('context-menu')).toBeNull());
   });
 
-  it('a Unicode document leaves the submenu unticked', async () => {
-    await mount();
-    fireEvent.click(indicator());
-    expect((await screen.findByTestId('menu-item-encoding-codepages')).querySelector('.context-menu__label')?.textContent).toBe('Windows Code Pages');
-  });
+  // "A Unicode document leaves the submenu unticked" is asserted by the menu-list test above (utf16be document,
+  // label exactly 'Windows Code Pages').
 
   it('the Reopen picker lists one row per encoding, code pages with their script, the file’s marked', async () => {
     await mount({ encoding: 'windows1251' });

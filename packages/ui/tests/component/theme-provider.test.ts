@@ -65,12 +65,7 @@ afterEach(() => {
 });
 
 describe('the provider names the theme that is actually on screen', () => {
-  it('stamps data-theme with the theme’s name', async () => {
-    render(tree());
-
-    await waitFor(() => expect(root().dataset.theme).toBe(THRONG_THEME.name));
-  });
-
+  // Stamping data-theme with the theme's name at mount is the first assertion of the test below.
   it('follows a theme SWITCH rather than stamping once at mount', async () => {
     // A live hot-reload is the case the attribute exists for: it is how a test, the devtools and
     // `:root[data-theme="…"]` all learn the switch has LANDED rather than guessing at when.
@@ -84,25 +79,13 @@ describe('the provider names the theme that is actually on screen', () => {
 });
 
 describe('color-scheme follows the theme’s lightness (issue 132)', () => {
-  it('keeps the default (dark) throng theme DARK — the fix does not over-correct', async () => {
+  it('follows a switch from the default (dark) theme to a light one, which is what a hot-reload does', async () => {
     /*
-     * The migrated claim. Issue 132 was a LIGHT theme leaving the document reporting `dark`, and the
-     * repair is easy to over-apply: forcing `light` unconditionally fixes the report and breaks the
-     * default, which is what every user sees on first launch.
+     * Issue 132 was a LIGHT theme leaving the document reporting `dark`; forcing `light` unconditionally
+     * would break the default, so both ends are asserted: the default is DARK, and the light theme derives
+     * LIGHT (a provider that hard-coded either would fail one of them). `style.colorScheme` is the INLINE
+     * property, which is what overrides the stylesheet's fallback.
      */
-    render(tree());
-
-    await waitFor(() => expect(root().style.colorScheme).toBe('dark'));
-  });
-
-  it('reports LIGHT for a light theme — so the assertion above is about the DERIVATION', async () => {
-    // Without this, a provider that hard-coded `dark` would pass the test above perfectly.
-    render(tree(LIGHT));
-
-    await waitFor(() => expect(root().style.colorScheme).toBe('light'));
-  });
-
-  it('follows a switch from dark to light, which is what a hot-reload does', async () => {
     const { rerender } = render(tree());
     await waitFor(() => expect(root().style.colorScheme).toBe('dark'));
 
@@ -110,31 +93,10 @@ describe('color-scheme follows the theme’s lightness (issue 132)', () => {
 
     await waitFor(() => expect(root().style.colorScheme).toBe('light'));
   });
-
-  it('writes it INLINE, so it overrides the stylesheet’s fallback', async () => {
-    /*
-     * The whole point of setting it here rather than in CSS. The stylesheet carries a fallback, and
-     * a switch that only changed the stylesheet's idea would leave Chromium's canvas backdrop and
-     * the native controls on the OLD scheme. A computed read cannot tell an inline write from a
-     * stylesheet that happens to agree; the inline property can.
-     */
-    render(tree());
-
-    await waitFor(() => expect(root().style.getPropertyValue('color-scheme')).toBe('dark'));
-  });
 });
 
 describe('the theme’s tokens reach the document', () => {
-  it('writes the CSS custom properties the theme emits', async () => {
-    // The colour-scheme assertions above would all pass against a provider that wrote nothing else,
-    // which would be a document with no theme on it at all.
-    render(tree());
-
-    await waitFor(() =>
-      expect(root().style.getPropertyValue('--throng-colour-appBg').trim()).toBeTruthy(),
-    );
-  });
-
+  // Writing the custom properties the theme emits is the first assertion of the removal test below.
   it('REMOVES a property the new theme no longer emits (018)', async () => {
     /*
      * The provider only ever ADDED until 018, and that was fine while token sets never shrank. It
@@ -146,21 +108,31 @@ describe('the theme’s tokens reach the document', () => {
      */
     const withIcon: Theme = {
       ...THRONG_THEME,
-      colours: { ...THRONG_THEME.colours, iconColour: '#abcdef' },
+      colours: { ...THRONG_THEME.colours, iconColour: '#abcdef', menuItemHoverSurface: '#00ff00' },
     };
     const { rerender } = render(tree(withIcon));
     await waitFor(() =>
       expect(root().style.getPropertyValue('--throng-colour-iconColour').trim()).toBe('#abcdef'),
     );
+    expect(root().style.getPropertyValue('--throng-colour-menuItemHoverSurface').trim()).toBe('#00ff00');
 
+    // Migrated from theme-sweep.e2e.ts (SC-004): BOTH optional tokens go when the next theme omits them.
     const withoutIcon: Theme = {
       ...THRONG_THEME,
-      colours: { ...THRONG_THEME.colours, iconColour: undefined },
+      colours: {
+        ...THRONG_THEME.colours,
+        iconColour: undefined,
+        menuItemHoverSurface: undefined,
+      },
     };
     rerender(tree(withoutIcon));
 
     await waitFor(() =>
       expect(root().style.getPropertyValue('--throng-colour-iconColour').trim()).toBe(''),
     );
+    expect(
+      root().style.getPropertyValue('--throng-colour-menuItemHoverSurface').trim(),
+      'the previous theme’s menu hover is stuck',
+    ).toBe('');
   });
 });

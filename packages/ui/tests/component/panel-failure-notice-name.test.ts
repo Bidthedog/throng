@@ -29,7 +29,7 @@ vi.mock('../../src/renderer/common/notification.js', () => ({
 
 const { useReportPanelFailure } = await import('../../src/renderer/workspace/panel-failure-notice.js');
 const { setEditorState, removeEditorState } = await import('../../src/renderer/editor/editor-state.js');
-const { setTerminalTitle, clearTerminalTitle } = await import('../../src/renderer/terminal/title-store.js');
+const { clearTerminalTitle } = await import('../../src/renderer/terminal/title-store.js');
 
 function layoutWith(panel: Record<string, unknown>): void {
   workspace.value = {
@@ -71,28 +71,10 @@ describe('a consolidated notice row names the panel as its header does (FR-032)'
     expect(reportedName('p-ed')).toBe('docs');
   });
 
-  it('names a terminal by its flavour before the shell announces a title', () => {
-    layoutWith({
-      id: 'p-term',
-      kind: 'terminal',
-      title: 'Blank Panel 2',
-      config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
-    });
-
-    expect(reportedName('p-term')).toBe('Command Prompt');
-  });
-
-  it('names a terminal by the LIVE window title once there is one', () => {
-    layoutWith({
-      id: 'p-term',
-      kind: 'terminal',
-      title: 'Blank Panel 2',
-      config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
-    });
-    setTerminalTitle('p-term', 'npm run dev');
-
-    expect(reportedName('p-term')).toBe('npm run dev');
-  });
+  // DELETED: the two terminal-naming cases (flavour fallback, live window title) — this notice names
+  // a panel through the same `currentPanelTitle` as the header, and panel-display-names.test.ts
+  // asserts the terminal's live title and its flavour fallback there. The two editor cases stay as
+  // the wiring proof (persisted path, live file preferred).
 
   it('names an empty panel exactly "Blank Panel", with no number (FR-130)', () => {
     layoutWith({ id: 'p-blank', title: 'Blank Panel 7' });

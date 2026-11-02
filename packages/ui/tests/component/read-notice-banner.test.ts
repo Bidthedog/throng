@@ -46,11 +46,7 @@ describe('the read notice (059 FR-068)', () => {
     expect(buttons()).toEqual(['Change Encoding…', 'Dismiss']);
   });
 
-  it('names the encoding it was read as', async () => {
-    const h = await mount({ encoding: 'utf16le' });
-    act(() => h.pushSync({ readNotice: { kind: 'reopened', readAs: 'utf16le' } }));
-    await waitFor(() => expect(notice()).toHaveTextContent('read as UTF-16 LE for this editor session only'));
-  });
+  // "Names the encoding it was read as" (UTF-16 LE) is asserted by the UTF-16 reopen test in the FR-071 describe below.
 
   it('Change Encoding… opens the encoding list in Change Encoding mode', async () => {
     const h = await mount({ encoding: 'utf8' });

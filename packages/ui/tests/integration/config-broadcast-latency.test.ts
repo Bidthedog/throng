@@ -45,25 +45,6 @@ function freshRoot(): string {
 }
 
 describe('FR-004 / SC-008 — an accepted change is observable within the bound', () => {
-  it('a completed write is readable well inside 100 ms', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-
-    const started = Date.now();
-    const written = await writeConfigPatch(store, { kind: 'settings' }, [
-      { path: ['appearance', 'theme'], value: 'Matrix' },
-    ]);
-    const result = await readConfigWithRetry(store);
-    const elapsed = Date.now() - started;
-
-    expect(written).toEqual({ ok: true });
-    expect(result.payload.settings.appearance.theme).toBe('Matrix');
-    expect(
-      elapsed,
-      `write → observable took ${elapsed} ms, against FR-004's ${FR004_BOUND_MS} ms bound`,
-    ).toBeLessThan(FR004_BOUND_MS);
-  });
-
   it('stays inside the bound across ten consecutive changes', async () => {
     // One sample can be lucky. Ten in a row catches a path that is fast when warm and slow on every
     // subsequent read — a cache that is not being invalidated, for instance.
@@ -87,21 +68,6 @@ describe('FR-004 / SC-008 — an accepted change is observable within the bound'
     );
   });
 
-  it('an unreadable document spends the retry budget and NOT more', async () => {
-    // The one case where the bound is legitimately exceeded, and the reason it is bounded at all.
-    // Without a ceiling on the retries, a permanently corrupt file would make every read slow
-    // forever rather than once.
-    const root = freshRoot();
-    writeFileSync(join(root, 'settings.json'), '{ broken', 'utf8');
-    const store = new FileConfigStore(root);
-
-    const started = Date.now();
-    const result = await readConfigWithRetry(store, { attempts: 3, intervalMs: 50 });
-    const elapsed = Date.now() - started;
-
-    expect(result.settingsUnreadable).toBe(true);
-    // Two 50 ms pauses, plus the reads. A ceiling far above that catches an unbounded retry without
-    // policing machine load.
-    expect(elapsed, `exhausting the retries took ${elapsed} ms`).toBeLessThan(2_000);
-  });
+  // The unreadable-document case, where the bound is legitimately exceeded, is the ceiling asserted in
+  // config-watcher-retry.test.ts ('spends the whole budget before giving up').
 });

@@ -61,10 +61,9 @@ async function openAnother(target?: { mode: 'lastActive' | 'new' }): Promise<{ m
 }
 
 describe('a restored layout and Last Active (FR-001)', () => {
-  it('one restored preview, never focused this session, is the one reused', async () => {
-    await mount(restored({ root: split(plain('term'), preview('pv1', 'README.md')) }));
-    expect(await openAnother()).toEqual({ mode: 'lastActive', reusePanelId: 'pv1' });
-  });
+  // DELETED: 'one restored preview, never focused this session, is the one reused' — 'a restored
+  // preview in a BACKGROUND tab is never reused' mounts the same active-tab preview and asserts
+  // `reusePanelId` is 'pv1'.
 
   it('with two restored previews, the persisted most recent wins (FR-002)', async () => {
     await mount(restored({ root: split(preview('pv1', 'README.md'), preview('pv2', 'b.md')), previewRecency: ['pv2', 'pv1'] }));

@@ -146,7 +146,9 @@ function launch(shell: DetectedShell, start: string, startupCommand?: string) {
 describe('a terminal that has left a folder no longer holds it (#387)', () => {
   for (const c of CASES) {
     const shell = shellFor(c.id);
-    it.skipIf(!shell)(`lets the worktree be deleted after a ${c.id} terminal launched in it has cd-ed to the parent`, async () => {
+    // windows-powershell is the same claim as pwsh through a second host binary: regression tier.
+    const tags = c.id === 'windows-powershell' ? ['regression'] : [];
+    it.skipIf(!shell)(`lets the worktree be deleted after a ${c.id} terminal launched in it has cd-ed to the parent`, { tags }, async () => {
       base = mkdtempSync(join(tmpdir(), 'throng-leave-'));
       const worktree = join(base, 'feature+x');
       mkdirSync(worktree);

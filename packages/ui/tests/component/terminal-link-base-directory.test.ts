@@ -113,13 +113,8 @@ describe('T188 / FR-144 — a shell that cannot report its directory gets NO bas
     expect(await baseDirectoryFor('pwsh', false)).toBeUndefined();
   });
 
-  it('Windows PowerShell with integration OFF', async () => {
-    expect(await baseDirectoryFor('windows-powershell', false)).toBeUndefined();
-  });
-
-  it('Git Bash with integration OFF', async () => {
-    expect(await baseDirectoryFor('git-bash', false)).toBeUndefined();
-  });
+  // Windows PowerShell and Git Bash with integration OFF: the same `reportsDirectory` flag as pwsh above, asserted for
+  // all three in core's `terminal-flavour-reports-directory.test.ts` ("with integration OFF, only ... cmd still reports").
 });
 
 describe('T188 / FR-142 – FR-143 — controls: a shell that reports its directory keeps it', () => {

@@ -185,11 +185,10 @@ describe('status bar content (FR-003/004, narrowed by 026 / #166)', () => {
 /**
  * The bar carries no ADMIN pill, whatever the daemon says (026 / #166).
  *
- * ADDED COVERAGE, not a migration. `status-bar-deduped.e2e.ts:70` asserts two things — that
- * `[ADMIN]` is on the title bar AND that the status bar has no pill — and only the second half is
- * this component's. The first is composed in `app.tsx:517` and reaches `TitleBar` as a plain
- * `identity` prop, so proving it here would need that composition extracted; that is a production
- * refactor, not a test migration, and the E2E keeps both halves until someone makes it.
+ * ADDED COVERAGE, not a migration. The deleted `status-bar-deduped.e2e.ts:70` asserted two things —
+ * that `[ADMIN]` is on the title bar AND that the status bar has no pill — and only the second half
+ * is this component's. The first is composed in `AppTitleBar` and reaches `TitleBar` as a plain
+ * `identity` prop; it is `component/app-title-bar-identity.test.ts`, which mounts that composition.
  *
  * The half below was asserted nowhere, and it is the one with a mechanism worth pinning. #166's
  * finding was that the pill, the dot, the name and the `Tab · Panel` context were all SECOND COPIES
@@ -221,17 +220,5 @@ describe('elevation reaches the title bar and not this one (#166)', () => {
     expect(screen.getByTestId('status-bar')).not.toHaveTextContent('ADMIN');
   });
 
-  it('is the same bar either way — the absence above is not an elevated-only branch', async () => {
-    /*
-     * The anti-vacuity half. A bar that rendered nothing at all under elevation would satisfy the
-     * test above, and so would one that happened to be mid-load. Asserting the bar is fully itself
-     * — the path present, the pill absent — is what makes it a statement about the PILL.
-     */
-    await mount([dto('p1', PROJECT_NAME, ROOT, true)]);
-    await waitFor(() =>
-      expect(screen.getByTestId('status-project-path')).toHaveTextContent(`(${ROOT})`),
-    );
-
-    expect(screen.queryByTestId('status-admin-pill')).toBeNull();
-  });
+  // The anti-vacuity half (the bar is fully itself, path present): the test above waits for the project path first.
 });

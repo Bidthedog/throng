@@ -113,7 +113,9 @@ function program(dir: string, name: string): string {
 describe('a remembered cmd command runs again exactly as it was saved', () => {
   const cases = [
     { title: 'a quoted program path with a space, then a quoted argument', dir: 'Program Files', name: 'say it.cmd' },
-    { title: 'a quoted program path without a space, then a quoted argument', dir: 'tools', name: 'say.cmd' },
+    // DELETED row: "a quoted program path without a space". launch-spec wraps the whole command in quotes whatever
+    // the path holds, and cmd's /K quote-stripping depends on the quote count, so this row exercised the same code
+    // and the same cmd rule as the row above.
   ];
   for (const c of cases) {
     it.skipIf(!cmd)(c.title, async () => {

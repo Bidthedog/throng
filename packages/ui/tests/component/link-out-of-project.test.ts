@@ -227,26 +227,8 @@ async function editorChord(resolved: ResolvedLink, text: string, s: Surface): Pr
 }
 
 describe('SC-007 — no gesture opens an out-of-project file in throng', () => {
-  // T157: the loop over *Default link action* values is gone with the setting (FR-112); the claim
-  // it made is unchanged and now holds by the click rule alone.
-  it('across the fixture set and both gestures', async () => {
-    const offenders: string[] = [];
-    for (const name of NAMES) {
-      for (const [why, toPath] of OUTSIDE) {
-        for (const [gesture, drive] of [
-          ['Ctrl+click (terminal)', terminalCtrlClick],
-          ['Open Link chord (editor)', editorChord],
-        ] as const) {
-          const s = surface();
-          await drive(outsideLink(toPath(name)), name, s);
-          if (s.opened.length > 0) {
-            offenders.push(`${name}/${why}/${gesture}: ${s.opened.join(',')}`);
-          }
-        }
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
+  // DELETED: 'across the fixture set and both gestures' (no `s.opened`) — the next test runs the
+  // identical loops and `drive` calls and fails on `s.opened.length > 0` as well as on a missing reveal.
 
   /**
    * T157 / FR-110 row three: an out-of-project file is SHOWN in OS Explorer — never handed to its
@@ -409,25 +391,9 @@ describe('SC-007 — and no MENU ITEM does either', () => {
     expect(offered).toEqual([]);
   });
 
-  it('and a row invoked anyway — reaching past FR-030 — still opens nothing', async () => {
-    const offenders: string[] = [];
-    const targets = ['editor', 'preview', 'osExplorer', 'osDefaultProgram'] as const;
-    for (const name of NAMES) {
-      for (const [why, toPath] of OUTSIDE) {
-        for (const target of targets) {
-          const s = surface();
-          await performLinkTarget({
-            target,
-            link: outsideLink(toPath(name)),
-            request: requestFor(name),
-            deps: { ...s.deps, ...osLinkActions() },
-          });
-          if (s.opened.length > 0) offenders.push(`${name}/${why}/${target}: ${s.opened.join(',')}`);
-        }
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
+  // DELETED: 'a row invoked anyway — reaching past FR-030 — still opens nothing' — link-actions-router
+  // .test.ts 'over every input, no out-of-project link reaches an editor or a preview' sweeps all
+  // four targets with `inProject: false`; the name and path do not affect `performLinkTarget`.
 
   it('the rows the menu DOES draw are only the ones that leave the app', () => {
     const drawn = new Set<string>();

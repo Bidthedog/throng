@@ -111,12 +111,7 @@ describe('the bar is split by alignment (FR-013)', () => {
     expect(declared('justify-content')).toBe('space-between');
   });
 
-  it('has not simply moved the old alignment onto a group', () => {
-    // The other way to get the tree right and the pixels wrong: leave the strip at `flex-end` and
-    // push the readouts with a margin. The requirement is that the pressure is absorbed BETWEEN
-    // the two groups (FR-014), which is what `space-between` says and a margin does not.
-    expect(declared('justify-content')).not.toBe('flex-end');
-  });
+  // Not `flex-end` moved onto a group: `toBe('space-between')` above rules it out.
 });
 
 /* ────────────────────────────────────────────────────────────────────────── *
@@ -218,5 +213,47 @@ describe('the declared gap and BAR_GAP agree (T044a)', () => {
       `editor.css declares gap: ${declaredGap} while status-strip.tsx computes with ` +
         `BAR_GAP = ${BAR_GAP}. The fit arithmetic and the cascade must agree.`,
     ).toBe(BAR_GAP);
+  });
+});
+
+/* ────────────────────────────────────────────────────────────────────────── *
+ * FR-010c — the LABEL truncates; the STRIP does not clip
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * MIGRATED FROM `editor-language-override.e2e.ts` — "the strip truncates in a narrow panel and never
+ * collapses the text area (FR-010c)" (test-suite audit).
+ *
+ * That declaration launched Electron, opened a real file and read `overflow`, `text-overflow` and
+ * `white-space` off the language label with `getComputedStyle` — three bare keywords on a plain class
+ * selector, which is exactly what this file's jsdom cascade answers faithfully. Its other two
+ * assertions (the text area's height is above 50px, the strip's is above 0) were true of any
+ * rendered editor; the claim that matters, that the text area's height does not move as the bar
+ * changes, is measured in `editor-status-bar.e2e.ts` under `@reserve:layout`.
+ *
+ * The comment the E2E carried is the reason for the second test: clipping the STRIP would also clip
+ * the language picker, which pops upward out of it — "exactly the bug this assertion originally had".
+ */
+describe('the language label truncates, and the strip does not clip (FR-010c)', () => {
+  let label: HTMLButtonElement;
+
+  beforeAll(() => {
+    label = document.createElement('button');
+    label.className = 'editor-status-strip__language';
+    controls.appendChild(label);
+  });
+
+  const onLabel = (property: string): string => getComputedStyle(label).getPropertyValue(property);
+
+  it('ellipsises on one line, clipped at the label', () => {
+    expect(onLabel('overflow')).toBe('hidden');
+    expect(onLabel('text-overflow')).toBe('ellipsis');
+    expect(onLabel('white-space')).toBe('nowrap');
+  });
+
+  it('leaves the STRIP itself unclipped, so the picker that pops out of it is not cut off', () => {
+    expect(declared('overflow'), 'a clipped strip would clip the language picker').not.toBe('hidden');
+    expect(declared('overflow-x')).not.toBe('hidden');
+    expect(declared('overflow-y')).not.toBe('hidden');
   });
 });

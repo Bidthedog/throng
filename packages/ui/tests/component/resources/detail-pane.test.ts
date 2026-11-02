@@ -36,6 +36,7 @@ describe('a process (US2 scenario 8)', () => {
   });
 
   it('names it, with its process id, full command line and executable path', () => {
+    expect(field('state'), 'the process facts keep their state row').toBeInTheDocument();
     expect(field('name')).toHaveTextContent('node.exe');
     expect(field('pid')).toHaveTextContent('300');
     expect(field('command-line')).toHaveTextContent('node server.js --port 3000');
@@ -64,12 +65,6 @@ describe('a process (US2 scenario 8)', () => {
   it('marks a hot process by band, with the band in words beside the value', () => {
     feed(sampleHierarchy({ nodeCpu: 95 }), 2);
     expect(within(pane()).getByTestId('line-graph-cpu-band')).toHaveTextContent('Critical');
-  });
-
-  it('keeps the process facts: state, id, command line, executable, start and run time', () => {
-    for (const name of ['state', 'pid', 'command-line', 'executable-path', 'started', 'running-for', 'owner']) {
-      expect(within(pane()).getByTestId(`detail-${name}`), name).toBeInTheDocument();
-    }
   });
 
   it('puts no figure in any title: what a figure is, never what it reads (FR-095)', () => {
@@ -235,6 +230,5 @@ describe('quantities', () => {
     act(() => setSelection('x:777:1'));
 
     expect(within(pane()).getByTestId('line-graph-memory-value')).toHaveTextContent(`${formatGrouped(2500)} GB`);
-    expect(MIB).toBeGreaterThan(0);
   });
 });

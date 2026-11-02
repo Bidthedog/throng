@@ -82,7 +82,7 @@ interface Sample {
   ms: number;
 }
 
-describe('051 FR-021 — the service answers while terminals end and start', () => {
+describe('051 FR-021 — the service answers while terminals end and start', { tags: ['regression'] }, () => {
   it(`answers within ${RPC_BOUND_MS} ms through ten ends and a busy check, and keeps terminals flowing`, async () => {
     // Ten terminals each running a real long command — the ends below are of BUSY shells.
     const load = Array.from({ length: ENDING }, (_, i) => `load${i}`);

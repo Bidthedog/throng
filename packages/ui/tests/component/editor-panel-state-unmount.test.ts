@@ -5,6 +5,7 @@ import {
   removePanelLanguage,
 } from '../../src/renderer/editor/editor-language.js';
 import { setDocumentOverride } from '../../src/renderer/editor/language-override.js';
+import { disposeEditor } from '../../src/renderer/editor/use-editor.js';
 import { mountEditor } from './helpers/mount-editor.js';
 
 /**
@@ -101,8 +102,9 @@ describe('an editor panel in a sub-workspace, where nothing else remembers the c
       documents: noDocuments,
     });
 
-    // `disposeEditor` is the destroy path; `removePanelLanguage` is the part of it under test here.
-    removePanelLanguage(PANEL);
+    // `disposeEditor` is the destroy path. It is called for real (pass 2: this used to call
+    // `removePanelLanguage` itself, which proved only the store's delete, never the wiring).
+    disposeEditor(PANEL);
     cleanup();
 
     expect(getPanelLanguage(PANEL), 'a destroyed panel must not leave its language behind').toBe(

@@ -197,6 +197,7 @@ describe('the shared commands (FR-063)', () => {
     rightClick('t:t1');
     fireEvent.click(screen.getByTestId('menu-item-Destroy Tab'));
     await waitFor(() => expect(bridge.routed).toEqual([{ action: 'destroyTab', id: 't1' }]));
+    expect(screen.queryByTestId('monitor-notice'), 'a routed request raises no notice').toBeNull();
 
     act(() => focusOn(['root', 'c:projects', 'p:p1', 't:t1']));
     rightClick('n:n1');
@@ -250,28 +251,8 @@ describe('the shared commands (FR-063)', () => {
     expect(bridge.routed).toEqual([]);
   });
 
-  it('a tab of the active project is enabled: the monitor holds no tab, so the project decides', async () => {
-    feed(sampleHierarchy());
-    await mount();
-    act(() => focusOn(['root', 'c:projects', 'p:p1']));
-
-    rightClick('t:t1');
-
-    expect(screen.getByTestId('menu-item-Destroy Tab')).toHaveAttribute('aria-disabled', 'false');
-  });
-
-  it('a tab another window holds is destroyed by routing the request there', async () => {
-    feed(sampleHierarchy());
-    bridge.setRouteAnswer(true);
-    await mount();
-    act(() => focusOn(['root', 'c:projects', 'p:p1']));
-
-    rightClick('t:t1');
-    fireEvent.click(screen.getByTestId('menu-item-Destroy Tab'));
-
-    await waitFor(() => expect(bridge.routed).toEqual([{ action: 'destroyTab', id: 't1' }]));
-    expect(screen.queryByTestId('monitor-notice')).toBeNull();
-  });
+  // A tab of the active project is enabled, and one another window holds is destroyed by routing there: the
+  // "routed, never run here" test above clicks the item (so it is enabled) and asserts the route and no notice.
 
   it('and says so, once, when no window holds it', async () => {
     feed(sampleHierarchy());

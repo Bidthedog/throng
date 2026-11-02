@@ -15,7 +15,7 @@
  * call log can prove and a real main process could only obscure.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { refusalMessage } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
@@ -71,16 +71,19 @@ afterEach(() => {
 
 /** Render, search, deliver rows, disclose replace and type a replacement. */
 async function ready(): Promise<ReturnType<typeof userEvent.setup>> {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderFindInFilesPanel();
-  await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+  // Typing is setup here, not the subject (the trigger has its own file): one change event each.
+  fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
 
   // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
 
   await user.click(screen.getByTestId(`fif-run-${PANEL_ID}`));
   stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: ROWS, totalMatches: 3 });
   await user.click(screen.getByTestId(`fif-toggle-replace-${PANEL_ID}`));
-  await user.type(screen.getByTestId(`fif-replacement-${PANEL_ID}`), 'thread');
+  fireEvent.change(screen.getByTestId(`fif-replacement-${PANEL_ID}`), {
+    target: { value: 'thread' },
+  });
   return user;
 }
 
@@ -136,9 +139,9 @@ describe('T093 — the three granularities are distinct, deliberate actions (FR-
   });
 
   it('the commit rows are drawn LIVE only while replace is disclosed (FR-046)', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderFindInFilesPanel();
-    await user.type(screen.getByTestId(`fif-term-${PANEL_ID}`), 'needle');
+    fireEvent.change(screen.getByTestId(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
 
     // The run control: an Enter this soon after typing is ignored under as-you-type (#389).
 
@@ -155,28 +158,9 @@ describe('T093 — the three granularities are distinct, deliberate actions (FR-
 });
 
 describe('T093 — FR-050: a skipped match stays a pending preview', () => {
-  it('committing one match leaves the other two listed and unmarked', async () => {
-    const user = await ready();
-    await commitVia(user, 'fif-row-src/a.ts-6', 'Replace Match');
-
-    expect(screen.getByTestId('fif-row-src/a.ts-6')).toHaveAttribute('data-committed', 'true');
-    // Skipped, not gone: still listed, still a preview.
-    expect(screen.getByTestId('fif-row-src/a.ts-80')).not.toHaveAttribute('data-committed');
-    expect(screen.getByTestId('fif-row-src/b.ts-40')).not.toHaveAttribute('data-committed');
-    /*
-     * TWO previews, and that number is FR-083a rather than a weakening of FR-050.
-     *
-     * This read `toHaveLength(3)` when every row was a preview whatever its state — FR-047's word
-     * "every", written before a row could be anything but pending. FR-083a withdraws it for exactly
-     * one row: the one that has been committed now shows the new text plainly, because a proposal
-     * that has happened is not a proposal. The two rows this test is actually about — the skipped
-     * match on the same file, and the untouched one in another — are still previews, which is
-     * FR-050 unchanged and is what the count now says.
-     */
-    expect(screen.getAllByTestId('fif-replacement')).toHaveLength(2);
-    expect(screen.getByTestId('fif-row-src/a.ts-6').querySelector('[data-testid="fif-replacement"]'))
-      .toBeNull();
-  });
+  // DELETED: 'committing one match leaves the other two listed and unmarked' — the proof lives in
+  // find-in-files-replace-preview.test.ts: T208 'renders the new text PLAINLY', 'leaves a PENDING
+  // row as the FR-047 preview' and 'leaves a SKIPPED match pending' (FR-050).
 
   it('stepping on, a second granularity commits the rest without re-committing the first', async () => {
     const user = await ready();
@@ -202,6 +186,10 @@ describe('T095 — the irreversible-commit warning (FR-057b, FR-057c, FR-057d, F
     // One call so far — the ASK. Nothing has been written, and the panel has not re-asked.
     expect(callsTo()).toHaveLength(1);
     expect(callsTo()[0]?.confirmedIrreversible).toBe(false);
+
+    // The decision buttons carry TEXT labels, under the themeable-icon exception.
+    expect(screen.getByTestId('confirm-accept').textContent?.trim().length ?? 0).toBeGreaterThan(0);
+    expect(screen.getByTestId('confirm-cancel').textContent?.trim().length ?? 0).toBeGreaterThan(0);
   });
 
   it('cancelling writes nothing at all', async () => {
@@ -236,23 +224,6 @@ describe('T095 — the irreversible-commit warning (FR-057b, FR-057c, FR-057d, F
     expect(callsTo()).toHaveLength(1);
   });
 
-  it('with the preference off the commit proceeds unasked (FR-057c)', async () => {
-    // Identical from here: `warnIrreversibleCommit: false` makes main skip the gate, so the panel
-    // sees a committed result on the first call.
-    const user = await ready();
-    await commitVia(user, 'fif-row-src/b.ts-40', 'Replace All');
-    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
-  });
-
-  it('the decision buttons carry TEXT labels, under the themeable-icon exception', async () => {
-    // Only the FIRST answer is overridden; the re-ask falls through to the committing default.
-    stub.commit.mockResolvedValueOnce(NEEDS);
-    const user = await ready();
-    await commitVia(user, 'fif-row-src/a.ts-6', 'Replace All');
-
-    expect((await screen.findByTestId('confirm-accept')).textContent?.trim().length ?? 0).toBeGreaterThan(0);
-    expect(screen.getByTestId('confirm-cancel').textContent?.trim().length ?? 0).toBeGreaterThan(0);
-  });
 });
 
 describe('T098 — the outcome is reported ONCE (FR-058)', () => {

@@ -217,6 +217,13 @@ describe('subgroup is ADDITIVE — a descriptor without one is unchanged (040 FR
   );
 });
 
+describe('the shipped theme tokens move nowhere (040 US3 scenario 9; moved down from the Themes tab)', () => {
+  it('declares no subgroup on any theme token, so the Themes tab renders no subsection for them', () => {
+    expect(THEME_METADATA.length).toBeGreaterThan(0);
+    expect(THEME_METADATA.filter((d) => d.subgroup)).toEqual([]);
+  });
+});
+
 describe('subgroup adds NO ControlKind (007 FR-028 — the control vocabulary is exhaustive)', () => {
   it('leaves the union exactly as 007 declared it', () => {
     expect(controlVocabulary()).toEqual([...SHIPPED_CONTROL_KINDS]);

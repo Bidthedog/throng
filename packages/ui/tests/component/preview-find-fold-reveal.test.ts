@@ -74,7 +74,7 @@ async function mountFoldable(): Promise<void> {
 }
 
 async function findFor(term: string): Promise<ReturnType<typeof userEvent.setup>> {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await user.keyboard('{Control>}f{/Control}');
   await waitFor(() => expect(screen.getByTestId(`find-bar-${m!.id}`)).toBeVisible());
   await user.type(screen.getByTestId('find-input'), term);

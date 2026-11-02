@@ -7,6 +7,9 @@
  * path, exactly as feature 014's single-theme restore does. Before this, the per-tab
  * reset resolved defaults from a SECOND source (theme-reset.ts's DEFAULT_* constants),
  * which had already drifted from the record once.
+ *
+ * "Restores the whole document" and "leaves the other editor's document alone" for both operations are
+ * proven through the channel in reset-ipc.test.ts (`resetSettings` / `resetKeybindings`).
  */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -40,22 +43,6 @@ function makeService(root: string): { store: FileConfigStore; service: ShippedDe
 }
 
 describe('ShippedDefaultsService.resetSettings', () => {
-  it('restores the whole settings document from the shipped record', async () => {
-    const root = freshRoot();
-    const { store, service } = makeService(root);
-    await store.write({ kind: 'settings' }, {
-      ...DEFAULT_APP_SETTINGS,
-      editor: { ...DEFAULT_APP_SETTINGS.editor, autoSave: !DEFAULT_APP_SETTINGS.editor.autoSave },
-      appearance: { ...DEFAULT_APP_SETTINGS.appearance, theme: 'Cyberpunk' },
-    });
-
-    const res = await service.resetSettings();
-
-    expect(res.ok).toBe(true);
-    const after = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
-    expect(after).toEqual(SHIPPED.settings);
-  });
-
   it('leaves key bindings and themes untouched', async () => {
     const root = freshRoot();
     const { store, service } = makeService(root);
@@ -85,33 +72,5 @@ describe('ShippedDefaultsService.resetSettings', () => {
     expect(res.ok).toBe(true);
     const after = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
     expect(after).toEqual(SHIPPED.settings);
-  });
-});
-
-describe('ShippedDefaultsService.resetKeybindings', () => {
-  it('restores the whole keybindings document from the shipped record', async () => {
-    const root = freshRoot();
-    const { store, service } = makeService(root);
-    await store.write({ kind: 'keybindings' }, {
-      version: DEFAULT_KEYBINDINGS.version,
-      bindings: { ...DEFAULT_KEYBINDINGS.bindings, 'zoom.in': ['Ctrl+Q'], 'search.find': ['F9'] },
-    });
-
-    const res = await service.resetKeybindings();
-
-    expect(res.ok).toBe(true);
-    const after = await store.read({ kind: 'keybindings' }, DEFAULT_KEYBINDINGS, parseKeybindings);
-    expect(after).toEqual(SHIPPED.keybindings);
-  });
-
-  it('leaves settings untouched', async () => {
-    const root = freshRoot();
-    const { store, service } = makeService(root);
-    await store.write({ kind: 'settings' }, { ...DEFAULT_APP_SETTINGS, appearance: { ...DEFAULT_APP_SETTINGS.appearance, theme: 'Cyberpunk' } });
-
-    await service.resetKeybindings();
-
-    const after = await store.read({ kind: 'settings' }, DEFAULT_APP_SETTINGS, parseAppSettings);
-    expect(after.appearance.theme).toBe('Cyberpunk');
   });
 });

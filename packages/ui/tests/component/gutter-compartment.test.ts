@@ -83,24 +83,9 @@ afterEach(() => {
  * FR-041 — the gutter is compartment content, not a fixed extension
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('the gutter arrives through a compartment (FR-041, D3)', () => {
-  it('puts something in the gutter compartment when the setting is on', async () => {
-    const h = await mounted();
-    expect(
-      gutterExtensions(h).length,
-      'with the gutter on, the compartment must hold the lineNumbers extension',
-    ).toBeGreaterThan(0);
-  });
-
-  it('leaves the compartment EMPTY when the setting is off at mount', async () => {
-    const h = await mounted({ editor: { showGutter: false } });
-    expect(
-      gutterExtensions(h),
-      'with the gutter off, the compartment must hold nothing — an unconditional lineNumbers() ' +
-        'elsewhere in the extension list would draw the gutter regardless of this',
-    ).toEqual([]);
-  });
-});
+// FR-041 / D3: DELETED 'puts something in the gutter compartment when the setting is on' and
+// 'leaves the compartment EMPTY when the setting is off at mount' — the FR-043 tests below assert the
+// on state at mount (non-empty compartment) and the off state at mount (empty, seeded off) first.
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * FR-043 — the change reaches the view that is already open
@@ -110,7 +95,12 @@ describe('a settings change reconfigures the LIVE view (FR-043)', () => {
   it('empties the compartment on the same EditorView, with no remount', async () => {
     const h = await mounted();
     const before = h.view();
-    expect(gutterExtensions(h).length).toBeGreaterThan(0);
+    expect(
+      gutterExtensions(h).length,
+      'with the gutter on, the compartment must hold the lineNumbers extension',
+    ).toBeGreaterThan(0);
+    before.dispatch({ selection: { anchor: 4, head: 7 } });
+    const text = before.state.doc.toString();
 
     act(() => {
       h.pushSettings({ editor: { showGutter: false } });
@@ -122,6 +112,10 @@ describe('a settings change reconfigures the LIVE view (FR-043)', () => {
       'the SAME view — recreating it would satisfy the content check and lose the undo history, ' +
         'the scroll and the selection (D3 rejects exactly that)',
     ).toBe(before);
+    // FR-044: the reconfigure disturbs neither the document nor the selection.
+    expect(h.view().state.doc.toString(), 'the document').toBe(text);
+    expect(h.view().state.selection.main.anchor, 'the anchor').toBe(4);
+    expect(h.view().state.selection.main.head, 'the head').toBe(7);
   });
 
   it('puts it back when the setting is turned on again', async () => {
@@ -159,28 +153,6 @@ describe('a settings change reconfigures the LIVE view (FR-043)', () => {
  * FR-044 — the selection half, which IS observable without layout
  * ────────────────────────────────────────────────────────────────────────── */
 
-describe('the reconfigure disturbs neither the document nor the selection (FR-044)', () => {
-  it('leaves the buffer and the selection exactly where they were', async () => {
-    /*
-     * FR-044's scroll half needs real layout and lives at E2E — hiding the gutter widens the text
-     * column, which re-wraps a wrapped document, so the pixel offset provably moves and only the
-     * document anchor can be asserted. The SELECTION half is different: a reconfigure is dispatched
-     * in a transaction carrying no `changes` and no `selection`, so `EditorState.selection` carries
-     * through by construction. That construction is exactly what this asserts — a reconfigure
-     * smuggled in beside a document rewrite would break it here rather than in a window.
-     */
-    const h = await mounted();
-    const view = h.view();
-    view.dispatch({ selection: { anchor: 4, head: 7 } });
-    const text = view.state.doc.toString();
-
-    act(() => {
-      h.pushSettings({ editor: { showGutter: false } });
-    });
-    await waitFor(() => expect(gutterExtensions(h)).toEqual([]));
-
-    expect(h.view().state.doc.toString(), 'the document').toBe(text);
-    expect(h.view().state.selection.main.anchor, 'the anchor').toBe(4);
-    expect(h.view().state.selection.main.head, 'the head').toBe(7);
-  });
-});
+// FR-044's selection half (the reconfigure is dispatched with no `changes` and no `selection`, so
+// the buffer and selection carry through; the scroll half needs real layout and lives at E2E) is
+// asserted inside 'empties the compartment on the same EditorView' above.

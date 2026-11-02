@@ -30,7 +30,7 @@
  * and FR-111 supersede every one of them. The unsaved guard (FR-035), the release order (step 4 before
  * step 6), the FR-037 exclusion and the one-notice failure rules stand, re-expressed for the two
  * actions that remain: Keep sends the terminal RPC nothing, End sends `killAll` (contracts/unload.md
- * §6 step 6). What Keep must NOT send is `unload-keep-terminals.test.ts`'s (T124).
+ * §6 step 6). What Keep must NOT send is asserted by T123, below.
  *
  * ══ WHAT THIS FILE DOES NOT COVER ══
  *
@@ -195,7 +195,8 @@ describe('T123 repro — no Unload row shows a confirmation prompt (FR-111, SC-0
     for (const { what, sessions } of TERMINALS) {
       it(`"${row}" (preference ${defaultAction}) with ${what}: no dialog, and ${action} applies`, async () => {
         const killAll = vi.fn((_params: unknown) => Promise.resolve({ killed: [] as string[] }));
-        fakeBridge({ sessions, killAll });
+        const closeIdle = vi.fn((_params: unknown) => Promise.resolve({ closed: [] as string[] }));
+        fakeBridge({ sessions, killAll, closeIdle });
         const deps = collaborators({ defaultAction });
 
         const first = await settleOrDialog(unloadProject(PROJECT_ID, PROJECT_NAME, variant, deps));
@@ -206,6 +207,9 @@ describe('T123 repro — no Unload row shows a confirmation prompt (FR-111, SC-0
 
         // …and the row's own action is carried out.
         expect(deps.unloadProject).toHaveBeenCalledWith(PROJECT_ID);
+        // 046 T124 (FR-086): Keep sends the terminal RPC nothing, and neither action ever closes idle shells.
+        expect(closeIdle, `"${row}" closed the idle shells`).not.toHaveBeenCalled();
+        expect(deps.reportFailure).not.toHaveBeenCalled();
         if (action === 'endTerminals') {
           expect(killAll).toHaveBeenCalledWith({ projectId: PROJECT_ID, exceptPanelIds: [] });
         } else {

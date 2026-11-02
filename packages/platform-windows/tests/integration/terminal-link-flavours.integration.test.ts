@@ -203,9 +203,13 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
     const shell = detected.find((s) => s.id === id);
     const reason = `${id} is not installed on this machine — not run (FR-145), never counted as a pass`;
     if (!shell) console.warn(`[T190] ${reason}`);
+    // cmd and pwsh are the PR-path representatives; the other two flavours are a sweep of the same
+    // ConPTY claim and run in the regression tier.
+    const tags = id === 'windows-powershell' || id === 'git-bash' ? ['regression'] : [];
 
     it.skipIf(!shell)(
       `${id}: after \`cd sub\` the directory arrives comparable with the root`,
+      { tags, timeout: 90_000 },
       async () => {
         const root = makeRoot();
         const sub = join(root, 'sub');
@@ -244,7 +248,6 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
           session.stop();
         }
       },
-      90_000,
     );
 
     if (shell && !conptyCarriesHyperlinks) {
@@ -253,6 +256,7 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
 
     it.skipIf(!shell || !conptyCarriesHyperlinks)(
       `${id}: an OSC 8 hyperlink the shell prints arrives intact`,
+      { tags, timeout: 90_000 },
       async () => {
         const root = makeRoot();
         const session = startBuiltIn(id, shell!.file, root);
@@ -276,7 +280,6 @@ describe('045 T190 — every installed built-in flavour, through ConPTY', () => 
           session.stop();
         }
       },
-      90_000,
     );
   }
 });
@@ -304,6 +307,7 @@ describe('045 T190 — a WSL flavour, where a distro is installed', () => {
 
   it.skipIf(distro === null || !conptyCarriesHyperlinks)(
     'OSC 8 printed inside WSL arrives intact through ConPTY (FR-141)',
+    { tags: ['regression'], timeout: 120_000 },
     async () => {
       const root = makeRoot();
       const wsl = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'wsl.exe');
@@ -330,6 +334,5 @@ describe('045 T190 — a WSL flavour, where a distro is installed', () => {
         session.stop();
       }
     },
-    120_000,
   );
 });

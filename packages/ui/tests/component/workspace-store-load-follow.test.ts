@@ -17,6 +17,7 @@ import { DocumentClient } from '../../src/renderer/state/document-client.js';
 import { FileOpUndoClient } from '../../src/renderer/state/fileop-undo-client.js';
 import { PanelNameClient } from '../../src/renderer/state/panel-name-client.js';
 import { ServicesProvider, type Services } from '../../src/renderer/composition-root.js';
+import { settleLayoutSaves } from '../../src/renderer/state/layout-saves.js';
 import { WorkspaceProvider, useWorkspace } from '../../src/renderer/state/workspace-store.js';
 import { ProjectsProvider } from '../../src/renderer/state/projects-store.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
@@ -148,7 +149,11 @@ describe('a move heard while a project load is pending (052 T025)', () => {
     await waitFor(() => expect(h.ws().layout).toBeTruthy());
 
     expect(h.pathOf()).toBe(OLD);
-    await new Promise((r) => setTimeout(r, 450));
+
+    // Fire any armed debounce and await what is in flight (the window's real shutdown drain), rather than sleeping past 400 ms.
+    await act(async () => {
+      await settleLayoutSaves();
+    });
     expect(h.saves).not.toHaveBeenCalled();
   });
 

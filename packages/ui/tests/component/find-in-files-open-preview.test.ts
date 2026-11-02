@@ -56,20 +56,10 @@ describe('Markdown set to open as a Preview (FR-030)', () => {
     expect(request.target.mode).toBe('lastActive');
     // The reveal is the renderer's own; main never sees it (contracts/preview-ipc-054.md).
     expect(request).not.toHaveProperty('reveal');
-    expect(m.openInto).not.toHaveBeenCalled();
-  });
-
-  it('a file already shown by a preview: main answers focused, and no editor is opened or moved (FR-004)', async () => {
-    const m = await mount(PREVIEW_DEFAULT);
-    m.preview.open.mockResolvedValue({ kind: 'focused', panelId: m.id });
-
-    act(() => {
-      requestOpenResult(row('README.md'));
-    });
-
-    await waitFor(() => expect(m.preview.open).toHaveBeenCalledTimes(1));
+    // Main answered `focused` (a file already shown by a preview): no editor is opened or moved
+    // (FR-004). Flush the answer's continuation first, so a late openInto would be seen.
     await act(() => Promise.resolve());
-    expect(m.openInto).not.toHaveBeenCalled();
+    expect(m.openInto, 'focused: no editor is opened or moved (FR-004)').not.toHaveBeenCalled();
   });
 
   it('main refusing the preview opens the editor at the match instead, rather than nothing', async () => {

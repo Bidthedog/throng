@@ -450,24 +450,8 @@ describe('the bar applies the fit result', () => {
     }
   });
 
-  it('shortens the words label first, without hiding anything (FR-021)', () => {
-    // 360px: shortening `words` alone brings the bar back inside the space. Nothing may disappear.
-    strip(360);
-    expect(visible()).toHaveLength(5);
-    expect(labelForm('words')).toBe('short');
-    expect(labelForm('chars')).toBe('full');
-  });
-
-  it('drops the word count once shortening is exhausted (FR-023)', () => {
-    strip(300);
-    expect(visible()).toEqual(['line', 'column', 'selected', 'chars']);
-    expect(screen.queryByTestId(`editor-status-words-${PANEL}`)).toBeNull();
-  });
-
-  it('keeps the LINE last of the readouts (FR-023)', () => {
-    strip(200);
-    expect(visible()).toEqual(['line', 'column']);
-  });
+  // The decider's answers at 360 (words shortens, nothing hidden; FR-021), 300 (word count dropped; FR-023) and 200
+  // (line kept last) are pinned in `unit/status-strip-fit.test.ts`; the ladder test below renders each width.
 
   it('keeps the two controls even when no readout fits at all (FR-024)', () => {
     // The hide order has no vocabulary for the language indicator or the wrap toggle, so there is

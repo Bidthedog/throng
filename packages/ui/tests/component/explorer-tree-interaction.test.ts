@@ -234,7 +234,7 @@ afterEach(() => {
 });
 
 async function mount(listing?: Record<string, FileTreeEntry[]>) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { files, renames, dirs } = fakeFiles(listing);
   const projectId = `project-${(projectSeq += 1)}`;
 

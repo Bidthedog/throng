@@ -1,4 +1,4 @@
-import { mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -89,9 +89,17 @@ const updatesFor = (panelId: string): PreviewUpdate[] =>
   push.updates.filter((u) => u.update.panelId === panelId).map((u) => u.update);
 const lastFor = (panelId: string): PreviewUpdate | undefined => updatesFor(panelId).at(-1);
 
-/** Let the service's awaited disk reads settle (real I/O, fake clock). */
+/**
+ * Let the service's awaited disk reads settle (real I/O, fake clock).
+ *
+ * Twenty real I/O round trips and event-loop turns, not twenty `setTimeout(5)`: on Windows a 5 ms timer
+ * resolves at the ~15.6 ms system tick, so the timer form cost ~310 ms per call for no extra settling.
+ */
 async function settle(): Promise<void> {
-  for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 5));
+  for (let i = 0; i < 20; i++) {
+    await stat(root);
+    await new Promise<void>((r) => setImmediate(r));
+  }
 }
 
 beforeEach(async () => {

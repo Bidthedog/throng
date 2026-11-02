@@ -102,6 +102,7 @@ describe('every other image source is removed, whatever the setting (FR-093)', (
     ['file:', '<img src="file:///C:/Windows/win.ini" alt="f">'],
     ['a network path', '<img src="//host/x.png" alt="n">'],
     ['javascript:', '<img src="javascript:alert(1)" alt="j">'],
+    ['data:', '<img src="data:image/svg+xml,&lt;svg onload=alert(1)&gt;" alt="d">'],
   ])('%s → no src', (_name, raw) => {
     for (const remoteImages of [true, false]) {
       const image = img(renderImages(raw, remoteImages));
@@ -126,20 +127,8 @@ describe('an image that cannot load shows its alt text (FR-084)', () => {
     onBodyFailure: () => {},
   });
 
-  it('replaces an image whose load fails with its alternative text', async () => {
-    render(createElement(MarkdownBody, props('![A diagram](missing.png)')));
-    const host = screen.getByTestId('preview-markdown-pv-1');
-    const image = await waitFor(() => {
-      const found = host.querySelector('img');
-      expect(found).not.toBeNull();
-      return found!;
-    }, COLD);
-
-    fireEvent.error(image);
-
-    expect(host.querySelector('img')).toBeNull();
-    expect(host.textContent).toContain('A diagram');
-  });
+  // MERGED: "replaces an image whose load fails with its alternative text" is asserted by "an image whose error
+  // fires becomes an alternative-text span carrying its tooltip" below (which also asserts the img is gone).
 
   it('shows a BLOCKED image as its alternative text at once, with nothing to load', async () => {
     render(createElement(MarkdownBody, props('![Outside](../../../outside.png)')));
@@ -212,12 +201,8 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
     expect(span.getAttribute('title')).toBe('https://img.example/b.svg');
   });
 
-  it('an image inside a followable link has no title, and the link keeps its generated one (I3)', () => {
-    const fragment = renderImages('[![](a.png "x")](https://real/)');
-    const image = img(fragment);
-    expect(image.hasAttribute('title')).toBe(false);
-    expect(fragment.querySelector('[data-throng-link]')?.getAttribute('title')).toBe('https://real/');
-  });
+  // DELETED: "an image inside a followable link has no title" — preview-sanitise.test.ts ("an image title inside a
+  // Markdown link") asserts the link is followable, keeps its own title and no title survives inside it.
 
   it('strips bidi controls from the source and the title', () => {
     const title = img(renderImages(`<img src="docs/${RLO}gnp.exe.png" alt="a" title="A ${LRI}title">`)).getAttribute('title') ?? '';
@@ -236,6 +221,7 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
 
     fireEvent.error(image);
 
+    expect(host.querySelector('img'), 'the failed img is replaced').toBeNull();
     const span = host.querySelector('.preview-markdown__alt');
     expect(span?.textContent).toBe('A diagram');
     expect(span?.getAttribute('title')).toBe('missing.png — Missing');
@@ -245,17 +231,8 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
 describe('the heading hook: only the pipeline plants a fragment target (FR-090b, FR-090e)', () => {
   const hostile = (): DocumentFragment => renderImages(readFileSync(HOSTILE, 'utf8'));
 
-  it('strips data-heading-slug from the raw <h2 data-heading-slug="spoof">', () => {
-    const fragment = hostile();
-    const spoof = [...fragment.querySelectorAll('h2')].find((h) => h.textContent === 'Spoofed heading slug');
-    expect(spoof).toBeDefined();
-    expect(spoof!.hasAttribute('data-heading-slug')).toBe(false);
-    expect(fragment.querySelector('[data-heading-slug="spoof"]')).toBeNull();
-  });
-
-  it('keeps the slug on a heading the pipeline generated', () => {
-    expect(hostile().querySelector('h1')?.getAttribute('data-heading-slug')).toBe('hostile-fixture');
-  });
+  // DELETED (two): the spoofed `<h2 data-heading-slug>` strip and the pipeline heading's kept slug —
+  // preview-sanitise.test.ts ("strips the spoofed data-heading-slug", "keeps the pipeline's own attributes").
 
   it('refuses a raw heading claiming a real heading line with a different slug', () => {
     const fragment = renderImages('# Real\n\n<h2 data-source-line="0" data-heading-slug="other">x</h2>');

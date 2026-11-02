@@ -90,6 +90,8 @@ export interface TransferDeps {
    * back. 0 sends every byte report. Default {@link BYTES_TICK_MS}.
    */
   progressTickMs?: number;
+  /** How much of its own work a paste spends before its progress shows (FR-031). Default {@link PROGRESS_WORK_MS}; a test shortens it. */
+  progressWorkMs?: number;
   now?: () => number;
   newId?: () => string;
 }
@@ -778,7 +780,7 @@ export class TransferService {
       job.workTimer = undefined;
       job.display = true;
       this.emitProgress(job);
-    }, Math.max(0, PROGRESS_WORK_MS - job.workMs));
+    }, Math.max(0, (this.deps.progressWorkMs ?? PROGRESS_WORK_MS) - job.workMs));
   }
 
   /** Stop the work clock: a question is open, or the run is over (FR-031). */

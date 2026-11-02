@@ -39,7 +39,8 @@
  * "nothing was rendered" checks sits beside a POSITIVE assertion that the record was nonetheless
  * filed, so an empty DOM cannot make either of them pass.
  */
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AffectedPanel, NoticeSubject } from '@throng/core';
@@ -138,9 +139,7 @@ async function mount(children?: ReactNode): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 

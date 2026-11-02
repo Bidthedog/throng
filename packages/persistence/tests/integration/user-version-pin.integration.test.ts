@@ -1,8 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence';
+import { describe, expect, it } from 'vitest';
+import { LATEST_VERSION } from '@throng/persistence';
 
 /**
  * REWRITTEN by 016 — the SECOND version pin.
@@ -12,39 +9,16 @@ import { openDatabase, runMigrations, LATEST_VERSION } from '@throng/persistence
  * and for a reason nobody had written down. Finding it was the point of looking; deleting it to
  * make the migration pass would have thrown away the guard AND the record of why it existed.
  *
- * The pin is now a MOVING one: the schema is at whatever `LATEST_VERSION` says, and a fresh store
- * must actually reach it. That still catches the thing both pins were really for — a migration
- * added without the version being bumped, or bumped without the migration — while no longer
- * asserting a number that a later feature is entitled to change.
+ * The pin is the number below: a migration added without the version being bumped, or bumped without the
+ * migration, is caught by migration-runner.integration.test.ts, which asserts that a fresh store reaches
+ * LATEST_VERSION.
  */
-const tempDirs: string[] = [];
-
-function freshDbPath(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'throng-verpin-'));
-  tempDirs.push(dir);
-  return join(dir, 'throng.db');
-}
-
-afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 describe('the schema version and the migration chain agree', () => {
   it('LATEST_VERSION is 12 — 060 #532 adds a project\'s own Find in Files exclusions', () => {
     expect(LATEST_VERSION).toBe(12);
   });
 
-  it('a freshly migrated store actually REACHES LATEST_VERSION', () => {
-    // A migration added without a version bump, or a bump without a migration, fails here.
-    const db = openDatabase({ databasePath: freshDbPath() });
-    try {
-      const result = runMigrations(db);
-      expect(result.to).toBe(LATEST_VERSION);
-      expect(Number(db.pragma('user_version', { simple: true }))).toBe(LATEST_VERSION);
-    } finally {
-      db.close();
-    }
-  });
+  // DELETED: 'a freshly migrated store actually REACHES LATEST_VERSION'. migration-runner.integration.test.ts
+  // ('creates the database file and migrates a fresh directory to the latest version') asserts the same
+  // result.to and user_version against LATEST_VERSION.
 });

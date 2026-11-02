@@ -53,7 +53,7 @@ function mount(initial = '#3b82f6', clearable = false) {
     });
   }
   render(createElement(Host));
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 const hex = (): HTMLInputElement => screen.getByTestId(`${ID}-hex`) as HTMLInputElement;
@@ -96,35 +96,19 @@ describe('the swatch is drawn, never delegated to the OS (FR-020)', () => {
 });
 
 describe('an invalid colour is refused (FR-026)', () => {
-  it('commits a valid hex', async () => {
-    const { user, onCommit } = mount('#3b82f6');
-    await user.clear(hex());
-    await user.type(hex(), '#ff8800');
-    await user.tab();
-    expect(onCommit).toHaveBeenLastCalledWith('#ff8800');
-  });
-
-  it('marks nonsense invalid and commits NOTHING', async () => {
+  // "commits a valid hex" and "marks nonsense invalid and commits NOTHING" were folded into this test
+  // (pass 2): the valid commit is the last step, the nonsense step asserts nothing was committed.
+  it('marks nonsense invalid and commits NOTHING, then recovers once the value is corrected', async () => {
     // The E2E's own point: the last valid colour must still stand. A control that committed the
     // rubbish would write it to the theme file and the surface reading that token would lose its
     // colour — persisted, so it survives a restart.
     const { user, onCommit } = mount('#ff8800');
     onCommit.mockClear();
-
-    await user.clear(hex());
-    await user.type(hex(), 'zzz');
-    await user.tab();
-
-    expect(hex()).toHaveAttribute('aria-invalid', 'true');
-    expect(onCommit).not.toHaveBeenCalled();
-  });
-
-  it('recovers once the value is corrected, clearing the invalid mark', async () => {
-    const { user, onCommit } = mount('#ff8800');
     await user.clear(hex());
     await user.type(hex(), 'zzz');
     await user.tab();
     expect(hex()).toHaveAttribute('aria-invalid', 'true');
+    expect(onCommit, 'nonsense commits nothing').not.toHaveBeenCalled();
 
     await user.clear(hex());
     await user.type(hex(), '#00ff00');

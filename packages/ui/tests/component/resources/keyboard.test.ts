@@ -139,30 +139,13 @@ describe('drilling in and out (FR-068)', () => {
     await openModal();
   });
 
-  it('Right drills into the focused node, and focus lands on its first child', async () => {
-    row('c:projects').focus();
-    key(document.activeElement!, 'ArrowRight');
-
-    expect(getView().focusPath).toEqual(['root', 'c:projects']);
-    await waitFor(() => expect(active()).toBe('p:p1'));
-  });
-
+  // "Right drills into the focused node, focus on its first child" and "Left goes up one level, focus back on the
+  // node it came from" are the first and last steps of the walk below.
   it('Enter drills in too', async () => {
     row('c:projects').focus();
     key(document.activeElement!, 'Enter');
     expect(getView().focusPath).toEqual(['root', 'c:projects']);
     await waitFor(() => expect(active()).toBe('p:p1'));
-  });
-
-  it('Left goes up one level and puts focus back on the node it came from', async () => {
-    row('c:projects').focus();
-    key(document.activeElement!, 'ArrowRight');
-    await waitFor(() => expect(active()).toBe('p:p1'));
-
-    key(document.activeElement!, 'ArrowLeft');
-
-    expect(getView().focusPath).toEqual(['root']);
-    await waitFor(() => expect(active()).toBe('c:projects'));
   });
 
   it('Backspace goes up one level too', async () => {
@@ -217,7 +200,7 @@ describe('in the filter field the arrows edit text (FR-068)', () => {
   });
 
   it('really edits: Backspace in the field deletes a character and does not go up', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     act(() => setView({ focusPath: ['root', 'c:projects'] }));
     const field = screen.getByTestId('monitor-filter') as HTMLInputElement;
     await user.type(field, 'nod{Backspace}');
@@ -230,7 +213,7 @@ describe('Tab moves between the window’s regions (FR-068)', () => {
   it('goes filter → help → toolbar → breadcrumb → left list → divider → right column (FR-112)', async () => {
     await openModal();
     act(() => setView({ focusPath: ['root', 'c:projects'] }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const regionOf = (el: Element | null): string | null => el?.closest('[data-region]')?.getAttribute('data-region') ?? null;
 
     screen.getByTestId('monitor-filter').focus();

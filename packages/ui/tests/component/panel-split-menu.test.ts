@@ -165,7 +165,7 @@ describe('the + button (FR-010, FR-014)', () => {
   });
 
   it('opens Split Down, Split Up, Split Right, Split Left, each with its chord, and adds nothing', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.click(await screen.findByTestId('panel-add-p1'));
     await waitFor(() => expect(menu()).not.toBeNull());
@@ -177,7 +177,7 @@ describe('the + button (FR-010, FR-014)', () => {
   });
 
   it('Split Right divides that panel left/right with the new panel on the right, active and in no rename box (FR-002)', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.click(await screen.findByTestId('panel-add-p1'));
     await user.click(await screen.findByTestId('menu-item-Split Right'));
@@ -198,7 +198,7 @@ describe('the + button (FR-010, FR-014)', () => {
   });
 
   it('opens the split menu on the FIRST click while another menu is open, and a second click closes its own (R6)', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await screen.findByTestId('panel-add-p1');
     // Some other menu is open: the panel header's own.
@@ -216,7 +216,7 @@ describe('the + button (FR-010, FR-014)', () => {
   });
 
   it('Escape closes the menu and changes nothing', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.click(await screen.findByTestId('panel-add-p1'));
     await waitFor(() => expect(menu()).not.toBeNull());
@@ -226,7 +226,7 @@ describe('the + button (FR-010, FR-014)', () => {
   });
 
   it('an outside click closes the menu and changes nothing', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.click(await screen.findByTestId('panel-add-p1'));
     await waitFor(() => expect(menu()).not.toBeNull());
@@ -239,7 +239,7 @@ describe('the + button (FR-010, FR-014)', () => {
 
 describe('the + button chooses the panel it belongs to (FR-011)', () => {
   it('makes its own panel active as the menu opens, then splits THAT panel', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await screen.findByTestId('panel-add-p1');
     // Two panels; the second is active, so p1's + is a click on an INACTIVE panel.
@@ -268,7 +268,7 @@ describe('the + button chooses the panel it belongs to (FR-011)', () => {
   });
 
   it('acts in the button’s OWN tab, not the window’s active tab', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount({ body: createElement(TabHost, { tabIndex: 1 }) });
     await waitFor(() => expect(live()?.layout).toBeTruthy());
     let t2 = '';
@@ -289,7 +289,7 @@ describe('the + button chooses the panel it belongs to (FR-011)', () => {
 
 describe('the + button from the keyboard (FR-012)', () => {
   it('Enter opens the menu, arrows move, Enter chooses', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     const button = await screen.findByTestId('panel-add-p1');
     button.focus();
@@ -309,7 +309,7 @@ describe('the + button from the keyboard (FR-012)', () => {
   });
 
   it('Space opens the menu', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     const button = await screen.findByTestId('panel-add-p1');
     button.focus();
@@ -320,7 +320,7 @@ describe('the + button from the keyboard (FR-012)', () => {
 
 describe('a drag starting closes an open + menu (T018)', () => {
   it('closes the menu and changes nothing', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await user.click(await screen.findByTestId('panel-add-p1'));
     await waitFor(() => expect(menu()).not.toBeNull());
@@ -339,7 +339,7 @@ describe('a drag starting closes an open + menu (T018)', () => {
 
 describe('split mode ends when a menu opens or a drag starts (T032, FR-022)', () => {
   it('the + menu opening ends split mode', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await screen.findByTestId('panel-add-p1');
     startSplitMode('p1');
@@ -350,7 +350,7 @@ describe('split mode ends when a menu opens or a drag starts (T032, FR-022)', ()
   });
 
   it('a right-click menu opening ends split mode', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     await screen.findByTestId('panel-add-p1');
     startSplitMode('p1');

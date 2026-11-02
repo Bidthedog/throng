@@ -117,7 +117,7 @@ describe('a group heading folds (FR-001, FR-006)', () => {
   });
 
   it('toggles with Enter and Space (FR-004)', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     toggle(idOf(FIRST)).focus();
     await user.keyboard('{Enter}');
@@ -232,7 +232,7 @@ describe('Expand All and Collapse All (FR-011b)', () => {
   });
 
   it('are reachable with Tab and act on Enter', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     mount();
     screen.getByTestId('keybindings-search').focus();
     await user.tab();

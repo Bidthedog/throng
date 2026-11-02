@@ -229,32 +229,10 @@ const targets: Array<[string, Panel]> = [
   ['a Find in Files panel', { type: 'panel', id: 'p-find', originProjectId: PROJECT, title: 'Find in Files', kind: 'findInFiles' }],
 ];
 
-describe('REPRO — Ctrl+Shift+Alt+ArrowRight from a focused editor moves the keyboard with the active panel', () => {
-  for (const [label, target] of targets) {
-    it(`to ${label}: the target becomes active AND DOM focus leaves the editor for it`, async () => {
-      await mount(target);
-      const content = await editorContent();
-
-      // The user is typing in the editor: DOM focus is in its CodeMirror content.
-      act(() => content.focus());
-      expect(document.activeElement, 'precondition: the editor holds DOM focus').toBe(content);
-
-      act(() => {
-        fireEvent.keyDown(content, { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true, shiftKey: true, altKey: true });
-      });
-
-      // Positive control — the chord did move the active panel.
-      await waitFor(() => expect(activeId()).toBe(target.id));
-
-      const focusedInEditor = screen.getByTestId(`panel-${editorPanel.id}`).contains(document.activeElement);
-      expect(focusedInEditor, 'DOM focus is still inside the editor panel — typing would go into the editor').toBe(false);
-      expect(
-        screen.getByTestId(`panel-${target.id}`).contains(document.activeElement),
-        `DOM focus is not inside the newly active panel (activeElement: ${document.activeElement?.outerHTML.slice(0, 120)})`,
-      ).toBe(true);
-    });
-  }
-});
+// DELETED: the 'REPRO — Ctrl+Shift+Alt+ArrowRight from a focused editor' pair (focus leaves the
+// editor and lands inside the new active panel) — the FR-125 tests below press the same chord from
+// the same focused editor on the same two targets and assert the stronger claim, that DOM focus is
+// ON the panel's type picker / search box (so it is in the target and not in the editor).
 
 /*
  * T210 (046 FR-125, constitution v5.6.0 Principle XI "Focus follows the active Panel"): WHERE inside

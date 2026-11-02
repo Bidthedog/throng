@@ -257,7 +257,7 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
       .fn<PreviewProviderView['load']>()
       .mockRejectedValueOnce(new Error('chunk preview-x.js failed'))
       .mockResolvedValue(FakeBody);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderPanel(fakeView(load));
 
     const banner = await screen.findByTestId('panel-failure-p1');
@@ -284,7 +284,7 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
   it('shows the failure banner when the Markdown renderer cannot be built, and Try again renders', async () => {
     installBridge();
     rendererFaults.remaining = 1;
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderPanel(
       fakeView(() =>
         import('../../src/renderer/preview/providers/markdown/markdown-body.js').then((m) => m.MarkdownBody),
@@ -316,7 +316,7 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
   it('a redraw that fails again keeps the ONE banner and says the condition is still there', async () => {
     installBridge();
     rendererFaults.renders = 2;
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderPanel(
       fakeView(() =>
         import('../../src/renderer/preview/providers/markdown/markdown-body.js').then((m) => m.MarkdownBody),
@@ -338,7 +338,7 @@ describe('a body that cannot be loaded says so, and Try again loads it (review i
   it('a redraw that succeeds clears the banner only once the body has drawn', async () => {
     installBridge();
     rendererFaults.renders = 1;
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderPanel(
       fakeView(() =>
         import('../../src/renderer/preview/providers/markdown/markdown-body.js').then((m) => m.MarkdownBody),

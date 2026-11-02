@@ -261,12 +261,8 @@ describe('fix round 1 (item 7) — a link title cannot be reordered by bidi cont
 });
 
 describe('Ctrl+click follows, a plain click does not (FR-094)', () => {
-  it('plain click → no onFollow', async () => {
-    const { host, onFollow } = mountBody();
-    await ready(host);
-    fireEvent.click(link('Site'));
-    expect(onFollow).not.toHaveBeenCalled();
-  });
+  // DELETED: "plain click → no onFollow" — every row of the plain-click hint `it.each` above asserts
+  // `onFollow` was not called after a plain click, 'Site' among them.
 
   /*
    * 045 FR-165, FR-166 (round four; S6) — the shared link hint SUPERSEDES 044 FR-094's own plain-click

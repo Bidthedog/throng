@@ -314,24 +314,16 @@ describe('minimising (FR-051, FR-052, FR-060, SC-007)', () => {
     expect(screen.getByTestId('category-toggle-cat-a').className).not.toMatch(/category-header__toggle--open/);
   });
 
-  it('Enter on the focused header toggles it', async () => {
+  it.each([
+    ['Enter', 'Enter'],
+    ['Space', ' '],
+  ])('%s on the focused header toggles it', async (_name, keyName) => {
     const server = twoCategoryFixture();
     await mount(server);
     const header = await screen.findByTestId('category-header-cat-a');
     header.focus();
 
-    press(header, 'Enter');
-
-    await waitFor(() => expect(screen.queryByTestId('project-item-p2')).toBeNull());
-  });
-
-  it('Space on the focused header toggles it', async () => {
-    const server = twoCategoryFixture();
-    await mount(server);
-    const header = await screen.findByTestId('category-header-cat-a');
-    header.focus();
-
-    press(header, ' ');
+    press(header, keyName);
 
     await waitFor(() => expect(screen.queryByTestId('project-item-p2')).toBeNull());
   });
@@ -544,8 +536,9 @@ describe('the header background token (FR-072)', () => {
     expect(declarations.get('background')).toBe('var(--throng-colour-categoryHeaderBackground)');
   });
 
-  it('a mixed-case category name keeps its stored casing in the Rename Category field, and the count stays a plain digit-grouped number', async () => {
-    const projects = Array.from({ length: 1234 }, (_, i) => makeProject(`p${i}`, 'cat-a'));
+  it('a mixed-case category name keeps its stored casing in the Rename Category field, and the count is unaffected', async () => {
+    // Digit grouping of a four-digit count is asserted in "the header" above; two projects are enough here.
+    const projects = Array.from({ length: 2 }, (_, i) => makeProject(`p${i}`, 'cat-a'));
     const categories = [makeCategory(DEFAULT_ID, 'In Progress'), makeCategory('cat-a', 'Side Quests')];
     const server = makeServer(projects, categories);
     await mount(server);
@@ -557,7 +550,7 @@ describe('the header background token (FR-072)', () => {
 
     const input = (await screen.findByTestId('category-name-input')) as HTMLInputElement;
     expect(input.value).toBe('Side Quests'); // not the display-only uppercase 'SIDE QUESTS'
-    expect(screen.getByTestId('category-count-cat-a')).toHaveTextContent(formatGrouped(1234));
+    expect(screen.getByTestId('category-count-cat-a')).toHaveTextContent(formatGrouped(2));
   });
 });
 

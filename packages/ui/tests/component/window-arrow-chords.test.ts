@@ -122,13 +122,8 @@ describe('focus.* acts only while the workspace holds the active pane (FR-122)',
     });
   }
 
-  it('from the workspace: the same chord moves the active panel as today (control)', async () => {
-    await mount();
-    act(() => setActivePane('workspace'));
-    act(() => press('ArrowRight', { ctrlKey: true, shiftKey: true, altKey: true }));
-    expect(active()).toBe('p2');
-    expect(getActivePane()).toBe('workspace');
-  });
+  // The control (from the workspace pane the same chord moves the active panel) is the first test of this file:
+  // `setActivePane('workspace')` runs in `beforeEach` and Ctrl+Shift+Alt+ArrowRight reaches p2.
 });
 
 describe('navigate.* — Alt+Arrow steps the focused panel (044 FR-105)', () => {

@@ -6,8 +6,6 @@
  *
  * Layer: component — the real helpers in the real toolbar, list and Held folders over the real session.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, Fragment } from 'react';
@@ -139,7 +137,7 @@ describe('opening and closing [derived]', () => {
 
   it('opens on Enter and on Space', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     helper('orderBy').focus();
     await user.keyboard('{Enter}');
     expect(popover()).toBeInTheDocument();
@@ -151,7 +149,7 @@ describe('opening and closing [derived]', () => {
 
   it('closes on Esc, and the focus stays on the helper', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(helper('hideIdle'));
     expect(popover()).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -168,7 +166,7 @@ describe('opening and closing [derived]', () => {
 
   it('closes on a second click', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(helper('interval'));
     await user.click(helper('interval'));
     expect(screen.queryByTestId('info-helper-popover')).toBeNull();
@@ -176,7 +174,7 @@ describe('opening and closing [derived]', () => {
 
   it('closes on a click elsewhere', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(helper('hideEnded'));
     await user.click(screen.getByTestId('monitor-metric-memory'));
     expect(screen.queryByTestId('info-helper-popover')).toBeNull();
@@ -184,7 +182,7 @@ describe('opening and closing [derived]', () => {
 
   it('shows one at a time: opening another closes the first', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(helper('hideIdle'));
     await user.click(helper('hideEnded'));
     expect(screen.getAllByTestId('info-helper-popover')).toHaveLength(1);
@@ -249,7 +247,7 @@ describe('dismissal (FR-119, sixth feedback)', () => {
 
   it('keeps the mark while a second helper replaces the first, and clears it when the last closes', async () => {
     await mountAll();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(helper('hideIdle'));
     await user.click(helper('hideEnded'));
     expect(document.documentElement).toHaveAttribute('data-helper-open');
@@ -257,31 +255,12 @@ describe('dismissal (FR-119, sixth feedback)', () => {
     expect(document.documentElement).not.toHaveAttribute('data-helper-open');
   });
 
-  it('gives the title bar\'s drag region up while the mark is there: a drag region delivers no DOM press, so it could never dismiss', () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/title-bar/title-bar.css'), 'utf8').replace(/\r\n/g, '\n');
-    const rule = /\[data-helper-open\][^{]*\{([^}]*)\}/.exec(css);
-    expect(rule, 'no rule for an open helper').not.toBeNull();
-    expect(rule?.[0]).toContain('.title-bar');
-    expect(rule?.[0]).toContain('.title-bar__drag-zone');
-    expect(rule?.[1]).toMatch(/-webkit-app-region:\s*no-drag/);
-  });
+  // The title bar's drag region giving way while the mark is there is a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
 });
 
 describe('placement: superscript and close to its subject (sixth feedback)', () => {
-  const rule = (selector: string): string => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(/\r\n/g, '\n');
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-  };
-
-  it('raises the "?" and makes it small, with no margin of its own pushing it away', () => {
-    const body = rule('.info-helper');
-    expect(body).toMatch(/vertical-align:\s*(super|top)/);
-    expect(body).toMatch(/margin:\s*0/);
-    expect(Number(/width:\s*(\d+)px/.exec(body)?.[1])).toBeLessThanOrEqual(14);
-    expect(Number(/height:\s*(\d+)px/.exec(body)?.[1])).toBeLessThanOrEqual(14);
-  });
-
+  // Raising the "?" and keeping it small is a stylesheet claim: `unit/resources/monitor-stylesheet.test.ts`.
   it('sits right after its subject at every call site: no gap, no spacer text between them', async () => {
     await mountAll();
     for (const topic of ['heldFolders', 'totalRow'] as const) {
@@ -293,16 +272,8 @@ describe('placement: superscript and close to its subject (sixth feedback)', () 
 });
 
 describe('the popup\'s look (FR-119: the app\'s standard popup style, no glow)', () => {
-  it('is a floating surface in the attention popover\'s style, not a glow', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(/\r\n/g, '\n');
-    const shared = /\n((?:\.[\w-]+,\n)*\.attention-popover(?:,\n\.[\w-]+)*)\s*\{/.exec(css)?.[1] ?? '';
-    expect(shared).toContain('.info-helper-popover');
-    expect(shared).toContain('.monitor-help');
-    expect(shared).toContain('.status-popover');
-  });
-
+  // The floating surface in the attention popover's style, not a glow, is a stylesheet claim:
+  // `unit/resources/monitor-stylesheet.test.ts`.
   it('renders in the body, so no scroll container clips it', async () => {
     await mountAll();
     fireEvent.click(helper('heldFolders'));

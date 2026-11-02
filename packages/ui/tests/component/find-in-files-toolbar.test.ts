@@ -17,12 +17,9 @@
  * discovery guard in `find-in-files-panel-controls.test.ts` and is asserted NOWHERE else — see the
  * long note in that file. Restating a token or a title here is what made that guard unable to fail.
  */
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  __resetFindInFilesState,
-  markFindInFilesScopeMissing,
-} from '../../src/renderer/find-in-files/find-in-files-store.js';
+import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
   PANEL_ID,
   committedEverything,
@@ -326,39 +323,9 @@ describe('the scope control carries ONE notice at a time (FR-030a, FR-070)', () 
     expect(notices()).toHaveLength(1);
   });
 
-  it('keeps FR-030a informational: every listed row survives the marking', () => {
-    /*
-     * Generalising the flag is exactly the kind of change that turns a marking into an error state
-     * for the whole panel, so the property FR-030a is emphatic about is re-asserted on the new
-     * shape rather than trusted to have survived it.
-     *
-     * Raised OUT OF BAND — the shape the watcher consumer uses (043 T078) — and that distinction is
-     * the requirement, not a testing convenience. A RUN refused for a missing scope supersedes into
-     * a fresh generation with every counter zeroed, because FR-030a also demands that such a run
-     * find nothing and be distinguishable from one that found nothing in a scope that exists. The
-     * "results stay listed" half is about the directory going while a finished run is on screen.
-     */
-    renderFindInFilesPanel();
-    fireEvent.change(el(`fif-term-${PANEL_ID}`), { target: { value: 'needle' } });
-    fireEvent.click(el(`fif-run-${PANEL_ID}`));
-    bridge.emit({
-      panelId: PANEL_ID,
-      generation: 1,
-      status: 'complete',
-      rows: [resultRow('src/a.ts', 1, 0)],
-      totalMatches: 1,
-    });
-    act(() => {
-      markFindInFilesScopeMissing(PANEL_ID);
-    });
-
-    expect(scopeControl().dataset.scopeNotice).toBe('missing');
-    expect(scopeField().getAttribute('aria-invalid')).toBe('true');
-    expect(scopeField().disabled).toBe(false);
-    const rows = screen.getAllByTestId(/^fif-row-/);
-    expect(rows).toHaveLength(1);
-    for (const row of rows) expect(row.getAttribute('aria-disabled')).not.toBe('true');
-  });
+  // DELETED: 'keeps FR-030a informational: every listed row survives the marking' —
+  // find-in-files-scope.test.ts 'marks the control while every listed row stays usable' raises the
+  // same out-of-band marking over a finished run and asserts the rows, aria-invalid and the field.
 
   it('states the condition through one attribute, not two', async () => {
     // The old `data-missing` is GONE rather than kept alongside: two attributes for two alternative

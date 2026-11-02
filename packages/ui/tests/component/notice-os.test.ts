@@ -15,7 +15,8 @@
  * ANTI-VACUITY CONTROL: drop the `toOs` call and every positive test fails; send for a `display`
  * override and the override test fails; send on a flash and the repeat test fails.
  */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotificationProvider, useNotify, type NoticeInput } from '../../src/renderer/common/notification.js';
@@ -57,7 +58,7 @@ async function mount(notifications: Record<string, unknown>): Promise<Probe> {
     createElement(ConfigProvider, null,
       createElement(NotificationProvider, null, createElement(ProbeView, { into: probe, key: 'probe' }))),
   );
-  await waitFor(() => expect(probe.loaded).toBe(true));
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 

@@ -98,6 +98,22 @@ describe('#95 — file-tree open-on-click has exactly one owner', () => {
     ).toHaveLength(1);
   });
 
+  /*
+   * MIGRATED FROM `packages/ui/tests/e2e/preferences-settings.e2e.ts:319` ("open-on-click is one control, in the
+   * File Explorer group, offering none (#95, C2)"). The Preferences form is generated from the descriptor — group,
+   * label and option list are read straight off it — so the placement the user sees is a fact about this entry.
+   */
+  it('the surviving control sits in the File Explorer group, labelled "Open files with", offering none/single/double (C2, FR-024)', () => {
+    const survivors = SETTINGS_METADATA.filter((d) => d.key === 'editor.openOnClick');
+    expect(survivors).toHaveLength(1);
+    const [descriptor] = survivors;
+    expect(descriptor?.group).toBe('File Explorer');
+    expect(descriptor?.label).toBe('Open files with');
+    expect(descriptor?.control).toBe('select');
+    // `none` is retained by the survivor and becomes visible for the first time — the inert control never offered it.
+    expect([...(descriptor?.allowedValues ?? [])].sort()).toEqual(['double', 'none', 'single']);
+  });
+
   it('every rendered open-on-click control is actually read by production code', () => {
     const sources = productionSources();
     const inert = renderedClaimants.filter((key) => readersOf(key, sources).length === 0);

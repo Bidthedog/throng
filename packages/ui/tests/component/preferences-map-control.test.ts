@@ -48,7 +48,7 @@ function renderMap(descriptor: FieldDescriptor, initial: Record<string, unknown>
     });
   }
   render(createElement(Host));
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 const id = (suffix: string): string => `${suffix}-${byExtension.key}`;

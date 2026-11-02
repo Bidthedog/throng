@@ -393,7 +393,7 @@ async function mount(
   const daemon = fakeDaemon(layout, initial, options.failing);
   const windowApi = stubSubWorkspaceBridge();
   const services = servicesOver(daemon.bridge);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
 
   render(
     createElement(ServicesProvider, {
@@ -667,14 +667,36 @@ describe('a failed create surfaces, and leaves nothing behind (migrated from sub
     expect(notice).toHaveTextContent(/Sub-workspace 1/);
   });
 
-  it('clears the error once a later create succeeds', async () => {
-    const { user, daemon } = await mount([seedSub()], { sidebar: true });
+  it('is removed at once by its dismiss control, and a repeat failure raises it again', async () => {
+    // Moved down from error-dismiss.e2e.ts "Sub-workspaces error".
+    const { user } = await mount([seedSub()], { sidebar: true, failing: FAILING });
+
     await openSyncTo(user, 'tab');
     await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+    await screen.findByTestId('subworkspace-error');
+    await user.click(screen.getByTestId('subworkspace-error-dismiss'));
+    await waitFor(() => expect(screen.queryByTestId('subworkspace-error'), 'dismiss removes the notice').toBeNull());
 
-    // The happy path calls `clearError()` before it refreshes. Nothing asserted that, and a store
-    // that only ever accumulates errors shows the user a stale failure for the rest of the session.
+    await openSyncTo(user, 'tab');
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+    await screen.findByTestId('subworkspace-error');
+    expect(screen.getByTestId('subworkspace-error-dismiss'), 'the repeat failure is dismissable too').toBeVisible();
+  });
+
+  it('clears the error once a later create succeeds', async () => {
+    // The daemon fails the first create, then recovers: `failing.method` is read on every call.
+    const failing = { ...FAILING };
+    const { user, daemon } = await mount([seedSub()], { sidebar: true, failing });
+    await openSyncTo(user, 'tab');
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
+    await screen.findByTestId('subworkspace-error');
+    failing.method = 'none.recovered';
+
+    // The happy path calls `clearError()` before it refreshes. A store that only ever accumulates
+    // errors shows the user a stale failure for the rest of the session.
+    await openSyncTo(user, 'tab');
+    await user.click(screen.getByTestId('menu-item-New Sub-workspace'));
     await waitFor(() => expect(daemon.current()).toHaveLength(2));
-    expect(screen.queryByTestId('subworkspace-error')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('subworkspace-error'), 'the stale failure is gone').toBeNull());
   });
 });

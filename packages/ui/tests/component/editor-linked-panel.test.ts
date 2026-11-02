@@ -105,22 +105,9 @@ describe('the relay of a link (052 T019)', () => {
     filePath: PATH,
   });
 
-  it('adopts the owner’s document, and MovedPathSync writes linkedTo into the layout', async () => {
-    const h = mountEditor({
-      panelId: PANEL,
-      doc: { text: 'MINE\n', version: 1, absPath: PATH },
-      withChrome: true,
-      registerProject: true,
-    });
-    await waitFor(() => expect(h.view().state.doc.toString()).toBe('MINE\n'));
-
-    h.pushSync({ linkedTo: 'owner', reset: reset('owner', 'OWNERS\n') });
-
-    await waitFor(() => expect(h.view().state.doc.toString()).toBe('OWNERS\n'));
-    await waitFor(() => expect(h.savedPanelConfig()?.linkedTo).toBe('owner'));
-  });
-
-  it('writes the link away again when the authority unlinks, and the panel loads its own path', async () => {
+  // The relay's first half (adopt the owner’s document; MovedPathSync writes linkedTo into the layout)
+  // is the arrangement of the unlink test below, so it is asserted there rather than in a mount of its own.
+  it('adopts the owner’s document and writes linkedTo into the layout; writes it away again when the authority unlinks, and the panel loads its own path', async () => {
     const h = mountEditor({
       panelId: PANEL,
       doc: { text: 'MINE\n', version: 1, absPath: PATH },
@@ -129,7 +116,8 @@ describe('the relay of a link (052 T019)', () => {
     });
     await waitFor(() => expect(h.view().state.doc.toString()).toBe('MINE\n'));
     h.pushSync({ linkedTo: 'owner', reset: reset('owner', 'OWNERS\n') });
-    await waitFor(() => expect(h.savedPanelConfig()?.linkedTo).toBe('owner'));
+    await waitFor(() => expect(h.view().state.doc.toString(), 'adopts the owner’s text').toBe('OWNERS\n'));
+    await waitFor(() => expect(h.savedPanelConfig()?.linkedTo, 'linkedTo written to the layout').toBe('owner'));
 
     // The owner moved away (an undo): no reset comes with it, and the panel reads what its path holds now.
     h.serve({ text: 'ON-DISK-NOW\n', version: 1, absPath: PATH });

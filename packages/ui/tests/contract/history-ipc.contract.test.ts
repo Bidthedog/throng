@@ -22,7 +22,7 @@ import {
  * for a history and no per-window send — a window holding the panel in a background tab has detached
  * from it and must still mirror a Save-As rewrite or a purge into its layout (§2).
  *
- * The service's behaviour behind the wire is `navigation-history-service.integration.test.ts` (T137).
+ * The service's behaviour behind the wire is `unit/navigation-history-service.test.ts` (T137).
  */
 
 type Listener = (event: unknown, payload: unknown) => unknown;

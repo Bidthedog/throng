@@ -15,6 +15,7 @@ import {
   candidateFor,
   recordLastActivePreview,
 } from '../../src/renderer/preview/last-active-preview.js';
+import { settleLayoutSaves } from '../../src/renderer/state/layout-saves.js';
 import { mountTabGroup, type MountedTabGroup } from './helpers/mount-tab-group.js';
 
 const PROJECT = 'proj-recency';
@@ -28,9 +29,10 @@ function layout(): WorkspaceLayout {
 
 let m: MountedTabGroup | undefined;
 
-async function settle(ms: number): Promise<void> {
+/** The window's real shutdown drain (019 FR-010): fires the armed debounce and awaits what is in flight. */
+async function settle(): Promise<void> {
   await act(async () => {
-    await new Promise<void>((r) => setTimeout(r, ms));
+    await settleLayoutSaves();
   });
 }
 
@@ -84,11 +86,11 @@ describe('setPreviewRecency (054 FR-002)', () => {
   it('records the order on the tab and saves it with the layout', async () => {
     m = mountTabGroup(layout());
     await screen.findByTestId('panel-p1');
-    await settle(500);
+    await settle();
     const before = m.saves.mock.calls.length;
     act(() => m!.ws().setPreviewRecency('t1', ['p2', 'p1']));
     expect(m.ws().layout!.tabs[0]!.previewRecency).toEqual(['p2', 'p1']);
-    await settle(500);
+    await settle();
     expect(m.saves.mock.calls.length).toBe(before + 1);
     const saved = m.saves.mock.calls.at(-1)![0] as { layout: WorkspaceLayout };
     expect(JSON.stringify(saved)).toContain('"previewRecency":["p2","p1"]');
@@ -98,12 +100,12 @@ describe('setPreviewRecency (054 FR-002)', () => {
     m = mountTabGroup(layout());
     await screen.findByTestId('panel-p1');
     act(() => m!.ws().setPreviewRecency('t1', ['p2']));
-    await settle(500);
+    await settle();
     const before = m.saves.mock.calls.length;
     const held = m.ws().layout;
     act(() => m!.ws().setPreviewRecency('t1', ['p2']));
     act(() => m!.ws().setPreviewRecency('nope', ['p1']));
-    await settle(500);
+    await settle();
     expect(m.saves.mock.calls.length).toBe(before);
     expect(m.ws().layout).toBe(held);
   });

@@ -59,6 +59,13 @@ describe('mirrored terminal — one session, many views (FR-021)', () => {
     // Wait for the session to fully close (PTY exit + root lock released) so the
     // temp cwd is no longer held when afterEach deletes it.
     await waitFor(() => !daemon.lockManager.hasOpenTerminals('proj'), 8000, "the project's terminal lock to be released");
+    // The kill reaches every subscribed view as a terminal.exit; that it is user-initiated (not unexpected,
+    // FR-017) is proved in terminal-end-outcomes.test.ts. Moved here from terminal-service.integration.test.ts.
+    await waitFor(
+      () => [viewA, viewB].every((v) => v.notifications.some((n) => n.method === 'terminal.exit' && n.params.panelId === 'shared')),
+      8000,
+      'a terminal.exit notification for the killed panel on every view',
+    );
     viewA.close();
     viewB.close();
   });
