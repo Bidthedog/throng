@@ -13,20 +13,46 @@
  * - Ctrl+C, then an end, clears the saved Startup Command (FR-042, FR-046);
  * - cmd's own `ping -t` is unchanged (FR-044);
  * - `npm run` is remembered as npm, never as the node process under it, and runs again in cmd (FR-043, FR-044);
- * - the literal `docker run` of #193, where Linux containers are available (SC-007).
+ *
+ * The literal `docker run` of #193 (SC-007) was a fourth case here and is DELETED: it needed Linux containers
+ * (the hosted runner has none, so it skipped there) and rode the same Git Bash route the first case covers.
  *
  * Layer: E2E, @reserve:process. `command-capture` and the attached-process query are pinned in core and
  * platform-windows unit and integration tests; none composes a real shell's process tree with the daemon's
  * observation and a reload that acts on what was saved.
  */
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { runApp, createProject, switchProject, firstPanelId, cleanupTemp, stayedAbsent, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
+import { openApp, createProject, switchProject, firstPanelId, cleanupTemp, stayedAbsent, TERMINAL_OUTPUT_TIMEOUT_MS, type OpenApp } from './harness.js';
 import { expectPingCount, pings, processesMatching } from './helpers/processes.js';
+
+/*
+ * ONE app for this file, not one per case. The cases differ in their project (each names its own, so the
+ * persisted layout rows never collide) and in the command they run, not in anything seeded before launch; the
+ * only launch option is `dataDir`, which they all read the layout back from, so it is one shared directory.
+ * Serial mode: shared window, shared database. `runApp` below runs a body against the shared window and
+ * refuses options rather than ignoring them.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let dataDir: string;
+test.beforeAll(async () => {
+  dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-data-'));
+  shared = await openApp({ dataDir });
+});
+test.afterAll(async () => {
+  await shared?.close();
+  if (dataDir) cleanupTemp(dataDir);
+});
+
+const runApp = (fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>, opts?: unknown): Promise<void> => {
+  if (opts) throw new Error('this file shares one app; its dataDir is the shared one');
+  return fn(shared.app, shared.win);
+};
 
 function layoutJson(dataDir: string, project: string): string {
   let db: InstanceType<typeof Database> | undefined;
@@ -160,7 +186,6 @@ test('Git Bash: a command the shell starts through MSYS is remembered and runs a
   test.setTimeout(240_000);
   const TARGET = '127.0.0.75';
   const root = mkdtempSync(join(tmpdir(), 'throng-launch-bash-'));
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-bash-data-'));
   try {
     await runApp(async (_app, win) => {
       let term = await memoryTerminal(win, 'LaunchBash', root, 'git-bash');
@@ -191,10 +216,9 @@ test('Git Bash: a command the shell starts through MSYS is remembered and runs a
       );
       // FR-046 — the panel's Startup Command is empty: end the shell, and the panel's form shows what it remembers.
       await expectStartupFieldEmpty(win, term);
-    }, { dataDir });
+    });
   } finally {
     cleanupTemp(root);
-    cleanupTemp(dataDir);
   }
 });
 
@@ -202,7 +226,6 @@ test('cmd: ping -t is remembered and runs again, as before 051 (FR-044)', { tag:
   test.setTimeout(180_000);
   const TARGET = '127.0.0.76';
   const root = mkdtempSync(join(tmpdir(), 'throng-launch-cmd-'));
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-cmd-data-'));
   try {
     await runApp(async (_app, win) => {
       const term = await memoryTerminal(win, 'LaunchCmd', root, 'cmd');
@@ -213,10 +236,9 @@ test('cmd: ping -t is remembered and runs again, as before 051 (FR-044)', { tag:
       await switchProject(win, 'LaunchCmd');
       await expectPingCount(TARGET, 1);
       await expectRecorded(dataDir, 'LaunchCmd', 'startupCommand', has(`ping -t ${TARGET}`), 'the ping was not saved as the Startup Command');
-    }, { dataDir });
+    });
   } finally {
     cleanupTemp(root);
-    cleanupTemp(dataDir);
   }
 });
 
@@ -224,7 +246,6 @@ test('cmd: npm run is remembered as typed, never as the node process under it (F
   test.setTimeout(180_000);
   const MARK = 'mt04spinmark';
   const root = mkdtempSync(join(tmpdir(), 'throng-launch-npm-'));
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-npm-data-'));
   writeFileSync(
     join(root, 'package.json'),
     JSON.stringify({ name: 'mt04', private: true, scripts: { spin: `node -e "setInterval(() => {}, 1000)" ${MARK}` } }, null, 2),
@@ -250,60 +271,12 @@ test('cmd: npm run is remembered as typed, never as the node process under it (F
       await switchProject(win, 'LaunchNpm');
       await expect.poll(() => processesMatching('node.exe', MARK).length, { timeout: 60_000 }).toBeGreaterThan(0);
       await expectRecorded(dataDir, 'LaunchNpm', 'startupCommand', isNpmRunSpin, 'npm run spin was not saved as npm');
-    }, { dataDir });
+    });
   } finally {
     cleanupTemp(root);
-    cleanupTemp(dataDir);
   }
 });
 
-/** Whether this machine can run a Linux container — the literal #193 case needs one. */
-function linuxContainers(): boolean {
-  try {
-    return execFileSync('docker', ['info', '--format', '{{.OSType}}'], { encoding: 'utf8', timeout: 15_000, windowsHide: true }).trim() === 'linux';
-  } catch {
-    return false;
-  }
-}
-
-test('Git Bash: docker run is remembered and runs again; Ctrl+C then an end forgets it (#193, SC-007)', { tag: ['@extended', '@terminal', '@reserve:process'] }, async () => {
-  test.skip(!linuxContainers(), 'needs Docker with Linux containers; the Git Bash case above covers the same route without it');
-  test.setTimeout(300_000);
-  const LINE = 'docker run --rm --init alpine sleep 600';
-  const root = mkdtempSync(join(tmpdir(), 'throng-launch-docker-'));
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-launch-docker-data-'));
-  const dockers = (): number => processesMatching('docker.exe', 'alpine sleep 600').length;
-  try {
-    await runApp(async (_app, win) => {
-      let term = await memoryTerminal(win, 'LaunchDocker', root, 'git-bash');
-      await term.click();
-      await win.keyboard.type(LINE);
-      await win.keyboard.press('Enter');
-      await expect.poll(dockers, { timeout: 120_000 }).toBeGreaterThan(0);
-      await expectRecorded(dataDir, 'LaunchDocker', 'observedCommand', has('alpine sleep 600'), 'docker run was never observed');
-
-      await unloadEndingTerminals(win, 'LaunchDocker');
-      await expect.poll(dockers, { timeout: 60_000 }).toBe(0);
-      await switchProject(win, 'LaunchDocker');
-      await expect.poll(dockers, { timeout: 120_000 }).toBeGreaterThan(0);
-      await expectRecorded(dataDir, 'LaunchDocker', 'startupCommand', has('alpine sleep 600'), 'docker run was not saved as the Startup Command');
-
-      term = win.locator('[data-testid^="terminal-"]').filter({ has: win.locator('.xterm') }).first();
-      await interruptUntil(win, term, () => dockers() === 0);
-      await expectRecorded(dataDir, 'LaunchDocker', 'observedCommand', nothingRunning, 'the stopped docker run was still recorded');
-      await unloadEndingTerminals(win, 'LaunchDocker');
-      await switchProject(win, 'LaunchDocker');
-      term = win.locator('[data-testid^="terminal-"]').filter({ has: win.locator('.xterm') }).first();
-      await expectPrompt(term, 'git-bash');
-      await stayedAbsent(
-        () => run(win, term, 'echo fe""nce45', 'fence45'),
-        async () => dockers(),
-        'the stopped docker run running again on reload',
-      );
-      await expectStartupFieldEmpty(win, term);
-    }, { dataDir });
-  } finally {
-    cleanupTemp(root);
-    cleanupTemp(dataDir);
-  }
-});
+// DELETED: 'Git Bash: docker run is remembered and runs again; Ctrl+C then an end forgets it (#193, SC-007)'.
+// It needed Linux containers (skipped wherever they are absent) and drove the same Git Bash route, the same
+// observation and the same reload as the first case above, with `docker run` in place of `ping`.

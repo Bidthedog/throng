@@ -19,21 +19,12 @@ import {
 } from './harness.js';
 
 /*
- * ONE app for this file, not one per test (034 FR-045, SC-027) — 2 launches -> 1.
+ * ONE app for this file (034 FR-045, SC-027). Nothing is seeded before launch. The test turns
+ * `editor.showStatusBar` off in the shared config root and leaves the preferences window open;
+ * it is the only test, so nothing reads either, and its root is deleted AFTER the app closes
+ * rather than out from under the explorer that watches it.
  *
- * Nothing is seeded before launch, and the two things each test leaves behind are both
- * downstream of everything that reads them:
- *
- *  - Test 1 starts a real `cmd` and never kills it. Test 2 makes its OWN project, so that
- *    terminal's panel is not even rendered while test 2 runs — an inactive project's workspace
- *    is not mounted — and every locator test 2 uses is keyed to a panel id it made itself. The
- *    shell dies with the app in `afterAll`, and the root it is sitting in is deleted AFTER that
- *    rather than out from under it, which is the one thing that had to change.
- *  - Test 2 turns `editor.showStatusBar` off in the shared config root and leaves the
- *    preferences window open. It is the last test; nothing reads either.
- *
- * ORDER: test 1 must stay first. Its claim is that the terminal status bar is present BY
- * DEFAULT, which is a claim about settings nothing has yet written to.
+ * (The file's other test, the terminal bar present by default, moved down to a component test.)
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -67,29 +58,12 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('the terminal status bar shows the flavour label by default (#152)', { tag: ['@extended', '@window'] }, async () => {
-  const root = own(mkdtempSync(join(tmpdir(), 'throng-tsb-')));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'TsbProj', root);
-      const pid = await firstPanelId(win);
-      await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
-      await win.getByTestId(`panel-type-confirm-${pid}`).click();
-      await expect(win.getByTestId(`terminal-${pid}`)).toBeVisible();
+// MOVED DOWN: 'the terminal status bar shows the flavour label by default (#152)' is now
+// component/terminal-status-bar-panel.test.ts (label shown by default; terminals.showStatusBar off removes
+// it), with the shipped default in core/tests/unit/settings-metadata-040.test.ts. It also started a real
+// cmd that this file never killed.
 
-      // The new status bar is present by default and names the flavour.
-      const bar = win.getByTestId(`terminal-status-bar-${pid}`);
-      await expect(bar).toBeVisible();
-      await expect(bar).not.toBeEmpty();
-    });
-  } finally {
-    // The root is deleted in `afterAll`, once the shared app has CLOSED. Deleting it here would
-    // remove a folder the explorer is still watching.
-  }
-});
-
-test('hiding the editor status bar keeps the word-wrap command working (#152)', { tag: ['@extended', '@window'] }, async () => {
+test('hiding the editor status bar keeps the word-wrap command working (#152)', { tag: ['@extended', '@window', '@reserve:input'] }, async () => {
   const root = own(mkdtempSync(join(tmpdir(), 'throng-esb-')));
   writeFileSync(join(root, 'x.txt'), 'y'.repeat(300) + '\n');
   try {

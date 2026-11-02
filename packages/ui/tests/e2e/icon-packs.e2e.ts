@@ -1,9 +1,16 @@
-import { mkdirSync, mkdtempSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { runApp, settle, createProject, cleanupTemp} from './harness.js';
+import {
+  openApp,
+  settle,
+  createProject as newProject,
+  cleanupTemp,
+  type OpenApp,
+} from './harness.js';
+import { closePrefsWindow } from './helpers/prefs-window.js';
 
 /**
  * US4 (007 Phase F): icon packs — a pack dropped under icon-packs\ is selectable
@@ -18,9 +25,50 @@ function bareCfgRoot(): string {
   cfgRoots.push(dir);
   return dir;
 }
-test.afterAll(() => {
+
+/*
+ * ONE app for every test (test-suite audit, pass 1; pass 2 moved the BROKEN-pack test down to the component layer).
+ *
+ * The three share a bare config root, which is write isolation and not seeding: nothing is in it when the app
+ * starts, and the first run seeds the bundled packs — which the first test then asserts, so DECLARATION ORDER IS
+ * LOAD-BEARING (a fresh install is only fresh once). Each leaves the pack on `throng` (the default) for the next,
+ * except the last, which has no successor. The preferences window is a singleton, so it is closed after each test
+ * (`app.waitForEvent('window')` never fires on a reused window).
+ *
+ * Projects accumulate on a shared app; the counter in `createProject` keeps their names apart.
+ */
+test.describe.configure({ mode: 'serial' });
+
+const sharedCfg = bareCfgRoot();
+let shared: OpenApp;
+let projectSeq = 0;
+
+test.beforeAll(async () => {
+  shared = await openApp({ env: { THRONG_CONFIG_ROOT: sharedCfg } });
+});
+
+test.afterEach(async () => {
+  await closePrefsWindow(shared.app);
+});
+
+test.afterAll(async () => {
+  await shared?.close();
   for (const dir of cfgRoots.splice(0)) cleanupTemp(dir);
 });
+
+const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
+  newProject(win, `${name}-${(projectSeq += 1)}`, root);
+
+/** The shared app, in the shape `runApp` had. Refuses launch options rather than silently ignoring them. */
+const runApp = (
+  fn: (app: OpenApp['app'], win: OpenApp['win']) => Promise<void>,
+  opts?: unknown,
+): Promise<void> => {
+  if (opts) {
+    throw new Error('this file shares one app; a test needing launch options must call runOwnApp instead');
+  }
+  return fn(shared.app, shared.win);
+};
 
 async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
   await win.getByTestId('title-bar-cog').click();
@@ -67,7 +115,7 @@ async function openThemes(app: ElectronApplication, win: Page): Promise<Page> {
 
 
 test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-040b)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  const cfgRoot = bareCfgRoot();
+  const cfgRoot = sharedCfg;
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -103,8 +151,11 @@ test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-04
       expect(box).not.toBeNull();
       expect(Math.round(box!.width)).toBe(24);
       expect(Math.round(box!.height)).toBe(24);
+
+      // Leave the default pack selected for the next test on this shared app.
+      await select.selectOption('throng');
+      await expect(select).toHaveValue('throng');
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -149,8 +200,7 @@ test('a fresh install seeds the throng glyph pack + an SVG image pack (H6, FR-04
  * whatsoever in the application the user was actually looking at. These tests assert the MAIN
  * WINDOW.
  */
-test('selecting a pack changes the icons in the MAIN WINDOW, live, with no restart (FR-001/005)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = bareCfgRoot();
+test('selecting a pack changes the icons in the MAIN WINDOW, live, with no restart (FR-001/005)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -173,16 +223,16 @@ test('selecting a pack changes the icons in the MAIN WINDOW, live, with no resta
       await prefs.getByTestId('icon-pack-select').selectOption('throng');
       await expect(win.locator('.icon > svg')).toHaveCount(0);
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
+// Split back out of the test above (035 FR-016b: one @reserve per test): it claims the rendered colour,
+// where the test above claims the live re-skin.
 test('pack icons take their colour from the THEME, not a fixed black (FR-004)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
-  const cfgRoot = bareCfgRoot();
   await runApp(
     async (app, win) => {
       await settle(win);
-      await createProject(win, 'Icons', 'C:/c/icons');
+      await createProject(win, 'Icons', 'C:/c/icons-theme'); // its own root: the shared app already holds C:/c/icons (FR-029)
       const prefs = await openThemes(app, win);
       await prefs.getByTestId('icon-pack-select').selectOption('throng-svg');
 
@@ -200,7 +250,6 @@ test('pack icons take their colour from the THEME, not a fixed black (FR-004)', 
       expect(stroke).not.toBe('rgb(0, 0, 0)');
       expect(stroke).toBeTruthy();
     },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
   );
 });
 
@@ -235,31 +284,12 @@ test('pack icons take their colour from the THEME, not a fixed black (FR-004)', 
  * install seeds the packs and the README, and that a broken pack degrades without stopping the app.
  */
 
-test('a BROKEN pack degrades: the app starts, icons fall back, and the picker says why (FR-004a / SC-011)', { tag: ['@extended', '@prefs'] }, async () => {
-  const cfgRoot = mkdtempSync(join(tmpdir(), 'throng-cfg-icons-'));
-  cfgRoots.push(cfgRoot);
-  // A pack directory whose manifest is unreadable. Silently dropping it would recreate the exact
-  // confusion this feature exists to remove: a setting that appears to do nothing.
-  const brokenDir = join(cfgRoot, 'icon-packs', 'brokenpack');
-  mkdirSync(brokenDir, { recursive: true });
-  writeFileSync(join(brokenDir, 'pack.json'), '{ this is not json', 'utf8');
-
-  await runApp(
-    async (app, win) => {
-      // 1. The app STARTS. A broken pack must never be fatal.
-      await settle(win);
-      await createProject(win, 'Icons', 'C:/c/icons');
-
-      // 2. Icons still render — they fall back to the theme's glyphs rather than leaving holes.
-      expect(await win.locator('.icon').count()).toBeGreaterThan(0);
-
-      // 3. The picker shows the pack as unavailable, WITH the reason — it does not vanish.
-      const prefs = await openThemes(app, win);
-      const option = prefs.getByTestId('icon-pack-option-brokenpack');
-      await expect(option).toHaveCount(1);
-      await expect(option).toBeDisabled();
-      await expect(option).toHaveAttribute('title', /pack\.json/i);
-    },
-    { env: { THRONG_CONFIG_ROOT: cfgRoot } },
-  );
-});
+/*
+ * MOVED DOWN (pass 2): "a BROKEN pack degrades: the app starts, icons fall back, and the picker says why
+ * (FR-004a / SC-011)". The loader half is `unit/icon-pack-service.test.ts` ("reports a pack with an
+ * unparseable manifest as unavailable, WITH a reason", "one broken pack does not stop the others
+ * loading"); the picker half (option disabled, reason as its title) is
+ * `component/preferences-themes-tab.test.ts` ("lists a BROKEN pack as disabled with its reason as the
+ * title"), red-proved by dropping `disabled` and by dropping `title` in icon-section.tsx. This file now
+ * shares one app throughout.
+ */

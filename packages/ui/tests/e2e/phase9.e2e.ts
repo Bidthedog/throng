@@ -7,8 +7,8 @@ import { test, expect, _electron as electron } from '@playwright/test';
 import { tmpDir, registerTempCleanup } from './temp-file-helpers.js';
 
 registerTempCleanup();
-import type { ElectronApplication, Page } from '@playwright/test';
-import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS, splitPanelViaMenu } from './harness.js';
+import type { ElectronApplication } from '@playwright/test';
+import { cleanupTemp, shutdownApp, DAEMON_READY_TIMEOUT_MS } from './harness.js';
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -67,30 +67,6 @@ function launchApp(pipeName: string, userData: string): Promise<ElectronApplicat
   });
 }
 
-async function createProject(win: Page, name: string): Promise<void> {
-  await win.getByTestId('project-new').click();
-  await win.getByTestId('project-name-input').fill(name);
-  await win.getByTestId('project-root-input').fill(`C:/code/${name}`);
-  await win.getByTestId('project-save').click();
-  await expect(win.locator('.project-item', { hasText: name })).toBeVisible();
-}
-
-
-async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Promise<void>): Promise<void> {
-  const h = await startHarness();
-  const userData = tmpDir('throng-ud-');
-  let app: ElectronApplication | undefined;
-  try {
-    app = await launchApp(h.pipeName, userData);
-    const win = await app.firstWindow();
-    await fn(win, app, h);
-  } finally {
-    if (app) await shutdownApp(app);
-    await stopDaemon(h.daemon);
-    cleanupTemp(h.dataDir);
-  }
-}
-
 /*
  * ── ONE REMOVED (035 T055) ──
  *
@@ -106,85 +82,36 @@ async function run(fn: (win: Page, app: ElectronApplication, h: Harness) => Prom
  * What the component test cannot say is that the daemon really unregisters the project and really
  * leaves its folder alone; `removal-verbs.e2e.ts` keeps that.
  */
-test('shows the panel count on a Tab and confirms tab close (FR-045/043)', { tag: ['@extended', '@window'] }, async () => {
-  await run(async (win) => {
-    await createProject(win, 'Counter');
-    // One panel → no pill (057 FR-132); it holds its place, hidden. The square-bracket form went with FR-042 (031 US5).
-    await expect(win.locator('.tab-chip__count').first()).toBeHidden();
+/*
+ * MOVED DOWN (test-suite audit) — "shows the panel count on a Tab and confirms tab close (FR-045/043)".
+ * The count pill is `component/tab-chip-attention.test.ts` ("a tab chip's panel-count pill"); the
+ * "N panels, M of which are active" summary and the double confirmation are
+ * `component/tab-strip.test.ts` ("says how many panels the tab holds…", "destroys it only after BOTH
+ * dialogs"). The summary test was red-proven against a hard-coded 0.
+ *
+ * DELETED — "reorders projects by dragging the grip (FR-046)". Held by
+ * `component/projects-panel-drag-categories.test.ts` ("a drop within the source category calls
+ * reorderProjects", "a drag starting on the name moves the project") and the daemon's
+ * `projects-ipc.integration` reorder test.
+ *
+ * MERGED — "enforces a 600x560 minimum window size (FR-048)" is the first assertion of the restore
+ * test below: same launch, one fewer Electron + daemon pair.
+ */
 
-    const firstPanel = await win
-      .locator('.panel-box')
-      .first()
-      .evaluate((el) => (el as HTMLElement).dataset.panelId ?? '');
-    await splitPanelViaMenu(win, firstPanel);
-    // The split opens no rename box (048 FR-002), so the count is the only thing to settle on.
-    await expect(win.locator('.tab-chip__count').first()).toHaveText('2');
-
-    // Add a 2nd tab so Close is enabled, then close the first with confirmation.
-    await win.getByTestId('tab-add').click();
-    const tabRename = win.locator('[data-testid^="tab-rename-input-"]');
-    await expect(tabRename).toBeFocused(); // same race, same guard
-    await win.keyboard.press('Enter');
-    await expect(tabRename).toHaveCount(0);
-    await expect(win.locator('.tab-chip')).toHaveCount(2);
-    await win.locator('.tab-chip').first().click({ button: 'right' });
-    await win.getByTestId('menu-item-Destroy Tab').click();
-    // Both panels are EMPTY (no confirmed terminal), so none has a running subprocess
-    // → "0 of which are active" (005 wired real running-subprocess detection; a panel
-    // is "active" only while it hosts a live terminal, not merely by existing).
-    await expect(win.getByTestId('confirm-message')).toContainText(/2 panels, 0 of which are active/i);
-    await win.getByTestId('confirm-accept').click();
-    await win.getByTestId('confirm-accept').click(); // wry second confirmation
-    await expect(win.locator('.tab-chip')).toHaveCount(1);
-  });
-});
-
-test('reorders projects by dragging the grip (FR-046)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  await run(async (win) => {
-    await createProject(win, 'Alpha');
-    await createProject(win, 'Beta');
-    await createProject(win, 'Gamma');
-
-    const names = () => win.locator('.project-item__name').allInnerTexts();
-    expect(await names()).toEqual(['Alpha', 'Beta', 'Gamma']);
-
-    // Drag Gamma's grip to the top (above Alpha).
-    const grip = win.locator('.project-item', { hasText: 'Gamma' }).locator('.project-item__grip');
-    const target = win.locator('.project-item', { hasText: 'Alpha' });
-    const gbox = await grip.boundingBox();
-    const tbox = await target.boundingBox();
-    if (!gbox || !tbox) throw new Error('boxes missing');
-    await win.mouse.move(gbox.x + gbox.width / 2, gbox.y + gbox.height / 2);
-    await win.mouse.down();
-    await win.mouse.move(gbox.x + gbox.width / 2, gbox.y - 8, { steps: 3 });
-    await win.mouse.move(tbox.x + tbox.width / 2, tbox.y + 3, { steps: 8 });
-    await win.mouse.up();
-
-    await expect(async () => {
-      expect(await names()).toEqual(['Gamma', 'Alpha', 'Beta']);
-    }).toPass({ timeout: 5000 });
-  });
-});
-
-test('enforces a 600x560 minimum window size (FR-048)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  await run(async (_win, app) => {
-    const min = await app.evaluate(async ({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0].getMinimumSize(),
-    );
-    // Floor: both side panes collapse to rails (32 each), so only the two rails +
-    // the workspace minimum (480) must fit horizontally; the three left-pane panel
-    // minimums fit above the status bar vertically.
-    expect(min).toEqual([600, 560]);
-  });
-});
-
-test('restores window size and position across restarts (FR-047)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
+test('enforces a 600x560 minimum window size (FR-048) and restores window size and position across restarts (FR-047)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const h = await startHarness();
   const userData = tmpDir('throng-ud-shared-');
   let app: ElectronApplication | undefined;
   try {
     app = await launchApp(h.pipeName, userData);
     await app.firstWindow();
+    // FR-048 — the floor: both side panes collapse to rails (32 each), so only the two rails + the
+    // workspace minimum (480) must fit horizontally; the three left-pane panel minimums fit above the
+    // status bar vertically.
+    const min = await app.evaluate(async ({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].getMinimumSize(),
+    );
+    expect(min).toEqual([600, 560]);
     await app.evaluate(async ({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].setBounds({ x: 120, y: 90, width: 1100, height: 700 });
     });

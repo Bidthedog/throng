@@ -100,7 +100,11 @@ const runApp = (
   return fn(shared.app, shared.win);
 };
 
-test('an ICON has its own size, independent of the font it sits beside', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * MERGED (pass 2): "a SCROLLBAR has a width, and it comes from the theme" is the last step here — same
+ * Themes tab, a second slider and a CSS-variable read.
+ */
+test('an ICON has its own size, independent of the font it sits beside; a SCROLLBAR width comes from the theme', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openPrefs(app, win, 'themes');
@@ -124,16 +128,7 @@ test('an ICON has its own size, independent of the font it sits beside', { tag: 
         const root = document.querySelector('.prefs-root');
         return root ? getComputedStyle(root).fontSize : '';
       });
-      expect(fontSize).not.toBe('28px');
-    },
-  );
-});
-
-test('a SCROLLBAR has a width, and it comes from the theme', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openPrefs(app, win, 'themes');
-      await expect(prefs.getByTestId('themes-tab')).toBeVisible();
+      expect(fontSize, 'the dialog text is untouched by the icon size').not.toBe('28px');
 
       // `scrollbar-width` accepts only auto | thin | none — the standard property cannot take a
       // measurement, so "thin" was the only answer the application could give, and it was too thin.
@@ -184,7 +179,9 @@ test('a SCROLLBAR has a width, and it comes from the theme', { tag: ['@extended'
  * document, which jsdom cannot supply (034 FR-049).
  */
 
-test('an ERROR notice has its own background, in every theme', { tag: ['@extended', '@prefs'] }, async () => {
+// Retitled (pass 2): it measures the ACTIVE theme (the shipped default), not every theme; the per-theme
+// token derivation is the core unit tests.
+test('an ERROR notice has its own background, not the ordinary card colour (active theme)', { tag: ['@extended', '@prefs', '@reserve:layout'] }, async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), 'throng-proj-'));
   try {
     await runApp(

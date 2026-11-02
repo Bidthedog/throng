@@ -16,7 +16,7 @@ import { writeConfigAtomic } from './config-write.js';
  * tests, not for pre-launch state. What those tests actually need is not a fresh PROCESS, it is a
  * config root that looks untouched at the start of each test.
  *
- * Rewriting a running app's config root is already how this suite works — `config-hotreload.e2e.ts`
+ * Rewriting a running app's config root is already how this suite works — `preferences-reset.e2e.ts`
  * and `keybindings.e2e.ts` both do it, through {@link writeConfigAtomic}, and the app hot-reloads.
  * The only missing piece was an UNDO, and this is it: photograph the root once the app has finished
  * its first-run seeding, and put it back between tests.

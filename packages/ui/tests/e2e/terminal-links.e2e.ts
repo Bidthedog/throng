@@ -189,7 +189,7 @@ function rowText(raw: string): string {
 }
 
 // One line, deliberately: e2e-budget.test.ts and e2e-tags.test.ts match the declaration with a LINE-based regex.
-test('a renderer-opened window is denied and http(s) routed to the OS opener (#159); a detected path is marked and a look-alike is marked too, a wrapped link is marked on every row and an unfollowable hyperlink on none (045)', { tag: ['@extended', '@terminal'] }, async () => {
+test('a detected path is marked and a look-alike is marked too, a wrapped link is marked on every row and an unfollowable hyperlink on none (045)', { tag: ['@extended', '@terminal', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-links-'));
   // The file one token names, and deliberately NOT the other. Both are path-shaped, so both are links
   // (FR-155): whether a file is there is decided when one is followed, not when it is drawn.
@@ -202,39 +202,9 @@ test('a renderer-opened window is denied and http(s) routed to the OS opener (#1
     await runApp(async (app, win) => {
       await createProject(win, 'LinksProj', 'C:/c/links');
 
-      // Intercept shell.openExternal and record the baseline window count.
-      await app.evaluate(({ shell }) => {
-        const w = globalThis as unknown as { __ext?: string[] };
-        w.__ext = [];
-        const orig = shell.openExternal.bind(shell);
-        shell.openExternal = (url: string, opts?: unknown) => {
-          w.__ext!.push(url);
-          return Promise.resolve();
-          void orig;
-          void opts;
-        };
-      });
-      const before = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
-
-      // A renderer opens an https window → denied (no new window), routed to the OS opener.
-      await win.evaluate(() => window.open('https://example.com/from-renderer'));
-      await expect
-        .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
-        .toBe(before);
-      const routed = await app.evaluate(
-        () => (globalThis as unknown as { __ext?: string[] }).__ext ?? [],
-      );
-      expect(routed).toContain('https://example.com/from-renderer');
-
-      // A javascript: target → denied AND not routed anywhere (the injection guard).
-      await win.evaluate(() => window.open('javascript:alert(1)'));
-      await expect
-        .poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length))
-        .toBe(before);
-      const routed2 = await app.evaluate(
-        () => (globalThis as unknown as { __ext?: string[] }).__ext ?? [],
-      );
-      expect(routed2).not.toContain('javascript:alert(1)');
+      // MOVED DOWN (#159): a renderer-opened window is denied and http(s) routed to the OS opener —
+      // unit/window-open-guard.test.ts (decision, routing through the injected opener, javascript:/mailto:
+      // refused) plus its source guard that createMainWindow installs the guard on the main window.
 
       // ══ 045 — the mark, in a real terminal with a real project behind it ══
 

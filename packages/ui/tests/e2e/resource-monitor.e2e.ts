@@ -231,6 +231,13 @@ const median = (xs: number[]): number => {
 test('having the monitor open does not slow typing: terminal echo is within 5% of its median with detail collection on, and no keystroke in the monitor waits over 50 ms', { tag: ['@extended', '@terminal', '@reserve:input'] }, async ({}, testInfo) => {
   const { win } = h;
   test.setTimeout(120_000);
+  // Both claims here are 055 SC-003 ceilings, adjudicated only where slaMeasurable (helpers/sla.ts);
+  // elsewhere the only assertion left is that an echo was observed, which the 60 echo round-trips and
+  // 24 interleaved keystrokes would cost ~13 s to learn. Skip the body there and record the skip.
+  if (!slaMeasurable(testInfo)) {
+    noteSlaNotMeasured(testInfo, { what: 'terminal echo with detail collection on, and the longest keydown in the open monitor', requirement: '055 SC-003', observed: 'not run (body skipped)' });
+    return;
+  }
 
   // Baseline: the terminal's echo with nothing collecting beyond the status bar's totals.
   const baseline = median(await echoLatencies(win, term(win), 30));

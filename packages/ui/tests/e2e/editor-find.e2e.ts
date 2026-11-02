@@ -86,7 +86,7 @@ const currentMatch = (win: Page, pid: string) =>
 /*
  * ── THE CONTROLLER MOVED (035 T055) ──
  *
- * `packages/ui/tests/component/editor-search-controller.test.ts` now owns
+ * `packages/ui/tests/unit/editor-search-controller.test.ts` now owns
  * `createEditorSearchController` — the join between the matching model and the document, which had
  * no test at any layer. `search-model.test.ts` proved the MATCHING and `search-store.test.ts`
  * proved the BAR; the thing between them was proven only from here.
@@ -117,32 +117,6 @@ const currentMatch = (win: Page, pid: string) =>
  *   :158, :209, :248, :334, :357 — selection-seeded input, the SC-007 budget on 10k lines, control
  *        geometry, and block selection. All already reserve-tagged.
  */
-test('finds as you type: highlights every match, marks the current one, counts them', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'FindProj', root);
-      const pid = await newEditor(win);
-      await typeInto(win, pid, 'alpha beta\nalpha gamma\nALPHA delta\n');
-
-      await win.keyboard.press('Control+f');
-      await expect(win.getByTestId(`find-bar-${pid}`)).toBeVisible();
-
-      await win.getByTestId('find-input').fill('alpha');
-
-      // Case-insensitive by default ⇒ all three, highlighted incrementally.
-      await expect(matches(win, pid)).toHaveCount(3);
-      await expect(currentMatch(win, pid)).toHaveCount(1);
-      await expect(win.getByTestId('find-count')).toHaveText('1 of 3');
-
-      // Searching never edits the file (SC-001).
-      expect(await docText(win, pid)).toContain('alpha beta');
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
 /*
  * DELETED (034 FR-045): "find next / previous step through matches and wrap at both ends".
  *
@@ -189,6 +163,84 @@ test('seeds the term from the selection, and shows a no-results state for a miss
   }
 });
 
+/**
+ * VERDICT DECLINED (035 T055/FR-022) — this stays, and the reason took two wrong answers to reach.
+ *
+ * The census said `component`: "no-active-panel is a routing/logic no-op, no OS feature involved".
+ * That is true about the CODE and false about what can be proved.
+ *
+ * ── FIRST WRONG ANSWER: that the test is fine as it is ──
+ *
+ * It is not. Its assertion — `find-bar-<pid>` has count 0 — cannot fail. `FindBar` is rendered by
+ * `EditorPanel` and `TerminalPanel` and by nothing else, and an untyped panel renders the
+ * type-selection form instead of either. The absence is a fact about the render tree's SHAPE. Delete
+ * the guard this test is named after and it still passes.
+ *
+ * ── SECOND WRONG ANSWER: that asserting on the STORE fixes it ──
+ *
+ * It looks like it should. `search-keybindings.tsx:108` has a real guard —
+ * `if (!activePanelId || !findKind) return;` — so a component test could mount `SearchKeybindings`
+ * on an untyped layout, press Ctrl+F, and assert `getFindState().panelId` stays null.
+ *
+ * That test was written, it passed, and BOTH of its mutations passed too: removing the kind guard,
+ * and forcing every panel to `'editor'`. It was deleted rather than kept.
+ *
+ * ── WHY, AND THIS IS THE PART WORTH KEEPING ──
+ *
+ * Two lines down there is a second, independent guard:
+ *
+ *     const controller = getPanelSearch(activePanelId);
+ *     if (!controller) return;
+ *
+ * An untyped panel never registers a search controller, so the handler returns there whatever the
+ * kind guard does. The absence is OVER-DETERMINED, and isolating either guard means constructing an
+ * untyped panel that has a registered controller — a state the application cannot produce. A test
+ * that has to fabricate an impossible state is asserting about its own fixture.
+ *
+ * So this test stays as the weak thing it is, honestly labelled, rather than being replaced by a
+ * component test that would pass under its own mutation. What would genuinely improve it is a
+ * production change — one guard instead of two — and that is not this spec's to make.
+ *
+ * MERGED (pass 2) into the test below: it runs FIRST there, on the still-untyped panel, so it costs
+ * no project and no app run of its own.
+ */
+/*
+ * MERGED (pass 2): 'finds as you type: highlights every match, marks the current one, counts them'
+ * and 'find is a no-op when no panel is active' now run inside this one test, which already needs
+ * a project, an editor and the find bar. Each assertion is labelled so a failure names its claim.
+ * The closing-find half is split back out (one @reserve per test, 035 FR-016b): it claims focus, the
+ * first claims the painted decorations.
+ */
+test('finds as you type, and is a no-op on an untyped panel', { tag: ['@extended', '@editor', '@reserve:layout'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'FindProj', root);
+
+      // (merged) find is a no-op while the panel has no type — nothing to search.
+      const untyped = await firstPanelId(win);
+      await win.keyboard.press('Control+f');
+      await expect(win.getByTestId(`find-bar-${untyped}`), 'Ctrl+F on an untyped panel opens no find bar').toHaveCount(0);
+
+      const pid = await newEditor(win);
+      await typeInto(win, pid, 'alpha beta\nalpha gamma\nALPHA delta\n');
+
+      await win.keyboard.press('Control+f');
+      await expect(win.getByTestId(`find-bar-${pid}`), 'Ctrl+F opens the find bar on an editor').toBeVisible();
+      await win.getByTestId('find-input').fill('alpha');
+
+      // (merged) Case-insensitive by default => all three, highlighted incrementally.
+      await expect(matches(win, pid), 'every case-insensitive match is painted as a span').toHaveCount(3);
+      await expect(currentMatch(win, pid), 'exactly one match is marked current').toHaveCount(1);
+      await expect(win.getByTestId('find-count'), 'the bar counts the matches').toHaveText('1 of 3');
+      // Searching never edits the file (SC-001).
+      expect(await docText(win, pid), 'searching leaves the document untouched').toContain('alpha beta');
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
 test('closing find clears the highlights and returns focus to the editor', { tag: ['@extended', '@editor', '@reserve:focus'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
   try {
@@ -199,15 +251,15 @@ test('closing find clears the highlights and returns focus to the editor', { tag
 
       await win.keyboard.press('Control+f');
       await win.getByTestId('find-input').fill('close');
-      await expect(matches(win, pid)).toHaveCount(1);
+      await expect(matches(win, pid), 'the term is highlighted before closing').toHaveCount(1);
 
       await win.keyboard.press('Escape');
-      await expect(win.getByTestId(`find-bar-${pid}`)).toHaveCount(0);
-      await expect(matches(win, pid)).toHaveCount(0);
+      await expect(win.getByTestId(`find-bar-${pid}`), 'Escape closes the find bar').toHaveCount(0);
+      await expect(matches(win, pid), 'closing find clears the highlights').toHaveCount(0);
 
       // Focus is back in the content: typing goes into the document.
       await win.keyboard.type('!');
-      expect(await docText(win, pid)).toContain('!');
+      expect(await docText(win, pid), 'focus is back in the editor after Escape').toContain('!');
     });
   } finally {
     cleanupTemp(root);
@@ -300,59 +352,6 @@ test('every find-bar action control is the same size, and match-case reads "Aa"'
           h: first.h,
         });
       }
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-/**
- * VERDICT DECLINED (035 T055/FR-022) — this stays, and the reason took two wrong answers to reach.
- *
- * The census said `component`: "no-active-panel is a routing/logic no-op, no OS feature involved".
- * That is true about the CODE and false about what can be proved.
- *
- * ── FIRST WRONG ANSWER: that the test is fine as it is ──
- *
- * It is not. Its assertion — `find-bar-<pid>` has count 0 — cannot fail. `FindBar` is rendered by
- * `EditorPanel` and `TerminalPanel` and by nothing else, and an untyped panel renders the
- * type-selection form instead of either. The absence is a fact about the render tree's SHAPE. Delete
- * the guard this test is named after and it still passes.
- *
- * ── SECOND WRONG ANSWER: that asserting on the STORE fixes it ──
- *
- * It looks like it should. `search-keybindings.tsx:108` has a real guard —
- * `if (!activePanelId || !findKind) return;` — so a component test could mount `SearchKeybindings`
- * on an untyped layout, press Ctrl+F, and assert `getFindState().panelId` stays null.
- *
- * That test was written, it passed, and BOTH of its mutations passed too: removing the kind guard,
- * and forcing every panel to `'editor'`. It was deleted rather than kept.
- *
- * ── WHY, AND THIS IS THE PART WORTH KEEPING ──
- *
- * Two lines down there is a second, independent guard:
- *
- *     const controller = getPanelSearch(activePanelId);
- *     if (!controller) return;
- *
- * An untyped panel never registers a search controller, so the handler returns there whatever the
- * kind guard does. The absence is OVER-DETERMINED, and isolating either guard means constructing an
- * untyped panel that has a registered controller — a state the application cannot produce. A test
- * that has to fabricate an impossible state is asserting about its own fixture.
- *
- * So this test stays as the weak thing it is, honestly labelled, rather than being replaced by a
- * component test that would pass under its own mutation. What would genuinely improve it is a
- * production change — one guard instead of two — and that is not this spec's to make.
- */
-test('find is a no-op when no panel is active (spec Edge Cases)', { tag: ['@extended', '@editor'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-find-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'NoPanelProj', root);
-      const pid = await firstPanelId(win);
-      // An unconfigured panel has no type — nothing to search.
-      await win.keyboard.press('Control+f');
-      await expect(win.getByTestId(`find-bar-${pid}`)).toHaveCount(0);
     });
   } finally {
     cleanupTemp(root);

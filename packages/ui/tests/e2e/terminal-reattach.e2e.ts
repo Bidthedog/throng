@@ -77,7 +77,7 @@ const requestClose = (app: ElectronApplication): Promise<void> =>
  */
 const TERMINAL_VIEW = /^terminal-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-test('a pre-existing terminal reattaches after restart and still warns on close', { tag: ['@extended', '@terminal'] }, async () => {
+test('a pre-existing terminal reattaches after restart and still warns on close', { tag: ['@extended', '@terminal', '@reserve:window'] }, async () => {
   skipIfElevated();
   const pipe = `\\\\.\\pipe\\throng-reattach-${process.pid}-${Date.now()}`;
   const dataDir = mkdtempSync(join(tmpdir(), 'reattach-data-'));

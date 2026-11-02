@@ -119,27 +119,9 @@ test('T044 — the group sits inside the pane, between the tabs and New Tab (T1)
   expect(actions.x + actions.w).toBeLessThanOrEqual(add.x + 1);
 });
 
-test('T044 — three themed icon controls, each with a hover title naming its action (T2, T4)', { tag: ['@extended', '@window'] }, async () => {
-  await freshProject();
-  await seedOverflowingTabs(shared.win, 'actions-icons');
-
-  const expected: Array<[string, RegExp]> = [
-    ['tabstrip-step-left', /previous tab/i],
-    ['tabstrip-step-right', /next tab/i],
-    ['tabstrip-show-all', /show all tabs/i],
-  ];
-  for (const [testId, names] of expected) {
-    const control = shared.win.getByTestId(testId);
-    await expect(control, `${testId} is present`).toBeVisible();
-    // A themed icon, drawn by the shared <Icon> (constitution: themeable icon controls) — never a
-    // bare glyph typed into the markup, which no icon pack could ever replace.
-    await expect(control.locator('.icon'), `${testId} renders a themed icon`).toHaveCount(1);
-    // The action is NAMED by the title, since the icon carries no text.
-    const title = await control.getAttribute('title');
-    expect(title ?? '', `${testId} names its action on hover`).toMatch(names);
-    expect(await control.getAttribute('aria-label')).toBe(title);
-  }
-});
+// MOVED DOWN (test-suite audit) — "T044 — three themed icon controls, each with a hover title naming its
+// action (T2, T4)" is `component/tab-chip-attention.test.ts` ("the tab-actions group": three themed icon
+// controls, each naming its action on hover), red-proven against a renamed title.
 
 test('T045 — the three counts are hidden-left, hidden-right and total, and follow a scroll (T3, S2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   await freshProject();
@@ -306,28 +288,9 @@ test('T046 — a step moves exactly one tab, landing it clear of the left fade (
   expect(Math.abs(back.scrollLeft - before.scrollLeft)).toBeLessThanOrEqual(1);
 });
 
-test('T046 — a step control is unavailable when nothing is hidden that way (S4)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  await freshProject();
-  await seedOverflowingTabs(shared.win, 'actions-unavailable');
-
-  await setScrollLeft(shared.win, 0);
-  await expect(
-    shared.win.getByTestId('tabstrip-step-left'),
-    'nothing is hidden to the left at the start of the strip',
-  ).toBeDisabled();
-  await expect(shared.win.getByTestId('tabstrip-step-right')).toBeEnabled();
-
-  const state = await stripState(shared.win);
-  await setScrollLeft(shared.win, state.maxScroll);
-  await expect(
-    shared.win.getByTestId('tabstrip-step-right'),
-    'nothing is hidden to the right at the end of the strip',
-  ).toBeDisabled();
-  await expect(shared.win.getByTestId('tabstrip-step-left')).toBeEnabled();
-
-  // Show all is never unavailable: it lists every tab, and there are always tabs.
-  await expect(shared.win.getByTestId('tabstrip-show-all')).toBeEnabled();
-});
+// MOVED DOWN (test-suite audit) — "T046 — a step control is unavailable when nothing is hidden that way
+// (S4)" is `component/tab-chip-attention.test.ts` ("makes a step control unavailable only where the strip
+// cannot move that way"), red-proven against a step-left that is never disabled.
 
 test('step-left is available as soon as a reveal has moved the strip off its start', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   /*
@@ -400,26 +363,6 @@ test('step-left is available as soon as a reveal has moved the strip off its sta
   }
 });
 
-test('the step controls ignore a right-click', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-  // #382 — only the primary button steps.
-  await freshProject();
-  await seedOverflowingTabs(shared.win, 'actions-right-click');
-
-  await setScrollLeft(shared.win, 0);
-  await expect(shared.win.getByTestId('tabstrip-step-right')).toBeEnabled();
-  await traceScroll(shared.win, () =>
-    shared.win.getByTestId('tabstrip-step-right').click({ button: 'right' }),
-  );
-  expect((await stripState(shared.win)).scrollLeft, 'a right-click on step-right moved the strip').toBeLessThanOrEqual(1);
-
-  const state = await stripState(shared.win);
-  await setScrollLeft(shared.win, state.maxScroll);
-  await expect(shared.win.getByTestId('tabstrip-step-left')).toBeEnabled();
-  await traceScroll(shared.win, () =>
-    shared.win.getByTestId('tabstrip-step-left').click({ button: 'right' }),
-  );
-  expect(
-    Math.abs((await stripState(shared.win)).scrollLeft - state.maxScroll),
-    'a right-click on step-left moved the strip',
-  ).toBeLessThanOrEqual(1);
-});
+// MOVED DOWN (test-suite audit) — "the step controls ignore a right-click" is
+// `component/tab-chip-attention.test.ts` ("steps on the primary button only"), red-proven against a
+// handler that no longer checks the button, with the primary press as its positive control.

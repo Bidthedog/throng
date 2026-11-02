@@ -1,16 +1,10 @@
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import {
-  cleanupTemp,
   createProject,
   firstPanelId,
   openApp,
   panelIds,
-  runApp,
   splitPanelViaMenu,
   type OpenApp,
   type SplitDirectionName,
@@ -113,65 +107,10 @@ test('each direction splits only the panel whose + was used (SC-001, SC-002)', {
   await expect(win.locator('.panel-box')).toHaveCount(8);
 });
 
-test('a split survives a restart (SC-009)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  test.setTimeout(180_000);
-  const dataDir = mkdtempSync(join(tmpdir(), 'throng-split-restart-data-'));
-  const userDataDir = mkdtempSync(join(tmpdir(), 'throng-split-restart-ud-'));
-  try {
-    await runApp(
-      async (_app, win) => {
-        await createProject(win, 'SplitRestart', 'C:/c/splitrestart');
-        const p1 = await firstPanelId(win);
-        const p2 = await splitAndFind(win, p1, 'right');
-        await splitAndFind(win, p2, 'down');
-        await expect(win.locator('.panel-box')).toHaveCount(3);
-
-        // The layout is written behind a debounce; the window closing before it lands would restore a
-        // workspace without the split, so wait for the saved document itself.
-        await expect
-          .poll(
-            () => {
-              let db: InstanceType<typeof Database> | undefined;
-              try {
-                db = new Database(join(dataDir, 'throng.db'), { readonly: true });
-                const row = db
-                  .prepare(
-                    `SELECT w.layout_json AS json FROM workspace_layout w
-                       JOIN projects p ON p.id = w.project_id WHERE p.name = ?`,
-                  )
-                  .get('SplitRestart') as { json?: string } | undefined;
-                return (row?.json?.match(/"type":"panel"/g) ?? []).length;
-              } catch {
-                return 0;
-              } finally {
-                db?.close();
-              }
-            },
-            { timeout: 15_000, message: 'the split layout was never persisted' },
-          )
-          .toBe(3);
-      },
-      { dataDir, userDataDir },
-    );
-
-    await runApp(
-      async (_app, win) => {
-        const item = win.locator('.project-item', { hasText: 'SplitRestart' });
-        await expect(item).toBeVisible({ timeout: 20_000 });
-        const sw = item.locator('[data-testid^="project-switch-"]');
-        if (await sw.isVisible().catch(() => false)) await sw.click();
-        await expect(win.locator('.panel-box')).toHaveCount(3, { timeout: 20_000 });
-        // The arrangement, not just the count: a row split holding a column split.
-        await expect(win.locator('.split--row')).toHaveCount(1);
-        await expect(win.locator('.split--column')).toHaveCount(1);
-      },
-      { dataDir, userDataDir },
-    );
-  } finally {
-    cleanupTemp(dataDir);
-    cleanupTemp(userDataDir);
-  }
-});
+// MOVED DOWN: "a split survives a restart (SC-009)" - the row-holding-a-column arrangement round-trips in
+// persistence/tests/integration/workspace-layout-v3.integration.test.ts ('round-trips a split
+// arrangement'), red-proven by flipping the saved orientation; persistence-restore.e2e.ts restores a
+// split through a real relaunch.
 
 /** Right-click the panel handle and sync it into a brand-new sub-workspace window. */
 async function syncToNewSubWorkspace(app: ElectronApplication, win: Page, panelId: string): Promise<Page> {

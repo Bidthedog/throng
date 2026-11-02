@@ -78,7 +78,8 @@ for (const [tier, workers] of passes) {
   console.log(`\n[e2e] ${tier} tier — ${workers} worker(s)${failFast ? ' — fail-fast' : ''}\n`);
   const args = [`--workers=${workers}`];
   if (failFast) args.push('--max-failures=1');
-  const code = play(args, { THRONG_E2E_TIER: tier });
+  // The first tier warmed Electron off disk on CI (playwright-global-setup.mjs); one warm-up is enough.
+  const code = play(args, { THRONG_E2E_TIER: tier, ...(results.length > 0 ? { THRONG_E2E_WARM: '1' } : {}) });
   results.push([tier, code]);
   if (failFast && code !== 0) {
     console.error(`\n[e2e] ${tier} tier failed — skipping the remaining tier(s) (fail-fast)\n`);

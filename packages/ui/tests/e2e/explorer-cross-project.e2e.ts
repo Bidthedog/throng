@@ -59,7 +59,7 @@ const menuItem = (win: Page, name: RegExp) => win.getByRole('menuitem', { name }
 async function docPath(win: Page, panelId: string): Promise<string | null> {
   const raw = await win.evaluate(async (pid) => {
     const docs = await window.throng.editor.list();
-    return docs.find((d) => d.panelId === pid)?.absPath ?? null;
+    return docs.find((d: { panelId: string; absPath: string }) => d.panelId === pid)?.absPath ?? null;
   }, panelId);
   return raw === null ? null : raw.replace(/\\/g, '/').toLowerCase();
 }

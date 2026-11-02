@@ -74,7 +74,7 @@ async function newEditor(win: Page, pid: string): Promise<void> {
   await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
 }
 
-test('zooming one editor scales only that editor — its sibling editor and a terminal are untouched; content preserved (FR-013)', { tag: ['@extended', '@window'] }, async () => {
+test('zooming one editor scales only that editor — its sibling editor and a terminal are untouched; content preserved; the level survives a reload (FR-013, SC-003)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pz-ed-'));
   try {
     await runApp(async (app, win) => {
@@ -125,8 +125,22 @@ test('zooming one editor scales only that editor — its sibling editor and a te
       // Content is unchanged — zoom never touches the buffer (FR-013).
       await expect(content).toContainText('const answer = 42;');
 
+      // SC-003 (merged in from "a panel keeps its own zoom across a reload"): the level survives a reload, and
+      // only p1 carries it. The save is debounced and the reload reads disk once.
+      const level = await panelZoom(win, p1);
+      // sleep-justified: the reload below reads whatever is on disk AT THAT MOMENT, once, and
+      // nothing after can correct a reload that ran ahead of the debounced save — the write
+      // itself raises no event this window can observe.
+      await win.waitForTimeout(700);
+      await reloadWindow(win);
+      await win.locator('.project-item', { hasText: 'ZoomEd' }).click();
+      await expect(win.getByTestId(`panel-${p1}`)).toBeVisible({ timeout: 15000 });
+      await expect.poll(() => panelZoom(win, p1), { message: 'the zoomed panel keeps its level across a reload' }).toBe(level);
+      expect(await panelZoom(win, p2), 'the sibling editor is still at the default after the reload').toBe(0);
+
       // Reset returns only p1 to its default size — on the keypad zero since 046 FR-114; the main-row
       // 0 no longer resets.
+      await win.getByTestId(`panel-${p1}`).click();
       await win.keyboard.press('Control+Alt+Numpad0');
       await expect.poll(() => editorFontPx(win, p1)).toBeCloseTo(baseP1, 1);
       expect(await panelZoom(win, p1)).toBe(0);
@@ -136,97 +150,13 @@ test('zooming one editor scales only that editor — its sibling editor and a te
   }
 });
 
-test('a panel keeps its own zoom across a reload (SC-003)', { tag: ['@extended', '@window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-pz-persist-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'ZoomPersist', root);
-      const pid = await firstPanelId(win);
-      await newEditor(win, pid);
+// MERGED into the first test above: "a panel keeps its own zoom across a reload (SC-003)".
 
-      await win.getByTestId(`panel-${pid}`).click();
-      await win.keyboard.press('Control+Alt+Equal');
-      await win.keyboard.press('Control+Alt+Equal');
-      await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
-      const level = await panelZoom(win, pid);
+// MOVED DOWN: "the panel right-click menu zooms that panel in and out" - unit/panel-header-zoom-menu.test.ts
+// ('runs the matching zoom action for each row, on every kind that zooms'): each Zoom row invokes its own
+// action. The keyboard route above still drives the real store and the level it renders.
 
-      // Let the debounced save flush, drop all in-memory state, then re-open the
-      // project → its layout (with this panel's zoom) is re-read from the store.
-      //
-      // sleep-justified: the reload below reads whatever is on disk AT THAT MOMENT, once, and
-      // nothing after can correct a reload that ran ahead of the debounced save — the write
-      // itself raises no event this window can observe.
-      await win.waitForTimeout(700);
-      await reloadWindow(win);
-      await win.locator('.project-item', { hasText: 'ZoomPersist' }).click();
-      await expect(win.getByTestId(`panel-${pid}`)).toBeVisible({ timeout: 15000 });
-      await expect.poll(() => panelZoom(win, pid)).toBe(level);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-/*
- * 043 FR-062a CHANGED WHAT THIS TEST MAY DRIVE, and the change is recorded rather than absorbed.
- *
- * This test used to run against whatever `firstPanelId` returned on a fresh project — the UNTYPED
- * PLACEHOLDER — and it passed, because the Zoom submenu was built unconditionally for every panel
- * kind. That was the defect: three permanently inert commands on a panel that renders no zoom level,
- * which is precisely what Constitution VI's disabled-versus-absent rule forbids. `KINDS_THAT_ZOOM`
- * now gates the submenu, so on a placeholder there is no `menu-item-Zoom` to click.
- *
- * So the panel is given a type first. The test's subject is unchanged — the MENU route to zoom, as
- * opposed to the keyboard route the tests above cover — and that subject only ever made sense on a
- * panel that zooms. `panel-header-zoom-menu.test.ts` is where the placeholder's side of this now
- * lives, asserting the submenu is ABSENT for it; the two must move together.
- *
- * AND THE PROJECT ROOT HAD TO BECOME REAL, which was not obvious and is worth the sentence. This
- * test passed for years against `C:/c/mz`, a path that does not exist, because it never asked the
- * application to DO anything with the root — a right-click and three menu clicks need no files. The
- * moment it types the panel, the missing root raises its "It could not be found" notice, and the
- * notice's own container sits over the panel-type form and intercepts the click on Confirm. The
- * failure reads as a broken locator and is nothing of the kind: it is the app correctly reporting a
- * condition the fixture had always had and never before provoked.
- */
-test('the panel right-click menu zooms that panel in and out', { tag: ['@extended', '@window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-pz-menu-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'MenuZoom', root);
-      const pid = await firstPanelId(win);
-      await newEditor(win, pid);
-
-      // Zoom In via the context menu → the panel's level rises.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await win.getByTestId('menu-item-Zoom').click(); // open the flyout
-      await win.getByTestId('menu-item-Zoom In').click();
-      await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
-      const inLevel = await panelZoom(win, pid);
-
-      // Zoom Out brings it back down.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await win.getByTestId('menu-item-Zoom').click();
-      await win.getByTestId('menu-item-Zoom Out').click();
-      await expect.poll(() => panelZoom(win, pid)).toBeLessThan(inLevel);
-
-      // Reset Zoom returns it to the default (0). Zoom in once more first so reset has
-      // something to undo, then reset.
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await win.getByTestId('menu-item-Zoom').click();
-      await win.getByTestId('menu-item-Zoom In').click();
-      await expect.poll(() => panelZoom(win, pid)).toBeGreaterThan(0);
-      await win.getByTestId(`panel-handle-${pid}`).click({ button: 'right' });
-      await win.getByTestId('menu-item-Zoom').click();
-      await win.getByTestId('menu-item-Reset Zoom').click();
-      await expect.poll(() => panelZoom(win, pid)).toBe(0);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@window'] }, async () => {
+test('zooming a terminal recomputes its grid (SC-005)', { tag: ['@extended', '@window', '@reserve:pty'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-pz-term-'));
   try {
     await runApp(async (app, win) => {

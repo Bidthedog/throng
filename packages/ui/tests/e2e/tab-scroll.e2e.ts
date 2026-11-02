@@ -7,7 +7,7 @@
  * position. So `scrollLeft` is sampled once per animation frame and the resulting series is what
  * gets asserted (see `helpers/tabs.ts`).
  *
- * Three apps, because the scroll DURATION is a launch-time seed and it is the independent variable:
+ * Three apps (eased, slow, unanimated), because the scroll DURATION is a launch-time seed and it is the independent variable:
  * an eased one for the ordinary guarantees, a deliberately long one for everything that has to be
  * caught mid-flight, and a zero one for A10. Sharing one app and hot-editing the setting would make
  * every test depend on a settings round-trip landing before the gesture — a race, in the file whose
@@ -219,6 +219,39 @@ test.describe('an eased strip', () => {
     expect(isFullyVisible(after, now), 'the chosen tab is scrolled into view').toBe(true);
   });
 
+  test('T055 — choosing an entry scrolls the strip to that tab AND makes it active (K2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+    // Folded in from tab-picker.e2e.ts (test-suite audit), which shared this group's seed for no reason.
+    await freshProject(shared.win);
+    await seedOverflowingTabs(shared.win, 'picker-choose');
+
+    // Park at the FAR END and choose the FIRST tab. Seeding leaves the last tab active, so choosing it
+    // would test neither half of K2: it is already active, and the strip is already showing it.
+    const start = await stripState(shared.win);
+    await setScrollLeft(shared.win, start.maxScroll);
+
+    const before = await stripState(shared.win);
+    const target = before.chips[0]!;
+    expect(isFullyVisible(before, target), 'precondition: the target is off screen').toBe(false);
+    expect(target.active, 'precondition: the target is not already active').toBe(false);
+
+    await shared.win.getByTestId('tabstrip-show-all').click();
+    await expect(shared.win.getByTestId('tabpicker')).toBeVisible();
+    await expect(shared.win.getByTestId('tabpicker-input')).toBeFocused();
+    await shared.win.getByTestId(`tabpicker-row-${target.tabId}`).click();
+    await expect(shared.win.getByTestId('tabpicker')).toHaveCount(0);
+
+    await expect
+      .poll(
+        async () => {
+          const state = await stripState(shared.win);
+          const chip = state.chips.find((c) => c.testId === target.testId);
+          return chip ? chip.active && isFullyVisible(state, chip) : false;
+        },
+        { message: 'choosing a tab did not both activate it and scroll it into view' },
+      )
+      .toBe(true);
+  });
+
   test('T049 — an already-fully-visible tab causes no movement at all (A2)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);
     // SHORT names on purpose: this test needs a fully visible tab that is not the active one, and a
@@ -337,26 +370,12 @@ test.describe('an eased strip', () => {
       'the second revealed tab starts where the left fade ends',
     ).toBeLessThanOrEqual(1);
   });
-});
 
-/* ══════════════════════════════════════════════════════════════════════════════════════════════
- * A strip restored from persistence — A1's "layout restore" route.
- *
- * Its own app, and its own describe, for a reporting reason rather than a technical one: this test
- * is currently RED against a real defect (see below), and Playwright's serial mode skips the rest of
- * a group once one of its tests fails. Left among the others it would hide them.
- * ══════════════════════════════════════════════════════════════════════════════════════════════ */
-test.describe('a restored strip', () => {
-  test.describe.configure({ mode: 'serial' });
-  let shared: OpenApp;
-
-  test.beforeAll(async () => {
-    shared = await openApp({ env: { THRONG_CONFIG_ROOT: seedConfig({ smoothScrollMs: 400 }) } });
-  });
-  test.afterAll(async () => {
-    await shared?.close();
-  });
-
+  /*
+   * A1's "layout restore" route, folded into this group (test-suite audit). It had its own app only
+   * because it was RED against a real defect and serial mode would have hidden its neighbours. The
+   * defect is fixed (see below) and the seed (`smoothScrollMs: 400`) is identical.
+   */
   test('T048 — a restored layout brings the active tab into view (A1: layout restore)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     const name = await freshProject(shared.win);
     const ids = await seedOverflowingTabs(shared.win, 'scroll-restore');
@@ -407,6 +426,53 @@ test.describe('a restored strip', () => {
     const state = await stripState(shared.win);
     expect(activeChip(state).testId, 'the restored layout keeps its active tab').toBe(wanted);
     await expectCountsInSync(shared.win);
+  });
+
+  // Moved here from "a slow strip" (pass 2): the glide that establishes the rest position is 400ms, not 1500ms.
+  // Reduce-motion is emulated for the second half, so it is put back in a `finally` - this group never resets it.
+  test('T053 — an instant scroll reaches the same rest position, active tab and counts (A14)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+    await freshProject(shared.win);
+    await seedOverflowingTabs(shared.win, 'scroll-instant-outcome');
+
+    /*
+     * Animated, to establish what the outcome IS.
+     *
+     * The wait is on the ANCHOR reaching its new tab, not on the strip going still. A long glide
+     * over 110px moves less than a physical pixel per frame at the start, and Chromium snaps
+     * `scrollLeft` to whole device pixels — so a value-based stillness test reads a moving strip as
+     * a stopped one and hands back a rest position of nearly zero. A semantic condition cannot be
+     * fooled that way.
+     */
+    await setScrollLeft(shared.win, 0);
+    const anchorBefore = anchorIndex(await stripState(shared.win));
+    await beginScrollTrace(shared.win);
+    await shared.win.getByTestId('tabstrip-step-right').click();
+    await expect
+      .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
+      .toBe(anchorBefore + 1);
+    await waitForScrollStill(shared.win);
+    const animated = await stripState(shared.win);
+    const animatedCounts = await expectCountsInSync(shared.win);
+
+    // The same gesture, instant.
+    try {
+      await setScrollLeft(shared.win, 0);
+      await shared.win.emulateMedia({ reducedMotion: 'reduce' });
+      await beginScrollTrace(shared.win);
+      await shared.win.getByTestId('tabstrip-step-right').click();
+      await expect
+        .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
+        .toBe(anchorBefore + 1);
+      await waitForScrollStill(shared.win);
+      const instant = await stripState(shared.win);
+      const instantCounts = await expectCountsInSync(shared.win);
+
+      expect(instant.scrollLeft, 'the same rest position').toBeCloseTo(animated.scrollLeft, 0);
+      expect(anchorIndex(instant)).toBe(anchorIndex(animated));
+      expect(instantCounts).toEqual(animatedCounts);
+    } finally {
+      await shared.win.emulateMedia({ reducedMotion: 'no-preference' });
+    }
   });
 });
 
@@ -549,46 +615,8 @@ test.describe('a slow strip', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  test('T053 — an instant scroll reaches the same rest position, active tab and counts (A14)', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
-    await freshProject(shared.win);
-    await seedOverflowingTabs(shared.win, 'scroll-instant-outcome');
-
-    /*
-     * Animated, to establish what the outcome IS.
-     *
-     * The wait is on the ANCHOR reaching its new tab, not on the strip going still. A long glide
-     * over 110px moves less than a physical pixel per frame at the start, and Chromium snaps
-     * `scrollLeft` to whole device pixels — so a value-based stillness test reads a moving strip as
-     * a stopped one and hands back a rest position of nearly zero. A semantic condition cannot be
-     * fooled that way.
-     */
-    await setScrollLeft(shared.win, 0);
-    const anchorBefore = anchorIndex(await stripState(shared.win));
-    await beginScrollTrace(shared.win);
-    await shared.win.getByTestId('tabstrip-step-right').click();
-    await expect
-      .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
-      .toBe(anchorBefore + 1);
-    await waitForScrollStill(shared.win);
-    const animated = await stripState(shared.win);
-    const animatedCounts = await expectCountsInSync(shared.win);
-
-    // The same gesture, instant.
-    await setScrollLeft(shared.win, 0);
-    await shared.win.emulateMedia({ reducedMotion: 'reduce' });
-    await beginScrollTrace(shared.win);
-    await shared.win.getByTestId('tabstrip-step-right').click();
-    await expect
-      .poll(async () => anchorIndex(await stripState(shared.win)), { timeout: 8000 })
-      .toBe(anchorBefore + 1);
-    await waitForScrollStill(shared.win);
-    const instant = await stripState(shared.win);
-    const instantCounts = await expectCountsInSync(shared.win);
-
-    expect(instant.scrollLeft, 'the same rest position').toBeCloseTo(animated.scrollLeft, 0);
-    expect(anchorIndex(instant)).toBe(anchorIndex(animated));
-    expect(instantCounts).toEqual(animatedCounts);
-  });
+  // MOVED (pass 2) into "an eased strip": "T053 - an instant scroll reaches the same rest position, active tab and
+  // counts (A14)". It ran a 1500ms glide only to learn the rest position; the outcome does not depend on the duration.
 
   test('T057a — a window resize mid-scroll settles the strip and recomputes the counts', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
     await freshProject(shared.win);

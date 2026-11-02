@@ -46,8 +46,8 @@ test.describe.configure({ mode: 'serial' });
  * that never happened as a broken move: on CI it read `false,true` — the file still at the root,
  * absent from the folder — thirty seconds later.
  *
- * The signal is `[role="treeitem"]:focus`, the same one `explorer-keyboard-selection.e2e.ts` already
- * uses, and it is a POSITIVE assertion about the row this test is about to act on rather than a
+ * The signal is `[role="treeitem"]:focus`, the same one `explorer.e2e.ts`'s arrow-key selection test
+ * already uses, and it is a POSITIVE assertion about the row this test is about to act on rather than a
  * pause hoping the state caught up. Issue #239 is the same defect in another spec, fixed the same
  * way; this file simply never had it applied.
  */
@@ -98,7 +98,7 @@ let projectSeq = 0;
 const createProject = (win: OpenApp['win'], name: string, root: string): Promise<void> =>
   newProject(win, `${name}-${(projectSeq += 1)}`, root);
 
-test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '@explorer'] }, async () => {
+test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back; undo works from the pane header; a refused undo says why', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undo-'));
   writeFileSync(join(root, 'before.txt'), 'content\n');
   try {
@@ -143,6 +143,38 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '
       await win.keyboard.press('Control+y');
       await expect(tree.getByText('after.txt', { exact: true })).toBeVisible({ timeout: 8000 });
       await expect.poll(() => existsSync(join(root, 'after.txt'))).toBe(true);
+
+      // Undo from the pane header (merged from "undo works from anywhere in the pane"): inside File
+      // Explorer, but not on a row and not in the tree. Redo above pushed the rename back on the stack.
+      await win.getByTestId('files-pane').getByText('File Explorer').click();
+      await win.keyboard.press('Control+z');
+      await expect
+        .poll(() => existsSync(join(root, 'before.txt')), {
+          timeout: FILE_OP_TIMEOUT_MS,
+        })
+        .toBe(true);
+      expect(existsSync(join(root, 'after.txt')), 'pane-header Ctrl+Z moved the file back').toBe(false);
+
+      // A refused undo (merged from "a refused undo says why"): rename again, then occupy the name the
+      // undo wants to restore.
+      await expect(tree.getByText('before.txt', { exact: true })).toBeVisible({ timeout: 8000 });
+      await tree.getByText('before.txt', { exact: true }).click();
+      await win.keyboard.press('F2');
+      const input2 = win.locator('.tree-rename');
+      await input2.fill('second.txt');
+      await input2.press('Enter');
+      await expect(tree.getByText('second.txt', { exact: true })).toBeVisible({ timeout: 8000 });
+      writeFileSync(join(root, 'before.txt'), 'a different file\n');
+      await tree.getByText('second.txt', { exact: true }).click();
+      await win.keyboard.press('Control+z');
+
+      // It is REPORTED — an undo that silently did nothing would read as undo being broken.
+      const notice = win.getByTestId('explorer-error');
+      await expect(notice.first()).toBeVisible({ timeout: 8000 });
+      await expect(notice.first()).toContainText('undo that file operation');
+      // …and nothing was destroyed.
+      expect(existsSync(join(root, 'second.txt')), 'the renamed file is still there').toBe(true);
+      expect(existsSync(join(root, 'before.txt')), 'the occupying file is still there').toBe(true);
     });
   } finally {
     cleanupTemp(root);
@@ -173,37 +205,12 @@ test('Ctrl+Z reverses a rename, and Ctrl+Y puts it back', { tag: ['@extended', '
  * mouse to leave focus off the rows, and asserts the file on DISK through the daemon — which is the
  * half no set membership can promise.
  */
-test('undo works from anywhere in the pane, not only with a row focused', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-undopane-'));
-  writeFileSync(join(root, 'renamed.txt'), 'x\n');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'UndoPaneProj', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree.getByText('renamed.txt', { exact: true })).toBeVisible({ timeout: 8000 });
-
-      // Rename through the MENU, closed by mouse — the path that leaves focus on the pane rather
-      // than on a tree row. Undo must still be the pane's Ctrl+Z, not the editor's.
-      await tree.getByText('renamed.txt', { exact: true }).click({ button: 'right' });
-      await win.getByTestId('menu-item-Rename').click();
-      const input = win.locator('.tree-rename');
-      await expect(input).toBeVisible();
-      await input.fill('other.txt');
-      await input.press('Enter');
-      await expect(tree.getByText('other.txt', { exact: true })).toBeVisible({ timeout: 8000 });
-
-      // Click the pane's header — inside File Explorer, but not on a row and not in the tree.
-      await win.getByTestId('files-pane').getByText('File Explorer').click();
-      await win.keyboard.press('Control+z');
-      await expect.poll(() => existsSync(join(root, 'renamed.txt')), { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
-      expect(existsSync(join(root, 'other.txt'))).toBe(false);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('undo reverses a move back out of the folder it went into', { tag: ['@extended', '@explorer'] }, async () => {
+/*
+ * MERGED (test-suite audit, pass 2): "undo works from anywhere in the pane, not only with a row focused" is now
+ * the pane-header step of the first test above (rename, undo, redo, then a pane-header click and Ctrl+Z).
+ * The menu-rename path it used is the same rename code as F2.
+ */
+test('undo reverses a move back out of the folder it went into', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-undomove-'));
   mkdirSync(join(root, 'dst'));
   writeFileSync(join(root, 'moved.txt'), 'x\n');
@@ -319,7 +326,7 @@ test('undo reverses a move back out of the folder it went into', { tag: ['@exten
   }
 });
 
-test('undoing a delete un-strands the editor that was open on the file', { tag: ['@extended', '@explorer'] }, async () => {
+test('undoing a delete un-strands the editor that was open on the file', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   skipIfElevated();
   const root = mkdtempSync(join(tmpdir(), 'throng-undodel-'));
   writeFileSync(join(root, 'open.txt'), 'ORIGINAL\n');
@@ -438,37 +445,8 @@ test('undoing a delete un-strands the editor that was open on the file', { tag: 
   }
 });
 
-test('a refused undo says why, and keeps the entry so it can be retried', { tag: ['@extended', '@explorer'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-undoblock-'));
-  writeFileSync(join(root, 'one.txt'), 'x\n');
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'UndoBlockProj', root);
-      const tree = win.getByTestId('file-explorer-tree');
-      await expect(tree.getByText('one.txt', { exact: true })).toBeVisible({ timeout: 8000 });
-
-      await tree.getByText('one.txt', { exact: true }).click();
-      await win.keyboard.press('F2');
-      const input = win.locator('.tree-rename');
-      await input.fill('two.txt');
-      await input.press('Enter');
-      await expect(tree.getByText('two.txt', { exact: true })).toBeVisible({ timeout: 8000 });
-
-      // Something else now occupies the name the undo wants to restore. Replaying blindly would
-      // either fail obscurely or overwrite a file the user never agreed to lose.
-      writeFileSync(join(root, 'one.txt'), 'a different file\n');
-      await tree.getByText('two.txt', { exact: true }).click();
-      await win.keyboard.press('Control+z');
-
-      // It is REPORTED — an undo that silently did nothing would read as undo being broken.
-      const notice = win.getByTestId('explorer-error');
-      await expect(notice.first()).toBeVisible({ timeout: 8000 });
-      await expect(notice.first()).toContainText('undo that file operation');
-      // …and nothing was destroyed.
-      expect(existsSync(join(root, 'two.txt'))).toBe(true);
-      expect(existsSync(join(root, 'one.txt'))).toBe(true);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
+/*
+ * MERGED (test-suite audit, pass 2): "a refused undo says why, and keeps the entry so it can be retried" is now the
+ * last step of the first test above (rename, occupy the old name, Ctrl+Z, notice shown, both files kept). The
+ * rename and move refusals themselves are `core/tests/unit/fileop-undo.test.ts`.
+ */

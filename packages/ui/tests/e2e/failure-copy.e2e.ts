@@ -64,7 +64,7 @@ function banner(win: Page, panelId: string): Locator {
  * only ever assert emptiness.
  */
 async function clipboardText(win: Page): Promise<string> {
-  return win.evaluate(() => window.throng?.clipboard?.paste().then((e) => e?.text ?? '') ?? '');
+  return win.evaluate(() => window.throng?.clipboard?.paste().then((e: { text?: string } | null) => e?.text ?? '') ?? '');
 }
 
 /** Non-empty, trimmed lines — the unit both sides of the comparison are measured in. */
@@ -164,14 +164,13 @@ test('a copied notice carries everything it renders, plus the system error it mu
       await expect(notice).toBeVisible({ timeout: 90_000 });
       await expect(notice.getByTestId('notice-affected-row')).toHaveCount(4, { timeout: 60_000 });
 
-      // ═══ T065 — WHAT IT RENDERS IS WHAT IT COPIES (FR-049). ═══
-      const rendered = lines(await notice.getByTestId('notice-body').innerText());
-      expect(rendered.length, 'the notice rendered nothing to compare against').toBeGreaterThan(4);
-
+      // ═══ T065 — NARROWED (test-suite audit, pass 2). ═══
+      // "What it renders is what it copies, in order" (FR-049) moved down to
+      // `component/notice-copy-matches-render.test.ts`; this test keeps what needs the real app — the
+      // copy lands on the clipboard, the scrolled copy matches, and the paste round-trips into an editor.
       await win.getByTestId('panel-failure-notice-copy').click();
       const copied = await clipboardText(win);
       expect(copied, 'the copy control put nothing on the clipboard').not.toBe('');
-      expectRenderedIsCopied(rendered, lines(copied));
 
       // ═══ …and the two parts that are copied and NEVER rendered (FR-034/FR-048a). ═══
       //
@@ -282,7 +281,10 @@ test('the banner copies its message, subject, path and system error with no noti
         const panelTitle = ((await win.getByTestId(`panel-title-${pid}`).textContent()) ?? '').trim();
         expect(panelTitle, 'the failed panel shows no title to assert the subject against').not.toBe('');
 
-        // Genuinely alone: no notice exists to have carried the detail instead.
+        // Genuinely alone: no notice exists to have carried the detail instead. The pointer sentence is
+        // read in that state, which is the one FR-041 wrote it for (merged from panel-failure-banner's
+        // "the banner appears with every severity set to Never display").
+        await expect(banner(win, pid)).toContainText('Copy the details here, or see the notification.');
         await expect(win.getByTestId('notices').locator('.notice')).toHaveCount(0);
         await expect(consolidated(win)).toHaveCount(0);
 

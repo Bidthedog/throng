@@ -178,8 +178,8 @@ async function pickTheme(prefs: Page, name: string): Promise<void> {
  * dialog, and that confirming a valid name renames the FILE — both are in “US3: Clone is the
  * sole creation path”, which stays (FR-047). And that the reserved set comes from
  * `reservedThemeNames()` rather than from the themes on disk is `themes-tab.tsx` WIRING, which a
- * component handed the list cannot see — “US3: a DELETED built-in name is still reserved” stays
- * for exactly that reason.
+ * component handed the list cannot see — it is now witnessed by mounting the tab itself, in
+ * `component/preferences-themes-tab.test.ts` (pass 2; see the MOVED DOWN note below).
  *
  * Red-proved, three mutations: confirm never disabled (5 red), `submit()` dropping its validation
  * guard so Enter confirms an invalid name (1 red — only the Enter test, which is the point), and
@@ -251,36 +251,14 @@ async function pickTheme(prefs: Page, name: string): Promise<void> {
  * The CSS-variable repaint `:161` polled for is `component/theme-provider.test.ts`, and the
  * filesystem round trip in front of both writes is `integration/config-store.integration.test.ts`.
  */
-test('the font control is a pill editor saving a comma stack; a non-family role exposes it (H4)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      // paneTitle does NOT pin a family in the default theme, yet now exposes the
-      // font control (T106).
-      const key = 'typography.paneTitle.family';
-      const control = prefs.getByTestId(`control-${key}`);
-      await expect(control).toBeVisible();
-
-      /*
-       * The PILLS are asserted at the component layer now (034 FR-045) — ordering, appending rather
-       * than replacing, filtering the typeahead, and re-serialising after a removal, in
-       * `tests/component/preferences-font-pills.test.ts`. What is left here is the claim that layer
-       * cannot make: the stack the control commits reaches <theme>.json, which is the file the
-       * live-reload path reads.
-       */
-      await control.click();
-      await control.fill('Arial');
-      await prefs.getByTestId(`control-${key}-option-Arial`).click();
-      await control.fill('Georgia');
-      await prefs.getByTestId(`control-${key}-option-Georgia`).click();
-
-      // Saved to the theme file as a comma-separated stack.
-      await expect
-        .poll(() => readTheme(cfgRoot, 'throng')?.typography?.paneTitle?.family)
-        .toBe('Arial, Georgia');
-    },
-  );
-});
+/*
+ * DELETED (pass 2): "the font control is a pill editor saving a comma stack; a non-family role exposes
+ * it (H4)". Appending picked families and committing `'Arial, Georgia'` is
+ * `component/preferences-font-pills.test.ts` ("appends a picked family", "commits the pills as a
+ * comma-separated stack"); a role pinning no family still drawing the control is the same file's "shows
+ * no pills at all for a role that pins no family"; a token edit reaching the active theme document is
+ * `component/preferences-app.test.ts` › "writes the edited colour to the ACTIVE theme document".
+ */
 
 /*
  * MOVED to `packages/ui/tests/component/preferences-font-pills.test.ts` (034 FR-045):
@@ -301,39 +279,26 @@ test('the font control is a pill editor saving a comma stack; a non-family role 
  * only the first proved nothing, because the effect immediately overwrote it), making a pick replace
  * the stack, removing the wrong index, and dropping the typeahead filter. Four mutations, four reds.
  */
-test('the three-type button tokens appear in the editor and apply live (021, US7, FR-027)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      // The three button TYPES each expose their six colour tokens; the button typography role
-      // exposes the (pill) font control. Spot one representative colour token from each type.
-      await expect(prefs.getByTestId('control-colours.confirmButtonBg-hex')).toBeVisible();
-      await expect(prefs.getByTestId('control-colours.cancelButtonBg-hex')).toBeVisible();
-      await expect(prefs.getByTestId('control-colours.destroyButtonBg-hex')).toBeVisible();
-      await expect(prefs.getByTestId('control-typography.button.family')).toBeVisible();
-
-      // Edit confirmButtonBg → saved + reflected in the live CSS var. (The live BUTTON render across
-      // all three types, rest + hover, is proven end-to-end in theme-buttons.e2e.ts.)
-      await prefs.getByTestId('control-colours.confirmButtonBg-hex').fill('#123456');
-      await expect.poll(() => readTheme(cfgRoot, 'throng')?.colours?.confirmButtonBg, { timeout: FILE_OP_TIMEOUT_MS }).toBe('#123456');
-      await expect
-        .poll(() =>
-          prefs.evaluate(() =>
-            getComputedStyle(document.documentElement)
-              .getPropertyValue('--throng-colour-confirmButtonBg')
-              .trim(),
-          ),
-        )
-        .toBe('#123456');
-    },
-  );
-});
+/*
+ * DELETED (pass 2): "the three-type button tokens appear in the editor and apply live (021, US7,
+ * FR-027)". The edit-writes-the-active-theme claim is `component/preferences-app.test.ts` › "writes the
+ * edited colour to the ACTIVE theme document", the repaint of the CSS variable is
+ * `component/theme-provider.test.ts` ("vars reach the document"), and the confirm/cancel/destroy
+ * button tokens being exposed in the editor is `core/tests/unit/theme-metadata.test.ts`
+ * (confirmButtonBg in the Buttons area). The live button render is `theme-fields.e2e.ts`.
+ */
 
 /* ---------------------------------------------------------------------------
  * Feature 014 — restore & create controls
  * ------------------------------------------------------------------------- */
 
-test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with "Clone" pre-selected; rename uses the same dialog', { tag: ['@extended', '@prefs'] }, async () => {
+/*
+ * NARROWED (pass 2): the dialog prefill, the pre-selected "Clone", and the reserved / case-insensitive
+ * refusals are `component/preferences-name-dialog.test.ts` ("the Clone prefill", "a reserved built-in
+ * name is refused"). What stays is what only the running app shows: Clone creates and activates the
+ * file on disk and Rename moves it.
+ */
+test('US3: Clone is the sole creation path — a valid name creates and activates a copy; rename uses the same dialog', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       const prefs = await openThemes(app, win);
@@ -343,25 +308,6 @@ test('US3: Clone is the sole creation path — prefilled "<source> - Clone" with
       await prefs.getByTestId('theme-clone').click();
       const input = prefs.getByTestId('theme-name-input');
       await expect(prefs.getByTestId('theme-name-dialog')).toBeVisible();
-      await expect(input).toHaveValue('throng - Clone');
-      // The trailing word "Clone" is pre-selected so the user types straight over it.
-      expect(
-        await input.evaluate((el) => {
-          const i = el as HTMLInputElement;
-          return i.value.slice(i.selectionStart ?? 0, i.selectionEnd ?? 0);
-        }),
-      ).toBe('Clone');
-
-      // A reserved built-in name is refused (and cannot be confirmed).
-      await input.fill('Matrix');
-      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
-      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
-
-      // ...in ANY case: a theme name is a FILE name, and `MATRIX.json` IS `Matrix.json` on
-      // Windows, so a case-only difference would silently overwrite the built-in.
-      await input.fill('MATRIX');
-      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
-      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
 
       // A valid name creates the custom theme (a copy of the source) and activates it.
       await input.fill('MyTheme');
@@ -421,26 +367,10 @@ test('the mode-toggle glyph stays on ONE line in every monospace-font theme (reg
   );
 });
 
-test('US3: a DELETED built-in name is still reserved for a new theme (FR-007)', { tag: ['@extended', '@prefs'] }, async () => {
-  await runApp(
-    async (app, win) => {
-      const prefs = await openThemes(app, win);
-      await waitForSeededList(prefs);
-
-      // Delete a built-in — its name stays reserved even though it is gone from disk.
-      await pickTheme(prefs, 'Debian');
-      await prefs.getByTestId('theme-delete').click();
-      await expect(prefs.getByTestId('theme-delete-confirm')).toBeVisible();
-      await prefs.getByTestId('theme-confirm-yes').click();
-      await expect.poll(() => prefs.getByTestId('theme-select').locator('option').allTextContents()).not.toContain('Debian');
-
-      await pickTheme(prefs, 'throng');
-      await prefs.getByTestId('theme-clone').click();
-      await prefs.getByTestId('theme-name-input').fill('Debian');
-      await expect(prefs.getByTestId('theme-name-error')).toBeVisible();
-      await expect(prefs.getByTestId('theme-name-confirm')).toBeDisabled();
-      // Nothing was created.
-      expect(existsSync(join(cfgRoot, 'themes', 'Debian.json'))).toBe(false);
-    },
-  );
-});
+/*
+ * MOVED DOWN (pass 2): "US3: a DELETED built-in name is still reserved for a new theme (FR-007)" is
+ * now `component/preferences-themes-tab.test.ts` › "a built-in name stays reserved when its theme is
+ * gone from disk". The tab is mounted over a listing with no Debian and refuses Debian as reserved.
+ * Red-proved: filtering Debian out of `reserved` in `themes-tab.tsx` turns it (and one delete-dialog
+ * test) red. The delete itself is `preferences-themes-tab.test.ts` › "deleting a theme".
+ */

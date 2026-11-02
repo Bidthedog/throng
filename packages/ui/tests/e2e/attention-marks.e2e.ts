@@ -22,11 +22,11 @@
  *
  * SC-002 says the row is marked within one second of the bell. The shell writes its own wall-clock time
  * to a file immediately before it emits the BEL, so the bell's moment is the shell's, not the test's
- * guess at when `Start-Sleep` ended. The measurement is printed on every run.
+ * guess at when the wait ended. The measurement is printed on every run.
  *
  * One app for the file, serial: the tests share their projects and a real shell.
  */
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -65,8 +65,8 @@ test.afterAll(async () => {
 
 /** The latency SC-002 allows between the bell and the row being marked. */
 const SC_002_MS = 1_000;
-/** How long the shell waits before ringing — long enough to leave the project, short of a slow test. */
-const BELL_DELAY_S = 4;
+/** How long the whole path may take, from leaving the project to the row being marked. */
+const MARK_TIMEOUT_MS = 24_000;
 
 test('a delayed bell in project A, seen from project B, marks A’s row and raises one toast whose link lands on A’s terminal (US1, US3, SC-002)', { tag: ['@extended', '@terminal', '@reserve:runtime'] }, async () => {
   const { win } = shared;
@@ -88,7 +88,10 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   await expect(win.getByTestId(`attention-project-${idA}`)).toHaveCount(0);
 
   // ── Ask the shell to ring in a few seconds, writing the moment it does to a file ───────────────
-  const command = `Start-Sleep -Seconds ${BELL_DELAY_S}; Set-Content -NoNewline -LiteralPath '${join(rootA, 'bell-at.txt')}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Write([char]7)`;
+  // The shell rings only once the test has left the project (a flag file it polls), so the bell can
+  // never beat the switch however slow the machine is, and no fixed delay has to out-wait it.
+  const flag = join(rootA, 'left-a.flag');
+  const command = `while (-not (Test-Path -LiteralPath '${flag}')) { Start-Sleep -Milliseconds 100 }; Set-Content -NoNewline -LiteralPath '${join(rootA, 'bell-at.txt')}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); [Console]::Write([char]7)`;
   await termA.click();
   await win.keyboard.type(command, { delay: TYPE_DELAY });
   await expect(termA).toContainText('Start-Sleep', { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
@@ -97,6 +100,7 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
   // ── Leave: project B is now the one on screen, so A's terminal is not attended ─────────────────
   await createProject(win, nameB, rootB);
   await settleOnActiveProject(win, nameB);
+  writeFileSync(flag, '1');
 
   // ── The row is marked, and when ─────────────────────────────────────────────────────────────────
   const rowMark = win.getByTestId(`attention-project-${idA}`);
@@ -108,7 +112,7 @@ test('a delayed bell in project A, seen from project B, marks A’s row and rais
         if (present && markedAt === 0) markedAt = Date.now();
         return present;
       },
-      { timeout: (BELL_DELAY_S + 20) * 1_000, intervals: [50], message: 'the bell never marked project A’s row' },
+      { timeout: MARK_TIMEOUT_MS, intervals: [50], message: 'the bell never marked project A’s row' },
     )
     .toBe(true);
   // The mark names the panel and the reason (FR-015), not just that something happened.

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { runApp, createProject, firstPanelId, cleanupTemp, splitPanelViaMenu } from './harness.js';
-import { expectWithinSla } from './helpers/sla.js';
+import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
 import { makeCmdTerminal } from './altscreen-fixture.js';
 
 /**
@@ -69,6 +69,17 @@ async function addTerminal(win: Page, root: string, existingPanelId: string): Pr
 
 test('switching to a tab of four terminals never blocks the main thread', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);
+  // The only assertion is the SC-012 ceiling, which is not adjudicated on a contended or
+  // non-reference host (helpers/sla.ts). Launching an app and sleeping 12 s of measurement windows
+  // there would assert nothing, so the body is skipped and the number's absence is recorded.
+  if (!slaMeasurable(test.info())) {
+    noteSlaNotMeasured(test.info(), {
+      what: 'the worst main-thread task while switching to a tab of four terminals',
+      requirement: 'SC-012',
+      observed: 'not run (body skipped)',
+    });
+    return;
+  }
   const root = mkdtempSync(join(tmpdir(), 'throng-activation-'));
   try {
     await runApp(async (_app, win) => {

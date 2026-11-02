@@ -48,6 +48,9 @@ import { writeSettingsAtomic } from './helpers/config-write.js';
  *   every terminal case, the editor's own cost, and the three benchmark runs.
  * - **A comma list of `editor`, `preview`, `terminal`** — those sections' full case lists alone.
  * - **`bench-a`, `bench-b`, `bench-c`** (alone or in the list) — those benchmark runs alone.
+ * - **`none`** — nothing; every test skips. gate.yml sets it on a dispatched run and leaves it unset on the
+ *   nightly one: the sweep is 11 minutes of a one-worker gate, so SC-009 is asserted once a night rather than
+ *   on every PR gate (test-suite audit, 2026-10-31).
  *
  * Each test launches its own app on a root holding only the files it opens: the explorer tree draws only
  * the rows in view, and a benchmark measured after another's panels is not the benchmark it was fitted on.
@@ -786,8 +789,8 @@ const TOKENS = RAW_CALIBRATE.split(',')
   .filter((s) => s.length > 0);
 {
   // A misspelt section would otherwise select nothing and pass, vacuously.
-  const unknown = TOKENS.filter((t) => t !== 'full' && !(SECTION_NAMES as readonly string[]).includes(t) && !BENCH_NAMES.includes(t));
-  if (unknown.length > 0) throw new Error(`THRONG_CALIBRATE: unknown ${unknown.join(', ')} (expected full, ${SECTION_NAMES.join(', ')}, ${BENCH_NAMES.join(', ')})`);
+  const unknown = TOKENS.filter((t) => t !== 'full' && t !== 'none' && !(SECTION_NAMES as readonly string[]).includes(t) && !BENCH_NAMES.includes(t));
+  if (unknown.length > 0) throw new Error(`THRONG_CALIBRATE: unknown ${unknown.join(', ')} (expected full, none, ${SECTION_NAMES.join(', ')}, ${BENCH_NAMES.join(', ')})`);
 }
 /** Unset: the trimmed gate. The only mode in which the calibration sections run their trimmed case lists. */
 const TRIMMED = TOKENS.length === 0;

@@ -104,17 +104,32 @@ test('every theme colour token applies and hot-reloads', { tag: ['@extended', '@
   try {
     await runApp(
       async (_app, win) => {
+        // ONE document carrying every token (pass 2; it was one write and one hot-reload poll per
+        // token). Each token gets a distinct valid hex, so a token wired to the wrong variable, or two
+        // tokens sharing a variable, still fails its own poll.
+        const values = COLOUR_TOKENS.map(
+          (_t, i) => `#${(i + 1).toString(16).padStart(2, '0')}abcd`,
+        );
+        writeFileSync(
+          themePath,
+          JSON.stringify(
+            {
+              name: 'throng',
+              colours: Object.fromEntries(COLOUR_TOKENS.map((token, i) => [token, values[i]])),
+            },
+            null,
+            2,
+          ),
+          'utf8',
+        );
         for (let i = 0; i < COLOUR_TOKENS.length; i += 1) {
           const token = COLOUR_TOKENS[i];
-          const value = `#${(i + 1).toString(16).padStart(2, '0')}abcd`; // distinct valid hex
-          writeFileSync(
-            themePath,
-            JSON.stringify({ name: 'throng', colours: { [token]: value } }, null, 2),
-            'utf8',
-          );
           await expect
-            .poll(() => rootVar(win, `--throng-colour-${token}`), { timeout: 8000 })
-            .toBe(value);
+            .poll(() => rootVar(win, `--throng-colour-${token}`), {
+              timeout: 8000,
+              message: `--throng-colour-${token} hot-reloads`,
+            })
+            .toBe(values[i]);
         }
       },
     );

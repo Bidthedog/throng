@@ -3,8 +3,29 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { test, expect } from '@playwright/test';
-import { runApp, createProject, switchProject, firstPanelId, cleanupTemp} from './harness.js';
+import { runApp, openApp, createProject, switchProject, firstPanelId, cleanupTemp, type OpenApp } from './harness.js';
 import { skipIfElevated } from './admin.js';
+
+/*
+ * ONE app for the two tests that run through `withTerminal` (row 2 and row 6), not one each: they differ in
+ * their project and in the memory switch, nothing seeded before launch, and their only launch option is `dataDir`,
+ * which is the one shared directory the layout is read back from. Serial mode: shared window, shared database.
+ *
+ * The last test keeps its own `runApp` calls: it ends an app and reopens a second against the SAME data directory,
+ * which is the claim it makes, so it cannot share.
+ */
+test.describe.configure({ mode: 'serial' });
+
+let shared: OpenApp;
+let sharedData: string;
+test.beforeAll(async () => {
+  sharedData = mkdtempSync(join(tmpdir(), 'throng-cmdmem-data-'));
+  shared = await openApp({ dataDir: sharedData });
+});
+test.afterAll(async () => {
+  await shared?.close();
+  if (sharedData) cleanupTemp(sharedData);
+});
 
 /**
  * 025 US2 — the command-memory rule, driven through the real app (T032).
@@ -72,10 +93,10 @@ async function withTerminal(
   }) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'throng-cmdmem-'));
-  const data = mkdtempSync(join(tmpdir(), 'throng-cmdmem-data-'));
+  const data = sharedData;
   try {
-    await runApp(
-      async (app, win) => {
+    const run = async (app: OpenApp['app'], win: OpenApp['win']): Promise<void> => {
+      {
         await createProject(win, project, root);
         const pid = await firstPanelId(win);
         await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
@@ -108,13 +129,11 @@ async function withTerminal(
           timeout: 25_000,
         });
         await body({ app, win, pid, data, term });
-      },
-      { dataDir: data },
-    );
+      }
+    };
+    await run(shared.app, shared.win);
   } finally {
-    for (const d of [root, data]) {
-      cleanupTemp(d);
-    }
+    cleanupTemp(root);
   }
 }
 
@@ -150,33 +169,12 @@ test('memory ON: a command started IN the terminal is observed and persisted (US
   });
 });
 
-test('memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
-  // daemon routes terminals through the de-elevated agent, a different process tree these
-  // assertions do not describe — the condition this guard exists for.
-  skipIfElevated();
-  test.setTimeout(120_000);
-  await withTerminal('MemRow34', { startupCommand: '', remember: true }, async ({ win, data, term }) => {
-    await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
-    await expectLayout(data, 'MemRow34', (j) => /"observedCommand":"[^"]*ping/i.test(j), 'never observed');
-
-    // Ctrl+C stops it. The observation must fall back to "nothing running" rather than sticking,
-    // because a command that has already finished must never be promoted (FR-017).
-    await term.click();
-    await win.keyboard.press('Control+c');
-    await expectLayout(
-      data,
-      'MemRow34',
-      (j) => /"observedCommand":null/.test(j),
-      'a stopped command was still recorded as running',
-    );
-    // ...and the saved startup command is untouched — never filled in by a command that ended.
-    const json = layoutJson(data, 'MemRow34') ?? '';
-    expect(json, 'a stopped command was promoted to the startup command').not.toMatch(
-      /"startupCommand":"[^"]*ping/i,
-    );
-  });
-});
+/*
+ * DELETED: 'memory ON: stopping the command leaves nothing to promote (US2 rows 3 and 4)'. Rows 3 and 4 are
+ * decisions, pinned by `captureDecision` in packages/core/tests/unit/command-capture.test.ts ('3. started empty,
+ * ran then STOPPED ...', '4. started with ... stopped it -> cleared'); the pipeline half — a Ctrl+C turns the
+ * persisted observation back to null — is asserted again by the 'takes over' test below.
+ */
 
 test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
@@ -215,52 +213,12 @@ test('memory OFF: a running command is never recorded at all (US2 row 6)', { tag
   });
 });
 
-test('memory ON: a later command replaces the earlier one (US2 row 5)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
-  // Measured on CI run 30943045917: passes without admin rights, fails with them. An elevated
-  // daemon routes terminals through the de-elevated agent, a different process tree these
-  // assertions do not describe — the condition this guard exists for.
-  skipIfElevated();
-  test.setTimeout(120_000);
-  await withTerminal('MemRow5', { remember: true }, async ({ win, data, term }) => {
-    await runInTerminal(win, term, LONG_RUNNING, 'Reply from');
-    await expectLayout(data, 'MemRow5', (j) => /"observedCommand":"[^"]*ping/i.test(j), 'never observed');
-
-    /*
-     * Interrupt until the observation actually clears, rather than pressing once and hoping.
-     *
-     * A single Ctrl+C is occasionally lost: the click focuses a terminal that is streaming ping
-     * output, and the chord lands somewhere that never reaches the shell — so the ping keeps running
-     * and `observedCommand` stays put. The failure then reads "did not clear", which blames the
-     * observation for a keystroke that was never delivered. Measured UNLOADED at 1 in 9, so this is
-     * not an artefact of the CPU-load harness.
-     *
-     * Re-pressing is what a user does with a runaway ping, and it is safe here: Ctrl+C at an idle cmd
-     * prompt is a no-op, so an extra press cannot corrupt the state being asserted.
-     */
-    await term.click();
-    await win.keyboard.press('Control+c');
-    await expect
-      .poll(
-        async () => {
-          if (/"observedCommand":null/.test(layoutJson(data, 'MemRow5') ?? '')) return true;
-          await term.click();
-          await win.keyboard.press('Control+c');
-          return false;
-        },
-        { timeout: 30_000, message: 'the interrupt never cleared the observed command' },
-      )
-      .toBe(true);
-
-    // A different long-runner takes over; the observation must follow it, not stay on the ping.
-    await runInTerminal(win, term, 'findstr /R x', '');
-    await expectLayout(
-      data,
-      'MemRow5',
-      (j) => /"observedCommand":"[^"]*findstr/i.test(j),
-      'the observation did not follow the newer command',
-    );
-  });
-});
+/*
+ * DELETED: 'memory ON: a later command replaces the earlier one (US2 row 5)'. A strict subset of the 'takes over'
+ * test below, which runs the same ping, interrupts it until the observation clears, runs `findstr`, asserts the
+ * observation follows it, and then goes on to prove the replacement is saved. The rule itself is row 5 of
+ * `captureDecision` in packages/core/tests/unit/command-capture.test.ts.
+ */
 
 test('a command that takes over REPLACES the startup command the user typed (US2 row 2)', { tag: ['@extended', '@terminal', '@reserve:pty'] }, async () => {
   test.setTimeout(180_000);

@@ -1,8 +1,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, panelIds, reloadWindow, commitTabRename, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { test, expect } from '@playwright/test';
+import { runApp, createProject, firstPanelId, panelIds, reloadWindow, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { openSubWorkspaceWindow } from './helpers/subworkspace-open.js';
 
 // 012 US4 (FR-005/006/010, SC-003): focus + per-type zoom survive layout changes.
@@ -15,64 +15,12 @@ const seedSub = `(() => window.throng.invoke('workspace.persistSubWorkspaces', {
     tabs: [{ id: 't', title: 'T', root: { type: 'panel', id: 'p', originProjectId: 'x', title: 'P' } }] },
 ] }))()`;
 
-/** A panel's stored zoom level (the `data-zoom` attribute on its panel box). */
-function panelZoom(win: Page, pid: string): Promise<number> {
-  return win.getByTestId(`panel-${pid}`).evaluate((el) => Number((el as HTMLElement).dataset.zoom));
-}
+// MOVED DOWN: "a panel's zoom and a single active panel survive tab switch, split, and close (FR-005/010)".
+// The zoom half is core's workspace-operations.test.ts ("a panel's zoom is unchanged by a tab switch, a split and
+// the close of a sibling"), red-proven against a zoom-dropping addPanel and removePanel. The focus re-homing half
+// is core's active-panel.test.ts (panelAfterRemoval, FR-005).
 
-async function newEditor(win: Page, pid: string): Promise<void> {
-  await win.getByTestId(`panel-type-select-${pid}`).selectOption('editor');
-  await win.getByTestId(`panel-type-confirm-${pid}`).click();
-  await expect(win.getByTestId(`editor-${pid}`)).toBeVisible();
-}
-
-test("a panel's zoom and a single active panel survive tab switch, split, and close (FR-005/010)", { tag: ['@extended', '@window'] }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'throng-fzl-'));
-  try {
-    await runApp(async (_app, win) => {
-      await createProject(win, 'Survive', root);
-      const p1 = await firstPanelId(win);
-      await newEditor(win, p1);
-
-      // Zoom this panel up.
-      await win.getByTestId(`panel-${p1}`).click();
-      await win.keyboard.press('Control+Alt+Equal');
-      await win.keyboard.press('Control+Alt+Equal');
-      await expect.poll(() => panelZoom(win, p1)).toBeGreaterThan(0);
-      const level = await panelZoom(win, p1);
-
-      // Tab switch → back: p1's own zoom is unchanged, one panel active.
-      await win.getByTestId('tab-add').click();
-      await commitTabRename(win);
-      await expect(win.locator('.tab-chip')).toHaveCount(2);
-      await win.locator('.tab-chip').first().click();
-      expect(await panelZoom(win, p1)).toBe(level);
-      await expect(win.locator('.panel-box--active')).toHaveCount(1);
-
-      // Split (add a sibling panel) → p1's zoom unchanged, exactly one panel active.
-      await splitPanelViaMenu(win, p1);
-      await expect(win.locator('.panel-box')).toHaveCount(2);
-      expect(await panelZoom(win, p1)).toBe(level);
-      await expect(win.locator('.panel-box--active')).toHaveCount(1);
-
-      // Activate the sibling then close it → focus re-homes to the FR-005 target
-      // (p1, the preceding panel), still exactly one active, and p1 keeps its zoom.
-      const [id1, id2] = await panelIds(win);
-      const sibling = id1 === p1 ? id2 : id1;
-      await win.getByTestId(`panel-${sibling}`).click();
-      await expect(win.getByTestId(`panel-${sibling}`)).toHaveAttribute('data-active', 'true');
-      await win.getByTestId(`panel-close-${sibling}`).click();
-      await expect(win.locator('.panel-box')).toHaveCount(1);
-      await expect(win.locator('.panel-box--active')).toHaveCount(1);
-      await expect(win.getByTestId(`panel-${p1}`)).toHaveAttribute('data-active', 'true');
-      expect(await panelZoom(win, p1)).toBe(level);
-    });
-  } finally {
-    cleanupTemp(root);
-  }
-});
-
-test('the main window and a detached sub-workspace hold independent active panels (FR-006)', { tag: ['@extended', '@window'] }, async () => {
+test('the main window and a detached sub-workspace hold independent active panels (FR-006)', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'throng-fzl2-'));
   try {
     await runApp(async (app, win) => {

@@ -9,8 +9,9 @@ import { runApp, createProject, firstPanelId, cleanupTemp} from './harness.js';
  * 027 / #161 — the reported cycle, end to end: close throng, rename the PROJECT FOLDER, reopen,
  * put the folder back.
  *
- * This is the replication the issue is actually made of, and it differs from
- * `editor-stranded-recovery.e2e.ts` in the two ways that turned out to matter:
+ * This is the replication the issue is actually made of, and it differed from the since-deleted
+ * `editor-stranded-recovery.e2e.ts` (see the foot of this file) in the two ways that turned out to
+ * matter:
  *
  * 1. **A real restart**, not a renderer reload. Two `runApp` launches over one dataDir and one
  *    userDataDir. A renderer reload leaves UI main's document registry intact, so the remounting
@@ -188,3 +189,13 @@ test('an editor and the tree recover when the project folder is renamed back aft
     }
   }
 });
+
+/*
+ * `editor-stranded-recovery.e2e.ts` DELETED (test-suite audit). Its one remaining test — a stranded
+ * editor across a renderer RELOAD recovering when a subfolder is renamed back — asserted the same
+ * banner (`panel-failure`, the path, "What is shown here is not the file.") and the same recovery
+ * (CHANGED-WHILE-AWAY) as the test above, on the weaker path: a reload leaves main's document
+ * registry intact, a real restart does not. The reload-shaped remount is
+ * `integration/editor-stranded-recovery.integration.test.ts` "`verifyPath` tells a REMOUNTING view
+ * its path has broken" (:163), the re-read is :133, and adoption on a repaired path is :81/:107.
+ */

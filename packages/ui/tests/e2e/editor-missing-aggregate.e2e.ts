@@ -113,7 +113,7 @@ async function reselectFirstTab(win: Page): Promise<void> {
  * changed it to do), and the deletion round trip through the watcher is the wiring no lower layer
  * sees.
  */
-test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-035)', { tag: ['@extended', '@editor'] }, async () => {
+test('lists ALL missing files on a tab in one notice (FR-100 · 030 FR-029/FR-035)', { tag: ['@extended', '@editor', '@reserve:native'] }, async () => {
   const root = makeProject();
   try {
     await runApp(async (_app, win) => {
@@ -348,7 +348,7 @@ test('the file tree got there first, and ONE notice still stands (030 FR-029/FR-
         // Through the app's own seam: Electron's clipboard does not work in this harness at all
         // (`failure-copy.e2e.ts` records why), and a test that cannot read it proves nothing.
         const copied = await win.evaluate(
-          () => window.throng?.clipboard?.paste().then((e) => e?.text ?? '') ?? '',
+          () => window.throng?.clipboard?.paste().then((e: { text?: string } | null) => e?.text ?? '') ?? '',
         );
         expect(copied, 'the superseded notice’s raw error must survive the merge').toContain('ENOENT');
         expect(copied).toContain(basename(root));

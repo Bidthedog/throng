@@ -133,21 +133,9 @@ test('the mark is drawn in the active theme’s colours, not hardcoded black and
   );
 });
 
-test('every window that draws a title bar carries the mark', { tag: ['@extended', '@window', '@reserve:window'] }, async () => {
-  await runApp(async (app, win) => {
-    await expect(win.getByTestId('throng-mark')).toBeVisible();
-
-    // The preferences window draws the same bar (007, FR-007) and must be branded too.
-    await win.getByTestId('title-bar-cog').click();
-    const [prefs] = await Promise.all([
-      app.waitForEvent('window'),
-      win.getByTestId('cog-menu-settings').click(),
-    ]);
-    await prefs.waitForLoadState('domcontentloaded');
-    await expect(prefs.getByTestId('preferences-window')).toBeVisible();
-    await expect(prefs.getByTestId('throng-mark')).toBeVisible();
-  });
-});
+// MOVED DOWN: "every window that draws a title bar carries the mark" - component/title-bar.test.ts asserts
+// TitleBar renders the throng-mark, and every window (main, sub-workspace, Preferences, About, monitor)
+// renders TitleBar.
 
 test('Electron can decode the bundled .ico the windows are given', { tag: ['@extended', '@window', '@reserve:native'] }, async () => {
   // The .ico is hand-packed (scripts/build-app-icons.mjs, no image dependency), so

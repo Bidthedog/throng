@@ -146,7 +146,7 @@ const coordsAt = (
 /*
  * MOVED to the component layer (034 FR-045) — two tests.
  *
- * The replacements are `packages/ui/tests/component/editor-command-semantics.test.ts` (14 tests).
+ * The replacements are `packages/ui/tests/unit/editor-command-semantics.test.ts` (14 tests).
  * That file drives the REAL commands from `commands.ts` over a REAL `EditorState` — real facets,
  * the real `columnBlockField`, real transactions — behind a two-member stand-in for the view,
  * because every one of these commands touches only `view.state` and `view.dispatch`.
