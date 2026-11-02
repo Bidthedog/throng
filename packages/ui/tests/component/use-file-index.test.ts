@@ -76,15 +76,7 @@ describe('mirroring the index a window is subscribed to', () => {
     expect(b.subscribes).toHaveLength(0);
   });
 
-  it('takes the first ready set wholesale', async () => {
-    const b = bridge();
-    const { result } = renderHook(() => useFileIndex(ROOT, true));
-
-    b.push({ root: ROOT, includeHidden: false, status: 'ready', paths: ['a.ts', 'b.ts'] });
-
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-    expect(result.current.paths).toEqual(['a.ts', 'b.ts']);
-  });
+  // Taking the first ready set wholesale is the first push of every test below (`paths` set, status 'ready').
 
   it('a file that APPEARS outside throng becomes choosable — the E2E claim, without a filesystem', async () => {
     const b = bridge();

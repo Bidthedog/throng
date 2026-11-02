@@ -49,7 +49,7 @@ async function mount(resourceMonitor: Record<string, number> = {}): Promise<void
 describe('the filter (FR-061)', () => {
   it('writes what is typed to the view, and clears with a titled icon control', async () => {
     await mount();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const field = screen.getByTestId('monitor-filter');
     expect(screen.queryByTestId('monitor-filter-clear')).toBeNull();
 

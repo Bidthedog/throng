@@ -219,13 +219,7 @@ describe('the bars hold still while the pointer is over them (FR-095)', () => {
     expect(screen.getByTestId('share-bar-figure-x:13:1-cpu')).toHaveTextContent('70%');
   });
 
-  it('moves on to the new item when the selection changes, though the pointer is still over', () => {
-    const root = scene({ 11: 60, 12: 30 }, { 11: [proc(21, 'c21.exe', metrics({ cpu: 40 })), proc(22, 'c22.exe', metrics({ cpu: 20 }))] });
-    mountOn(root);
-    fireEvent.mouseEnter(screen.getByTestId('share-bars'));
-    act(() => setSelection('x:11:1'));
-    expect(bars()).toEqual(['x:21:1', 'x:22:1']);
-  });
+  // Moving on to the new item when the selection changes under the pointer is the first half of the next test.
 
   it('keeps holding after the selection changes: the new bars do not move under the pointer', () => {
     const root = (a: number, b: number): ResourceNode =>

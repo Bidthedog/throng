@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 async function openCog(): Promise<void> {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     createElement(ContextMenuProvider, {
       children: createElement(TitleBar, { identity: 'throng', showCog: true }),
@@ -58,7 +58,7 @@ describe('the cog menu lists Resource Monitor (FR-056)', () => {
   });
 
   it('opens the monitor window when chosen, and closes the menu', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await openCog();
     expect(bridge.opens()).toBe(0);
 

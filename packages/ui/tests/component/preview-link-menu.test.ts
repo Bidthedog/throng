@@ -35,7 +35,6 @@ import {
   type PreviewLink,
   type ResolvedLink,
 } from '@throng/core';
-import { linkAddress, previewContentMenu } from '../../src/renderer/preview/content-menu.js';
 import { openPreviewLinkMenu, type PreviewLinkMenuArgs } from '../../src/renderer/preview/preview-link-menu.js';
 import type { LinkActionDeps } from '../../src/renderer/links/link-actions.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
@@ -51,100 +50,8 @@ afterEach(() => {
   delete (window as unknown as { throng?: unknown }).throng;
 });
 
-/* ── `previewContentMenu` — the ordinary body menu, no link row at all (FR-169) ─────────────────── */
-
-describe('previewContentMenu carries no Contextual section any more (FR-169)', () => {
-  it('draws only Navigate (Find…, Go to Heading…), Content, Navigate and View & state — never Open Link or Copy Link to Clipboard', () => {
-    const items = previewContentMenu({
-      selectionEmpty: false,
-      content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
-      syncScroll: { on: true, toggle: vi.fn() },
-      find: { run: vi.fn() },
-      goToHeading: { run: vi.fn() },
-    });
-    // 047 US1/US4 (FR-007) — Find… and Go to Heading… are pushed first (`content-menu.ts`'s own raw
-    // order), ahead of Content.
-    expect(items.map((i) => i.section)).toEqual([
-      'navigate',
-      'navigate',
-      'content',
-      'content',
-      'content',
-      'content',
-      'navigate',
-      'viewState',
-    ]);
-    expect(items.some((i) => i.label === 'Open Link')).toBe(false);
-    expect(items.some((i) => i.label.startsWith('Copy Link'))).toBe(false);
-  });
-
-  it('with nothing else to draw, the menu still carries Find… and Go to Heading… (FR-007, always present)', () => {
-    const items = previewContentMenu({ selectionEmpty: true, find: { run: vi.fn() }, goToHeading: { run: vi.fn() } });
-    expect(items).toEqual([
-      expect.objectContaining({ label: 'Find…', section: 'navigate' }),
-      expect.objectContaining({ label: 'Go to Heading…', section: 'navigate' }),
-    ]);
-  });
-});
-
-describe('the address a link copies (FR-116)', () => {
-  const DOC_PATH = 'D:/proj/README.md';
-
-  it.each<[PreviewLink, string]>([
-    [EXTERNAL, 'https://example.com/'],
-    [{ kind: 'external', url: 'mailto:a@b.c' }, 'mailto:a@b.c'],
-    [{ kind: 'file', absPath: 'D:/proj/docs/a.md' }, 'D:/proj/docs/a.md'],
-    [{ kind: 'file', absPath: 'D:/proj/docs/a.md', fragment: 'x' }, 'D:/proj/docs/a.md#x'],
-    [{ kind: 'heading', fragment: 'install' }, `${DOC_PATH}#install`],
-    [{ kind: 'outside', target: '../../x.md' }, '../../x.md'],
-  ])('%j → %s', (link, address) => {
-    expect(linkAddress(link, DOC_PATH)).toBe(address);
-  });
-
-  it('never copies a bare #fragment, for any link kind', () => {
-    const links: PreviewLink[] = [
-      EXTERNAL,
-      { kind: 'file', absPath: 'D:/proj/docs/a.md', fragment: 'x' },
-      { kind: 'heading', fragment: 'install' },
-      { kind: 'outside', target: '../../x.md' },
-    ];
-    for (const link of links) expect(linkAddress(link, DOC_PATH).startsWith('#'), JSON.stringify(link)).toBe(false);
-  });
-});
-
-/*
- * 044 T234 — Synchronise Scrolling on the preview body menu (FR-122a, FR-122b; contracts/menus-and-controls.md
- * §4, §10): a View & state section, last, on every text-provider preview, whatever is under the pointer.
- */
-describe('Synchronise Scrolling on the body menu (FR-122b)', () => {
-  const SYNC = 'menu-item-Synchronise Scrolling';
-
-  it.each<[string, boolean]>([
-    ['nothing selected', true],
-    ['text selected', false],
-  ])('is the last item with %s', (_name, selectionEmpty) => {
-    const items = previewContentMenu({
-      selectionEmpty,
-      content: { copyFormat: 'rich', copy: vi.fn(), selectAll: vi.fn() },
-      editorRoute: { parented: false, run: vi.fn() },
-      syncScroll: { on: true, toggle: vi.fn() },
-      find: { run: vi.fn() },
-      goToHeading: { run: vi.fn() },
-    });
-    expect(items.at(-1)).toMatchObject({ testId: SYNC, section: 'viewState', label: 'Synchronise Scrolling ✓' });
-  });
-
-  it('is absent when the panel hands the builder none (a binary provider)', () => {
-    const items = previewContentMenu({
-      selectionEmpty: true,
-      syncScroll: null,
-      find: { run: vi.fn() },
-      goToHeading: { run: vi.fn() },
-    });
-    expect(items.find((i) => i.testId === SYNC)).toBeUndefined();
-  });
-});
+// MOVED DOWN: the `previewContentMenu` (no link row, Synchronise Scrolling) and `linkAddress` cases now live in
+// packages/ui/tests/unit/preview-content-menu.test.ts; this file keeps openPreviewLinkMenu and the mounted menu.
 
 /* ── `openPreviewLinkMenu` — one Link menu, per SC-025 fixture (FR-169 – FR-171, T277) ─────────── */
 

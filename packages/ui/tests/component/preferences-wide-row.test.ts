@@ -11,23 +11,30 @@ import { describe, expect, it } from 'vitest';
 import { NotificationProvider } from '../../src/renderer/common/notification.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ResetNoticeProvider } from '../../src/renderer/preferences/reset-notice.js';
-import { SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
+import { SETTINGS_METADATA } from '@throng/core';
+import { SettingsMetadataContext, SettingsTab } from '../../src/renderer/preferences/settings-tab.js';
 
 const WIDE = 'terminals.titleTemplate';
 const NARROW = 'terminals.titleCommandMaxLength';
+// Only the two rows under test, not the whole registry (the claim is one row's structure).
+const ROWS = SETTINGS_METADATA.filter((d) => d.key === WIDE || d.key === NARROW);
 
 function mount(): void {
   render(
     createElement(
-      NotificationProvider,
-      null,
-      createElement(ResetNoticeProvider, null, createElement(ConfirmProvider, null, createElement(SettingsTab, {}))),
+      SettingsMetadataContext.Provider,
+      { value: ROWS },
+      createElement(
+        NotificationProvider,
+        null,
+        createElement(ResetNoticeProvider, null, createElement(ConfirmProvider, null, createElement(SettingsTab, {}))),
+      ),
     ),
   );
 }
 
 describe('a wide setting’s control sits under its description (053 FR-014)', () => {
-  it('the title template: a single-line field after the description, spanning the row', () => {
+  it('the title template spans the row under its description, while an ordinary setting keeps its control beside the text', () => {
     mount();
     const row = screen.getByTestId(`setting-${WIDE}`);
     const input = screen.getByTestId(`control-${WIDE}`);
@@ -37,14 +44,11 @@ describe('a wide setting’s control sits under its description (053 FR-014)', (
     expect(description.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(row.querySelector('.settings-row__meta')).toContainElement(input);
     expect(input.closest('.settings-row__control--wide')).not.toBeNull();
-  });
 
-  it('control: an ordinary setting keeps its control beside the text', () => {
-    mount();
-    const row = screen.getByTestId(`setting-${NARROW}`);
-    const control = screen.getByTestId(`control-${NARROW}`);
-
-    expect(row.querySelector('.settings-row__meta')).not.toContainElement(control);
-    expect(control.closest('.settings-row__control--wide')).toBeNull();
+    // Control: an ordinary setting, in the SAME mount, keeps its control beside the text.
+    const narrowRow = screen.getByTestId(`setting-${NARROW}`);
+    const narrow = screen.getByTestId(`control-${NARROW}`);
+    expect(narrowRow.querySelector('.settings-row__meta')).not.toContainElement(narrow);
+    expect(narrow.closest('.settings-row__control--wide')).toBeNull();
   });
 });

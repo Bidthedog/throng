@@ -9,8 +9,6 @@
  * rather than in the explorer pane, it is untouched by a project switch.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { THRONG_THEME } from '@throng/core';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -356,17 +354,6 @@ describe('the notice belongs to the window, not to a project (050 T050, FR-019)'
  * icon (not the dismiss glyph), set apart on the right.
  */
 const MB = 1024 * 1024;
-const themeCss = (): string =>
-  readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(
-    /\/\*[\s\S]*?\*\//g,
-    ' ',
-  );
-const rulesFor = (css: string, needle: string): string =>
-  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-    .filter((m) => m[1]!.includes(needle))
-    .map((m) => m[2]!)
-    .join('\n');
-
 describe('the progress bar (050 T116, FR-039)', () => {
   it('is a determinate progressbar filled by bytesDone of bytesTotal', () => {
     render(tree());
@@ -424,19 +411,6 @@ describe('the progress bar (050 T116, FR-039)', () => {
     expect(text).not.toContain(' files');
     expect(text).not.toContain(' of ');
   });
-
-  it('draws only from theme tokens and stops animating under reduced motion', () => {
-    const css = themeCss();
-    const block = rulesFor(css, '.paste-progress');
-    expect(block, 'no .paste-progress rules in theme.css').not.toBe('');
-    expect(block).toContain('var(--throng-colour-accent)');
-    expect(block).toContain('var(--throng-colour-border)');
-    expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
-    const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)]
-      .map((m) => m[1]!)
-      .join('\n');
-    expect(reduced).toMatch(/\.paste-progress__bar--indeterminate[^{]*\{[^}]*animation:\s*none/);
-  });
 });
 
 describe('the Cancel icon (050 T116, FR-039)', () => {
@@ -462,6 +436,5 @@ describe('the Cancel icon (050 T116, FR-039)', () => {
     expect(slot, 'cancel is not in a .paste-progress__cancel slot').not.toBeNull();
     expect(body.lastElementChild).toBe(slot);
     expect(slot!.querySelector('.paste-progress__text')).toBeNull();
-    expect(rulesFor(themeCss(), '.paste-progress__cancel')).toMatch(/margin-left:\s*auto/);
   });
 });

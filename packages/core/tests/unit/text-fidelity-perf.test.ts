@@ -42,7 +42,7 @@ function medianRatio(rounds: number, base: () => void, cost: () => void): number
   return ratios[Math.floor(rounds / 2)] as number;
 }
 
-describe('5 MB read cost by encoding (059 SC-005)', () => {
+describe('5 MB read cost by encoding (059 SC-005)', { tags: ['regression'] }, () => {
   const utf8Bytes = new TextEncoder().encode(TEXT);
   // Held to 2×, amended 2026-10-30: on hosted runners the platform decoders alone measured 1.55–1.72× its
   // UTF-8 one for Windows-1252 and 1.51× for UTF-16, as the median of fifteen interleaved rounds.

@@ -34,8 +34,8 @@
  *    themes present on disk (FR-007). That is `themes-tab.tsx` WIRING; this file is handed the
  *    reserved list, so it cannot tell where the tab got it. `preferences-themes.e2e.ts` ›
  *    "US3: a DELETED built-in name is still reserved" deletes the file first and stays for exactly
- *    that reason. The test below with `existing` omitting Debian is reinforcement, not its
- *    replacement.
+ *    that reason. (Pass 2: that wiring is now `preferences-themes-tab.test.ts` › "a built-in name
+ *    stays reserved when its theme is gone from disk", red-proved, and the E2E is gone.)
  *
  * The pure predicate underneath (`validateThemeName`, `cloneName`) is unit-tested in
  * `packages/core/tests/unit/theme-editor-model.test.ts`; what is asserted here is the DIALOG — that
@@ -82,7 +82,7 @@ function open(overrides: Partial<Props> = {}) {
     ...overrides,
   } as Props;
   render(createElement(NameDialog, props));
-  return { onConfirm, onCancel, user: userEvent.setup() };
+  return { onConfirm, onCancel, user: userEvent.setup({ delay: null }) };
 }
 
 const input = (): HTMLInputElement => screen.getByTestId('theme-name-input') as HTMLInputElement;

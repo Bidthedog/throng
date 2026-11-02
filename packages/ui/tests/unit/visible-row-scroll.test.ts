@@ -2,7 +2,7 @@
  * #419 — the explorer leaves a row that is already in full view where it is.
  *
  * The real-layout half (two scrollbars, a list at its bottom, a double-click that has to land) is
- * `explorer-bottom-click.e2e.ts`. This is the decision on its own: which reveal requests reach
+ * `explorer.e2e.ts`'s #419 bottom-click test. This is the decision on its own: which reveal requests reach
  * react-arborist's scroll and which are answered by "it is already on screen".
  */
 import { describe, expect, it, vi } from 'vitest';

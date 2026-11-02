@@ -123,7 +123,7 @@ function LayoutProbe(): ReactElement {
 async function mount(kind: 'editor' | 'terminal') {
   registerPanelSearch(PANEL, kind === 'terminal' ? terminalController() : editorController());
   const client = new WorkspaceClient(fakeBridge(layoutWith(kind)));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
 
   render(
     // ANTI-VACUITY CONTROL: drop this `WorkspaceProvider` element and every test here fails.
@@ -154,6 +154,7 @@ describe('the disclosure control expands and collapses the replace row (FR-008)'
 
     // Collapsed: the control is drawn, and it ANNOUNCES the state rather than only implying it.
     const arrow = disclosure();
+    const collapsedGlyph = arrow?.textContent ?? '';
     expect(arrow, 'an editor find bar draws the replace disclosure control').not.toBeNull();
     expect(arrow).toHaveAttribute('aria-expanded', 'false');
     expect(replaceRow()).toBeNull();
@@ -165,63 +166,25 @@ describe('the disclosure control expands and collapses the replace row (FR-008)'
     // The row is the real one, with its controls — not an empty div that satisfies a query.
     expect(screen.getByTestId('replace-input')).toBeVisible();
     expect(screen.getByTestId('replace-all')).toBeVisible();
-  });
 
-  it('collapses it again from the same control — the bar stays open on find only', async () => {
-    /*
-     * The half that was impossible before 043: `showReplace` only ever set the flag TRUE, so the
-     * only way back to a find-only bar was Escape and a fresh `Ctrl+F`. FR-008 requires both
-     * directions from one control.
-     */
-    const { user } = await mount('editor');
-    await press(user, 'h');
-    await waitFor(() => expect(replaceRow()).not.toBeNull());
-
-    await user.click(disclosure() as HTMLElement);
-
-    await waitFor(() => expect(replaceRow()).toBeNull());
-    expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
-    // Collapsing hides the ROW, it does not close the bar (013 FR-005 keeps Escape for that).
-    expect(screen.getByTestId('find-input')).toBeVisible();
-    expect(getFindSession(PANEL)?.replaceShown).toBe(false);
-  });
-
-  it('renders a DIFFERENT glyph in each state, so the state is legible without a screen reader', async () => {
     /*
      * `aria-expanded` alone would satisfy every assertion above while the control looked identical
      * in both states — FR-008 says it must RENDER which state it is in. The glyphs come from the
      * active theme's icon set (FR-011), so this compares the two rendered glyphs to each other
      * rather than to any hardcoded character.
      */
-    const { user } = await mount('editor');
-    await press(user, 'f');
-    await waitFor(() => expect(disclosure()).not.toBeNull());
-
-    const collapsed = disclosure()?.textContent ?? '';
-    expect(collapsed, 'the collapsed control draws a glyph').not.toBe('');
-
-    await user.click(disclosure() as HTMLElement);
-    await waitFor(() => expect(replaceRow()).not.toBeNull());
-
-    expect(disclosure()?.textContent).not.toBe(collapsed);
+    expect(collapsedGlyph, 'the collapsed control draws a glyph').not.toBe('');
+    expect(disclosure()?.textContent, 'a different glyph in each state').not.toBe(collapsedGlyph);
     // …and the hover title names the action it will perform, in each state (constitution v3.12.0).
     expect(disclosure()?.getAttribute('title')).toBeTruthy();
   });
 });
 
+// DELETED (pass 2): "collapses it again from the same control", "renders a DIFFERENT glyph" and
+// "Ctrl+H leaves the control showing expanded": the glyph/title checks moved into the first test above;
+// the Ctrl+H step and the collapse step (with the bar staying open on find only) are in the alternating
+// test below.
 describe('the key binding and the control drive ONE state (FR-009)', () => {
-  it('Ctrl+H leaves the control showing expanded', async () => {
-    const { user } = await mount('editor');
-
-    await press(user, 'h');
-
-    await waitFor(() => expect(replaceRow()).not.toBeNull());
-    expect(
-      disclosure(),
-      'the chord revealed replace, so the control must show the expanded state',
-    ).toHaveAttribute('aria-expanded', 'true');
-  });
-
   it('the two routes never disagree, driven alternately', async () => {
     /*
      * The test a second `useState` behind the arrow cannot pass. Chord → arrow → chord → arrow, with
@@ -237,6 +200,9 @@ describe('the key binding and the control drive ONE state (FR-009)', () => {
     await user.click(disclosure() as HTMLElement); // arrow closes it
     await waitFor(() => expect(replaceRow()).toBeNull());
     expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    // Collapsing hides the ROW, it does not close the bar (013 FR-005 keeps Escape for that).
+    expect(screen.getByTestId('find-input'), 'the bar stays open on find only').toBeVisible();
+    expect(getFindSession(PANEL)?.replaceShown).toBe(false);
 
     await press(user, 'h'); // chord opens it again
     await waitFor(() => expect(replaceRow()).not.toBeNull());
@@ -270,16 +236,5 @@ describe('the key binding and the control drive ONE state (FR-009)', () => {
   });
 });
 
-describe('a TERMINAL bar has neither (FR-013)', () => {
-  it('draws the find input but no disclosure control and no replace row', async () => {
-    const { user } = await mount('terminal');
-    await press(user, 'f');
-
-    // The anchor first: this is a real, rendered find bar, so the two absences below mean something.
-    await waitFor(() => expect(screen.getByTestId('find-input')).toBeVisible());
-    expect(screen.getByTestId('find-next')).toBeVisible();
-
-    expect(disclosure(), 'a terminal find is read-only — there is nothing to disclose').toBeNull();
-    expect(replaceRow()).toBeNull();
-  });
-});
+// DELETED (pass 2): "a TERMINAL bar has neither (FR-013)" — `find-bar-panel-kind.test.ts` ("opens a
+// find-only bar on Ctrl+F") asserts the same bar with no replace row and now also no disclosure control.

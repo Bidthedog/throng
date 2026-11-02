@@ -243,23 +243,9 @@ describe('SC-010 / FR-111 — no gesture runs an executable', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('in neither case does any gesture reach the OS default program', async () => {
-    const ran: string[] = [];
-    for (const extension of EXECUTABLES) {
-      for (const inProject of [true, false]) {
-        for (const [name, drive] of GESTURES) {
-          osCalls.length = 0;
-          const s = surface();
-          const resolved = inProject
-            ? executableLink(extension)
-            : { ...executableLink(extension), path: `D:\\downloads\\setup${extension}`, inProject: false };
-          await drive(resolved, inProject ? `src/tool${extension}` : `D:/downloads/setup${extension}`, s);
-          if (osCalls.some((c) => c.startsWith('osDefaultProgram:'))) ran.push(`${extension}/${inProject ? 'in' : 'out'}/${name}`);
-        }
-      }
-    }
-    expect(ran).toEqual([]);
-  });
+  // DELETED: 'in neither case does any gesture reach the OS default program' — the two tests above
+  // assert the exact outcome (`editor:` or `osExplorer:` only) over the same loops, so an
+  // `osDefaultProgram:` call would already fail them; link-out-of-project.test.ts spies `links.open`.
 });
 
 describe('FR-111 — the explicit menu item still runs it', () => {

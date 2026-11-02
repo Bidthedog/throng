@@ -37,6 +37,7 @@ import { getPendingChord, setPendingChord } from '../../src/renderer/editor/pend
 import { setActivePane } from '../../src/renderer/workspace/active-pane.js';
 import { panelHeaderMenu, type PanelHeaderMenuActions } from '../../src/renderer/workspace/panel-header-menu.js';
 import { registerEditorActions, unregisterEditorActions } from '../../src/renderer/editor/editor-actions.js';
+import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 import {
   __resetDirtyCloseStore,
   useDirtyCloseRequest,
@@ -293,7 +294,7 @@ async function mountReal(layout: WorkspaceLayout, opts: { sub?: boolean } = {}):
     panel: { notifyDestroyed: vi.fn(), notifyRenamed: vi.fn(), notifyTyped: vi.fn() },
     preview: { attach: vi.fn(), detach: vi.fn(), destroyed: vi.fn(), onUpdate: vi.fn(() => () => {}) },
     history: { purge: vi.fn(), attach: vi.fn(), setViewState: vi.fn(), onChanged: () => () => {} },
-    editor: { destroy: vi.fn() },
+    editor: { destroy: vi.fn(), register: vi.fn() },
     subWorkspace: { notifyChanged: vi.fn(), close: vi.fn() },
     config: { get: () => Promise.resolve({ settings: {} }), onChange: () => () => {} },
   });
@@ -414,6 +415,111 @@ describe('the chord runs the panel’s own destroy flow (FR-131 — the ✕’s 
     pressInPanel('b');
     await waitFor(() => expect(panelIds()).toEqual(['a']));
     expect(requestPanelDestroy('b')).toBe(false);
+  });
+});
+
+/* ══ The header menu's own Destroy item (MOVED DOWN from editor-menus.e2e.ts) ══ */
+
+describe('the panel header menu’s Destroy Panel on a dirty editor (moved down from editor-menus.e2e.ts)', () => {
+  afterEach(() => {
+    unmountReal?.();
+    unmountReal = null;
+    captured.ws = null;
+    captured.dirty = null;
+    unregisterEditorActions('p2');
+  });
+
+  it('raises the dirty-close prompt, Cancel keeps the panel dirty and in place, Discard removes it', async () => {
+    await mountReal(layoutOf(PROJECT, row(plain('a', PROJECT), plain('p2', PROJECT))));
+    registerEditorActions('p2', {
+      save: () => Promise.resolve(true),
+      saveAs: () => Promise.resolve(true),
+      isDirty: () => true,
+      openFile: () => Promise.resolve(),
+      revert: () => {},
+      reloadFromDisk: () => Promise.resolve(true),
+    });
+
+    const destroyFromMenu = async (): Promise<void> => {
+      fireEvent.contextMenu(screen.getByTestId('panel-handle-p2'));
+      fireEvent.click(await screen.findByTestId('menu-item-Destroy Panel'));
+    };
+
+    await destroyFromMenu();
+    await waitFor(() => expect(captured.dirty, 'Destroy on a dirty editor asks first').not.toBeNull());
+    expect(panelIds(), 'the panel is still there while the prompt is up').toEqual(['a', 'p2']);
+
+    act(() => captured.dirty?.resolve('cancel'));
+    await waitFor(() => expect(captured.dirty).toBeNull());
+    expect(panelIds(), 'Cancel is a no-op').toEqual(['a', 'p2']);
+
+    await destroyFromMenu();
+    await waitFor(() => expect(captured.dirty, 'a second Destroy asks again').not.toBeNull());
+    act(() => captured.dirty?.resolve('discard'));
+    await waitFor(() => expect(panelIds(), 'Discard removes the panel').toEqual(['a']));
+  });
+});
+
+/* ══ The header menu's Save and Revert (MOVED DOWN from editor-feedback.e2e.ts) ══ */
+
+describe('the panel header menu’s Save and Revert on an editor (moved down from editor-feedback.e2e.ts)', () => {
+  const calls = { save: vi.fn(() => Promise.resolve(true)), revert: vi.fn() };
+
+  afterEach(() => {
+    unmountReal?.();
+    unmountReal = null;
+    captured.ws = null;
+    captured.dirty = null;
+    unregisterEditorActions('e1');
+    removeEditorState('e1');
+    calls.save.mockClear();
+    calls.revert.mockClear();
+  });
+
+  async function mountEditor(): Promise<void> {
+    // No file path: a brand-new empty document, so the panel's own hook has nothing to load.
+    await mountReal(layoutOf(PROJECT, row({ ...editor('e1'), config: {} }, plain('a', PROJECT))));
+    // The panel's own editor hook registers real actions on mount; replace them with spies and say the
+    // document is dirty, which is what enables Revert in the menu.
+    registerEditorActions('e1', {
+      save: calls.save,
+      saveAs: () => Promise.resolve(true),
+      isDirty: () => true,
+      openFile: () => Promise.resolve(),
+      revert: calls.revert,
+      reloadFromDisk: () => Promise.resolve(true),
+    });
+    act(() => setEditorState('e1', { filePath: 'D:/proj/e1.ts', dirty: true }));
+  }
+
+  const openMenu = (): void => {
+    fireEvent.contextMenu(screen.getByTestId('panel-handle-e1'));
+  };
+
+  it('Save runs the editor’s save', async () => {
+    await mountEditor();
+    openMenu();
+    fireEvent.click(await screen.findByTestId('menu-item-Save'));
+    await waitFor(() => expect(calls.save, 'the Save item calls the editor’s save').toHaveBeenCalledTimes(1));
+  });
+
+  it('Revert asks first: Cancel reverts nothing, Confirm reverts', async () => {
+    await mountEditor();
+
+    openMenu();
+    fireEvent.click(await screen.findByTestId('menu-item-Revert'));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog.textContent, 'the confirmation names the discard').toContain('Revert changes');
+    expect(calls.revert, 'nothing is reverted before the answer').not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('confirm-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(calls.revert, 'Cancel reverts nothing').not.toHaveBeenCalled();
+
+    openMenu();
+    fireEvent.click(await screen.findByTestId('menu-item-Revert'));
+    await screen.findByTestId('confirm-dialog');
+    fireEvent.click(screen.getByTestId('confirm-accept'));
+    await waitFor(() => expect(calls.revert, 'confirming reverts the editor').toHaveBeenCalledTimes(1));
   });
 });
 

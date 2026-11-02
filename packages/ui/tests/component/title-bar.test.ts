@@ -99,20 +99,8 @@ describe('the cog is main-window only (FR-005, FR-007)', () => {
     expect(screen.queryByTestId('title-bar-cog')).toBeNull();
   });
 
-  it('draws it when asked, so the absence above is a decision and not a broken import', () => {
-    /*
-     * Without this half, deleting `<CogMenu />` entirely would leave the negative test green — the
-     * classic vacuous pass, and the one worth spending a provider on. `CogMenu` calls
-     * `useContextMenu`, so the provider is what makes it renderable at all.
-     */
-    render(
-      createElement(ContextMenuProvider, {
-        children: createElement(TitleBar, { identity: 'throng', showCog: true }),
-      }),
-    );
-
-    expect(screen.getByTestId('title-bar-cog')).toBeVisible();
-  });
+  // The anti-vacuity half (it is drawn when asked, so the absence is a decision): the Navigate-section test below
+  // renders with `showCog: true` and clicks the cog, which throws if it is absent.
 });
 
 /**
@@ -132,7 +120,7 @@ describe('the cog is main-window only (FR-005, FR-007)', () => {
  */
 describe('046 T121 — the cog draws no Navigate section any more (FR-074)', () => {
   it('opens on something other than Next Project — none of the four retired rows is drawn', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       createElement(ContextMenuProvider, {
         children: createElement(TitleBar, { identity: 'throng', showCog: true }),
@@ -189,7 +177,7 @@ describe('which window controls each window gets (FR-002, FR-003, FR-034)', () =
     // stand for happens in main. This asserts the relay, not the OS.
     const bridge = stubWindowBridge();
     render(createElement(TitleBar, { identity: 'throng' }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await user.click(screen.getByTestId('window-min'));
     await user.click(screen.getByTestId('window-max'));
@@ -205,7 +193,7 @@ describe('the drag zone toggles maximise on double-click (FR-004)', () => {
   it('maximises a normal window', async () => {
     const bridge = stubWindowBridge();
     render(createElement(TitleBar, { identity: 'throng' }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await user.dblClick(bar().querySelector('.title-bar__drag-zone') as HTMLElement);
 
@@ -217,7 +205,7 @@ describe('the drag zone toggles maximise on double-click (FR-004)', () => {
     // layout was never written for, and there is no control to put it back.
     const bridge = stubWindowBridge();
     render(createElement(TitleBar, { identity: 'About — throng', closeOnly: true }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     await user.dblClick(bar().querySelector('.title-bar__drag-zone') as HTMLElement);
 

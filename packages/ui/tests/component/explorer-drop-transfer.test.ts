@@ -13,7 +13,7 @@
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, createRef, type ReactElement } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { TreeApi } from 'react-arborist';
 import type { TransferResult } from '@throng/core';
 import {
@@ -182,6 +182,5 @@ describe('a drop is a transfer job (050 T041)', () => {
     act(() => holder.api!.drop(['a.txt'], 'Docs', false));
 
     await waitFor(() => expect(holder.api!.error).toBe('Nothing to move.'));
-    expect(vi.isMockFunction(transfer.api.drop)).toBe(true);
   });
 });

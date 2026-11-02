@@ -203,6 +203,7 @@ describe('an arrow completes it (FR-020a, FR-022)', () => {
     expect(active()).not.toBe('p2'); // focus.down would have moved here
     expect(active()).toBe(parent?.ids[1]);
     expect(getSplitModePanel()).toBeNull();
+    expect(t.reached, 'neither stroke reaches the terminal (FR-023)').not.toHaveBeenCalled();
   });
 
   it('ArrowDown with the modifiers released splits down too', () => {
@@ -245,6 +246,7 @@ describe('the endings that cancel (FR-022)', () => {
       firstStroke(t.el);
       expect(press(t.el, 'Escape')).toBe(true);
       expect(barClosed).not.toHaveBeenCalled();
+      expect(t.reached, 'neither stroke reaches the terminal (FR-023)').not.toHaveBeenCalled();
     } finally {
       window.removeEventListener('keydown', barClosed);
     }
@@ -266,6 +268,7 @@ describe('the endings that cancel (FR-022)', () => {
     expect(state?.host).toBe(box);
     expect(pendingChordText(state!)).toBe('The key combination (Ctrl+Shift+Alt+End,X) is not bound.');
     expect(active()).toBe('p1');
+    expect(t.reached, 'neither stroke reaches the terminal (FR-023)').not.toHaveBeenCalled();
   });
 
   it('the timeout ends it with no split', () => {
@@ -389,17 +392,5 @@ describe('any window command on a multi-stroke chord (048 T060, FR-024)', () => 
   });
 });
 
-describe('neither stroke reaches a terminal (FR-023)', () => {
-  for (const [name, second] of [
-    ['a completed split', 'ArrowLeft'],
-    ['a cancelled one', 'Escape'],
-    ['an unbound second key', 'q'],
-  ] as const) {
-    it(`${name}: both strokes consumed and stopped`, () => {
-      const t = terminal();
-      expect(firstStroke(t.el)).toBe(true);
-      expect(press(t.el, second, {}, second === 'q' ? 'KeyQ' : second)).toBe(true);
-      expect(t.reached).not.toHaveBeenCalled();
-    });
-  }
-});
+// Neither stroke reaches a terminal (FR-023): the completed split (ArrowDown), the cancelled one (Escape) and the
+// unbound second key each assert `t.reached` was not called in their own tests above.

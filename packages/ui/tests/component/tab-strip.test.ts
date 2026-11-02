@@ -23,7 +23,7 @@ import { NotificationProvider } from '../../src/renderer/common/notification.js'
 import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js';
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
-import { markTerminalRunning } from '../../src/renderer/workspace/subprocess.js';
+import { markTerminalRunning, markTerminalStopped } from '../../src/renderer/workspace/subprocess.js';
 import { TabGroup } from '../../src/renderer/workspace/tab-group.js';
 import { requestTabPicker } from '../../src/renderer/workspace/tab-picker.js';
 
@@ -138,7 +138,7 @@ function mount(
    */
   settings?: Record<string, unknown>,
 ) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   /*
    * `editor` is deliberately ABSENT here, and adding it is not free: every caller reaches it as
    * `window.throng?.editor?.x(…)`, so while the object is missing the whole chain short-circuits
@@ -364,6 +364,45 @@ describe('cancelling a Tab destroy changes nothing (migrated from destroy.e2e.ts
 
     await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
     expect(chipIds()).toEqual(before);
+  });
+
+  it('says how many panels the tab holds and how many of them are active (migrated from phase9.e2e.ts:109)', async () => {
+    /*
+     * The E2E split a panel, added a second tab, chose Destroy Tab and read "2 panels, 0 of which are
+     * active". A summary that always said 0 passes that, so a panel with a live terminal is marked
+     * running as well and the count must follow it (and its "is"/"are" with it).
+     */
+    const { user } = mount();
+    await ready();
+
+    await splitFromPlus(user, panelBoxes()[0]?.dataset.panelId ?? '');
+    await waitFor(() => expect(panelBoxes()).toHaveLength(2));
+    await user.click(screen.getByTestId('tab-add'));
+    await waitFor(() => expect(chips()).toHaveLength(2));
+    await dismissRename(user);
+
+    const destroyFirst = async (): Promise<HTMLElement> => {
+      await user.pointer({ keys: '[MouseRight]', target: screen.getByTestId(`tab-${chipIds()[0]}`) });
+      await user.click(await screen.findByTestId('menu-item-Destroy Tab'));
+      return screen.findByTestId('confirm-message');
+    };
+
+    const idle = await destroyFirst();
+    expect(idle).toHaveTextContent(/2 panels, 0 of which are active\./);
+    await user.click(screen.getByTestId('confirm-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+
+    // The first tab's panels are the ones in the Probe's first tab.
+    const running = panelsIn(liveWorkspace(), 0);
+    expect(running).toHaveLength(2);
+    markTerminalRunning(running[0]!.id);
+    try {
+      const busy = await destroyFirst();
+      expect(busy).toHaveTextContent(/2 panels, 1 of which is active\./);
+    } finally {
+      markTerminalStopped(running[0]!.id);
+    }
+    await user.click(screen.getByTestId('confirm-cancel'));
   });
 });
 
@@ -830,41 +869,10 @@ describe('the close affordance arms only after a rest (P6)', () => {
     vi.useRealTimers();
   });
 
-  it('is NOT armed the moment the pointer arrives', async () => {
-    const { user } = mount();
-    await ready();
-    const ws = liveWorkspace();
-    const tabId = (ws.layout as WorkspaceLayout).tabs[0].id;
-
-    await user.hover(chips()[0]);
-
-    // Shown, because the pointer is on it — and inert, because it has only just arrived.
-    expect(closeOf(tabId).className).toContain('tab-chip__close--shown');
-    expect(isArmed(tabId)).toBe(false);
-  });
-
-  it('arms once the delay has passed with the pointer still there', async () => {
-    /*
-     * Fake timers rather than a real wait, which is the whole reason this belongs at this layer:
-     * the E2E equivalent would have to sleep 300 ms and hope, and a machine under load turns that
-     * into a flake rather than a failure.
-     */
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { user } = mount();
-    await ready();
-    const ws = liveWorkspace();
-    const tabId = (ws.layout as WorkspaceLayout).tabs[0].id;
-
-    await user.hover(chips()[0]);
-    expect(isArmed(tabId)).toBe(false);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(DEFAULT_APP_SETTINGS.tabs.closeArmingDelayMs + 10);
-    });
-
-    expect(isArmed(tabId)).toBe(true);
-  });
-
+  /*
+   * "Not armed on arrival" and "arms once the delay has passed" are asserted by T099 and T100 below (hover, `--shown`,
+   * inert; then settle `delay + 10`, armed); "disarms when the pointer leaves" by T100's unhover.
+   */
   it('does not arm early — the delay is a real interval, not a tick', async () => {
     /*
      * The anti-vacuity control for the test above. An implementation that armed on the next tick
@@ -885,22 +893,179 @@ describe('the close affordance arms only after a rest (P6)', () => {
     expect(isArmed(tabId)).toBe(false);
   });
 
-  it('disarms again when the pointer leaves, so a return starts the rest over', async () => {
+  /*
+   * ══ MIGRATED FROM `tab-presentation.e2e.ts` (T099–T104, test-suite audit) ══
+   *
+   * The E2E waited out real arming delays (2 s, twice) in an Electron window to observe the same
+   * `data-armed` attribute and the same click handler. Fake timers observe both exactly. What stays
+   * end-to-end there is what needs a real engine: the pill's computed shape, the popover geometry,
+   * the reserved-space measurement and the opacity of an inert control.
+   */
+  const settle = async (ms: number): Promise<void> => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  };
+  const delay = DEFAULT_APP_SETTINGS.tabs.closeArmingDelayMs;
+
+  /** Add `n` tabs after the first and leave the pointer nowhere; returns every tab id in strip order. */
+  async function withTabs(user: ReturnType<typeof userEvent.setup>, n: number): Promise<string[]> {
+    for (let i = 0; i < n; i += 1) {
+      await user.click(screen.getByTestId('tab-add'));
+      await dismissRename(user);
+    }
+    await waitFor(() => expect(chips()).toHaveLength(n + 1));
+    await user.unhover(chips()[0]);
+    return chipIds();
+  }
+  const activeId = (): string =>
+    (document.querySelector('.tab-chip[data-active="true"]')?.getAttribute('data-testid') ?? '').replace(
+      /^tab-/,
+      '',
+    );
+
+  it('ignores a click inside the arming window, and does not queue it (T099: P6, P7, P8)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { user } = mount();
     await ready();
-    const ws = liveWorkspace();
-    const tabId = (ws.layout as WorkspaceLayout).tabs[0].id;
+    const ids = await withTabs(user, 2);
+    const target = ids.find((id) => id !== activeId())!;
 
-    await user.hover(chips()[0]);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(DEFAULT_APP_SETTINGS.tabs.closeArmingDelayMs + 10);
+    await user.hover(screen.getByTestId(`tab-${target}`));
+    expect(closeOf(target).className).toContain('tab-chip__close--shown');
+    expect(isArmed(target), 'P6: a hover-revealed affordance starts inert').toBe(false);
+
+    await user.click(closeOf(target));
+
+    expect(chipIds(), 'P7: nothing was destroyed by the click itself').toEqual(ids);
+    expect(screen.getByTestId(`tab-${target}`), 'P8: and the click did not activate the tab').toHaveAttribute(
+      'data-active',
+      'false',
+    );
+    expect(document.querySelector('input.tab-chip__rename'), 'P8: nor start a rename').toBeNull();
+    expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+
+    // IGNORED, NOT QUEUED: the delay elapsing is where a deferred click would quietly fire.
+    await settle(delay + 10);
+    expect(isArmed(target)).toBe(true);
+    expect(chipIds(), 'P7: nothing fired when the delay elapsed, either').toEqual(ids);
+    expect(screen.queryByTestId('confirm-dialog'), 'P7: and nothing was asked later').toBeNull();
+  });
+
+  it('runs Destroy Tab once armed, and leaving re-arms from scratch (T100: P3, P7)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = mount();
+    await ready();
+    const ids = await withTabs(user, 2);
+    const target = ids.find((id) => id !== activeId())!;
+
+    await user.hover(screen.getByTestId(`tab-${target}`));
+    await settle(delay + 10);
+    expect(isArmed(target)).toBe(true);
+
+    await user.unhover(screen.getByTestId(`tab-${target}`));
+    expect(isArmed(target), 'the affordance disarmed with the pointer').toBe(false);
+    await user.hover(screen.getByTestId(`tab-${target}`));
+    expect(isArmed(target), 'P7: re-entering re-arms from scratch').toBe(false);
+    await settle(delay + 10);
+    expect(isArmed(target)).toBe(true);
+
+    // The SAME Destroy Tab action with the same two confirmations (`destroyTab` ships as `double`).
+    // `fireEvent`, not `user.click`: the pointer is already resting here, and a user-event click would
+    // first MOVE it onto the button, which is a different gesture from the one being tested.
+    fireEvent.click(closeOf(target));
+    const dialog = await screen.findByTestId('confirm-dialog');
+    expect(dialog).toHaveTextContent('Destroy');
+    await user.click(screen.getByTestId('confirm-accept'));
+    await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toHaveTextContent(/absolutely sure/i));
+    await user.click(screen.getByTestId('confirm-accept'));
+
+    await waitFor(() => expect(screen.queryByTestId(`tab-${target}`)).toBeNull());
+    expect(chipIds(), 'exactly the one tab went').toEqual(ids.filter((id) => id !== target));
+  });
+
+  it('arms the ACTIVE tab’s affordance on a rest like every other one (T101: FR-057)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = mount();
+    await ready();
+    const ids = await withTabs(user, 1);
+    const active = activeId();
+
+    // Drawn (P4) but inert for lack of a rest: an unrested click is ignored and not queued.
+    expect(closeOf(active).className).toContain('tab-chip__close--shown');
+    expect(isArmed(active), 'FR-057: the active tab is not exempt — unrested, it is inert').toBe(false);
+    await user.click(closeOf(active));
+    expect(screen.queryByTestId('confirm-dialog'), 'an unrested click does nothing').toBeNull();
+
+    await user.hover(screen.getByTestId(`tab-${active}`));
+    await settle(delay + 10);
+    expect(isArmed(active)).toBe(true);
+    expect(chipIds()).toEqual(ids);
+    expect(screen.queryByTestId('confirm-dialog'), 'P7: the early click never fired late').toBeNull();
+
+    fireEvent.click(closeOf(active));
+    expect(await screen.findByTestId('confirm-dialog'), 'armed, so it acts').toBeVisible();
+    await user.click(screen.getByTestId('confirm-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(screen.getByTestId(`tab-${active}`), 'cancelled, so nothing was destroyed').toBeInTheDocument();
+  });
+
+  it('destroys no tab when the pointer only sweeps across the strip (T102: SC-007a)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = mount();
+    await ready();
+    const ids = await withTabs(user, 3);
+
+    // Two passes, resting past the delay on every chip — the dangerous (armed) state. No click is issued.
+    for (const pass of [ids, [...ids].reverse()]) {
+      for (const id of pass) {
+        await user.hover(screen.getByTestId(`tab-${id}`));
+        await settle(delay + 10);
+      }
+    }
+    await user.unhover(chips()[chips().length - 1]);
+
+    expect(chipIds(), 'SC-007a: a pointer that only passed over destroyed nothing').toEqual(ids);
+    expect(screen.queryByTestId('confirm-dialog'), 'and asked nothing, either').toBeNull();
+  });
+
+  it('makes a hover-revealed affordance live at once when the delay is 0 (T103: FR-044h)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = mount(undefined, {
+      tabs: { ...DEFAULT_APP_SETTINGS.tabs, closeArmingDelayMs: 0 },
     });
-    expect(isArmed(tabId)).toBe(true);
+    await ready();
+    const ids = await withTabs(user, 1);
+    const target = ids.find((id) => id !== activeId())!;
 
-    await user.unhover(chips()[0]);
+    await user.hover(screen.getByTestId(`tab-${target}`));
+    await settle(0);
+    expect(isArmed(target), 'FR-044h: zero means live, with no window to wait out').toBe(true);
 
-    expect(isArmed(tabId)).toBe(false);
+    // "Not inert" means "acts": the very first click reaches Destroy Tab.
+    await user.click(closeOf(target));
+    expect(await screen.findByTestId('confirm-dialog')).toBeVisible();
+    await user.click(screen.getByTestId('confirm-cancel'));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(chipIds(), 'cancelled, so the strip is untouched').toEqual(ids);
+  });
+
+  it('offers no usable close on the last tab, and a second tab makes it usable again (T104: P10)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { user } = mount();
+    await ready();
+    const only = chipIds()[0]!;
+
+    expect(closeOf(only).className, 'P10 is about it being unavailable, not absent').toContain(
+      'tab-chip__close--shown',
+    );
+    expect(closeOf(only), 'unavailable exactly where Destroy Tab is — the last tab of the main window').toBeDisabled();
+
+    await withTabs(user, 1);
+    for (const id of chipIds()) {
+      await user.hover(screen.getByTestId(`tab-${id}`));
+      expect(closeOf(id), 'with two tabs, Destroy Tab is available again').toBeEnabled();
+    }
   });
 });
 
@@ -1184,20 +1349,10 @@ describe('destroying a Tab disposes the editor documents inside it (migrated fro
 describe('the confirmation LEVEL the user set reaches a destroy (migrated from config-hotreload.e2e.ts:111)', () => {
   const firstPanelId = (): string => panelsIn(liveWorkspace())[0]!.id;
 
-  it('asks first at the SHIPPED level', async () => {
-    const { user } = mount(undefined, { confirmations: { destroyPanel: 'double' } });
-    await ready();
-    const id = firstPanelId();
-    markTerminalRunning(id);
-
-    await user.click(screen.getByTestId(`panel-close-${id}`));
-
-    await waitFor(() => expect(screen.getByTestId('confirm-dialog')).toBeTruthy());
-  });
-
+  // The "asks first" half is the `single` test below (same arrangement; which levels confirm is pure core logic).
   it('destroys WITHOUT asking when the user has set "none"', async () => {
     /*
-     * The same panel, the same gesture, the other level. Together with the test above this is the
+     * The same panel, the same gesture, the other level. Together with the `single` test below this is the
      * whole claim: the level decides, and the level comes from the user's settings.
      *
      * A SECOND panel exists first so the destroy is unambiguous. Destroying the only panel in a tab
@@ -1220,11 +1375,8 @@ describe('the confirmation LEVEL the user set reaches a destroy (migrated from c
 
   it('reads the level from SETTINGS rather than from the panel’s own state', async () => {
     /*
-     * The two tests above differ in the setting AND nothing else, which is the point — but a
-     * component that ignored settings and keyed off "does this panel have a terminal" would produce
-     * the shipped answer in both, and only the second would fail. This one makes the setting the
-     * only variable a second time, from the other direction: `single` is neither of the values
-     * above, and it must still confirm.
+     * The test above differs only in the setting, which is the point: a component that ignored settings
+     * and keyed off "does this panel have a terminal" would confirm in both. `single` must still confirm.
      */
     const { user } = mount(undefined, { confirmations: { destroyPanel: 'single' } });
     await ready();

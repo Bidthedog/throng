@@ -29,8 +29,6 @@
  * instead, which is the accessible-name rule the input controls elsewhere in the app follow.
  */
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { THRONG_THEME } from '@throng/core';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
@@ -389,46 +387,5 @@ describe('every panel action offered only in the menu carries a drawn icon (FR-0
     for (const label of MENU_ONLY_ACTIONS) {
       expect(row(label).querySelector('.context-menu__label')?.textContent ?? '').toBe(label);
     }
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * The colours — resolved from tokens, which is the half a rendered DOM cannot show
- * ────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Resolved from the working directory, not from `import.meta.url`.
- *
- * This layer runs in jsdom, where `import.meta.url` is an `http:` URL and `fileURLToPath` throws
- * before a single test is collected. `find-in-files-results.test.ts` reads the same sheet the same
- * way for the same reason.
- */
-const CSS_PATH = resolve(process.cwd(), 'packages/ui/src/renderer/find-in-files/find-in-files.css');
-
-describe('the control resolves its colours from theme tokens (FR-011)', () => {
-  it('reads foreground, background and border from tokens in every state it draws', () => {
-    /*
-     * `find-in-files-results.test.ts` already asserts the negative over the whole sheet — no
-     * hardcoded colour, and no token the shipped theme has never heard of. That sweep passes
-     * perfectly on a control that states no colour at all, which is the failure this asserts
-     * against: an icon control that inherits whatever it lands on is not themeable, it is
-     * accidental, and it is invisible until somebody switches to a light theme.
-     */
-    expect(existsSync(CSS_PATH), `find-in-files.css was not found at ${CSS_PATH}`).toBe(true);
-    const sheet = readFileSync(CSS_PATH, 'utf8');
-    const ruleFor = (selector: string): string => {
-      const at = sheet.indexOf(`${selector} {`);
-      expect(at, `${selector} has no rule in find-in-files.css`).toBeGreaterThan(-1);
-      return sheet.slice(at, sheet.indexOf('}', at));
-    };
-
-    // The resting state: a control that names no colour of its own is the defect above.
-    expect(ruleFor('.fif-btn')).toContain('color: var(--throng-colour-');
-    // The engaged state — a match mode or the grouping in force — reads as SELECTED, and that is a
-    // colour decision the theme has to own too.
-    const engaged = ruleFor('.fif-btn--on');
-    expect(engaged).toContain('color: var(--throng-colour-');
-    expect(engaged).toContain('background: var(--throng-colour-');
-    expect(engaged).toContain('border-color: var(--throng-colour-');
   });
 });

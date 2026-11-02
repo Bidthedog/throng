@@ -14,8 +14,8 @@
  * ══ WHY THE COMPONENT TIER ══
  *
  * The claim is entirely about `notify` deciding whether to call `setTimeout(() => dismiss(id), …)`,
- * and with what number — the same decision `notice-dismissal-timer.test.ts` moved down from an E2E
- * for the same reason. There is no window, no daemon and no rendering in it; a fake clock proves in
+ * and with what number — the same decision the E2E notification-prefs sleeps observed in real time
+ * (`notice-dismissal-timer.test.ts` was merged into this file's FR-082a block). There is no window, no daemon and no rendering in it; a fake clock proves in
  * microseconds what a real one needed seconds of sleeping to observe. The file follows that one's
  * arrangement exactly, including mounting over the REAL config store so the "global" half of every
  * comparison is a genuine settings document rather than a stub.
@@ -33,7 +33,8 @@
  * every override test sets the GLOBAL to the opposite behaviour — so a provider that ignored the
  * override entirely fails, and so does one that ignored the global entirely.
  */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DisplayMode } from '@throng/core';
@@ -99,9 +100,7 @@ async function mount(): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded, 'the seeded settings never reached the config store').toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 

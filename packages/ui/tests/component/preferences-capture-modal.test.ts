@@ -311,13 +311,7 @@ describe('capturing Ctrl+Shift+Alt+Numpad0 with NumLock ON (046 FR-120)', () => 
  * recorded until every key is up. `capture-pending` still shows the chord while it forms.
  */
 describe('capturing a TWO-STROKE chord (046 FR-091, FR-092; re-pinned for FR-124)', () => {
-  it('a plain capture stays single-stroke — one key under the modifiers', () => {
-    const { onApply } = openCapture();
-    press('e', { ctrlKey: true });
-    expect(onApply).toHaveBeenCalledWith(
-      expect.objectContaining({ 'view.toggleExplorer': ['Ctrl+Alt+N', 'Ctrl+E'] }),
-    );
-  });
+  // DELETED: "a plain capture stays single-stroke" — "ADDS the captured chord" (press Ctrl+K) asserts a single stroke under Ctrl.
 
   const one = (type: 'keydown' | 'keyup', key: string, mods: Partial<KeyboardEventInit> = {}): void => {
     act(() => {
@@ -325,35 +319,9 @@ describe('capturing a TWO-STROKE chord (046 FR-091, FR-092; re-pinned for FR-124
     });
   };
 
-  it('two keys under the held Ctrl record "Ctrl+E,W", the first shown pending until the release', () => {
-    const { onApply } = openCapture(WRAP);
-    one('keydown', 'Control', { ctrlKey: true });
-    one('keydown', 'e', { ctrlKey: true });
-    one('keyup', 'e', { ctrlKey: true });
-    // The modal shows the forming chord while the modifiers are still held.
-    expect(screen.getByTestId('capture-pending')).toHaveTextContent('Ctrl+E');
-    expect(onApply).not.toHaveBeenCalled(); // not yet — Ctrl is still down
-    one('keydown', 'w', { ctrlKey: true });
-    one('keyup', 'w', { ctrlKey: true });
-    one('keyup', 'Control');
-    expect(onApply).toHaveBeenCalledWith(
-      expect.objectContaining({ [WRAP]: ['Ctrl+E,W'] }),
-    );
-  });
-
-  it('Ctrl held from the first stroke through the W records "Ctrl+E,W" (FR-124 over FR-123)', () => {
-    const { onApply } = openCapture(WRAP);
-    one('keydown', 'Control', { ctrlKey: true });
-    one('keydown', 'e', { ctrlKey: true });
-    one('keyup', 'e', { ctrlKey: true });
-    expect(screen.getByTestId('capture-pending')).toHaveTextContent('Ctrl+E');
-    one('keydown', 'w', { ctrlKey: true });
-    one('keyup', 'w', { ctrlKey: true });
-    one('keyup', 'Control');
-    expect(onApply).toHaveBeenCalledWith(
-      expect.objectContaining({ [WRAP]: ['Ctrl+E,W'] }),
-    );
-  });
+  // DELETED (two): "two keys under the held Ctrl record Ctrl+E,W" and "Ctrl held from the first stroke through the W" —
+  // "Ctrl down, E down/up, W down/up, Ctrl up records Ctrl+E,W" (FR-124) runs the same key sequence and asserts nothing
+  // is recorded until Ctrl is released; the pending display is asserted by "MINOR 6" and "Ctrl held through E, W and Q".
 
   it('Ctrl released and pressed again is two presses: the first records "Ctrl+E" on the release (FR-124)', () => {
     const { onApply } = openCapture();
@@ -373,24 +341,9 @@ describe('capturing a TWO-STROKE chord (046 FR-091, FR-092; re-pinned for FR-124
     expect(recorded.flat()).not.toContain('Ctrl+E,W');
   });
 
-  it('there is no two-stroke control to activate (FR-124 removes it)', () => {
-    openCapture();
-    expect(screen.queryByTestId('capture-two-stroke')).not.toBeInTheDocument();
-  });
-
-  it('a first stroke that collides with a whole single-stroke chord warns', () => {
-    // Ctrl+Alt+B is view.toggleProjects' whole chord (BINDINGS above) — using it as a FIRST stroke
-    // would make the two-stroke binding unreachable, because the single-stroke chord fires first.
-    const { onApply } = openCapture(WRAP);
-    one('keydown', 'b', { ctrlKey: true, altKey: true });
-    one('keyup', 'b', { ctrlKey: true, altKey: true });
-    one('keydown', 'x', { ctrlKey: true, altKey: true });
-    one('keyup', 'x', { ctrlKey: true, altKey: true });
-    one('keyup', 'Alt', { ctrlKey: true });
-    one('keyup', 'Control');
-    expect(screen.getByTestId('capture-conflict')).toBeVisible();
-    expect(onApply).not.toHaveBeenCalled();
-  });
+  // DELETED (two): "there is no two-stroke control to activate" and "a first stroke that collides with a whole
+  // single-stroke chord warns" — "IMPORTANT 5" asserts the control is absent; "CRITICAL 3" runs the same keys and
+  // asserts the conflict is visible, no Reassign, and nothing applied.
 });
 
 /**
@@ -608,22 +561,8 @@ describe('FR-124 — at most two keys follow the modifiers, and no two-stroke co
     expect(onApply).not.toHaveBeenCalled();
   });
 
-  it('…while an ordinary terminal-live command still refuses it (the allowance is the split commands only)', () => {
-    const { onApply } = openCapture('focus.left');
-    one('keydown', 'Control', { ctrlKey: true });
-    one('keydown', 'e', { ctrlKey: true });
-    one('keyup', 'e', { ctrlKey: true });
-    one('keydown', 'w', { ctrlKey: true });
-    one('keyup', 'w', { ctrlKey: true });
-    one('keyup', 'Control');
-    expect(screen.getByTestId('capture-error')).toHaveTextContent(/terminal/i);
-    expect(onApply).not.toHaveBeenCalled();
-  });
-
-  it('renders no capture-two-stroke control', () => {
-    openCapture();
-    expect(screen.queryByTestId('capture-two-stroke')).not.toBeInTheDocument();
-  });
+  // DELETED (two): "an ordinary terminal-live command still refuses it" — "a two-key chord for a command live in a
+  // terminal is refused inline" asserts the same refusal; "renders no capture-two-stroke control" — "IMPORTANT 5".
 
   it('a modifier added for the second key is part of it: Ctrl, E, then Shift+W records "Ctrl+E,Shift+W"', () => {
     const { onApply } = openCapture(WRAP);

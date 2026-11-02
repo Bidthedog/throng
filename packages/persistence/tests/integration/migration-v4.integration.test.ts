@@ -23,7 +23,7 @@ function columns(db: ThrongDatabase, table: string): string[] {
 }
 
 describe('migration v4 (sub-workspace identity)', () => {
-  it('adds name + colour columns to sub_workspaces and reaches the latest version', () => {
+  it('adds name + colour columns to sub_workspaces and reaches the latest version', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -37,7 +37,7 @@ describe('migration v4 (sub-workspace identity)', () => {
     }
   });
 
-  it('backfills existing rows with default name/colour and is idempotent', () => {
+  it('backfills existing rows with default name/colour and is idempotent', { tags: ['regression'] }, () => {
     const path = freshDbPath();
     // Migrate only up to v3, then insert a pre-v4 sub-workspace row (no name/colour).
     let db = openDatabase({ databasePath: path });

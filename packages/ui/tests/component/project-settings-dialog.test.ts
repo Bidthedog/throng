@@ -170,7 +170,7 @@ function Host({ onClose }: { onClose: () => void }): ReactElement {
 async function mount(initial: ProjectDto[]) {
   const { client, methods, setHiddenCalls, setSearchExcludesCalls } = fakeDaemon(initial);
   const onClose = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     createElement(ProjectsProvider, { client, children: createElement(Host, { onClose }) }),
   );

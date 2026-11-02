@@ -11,7 +11,8 @@
  * Arranged like `notice-display-override.test.ts`: over the real config store, with the settings
  * seeded, so the severity-keyed display the update has to re-resolve is a genuine settings document.
  */
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import { flushUntil } from './helpers/flush-until.js';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -71,9 +72,7 @@ async function mount(): Promise<Probe> {
       ),
     ),
   );
-  await waitFor(() => {
-    expect(probe.loaded).toBe(true);
-  });
+  await flushUntil(() => probe.loaded === true);
   return probe;
 }
 
@@ -202,11 +201,7 @@ describe('update patches a live notice in place (050 T048)', () => {
     expect(screen.getByTestId('paste-progress')).toBeVisible();
   });
 
-  it('every existing caller shape still compiles and works: the return value may be ignored', async () => {
-    const probe = await mount();
-    act(() => {
-      probe.notify!(RAISE);
-    });
-    expect(screen.getByTestId('paste-progress')).toBeVisible();
-  });
+  // DELETED: 'every existing caller shape still compiles and works' (notify, then visible) — zero
+  // value; 'changes the message, severity and body on the SAME card' above raises with the same
+  // call and reads the card.
 });

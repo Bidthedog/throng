@@ -7,8 +7,6 @@
  * list declares, the stylesheet's flex and overflow, and where the Total row sits in the DOM. MT-16 is the
  * visual proof that the browser does what the rules say.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,12 +14,6 @@ import type { ResourceNode } from '@throng/core';
 import { Breakdown } from '../../../src/renderer/resources/breakdown.js';
 import { __resetSession, focusOn, ingestFrame, startSession } from '../../../src/renderer/resources/monitor-session.js';
 import { frame, metrics, node, proc, sampleHierarchy } from '../helpers/resource-fixtures.js';
-
-const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(/\r\n/g, '\n');
-const rule = (selector: string): string => {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
-};
 
 beforeEach(() => {
   __resetSession();
@@ -94,48 +86,13 @@ describe('the Total row (FR-118, FR-104)', () => {
   });
 });
 
-describe('the rules the browser lays it out by (FR-118)', () => {
-  it('scrolls the list\'s rows, with a floor of its declared rows', () => {
-    const rows = rule('.breakdown__rows');
-    expect(rows).toMatch(/overflow-y:\s*auto/);
-    expect(rows).toMatch(/min-height:\s*calc\(var\(--breakdown-floor\)\s*\*\s*var\(--breakdown-row-px\)\)/);
-  });
-
-  it('gives Held folders up first: it shrinks far faster than the list, and scrolls within what it has', () => {
-    const held = rule('.held-folders');
-    const shrink = Number(/flex:\s*0\s+(\d+)\s+auto/.exec(held)?.[1] ?? 'NaN');
-    expect(shrink).toBeGreaterThan(1);
-    expect(rule('.held-folders > .held-folders__list')).toMatch(/overflow-y:\s*auto/);
-    expect(rule('.held-folders > .breakdown__heading')).toMatch(/flex:\s*none/);
-  });
-
-  it('lets the shortage reach the list: a section can shrink (min-height 0), so the Total row and column names stay put while the rows scroll', () => {
-    const section = rule('.breakdown__section');
-    expect(section).toMatch(/min-height:\s*0/);
-    expect(section).toMatch(/flex:\s*var\(--breakdown-grow,\s*0\)\s+1\s+auto/);
-  });
-
-  it('sizes the list by its floor, and lets a tall window fill it only when it has more than 10 rows (FR-118)', () => {
-    // basis = floor rows: beyond 10 rows the list stops asking Held folders for more and scrolls;
-    // grow only when there is something to scroll, so a short list leaves no blank space in itself.
-    expect(rule('.breakdown__rows')).toMatch(/flex:\s*var\(--breakdown-grow,\s*0\)\s+1\s+calc\(var\(--breakdown-floor\)\s*\*\s*var\(--breakdown-row-px\)\)/);
-    expect(rule('.breakdown')).toMatch(/flex:\s*var\(--breakdown-grow,\s*0\)\s+1\s+auto/);
-  });
-
+// The stylesheet rules the browser lays the column out by (FR-118) are `unit/resources/monitor-stylesheet.test.ts`.
+describe('whether the list grows (FR-118)', () => {
   it('declares whether the list grows: 1 for a list of more than 10 rows, 0 otherwise', () => {
     mountFocused(11);
     expect(screen.getByTestId('breakdown').style.getPropertyValue('--breakdown-grow')).toBe('1');
     cleanup();
     mountFocused(10);
     expect(screen.getByTestId('breakdown').style.getPropertyValue('--breakdown-grow')).toBe('0');
-  });
-
-  it('never lets Held folders vanish: it keeps room for its heading', () => {
-    expect(rule('.held-folders')).toMatch(/min-height:\s*\d+px/);
-  });
-
-  it('keeps the list\'s own floor when the column is shorter still: the column scrolls, the list is not squeezed', () => {
-    expect(rule('.breakdown')).toMatch(/min-height:\s*calc\(var\(--breakdown-floor-rows[,)]/);
-    expect(rule('.monitor-body__breakdown')).toMatch(/overflow-y:\s*auto/);
   });
 });

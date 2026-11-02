@@ -255,12 +255,8 @@ describe('one definition of "searching" (the debounce gap, whitespace)', () => {
 });
 
 describe('expandAll and collapseAll (FR-011b, FR-017)', () => {
-  it('collapseAll folds every current key and records true for each', () => {
-    const { result } = mount();
-    act(() => result.current.collapseAll());
-    expect([A, B, C].every((k) => result.current.isFolded(k))).toBe(true);
-    expect(readFolds('settings')).toEqual(choices([[A, true], [B, true], [C, true]]));
-  });
+  // collapseAll folds every current key and records true for each: the second half of "expandAll records false for
+  // every key and collapseAll records true" above.
 
   it('expandAll unfolds every key and records false for each', () => {
     writeFolds('settings', choices([[A, true], [B, true]]), KEYS);

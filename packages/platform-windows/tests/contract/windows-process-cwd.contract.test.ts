@@ -36,11 +36,13 @@ describe('WindowsProcessCwd (PEB read)', () => {
     });
     expect(child.pid).toBeGreaterThan(0);
 
-    // Give the shell a moment to initialise its process parameters.
-    await new Promise((r) => setTimeout(r, 400));
-
-    const cwds = await new WindowsProcessCwd().read([child.pid!]);
-    const read = cwds.get(child.pid!);
+    // The shell needs a moment to initialise its process parameters: poll until the read succeeds.
+    const reader = new WindowsProcessCwd();
+    let read: string | undefined;
+    for (const deadline = Date.now() + 5_000; !read && Date.now() < deadline; ) {
+      read = (await reader.read([child.pid!])).get(child.pid!);
+      if (!read) await new Promise((r) => setTimeout(r, 20));
+    }
     expect(read, 'a cwd should be read for the live child').toBeTruthy();
     // Case-insensitive path compare (Windows) with normalised separators.
     expect(read!.toLowerCase()).toBe(dir.toLowerCase());

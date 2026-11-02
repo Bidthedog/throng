@@ -98,12 +98,8 @@ describe('Esc is left to an inline editor outside the maximised tab (review 3)',
     expect(shape()).toEqual(['panel:p1']);
   });
 
-  it('an Esc with focus on nothing in particular still steps back', async () => {
-    await mount();
-    act(() => maximisePanel('t1', 'p1'));
-    expect(esc()).toBe(true);
-    expect(shape()).toEqual([]);
-  });
+  // DELETED: 'an Esc with focus on nothing in particular still steps back' — maximise-panel.test.ts
+  // 'restores the maximised panel and consumes the key' is the same mount, press and assertions.
 });
 
 describe('a find bar in a hidden panel does not block the step back (review 5)', () => {
@@ -118,15 +114,8 @@ describe('a find bar in a hidden panel does not block the step back (review 5)',
     expect(shape()).toEqual([]);
   });
 
-  it('still defers to a find bar in the maximised panel', async () => {
-    await mount();
-    const bar = document.createElement('div');
-    bar.className = 'find-bar';
-    add(bar, screen.getByTestId('panel-body-p1'));
-    act(() => maximisePanel('t1', 'p1'));
-    expect(esc()).toBe(false);
-    expect(shape()).toEqual(['panel:p1']);
-  });
+  // DELETED: 'still defers to a find bar in the maximised panel' — maximise-panel.test.ts 'is left
+  // alone while a find bar is open' asserts the same Esc outcome and shape.
 });
 
 describe('Esc during a tab drag cancels the drag, not the maximise (review 4)', () => {
@@ -204,7 +193,7 @@ describe('a maximised tab refuses a panel moved into it (review 2, FR-074)', () 
   });
 
   it("draws that tab's Send to Tab row disabled, and the other tab's enabled", async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const t2 = await twoTabs();
     const t3 = (() => {
       let id = '';

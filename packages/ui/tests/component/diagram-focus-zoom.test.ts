@@ -181,13 +181,8 @@ describe('a panel its diagram fills', () => {
     expect(resetZoom).not.toHaveBeenCalled();
   });
 
-  it('a diagram that does not fill its panel still needs focus, as before', async () => {
-    await mount();
-    outsideInput.focus();
-    chord(outsideInput, 'in');
-    expect(bumpZoom).toHaveBeenCalledWith('p1', 1);
-    expect(diagramZoom).not.toHaveBeenCalled();
-  });
+  // DELETED (pass 2): "a diagram that does not fill its panel still needs focus, as before" — the
+  // same arrangement and assertions as "with focus elsewhere in the panel Ctrl+Alt++ zooms the panel".
 });
 
 describe('Ctrl+wheel / Ctrl+middle-click with a diagram focused', () => {

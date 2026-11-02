@@ -158,7 +158,7 @@ const withLimit = (limit: number): AppSettings => ({
 const listeners: ((payload: unknown) => void)[] = [];
 
 function mount(opts: { limit: number; title?: string }) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
   if (opts.title !== undefined) layout.tabs[0].title = opts.title;
 

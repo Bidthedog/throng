@@ -69,7 +69,7 @@ function descriptorFor(key: string): FieldDescriptor {
 function renderSelect(key: string, value: unknown = getAtPath(SHIPPED.settings, key)) {
   const onCommit = vi.fn();
   render(createElement(SettingControl, { descriptor: descriptorFor(key), value, onCommit }));
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 const select = (key: string): HTMLSelectElement =>

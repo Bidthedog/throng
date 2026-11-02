@@ -7,6 +7,7 @@ import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 import { AppClosePrompt } from '../../src/renderer/app-close-prompt.js';
 import { clearPanelExit, getPanelExit } from '../../src/renderer/terminal/exit-store.js';
 import { resetAppTerminating } from '../../src/renderer/terminal/app-terminating.js';
+import { settleLayoutSaves } from '../../src/renderer/state/layout-saves.js';
 import { forgetTerminalCommand, reportTerminalCommand } from '../../src/renderer/terminal/command-store.js';
 
 /**
@@ -147,8 +148,10 @@ describe('Terminate all on close', () => {
     // Terminate all: main announces it, then ends the program first — the observation sees its shell alone.
     act(() => announceTerminating!());
     act(() => reportTerminalCommand(PANEL, null));
-    // Give the debounced layout save every chance to write it, then read what was saved.
-    await new Promise((r) => setTimeout(r, 1500)); // sleep-justified: asserting a write did NOT happen; the debounce is 400 ms
+    // Fire any armed layout save and await it (the window's real shutdown drain), then read what was saved.
+    await act(async () => {
+      await settleLayoutSaves();
+    });
     expect(harness!.savedPanelMemory()?.observedCommand, 'the close saved "nothing running" over the running command').toBe(
       'node titler.js',
     );

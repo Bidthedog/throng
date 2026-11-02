@@ -120,11 +120,7 @@ describe('hostile.md through the pipeline and the sanitiser (FR-081, FR-082, SC-
     expect(fragment.querySelector('[data-heading-slug="spoof"]')).toBeNull();
   });
 
-  it('leaves the http: image with no src (T096 image hook)', () => {
-    const img = [...fragment.querySelectorAll('img')].find((i) => i.getAttribute('alt') === 'no-https remote image');
-    expect(img).toBeDefined();
-    expect(img!.hasAttribute('src')).toBe(false);
-  });
+  // MOVED: "leaves the http: image with no src" — preview-images.test.ts ("every other image source is removed").
 
   it('leaves no attribute starting "on", and no style attribute', () => {
     for (const el of all) {
@@ -362,19 +358,5 @@ describe('nothing inside a followable link can show a title of its own (adversar
   });
 });
 
-describe('an image src the URL filter must refuse, written as raw HTML', () => {
-  /*
-   * Not in hostile.md, which has only a `data:` LINK and a markdown `file:` image (and markdown-it
-   * itself refuses to make an <img> of the latter). Raw HTML reaches the sanitiser verbatim, so these
-   * are the cases where the profile — not markdown-it — is the only thing in the way.
-   */
-  it.each([
-    ['javascript:', '<img src="javascript:alert(1)" alt="j">'],
-    ['data:', '<img src="data:image/svg+xml,&lt;svg onload=alert(1)&gt;" alt="d">'],
-    ['file:', '<img src="file:///C:/Windows/win.ini" alt="f">'],
-  ])('removes a %s src from an img', (_scheme, raw) => {
-    const img = render(raw).querySelector('img');
-    expect(img).not.toBeNull();
-    expect(img?.hasAttribute('src')).toBe(false);
-  });
-});
+// MOVED: "an image src the URL filter must refuse, written as raw HTML" (javascript:, data:, file:) — the rows of
+// preview-images.test.ts's "every other image source is removed" `it.each`.

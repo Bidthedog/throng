@@ -48,7 +48,7 @@ function open(overrides: Partial<Parameters<typeof Picker>[0]> = {}) {
       ...overrides,
     } as Parameters<typeof Picker>[0]),
   );
-  return { onChoose, onDismiss, user: userEvent.setup() };
+  return { onChoose, onDismiss, user: userEvent.setup({ delay: null }) };
 }
 
 const rows = (): HTMLElement[] =>

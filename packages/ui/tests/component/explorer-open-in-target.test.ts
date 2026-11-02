@@ -228,7 +228,7 @@ afterEach(() => {
 });
 
 async function mount(layout: WorkspaceLayout) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { services, loads } = fakeServices(layout);
 
   // `FileTree` reaches the preload bridge exclusively through optional chaining, so only what it
@@ -297,16 +297,8 @@ async function openInFlyout(
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('the Open In target names the tab’s last active editor (FR-098)', () => {
-  it('draws "Last Active Editor (<panel name>)" for the panel the store holds', async () => {
-    // The migrated claim, verbatim: the E2E renamed its editor panel to "Scratch" and asserted
-    // `menu-item-Last Active Editor (Scratch)`.
-    setLastActiveEditor(TAB_ID, 'p1');
-    const { user, tree } = await mount(oneNamedPanel('Scratch'));
-
-    const flyout = await openInFlyout(user, tree);
-
-    expect(within(flyout).getByTestId('menu-item-Last Active Editor (Scratch)')).toBeVisible();
-  });
+  // DELETED (pass 2): 'draws "Last Active Editor (<panel name>)" for the panel the store holds' — the
+  // STORE’s-panel test below asserts "(Right)" present and "(Left)" absent, so the parenthetical is composed.
 
   it('drops the parenthetical entirely when the tab has no last active editor', async () => {
     // Nothing is registered for this tab, so `getLastActiveEditor` returns undefined and there is no
@@ -377,15 +369,8 @@ describe('New Editor is refused once the file is open (FR-011a)', () => {
     el.className.includes('context-menu__item--disabled') ||
     el.getAttribute('aria-disabled') === 'true';
 
-  it('is offered, and ENABLED, while the file is not open anywhere', async () => {
-    const { user, tree } = await mountWithOpenState(false);
-
-    const flyout = await openInFlyout(user, tree);
-
-    const item = within(flyout).getByTestId('menu-item-New Editor');
-    expect(item).toBeVisible();
-    expect(isDisabled(item), 'a closed file must be openable in a new editor').toBe(false);
-  });
+  // DELETED (pass 2): "is offered, and ENABLED, while the file is not open anywhere" — the
+  // 'is ENABLED while that editor holds something else' test below now also asserts New Editor enabled.
 
   /*
    * 060 FR-045 (supersedes the disabled New Editor row 006 FR-072 / FR-011a drew for an open file):
@@ -452,7 +437,11 @@ describe('Last Active Editor goes quiet when that editor holds the file (FR-082)
     setEditorState('p1', { filePath: 'C:/projects/demo/other.txt' });
     const { user, tree } = await mount(oneNamedPanel('Scratch'));
 
-    expect(isDisabled(target(await openInFlyout(user, tree)))).toBe(false);
+    const flyout = await openInFlyout(user, tree);
+    expect(isDisabled(target(flyout))).toBe(false);
+    // Folded in from "New Editor is offered, and ENABLED, while the file is not open anywhere".
+    const newEditor = within(flyout).getByTestId('menu-item-New Editor');
+    expect(isDisabled(newEditor), 'a closed file must be openable in a new editor').toBe(false);
   });
 
   // 060 FR-045 — that editor holding THIS file is the file being open: Current Editor replaces the row.

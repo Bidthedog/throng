@@ -460,20 +460,6 @@ describe('a mutation refusal is not cleared by an unrelated successful refresh()
     expect(result.current.errorSubject).toEqual(heldSubject);
   });
 
-  it('still clears a LOAD failure refresh() raised itself, once the load succeeds', async () => {
-    const defaultCat = category('cat-default', 'In Progress', true);
-    const failing = new Error('the daemon refused projects.categories.list');
-    const { result, daemon } = await mount([defaultCat], [], { categoriesError: failing });
-    expect(result.current.error).not.toBeNull();
-    expect(result.current.errorAction).toBe('load your project categories');
-
-    daemon.categoriesErrorRef.current = undefined; // the daemon recovers
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    // refresh() MAY clear an error IT raised — only a mutation refusal is protected.
-    expect(result.current.error).toBeNull();
-    expect(result.current.errorAction).toBeNull();
-  });
+  // "Still clears a LOAD failure refresh() raised itself, once the load succeeds" — only a mutation refusal is
+  // protected — is the recovery test in the load-failure describe above.
 });

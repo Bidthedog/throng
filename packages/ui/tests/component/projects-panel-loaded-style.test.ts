@@ -128,7 +128,7 @@ describe('loaded vs not-loaded projects (046 T048b, from loaded-projects.e2e.ts)
   it('opening it marks it loaded, and the unloaded modifier goes', async () => {
     const row = await mount();
     expect(row).toHaveAttribute('data-loaded', 'false');
-    await userEvent.setup().click(screen.getByTestId(`project-switch-${PERSISTED.id}`));
+    await userEvent.setup({ delay: null }).click(screen.getByTestId(`project-switch-${PERSISTED.id}`));
     await waitFor(() => expect(screen.getByTestId(`project-item-${PERSISTED.id}`)).toHaveAttribute('data-loaded', 'true'));
     const after = screen.getByTestId(`project-item-${PERSISTED.id}`);
     expect(after).not.toHaveClass('project-item--unloaded');

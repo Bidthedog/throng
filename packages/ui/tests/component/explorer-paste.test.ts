@@ -108,7 +108,7 @@ describe('the Paste menu item names what will land (050 T026, FR-025a)', () => {
     });
     await waitFor(() => expect(m.clipboard.api.get).toHaveBeenCalled());
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.pointer({ keys: '[MouseRight]', target: within(m.tree).getByText('Docs') });
     const menuItem = await screen.findByTestId('menu-item-Paste "a.txt" from Other');
     expect(menuItem).not.toHaveAttribute('aria-disabled', 'true');

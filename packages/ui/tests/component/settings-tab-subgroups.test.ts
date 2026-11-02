@@ -25,9 +25,9 @@
  *
  * ══ ANTI-VACUITY CONTROL ══
  *
- * Change `SUBGROUP` below to a subgroup no descriptor declares (`'Nonsense'`). Four of the five
- * tests fail on the missing subsection, and the fifth — the FR-036c filter test — starts passing
- * for the wrong reason, which is why it asserts the subsection is PRESENT before the search and
+ * Change `SUBGROUP` below to a subgroup no descriptor declares (`'Nonsense'`). The chained test
+ * fails on the missing subsection, and its FR-036c filter step would start passing for the wrong
+ * reason on its own, which is why the chain asserts the subsection is PRESENT before the search and
  * absent after, rather than only absent after.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
@@ -92,39 +92,61 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/* ────────────────────────────────────────────────────────────────────────── *
- * FR-036a — a subsection INSIDE its group's section, in declaration order
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('a subgroup is a subsection of its group (FR-036a)', () => {
-  it('renders the Status Bar subsection inside the Editor section, with its name as a heading', () => {
+/*
+ * ONE mount for the five read-only subgroup tests (audit, component-2a): FR-036a placement, rows,
+ * label, FR-036b order, FR-053 controls — then the two that CHANGE the tree (fold, FR-036c search)
+ * last, in that order. Every assertion is kept.
+ */
+describe('a subgroup is a subsection of its group, ordered, editable, foldable and filterable (FR-036a/b/c, FR-053, 056 FR-002)', () => {
+  it('renders the Status Bar subsection inside Editor, with its rows, label, order and controls, then folds and filters', () => {
     mount();
+
+    // FR-036a: inside the Editor section, with its name as a heading.
     expect(groupSection()).toContainElement(subsection());
     expect(within(subsection()).getByText(SUBGROUP)).toBeInTheDocument();
-  });
 
-  it('holds the three status-bar settings and only those, in declaration order', () => {
-    mount();
-    // Rows by CLASS rather than by a test-id pattern: `setting-inert-<key>` shares the `setting-`
-    // prefix, so a regex over test ids would silently count an explanation as a row.
-    const rows = [...subsection().querySelectorAll('.settings-row')].map((el) =>
-      el.getAttribute('data-testid'),
-    );
+    // The three status-bar settings and only those, in declaration order. Rows by CLASS rather than
+    // by a test-id pattern: `setting-inert-<key>` shares the `setting-` prefix, so a regex over test
+    // ids would silently count an explanation as a row.
+    const rows = [...subsection().querySelectorAll('.settings-row')].map((el) => el.getAttribute('data-testid'));
     expect(rows).toEqual(IN_SUBGROUP.map((k) => `setting-${k}`));
-  });
 
-  it('folds — the heading is a disclosure button, superseding "not collapsible" (056 FR-002)', () => {
     /*
+     * A labelled group to assistive technology, not an anonymous div. The subsection heading is the
+     * only thing that says which fields belong together; `role="group"` plus `aria-labelledby` is the
+     * standard pair. Asserted through the accessible NAME so it fails if `aria-labelledby` points at
+     * an id that does not resolve.
+     */
+    expect(screen.getByRole('group', { name: SUBGROUP })).toBe(subsection());
+
+    // FR-036b: an ordinary Editor row comes before the subsection in document order — a field must
+    // never appear below a subsection heading it does not belong to.
+    const plain = screen.getByTestId(`setting-${NOT_IN_SUBGROUP}`);
+    expect(
+      plain.compareDocumentPosition(subsection()) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the plain row must come BEFORE the subsection',
+    ).toBeTruthy();
+    expect(subsection()).not.toContainElement(plain);
+
+    // FR-053: a checkbox for each new toggle, inside the subsection, editable and ticked (both ship on).
+    for (const key of ['editor.statusBar.showCursorPosition', 'editor.statusBar.showCounts']) {
+      const control = screen.getByTestId(`control-${key}`) as HTMLInputElement;
+      expect(control.tagName, key).toBe('INPUT');
+      expect(control.type, key).toBe('checkbox');
+      expect(control.disabled, `${key} must be editable, not inert`).toBe(false);
+      expect(control.checked, key).toBe(true);
+      expect(subsection(), key).toContainElement(control);
+    }
+
+    /*
+     * Folds — the heading is a disclosure button, superseding "not collapsible" (056 FR-002).
      * 040 FR-036a said a subsection MUST NOT be collapsible and contract rule 3 pinned it. 056 FR-002
      * supersedes both: every section, subgroup and nested subsection folds, through one shared heading.
-     * What 040 still owns is that the subsection is a labelled group in a fixed place (the test below).
      */
-    mount();
-    const el = subsection();
-    const button = within(el).getByTestId(`${SUBGROUP_ID}-toggle`);
+    const button = within(subsection()).getByTestId(`${SUBGROUP_ID}-toggle`);
     expect(button.tagName).toBe('BUTTON');
     expect(button).toHaveAttribute('aria-expanded', 'true');
-    expect(el.querySelector('details')).toBeNull();
+    expect(subsection().querySelector('details')).toBeNull();
 
     fireEvent.click(button);
 
@@ -133,57 +155,12 @@ describe('a subgroup is a subsection of its group (FR-036a)', () => {
     expect(row.closest('[hidden]'), 'the subgroup’s rows are hidden').not.toBeNull();
     // The rest of the Editor section is untouched.
     expect(screen.getByTestId(`setting-${NOT_IN_SUBGROUP}`).closest('[hidden]')).toBeNull();
-  });
-
-  it('is a labelled group to assistive technology, not an anonymous div', () => {
-    /*
-     * The subsection heading is the only thing that says which fields belong together, and a bare
-     * `<div>` + `<h4>` conveys that VISUALLY and nowhere else — a screen reader reading the form
-     * field by field hears three status-bar toggles with nothing to say they are a set.
-     * `role="group"` plus `aria-labelledby` pointing at the `<h4>` is the standard grouping pair,
-     * and the heading text is already the right label, so nothing new has to be written for it.
-     *
-     * Asserted through the accessible NAME rather than the raw attribute, so the assertion fails if
-     * `aria-labelledby` points at an id that does not resolve — which is the way this breaks.
-     */
-    mount();
-    expect(screen.getByRole('group', { name: SUBGROUP })).toBe(subsection());
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * FR-036b — the ungrouped fields come FIRST
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('fields with no subgroup render above every subsection (FR-036b)', () => {
-  it('puts an ordinary Editor row before the Status Bar subsection in document order', () => {
-    mount();
-    const plain = screen.getByTestId(`setting-${NOT_IN_SUBGROUP}`);
-    const position = plain.compareDocumentPosition(subsection());
-    // A field must never appear below a subsection heading it does not belong to.
-    expect(
-      position & Node.DOCUMENT_POSITION_FOLLOWING,
-      'the plain row must come BEFORE the subsection',
-    ).toBeTruthy();
-    expect(subsection()).not.toContainElement(plain);
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * FR-036c — an emptied subgroup takes its heading with it
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('a search that empties a subgroup removes its heading too (FR-036c)', () => {
-  it('drops the Status Bar subsection while the Editor section survives', () => {
-    mount();
-    // Present first, so a subsection that never rendered cannot pass this test by being absent.
-    expect(screen.queryByTestId(SUBGROUP_ID)).not.toBeNull();
 
     /*
+     * FR-036c: a search that empties the subgroup removes its heading too (present first, above).
      * ONE token, and a key rather than prose. The search is OR over whitespace-separated tokens
      * (`settings-search.ts`), so a phrase like "missing or deleted" would match on "or" — a
-     * substring of half the registry — and the subsection would survive for a reason that has
-     * nothing to do with the requirement.
+     * substring of half the registry — and the subsection would survive for the wrong reason.
      */
     search('warnonmissingfile');
 
@@ -232,7 +209,8 @@ describe('a subsection nests inside its subgroup (054 FR-050a)', () => {
     );
   }
 
-  it('renders inside its subgroup, after the subgroup’s own rows, under an h5 heading', () => {
+  it('renders inside its subgroup, after the subgroup’s own rows, under an h5 heading, and disappears with its heading when a search empties it', () => {
+    // Chained from two tests on one mount (audit, component-2a).
     mountWith();
     const previews = screen.getByTestId('settings-subgroup-Editor-Previews');
     const markdown = screen.getByTestId(SUB_ID);
@@ -246,33 +224,11 @@ describe('a subsection nests inside its subgroup (054 FR-050a)', () => {
     // Declaration order: Markdown before Mermaid.
     const mermaid = screen.getByTestId('settings-subsection-Editor-Previews-Mermaid');
     expect(markdown.compareDocumentPosition(mermaid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
 
-  it('disappears with its heading when a search empties it', () => {
-    mountWith();
-    expect(screen.queryByTestId(SUB_ID)).not.toBeNull();
+    // Present first (above), so a subsection that never rendered cannot pass this by being absent.
     search('showcursorposition');
     expect(screen.queryByTestId(SUB_ID)).toBeNull();
     expect(screen.queryByText('Markdown')).toBeNull();
     expect(screen.queryByTestId('settings-subsection-Editor-Previews-Mermaid')).not.toBeNull();
-  });
-});
-
-/* ────────────────────────────────────────────────────────────────────────── *
- * FR-053 — the two new settings are EDITABLE from the visual editor
- * ────────────────────────────────────────────────────────────────────────── */
-
-describe('both new toggles are editable controls in the subsection (FR-053)', () => {
-  it('renders a checkbox for each, inside the Status Bar subsection', () => {
-    mount();
-    for (const key of ['editor.statusBar.showCursorPosition', 'editor.statusBar.showCounts']) {
-      const control = screen.getByTestId(`control-${key}`) as HTMLInputElement;
-      expect(control.tagName, key).toBe('INPUT');
-      expect(control.type, key).toBe('checkbox');
-      expect(control.disabled, `${key} must be editable, not inert`).toBe(false);
-      // Ticked, because both ship on — and in the subsection, not loose under Editor.
-      expect(control.checked, key).toBe(true);
-      expect(subsection(), key).toContainElement(control);
-    }
   });
 });

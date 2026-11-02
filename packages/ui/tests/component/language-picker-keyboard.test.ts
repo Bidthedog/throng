@@ -219,7 +219,7 @@ function mount(): { user: ReturnType<typeof userEvent.setup>; calls: Recorded[] 
   registerEditorView(PANEL, { dispatch: () => {} } as unknown as EditorView);
 
   const calls: Recorded[] = [];
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     // ANTI-VACUITY CONTROL: drop this `ServicesProvider` element and `useServices` throws inside
     // `LanguagePicker`, failing all seven tests. See the file header.

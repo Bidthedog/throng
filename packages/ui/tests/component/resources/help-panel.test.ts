@@ -7,8 +7,6 @@
  * Layer: component — the real toolbar over the real config store (settings faked at `window.throng.config`).
  * That the popover is registered as a floating surface is `unit/floating-surfaces.test.ts`'s.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Fragment, createElement } from 'react';
@@ -119,17 +117,7 @@ describe('the panel (FR-093, FR-119)', () => {
     for (const section of HELP_SECTIONS) expect(text, section.title).toContain(section.text);
   });
 
-  it('is in the popover style with no glow (FR-119)', async () => {
-    const css = readFileSync(resolve(process.cwd(), 'packages/ui/src/renderer/theme.css'), 'utf8').replace(/\r\n/g, '\n');
-    // The panel's own rule is the last `.monitor-help {`; the first is the shared surface it is grouped into.
-    const own = [...css.matchAll(/\n\.monitor-help\s*\{([^}]*)\}/g)].pop()?.[1] ?? '';
-    expect(own).toMatch(/width:/);
-    expect(own).not.toMatch(/color-mix/);
-    expect(own).not.toMatch(/box-shadow/);
-    expect(own).not.toMatch(/background/);
-    // The surface itself is the attention popover's, shared in one rule.
-    expect(/\n((?:\.[\w-]+,\n)*\.attention-popover(?:,\n\.[\w-]+)*)\s*\{/.exec(css)?.[1] ?? '').toContain('.monitor-help');
-  });
+  // "In the popover style with no glow" (FR-119) is a stylesheet claim: `unit/resources/monitor-stylesheet.test.ts`.
 });
 
 describe('focus and closing (FR-093)', () => {
@@ -153,7 +141,7 @@ describe('focus and closing (FR-093)', () => {
 
   it('closes when the button is pressed again, focus staying on it', async () => {
     await mount();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(button());
     expect(panel()).toBeInTheDocument();
 
@@ -165,7 +153,7 @@ describe('focus and closing (FR-093)', () => {
 
   it('closes on a click anywhere else, and leaves focus where that click put it', async () => {
     await mount();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(button());
 
     await user.click(screen.getByTestId('monitor-metric-memory'));

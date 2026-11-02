@@ -16,12 +16,16 @@ import { createElement } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FileOpUndoEntry } from '@throng/core';
 import {
+  fakeDaemon,
+  fakeFileClipboard,
+  fakeTransfer,
   installResizeObserver,
   mountExplorer,
   standardHost,
   uninstallResizeObserver,
   type MountedExplorer,
 } from './helpers/explorer-harness.js';
+import { resetFileClipboardStoreForTests } from '../../src/renderer/explorer/file-clipboard-store.js';
 import { TransferCompletionHost } from '../../src/renderer/explorer/transfer-completion.js';
 import { resetPendingRevealForTests } from '../../src/renderer/explorer/pending-reveal.js';
 
@@ -67,8 +71,21 @@ async function stacksLoaded(m: MountedExplorer): Promise<void> {
 }
 const ids = (list: readonly FileOpUndoEntry[]): (string | undefined)[] => list.map((e) => e.id);
 
+type Doubles = Pick<MountedExplorer, 'clipboard' | 'transfer' | 'daemon'>;
+
+/**
+ * The doubles a mount would build, made WITHOUT mounting. The tests below used to mount an explorer
+ * just to reach `daemon.seedStack`, unmount it, and mount again with `reuse` — one wasted tree mount
+ * each (pass 2). `mountExplorer` resets the clipboard store only when it is not given `reuse`, so that
+ * reset happens here.
+ */
+function seedDoubles(): Doubles {
+  resetFileClipboardStoreForTests();
+  return { clipboard: fakeFileClipboard(null), transfer: fakeTransfer(), daemon: fakeDaemon() };
+}
+
 /** Both projects hold the entry on their UNDO list — the state right after the paste. */
-function seedBoth(m: MountedExplorer): void {
+function seedBoth(m: Pick<MountedExplorer, 'daemon'>): void {
   for (const p of ['project-a', 'project-b']) m.daemon.seedStack(p, { undo: [CROSS], redo: [] });
 }
 
@@ -149,9 +166,8 @@ describe('recording a cross-project move (050 T062)', () => {
 
 describe('undo and redo from either side (050 T062, FR-020)', () => {
   it('Ctrl+Z in the TARGET applies once, and moves the entry in the source stack by id', async () => {
-    const m = await mountExplorer(standardHost, B);
+    const m = seedDoubles();
     seedBoth(m);
-    m.unmount();
     const again = await mountExplorer(standardHost, { ...B, reuse: m });
 
     await stacksLoaded(again);
@@ -171,9 +187,8 @@ describe('undo and redo from either side (050 T062, FR-020)', () => {
   });
 
   it('Ctrl+Z in the SOURCE behaves symmetrically', async () => {
-    const seed = await mountExplorer(standardHost, A);
+    const seed = seedDoubles();
     seedBoth(seed);
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...A, reuse: seed });
 
     await stacksLoaded(m);
@@ -188,9 +203,8 @@ describe('undo and redo from either side (050 T062, FR-020)', () => {
   });
 
   it('redo from the other project puts the entry back on BOTH undo lists', async () => {
-    const seed = await mountExplorer(standardHost, B);
+    const seed = seedDoubles();
     for (const p of ['project-a', 'project-b']) seed.daemon.seedStack(p, { undo: [], redo: [CROSS] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...B, reuse: seed });
 
     await stacksLoaded(m);
@@ -205,9 +219,8 @@ describe('undo and redo from either side (050 T062, FR-020)', () => {
   });
 
   it('a REFUSED undo leaves both stacks as they were and raises the error notice (024 FR-008a)', async () => {
-    const seed = await mountExplorer(standardHost, B);
+    const seed = seedDoubles();
     seedBoth(seed);
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...B, reuse: seed });
     m.transfer.api.applyUndo.mockResolvedValue({ error: 'x.ts is no longer there.' } as never);
 
@@ -225,8 +238,29 @@ describe('undo and redo from either side (050 T062, FR-020)', () => {
     expect(m.daemon.stack('project-a').redo).toHaveLength(0);
   });
 
+  it('the explorer error notice is dismissed by its own control, at once, and a repeat refusal raises it again', async () => {
+    // Moved down from error-dismiss.e2e.ts "File Explorer error": the dismiss control is
+    // `${testId}-dismiss` on the shared notice (notification.tsx), and recurrence needs the store's
+    // error cleared on dismissal so the same refusal is a change again.
+    const seed = seedDoubles();
+    seedBoth(seed);
+    const m = await mountExplorer(standardHost, { ...B, reuse: seed });
+    m.transfer.api.applyUndo.mockResolvedValue({ error: 'x.ts is no longer there.' } as never);
+
+    await stacksLoaded(m);
+    pressUndo();
+    await waitFor(() => expect(screen.getAllByTestId('explorer-error').length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getAllByTestId('explorer-error-dismiss')[0]);
+    await waitFor(() => expect(screen.queryByTestId('explorer-error'), 'dismiss removes the notice').toBeNull());
+
+    pressUndo();
+    await waitFor(() => expect(screen.getAllByTestId('explorer-error').length).toBeGreaterThan(0));
+    expect(screen.getAllByTestId('explorer-error-dismiss')[0], 'the repeat refusal is dismissable too').toBeVisible();
+  });
+
   it('routes a `paste` entry to main BY KIND, even without `projects`', async () => {
-    const seed = await mountExplorer(standardHost, A);
+    const seed = seedDoubles();
     const paste: FileOpUndoEntry = {
       kind: 'paste',
       id: 'p-1',
@@ -236,7 +270,6 @@ describe('undo and redo from either side (050 T062, FR-020)', () => {
       at: 5,
     };
     seed.daemon.seedStack('project-a', { undo: [paste], redo: [] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...A, reuse: seed });
 
     await stacksLoaded(m);
@@ -260,9 +293,8 @@ describe('a redo that refreshes the entry (050 T061)', () => {
   const refreshed: FileOpUndoEntry = { ...original, replaced: [{ path: 'D:/projects/other/m.txt', trashedAt: 99 }] };
 
   it('stores the refreshed entry (same id) in BOTH stacks, so the next undo sends it', async () => {
-    const seed = await mountExplorer(standardHost, B);
+    const seed = seedDoubles();
     for (const p of ['project-a', 'project-b']) seed.daemon.seedStack(p, { undo: [], redo: [original] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...B, reuse: seed });
     m.transfer.api.applyUndo.mockResolvedValueOnce({ ok: true, entry: refreshed } as never);
 
@@ -282,10 +314,9 @@ describe('a redo that refreshes the entry (050 T061)', () => {
 
 describe('the stacks on load and the older entry kinds (050 T062)', () => {
   it('drops an entry that names a project which no longer exists', async () => {
-    const seed = await mountExplorer(standardHost, B);
+    const seed = seedDoubles();
     const orphan: FileOpUndoEntry = { ...CROSS, projects: { source: 'project-gone', target: 'project-b' } };
     seed.daemon.seedStack('project-b', { undo: [orphan], redo: [] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...B, reuse: seed });
     await waitFor(() => expect(m.daemon.calls.map((c) => c.method)).toContain('projects.list'));
     await new Promise((r) => setTimeout(r, 30));
@@ -297,7 +328,7 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
   });
 
   it('still applies a within-project rename through the root-relative bridge', async () => {
-    const seed = await mountExplorer(standardHost, A);
+    const seed = seedDoubles();
     const rename: FileOpUndoEntry = {
       kind: 'rename',
       from: 'C:/projects/demo/old.txt',
@@ -305,7 +336,6 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
       at: 1,
     };
     seed.daemon.seedStack('project-a', { undo: [rename], redo: [] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...A, reuse: seed });
 
     await stacksLoaded(m);
@@ -316,7 +346,7 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
   });
 
   it('keeps a within-project cut (`move` with no `projects`) on the root-relative bridge', async () => {
-    const seed = await mountExplorer(standardHost, A);
+    const seed = seedDoubles();
     const move: FileOpUndoEntry = {
       kind: 'move',
       id: 'm-1',
@@ -324,7 +354,6 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
       at: 1,
     };
     seed.daemon.seedStack('project-a', { undo: [move], redo: [] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, {
       ...A,
       reuse: seed,
@@ -347,7 +376,7 @@ describe('the stacks on load and the older entry kinds (050 T062)', () => {
 
 describe('an entry that created folders (050 T085, R16, FR-033)', () => {
   it('applies a within-project `move` carrying createdDirs through main, not the root-relative bridge', async () => {
-    const seed = await mountExplorer(standardHost, A);
+    const seed = seedDoubles();
     const move: FileOpUndoEntry = {
       kind: 'move',
       id: 'm-2',
@@ -356,7 +385,6 @@ describe('an entry that created folders (050 T085, R16, FR-033)', () => {
       at: 1,
     };
     seed.daemon.seedStack('project-a', { undo: [move], redo: [] });
-    seed.unmount();
     const m = await mountExplorer(standardHost, { ...A, reuse: seed });
 
     await stacksLoaded(m);

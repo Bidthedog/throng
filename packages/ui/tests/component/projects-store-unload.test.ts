@@ -117,15 +117,6 @@ describe('a later switchProject(id) loads it again as usual (data-model §6)', (
   });
 });
 
-describe('unloadProject never persists — loaded state is session-only (data-model §6)', () => {
-  it('leaves the project list/RPC call surface untouched (no projects.* call made by unload itself)', async () => {
-    const { ctx } = await mount();
-    await ctx().switchProject('p1');
-    await waitFor(() => expect(ctx().activeProject?.id).toBe('p1'));
-
-    // unloadProject(id) is a pure client-side transition — nothing to await, and it must not throw
-    // reaching for an RPC the contract never gives it (contracts/unload.md §5: "does not… change the
-    // daemon's persisted is_active").
-    expect(() => ctx().unloadProject('p1')).not.toThrow();
-  });
-});
+// "unloadProject never persists" (data-model §6, contracts/unload.md §5) was a `not.toThrow()` on a synchronous call
+// that survived a mutation making unload call `client.setActive` (the fake bridge accepts it). The re-open test above
+// is what catches it: it counts `setActiveCalls` for p1 at exactly 2 (open, re-open), so an RPC from unload makes 3.

@@ -59,7 +59,7 @@ function mount(props: Record<string, unknown>) {
       createElement(PanelFailureBanner, { ...props, onRetry, onCancel } as never),
     ),
   );
-  return { onRetry, onCancel, view, user: userEvent.setup() };
+  return { onRetry, onCancel, view, user: userEvent.setup({ delay: null }) };
 }
 
 /** The banner's root. Its `role` is asserted rather than used to find it. */

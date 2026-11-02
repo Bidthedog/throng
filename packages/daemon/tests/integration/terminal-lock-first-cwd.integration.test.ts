@@ -190,49 +190,7 @@ describe('a folder a closed terminal started in is deletable again (005 FR-022 l
     });
   });
 
-  /*
-   * The control. Identical steps, but the ROOT terminal opens first, so the lock lands on the root.
-   * This passes today, which is what shows the repro above is refused by the lock's target and not by
-   * a dead shell's handle lingering: the only thing that differs is which terminal came first.
-   */
-  it('(control) deletes the worktree when the root terminal was the one opened first', async () => {
-    const worktree = join(projectRoot, '.claude', 'worktrees', 'feature+x');
-    mkdirSync(worktree, { recursive: true });
-    const created = await call('projects.create', { name: 'Repo', colour: '#6aa3ff', rootFolder: projectRoot });
-    const projectId = created.result.project.id as string;
-
-    await call('terminal.attach', {
-      panelId: 'root-term',
-      projectId,
-      launch: { file: CMD, args: [], cwd: projectRoot },
-      cols: 80,
-      rows: 24,
-    });
-    await call('terminal.attach', {
-      panelId: 'wt-term',
-      projectId,
-      launch: { file: CMD, args: [], cwd: worktree },
-      cols: 80,
-      rows: 24,
-    });
-
-    await call('terminal.kill', { panelId: 'wt-term' });
-    const shellGone = await waitFor(async () => {
-      const listed = await call('terminal.list', {});
-      return !listed.result.sessions.some((s: { panelId: string }) => s.panelId === 'wt-term');
-    });
-    expect(shellGone).toBe(true);
-
-    let lastRefusal: string | null = 'not attempted';
-    const deleted = await waitFor(() => {
-      lastRefusal = tryDelete(worktree);
-      return lastRefusal === null;
-    }, 5000);
-
-    expect({ deleted, lastRefusal, stillThere: existsSync(worktree) }).toEqual({
-      deleted: true,
-      lastRefusal: null,
-      stillThere: false,
-    });
-  });
+  // DELETED: a "(control)" row that opened the ROOT terminal first and asserted the same
+  // delete outcome. It passed with and without the first-cwd-lock defect, so it detected nothing the test above
+  // does not; that test fails under the defect.
 });

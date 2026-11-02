@@ -357,6 +357,22 @@ describe('per-panel zoom reducer (012, per-instance)', () => {
     expect(bumpZoom(hi, 'nope', 1)).toBe(hi);
   });
 
+  it("a panel's zoom is unchanged by a tab switch, a split and the close of a sibling (012 FR-005/010)", () => {
+    let l = bumpZoom(base(), 'p1', 2);
+    const level = zoomOf(l, 'p1');
+    expect(level, 'precondition: p1 is zoomed in').toBeGreaterThan(0);
+
+    l = setActiveTab(addTab(l, { tab: 't2', panel: 'p9' }), 't1');
+    expect(zoomOf(l, 'p1'), 'a new tab and the switch back leave p1 zoom alone').toBe(level);
+
+    l = addPanel(l, 't1', 'p2');
+    expect(zoomOf(l, 'p1'), 'splitting in a sibling leaves p1 zoom alone').toBe(level);
+    expect(zoomOf(l, 'p2'), 'the new sibling starts at the default').toBe(0);
+
+    l = removePanel(l, 'p2');
+    expect(zoomOf(l, 'p1'), 'closing the sibling leaves p1 zoom alone').toBe(level);
+  });
+
   it('resetZoom returns one panel to default and is idempotent (FR-009)', () => {
     let l = twoPanels();
     l = bumpZoom(l, 'p1', 3);

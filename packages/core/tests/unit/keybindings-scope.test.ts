@@ -35,6 +35,21 @@ describe('scope-aware resolveAction (FR-017b0)', () => {
     expect(resolveAction(DEFAULT_KEYBINDINGS, CTRL_X, 'terminal')).toBeNull();
   });
 
+  // Moved down from preferences-keybindings-tab.test.ts ("a rebinding changes what the chord RESOLVES to"):
+  // "live dispatch with no reload" is the resolver reading the document the tab wrote.
+  it('resolves a newly added chord from the rebound document, in a terminal too, with no reload', () => {
+    const f9 = { key: 'F9' } as const;
+    expect(resolveAction(DEFAULT_KEYBINDINGS, f9, 'terminal')).not.toBe('focus.projects');
+    const rebound = {
+      version: DEFAULT_KEYBINDINGS.version,
+      bindings: {
+        ...DEFAULT_KEYBINDINGS.bindings,
+        'focus.projects': [...DEFAULT_KEYBINDINGS.bindings['focus.projects'], 'F9'],
+      },
+    };
+    expect(resolveAction(rebound, f9, 'terminal')).toBe('focus.projects');
+  });
+
   // RE-PINNED by 046 iterate round 1 (FR-102 *changes* row): focus.left moves from Ctrl+Alt+ArrowLeft
   // to the Ctrl+Shift+Alt navigation tier.
   it('keeps a window-level chord live in every scope', () => {

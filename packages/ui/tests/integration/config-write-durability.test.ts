@@ -1,9 +1,8 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../src/main/config-store.js';
-import { writeConfigDoc } from '../../src/main/config-write-ipc.js';
 
 /**
  * Config-write durability (issue #75, part 1).
@@ -40,15 +39,9 @@ function obstruct(path: string): void {
 }
 
 describe('FileConfigStore.write durability', () => {
-  it('reports failure when the target cannot be written', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-    obstruct(store.pathOf({ kind: 'settings' }));
-
-    const result = await store.write({ kind: 'settings' }, { editor: { autoSaveDebounceMs: 1500 } });
-
-    expect(result.ok).toBe(false);
-  });
+  // "Reports failure when the target cannot be written" and "leaves no temp file behind when the write
+  // ultimately fails" were the same writes as config-store-retry-exhaustion.test.ts (`ok` false, no
+  // `.tmp` strays) and the #265 diagnosis claims; they live there now.
 
   it('retries a transient rename failure and lands the value', async () => {
     const root = freshRoot();
@@ -70,29 +63,7 @@ describe('FileConfigStore.write durability', () => {
     expect(result.ok).toBe(true);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ editor: { autoSaveDebounceMs: 1500 } });
   });
-
-  it('does not leave its temp file behind when the write ultimately fails', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-    obstruct(store.pathOf({ kind: 'settings' }));
-
-    await store.write({ kind: 'settings' }, { editor: { autoSaveDebounceMs: 1500 } });
-
-    const strays = readdirSync(root).filter((name) => name.includes('.tmp'));
-    expect(strays).toEqual([]);
-  });
 });
 
-describe('writeConfigDoc', () => {
-  it('reports the failure instead of claiming success when the store cannot write', async () => {
-    const root = freshRoot();
-    const store = new FileConfigStore(root);
-    obstruct(store.pathOf({ kind: 'settings' }));
-
-    const result = await writeConfigDoc(store, { kind: 'settings' }, '{"editor":{"autoSaveDebounceMs":1500}}');
-
-    // The defect: this returned {ok:true} for a write that never reached disk, so the
-    // renderer published the edit as applied and the user's change was silently lost.
-    expect(result.ok).toBe(false);
-  });
-});
+// MOVED DOWN: "writeConfigDoc reports the failure instead of claiming success" is proven against a
+// fake store in packages/ui/tests/unit/config-write-doc-failure.test.ts (red under `return { ok: true }`).

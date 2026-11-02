@@ -78,15 +78,8 @@ describe('a panel failure banner names its path exactly once (FR-019, FR-019a)',
     expect(pathOccurrences(), 'the banner printed its path more than once').toBe(1);
   });
 
-  it('does so for the TERMINAL banner — a different headline, the same rule', () => {
-    renderBanner({
-        headline: 'This terminal could not be opened',
-        subject: 'Proj — Tab — Terminal',
-        detail: { path: PATH, systemError: 'The system cannot find the path specified.' },
-      });
-
-    expect(pathOccurrences()).toBe(1);
-  });
+  // DELETED: 'does so for the TERMINAL banner' — one component renders both banners; only the
+  // headline text differs, so the EDITOR case above proves the rule.
 
   it('renders no path at all when there is none to render', () => {
     renderBanner({
@@ -98,15 +91,7 @@ describe('a panel failure banner names its path exactly once (FR-019, FR-019a)',
     expect(pathOccurrences()).toBe(0);
   });
 
-  it('still keeps the RAW system error off the screen (029 FR-016, 030 FR-034)', () => {
-    // Asserted here as well as in the notice tests, because the banner is the OTHER surface a raw
-    // errno could reach the user through — and the two have drifted apart before.
-    renderBanner({
-        headline: 'This file could not be read',
-        subject: 'Proj — Tab — Panel',
-        detail: { path: PATH, systemError: 'ENOENT: no such file or directory, realpath' },
-      });
-
-    expect(screen.getByTestId('panel-failure-p1').textContent ?? '').not.toContain('ENOENT');
-  });
+  // DELETED: 'still keeps the RAW system error off the screen' — panel-failure-banner.test.ts 'never
+  // renders the raw system error (FR-034)' asserts it for the same banner; the first case here also
+  // carries an ENOENT string and counts the path once.
 });

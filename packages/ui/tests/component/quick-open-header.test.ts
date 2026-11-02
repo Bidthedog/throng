@@ -58,7 +58,7 @@
  * in this file** — every one of them goes through `mount()`, which awaits the query input before a
  * test body begins. Nothing here can pass against an empty document.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -69,6 +69,8 @@ import { WorkspaceProvider } from '../../src/renderer/state/workspace-store.js';
 import { ConfigProvider, useConfigLoaded } from '../../src/renderer/config/config-store.js';
 import { removeEditorState, setEditorState } from '../../src/renderer/editor/editor-state.js';
 import { QuickOpen } from '../../src/renderer/navigate/quick-open.js';
+import type { FileIndexView } from '../../src/renderer/navigate/use-file-index.js';
+import { rememberedInput, resetRememberedInput } from '../../src/renderer/navigate/navigation-store.js';
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * The one mocked module — the seam, not the subject. See the header.
@@ -206,10 +208,12 @@ interface MountOptions {
    * and ConfigContext's SHIPPED defaults apply — which is the state T2's default case is about.
    */
   settings?: Record<string, unknown>;
+  /** The candidate set the window mirrors. Omitted, the walk is done and `PATHS` are listed. */
+  index?: FileIndexView;
 }
 
 async function mount(options: MountOptions = {}) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onDismiss = vi.fn();
   const onIncludeHiddenChange = vi.fn();
 
@@ -226,30 +230,35 @@ async function mount(options: MountOptions = {}) {
   // header does — `panelDisplayTitle` reads the live editor state first and the panel config second.
   setEditorState(EDITOR_PANEL, { filePath: OPEN_FILE, displayName: 'README.md' });
 
-  const subject = createElement(QuickOpen, {
-    root: ROOT,
-    index: { status: 'ready', paths: PATHS },
-    invokedFrom:
-      options.invokedFrom === undefined ? { editorPanelId: EDITOR_PANEL } : options.invokedFrom,
-    includeHidden: false,
-    onIncludeHiddenChange,
-    onDismiss,
-  });
+  const client = new WorkspaceClient(fakeBridge());
+  const tree = (index: FileIndexView): ReactElement => {
+    const subject = createElement(QuickOpen, {
+      root: ROOT,
+      index,
+      invokedFrom:
+        options.invokedFrom === undefined ? { editorPanelId: EDITOR_PANEL } : options.invokedFrom,
+      includeHidden: false,
+      onIncludeHiddenChange,
+      onDismiss,
+    });
+    const wrapped: ReactElement = createElement(
+      WorkspaceProvider,
+      { client, activeProjectId: PROJECT },
+      options.settings ? createElement(WhenSettingsAreLive, null, subject) : subject,
+    );
+    return options.settings ? createElement(ConfigProvider, null, wrapped) : wrapped;
+  };
 
-  const wrapped: ReactElement = createElement(
-    WorkspaceProvider,
-    { client: new WorkspaceClient(fakeBridge()), activeProjectId: PROJECT },
-    options.settings ? createElement(WhenSettingsAreLive, null, subject) : subject,
-  );
-
-  render(options.settings ? createElement(ConfigProvider, null, wrapped) : wrapped);
+  const view = render(tree(options.index ?? { status: 'ready', paths: PATHS }));
+  /** The index the window mirrors changes under the open modal - a walk finishing, a toggle flipping. */
+  const setIndex = (index: FileIndexView): void => view.rerender(tree(index));
 
   /*
    * Wait for the input rather than assuming it. This is the assertion the anti-vacuity control in
    * the header trips: with no `WorkspaceProvider`, `useWorkspace` throws and nothing renders at all.
    */
   const input = await screen.findByTestId('quickopen-input');
-  return { user, input, onDismiss, onIncludeHiddenChange };
+  return { user, input, onDismiss, onIncludeHiddenChange, setIndex };
 }
 
 beforeEach(() => {
@@ -298,11 +307,7 @@ async function namedDestination(): Promise<HTMLElement> {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 describe('invoked from inside an editor (AS-11, AS-11a, T1–T3, T6, P7, P8, E3)', () => {
-  it('draws the target control (T3, FR-011)', async () => {
-    await mount();
-    expect(target()).toBeVisible();
-  });
-
+  // The target control is drawn (T3, FR-011): the order test below asserts it is in the DOM and the preselect test reads it.
   it('puts it ABOVE the input, which is what makes Shift+Tab reach it (P7)', async () => {
     await mount();
 
@@ -375,14 +380,7 @@ describe('invoked from inside an editor (AS-11, AS-11a, T1–T3, T6, P7, P8, E3)
  * ══════════════════════════════════════════════════════════════════════════ */
 
 describe('Shift+Tab reaches the control and Space changes it (AS-11b, T4, E5)', () => {
-  it('Shift+Tab from the query input lands on the target control', async () => {
-    const { user } = await mount();
-
-    await user.tab({ shift: true });
-
-    expect(target()).toHaveFocus();
-  });
-
+  // Shift+Tab from the query input landing on the target is asserted by the Space test below (and the Enter test).
   it('Space toggles the value, opens nothing and dismisses nothing', async () => {
     const { user, onDismiss } = await mount();
 
@@ -599,5 +597,140 @@ describe('the control says where the file will land IN WORDS (SC-020, FR-068)', 
     await user.click(screen.getByTestId('quickopen-target-label'));
     expect(target()).toHaveAttribute('data-value', 'lastActive');
     expect(target()).toHaveTextContent('Will open in the active editor (README)');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ *
+ * The remembered query — MIGRATED FROM `navigation-remember.e2e.ts` (test-suite audit)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Two E2E declarations — "at the shipped defaults BOTH modals reopen empty, even straight after a
+ * value was accepted" (AS-18, FR-057) and "with rememberQuickOpenQuery on, the accepted query comes
+ * back selected with its own results — an abandoned one never does" (AS-19, AS-20, FR-060, FR-061) —
+ * launched an Electron app each, with a config root seeded before launch, to read one modal's input.
+ *
+ * What they asserted splits into the store's rules, which are `unit/navigation-remember-store.test.ts`
+ * (what counts as accepted, what a project change discards, what turning a setting off discards),
+ * and the WIRING of the real modal to them, which is here: the setting is READ (SC-014's #108 — a
+ * setting rendered and never consumed passes everything else), the accepted query is seeded back
+ * fully selected and into the picker's own query state so the list shows ITS results, and an
+ * abandoned or cancelled open records nothing. The real `ConfigProvider` serves the setting, so
+ * "seeded on disk before launch" becomes an argument.
+ *
+ * Go To Line's half of the off-state (AS-13) and the line number's rules are the same store
+ * (`rememberGotoLineNumber`, `applyRememberSettings`), covered by the unit file; the project change
+ * and the discard-on-turn-off are `NavigationChrome` effects over `noteActiveProjectRoot` and
+ * `applyRememberSettings`, and the preferences-window round trip stays END-TO-END
+ * (`navigation-remember.e2e.ts`, the FR-059/FR-063 declaration).
+ */
+describe('the remembered query (033 Phase 8, FR-057, FR-060, FR-061, SC-014)', () => {
+  beforeEach(() => resetRememberedInput());
+  afterEach(() => resetRememberedInput());
+
+  const settingsWith = (on: boolean): Record<string, unknown> => ({
+    version: 1,
+    editor: { navigation: { rememberQuickOpenQuery: on } },
+  });
+  const rowPaths = (): string[] =>
+    rows().map((r) => (r.getAttribute('data-testid') ?? '').slice('quickopen-row-'.length));
+
+  /** Open Quick Open, type a query that has exactly one answer, accept it, and close the modal. */
+  async function accept(settings: Record<string, unknown>, query: string): Promise<void> {
+    const { user } = await mount({ settings });
+    await user.keyboard(query);
+    expect(rows()).toHaveLength(1);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(openFileInTab).toHaveBeenCalledTimes(1));
+    // The record sits BEHIND the open's await (#321): let the router's answer land before closing.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    cleanup();
+  }
+
+  it('at the shipped default (off) the modal reopens EMPTY, even straight after a value was accepted', async () => {
+    await accept(settingsWith(false), 'guide');
+
+    const { input } = await mount({ settings: settingsWith(false) });
+
+    expect(input).toHaveValue('');
+    // …and it is listing the WHOLE project, which is what an unseeded query does.
+    expect(rows()).toHaveLength(PATHS.length);
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+  });
+
+  it('with the setting on, the accepted query comes back FULLY SELECTED, showing its own results', async () => {
+    await accept(settingsWith(true), 'guide');
+    expect(rememberedInput().quickOpenQuery).toBe('guide');
+
+    const { user, input } = await mount({ settings: settingsWith(true) });
+
+    expect(input).toHaveValue('guide');
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'guide'.length]);
+    // The row assertion separates "seeded the control" from "seeded the field": text written into the
+    // input without reaching the picker's query state would list all four files.
+    expect(rowPaths()).toEqual(['docs/guide.md']);
+
+    // Typing REPLACES it outright, with no keystroke spent clearing it.
+    await user.keyboard('README');
+    expect(input).toHaveValue('README');
+    expect(rowPaths()).toEqual(['README.md']);
+  });
+
+  it('an ABANDONED query is never recorded (AS-20) — a dismissal has no path to the store', async () => {
+    const { user, onDismiss } = await mount({ settings: settingsWith(true) });
+    await user.keyboard('zzz-abandoned');
+    expect(screen.getByTestId('quickopen-input')).toHaveValue('zzz-abandoned');
+    await user.keyboard('{Escape}');
+    expect(onDismiss).toHaveBeenCalled();
+    expect(openFileInTab).not.toHaveBeenCalled();
+    cleanup();
+
+    const { input } = await mount({ settings: settingsWith(true) });
+
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+    expect(input).toHaveValue('');
+  });
+
+  it('an open the user cancelled (or that failed) records nothing — "accepted" means a file OPENED (FR-061)', async () => {
+    openFileInTab.mockResolvedValue(false);
+    await accept(settingsWith(true), 'guide');
+
+    const { input } = await mount({ settings: settingsWith(true) });
+
+    expect(rememberedInput().quickOpenQuery).toBeNull();
+    expect(input).toHaveValue('');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ *
+ * A candidate set still being built SAYS SO, over whatever rows it holds
+ * (FR-015, S3, FR-069d) - migrated from quick-open-perf.e2e.ts
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+describe('a candidate set that is still being built (FR-015, S3, FR-069d)', () => {
+  const stillListing = (): HTMLElement | null => screen.queryByTestId('quickopen-building');
+
+  it('says it is still listing when opened mid-walk with no rows, then lists once the walk is done (S3)', async () => {
+    const { setIndex } = await mount({ index: { status: 'building', paths: [] } });
+
+    expect(stillListing(), 'S3: a modal opened before enumeration finishes says so').not.toBeNull();
+    expect(rows(), 'and has no rows to show yet').toHaveLength(0);
+
+    setIndex({ status: 'ready', paths: PATHS });
+
+    await waitFor(() => expect(stillListing(), 'the line goes once the walk is done').toBeNull());
+    expect(rows(), 'and the real list is shown').toHaveLength(PATHS.length);
+  });
+
+  it('keeps the line standing OVER a borrowed list: rows and the line together, never a silent partial list (FR-069d)', async () => {
+    const { setIndex } = await mount({ index: { status: 'building', paths: PATHS.slice(0, 2) } });
+
+    expect(rows(), 'the borrowed (narrower) rows stay on screen - no blink to empty').toHaveLength(2);
+    expect(stillListing(), 'FR-069d: a partial list is never presented as whole').not.toBeNull();
+
+    setIndex({ status: 'ready', paths: PATHS });
+
+    await waitFor(() => expect(stillListing(), 'the line is gone once the wider index lands').toBeNull());
+    expect(rows(), 'the rows remain, widened').toHaveLength(PATHS.length);
   });
 });

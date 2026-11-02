@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as shellIntegrationModule from '../../src/main/electron-shell-integration.js';
 import type { DeElevatingLauncher, ElectronShellLike, PathKind } from '../../src/main/electron-shell-integration.js';
 
@@ -136,16 +136,30 @@ const FOLDER = 'C:\\Users\\dev\\notes';
 beforeEach(() => {
   platform.launches.length = 0;
   platform.elevated = true;
+  // A de-elevated action answers only after DE_ELEVATED_LAUNCH_REPORT_MS of silence; `settle`
+  // advances a fake clock through that window instead of waiting it out three times per test.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function settle<T>(action: Promise<T>): Promise<T> {
+  let done = false;
+  void action.finally(() => (done = true)).catch(() => {});
+  while (!done) await vi.advanceTimersByTimeAsync(shellIntegrationModule.DE_ELEVATED_LAUNCH_REPORT_MS);
+  return action;
+}
 
 describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composition builds it', () => {
   it('with NO overrides and an elevated host, all three actions go through the de-elevating launcher', async () => {
     const shell = recordingShell();
     const integration = factory()(shell, { statKind: async (p) => (p === FOLDER ? 'folder' : 'file') });
 
-    await integration.revealInFileManager(FILE);
-    await integration.openFolder(FOLDER);
-    await integration.openWithDefaultProgram(FILE);
+    await settle(integration.revealInFileManager(FILE));
+    await settle(integration.openFolder(FOLDER));
+    await settle(integration.openWithDefaultProgram(FILE));
 
     expect(platform.launches.map((l) => l.file.toLowerCase().split('\\').pop())).toEqual([
       'explorer.exe',
@@ -164,9 +178,9 @@ describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composi
       isElevated: () => true,
     });
 
-    await integration.revealInFileManager(FILE);
-    await integration.openFolder(FOLDER);
-    await integration.openWithDefaultProgram(FILE);
+    await settle(integration.revealInFileManager(FILE));
+    await settle(integration.openFolder(FOLDER));
+    await settle(integration.openWithDefaultProgram(FILE));
 
     expect(launched).toHaveLength(3);
     expect(shell.calls).toEqual([]);
@@ -177,7 +191,7 @@ describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composi
     const shell = recordingShell();
     const integration = factory()(shell, { statKind: async () => 'file' });
 
-    await integration.revealInFileManager(FILE);
+    await settle(integration.revealInFileManager(FILE));
 
     expect(platform.launches).toEqual([]);
     expect(shell.calls).toEqual([`showItemInFolder ${FILE}`]);
@@ -208,9 +222,9 @@ describe('gate 35381378387 — under the E2E harness an elevated app opens throu
     const shell = recordingShell();
     const integration = factory()(shell, { statKind: async () => 'file' }, HARNESS);
 
-    await integration.revealInFileManager(FILE);
-    await integration.openFolder(FOLDER);
-    await integration.openWithDefaultProgram(FILE);
+    await settle(integration.revealInFileManager(FILE));
+    await settle(integration.openFolder(FOLDER));
+    await settle(integration.openWithDefaultProgram(FILE));
 
     expect(platform.launches, 'a real explorer.exe / rundll32.exe was started under the harness').toEqual([]);
     expect(shell.calls).toEqual([`showItemInFolder ${FILE}`, `openPath ${FOLDER}`, `openPath ${FILE}`]);
@@ -220,7 +234,7 @@ describe('gate 35381378387 — under the E2E harness an elevated app opens throu
     const shell = recordingShell();
     const integration = factory()(shell, { statKind: async () => 'file' }, {});
 
-    await integration.revealInFileManager(FILE);
+    await settle(integration.revealInFileManager(FILE));
 
     expect(platform.launches).toHaveLength(1);
     expect(shell.calls).toEqual([]);

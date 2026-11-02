@@ -511,16 +511,9 @@ describe('refused and placedElsewhere change nothing here', () => {
 /* ── target (047 US2, R8) ─────────────────────────────────────────────────────────────────────── */
 
 describe('the target sent to main', () => {
-  it("sends the caller's defaultOpenTarget as the mode, and null when no candidate is recorded", async () => {
-    const ws = fakeWs(twoTabs()); // active tab 't1' — no preview panel in it, nothing recorded
-    const bridge = fakeBridge({ kind: 'placeLocally', reservation: 'r-1', besidePanelId: null });
-
-    await openPreview({ ws, bridge, intent: { absPath: FILE, projectId: PROJECT }, defaultOpenTarget: 'new' });
-
-    expect(bridge.open).toHaveBeenCalledWith(
-      expect.objectContaining({ target: { mode: 'new', reusePanelId: null } }),
-    );
-  });
+  // DELETED: "sends the caller's defaultOpenTarget as the mode, and null when no candidate" — "mode
+  // 'new' never sends a candidate, even with one recorded" below asserts the same target for the
+  // same call, with a candidate recorded.
 
   it("mode 'lastActive' sends the visible tab's most recently active preview as reusePanelId", async () => {
     // A preview already standing in the ACTIVE tab ('t1'), recorded active.

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * 046 branch review #2 / #1 — the busy probe behind Unload's dialog and `closeIdle`.
@@ -44,6 +44,10 @@ type Callback = (err: Error | null, stdout?: string, stderr?: string) => void;
 beforeEach(() => {
   execFileSync.mockReset();
   execFile.mockReset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('a failed probe never reads as idle (review #2)', () => {
@@ -114,9 +118,15 @@ describe('one async snapshot serves every terminal asked about together (review 
     });
     const host = await newHost();
 
-    await host.probeChildPids!({ pid: 100 });
-    await new Promise((r) => setTimeout(r, 400));
-    await host.probeChildPids!({ pid: 100 });
+    // A fake clock: the snapshot's 250 ms share window is read from Date.now, and the mock answers on a 5 ms timer.
+    vi.useFakeTimers();
+    const first = host.probeChildPids!({ pid: 100 });
+    await vi.advanceTimersByTimeAsync(5);
+    await first;
+    await vi.advanceTimersByTimeAsync(400);
+    const second = host.probeChildPids!({ pid: 100 });
+    await vi.advanceTimersByTimeAsync(5);
+    await second;
 
     expect(execFile).toHaveBeenCalledTimes(2);
   });

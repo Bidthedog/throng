@@ -113,11 +113,8 @@ describe('with nothing selected the keys start at the ends of the list (FR-021)'
     ]);
   }
 
-  it('ArrowDown selects the FIRST item, not the second', () => {
-    seed();
-    down();
-    expect(heading('src/a.ts')).toHaveAttribute('data-current', 'true');
-  });
+  // DELETED: 'ArrowDown selects the FIRST item' — 'ArrowDown and ArrowUp step through headings and
+  // rows alike' (below) asserts the same first press selects the heading.
 
   it('ArrowUp selects the first item', () => {
     seed();
@@ -125,15 +122,8 @@ describe('with nothing selected the keys start at the ends of the list (FR-021)'
     expect(heading('src/a.ts')).toHaveAttribute('data-current', 'true');
   });
 
-  it('Home selects the first item and End the last', () => {
-    seed();
-    fireEvent.keyDown(list(), { key: 'Home' });
-    expect(heading('src/a.ts')).toHaveAttribute('data-current', 'true');
-    // A fresh run clears the selection again.
-    emit(2, 'complete', [resultRow('src/a.ts', 1, 1), resultRow('src/b.ts', 1, 3)]);
-    fireEvent.keyDown(list(), { key: 'End' });
-    expect(rowEl('src/b.ts', 3)).toHaveAttribute('data-current', 'true');
-  });
+  // DELETED: 'Home selects the first item and End the last' — 'Home and End jump to the first and
+  // last items' (FR-021, below) asserts both from the same unselected seed.
 
   it('Enter does nothing: it does not open a row or toggle a heading nobody selected', () => {
     const opened: ResultOpenRequest[] = [];

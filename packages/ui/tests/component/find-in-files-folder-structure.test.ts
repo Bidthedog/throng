@@ -191,7 +191,7 @@ describe('the tree is one heading per level, all open (FR-013, FR-013a, FR-016)'
   });
 
   it('Collapse all and Expand all reach every level', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderFindInFilesPanel();
     emit();
     chooseFolderTree();

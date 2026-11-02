@@ -70,7 +70,7 @@ describe('raise', () => {
   // and there is no go-to control of its own.
   it('goes to the panel on a click on the card body (FR-124)', async () => {
     raise('p1', { title: 'Build' });
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(within(card('p1')).getByTestId('notice-body'));
     expect(goTo).toHaveBeenCalledWith('p1');
     await user.click(within(card('p1')).getByText('Bell'));
@@ -80,14 +80,14 @@ describe('raise', () => {
   it('goes to the right panel when two toasts are showing (FR-124)', async () => {
     raise('p1');
     raise('p2');
-    await userEvent.setup().click(within(card('p2')).getByTestId('notice-body'));
+    await userEvent.setup({ delay: null }).click(within(card('p2')).getByTestId('notice-body'));
     expect(goTo).toHaveBeenCalledTimes(1);
     expect(goTo).toHaveBeenCalledWith('p2');
   });
 
   it('the focused card goes to the panel on Enter or Space; Enter on Dismiss does not (FR-124, keyboard parity)', async () => {
     raise('p1');
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     card('p1').focus();
     await user.keyboard('{Enter}');
     expect(goTo).toHaveBeenCalledTimes(1);
@@ -101,7 +101,7 @@ describe('raise', () => {
   it('Copy and Dismiss do not navigate (FR-124)', async () => {
     raise('p1');
     Reflect.set(window.throng, 'clipboard', { write: vi.fn(() => Promise.resolve()) });
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.click(within(card('p1')).getByTestId('attention-toast-p1-copy'));
     expect(goTo).not.toHaveBeenCalled();
     await user.click(within(card('p1')).getByTestId('attention-toast-p1-dismiss'));

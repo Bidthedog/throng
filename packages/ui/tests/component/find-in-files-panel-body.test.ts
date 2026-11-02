@@ -16,7 +16,6 @@
 import { screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FIND_IN_FILES_KIND } from '@throng/core';
 import { PanelBody } from '../../src/renderer/workspace/panel-body.js';
 import { __resetFindInFilesState } from '../../src/renderer/find-in-files/find-in-files-store.js';
 import {
@@ -79,18 +78,8 @@ describe('PanelBody routes a Find in Files panel to its own body (T061)', () => 
     expect(screen.queryByText('Empty Panel')).toBeNull();
   });
 
-  it('uses the registered kind, not a hand-spelled string', () => {
-    // If the constant and the branch ever disagree the panel silently falls through to the
-    // placeholder, so the test names the constant the registry uses.
-    renderWithContextMenu(
-      createElement(PanelBody, {
-        panel: findInFilesPanel({ kind: FIND_IN_FILES_KIND }),
-        tabId: 'tab-1',
-      }),
-    );
-
-    expect(screen.getByTestId(`fif-panel-${PANEL_ID}`)).toBeInTheDocument();
-  });
+  // DELETED: 'uses the registered kind' — helpers/find-in-files.ts:41 builds the panel with that
+  // same FIND_IN_FILES_KIND string, so the test above already routes by it.
 
   it('waits for the project list before searching anything (FR-018)', () => {
     // Ownership decides which tree is searched. While the list is loading, "outside every project"

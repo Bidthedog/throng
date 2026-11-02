@@ -30,8 +30,6 @@ import {
   PREVIEW_KIND,
   SHIPPED_PREVIEW_PROVIDERS,
   createDefaultLayout,
-  previewAffordance,
-  DEFAULT_APP_SETTINGS,
   truncateGraphemes,
   type Panel,
   type WorkspaceLayout,
@@ -50,7 +48,6 @@ import { ContextMenuProvider } from '../../src/renderer/context-menu-provider.js
 import { ConfirmProvider } from '../../src/renderer/confirm-dialog.js';
 import { ConfigProvider } from '../../src/renderer/config/config-store.js';
 import { FileTree } from '../../src/renderer/explorer/file-tree.js';
-import { buildContextMenuItems, type ContextMenuOps } from '../../src/renderer/explorer/context-menu-items.js';
 import { PreviewProviderRegistryContext } from '../../src/renderer/preview/provider-registry-context.js';
 import { PREVIEW_PROVIDER_VIEWS } from '../../src/renderer/preview/providers/index.js';
 import { registerPreviewOpener, type PreviewOpenIntent } from '../../src/renderer/preview/open-preview.js';
@@ -154,7 +151,7 @@ function layoutWithVisiblePreview(previewId: string, filePath: string): Workspac
 }
 
 async function mount(opts: { previewOpen?: boolean; settings?: Record<string, unknown>; layout?: WorkspaceLayout } = {}) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { services, loads } = fakeServices(opts.layout ?? createDefaultLayout(PROJECT_ID, { tab: 't1', panel: 'p1' }));
   let configLoaded = false;
   Reflect.set(window, 'throng', {
@@ -248,48 +245,9 @@ describe('where the preview rows sit in Open In (contracts §5; 047 FR-075)', ()
   });
 });
 
-describe('absent where a preview means nothing (FR-003, FR-004)', () => {
-  it('on a folder', async () => {
-    const { user, tree } = await mount();
-    const flyout = await openInFlyout(user, tree, 'docs');
-    expect(within(flyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
-  });
-
-  it('on a file no provider claims', async () => {
-    const { user, tree } = await mount();
-    const flyout = await openInFlyout(user, tree, 'notes.txt');
-    expect(within(flyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
-    expect(within(flyout).getByTestId('menu-item-New Editor')).toBeInTheDocument();
-  });
-
-  it('for a file outside the project — the builder draws no row for an absent affordance', () => {
-    // The tree composes every path under its own root, so the outside case is reached at the seam the
-    // tree hands over: core's answer for a path outside the root, passed as the Preview argument.
-    const affordance = previewAffordance({
-      registry: SHIPPED_PREVIEW_PROVIDERS,
-      settings: DEFAULT_APP_SETTINGS.editor.previews,
-      absPath: 'E:/elsewhere/README.md',
-      projectRoot: ROOT_FOLDER,
-      isFolder: false,
-      previewOpen: false,
-      surface: 'explorer',
-    });
-    expect(affordance.state).toBe('absent');
-    const noop = (): void => {};
-    const ops = new Proxy({}, { get: () => noop }) as unknown as ContextMenuOps;
-    const items = buildContextMenuItems({
-      node: { relPath: 'README.md', kind: 'file' },
-      selectedRelPaths: [],
-      clipboard: null,
-      ops,
-      preview: { affordance, openLastActive: noop, openNew: noop, lastPreviewTitle: null },
-    });
-    const openIn = items.find((i) => i.label === 'Open In');
-    const labels = openIn?.submenu?.map((i) => i.label) ?? [];
-    expect(labels).not.toContain('New Preview Panel');
-    expect(labels).not.toContain('Last Preview Panel');
-  });
-});
+// MOVED DOWN (pass 2): "for a file outside the project — the builder draws no row for an absent
+// affordance" renders nothing; it is `unit/explorer-open-in-preview-absent.test.ts`. On a folder and on a
+// file no provider claims is asserted below, in the Last Preview Panel / New Preview Panel group.
 
 describe('drawn DISABLED, never hidden, while unavailable', () => {
   const isDisabled = (el: HTMLElement): boolean => el.getAttribute('aria-disabled') === 'true';
@@ -333,13 +291,6 @@ describe('drawn DISABLED, never hidden, while unavailable', () => {
 describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
   const isDisabled = (el: HTMLElement): boolean => el.getAttribute('aria-disabled') === 'true';
 
-  it('present for a file with an enabled provider, absent for a folder or an unclaimed file', async () => {
-    const { user, tree } = await mount();
-    const flyout = await openInFlyout(user, tree, 'README.md');
-    expect(within(flyout).getByTestId('menu-item-Last Preview Panel')).toBeInTheDocument();
-    expect(within(flyout).getByTestId('menu-item-New Preview Panel')).toBeInTheDocument();
-  });
-
   it('absent on a folder and on a file no provider claims, exactly like Preview', async () => {
     const { user, tree } = await mount();
     const folderFlyout = await openInFlyout(user, tree, 'docs');
@@ -349,12 +300,7 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     const unclaimedFlyout = await openInFlyout(user, tree, 'notes.txt');
     expect(within(unclaimedFlyout).queryByTestId('menu-item-Last Preview Panel')).toBeNull();
     expect(within(unclaimedFlyout).queryByTestId('menu-item-New Preview Panel')).toBeNull();
-  });
-
-  it('New Preview Panel is disabled while the provider is off (already previewed: 060 FR-049, above)', async () => {
-    const off = await mount({ settings: MARKDOWN_OFF });
-    const offFlyout = await openInFlyout(off.user, off.tree, 'README.md');
-    expect(isDisabled(within(offFlyout).getByTestId('menu-item-New Preview Panel'))).toBe(true);
+    expect(within(unclaimedFlyout).getByTestId('menu-item-New Editor')).toBeInTheDocument();
   });
 
   it('Last Preview Panel is ALSO disabled, and unnamed, while the visible tab holds no preview to reuse (FR-076)', async () => {
@@ -367,16 +313,8 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(opened).toEqual([]);
   });
 
-  it('Last Preview Panel is enabled, and names the panel it would reuse as its header shows it (FR-076)', async () => {
-    recordLastActivePreview('t1', 'pv');
-    const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
-    const flyout = await openInFlyout(user, tree, 'README.md');
-    // The header title of a standalone preview is `<file name> - Preview` (054 FR-005a); the item names the
-    // panel without the suffix, since it already says "Preview Panel" (FR-080).
-    const row = within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)');
-    expect(isDisabled(row)).toBe(false);
-    expect(within(flyout).queryByTestId('menu-item-Last Preview Panel')).toBeNull();
-  });
+  // DELETED (pass 2): "Last Preview Panel is enabled, and names the panel it would reuse" — the
+  // 'sends the explicit target override' test below asserts the same enabled, named row (other.md).
 
   /**
    * MT-02 round 3 — "the name of the panel in Last Preview Panel (<name>) should be truncated as long
@@ -407,17 +345,13 @@ describe('Last Preview Panel / New Preview Panel (FR-014)', () => {
     expect(isDisabled(row)).toBe(true);
   });
 
-  it('a name within 16 characters shows whole, without the " - Preview" suffix (FR-080)', async () => {
-    recordLastActivePreview('t1', 'pv');
-    const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
-    const flyout = await openInFlyout(user, tree, 'README.md');
-    expect(within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)')).toBeInTheDocument();
-  });
-
   it('sends the explicit target override — never the setting — for each row', async () => {
     recordLastActivePreview('t1', 'pv');
     const { user, tree } = await mount({ layout: layoutWithVisiblePreview('pv', `${ROOT_FOLDER}/other.md`) });
     const flyout = await openInFlyout(user, tree, 'README.md');
+    // Enabled, and named as its header shows it: within 16 characters, whole, without " - Preview" (FR-076, FR-080).
+    expect(isDisabled(within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)'))).toBe(false);
+    expect(within(flyout).queryByTestId('menu-item-Last Preview Panel')).toBeNull();
 
     await user.click(within(flyout).getByTestId('menu-item-Last Preview Panel (other.md)'));
     expect(opened.at(-1)).toEqual({

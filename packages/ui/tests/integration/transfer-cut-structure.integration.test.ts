@@ -128,18 +128,6 @@ describe('a cut of test/test.md and test.md pasted on test2 (FR-033)', () => {
     });
   });
 
-  it('a copy of the same selection lands the same — the cut is no different', async () => {
-    await setup();
-    show('A');
-    expect(await handles.get('throng:fileClipboard:set')!(event, 'copy', ['test/test.md', 'test.md'])).toEqual({ ok: true });
-    show('B');
-    const r = await pasteOnTest2();
-
-    expect(r.failures).toEqual([]);
-    expect(await snapshotTree(join(h.rootB, 'test2'))).toEqual({
-      'test/': '',
-      'test/test.md': 'nested',
-      'test.md': 'top',
-    });
-  });
+  // A copy of the same selection landing the same way is transfer-structure.integration.test.ts's
+  // `it.each` (within a project, across projects).
 });

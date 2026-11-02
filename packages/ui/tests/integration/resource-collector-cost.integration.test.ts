@@ -5,8 +5,9 @@
  * GPU counters; its cost is its own CPU time as Windows reports it, which nothing in-process can stand
  * in for.
  *
- * Duration: 60 s, as SC-004 defines it: a shorter window over-weights a freshly forked collector's
- * unoptimised first ticks.
+ * Duration: 30 s (15 summary ticks at the default 2 s). SC-004 says only "on average", so the window is
+ * ours to pick; it was 60 s. The first tick is excluded below, which is what keeps a freshly forked
+ * collector's unoptimised start-up from over-weighting a short window.
  *
  * Measured on the development machine, ~420 processes: 1.02% before the collector read only its own
  * session's processes, took GPU every other summary tick and computed figures only for throng's
@@ -25,7 +26,7 @@ import type { CollectorToMain, ResourceRoster } from '@throng/ipc-contract';
 import { WindowsElevation, WindowsProcessMetrics } from '@throng/platform-windows';
 
 const ENTRY = fileURLToPath(new URL('../../dist/collector/resource-collector-entry.js', import.meta.url));
-const WINDOW_MS = 60_000;
+const WINDOW_MS = 30_000;
 
 /** Ten terminals' worth of roster, naming processes that may or may not exist — the attribution runs either way. */
 const ROSTER: ResourceRoster = {
@@ -90,7 +91,7 @@ async function measure(withTrace: boolean): Promise<void> {
   }
 }
 
-describe('the collector’s own cost (055 SC-004)', () => {
+describe('the collector’s own cost (055 SC-004)', { tags: ['regression'] }, () => {
   it('averages under 1% of one core in summary mode at the default 2 s interval', () => measure(false), WINDOW_MS + 15_000);
 
   it.skipIf(!new WindowsElevation().isElevated())(

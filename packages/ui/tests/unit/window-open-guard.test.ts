@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { IShellIntegration } from '@throng/core';
 import { windowOpenDecision, denyRendererWindows } from '../../src/main/window-open-guard.js';
@@ -91,5 +93,23 @@ describe('denyRendererWindows (024 US7 / 044 FR-091)', () => {
     denyRendererWindows(contents, shell);
     expect(fire('javascript:alert(1)')).toEqual({ action: 'deny' });
     expect(opened).toEqual([]);
+  });
+});
+
+/**
+ * The guard only protects a window it is installed on. `main.ts` runs the whole application at import and
+ * cannot be loaded here, so this is a source guard (as `preferences-window-query.test.ts` does): the MAIN
+ * window — the one whose renderer a terminal link lives in — gets `denyRendererWindows`. Moved down from
+ * terminal-links.e2e.ts, which called `window.open` from the renderer to learn the same thing.
+ */
+describe('the main window installs the guard (024 US7)', () => {
+  it('createMainWindow calls denyRendererWindows on its own webContents', () => {
+    const source = readFileSync(fileURLToPath(new URL('../../src/main/main.ts', import.meta.url)), 'utf8');
+    const start = source.indexOf('async function createMainWindow(');
+    const end = source.indexOf('\nfunction ', start);
+    expect(start, 'createMainWindow exists').toBeGreaterThan(-1);
+    expect(source.slice(start, end), 'the main window denies renderer-opened windows').toMatch(
+      /denyRendererWindows\(window\.webContents,\s*shellIntegration\)/,
+    );
   });
 });

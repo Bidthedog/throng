@@ -201,6 +201,8 @@ async function mount(
 ) {
   for (const [id, c] of Object.entries(controllers)) registerPanelSearch(id, c);
   const client = new WorkspaceClient(fakeBridge(twoPanelLayout(kinds.a, kinds.b)));
+  // The default delay, not `delay: null`: SearchKeybindings registers its key listener in a passive
+  // effect, and with no delay a chord can reach the listener from before the active panel resolved.
   const user = userEvent.setup();
 
   render(
@@ -254,7 +256,7 @@ async function focus(
 }
 
 describe('two panels, two sessions (FR-003)', () => {
-  it('holds a different term in each panel at the same time, and neither drives the other', async () => {
+  it('holds a different term in each panel at the same time, neither drives the other, and stepping A leaves B alone', async () => {
     const recA = recorder();
     const recB = recorder();
     const { user } = await mount({ [A]: editorController(recA), [B]: editorController(recB) });
@@ -265,6 +267,8 @@ describe('two panels, two sessions (FR-003)', () => {
     await focus(user, B, 'focus-b');
     await press(user, 'f');
     await search(user, B, 'beta', recB);
+
+    const bBefore = within(bar(B) as HTMLElement).getByTestId('find-count').textContent;
 
     // Each engine saw only its OWN term — the guarantee FR-003 is about.
     expect(recA.queries).not.toContain('beta');
@@ -279,21 +283,8 @@ describe('two panels, two sessions (FR-003)', () => {
     });
     expect(within(host).getByTestId('find-input')).toHaveValue('alpha');
     expect(bar(B)).toBeNull();
-  });
 
-  it('steps matches in A without moving B (US1 scenario 2)', async () => {
-    const recA = recorder();
-    const recB = recorder();
-    const { user } = await mount({ [A]: editorController(recA), [B]: editorController(recB) });
-
-    await press(user, 'f');
-    await search(user, A, 'alpha', recA);
-    await focus(user, B, 'focus-b');
-    await press(user, 'f');
-    await search(user, B, 'beta', recB);
-    const bBefore = within(bar(B) as HTMLElement).getByTestId('find-count').textContent;
-
-    await focus(user, A, 'focus-a');
+    // Stepping matches in A does not move B (US1 scenario 2).
     await user.click(within(bar(A) as HTMLElement).getByTestId('find-next'));
     await waitFor(() =>
       expect(within(bar(A) as HTMLElement).getByTestId('find-count')).toHaveTextContent('2 of 3'),

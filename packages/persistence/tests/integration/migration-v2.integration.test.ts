@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('migration v2 (projects + workspace + sub-workspaces)', () => {
-  it('applies the v2 domain tables when migrating to the latest version', () => {
+  it('applies the v2 domain tables when migrating to the latest version', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       const result = runMigrations(db);
@@ -41,7 +41,7 @@ describe('migration v2 (projects + workspace + sub-workspaces)', () => {
     }
   });
 
-  it('creates the projects, workspace_layout and sub_workspaces tables', () => {
+  it('creates the projects, workspace_layout and sub_workspaces tables', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -54,7 +54,7 @@ describe('migration v2 (projects + workspace + sub-workspaces)', () => {
     }
   });
 
-  it('gives projects the owner_user-scoped columns the domain needs', () => {
+  it('gives projects the owner_user-scoped columns the domain needs', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -79,7 +79,7 @@ describe('migration v2 (projects + workspace + sub-workspaces)', () => {
     }
   });
 
-  it('cascades workspace_layout deletion when its project is removed (FK on)', () => {
+  it('cascades workspace_layout deletion when its project is removed (FK on)', { tags: ['regression'] }, () => {
     const db = openDatabase({ databasePath: freshDbPath() });
     try {
       runMigrations(db);
@@ -103,7 +103,7 @@ describe('migration v2 (projects + workspace + sub-workspaces)', () => {
     }
   });
 
-  it('is idempotent: a second run against a v2 store changes nothing', () => {
+  it('is idempotent: a second run against a v2 store changes nothing', { tags: ['regression'] }, () => {
     const databasePath = freshDbPath();
     let db = openDatabase({ databasePath });
     runMigrations(db);

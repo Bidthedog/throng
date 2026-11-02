@@ -125,6 +125,7 @@ describe('a missing scope is marked on the control and mutes nothing (FR-030a)',
 
     expect(scopeControl().dataset.scopeNotice).toBe('missing');
     expect(scopeField().getAttribute('aria-invalid')).toBe('true');
+    expect(scopeField().disabled).toBe(false);
     expect(screen.getByTestId(`fif-scope-notice-${PANEL_ID}`)).toBeInTheDocument();
 
     // Nothing hidden, nothing reordered, nothing disabled — the marking is informational.
@@ -209,26 +210,8 @@ describe('what the box accepts, typed (FR-092b)', () => {
     expect(scopeControl().dataset.scopeNotice).toBe('outsideProject');
   });
 
-  it('refuses a relative path that climbs out, rather than clamping it to the root', () => {
-    mount();
-    typeAndRun('../other');
-
-    expect(bridge.start).not.toHaveBeenCalled();
-    expect(scopeControl().dataset.scopeNotice).toBe('outsideProject');
-  });
-
-  it('sends a trailing slash and backslashes as the scope they mean', () => {
-    mount();
-    typeAndRun('src\\renderer\\');
-
-    // Sent verbatim, this became the row prefix `src\renderer\/` — every row's path carried it.
-    expect(bridge.start.mock.calls[0][0]).toMatchObject({ scopeSubPath: 'src/renderer' });
-  });
-
-  it('sends the project root, typed out in full, as the whole project', () => {
-    mount();
-    typeAndRun('D:\\proj\\');
-
-    expect(bridge.start.mock.calls[0][0]).toMatchObject({ scopeSubPath: null });
-  });
+  // DELETED: the climbing path, trailing-slash/backslash and root-typed-in-full cases — the reading
+  // is pinned in core `scope-input.test.ts` ('a relative path that climbs out', 'ignores a trailing
+  // separator', 'reads backslashes', 'is the project root typed out in full'); the two tests above
+  // keep the panel's wiring (it reads the box through that reading before a scan starts).
 });

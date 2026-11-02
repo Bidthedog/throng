@@ -34,7 +34,7 @@ import { PanelPlaceholder } from '../../../src/renderer/workspace/panel-placehol
  * ══ WHY THIS EXISTS, AND WHY IT WAS BELIEVED IMPOSSIBLE ══
  *
  * Nothing in this suite had ever constructed an `EditorView` with a DOM parent — the closest,
- * `component/editor-command-semantics.test.ts`, drives commands against a `FakeView` and says so.
+ * `unit/editor-command-semantics.test.ts`, drives commands against a `FakeView` and says so.
  * That made "the editor cannot be mounted below E2E" an assumption nobody had tested, and it is
  * false: `new EditorView({ parent })` mounts in jsdom, renders `.cm-content`, and handles keydown
  * through its own keymap. Measured before this helper was written, with a throwaway spike.

@@ -73,6 +73,16 @@ describe('the Tabs settings group (FR-030, FR-034, FR-044h, FR-047, FR-050, FR-0
     }
   });
 
+  it('files the hover-activate delay under Tabs, though its key does not start `tabs.`', () => {
+    // It moved here from Behaviour; only `group` moved, because the key is the settings.json
+    // contract. Moved down from tab-settings.e2e.ts (T057), which checked it in the rendered form.
+    const d = byKey.get('behaviour.tabHoverActivateMs');
+    expect(d?.group).toBe('Tabs');
+    expect(d?.control).toBe('slider');
+    expect([d?.min, d?.max, d?.step]).toEqual([0, 5000, 50]);
+    expect(getAtPath(DEFAULT_APP_SETTINGS, 'behaviour.tabHoverActivateMs')).toBe(600);
+  });
+
   it('puts the shipped default on a step the slider can actually land on', () => {
     // NOT covered by `slider-descriptors.test.ts`, which checks a step's SIZE and never asks
     // whether the shipped value sits on one. A default between two stops is a setting the user can

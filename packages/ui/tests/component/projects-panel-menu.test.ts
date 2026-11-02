@@ -375,32 +375,8 @@ describe('Escape closes the menu and returns focus to the row (contracts/menus.m
 });
 
 describe('T126 — exactly two Unload rows, following projects.unloadTerminalAction (FR-081, FR-038)', () => {
-  it('under keepRunning: Unload Project, then Unload Project and End Terminals', async () => {
-    await mount({ unloadTerminalAction: 'keepRunning' });
-    await openMenuOn('p1');
-
-    expect(unloadRowLabels()).toEqual(['Unload Project', 'Unload Project and End Terminals']);
-  });
-
-  it('under endTerminals: Unload Project, then Unload Project and Keep Terminals Running', async () => {
-    await mount({ unloadTerminalAction: 'endTerminals' });
-    await openMenuOn('p1');
-
-    expect(unloadRowLabels()).toEqual(['Unload Project', 'Unload Project and Keep Terminals Running']);
-  });
-
-  it.each([
-    ['keepRunning', 'Unload Project and Keep Terminals Running'],
-    ['endTerminals', 'Unload Project and End Terminals'],
-  ] as const)(
-    'under %s, never draws "%s" — it would duplicate Unload Project (006 FR-030)',
-    async (action, redundant) => {
-      await mount({ unloadTerminalAction: action });
-      await openMenuOn('p1');
-      expect(screen.queryByTestId(`menu-item-${redundant}`)).toBeNull();
-    },
-  );
-
+  // The exact row list per preference (keepRunning, endTerminals) is asserted by the live-change test below; an exact
+  // list also means the redundant variant is never drawn (006 FR-030).
   it('the second row follows a live preference change on the next open, with no restart', async () => {
     const app = await mount({ unloadTerminalAction: 'keepRunning' });
     await openMenuOn('p1');

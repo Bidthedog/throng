@@ -92,7 +92,7 @@ const freeText: FieldDescriptor = {
 function renderControl(descriptor: FieldDescriptor, value: unknown) {
   const onCommit = vi.fn();
   render(createElement(SettingControl, { descriptor, value, onCommit }));
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 /**
@@ -116,7 +116,7 @@ function renderBound(descriptor: FieldDescriptor, initial: unknown) {
     });
   }
   render(createElement(Host));
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 const box = (testId: string): HTMLInputElement => screen.getByTestId(testId) as HTMLInputElement;

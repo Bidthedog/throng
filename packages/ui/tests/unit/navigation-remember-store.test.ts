@@ -2,9 +2,10 @@
  * The remembered-input half of the navigation store (033 Phase 8, FR-061 – FR-063).
  *
  * The rules this covers are pure state transitions, so they belong HERE rather than in the E2E: what
- * counts as accepted, what a project change discards, and what turning a setting off discards. The
- * E2E (`navigation-remember.e2e.ts`) proves the modals are wired to them and that the value arrives
- * selected — the parts only a real window can answer.
+ * counts as accepted, what a project change discards, and what turning a setting off discards. That
+ * Quick Open is wired to them — the setting read, the value seeded back fully selected, an abandoned
+ * or cancelled open recording nothing — is `component/quick-open-header.test.ts` ("the remembered
+ * query"); only the preferences-window round trip stays in `navigation-remember.e2e.ts`.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {

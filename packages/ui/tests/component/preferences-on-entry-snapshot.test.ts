@@ -135,7 +135,7 @@ describe('the on-entry snapshot when the config loads late (#341, preferences-re
   });
 
   it('reverts to the value the window opened with, not to one edited after it', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     // The user's REAL saved setting — the thing "revert to how this window opened" owes back.
     const { patched, releaseLoad, autoSave } = mountWithDeferredLoad({ autoSave: true });
 

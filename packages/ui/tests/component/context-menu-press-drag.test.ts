@@ -30,7 +30,7 @@ function renderMenu(): { first: ReturnType<typeof vi.fn>; second: ReturnType<typ
 describe('a press on one menu item dragged onto another', () => {
   it('leaves the pressed item without focus, so only the item under the pointer is highlighted', async () => {
     renderMenu();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const first = screen.getByTestId('menu-item-First');
     const second = screen.getByTestId('menu-item-Second');
 
@@ -42,7 +42,7 @@ describe('a press on one menu item dragged onto another', () => {
 
   it('runs nothing when released on the other item', async () => {
     const { first, second, onClose } = renderMenu();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.pointer([
       { keys: '[MouseLeft>]', target: screen.getByTestId('menu-item-First') },
       { target: screen.getByTestId('menu-item-Second') },
@@ -55,7 +55,7 @@ describe('a press on one menu item dragged onto another', () => {
 
   it('still runs an item clicked in place, and arrow keys still move a visible focus', async () => {
     const { second, onClose } = renderMenu();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(screen.getByTestId('menu-item-First'));
     await user.click(screen.getByTestId('menu-item-Second'));

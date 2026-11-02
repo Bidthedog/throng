@@ -67,18 +67,8 @@ const PARTIAL_STATES: Array<{ name: string; content: string }> = [
 ];
 
 describe('a partially written settings.json is not mistaken for the defaults', () => {
-  it('a COMPLETE document holding non-default values reads back as those values', async () => {
-    // The control. Without it, a failure below could mean "the read is broken" rather than
-    // "the read cannot distinguish unreadable from default".
-    const root = freshRoot();
-    writeFileSync(
-      join(root, 'settings.json'),
-      JSON.stringify({ version: 1, notifications: { error: { mode: 'never' } } }),
-      'utf8',
-    );
-    const payload = await readConfigPayload(new FileConfigStore(root));
-    expect(payload.settings.notifications.error.mode).toBe('never');
-  });
+  // The control (a COMPLETE document reads back as its non-default values) is the first assertion of
+  // the payload-shape test at the end of this file.
 
   it.each(PARTIAL_STATES)(
     'reports that it could not read the document — $name',
@@ -101,25 +91,7 @@ describe('a partially written settings.json is not mistaken for the defaults', (
     },
   );
 
-  it('still hands back a USABLE payload while reporting the document unreadable', async () => {
-    /*
-     * The other half of the same guarantee, and the reason `unreadable` is a flag rather than an
-     * error. A malformed settings file must not stop the application: it runs on the defaults, and
-     * SAYS it is doing so. Reporting without a value would have made every caller handle a case
-     * that has one obvious answer.
-     */
-    const root = freshRoot();
-    writeFileSync(join(root, 'settings.json'), '{"version":1,"notifications":{"error":{"mo', 'utf8');
-
-    const result = await readConfigOnce(new FileConfigStore(root));
-
-    expect(result.settingsUnreadable).toBe(true);
-    expect(result.payload.settings.notifications.error.mode).toBe(
-      DEFAULT_APP_SETTINGS.notifications.error.mode,
-    );
-    expect(result.payload.keybindings).toBeDefined();
-    expect(result.payload.theme).toBeDefined();
-  });
+  // "Unreadable, yet still a USABLE payload" is asserted in config-watcher-retry.test.ts (G7).
 
   it('DOES NOT report unreadable for a document that is merely absent', async () => {
     // A config root with no settings.json is the first-run case, not a failure. Retrying it would

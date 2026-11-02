@@ -291,15 +291,8 @@ describe('Zoom 100%', () => {
     expect(Number(frame().getAttribute('data-scale'))).toBe(1);
   });
 
-  it('works alongside Fit: Fit puts the shrunk view back, Zoom 100% the actual one', () => {
-    const { frame, button } = mount(800, 300);
-    fireEvent.click(button('Zoom 100%'));
-    fireEvent.click(button('Fit diagram'));
-    expect(frame().getAttribute('data-mode')).toBe('fit');
-    expect(Number(frame().getAttribute('data-scale'))).toBe(0.5);
-    fireEvent.click(button('Zoom 100%'));
-    expect(Number(frame().getAttribute('data-scale'))).toBe(1);
-  });
+  // DELETED: "works alongside Fit" — "sets the diagram to its actual size" asserts Zoom 100% from Fit and from any
+  // zoom, and "returns to the fit view after a zoom" asserts Fit restores mode fit at scale 0.5.
 
   it('brings the diagram back to the centre of the viewport, as Fit does', () => {
     const { layer, viewport, button } = mount(800, 300);

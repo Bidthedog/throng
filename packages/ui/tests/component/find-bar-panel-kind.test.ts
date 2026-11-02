@@ -158,7 +158,7 @@ function LayoutProbe(): ReactElement {
 async function mount(kind: 'editor' | 'terminal') {
   registerPanelSearch(PANEL, kind === 'terminal' ? terminalController() : editorController());
   const client = new WorkspaceClient(fakeBridge(layoutWith(kind)));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
 
   render(
     // ANTI-VACUITY CONTROL: drop this `WorkspaceProvider` element and `useWorkspace` throws inside
@@ -219,6 +219,8 @@ describe('a TERMINAL panel', () => {
     expect(screen.queryByTestId('find-replace-row')).toBeNull();
     expect(screen.queryByTestId('replace-all')).toBeNull();
     expect(screen.queryByTestId('replace-current')).toBeNull();
+    // Folded in from find-bar-disclosure (FR-013): a terminal find is read-only — nothing to disclose.
+    expect(screen.queryByTestId('find-toggle-replace'), 'no disclosure control on a terminal bar').toBeNull();
   });
 
   it('cannot be talked into a replace row by asking the store directly', async () => {

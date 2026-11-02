@@ -91,34 +91,9 @@ describe('a patch and a reset — different channels, one document (G11/G12)', (
     expect(after.newProject.lastProjectFolder).toBe('D:/kept');
   });
 
-  it('the later caller reads the earlier caller\u2019s result (G11)', async () => {
-    /*
-     * The defining property of a serialisation point: section two must OBSERVE section one, not
-     * merely follow it.
-     *
-     * `newProject.lastProjectFolder` is the probe, and it must be a MODELLED key. An earlier
-     * revision used a hand-written `handWritten` key, reasoning that only a genuine
-     * read-modify-write could carry it through the reset's whole-document write. That was true —
-     * and it also asserted that an unmodelled key survives a write, which contradicts 007 FR-023
-     * (#95, C1): every settings write in this application normalises through the parse and drops
-     * unmodelled keys. The test was pinning a requirement nobody had, against one that shipped two
-     * releases earlier.
-     *
-     * A modelled key proves the same thing just as tightly. The reset writes the whole document
-     * computed from what it READ, so the patch's value can only be present if the reset read the
-     * patch's result.
-     */
-    const { store, svc, root } = fresh(DEFAULT_APP_SETTINGS);
-
-    const patch = writeConfigPatch(store, { kind: 'settings' }, [
-      { path: ['newProject', 'lastProjectFolder'], value: 'D:/written-by-the-patch' },
-    ]);
-    const reset = svc.resetSetting('appearance.theme');
-    await Promise.all([patch, reset]);
-
-    const after = readSettings(root) as { newProject: { lastProjectFolder: string } };
-    expect(after.newProject.lastProjectFolder).toBe('D:/written-by-the-patch');
-  });
+  // "The later caller reads the earlier caller's result (G11)" is the lastProjectFolder tell above:
+  // the reset writes the whole document from what it READ, so 'D:/kept' is only there if it read
+  // the patch's result.
 });
 
 describe('a patch and a whole-document write — different channels, one document', () => {

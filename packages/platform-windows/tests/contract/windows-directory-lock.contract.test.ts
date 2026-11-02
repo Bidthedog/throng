@@ -13,11 +13,11 @@ describe('WindowsDirectoryLock', () => {
       makeDir: () => mkdtempSync(join(tmpdir(), 'throng-lock-')),
       nonExistentPath: () => join(tmpdir(), `throng-lock-missing-${Date.now()}-${counter++}`),
       tryDelete: (dir) => {
-        // Retry briefly: a held lock keeps failing, while a just-released dir
-        // becomes deletable once the OS finishes releasing the handle (a few ms
-        // after the holder process exits).
+        // Retry briefly: a held lock keeps failing, and every refused delete pays the whole back-off,
+        // so keep it short. A just-released dir needs no long retry: release() polls until the OS has
+        // freed the directory (windows-directory-lock.ts).
         try {
-          rmSync(dir, { recursive: true, maxRetries: 12, retryDelay: 60 });
+          rmSync(dir, { recursive: true, maxRetries: 3, retryDelay: 25 });
           return true;
         } catch {
           return false;

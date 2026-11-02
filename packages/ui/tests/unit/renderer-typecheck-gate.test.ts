@@ -58,3 +58,24 @@ describe('#82 — the typecheck gate covers the shipping renderer', () => {
     expect(rendererTsconfig.compilerOptions?.noEmit).toBe(true);
   });
 });
+
+/**
+ * The same hole, one layer out: Playwright transpiles the E2E specs without checking them, and no
+ * other tsconfig includes `tests/`. A narrowing that deleted an import a spec still used —
+ * `join` in unsaved-dot-pulse.e2e.ts — passed lint and typecheck and surfaced only as a
+ * ReferenceError in the gate's E2E stage, 20 minutes in.
+ */
+const E2E_TSCONFIG = fileURLToPath(new URL('../e2e/tsconfig.json', import.meta.url));
+const e2eTsconfig = JSON.parse(readFileSync(E2E_TSCONFIG, 'utf8')) as TsConfig;
+
+describe('the typecheck gate covers the E2E specs', () => {
+  it('`npm run typecheck` runs the E2E check, against the E2E tsconfig', () => {
+    expect(pkg.scripts?.typecheck ?? '').toContain('typecheck:e2e');
+    expect(pkg.scripts?.['typecheck:e2e'] ?? '').toContain('tests/e2e/tsconfig.json');
+  });
+
+  it('the E2E tsconfig compiles every spec and helper as a no-emit check', () => {
+    expect(e2eTsconfig.include ?? []).toContain('**/*.ts');
+    expect(e2eTsconfig.compilerOptions?.noEmit).toBe(true);
+  });
+});

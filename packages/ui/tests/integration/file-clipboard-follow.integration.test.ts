@@ -78,16 +78,5 @@ describe('the clipboard follows in-app changes (FR-009)', () => {
   });
 });
 
-describe('the clipboard empties when its project goes (FR-011)', () => {
-  it('the holding project removed, or re-rooted, empties it; an unrelated change does not', () => {
-    clipboard.setFromRelative('copy', ['a.txt'], root, 'P');
-    clipboard.retainProjects(new Map([['P', root], ['Q', join(root, '..', 'other')]]));
-    expect(paths()).toEqual([join(root, 'a.txt')]);
-    clipboard.retainProjects(new Map([['P', join(root, '..', 'elsewhere')]]));
-    expect(clipboard.get()).toBeNull();
-
-    clipboard.setFromRelative('copy', ['a.txt'], root, 'P');
-    clipboard.retainProjects(new Map([['Q', join(root, '..', 'other')]]));
-    expect(clipboard.get()).toBeNull();
-  });
-});
+// The clipboard emptying when its project goes or is re-rooted (FR-011, `retainProjects`) is asserted
+// in unit/file-clipboard.test.ts, which exercises the same call.

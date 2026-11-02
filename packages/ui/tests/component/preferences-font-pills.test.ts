@@ -48,7 +48,7 @@ function mount(value: unknown) {
   render(
     createElement(ThemeTokenControl, { descriptor, value, fonts: FONTS, onCommit }),
   );
-  return { onCommit, user: userEvent.setup() };
+  return { onCommit, user: userEvent.setup({ delay: null }) };
 }
 
 const pill = (i: number): HTMLElement => screen.getByTestId(`control-${KEY}-pill-${i}`);

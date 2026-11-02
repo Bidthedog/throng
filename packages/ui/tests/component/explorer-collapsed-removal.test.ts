@@ -211,22 +211,31 @@ async function mountAndDescend(): Promise<HTMLElement> {
   return tree;
 }
 
+/** Macrotask ticks drained after the re-read for the ancestor `exists` probes and the notice to land. */
+const DRAIN_TICKS = 10;
+
 /**
  * Remove `a/b` on disk and wait until the watcher's re-read has run and settled.
  *
  * It waits on the ROOT being re-read rather than on `a/b`, because a correct tree may never re-read
- * a collapsed `a/b` at all. The pause after it lets the ancestor `exists` probes and the notice land.
+ * a collapsed `a/b` at all. The drain after it lets the ancestor `exists` probes and the notice land.
  */
 async function removeAbAndSettle(): Promise<void> {
   const rootReads = world.listed.filter((p) => p === '').length;
   world.remove('a/b'); // `a` survives, so this is a cause of its own (041 FR-003a), never suppressed
   await waitFor(() => expect(world.listed.filter((p) => p === '').length).toBeGreaterThan(rootReads));
-  await act(() => new Promise((r) => setTimeout(r, 250)));
+  // Every bridge answer is an already-resolved promise, so what is left after the root's re-read is
+  // microtasks and React's scheduled renders: drain them tick by tick instead of sleeping 250 ms. The
+  // (control) test asserts the notice right after this returns, so a drain too short to reach the
+  // `exists` probes and the notice fails THERE, rather than the absence cases passing vacuously.
+  for (let tick = 0; tick < DRAIN_TICKS; tick += 1) {
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+  }
 }
 
 describe('a folder the user collapsed is not reported when it is deleted on disk', () => {
   it('raises no notice for `a/b` after the user closed `a` by its chevron', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const tree = await mountAndDescend();
 
     await user.click(within(tree).getByTestId('tree-twisty-a'));
@@ -238,7 +247,7 @@ describe('a folder the user collapsed is not reported when it is deleted on disk
   });
 
   it('raises no notice for `a/b` after the user pressed Collapse all', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const tree = await mountAndDescend();
 
     await user.click(screen.getByRole('button', { name: 'Collapse all' }));

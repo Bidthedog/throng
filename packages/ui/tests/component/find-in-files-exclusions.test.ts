@@ -163,15 +163,9 @@ describe('the toggle (FR-027, FR-028, FR-038)', () => {
     );
   });
 
-  it('is NOT a row in the panel menu: the toolbar toggle is its route (060 FR-042)', () => {
-    renderFindInFilesPanel();
-    fireEvent.contextMenu(screen.getByTestId(`fif-panel-${PANEL_ID}`));
-
-    expect(screen.queryByTestId('menu-item-Use search exclusions')).toBeNull();
-    expect(screen.queryByTestId('menu-item-Use search exclusions ✓')).toBeNull();
-    const labels = [...screen.getByTestId('context-menu').querySelectorAll('.context-menu__label')];
-    expect(labels.map((el) => el.textContent ?? '').join('|')).not.toMatch(/Use search exclusions/);
-  });
+  // DELETED (pass 2): "is NOT a row in the panel menu" — find-in-files-content-menu.test.ts ("carries no
+  // Replace, exclusions, Group by or Split row") asserts 'Use search exclusions' absent and the toolbar
+  // toggle (`fif-use-excludes`) present.
 });
 
 describe('what a scan is sent (FR-027, FR-029)', () => {

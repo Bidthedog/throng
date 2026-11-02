@@ -188,7 +188,7 @@ describe('S1 / S6a — File Explorer offers Open In → Preview for both test pr
   const entry = (name: string): FileTreeEntry => ({ name, kind: 'file', isSymlink: false, hasChildren: false });
 
   async function mountTree(settings: Record<string, unknown>) {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const layout = createDefaultLayout(PROJECT, { tab: 't1', panel: 'p1' });
     const services = servicesOver(daemonOver(layout));
     let configLoaded = false;
@@ -483,7 +483,7 @@ describe('S3 / S7 — a preview of each kind mounts in the real panel, with the 
   };
 
   async function mountPreview(filePath: string) {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     captured.ws = null;
     setActivePane('workspace');
     const attach = vi.fn((req: PreviewAttachRequest) => Promise.resolve({ ok: true as const, update: snapshot(req) }));

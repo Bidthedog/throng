@@ -245,10 +245,5 @@ describe('document commands are inert while a preview is active (FR-021)', () =>
   });
 });
 
-describe('the panel cannot be renamed (FR-030)', () => {
-  it('a header double-click opens no rename box', async () => {
-    const { id } = await mountText();
-    fireEvent.doubleClick(screen.getByTestId(`panel-handle-${id}`));
-    expect(screen.queryByTestId(`panel-rename-input-${id}`)).toBeNull();
-  });
-});
+// DELETED: "the panel cannot be renamed (FR-030)" — preview-panel-mount.test.ts ("opens no rename box on a header
+// double-click") asserts the same.

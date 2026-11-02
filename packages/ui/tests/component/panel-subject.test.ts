@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WorkspaceLayout } from '@throng/core';
@@ -20,7 +20,7 @@ import {
   type PanelPlace,
 } from '../../src/renderer/common/panel-subject.js';
 import { removeEditorState } from '../../src/renderer/editor/editor-state.js';
-import { clearTerminalTitle, setTerminalTitle } from '../../src/renderer/terminal/title-store.js';
+import { clearTerminalTitle } from '../../src/renderer/terminal/title-store.js';
 
 /**
  * WHERE a panel is, so a notice can say which one it means (030 US2 / #195, FR-021/022/026/027).
@@ -170,14 +170,8 @@ describe('locating a panel (FR-022)', () => {
     expect(place?.project).toBe('Beta');
   });
 
-  it('gives the project NAME rather than its id', async () => {
-    // FR-022 asks for a name a user recognises. An id would satisfy "the project is identified"
-    // and satisfy nobody reading the notice.
-    const place = await mount(layoutWith(ALPHA), [dto(ALPHA, 'Alpha')]);
-
-    expect(place?.project).toBe('Alpha');
-    expect(place?.project).not.toBe(ALPHA);
-  });
+  // DELETED: 'gives the project NAME rather than its id' — 'names the panel, its tab, and its
+  // project' above asserts `project: 'Alpha'` exactly (the id would fail it).
 
   it('leaves the project out when its record is not loaded', async () => {
     // A panel can outlive the project list this window holds. Better an unqualified `Tab — Panel`
@@ -228,18 +222,9 @@ describe('the panel is named by its content, as its header names it (048 FR-032)
     clearTerminalTitle('panel-1');
   });
 
-  it('names a terminal by its flavour, not the stored fallback', async () => {
-    const place = await mount(
-      layoutHolding({
-        kind: 'terminal',
-        title: 'Blank Panel 3',
-        config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
-      }),
-      [dto(ALPHA, 'Alpha')],
-    );
-
-    expect(place?.name).toBe('Command Prompt');
-  });
+  // DELETED: the terminal-flavour, 'Blank Panel' and live-terminal-title cases — the name comes from
+  // `currentPanelTitle`, which panel-display-names.test.ts covers for each (flavour fallback, live
+  // title, 'Blank Panel'); the editor case below proves this module reads it rather than `panel.title`.
 
   it('names an editor by its file, from the persisted config', async () => {
     const place = await mount(
@@ -248,31 +233,6 @@ describe('the panel is named by its content, as its header names it (048 FR-032)
     );
 
     expect(place?.name).toBe('charlie');
-  });
-
-  it('names an empty panel exactly "Blank Panel" (FR-130)', async () => {
-    const place = await mount(layoutHolding({ title: 'Blank Panel 3' }), [dto(ALPHA, 'Alpha')]);
-
-    expect(place?.name).toBe('Blank Panel');
-  });
-
-  it('follows the terminal’s LIVE title as the shell announces it', async () => {
-    await mount(
-      layoutHolding({
-        kind: 'terminal',
-        title: 'Blank Panel 3',
-        config: { flavourId: 'cmd', flavourLabel: 'Command Prompt' },
-      }),
-      [dto(ALPHA, 'Alpha')],
-    );
-
-    act(() => setTerminalTitle('panel-1', 'npm run dev'));
-
-    await waitFor(() =>
-      expect((JSON.parse(screen.getByTestId('place').textContent ?? '{}') as PanelPlace).name).toBe(
-        'npm run dev',
-      ),
-    );
   });
 });
 

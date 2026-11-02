@@ -64,6 +64,7 @@ function openByPointer(): void {
 describe('the item carries no native title (FR-115)', () => {
   it('has no title on the item or any figure, and is named "Open Resource Monitor"', async () => {
     await mountItem();
+    expect(item().tagName, 'a real button').toBe('BUTTON');
     expect(item()).toHaveAttribute('aria-label', 'Open Resource Monitor');
     expect(item()).not.toHaveAttribute('title');
     expect(item().querySelector('[title]')).toBeNull();
@@ -118,10 +119,18 @@ describe('opening and closing (FR-115)', () => {
   it('stays open while the pointer crosses from the item to the popover, and closes on leaving both', async () => {
     await mountItem();
     openByPointer();
-    fireEvent.pointerLeave(item());
-    fireEvent.pointerEnter(popover());
-    await new Promise((r) => setTimeout(r, 250));
-    expect(popover()).toBeInTheDocument();
+    // Fake timers for the grace window (CLOSE_GRACE_MS, 120 ms): advancing 250 ms is deterministic where a real sleep was not.
+    vi.useFakeTimers();
+    try {
+      fireEvent.pointerLeave(item());
+      fireEvent.pointerEnter(popover());
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(popover()).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
 
     fireEvent.pointerLeave(popover());
     await waitFor(() => expect(screen.queryByTestId('status-popover')).toBeNull());
@@ -158,12 +167,7 @@ describe('opening and closing (FR-115)', () => {
     expect(popover()).toBeInTheDocument();
   });
 
-  it('a click still opens the monitor', async () => {
-    const bridge = await mountItem();
-    openByPointer();
-    fireEvent.click(item());
-    expect(bridge.opens()).toBe(1);
-  });
+  // "A click still opens the monitor" is `status-resources.test.ts` "opens the monitor window on a click".
 
   it('a click inside the popover does not open the monitor', async () => {
     const bridge = await mountItem();
@@ -208,12 +212,7 @@ describe('content (FR-115, FR-042, FR-032)', () => {
     expect(screen.getByTestId('status-popover-cpu-split')).toHaveTextContent(/Projects\s*13%/);
   });
 
-  it('carries the band in words, not only a colour (FR-046)', async () => {
-    await mountItem(summary(metrics({ cpu: 85, memory: 10 * GIB }), { tick: 1 }));
-    openByPointer();
-    expect(screen.getByTestId('status-popover-cpu-total')).toHaveTextContent(/critical/);
-    expect(screen.getByTestId('status-popover-memory-total')).toHaveTextContent(/warning/);
-  });
+  // The band in words (FR-046): `status-resources.test.ts` "bands CPU and memory by usage" (85% CPU, 10 GiB) asserts it.
 
   it('says a total is unavailable, with its reason, rather than showing zero (FR-044)', async () => {
     await mountItem(summary({ ...TOTAL, gpu: unavailable('The GPU counters could not be read') }, { tick: 1 }));
@@ -228,11 +227,7 @@ describe('content (FR-115, FR-042, FR-032)', () => {
     expect(screen.getByTestId('status-popover-gpu-total')).toHaveTextContent('Not measured');
   });
 
-  it('says the figures are the last reading when stale (FR-044)', async () => {
-    await mountItem(summary(TOTAL, { tick: 1, stale: true }));
-    openByPointer();
-    expect(screen.getByTestId('status-popover-stale')).toHaveTextContent(/last reading/i);
-  });
+  // The stale line (FR-044): `status-resources.test.ts` "marks stale figures as the previous reading" asserts its text.
 
   it('reserves the stale and note lines when there is nothing to say, so nothing moves', async () => {
     await mountItem();

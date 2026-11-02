@@ -146,7 +146,7 @@ function Host({ tabIndex = 0 }: { tabIndex?: number }): ReactElement | null {
 }
 
 function mount(tabIndex = 0, opts: { projects?: readonly unknown[] } = {}) {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   // `notifyDestroyed` and `notifyTyped` are optional-chained broadcasts to other windows. Present as
   // spies so a destroy can be asserted to have told them, absent nothing.
   const notifyDestroyed = vi.fn();
@@ -597,6 +597,8 @@ describe('the header’s ✕ names what it will do (migrated from removal-verbs.
     const close = screen.getByTestId(`panel-close-${first}`);
     expect(add.getAttribute('title')).not.toBe(close.getAttribute('title'));
     expect(add).toHaveAttribute('title');
+    // FR-010 / #57: the controls keep a NAMING title (not stripped with the instruction list).
+    expect(add.getAttribute('title') ?? '', 'the add control names its action').toMatch(/.+/);
   });
 });
 
@@ -658,21 +660,9 @@ describe('a panel header tooltip shows the title (#57)', () => {
     expect(titleOf(panelId)).toBe('Renamed');
   });
 
-  it('leaves the action controls their own naming titles (FR-010)', async () => {
-    /*
-     * Migrated from `:131`. #57 removed an INSTRUCTION list; it did not remove tooltips. The
-     * add/close controls are themeable icon buttons whose meaning lives entirely in an attribute —
-     * the constitution requires them to name their action — so a fix that stripped every `title`
-     * would be a different bug wearing this one's clothes.
-     */
-    mount();
-    const ws = await ready();
-    const panelId = panelsIn(ws)[0].id;
-
-    const add = screen.getByTestId(`panel-add-${panelId}`);
-    expect(add.getAttribute('title') ?? '').toMatch(/.+/);
-    expect(add.getAttribute('title') ?? '').not.toContain('Click: Activate');
-  });
+  // MERGED: 'leaves the action controls their own naming titles (FR-010)' (migrated from E2E `:131`)
+  // — its non-empty-title claim now sits in 'is not the same string as the ADD button’s' above, and
+  // 'no control in the header carries the instruction list' below sweeps every rendered title.
 
   it('no control in the header carries the instruction list — the rule, not three examples', async () => {
     /*
