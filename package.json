@@ -29,6 +29,8 @@
     "stage:runtime": "node scripts/stage-runtime.mjs",
     "prepackage": "node scripts/clean-dist.mjs",
     "package": "npm run build && npm run stage:runtime && electron-builder --config electron-builder.yml",
+    "prepackage:linux": "node scripts/clean-dist.mjs",
+    "package:linux": "npm run build && npm run stage:runtime && electron-builder --linux --config electron-builder.yml",
     "verify:installer": "node scripts/verify-installer.mjs",
     "publish:check": "node scripts/publish-gates.mjs",
     "build:renderer": "npm run build:renderer --workspace @throng/ui",

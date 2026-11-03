@@ -606,6 +606,9 @@ if (startupRefusal !== null) {
 }
 
 /**
+ * userData is the platform's data folder, which is not always Electron's default: on Linux that default is
+ * `~/.config`, and the database belongs in `~/.local/share` (062 FR-013).
+ *
  * Dev-instance isolation: an UNPACKAGED run develops throng while a PACKAGED throng is
  * installed and in daily use on the same account, so it keeps its own userData, config root,
  * database and daemon pipe (see `instance-paths.ts` for why the pipe matters most).
@@ -615,8 +618,8 @@ if (startupRefusal !== null) {
  * `--user-data-dir` (the E2E harness) is left exactly as it asked.
  */
 const isDevInstance = !app.isPackaged;
-if (isDevInstance && !hasUserDataDirSwitch(process.argv)) {
-  const userData = platform.userDirectories().dataDir(true);
+if (!hasUserDataDirSwitch(process.argv)) {
+  const userData = platform.userDirectories().dataDir(isDevInstance);
   platform.userDirectories().prepare(userData);
   app.setPath('userData', userData);
 }

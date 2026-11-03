@@ -1,3 +1,4 @@
+import { configureHostTraits, hostTraits, linuxHostTraits } from '@throng/core';
 import { skipUnlessWindows } from '@throng/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -17,6 +18,17 @@ describe('resolveDaemonNodeExe (020 FR-009)', () => {
       {},
     );
     expect(resolved).toBe('C:\\Program Files\\throng\\resources\\runtime\\node.exe');
+  });
+
+  it('uses the bundled node when packaged on Linux (063 FR-002)', () => {
+    const before = hostTraits();
+    configureHostTraits(linuxHostTraits('/run/user/1000'));
+    try {
+      const resolved = resolveDaemonNodeExe(undefined, '/opt/throng-versions/1.0.0/resources', (p) => p.endsWith('runtime/node'), {});
+      expect(resolved.replace(/\\/g, '/')).toBe('/opt/throng-versions/1.0.0/resources/runtime/node');
+    } finally {
+      configureHostTraits(before);
+    }
   });
 
   it('an explicit nodePath always wins (tests)', () => {

@@ -185,6 +185,11 @@ describe('main.ts wires the dev redirection early enough', () => {
     expect(source).not.toContain('acquireSingleInstance(');
   });
 
+  it('takes userData from the platform in an installed build too, not from Electron (062 FR-013)', () => {
+    expect(source).toContain('dataDir(isDevInstance)');
+    expect(source).toContain('if (!hasUserDataDirSwitch(process.argv)) {');
+  });
+
   it('resolves the namespace ONCE and hands that value to the container (058 review A4)', () => {
     // The lock and the daemon must be in the same namespace by construction, not by two calls that
     // happen to agree today. One resolution in main, one bound value in the container.
