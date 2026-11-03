@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -566,7 +567,7 @@ describe('heading intent and same-file history steps (FR-115)', () => {
     expect(push.pathChanged).toEqual([]);
   });
 
-  it('for a spelling of the current file that differs only in case and separators, still records it (samePath)', async () => {
+  it.skipIf(skipUnlessWindows('case and separators spell one path on Windows only'))('for a spelling of the current file that differs only in case and separators, still records it (samePath)', async () => {
     await attach('v1', readme);
     await heading('v1', readme.toUpperCase().replace(/\\/g, '/'), 'readme', TOP, AT_4);
     expect(real.get('v1')!.entries).toHaveLength(2);

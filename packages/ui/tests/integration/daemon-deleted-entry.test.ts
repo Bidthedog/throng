@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:net';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -42,7 +43,7 @@ async function fakeDaemon(pipeName: string, pong: Record<string, unknown>): Prom
     });
   });
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(pipeName, resolve));
+  await new Promise<void>((resolve) => server.listen(resolveIpcAddress(pipeName), resolve));
   return server;
 }
 

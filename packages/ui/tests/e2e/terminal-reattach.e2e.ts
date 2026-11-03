@@ -92,7 +92,9 @@ test('a pre-existing terminal reattaches after restart and still warns on close'
   await new Promise<void>((res) => daemon.stdout!.on('data', (c: string) => c.includes('listening') && res()));
 
   const launch = (): Promise<ElectronApplication> =>
-    electron.launch({ args: [mainEntry, `--user-data-dir=${userData}`], env: {
+    electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true, args: [mainEntry, `--user-data-dir=${userData}`], env: {
       ...process.env,
       THRONG_PIPE_NAME: pipe,
       THRONG_CONFIG_ROOT: cfg,

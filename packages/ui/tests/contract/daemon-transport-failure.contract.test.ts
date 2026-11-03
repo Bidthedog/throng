@@ -35,7 +35,7 @@
  */
 import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { isTransportFailure } from '@throng/core';
+import { isTransportFailure, resolveIpcAddress } from '@throng/core';
 import { DaemonClient } from '../../src/main/daemon-client.js';
 
 /**
@@ -71,7 +71,7 @@ async function serving(
     });
   });
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(pipeName, resolve));
+  await new Promise<void>((resolve) => server.listen(resolveIpcAddress(pipeName), resolve));
 }
 
 afterEach(async () => {

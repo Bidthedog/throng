@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { connect } from 'node:net';
@@ -188,7 +189,7 @@ describe('instance guard (058 FR-018)', () => {
     await a.guard.acquire();
 
     await new Promise<void>((resolve, reject) => {
-      const socket = connect(instanceLockName(ns));
+      const socket = connect(resolveIpcAddress(instanceLockName(ns)));
       socket.on('error', reject);
       socket.on('close', () => resolve());
       socket.end('not a launch\n');
@@ -197,7 +198,7 @@ describe('instance guard (058 FR-018)', () => {
 
     // Still answering: a well-formed message written straight to the pipe (as the E2E does) lands.
     await new Promise<void>((resolve, reject) => {
-      const socket = connect(instanceLockName(ns));
+      const socket = connect(resolveIpcAddress(instanceLockName(ns)));
       socket.on('error', reject);
       socket.on('close', () => resolve());
       socket.end(formatLaunchMessage({ execPath: 'E:\\other\\throng.exe', version: '9.9.9' }));

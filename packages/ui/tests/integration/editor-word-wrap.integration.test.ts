@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -122,7 +123,7 @@ describe('word wrap is owned by the document authority (024 US1, FR-001a)', () =
     expect(coord.wordWrapFor('p3', true)).toBe(true);
   });
 
-  it('treats a Windows path differing only in case as ONE document', async () => {
+  it.skipIf(skipUnlessWindows('paths differing only by case are one file on Windows, and two on Linux'))('treats a Windows path differing only in case as ONE document', async () => {
     const file = join(root, 'Case.txt');
     await writeFile(file, 'x\n');
     await coord.load({ ...meta('p1', file) });

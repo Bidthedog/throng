@@ -48,6 +48,7 @@
  * adds a window chord on a letter key and covers it nowhere, and that answer is worth having in the
  * unit tier rather than most of an E2E run later.
  */
+import { TEST_SHELL } from './harness.js';
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -429,7 +430,7 @@ test('from a focused real terminal, Ctrl+Shift+Alt+Numpad0, Ctrl+Shift+Alt+M and
     pid = ids[ids.length - 1] as string;
   }
   await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   await win.getByTestId(`panel-type-confirm-${pid}`).click();
   const term = win.getByTestId(`terminal-${pid}`);
   await expect(term).toContainText(basename(root), { timeout: 30_000 });

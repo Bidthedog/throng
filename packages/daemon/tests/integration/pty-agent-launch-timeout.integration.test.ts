@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { describe, it, expect } from 'vitest';
 import { createServer, type Server, type Socket } from 'node:net';
 import process from 'node:process';
@@ -206,7 +207,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       });
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
-        server.listen(pipe, resolve);
+        server.listen(resolveIpcAddress(pipe), resolve);
       });
 
       // A live server is listening, so the connect succeeds at once; the budget is generous because
@@ -307,8 +308,8 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       // test budgets 30s for exactly that). Read the field once, at the lapse instant, and a
       // reason that lands a moment late is silently discarded: a quieter `stdio: 'ignore'`,
       // which is the very thing FR-015 exists to end. CI injects
-      // THRONG_AGENT_CONNECT_TIMEOUT_MS=8000, so the run designed to expose this is the run
-      // most likely to drop it.
+      // its own THRONG_AGENT_CONNECT_TIMEOUT_MS, so a shim that fails slowly can land after the lapse
+      // there as well.
       const pipe = uniquePipe();
       let report: ((reason: string) => void) | undefined;
       const host = new PtyAgentHost(
@@ -358,7 +359,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       });
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
-        server.listen(pipe, resolve);
+        server.listen(resolveIpcAddress(pipe), resolve);
       });
 
       const reports: Array<(reason: string) => void> = [];
@@ -435,7 +436,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       });
       await new Promise<void>((resolve, reject) => {
         server.on('error', reject);
-        server.listen(pipe, resolve);
+        server.listen(resolveIpcAddress(pipe), resolve);
       });
 
       // A SHORT readiness budget, injected: this scenario costs ~2s rather than 15, and the

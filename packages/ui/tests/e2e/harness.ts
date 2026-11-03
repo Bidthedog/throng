@@ -33,6 +33,11 @@ import { quiesceSampler } from './quiesce-sampler.js';
  * an undefined name here is invisible until it runs.
  */
 import { forceKillProcessTree } from './process-tree.js';
+import { resolveIpcAddress } from '@throng/core';
+import { startPlatform } from '@throng/platform';
+
+// 062: this process connects to the daemon as well, so it resolves IPC addresses by the same traits the app does.
+startPlatform();
 
 const mainEntry = fileURLToPath(new URL('../../dist/main/main.js', import.meta.url));
 const daemonEntry = fileURLToPath(new URL('../../../daemon/dist/main.js', import.meta.url));
@@ -615,6 +620,8 @@ async function launchApp(opts: AppOptions): Promise<{
   let endSuddenDeathWatch: () => void = () => {};
   try {
     app = await electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true,
       args: [mainEntry, `--user-data-dir=${userData}`],
       env: {
         ...claudeFreeEnv(),
@@ -1051,7 +1058,7 @@ export async function shutdownApp(app: ElectronApplication): Promise<void> {
 /** Kill a detached daemon the APP spawned: ask it for its pid via health.ping. */
 export async function killAppSpawnedDaemon(pipeName: string): Promise<void> {
   const pong = await new Promise<{ pid?: number } | null>((resolve) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     const done = (v: { pid?: number } | null): void => {
       clearTimeout(timer);
@@ -1210,6 +1217,22 @@ export async function settleOnActiveProject(win: Page, name: string): Promise<st
 export async function switchProject(win: Page, name: string): Promise<string> {
   await win.locator('.project-item').filter({ hasText: name }).first().click();
   return settleOnActiveProject(win, name);
+}
+
+/** Accept however many confirmation steps this panel's close asks for. */
+export async function acceptConfirmations(win: Page): Promise<void> {
+  const dialog = win.getByTestId('confirm-dialog');
+  for (let i = 0; i < 3; i += 1) {
+    const appeared = await dialog
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!appeared) break;
+    await win.getByTestId('confirm-accept').click();
+    // Wait for THIS dialog to actually close before the next iteration looks for another one —
+    // otherwise a not-yet-closed dialog would be mistaken for a fresh, unconfirmed one.
+    await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  }
 }
 
 export async function firstPanelId(win: Page): Promise<string> {
@@ -1543,6 +1566,12 @@ export async function runTypedCommand(
   expected: { readonly echoed: string; readonly output: string; readonly timeout?: number },
 ): Promise<void> {
   const timeout = expected.timeout ?? TERMINAL_OUTPUT_TIMEOUT_MS;
+  // On Linux a keystroke beaten to the prompt is echoed ahead of it, which readline does not know about, so a line long
+  // enough to wrap draws wrongly: the shell still gets every character, but the check below cannot read them (measured with
+  // a real ~/.bashrc and a long temp path). CI's bare account answers too fast to show it. A custom prompt just waits this out.
+  if (process.platform === 'linux') {
+    await expect(term).toContainText(/[$#%>]\s*$/, { timeout: 5000 }).catch(() => {});
+  }
   await term.click();
   await win.keyboard.type(command, { delay: TYPE_DELAY });
   await withTerminalEvidence(win, term, `the shell never echoed the typed ${JSON.stringify(expected.echoed)}`, () =>
@@ -1730,7 +1759,7 @@ export function daemonRpcOutcome(
   timeoutMs: number = RPC_ATTEMPT_TIMEOUT_MS,
 ): Promise<RpcOutcome> {
   return new Promise((resolve) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     const done = (o: RpcOutcome): void => {
       clearTimeout(timer);
@@ -1857,8 +1886,34 @@ export interface ConhostProbe {
   pids: number[];
 }
 
+/**
+ * The flavour a neutral spec opens (062 FR-045): `cmd` on Windows, as these specs have always used, and `bash`, which
+ * every Linux machine has, elsewhere. A spec whose SUBJECT is one shell names that shell instead.
+ */
+export const TEST_SHELL = process.platform === 'win32' ? 'cmd' : 'bash';
+
+/** A command that keeps a terminal busy for about 30 seconds, as a real child process of its shell. */
+export const LONG_RUNNING_COMMAND = process.platform === 'win32' ? 'ping -n 30 127.0.0.1' : 'sleep 30';
+
+function probeShellChildren(parentPid: number): ConhostProbe {
+  try {
+    const out = execFileSync('ps', ['--ppid', String(parentPid), '-o', 'pid=,comm='], { encoding: 'utf8', timeout: 8000 });
+    const pids = out
+      .split('\n')
+      .map((l) => /^\s*(\d+)\s+(\S+)/.exec(l))
+      .filter((m): m is RegExpExecArray => m !== null && /^(bash|zsh|fish|sh|dash)$/.test(m[2] ?? ''))
+      .map((m) => Number(m[1]));
+    return { ok: true, pids };
+  } catch (error) {
+    // `ps` exits 1 when the pid has no children, which is an answer.
+    return (error as { status?: number }).status === 1 ? { ok: true, pids: [] } : { ok: false, pids: [] };
+  }
+}
+
 /** Ask the OS which `--headless` conhosts are children of `parentPid`, reporting probe failure. */
 export function probeConhostChildren(parentPid: number): ConhostProbe {
+  // 062: Linux has no console host. What a terminal leaves under the daemon is its shell, so that is what is counted.
+  if (process.platform !== 'win32') return probeShellChildren(parentPid);
   try {
     const out = execFileSync(
       'powershell.exe',

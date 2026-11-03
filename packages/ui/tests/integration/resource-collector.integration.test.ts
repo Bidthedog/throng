@@ -162,7 +162,9 @@ describe('the resource collector process (055 T031, contracts/collector-protocol
     h.send({ type: 'test:failNext' });
     const err = await h.next('error');
     expect(err.cause.length).toBeGreaterThan(0);
-    const stale = (await h.next('summary')).summary;
+    // Sent together with the error, so it may already be here: a waiter added now would miss it.
+    const arrived = h.messages.slice(h.messages.indexOf(err)).find((m) => m.type === 'summary');
+    const stale = (arrived ?? (await h.next('summary'))).summary;
     expect(stale.stale).toBe(true);
     expect(stale.total).toEqual(good.total);
   });

@@ -1,9 +1,11 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SHIPPED_PREVIEW_PROVIDERS, type PreviewSettings } from '@throng/core';
+import { LinuxPathForms } from '@throng/platform-linux';
 import { WindowsExecutableExtensions, WindowsPathForms } from '@throng/platform-windows';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
@@ -56,7 +58,7 @@ function wired() {
   const revealed: string[] = [];
   const resolver = new FileLinkResolver({
     fs: new NodeFileSystem(async () => {}),
-    pathForms: new WindowsPathForms(),
+    pathForms: process.platform === 'win32' ? new WindowsPathForms() : new LinuxPathForms(),
     executables: new WindowsExecutableExtensions(),
     // I2: main's own answer. The renderer names a project ID it legitimately owns; the ROOT is
     // derived here, and there is no parameter by which a renderer could supply one.
@@ -198,7 +200,7 @@ describe('FR-035a \u2014 the third reveal policy, and what it deliberately does 
   // was refused as `gone`. FR-158b makes the explicit Open in OS Explorer item reveal a missing location
   // on its PARENT instead. The confinement is unchanged — it is RE-RESOLUTION from the request: what
   // reaches the OS is derived by main from the text, never a path the renderer supplied (I1 above).
-  it('a path that does not exist is revealed on its parent \u2014 still derived from the text, not taken', async () => {
+  it.skipIf(skipUnlessWindows('names a drive-qualified path, which is one odd relative name on Linux'))('a path that does not exist is revealed on its parent \u2014 still derived from the text, not taken', async () => {
     const { ipc, revealed } = wired();
     const answer = await ipc.handles.get('throng:links:reveal')!(event, {
       text: 'C:\\Windows\\System32\\throng-no-such-thing.dll',

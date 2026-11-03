@@ -1,3 +1,4 @@
+import { skipUnlessLinux, skipUnlessWindows } from '@throng/core/testing';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PtyHandle } from '@throng/core';
+import { LinuxPtyHost, readProcTable } from '@throng/platform-linux';
 import { NodePtyHost } from '@throng/platform-windows';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
@@ -41,6 +43,7 @@ interface Row {
   pid: number;
   ppid: number;
   name: string;
+  started: string;
 }
 
 /** The whole process table — a test-side read, so it may block. */
@@ -51,15 +54,15 @@ function processTable(): Row[] {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      "Get-CimInstance Win32_Process | ForEach-Object { '{0},{1},{2}' -f $_.ProcessId, $_.ParentProcessId, $_.Name }",
+      "Get-CimInstance Win32_Process | ForEach-Object { '{0},{1},{2},{3}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CreationDate.ToUniversalTime().ToString('o') }",
     ],
     { encoding: 'utf8', windowsHide: true },
   );
   return out
     .split(/\r?\n/)
     .map((l) => l.trim().split(','))
-    .filter((p) => p.length === 3)
-    .map(([pid, ppid, name]) => ({ pid: Number(pid), ppid: Number(ppid), name: name! }));
+    .filter((p) => p.length === 4)
+    .map(([pid, ppid, name, started]) => ({ pid: Number(pid), ppid: Number(ppid), name: name!, started: started! }));
 }
 
 /** Every live descendant of `roots`, plus this process's console hosts, by pid. */
@@ -89,7 +92,7 @@ afterEach(() => {
   rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-describe('051 FR-015a — shutdown escalates an end that fails', () => {
+describe.skipIf(skipUnlessWindows("the table, the shell and the console host are Windows'"))('051 FR-015a — shutdown escalates an end that fails', () => {
   it('leaves no shell, command or console host of its terminals running', async () => {
     const before = new Set(survivorsOf([]).map((r) => r.pid));
     const host = new RefusingHost();
@@ -122,11 +125,78 @@ describe('051 FR-015a — shutdown escalates an end that fails', () => {
     expect(survivorsOf(shells).some((r) => /^PING\.EXE$/i.test(r.name))).toBe(true);
 
     await service.shutdown();
+    const endedAt = new Date().toISOString();
 
+    let left: Row[] = [];
     await waitFor(
-      () => survivorsOf(shells).filter((r) => !before.has(r.pid)).length === 0,
+      () => {
+        left = survivorsOf(shells).filter((r) => !before.has(r.pid));
+        return left.length === 0;
+      },
       10_000,
       'every shell, ping and console host of the three terminals to be gone',
+    ).catch((error: Error) => {
+      const named = left.map((r) => `${r.name} pid ${r.pid} ppid ${r.ppid} started ${r.started}`).join('; ');
+      throw new Error(`${error.message}. Shells ${shells.join(', ')}, shutdown finished ${endedAt}. Still there: ${named}`);
+    });
+  }, 60_000);
+});
+
+/** The Linux host with the same refusal. */
+class RefusingLinuxHost extends LinuxPtyHost {
+  private readonly refused = new Set<number>();
+  override async end(handle: PtyHandle, timeoutMs: number): Promise<void> {
+    if (!this.refused.has(handle.pid)) {
+      this.refused.add(handle.pid);
+      throw new Error('did not end within 5 seconds');
+    }
+    return super.end(handle, timeoutMs);
+  }
+  override async dispose(): Promise<void> {}
+}
+
+/** Layer: integration. FR-015a over real Linux processes: a refused end still leaves nothing behind. */
+describe('shutdown on Linux', () => {
+  it.skipIf(skipUnlessLinux('the Linux end path'))('leaves no shell or command of its terminals running when an end fails', async () => {
+    const host = new RefusingLinuxHost();
+    const events = new TerminalEvents();
+    const service = new TerminalService(host, events, new TerminalLockManager({ acquire: async (p) => ({ path: p }), release: async () => {} }), {
+      isElevated: () => false,
+    });
+    const router = new RpcRouter();
+    service.register(router);
+    for (const panelId of ['a', 'b', 'c']) {
+      await router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params: { panelId, projectId: 'p', launch: { file: CMD, args: [], cwd }, cols: 80, rows: 24 } });
+      await router.handle({ jsonrpc: '2.0', id: 2, method: 'terminal.write', params: { panelId, data: 'sleep 300\r' } });
+    }
+    const shells = host.rosterEntries().map((e) => e.osPid!);
+    expect(shells).toHaveLength(3);
+    const treeOf = async (): Promise<{ pid: number; comm: string }[]> => {
+      const table = await readProcTable();
+      const live = new Set(shells);
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const row of table) {
+          if (live.has(row.ppid) && !live.has(row.pid)) {
+            live.add(row.pid);
+            grew = true;
+          }
+        }
+      }
+      return table.filter((r) => live.has(r.pid));
+    };
+    await waitFor(async () => (await treeOf()).filter((r) => r.comm === 'sleep').length === 3, 15_000, 'every command to be running');
+    const before = (await treeOf()).map((r) => r.pid);
+
+    await service.shutdown();
+
+    await waitFor(
+      async () => {
+        const table = await readProcTable();
+        return !table.some((r) => before.includes(r.pid) && r.state !== 'Z');
+      },
+      10_000,
+      'every shell and command of the three terminals to be gone',
     );
   }, 60_000);
 });

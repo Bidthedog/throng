@@ -1,3 +1,4 @@
+import { TEST_SHELL } from './harness.js';
 import { expect, test } from '@playwright/test';
 import { createProject, firstPanelId, mkdtempSync, tmpdir, join, runApp } from './harness.js';
 
@@ -94,7 +95,7 @@ test('a click on a notice parked over the panel-type form does not confirm the p
 
     // Arm the form so Confirm is live: a click that got through would really create the panel.
     await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-    await win.getByTestId('terminal-flavour').selectOption('cmd');
+    await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
     await expect(win.getByTestId(`panel-type-confirm-${pid}`)).toBeEnabled();
 
     // The same persistent error notice as above — a second project on a root already taken.

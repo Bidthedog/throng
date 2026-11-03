@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LINK_ROOT_BACKOFF_MS,
@@ -169,7 +170,7 @@ describe('P8 — a timed-out root is not asked again while it is stuck (FR-121)'
   });
 });
 
-describe('P11 — a healthy root is never delayed by a stuck one (FR-121)', () => {
+describe.skipIf(skipUnlessWindows('several roots on one machine are drive letters and UNC shares; Linux has one'))('P11 — a healthy root is never delayed by a stuck one (FR-121)', () => {
   it('a local request answers normally and at once while the share is stuck', async () => {
     const { resolver } = makeResolver();
     void resolver.resolve(request(`${STUCK}first.txt`));
@@ -181,7 +182,7 @@ describe('P11 — a healthy root is never delayed by a stuck one (FR-121)', () =
   });
 });
 
-describe('P9 — at most two checks may be stuck past the timeout (FR-121)', () => {
+describe.skipIf(skipUnlessWindows('several roots on one machine are drive letters and UNC shares; Linux has one'))('P9 — at most two checks may be stuck past the timeout (FR-121)', () => {
   it('with two roots stuck, a THIRD root answers unreachable at once and is never stat-ed', async () => {
     const { resolver, disk } = makeResolver();
     void resolver.resolve(request(`${STUCK}a.txt`));
@@ -215,7 +216,7 @@ describe('P9 — at most two checks may be stuck past the timeout (FR-121)', () 
  * and FR-122a moves the back-off to main: the root is left alone for `LINK_ROOT_BACKOFF_MS` after its
  * stuck check settles, then asked again.
  */
-describe('P10 / FR-122a — after the stuck stat settles, the root is left alone, then checked again', () => {
+describe.skipIf(skipUnlessWindows('several roots on one machine are drive letters and UNC shares; Linux has one'))('P10 / FR-122a — after the stuck stat settles, the root is left alone, then checked again', () => {
   it('is gated while stuck, left alone for LINK_ROOT_BACKOFF_MS after it settles, then asked again', async () => {
     const { resolver, disk } = makeResolver();
     void resolver.resolve(request(`${STUCK}a.txt`));
@@ -305,7 +306,7 @@ describe('T226 / T227 / FR-161 — one deadline per request, across every readin
   });
 });
 
-describe('FR-124 — following a link on a stuck root ends at the timeout, reason unreachable', () => {
+describe.skipIf(skipUnlessWindows('several roots on one machine are drive letters and UNC shares; Linux has one'))('FR-124 — following a link on a stuck root ends at the timeout, reason unreachable', () => {
   // *Round four (T255, FR-158a):* this case asserted that an out-of-project reveal on a stuck root
   // answered `unreachable` and touched no shell. FR-158a hands a location the check cannot reach to OS
   // Explorer on its PARENT, with no throng notice — within the one deadline.

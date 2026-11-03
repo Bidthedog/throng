@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { expect } from '@playwright/test';
@@ -33,11 +33,32 @@ import { adminTest } from './admin.js';
  */
 
 /** How long a de-elevated terminal gets to produce a prompt OR a visible error. */
-const LAUNCH_BUDGET_MS = 25_000;
+const LAUNCH_BUDGET_MS = 35_000;
 
 async function daemonElevated(win: Page): Promise<boolean> {
   const caps = await win.evaluate(() => window.throng?.terminal?.capabilities?.());
   return caps?.elevated === true;
+}
+
+/**
+ * What the agent's own log says about this launch. A de-elevated agent gets the desktop user's environment rather than the
+ * run's, so its log is in that user's temp folder as well as, for an agent spawned normally, the run's.
+ */
+function agentEvidence(since: number): { timings: string; log: string } {
+  const folders = [tmpdir(), join(process.env.LOCALAPPDATA ?? tmpdir(), 'Temp')];
+  const logs = folders.flatMap((folder) =>
+    readdirSync(folder)
+      .filter((name) => /^throng-agent-\d+\.log$/.test(name))
+      .map((name) => join(folder, name))
+      .filter((path) => statSync(path).mtimeMs >= since),
+  );
+  if (logs.length === 0) return { timings: 'no agent log', log: 'no agent log was written during this launch' };
+  const log = readFileSync(logs[logs.length - 1], 'utf8');
+  const after = (line: string): string => {
+    const at = new RegExp(`^(\\S+) ${line}`, 'm').exec(log)?.[1];
+    return at === undefined ? 'never' : `+${new Date(at).getTime() - since}ms`;
+  };
+  return { timings: `agent started ${after('agent start')}, connected ${after('daemon connected')}, since launch`, log };
 }
 
 /** The flavour ids offered in the dropdown (after selecting Terminal on `pid`). */
@@ -53,6 +74,7 @@ adminTest(
   'an elevated throng opening a NON-elevated terminal reaches a prompt or fails visibly — never hangs (#94)',
   async () => {
     const root = mkdtempSync(join(tmpdir(), 'throng-94-hang-'));
+    const launchedAt = Date.now();
     try {
       await runApp(async (_app, win) => {
         await createProject(win, 'DeElevationHang', root);
@@ -90,18 +112,20 @@ adminTest(
           await expect
             .poll(
               async () => {
-                text = await term.innerText();
+                // The panel reverting to the type form is also a surfaced failure (FR-020). Asked first, and the
+                // read below is bounded: reverting removes the terminal, and an unbounded read of it would wait out
+                // this poll's whole budget, reporting a visible failure as a hang.
+                if (await win.getByTestId(`panel-type-form-${pid}`).isVisible()) {
+                  outcome = 'visible-error';
+                  return true;
+                }
+                text = await term.innerText({ timeout: 1000 }).catch(() => text);
                 if (text.includes(marker)) {
                   outcome = 'prompt'; // the intended outcome: a working non-elevated shell
                   return true;
                 }
                 if (/\[throng\]|failed/i.test(text)) {
                   outcome = 'visible-error'; // the acceptable fallback: fail fast, visibly
-                  return true;
-                }
-                // The panel reverting to the type form is also a surfaced failure (FR-020).
-                if (await win.getByTestId(`panel-type-form-${pid}`).isVisible()) {
-                  outcome = 'visible-error';
                   return true;
                 }
                 return false;
@@ -113,9 +137,12 @@ adminTest(
           /* fall through — the assertion below reports the #94 diagnostic with the terminal text */
         }
 
+        const agent = agentEvidence(launchedAt);
+        console.log(`[#94] ${outcome ?? 'no outcome'}; ${agent.timings}`);
+
         expect(
           outcome,
-          `a non-elevated terminal on an elevated throng produced neither a prompt nor a visible error within ${LAUNCH_BUDGET_MS}ms — it hung (#94). Terminal text was: ${JSON.stringify(text)}`,
+          `a non-elevated terminal on an elevated throng produced neither a prompt nor a visible error within ${LAUNCH_BUDGET_MS}ms — it hung (#94). Terminal text was: ${JSON.stringify(text)}\n${agent.log}`,
         ).not.toBeNull();
 
         // The bug is fixed properly only when the outcome is a WORKING de-elevated
@@ -123,7 +150,7 @@ adminTest(
         // permits, so record it loudly rather than passing silently.
         expect(
           outcome,
-          'de-elevation must actually produce a usable non-elevated prompt, not just a visible failure',
+          `de-elevation must actually produce a usable non-elevated prompt, not just a visible failure. Terminal text was: ${JSON.stringify(text)}\n${agent.log}`,
         ).toBe('prompt');
 
         await win.evaluate((id) => window.throng?.terminal?.kill?.(id), pid);

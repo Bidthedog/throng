@@ -6,14 +6,23 @@
  */
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
-import { NodePtyHost, WindowsDirectoryLock } from '@throng/platform-windows';
+import { resolveIpcAddress } from '@throng/core';
+import { selectPlatform } from '@throng/platform';
 import { IpcServer } from '../../src/ipc-server.js';
 import { RpcRouter } from '../../src/rpc-router.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';
 import { TerminalService } from '../../src/terminal-service.js';
 
-export const CMD = process.env.ComSpec ?? 'cmd.exe';
+/** The shell these tests drive: `cmd` on Windows, as they have always used, and `bash` on Linux (062 FR-045). */
+export const CMD = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/bash';
+
+/**
+ * A command that keeps the terminal busy for about `seconds`, whose typed line contains `127.0.0.1`.
+ * The comment keeps that true on Linux, where `ping` needs a capability a sandbox may not grant.
+ */
+export const busyCommand = (seconds: number): string =>
+  process.platform === 'win32' ? `ping -n ${seconds} 127.0.0.1` : `sleep ${seconds} # 127.0.0.1`;
 
 export interface TerminalDaemon {
   pipeName: string;
@@ -30,10 +39,11 @@ let counter = 0;
 export async function startTerminalDaemon(opts: { elevated?: boolean } = {}): Promise<TerminalDaemon> {
   counter += 1;
   const pipeName = `\\\\.\\pipe\\throng-term-${process.pid}-${counter}`;
+  const platform = selectPlatform(process.platform);
   const events = new TerminalEvents();
-  const lockManager = new TerminalLockManager(new WindowsDirectoryLock());
+  const lockManager = new TerminalLockManager(platform.directoryLock());
   const elevation = { isElevated: () => opts.elevated === true };
-  const service = new TerminalService(new NodePtyHost(), events, lockManager, elevation);
+  const service = new TerminalService(platform.ptyHost(), events, lockManager, elevation);
   const router = new RpcRouter();
   service.register(router);
   const server = new IpcServer({ pipeName }, router, events);
@@ -52,7 +62,7 @@ let rpcId = 0;
 /** One request/response RPC over a short-lived socket. */
 export function rpcCall(pipeName: string, method: string, params: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () => {
@@ -84,7 +94,7 @@ export interface EventsSocket {
 /** A long-lived events socket: subscribes, then accumulates notification frames. */
 export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
   return new Promise((resolve, reject) => {
-    const socket: Socket = connect(pipeName);
+    const socket: Socket = connect(resolveIpcAddress(pipeName));
     const notifications: Array<{ method: string; params: any; at: number }> = [];
     let buffer = '';
     let resolved = false;

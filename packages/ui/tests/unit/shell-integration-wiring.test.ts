@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,6 +60,7 @@ vi.mock('@throng/platform-windows', async (importOriginal) => {
 
 const MAIN_DIR = fileURLToPath(new URL('../../src/main/', import.meta.url));
 const SRC_DIR = fileURLToPath(new URL('../../src/', import.meta.url));
+const PLATFORM_SRC_DIR = fileURLToPath(new URL('../../../platform/src/', import.meta.url));
 
 /** Block and line comments removed, so a comment naming the defect is not mistaken for code. */
 function code(source: string): string {
@@ -90,10 +92,11 @@ describe('T217 / D4 — structural: the app never builds its shell integration w
     expect(offenders).toEqual([]);
   });
 
-  it('something under packages/ui/src constructs a WindowsDeElevatedLauncher', () => {
-    const constructing = sourcesUnder(SRC_DIR)
+  it('the platform set constructs a WindowsDeElevatedLauncher', () => {
+    // 062: selection moved to @throng/platform, and the app takes its launcher from there.
+    const constructing = sourcesUnder(PLATFORM_SRC_DIR)
       .filter((s) => /new\s+WindowsDeElevatedLauncher\(/.test(s.text))
-      .map((s) => s.file.slice(SRC_DIR.length));
+      .map((s) => s.file.slice(PLATFORM_SRC_DIR.length));
     expect(constructing.length, 'nothing supplies the launcher FR-038 routes through').toBeGreaterThan(0);
   });
 });
@@ -152,7 +155,7 @@ async function settle<T>(action: Promise<T>): Promise<T> {
   return action;
 }
 
-describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composition builds it', () => {
+describe.skipIf(skipUnlessWindows('routes through the Windows de-elevated launcher, which only Windows selects'))('T217 / SI5 — behavioural: the app\u2019s integration, as the composition builds it', () => {
   it('with NO overrides and an elevated host, all three actions go through the de-elevating launcher', async () => {
     const shell = recordingShell();
     const integration = factory()(shell, { statKind: async (p) => (p === FOLDER ? 'folder' : 'file') });
@@ -215,7 +218,7 @@ describe('T217 / SI5 — behavioural: the app\u2019s integration, as the composi
  * stubs. FR-038's routing is still proved where it can be: by the cases above, and on a really
  * elevated host by `link-de-elevated-open.integration.test.ts`.
  */
-describe('gate 35381378387 — under the E2E harness an elevated app opens through the stubbed shell', () => {
+describe.skipIf(skipUnlessWindows('routes through the Windows de-elevated launcher, which only Windows selects'))('gate 35381378387 — under the E2E harness an elevated app opens through the stubbed shell', () => {
   const HARNESS = { THRONG_E2E_CLIPBOARD: 'memory' };
 
   it('elevated, under the harness marker: all three actions reach shell.*, and nothing is launched', async () => {

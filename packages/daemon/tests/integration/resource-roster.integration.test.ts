@@ -1,8 +1,10 @@
+import { skipUnlessLinux, skipUnlessWindows } from '@throng/core/testing';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { RESOURCES_ROSTER_METHOD, type DaemonRoster } from '@throng/ipc-contract';
+import { LinuxGpuUsage, LinuxProcessMetrics } from '@throng/platform-linux';
 import { WindowsProcessMetrics } from '@throng/platform-windows';
 import { ResourceRosterService } from '../../src/resource-roster-service.js';
 import { CMD, rpcCall, startTerminalDaemon, waitFor, type TerminalDaemon } from './terminal-harness.js';
@@ -23,7 +25,7 @@ afterEach(async () => {
 });
 
 describe('resources.roster against a real daemon (055 R5, T028)', () => {
-  it("names both shells, their console hosts, and the project's lock helper with its panel", async () => {
+  it.skipIf(skipUnlessWindows('console hosts and a lock helper exist only on Windows'))("names both shells, their console hosts, and the project's lock helper with its panel", async () => {
     cwd = mkdtempSync(join(tmpdir(), 'throng-roster-'));
     daemon = await startTerminalDaemon();
     new ResourceRosterService(daemon.service, daemon.lockManager, () => null).register(daemon.router);
@@ -52,5 +54,33 @@ describe('resources.roster against a real daemon (055 R5, T028)', () => {
     expect(roster!.locks).toHaveLength(1);
     expect(roster!.locks[0]).toMatchObject({ projectId: 'proj', path: cwd, panelIds: ['a'] });
     expect(image(roster!.locks[0]!.pid)).toBe('node.exe');
+  });
+
+  it.skipIf(skipUnlessLinux('the Linux roster'))('names both shells, with no console host and no lock helper', async () => {
+    cwd = mkdtempSync(join(tmpdir(), 'throng-roster-'));
+    daemon = await startTerminalDaemon();
+    new ResourceRosterService(daemon.service, daemon.lockManager, () => null).register(daemon.router);
+    const launch = { file: CMD, args: [], cwd };
+    await rpcCall(daemon.pipeName, 'terminal.attach', { panelId: 'a', projectId: 'proj', launch, cols: 80, rows: 24 });
+    await rpcCall(daemon.pipeName, 'terminal.attach', { panelId: 'b', projectId: 'proj', rootless: true, launch, cols: 80, rows: 24 });
+
+    let roster: DaemonRoster | undefined;
+    await waitFor(
+      async () => {
+        roster = ((await rpcCall(daemon!.pipeName, RESOURCES_ROSTER_METHOD, {})) as { result: DaemonRoster }).result;
+        return roster.terminals.length === 2 && roster.terminals.every((t) => t.osPid !== null);
+      },
+      20_000,
+      'both terminals with their shells',
+    );
+
+    const table = new Map((await new LinuxProcessMetrics(new LinuxGpuUsage()).snapshot()).readings.map((r) => [r.pid, r]));
+    expect(roster!.daemonPid).toBe(process.pid);
+    for (const t of roster!.terminals) {
+      expect(table.get(t.osPid!)?.imageName).toBe('bash');
+      expect(t.conhostPid).toBeNull();
+    }
+    expect(roster!.terminals.find((t) => t.panelId === 'b')!.projectId).toBeNull();
+    expect(roster!.locks.filter((l) => l.pid !== null)).toEqual([]);
   });
 });

@@ -1,3 +1,5 @@
+import { isWindowsHost, skipUnlessWindows } from '@throng/core/testing';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import {
@@ -49,8 +51,8 @@ import { createLinkViewMarks, terminalViewScan } from '../../src/renderer/termin
  * below changes the settings object BEHIND plumbing that was built before the change.
  */
 
-const ROOT = 'D:\\p';
-const TS = `${ROOT}\\src\\foo.ts`;
+const ROOT = isWindowsHost() ? 'D:\\p' : '/p';
+const TS = join(ROOT, 'src', 'foo.ts');
 
 const resolved: ResolvedLink = {
   path: TS,
@@ -196,7 +198,7 @@ describe('SC-008 — a detection switch lands on the next gesture, in both panel
     const markdown = SHIPPED_PREVIEW_PROVIDERS.forPath('a.md');
     expect(markdown, 'the shipped registry must still claim .md').toBeDefined();
     const mdLink: ResolvedLink = {
-      path: `${ROOT}\\docs\\a.md`,
+      path: join(ROOT, 'docs', 'a.md'),
       kind: 'file',
       inProject: true,
       executable: false,
@@ -431,7 +433,7 @@ describe('SC-008 — the existence-check timeout applies to the next check, with
     vi.useRealTimers();
   });
 
-  it('2 s, then raised to 5 s behind the same resolver', async () => {
+  it.skipIf(skipUnlessWindows('names two UNC shares, which are only two roots on Windows'))('2 s, then raised to 5 s behind the same resolver', async () => {
     vi.useFakeTimers();
     const neverSettles = (): Promise<never> => new Promise(() => {});
     const deps = {

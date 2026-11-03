@@ -181,6 +181,8 @@ test('an OSC 52 sequence from inside the terminal writes to the system clipboard
   let app: ElectronApplication | undefined;
   try {
     app = await electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true,
       args: [mainEntry, `--user-data-dir=${userData}`],
       // THRONG_TEST_SHELL_HISTORY: this file opens a REAL PowerShell and types into it, so without
       // it every command below lands in the developer's own PSReadLine history (#339).
@@ -316,6 +318,8 @@ test.describe('the two tests that need the in-process clipboard seam', () => {
     await new Promise<void>((res) => daemon.stdout!.on('data', (c: string) => c.includes('listening') && res()));
 
     app = await electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true,
       args: [mainEntry, `--user-data-dir=${userData}`],
       // The in-process clipboard seam, as `harness.ts` uses for every app it launches. Without it
       // these tests PASTE THE DEVELOPER'S REAL CLIPBOARD: Electron's clipboard does not work under

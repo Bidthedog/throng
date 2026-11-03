@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { describe, it, expect } from 'vitest';
 import { createServer, type Server, type Socket } from 'node:net';
 import process from 'node:process';
@@ -63,7 +64,7 @@ function startFakeAgent(pipeName: string): Promise<FakeAgent> {
   });
   return new Promise((resolve, reject) => {
     server.on('error', reject);
-    server.listen(pipeName, () => {
+    server.listen(resolveIpcAddress(pipeName), () => {
       resolve({
         server,
         nextConnection() {

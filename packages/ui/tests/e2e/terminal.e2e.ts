@@ -1,3 +1,4 @@
+import { TEST_SHELL } from './harness.js';
 import { basename } from 'node:path';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,7 +20,7 @@ test('confirms Terminal → a live inline shell echoes input and starts at the p
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
       // Use Command Prompt (plain echo, no PSReadLine line-editor repainting) so
       // the streamed output is straightforward to assert.
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       const confirm = win.getByTestId(`panel-type-confirm-${pid}`);
       await expect(confirm).toBeEnabled();
       await confirm.click();
@@ -29,7 +30,13 @@ test('confirms Terminal → a live inline shell echoes input and starts at the p
       await expect(term).toBeVisible();
 
       // cmd.exe's prompt shows its cwd → the project root (FR-013 / SC-004). The
-      // temp dir's unique basename appears in the terminal viewport.
+      // temp dir's unique basename appears in the terminal viewport. A bash prompt is the user's own
+      // to shape, so there the shell is asked (062).
+      if (process.platform !== 'win32') {
+        await term.click();
+        await win.keyboard.type('pwd');
+        await win.keyboard.press('Enter');
+      }
       await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });
 
       // A plain left-click must focus the terminal so the user can type (the click

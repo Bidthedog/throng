@@ -5,6 +5,7 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CMD,
+  busyCommand,
   openEventsSocket,
   rpcCall,
   startTerminalDaemon,
@@ -88,7 +89,7 @@ describe('051 FR-021 — the service answers while terminals end and start', { t
     const load = Array.from({ length: ENDING }, (_, i) => `load${i}`);
     for (const id of load) {
       await attach(id, 'load', cmd);
-      await rpcCall(daemon.pipeName, 'terminal.write', { panelId: id, data: 'ping -n 120 127.0.0.1\r' });
+      await rpcCall(daemon.pipeName, 'terminal.write', { panelId: id, data: `${busyCommand(120)}\r` });
     }
     // A terminal that prints on its own every 50 ms, and one the test types into.
     await attach('ticker', 'watch', {

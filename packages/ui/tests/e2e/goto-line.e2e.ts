@@ -35,6 +35,7 @@
  * `helpers/navigation.ts` already fixes them: `gotoline` for the dialog card, `gotoline-input` for
  * the field, `gotoline-overlay` for the scrim.
  */
+import { TEST_SHELL } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -578,7 +579,7 @@ test('with a terminal focused the chord opens nothing and the shell receives ^G 
 
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toContainText(basename(root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });

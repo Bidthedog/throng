@@ -32,7 +32,7 @@ afterEach(async () => {
 
 describe('FilesService move — same-folder drop (FR-080)', () => {
   it('dropping a file onto its own parent folder is a no-op (no error)', async () => {
-    const result = await svc.move(['sub\\a.txt'], 'sub');
+    const result = await svc.move([join('sub', 'a.txt')], 'sub');
     expect(result).toEqual({ ok: true });
     expect(existsSync(join(root, 'sub', 'a.txt'))).toBe(true); // still there, unmoved
   });

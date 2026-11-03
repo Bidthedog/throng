@@ -28,6 +28,7 @@
  *
  * RED on master: the watch is never re-established, so nothing can arrive again.
  */
+import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -86,7 +87,7 @@ describe('watcher survives an fs.watch runtime error (026 / #186)', () => {
     // could just mean the harness never worked.
     watches[0].listener('change', 'before.txt');
     await vi.advanceTimersByTimeAsync(60);
-    expect(changes).toEqual(['C:\\proj\\before.txt']);
+    expect(changes).toEqual([join('C:/proj', 'before.txt')]);
 
     // The OS reports a runtime failure on the recursive watch (EPERM/ENOENT under churn).
     watches[0].watcher.emit(
@@ -108,7 +109,7 @@ describe('watcher survives an fs.watch runtime error (026 / #186)', () => {
     // And that new watch's events reach the caller.
     live!.listener('change', 'after.txt');
     await vi.advanceTimersByTimeAsync(60);
-    expect(changes).toEqual(['C:\\proj\\before.txt', 'C:\\proj\\after.txt']);
+    expect(changes).toEqual([join('C:/proj', 'before.txt'), join('C:/proj', 'after.txt')]);
 
     handle.dispose();
   });

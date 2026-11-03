@@ -3,12 +3,13 @@
  *
  * Layer: integration — ending a process by its identity, leaves first, and refusing anything outside
  * Projects are claims about real processes in the real process table. The collector runs in-process
- * over the real `WindowsProcessMetrics`; its process boundary is `resource-collector.integration.test.ts`.
+ * over the platform's real metrics; its process boundary is `resource-collector.integration.test.ts`.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { killOrder, type ResourceNode } from '@throng/core';
 import type { CollectorToMain, DetailFrame, KillResult, ResourceRoster } from '@throng/ipc-contract';
+import { LinuxGpuUsage, LinuxProcessMetrics } from '@throng/platform-linux';
 import { WindowsProcessMetrics } from '@throng/platform-windows';
 import { ResourceCollector } from '../../src/collector/collector.js';
 
@@ -23,16 +24,26 @@ ${'setInterval(()=>{},1e3)'};
 `;
 
 let parent: ChildProcess | undefined;
+let tree: number[] = [];
 let collector: ResourceCollector | undefined;
 
 afterEach(() => {
   collector?.stop();
-  parent?.kill();
+  // Ending only the parent would orphan its child and grandchild: the tree has no shared lifetime.
+  for (const pid of tree) {
+    try {
+      process.kill(pid);
+    } catch {
+      // Already ended by the test.
+    }
+  }
+  tree = [];
 });
 
 async function setUp() {
   parent = spawn(process.execPath, ['-e', TREE], { stdio: ['ignore', 'pipe', 'ignore'] });
   const pids = await new Promise<number[]>((resolve) => parent!.stdout!.once('data', (d) => resolve(JSON.parse(String(d)))));
+  tree = pids;
   const roster: ResourceRoster = {
     daemonPid: null,
     agentPid: null,
@@ -42,7 +53,7 @@ async function setUp() {
   };
   const frames: DetailFrame[] = [];
   const kills = new Map<number, (r: KillResult) => void>();
-  const metrics = new WindowsProcessMetrics();
+  const metrics = process.platform === 'win32' ? new WindowsProcessMetrics() : new LinuxProcessMetrics(new LinuxGpuUsage());
   const c: ResourceCollector = new ResourceCollector({
     metrics,
     collectorPid: process.pid,

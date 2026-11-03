@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { connect } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { IpcServer } from '../../src/ipc-server.js';
@@ -21,7 +22,7 @@ function uniquePipeName(): string {
 
 function sendOnce(pipeName: string, request: object): Promise<Record<string, any>> {
   return new Promise((resolve, reject) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () => socket.write(`${JSON.stringify(request)}\n`));
@@ -106,7 +107,7 @@ describe('daemon health.ping IPC', () => {
     const server = makeServer(pipeName);
     await server.start();
 
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     await new Promise<void>((resolve, reject) => {
       socket.on('connect', () => resolve());
       socket.on('error', reject);

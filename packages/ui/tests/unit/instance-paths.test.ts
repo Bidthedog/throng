@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
@@ -30,7 +31,10 @@ const APPDATA = 'C:\\Users\\dev\\AppData\\Roaming';
 const HOME = 'C:\\Users\\dev';
 const BASE_PIPE = '\\\\.\\pipe\\throng.dev.deadbeef.daemon';
 
-describe('instance paths: packaged (installed) defaults', () => {
+/** These assert the Windows folders, spelled with Windows separators, which node:path only joins on Windows. */
+const WINDOWS_PATHS = skipUnlessWindows('asserts the Windows folder layout and its separators');
+
+describe.skipIf(WINDOWS_PATHS)('instance paths: packaged (installed) defaults', () => {
   it('keeps the documented production locations', () => {
     expect(instanceUserDataDir(APPDATA, false)).toBe(`${APPDATA}\\${PROD_DATA_DIR_NAME}`);
     expect(instanceConfigRoot(HOME, false, {})).toBe(`${HOME}\\${PROD_CONFIG_DIR_NAME}`);
@@ -74,7 +78,7 @@ describe('instance paths: the portable build shares the user namespace (058 D6)'
  * portable exe would read as two different copies, and the notice would send the user to a path
  * that is deleted when throng exits. The extractor says where the real exe is.
  */
-describe('copyExecPath: the executable that identifies this copy (058 review A3)', () => {
+describe.skipIf(WINDOWS_PATHS)('copyExecPath: the executable that identifies this copy (058 review A3)', () => {
   const TEMP_EXE = 'C:\\Users\\dev\\AppData\\Local\\Temp\\2xYz\\throng.exe';
 
   it('is process.execPath for an installed or extracted copy', () => {
@@ -99,7 +103,7 @@ describe('copyExecPath: the executable that identifies this copy (058 review A3)
   });
 });
 
-describe('instance paths: unpackaged (dev) defaults', () => {
+describe.skipIf(WINDOWS_PATHS)('instance paths: unpackaged (dev) defaults', () => {
   it('moves userData, the config root and the pipe aside', () => {
     expect(instanceUserDataDir(APPDATA, true)).toBe(`${APPDATA}\\${DEV_DATA_DIR_NAME}`);
     expect(instanceConfigRoot(HOME, true, {})).toBe(`${HOME}\\${DEV_CONFIG_DIR_NAME}`);
@@ -125,7 +129,7 @@ describe('instance paths: unpackaged (dev) defaults', () => {
   });
 });
 
-describe('instance paths: explicit overrides still win', () => {
+describe.skipIf(WINDOWS_PATHS)('instance paths: explicit overrides still win', () => {
   it('honours THRONG_CONFIG_ROOT in both modes (the E2E harness depends on it)', () => {
     const env = { THRONG_CONFIG_ROOT: 'C:\\tmp\\cfg' };
     expect(instanceConfigRoot(HOME, true, env)).toBe('C:\\tmp\\cfg');

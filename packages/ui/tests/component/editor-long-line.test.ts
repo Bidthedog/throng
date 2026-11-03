@@ -1,5 +1,6 @@
 import { waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LONG_LINE_THRESHOLD } from '../../src/renderer/editor/highlight-style.js';
 import { mountEditor } from './helpers/mount-editor.js';
 
 /**
@@ -30,14 +31,18 @@ import { mountEditor } from './helpers/mount-editor.js';
  * passing vacuously.
  */
 
-/** Comfortably over `LONG_LINE_THRESHOLD` (10,000), and syntactically real JavaScript. */
-const LONG = `const bundle = ${JSON.stringify('x'.repeat(12_000))};`;
+/**
+ * Just over `LONG_LINE_THRESHOLD`, and syntactically real JavaScript. No longer than it has to be: jsdom's cost for a
+ * line this size climbs with its length, measured at 2.3 s for 12,000 characters and 1.4 s for 10,100, and a slow runner
+ * multiplies that (5.5 s on a green CI run, past this project's 15 s timeout on a red one).
+ */
+const LONG = `const bundle = ${JSON.stringify('x'.repeat(LONG_LINE_THRESHOLD))};`;
 const SHORT = 'const readable = 1;';
 const DOC = [SHORT, LONG, 'export default readable;', ''].join('\n');
 
 const lines = (): { long: boolean; plain: boolean }[] =>
   [...document.querySelectorAll('.cm-line')].map((l) => ({
-    long: (l.textContent ?? '').length > 10_000,
+    long: (l.textContent ?? '').length > LONG_LINE_THRESHOLD,
     plain: l.classList.contains('cm-throng-plain-line'),
   }));
 

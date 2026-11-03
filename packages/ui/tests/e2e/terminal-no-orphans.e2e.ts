@@ -1,9 +1,10 @@
+import { TEST_SHELL, LONG_RUNNING_COMMAND } from './harness.js';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
+import { acceptConfirmations, runApp, createProject, firstPanelId, daemonPid, daemonRpc, conhostChildren, expectNoOrphanConhosts, cleanupTemp, splitPanelViaMenu } from './harness.js';
 import { skipIfElevated } from './admin.js';
 import { processTable } from './helpers/processes.js';
 
@@ -62,20 +63,6 @@ async function openTerminal(
 }
 
 /** Click through however many confirmation dialogs the destroy flow shows. */
-async function acceptConfirmations(win: Page): Promise<void> {
-  const dialog = win.getByTestId('confirm-dialog');
-  for (let i = 0; i < 3; i += 1) {
-    const appeared = await dialog
-      .waitFor({ state: 'visible', timeout: 3000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!appeared) break;
-    await win.getByTestId('confirm-accept').click();
-    // Wait for THIS dialog to actually close before the next iteration looks for another one —
-    // otherwise a not-yet-closed dialog would be mistaken for a fresh, unconfirmed one.
-    await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
-  }
-}
 
 /*
  * MOVED DOWN (the per-flavour loop): 'panel-destroy reaps the conhost for EVERY detected terminal flavour' opened and
@@ -96,7 +83,7 @@ test('panel-destroy reaps the terminal’s conhost', { tag: ['@core', '@terminal
       const pid = await firstPanelId(win);
       // A second Panel so destroying the terminal Panel is allowed (keep ≥ 1).
       await splitPanelViaMenu(win, pid);
-      await openTerminal(win, pid, 'cmd', dpid);
+      await openTerminal(win, pid, TEST_SHELL, dpid);
 
       // Destroy the Panel → daemon `terminal.kill` → the conhost must be reaped.
       await win.getByTestId(`panel-close-${pid}`).click();
@@ -117,7 +104,7 @@ test('deleting a project reaps its terminals’ conhosts', { tag: ['@core', '@te
       const dpid = await daemonPid(pipeName);
       const baseline = conhostChildren(dpid);
 
-      await openTerminal(win, await firstPanelId(win), 'cmd', dpid);
+      await openTerminal(win, await firstPanelId(win), TEST_SHELL, dpid);
 
       // Delete the project → its terminals must be torn down, not orphaned.
       await win.locator('[data-testid^="project-delete-"]').first().click();
@@ -143,9 +130,9 @@ test('Unload Project and End Terminals reaps a busy terminal with no dialog, pai
       // row is its opposite. A busy shell is the stronger case for End: nothing about it being busy
       // may stop the reap, and no dialog may ask first (FR-111).
       const pid = await firstPanelId(win);
-      await openTerminal(win, pid, 'cmd', dpid);
+      await openTerminal(win, pid, TEST_SHELL, dpid);
       await win.getByTestId(`terminal-${pid}`).click();
-      await win.keyboard.type('ping -n 30 127.0.0.1');
+      await win.keyboard.type(LONG_RUNNING_COMMAND);
       await win.keyboard.press('Enter');
       // The real condition: the daemon's OWN busy check for this panel reports true, rather than
       // guessing how long ping.exe takes to become a real child pid.

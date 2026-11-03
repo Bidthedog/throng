@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CMD,
+  busyCommand,
   openEventsSocket,
   rpcCall,
   startTerminalDaemon,
@@ -78,7 +79,7 @@ describe('reattach + idle/busy close (US3)', () => {
      * 15 s deadline, and no relationship between the two that a slower machine can invert. It costs
      * nothing — `killAll` below ends the child either way.
      */
-    await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'busy1', data: 'ping -n 30 127.0.0.1\r\n' });
+    await rpcCall(daemon.pipeName, 'terminal.write', { panelId: 'busy1', data: `${busyCommand(30)}\r\n` });
     const isBusyNow = async (): Promise<boolean> => {
       const l = await rpcCall(daemon.pipeName, 'terminal.list', { includeBusy: true });
       return l.result.sessions.find((s: any) => s.panelId === 'busy1')?.busy === true;

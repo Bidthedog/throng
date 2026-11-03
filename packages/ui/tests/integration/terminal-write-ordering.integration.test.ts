@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { createServer, type Server, type Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DaemonClient } from '../../src/main/daemon-client.js';
@@ -55,7 +56,7 @@ function startServer(arrivals: string[], stallFirstMs: number): Promise<void> {
       });
       socket.on('error', () => undefined);
     });
-    server.listen(pipeName, () => resolve());
+    server.listen(resolveIpcAddress(pipeName), () => resolve());
   });
 }
 

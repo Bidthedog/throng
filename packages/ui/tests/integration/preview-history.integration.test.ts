@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { mkdtemp, mkdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -452,7 +453,7 @@ describe('fix round 1', () => {
     expect(history.get('v1')!.entries[1]).toEqual({ filePath: setup, viewState: { line: 77 } });
   });
 
-  it('item 4 — a restore whose history names filePath in another SPELLING sends no pathChanged', async () => {
+  it.skipIf(skipUnlessWindows('a backslash is a name character on Linux, so there is no other spelling'))('item 4 — a restore whose history names filePath in another SPELLING sends no pathChanged', async () => {
     // Separators only: the extension's case decides the provider, so it is left alone.
     const spelledOtherwise = readme.includes('\\') ? readme.replace(/\\/g, '/') : readme.replace(/\//g, '\\');
     expect(spelledOtherwise).not.toBe(readme);

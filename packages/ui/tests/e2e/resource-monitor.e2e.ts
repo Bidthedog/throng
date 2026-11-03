@@ -1,3 +1,4 @@
+import { TEST_SHELL } from './harness.js';
 import { mkdtempSync } from 'node:fs';
 import { cpus, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,7 +6,7 @@ import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, openApp, runTypedCommand, TERMINAL_OUTPUT_TIMEOUT_MS } from './harness.js';
 import type { OpenApp } from './harness.js';
-import { closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList, pressEscapeToClose } from './helpers/monitor-window.js';
+import { MONITOR_CHORD, closeMonitorWindow, monitorWindowPage, openMonitorWindow, openProjectsList, pressEscapeToClose } from './helpers/monitor-window.js';
 import { expectWithinSla, noteSlaNotMeasured, slaMeasurable } from './helpers/sla.js';
 
 /**
@@ -28,6 +29,12 @@ let panelId: string;
 
 const term = (win: Page): Locator => win.getByTestId(`terminal-${panelId}`);
 
+/** A sum the shell works out, so seeing the answer proves the shell ran it. The answer is 42 in every use. */
+const arithmetic = (sum: string): [string, { echoed: string; output: string }] => {
+  const command = process.platform === 'win32' ? `set /a ${sum}` : `echo $((${sum}))`;
+  return [command, { echoed: command, output: '42' }];
+};
+
 /** A "12.3%"-shaped figure as a number. Under 100, so no digit grouping can be in the way. */
 const percent = (text: string): number => Number.parseFloat(text.replace(',', '.').replace(/[^\d.]/g, ''));
 
@@ -42,13 +49,13 @@ test.beforeAll(async () => {
   await createProject(win, 'Monitor', root);
   panelId = await firstPanelId(win);
   await win.getByTestId(`panel-type-select-${panelId}`).selectOption('terminal');
-  await win.getByTestId('terminal-flavour').selectOption('cmd');
+  await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
   const confirm = win.getByTestId(`panel-type-confirm-${panelId}`);
   await expect(confirm).toBeEnabled();
   await confirm.click();
   await expect(term(win)).toBeVisible();
   // A live shell, proved by an answer the command line itself does not contain.
-  await runTypedCommand(win, term(win), 'set /a 40+2', { echoed: 'set /a 40+2', output: '42' });
+  await runTypedCommand(win, term(win), ...arithmetic('40+2'));
 });
 
 test.afterAll(async () => {
@@ -108,14 +115,14 @@ function rollUpMismatches(node: Node, out: string[] = []): string[] {
   return out;
 }
 
-test('Ctrl+Shift+Alt+R opens the monitor window on the components alone; Projects to the busy process is five clicks from the status bar, every level adds up, and Esc closes it', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
+test('Ctrl+Shift+Alt+Y opens the monitor window on the components alone; Projects to the busy process is five clicks from the status bar, every level adds up, and Esc closes it', { tag: ['@extended', '@window', '@reserve:layout'] }, async () => {
   const { app, win } = h;
 
   // A process to find: an idle node under the terminal's shell.
   await runTypedCommand(win, term(win), 'node -e "setInterval(function(){},1000)"', { echoed: 'setInterval', output: 'setInterval' });
 
   // The chord opens it as a window of its own, with the first reading in (FR-051, FR-081).
-  const monitor = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  const monitor = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
   // Esc closes it (FR-052).
   await pressEscapeToClose(monitor);
   await expect.poll(() => monitorWindowPage(app), { timeout: 15_000 }).toBeNull();
@@ -266,7 +273,7 @@ test('having the monitor open does not slow typing: terminal echo is within 5% o
 
   // With the monitor window itself open and frames arriving, typing in it must never wait over 50 ms:
   // Chromium's own event timing for the keydowns, which covers input delay, handlers and the next paint.
-  const mon = await openMonitorWindow(h.app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  const mon = await openMonitorWindow(h.app, () => win.keyboard.press(MONITOR_CHORD));
   await mon.evaluate(() => {
     const w = window as unknown as { __events: number[]; __eventObserver: PerformanceObserver };
     w.__events = [];
@@ -318,12 +325,12 @@ test('the monitor is a window beside throng: the terminal takes typing while it 
   const { app, win } = h;
   test.setTimeout(120_000);
 
-  const monitor = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  const monitor = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
 
   // Throng is not blocked behind it (FR-082): a click lands in the main window and the terminal echoes
   // what is typed, with the monitor still up.
   await term(win).click();
-  await runTypedCommand(win, term(win), 'set /a 6*7', { echoed: 'set /a 6*7', output: '42' });
+  await runTypedCommand(win, term(win), ...arithmetic('6*7'));
   expect(await monitorWindowPage(app), 'the monitor is still open').not.toBeNull();
 
   // Above throng's own window, while throng has focus (FR-083).
@@ -374,7 +381,7 @@ test('Activate on a panel in another tab brings its window forward with that pan
   await expect(win.getByTestId(`tab-${terminalTab}`)).not.toHaveClass(/tab-chip--active/);
   await expect(term(win)).toBeHidden();
 
-  const mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+  const mon = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
   // The view is held between openings (FR-087): an earlier test left text in the filter.
   await mon.getByTestId('monitor-filter').fill('');
   await openProjectsList(mon);

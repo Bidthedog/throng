@@ -28,7 +28,7 @@ function twoPanels(): WorkspaceLayout {
 }
 
 const FOCUS_RIGHT = { key: 'ArrowRight', code: 'ArrowRight', ctrlKey: true, shiftKey: true, altKey: true };
-const OPEN_MONITOR = { key: 'R', code: 'KeyR', ctrlKey: true, shiftKey: true, altKey: true };
+const OPEN_MONITOR = { key: 'Y', code: 'KeyY', ctrlKey: true, shiftKey: true, altKey: true };
 
 let m: MountedWorkspace | undefined;
 let bridge: ResourcesBridge;

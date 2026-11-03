@@ -148,6 +148,19 @@ describe('chordCandidates — the tier-1 physical rule, Ctrl+Shift+Alt (FR-104, 
     }
   });
 
+  it('a keypad digit that reports its arrow resolves to that arrow, as measured on GNOME (062 MT-04)', () => {
+    const held = { ctrlKey: true, shiftKey: true, altKey: true };
+    expect(chordCandidates({ ...held, code: 'Numpad4', key: 'ArrowLeft' })).toEqual(['Ctrl+Shift+Alt+ArrowLeft']);
+    expect(chordCandidates({ ...held, code: 'Numpad6', key: 'ArrowRight' })).toEqual(['Ctrl+Shift+Alt+ArrowRight']);
+    expect(chordCandidates({ ...held, code: 'Numpad8', key: 'ArrowUp' })).toEqual(['Ctrl+Shift+Alt+ArrowUp']);
+    expect(chordCandidates({ ...held, code: 'Numpad2', key: 'ArrowDown' })).toEqual(['Ctrl+Shift+Alt+ArrowDown']);
+  });
+
+  it('the same keypad press on Windows, with NumLock on hiding Shift, resolves to the same arrow (046 FR-120)', () => {
+    const press = { code: 'Numpad4', key: 'ArrowLeft', ctrlKey: true, shiftKey: false, altKey: true, getModifierState: () => true };
+    expect(chordCandidates(press)).toEqual(['Ctrl+Shift+Alt+ArrowLeft']);
+  });
+
   it('Equal and NumpadAdd both resolve to +, the SAME binding (FR-105)', () => {
     const main = chordEventOnLayout('US', 'Equal', { ctrlKey: true, shiftKey: true, altKey: true });
     const pad = chordEventOnLayout('US', 'NumpadAdd', { ctrlKey: true, shiftKey: true, altKey: true });
