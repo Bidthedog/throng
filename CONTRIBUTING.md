@@ -167,6 +167,10 @@ port](docs/architecture.md#adding-a-platform-port).
 
 ## Developer setup
 
+Windows and Linux are both supported for development; see [running from source](docs/installation.md#running-from-source).
+Spec Kit's scripts are bash and run on either. A feature that needs different code per platform delivers Windows and Linux
+together.
+
 Clone, then `npm install && npm run build && npm test` to confirm a green baseline before you
 start (prerequisites and commands are in the [README](README.md)). For the AI path, install
 Claude Code with the Spec Kit extension and use the repo-local `/speckit-*` commands.

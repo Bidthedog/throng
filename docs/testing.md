@@ -104,6 +104,13 @@ changed after it. `-f only=<stage>` re-runs a single stage while fixing one. The
 reasoning and what the gate clears are in
 [the gate in detail](../.claude/skills/throng-testing/references/gate.md).
 
+## On Linux
+
+CI runs every layer on Ubuntu 24.04 too: the `Linux:` jobs in `ci.yml`, and `gate-linux` in `gate.yml`. E2E there runs on a
+real X display with a window manager (`scripts/ci-linux-display.sh`), and its lane is `@core` plus `@linux`, the tag for
+specs about Linux itself. A test asserting one platform's behaviour says so with `skipUnlessWindows(reason)` or
+`skipUnlessLinux(reason)` from `@throng/core/testing`, and the reason is required.
+
 ## Two lanes: `@core` and `@extended`
 
 Every E2E test carries exactly one significance tag and at least one category tag, and

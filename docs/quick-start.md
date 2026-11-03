@@ -9,7 +9,7 @@ know your way around. Every chord mentioned is rebindable; the full list is in
 ## Before you start
 
 Install throng from a download, or run it from a clone — both are in
-[installation](installation.md). It runs on Windows 11.
+[installation](installation.md). It runs on Windows 11, and on [Linux](linux.md) from source.
 
 ## First launch
 
@@ -210,7 +210,7 @@ The right of the status bar always shows throng's total **CPU**, **memory**, **G
 throng itself and everything its terminals run — coloured when a figure passes its warning or
 critical level. Point at it for all four at once, each split by part of throng with a small graph of
 the total — CPU, memory and GPU as a share of the machine, I/O as a rate — updating as you watch. Click
-it, choose **Resource Monitor** from the cog, or press [`Ctrl+Shift+Alt+R`](key-bindings.md#view).
+it, choose **Resource Monitor** from the cog, or press [`Ctrl+Shift+Alt+Y`](key-bindings.md#view).
 
 The monitor opens in its own window, like Preferences: move it beside your work and keep using throng
 behind it — it stays above throng's windows and updates as you go. Across the top are the filter (by
