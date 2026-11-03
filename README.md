@@ -49,7 +49,7 @@ goes away.
 
 ## Getting started
 
-throng runs on **Windows 11**, and on **Linux** [from source](docs/installation.md#running-from-source); macOS
+throng runs on **Windows 11** and [**Linux**](docs/installation.md#installing-on-linux); macOS
 ([#22](https://github.com/Bidthedog/throng/issues/22)) is planned.
 
 1. **Install it** — download the installer, an MSI, a portable build or a zip from the

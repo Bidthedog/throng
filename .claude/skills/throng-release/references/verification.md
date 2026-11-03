@@ -4,6 +4,13 @@ What verification proves, the verdict model, what each artifact costs to start, 
 a developer machine without mistaking the harness for the product. What a *passing* verdict looks
 like on a real release run is in [`SKILL.md`](../SKILL.md) step 10.
 
+## Linux
+
+The Linux artifacts have their own harness, `scripts/verify-linux-package.mjs`, over the same step vocabulary and verdict
+(063 research D8). It runs on `ubuntu-24.04`, and the `.rpm` in a privileged Fedora container, as a non-root account.
+Nothing in it may be `unproven`. `in-use-upgrade` installs the `linux-upgrade-fixture` artifact, this tree packaged as
+0.9.0, and upgrades over it while it runs. The sections below describe the Windows harness.
+
 ## What is proved
 
 **Every** declared artifact is verified before any of them is published, each on a fresh CI runner

@@ -33,7 +33,7 @@ and the test harnesses, which run isolated throngs beside an installed one — s
 | Variable | What it controls | Default |
 |---|---|---|
 | `THRONG_CONFIG_ROOT` | The folder holding `settings.json`, `keybindings.json`, `themes\` and `icon-packs\` — see [where the files live](preferences.md#where-the-files-live). | `%USERPROFILE%\.throng` (dev run: `%USERPROFILE%\.throng-dev`) |
-| `THRONG_DATABASE_PATH` | The SQLite database holding projects, layouts and sub-workspaces. | `%APPDATA%\throng\throng.db` (dev run: `%APPDATA%\throng-dev\throng.db`) |
+| `THRONG_DATABASE_PATH` | The SQLite database holding projects, layouts and sub-workspaces. | `%APPDATA%\throng\throng.db` (dev run: `%APPDATA%\throng-dev\throng.db`); on Linux, `~/.local/share/throng/throng.db` (dev run: `~/.local/share/throng-dev/throng.db`) |
 | `THRONG_PIPE_NAME` | The instance's **namespace**: the named pipe the app and its daemon talk over, and the one-running-throng lock (`<pipe>.instance`). Two throngs on different pipes are fully independent. | `\\.\pipe\throng.<user>.<hash>.daemon` for every installed or extracted copy; `….daemon.dev` for a dev run |
 
 `--user-data-dir=<folder>` (a command-line switch, not a variable) moves Electron's user-data folder —

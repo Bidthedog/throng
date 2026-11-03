@@ -41,8 +41,10 @@ sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.
 deliberate, documented choice, not an omission to fix.
 
 **A release is a DECLARED SET of artifacts, not a file the pipeline finds** (042). The declaration
-is `packages/core/src/config/release-artifacts.ts` — four roles (`setup`, `msi`, `portable`,
-`archive`), the two installers each with two install scopes. Every step resolves by **role** through
+is `packages/core/src/config/release-artifacts.ts` — seven roles (`setup`, `msi`, `portable`,
+`archive`, `deb`, `rpm`, `tarball`), the two Windows installers each with two install scopes. The Linux layout (version
+folders of hard links, the launcher, the maintainer scripts in `packaging/linux/`) and why it is that shape are
+`specs/063-linux-packaging/research.md`. Every step resolves by **role** through
 `scripts/artifact-set.mjs` (`list`, `list --combinations`, `resolve`, `reconcile`, `checksums`).
 How the setup and the MSI are customised is in [artifact-set.md](artifact-set.md#how-the-installers-are-customised). Nothing globs, and nothing
 resolves by file extension: `nsis` and `portable` both produce a `.exe`, which is exactly why

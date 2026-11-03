@@ -40,10 +40,12 @@ its role:
 | `msi` | `throng-<version>.msi` | The same two scopes as an MSI, for managed deployment; machine-wide by default when run elevated. |
 | `portable` | `throng-portable-<version>.exe` | A single self-extracting executable. Unpacks to a temporary folder and runs; installs nothing. |
 | `archive` | `throng-<version>.zip` | An ordinary archive, extracted and run from wherever the user puts it. |
+| `deb` | `throng-<version>-amd64.deb` | The Linux package for Ubuntu, Debian and their relatives, for the whole machine. |
+| `rpm` | `throng-<version>-x86_64.rpm` | The Linux package for Fedora and its relatives, for the whole machine. |
+| `tarball` | `throng-<version>-linux-x64.tar.gz` | The Linux archive, extracted and run from wherever the user puts it. |
 
-All four carry the same contents and bundle their own Node.js runtime, so nothing else needs
-installing. The two installers each support two **install scopes**; the portable build and the
-archive have none. Which one a user should pick is covered in [Installation](installation.md).
+All of them bundle their own Node.js runtime, so nothing else needs installing. The two Windows installers each
+support two **install scopes**; the others have none. Which one a user should pick is covered in [Installation](installation.md).
 Detail — how the set is declared and reconciled, and what ships inside:
 [artifact set](../.claude/skills/throng-release/references/artifact-set.md).
 
@@ -59,8 +61,8 @@ sign-off reads the exact rendered body before approving it. Detail:
 
 ## Verification
 
-Every **combination** of artifact and install scope — six today: the setup and the MSI each per-user
-and machine-wide, plus the portable build and the archive — is installed (or extracted, or unpacked),
+Every **combination** of artifact and install scope — nine today: the setup and the MSI each per-user
+and machine-wide, the portable build, the archive, and the three Linux artifacts — is installed (or extracted, or unpacked),
 launched, checked for the right version, driven through a core journey — project, terminal, close,
 reopen, reattach — checksummed, and removed again, each on its own fresh CI runner. Machine-wide
 combinations also prove a second, standard account gets its own background service and terminals,
@@ -68,7 +70,9 @@ and that an upgrade in use by that account finishes at a restart without closing
 job installs every copy side by side and proves they coexist: one runs at a time, all open the same
 data. Each combination, and the coexistence run, gets its own verdict. A missing verdict is a
 failure, and a set of verdicts covering only some combinations is a refusal, not a partial pass. The
-one gap allowed — a second-account check a hosted runner cannot exercise — is named on every run. Detail:
+one gap allowed — a second-account check a hosted runner cannot exercise — is named on every run. The Linux
+packages also prove an older copy left open survives the upgrade, and that an older package is refused; the `.rpm` is
+verified in a Fedora container, because no hosted runner is rpm-based. Detail:
 [verification](../.claude/skills/throng-release/references/verification.md).
 
 ## What fails a release
