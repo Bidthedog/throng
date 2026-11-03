@@ -16,7 +16,7 @@
     "npm run build"
   ],
   "teardown": [
-    "powershell -NoProfile -ExecutionPolicy Bypass -File \"$(cygpath -w \"$SOURCE_PATH/.claude/skills/throng-clear-dev-state/scripts/clear-dev-state.ps1\")\" -RepoRoot \"$(cygpath -w \"$WORKTREE_PATH\")\" -KeepData"
+    "if [ \"$(uname)\" = Linux ]; then node \"$SOURCE_PATH/scripts/clear-dev-state.mjs\" --keep-data --root \"$WORKTREE_PATH\"; else powershell -NoProfile -ExecutionPolicy Bypass -File \"$(cygpath -w \"$SOURCE_PATH/.claude/skills/throng-clear-dev-state/scripts/clear-dev-state.ps1\")\" -RepoRoot \"$(cygpath -w \"$WORKTREE_PATH\")\" -KeepData; fi"
   ],
   "teardownNotes": {
     "why": "throng's daemon is DESIGNED to outlive its window (Constitution Principle III: terminals keep running when the UI closes). So closing the app, or ending an E2E run, does not stop it. A daemon, its pty-agent, the shells it started and a conhost.exe per shell all keep running, holding the dev data folder open — which is why a later run inherits stale state, and why deleting the worktree can fail with a permission error while nothing appears to be running.",

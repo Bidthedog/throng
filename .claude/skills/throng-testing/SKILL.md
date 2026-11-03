@@ -286,6 +286,8 @@ Get-CimInstance Win32_Process |
   Select-Object ProcessId, Name
 ```
 
+On Linux the probe is `pgrep -af "<your-worktree>"`, there is no `conhost`, and a shell's children stand in for it.
+
 To clear everything, use the sibling skill **throng-clear-dev-state**, which stops those processes in
 the right order (children first, so nothing is orphaned) and removes the dev data folders.
 

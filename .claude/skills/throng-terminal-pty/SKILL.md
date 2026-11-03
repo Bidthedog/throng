@@ -21,6 +21,11 @@ machine. Assume every change here can orphan a process until you have proven oth
 - `packages/ui/src/renderer/terminal/` — xterm.js 6 with the fit, search and web-links addons.
 - `packages/core/src/terminal/` — flavour-agnostic terminal domain state.
 
+On Linux: `packages/platform-linux/src` — `linux-pty-host.ts` (node-pty, tree read from `/proc` before any signal, start
+times checked before every signal), `linux-shell-detection.ts`, `linux-process-cwd.ts`, `proc-table.ts`,
+`linux-orphan-processes.ts`. There is no conhost and no elevation; a job has its own process group, so killing the
+shell's group is not enough, which is why the tree is read first.
+
 ## The hygiene rules (Principle III, NON-NEGOTIABLE)
 
 - **No orphaned OS processes.** Every end path — user close, kill, panel destroy, project delete,
