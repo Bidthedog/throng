@@ -1,6 +1,53 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.1.0 → 6.2.0
+Bump rationale: MINOR — Principle IV gains one additive rule, settled by the maintainer in 062's manual
+                test on 2026-11-03: a default key chord is the same on every platform wherever it can be.
+                Nothing is withdrawn, and the codebase already meets it.
+Modified principles: IV — new rule "A default chord is the same on every platform wherever it can be (v6.2.0)".
+Added sections: none. Removed sections: none.
+Audit (2026-11-03, at the 062 branch's head): Windows and Linux share every shipped default. The four focus
+                moves reach Linux through the keypad, because GNOME reserves the arrow keys, and docs/linux.md
+                records it.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+           ✅ constitution-template.md — resolved earlier in this session's amendment; no placeholder in play.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: 6.0.0 → 6.1.0
+Bump rationale: MINOR — Principle II gains one rule, on the maintainer's instruction of 2026-11-02:
+                a feature that requires distinct code for Linux and Windows delivers both. Linux also
+                becomes a supported target beside Windows. Nothing is withdrawn: Windows stays supported
+                and "no design decision may foreclose" still holds for macOS. It is a new constraint that
+                shipped code fails, which is the ordinary MINOR case (v5.9.0, v5.6.0, v3.15.0); the
+                failures are stated in the rule as an end-state requirement under Incremental Delivery.
+Modified principles: II — "Windows is the first supported target" → Windows and Linux are the
+                supported targets; new rule "A feature that needs distinct code per OS delivers both
+                (v6.1.0)"; rationale extended.
+Added sections: none. Removed sections: none.
+Audit (2026-11-02, static reading plus a Linux install and build at 992f0635): no abstraction implemented
+                in packages/platform-windows has a Linux implementation; the core offers no-op defaults
+                for foreground hand-off, system notification and taskbar badge only. Every gating CI job
+                runs on Windows. Spec 062 (#23, #499) is the closing work and its FR-046 adds the Linux lane.
+In-flight: all other feature work is on hold until 062 lands (maintainer, 2026-11-02). Spec 061 (PR #549)
+                is specified but not planned, so its plan is bound by this rule when it resumes.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+           ✅ constitution-template.md — resolved with .specify/scripts/bash/resolve-template.sh; the
+              constitution is fully populated and no placeholder was in play.
+           ✅ .claude/skills/throng-spec-governance/SKILL.md — brought current in the same change.
+Follow-up (outside this command's scope):
+           ⚠ README.md, docs/installation.md, docs/quick-start.md — still say Windows-only; 062 FR-047
+             changes them when Linux works, since they describe what runs today.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 5.10.0 → 6.0.0
 Bump rationale: MAJOR — a previously-stated guarantee is withdrawn: "every panel action has a menu
                 item" no longer holds. Principle VI now requires every panel action to be REACHABLE by
@@ -1958,12 +2005,26 @@ application logic MUST remain platform-independent.
   with OS-specific concrete implementations selected at runtime.
 - Core logic (project model, terminal lifecycle orchestration, edit-list state,
   layout state) MUST NOT contain direct OS calls or hardcoded OS assumptions.
-- Windows is the first supported target, but no design decision MAY foreclose
-  future macOS or Linux implementations.
+- Windows and Linux are the supported targets. No design decision MAY foreclose a
+  future macOS implementation.
+- **A feature that needs distinct code per OS delivers both (v6.1.0).** A feature that
+  requires distinct code for Linux and Windows MUST ship both implementations in that
+  feature, each passing the same shared contract and each tested on its own platform.
+  It MUST NOT be declared done with one side missing, and Incremental Delivery staging
+  applies inside the feature only, never across to a later one. Where a capability
+  genuinely does not exist on one platform, the abstraction MUST report it as absent and
+  the feature's spec MUST say so. macOS implementations are not required, but each seam
+  MUST admit one without changing core logic.
+  *Known violations at adoption — end-state requirement under Incremental Delivery:*
+  no abstraction implemented in `packages/platform-windows` has a Linux implementation.
+  Spec 062 (#23, #499) closes them, and all other feature work is on hold until it lands
+  (maintainer, 2026-11-02), so no feature adds to this list in the meantime.
 
 Rationale: The user explicitly requires a technology choice that supports
 multiple operating systems and code structured so OS-specific concrete
-implementations can be added later without rewriting the core.
+implementations can be added later without rewriting the core. With Linux supported,
+a feature shipped for one platform alone is a regression on the other: the work of
+catching up grows with every feature, which is exactly the debt spec 062 exists to clear.
 
 ### III. Detached, Tagged & Persistent Terminals
 
@@ -2309,6 +2370,11 @@ an end-state requirement that MAY be delivered incrementally under the Increment
 Delivery rule (Development Workflow & Quality Gates), provided each released
 increment is internally consistent and the outstanding work is tracked; until it
 lands, no feature may widen the gap by binding a key in one flavour alone.
+
+**A default chord is the same on every platform wherever it can be (v6.2.0).** A default key
+chord MUST be the same on every supported platform. It MAY differ only when a platform's desktop
+reserves the chord and no other route, such as the keypad, reaches it, and the key bindings docs
+MUST record the reason.
 
 Rationale: Working natively in the command line for each agent is the user's
 primary unmet need. Auto-detection and correct working-directory defaults remove
@@ -3111,7 +3177,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.0.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-10-25
+**Version**: 6.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-03
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
