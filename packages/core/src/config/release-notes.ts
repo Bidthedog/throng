@@ -205,7 +205,7 @@ function renderFooter(
     '(SmartScreen) — click **More info → Run anyway**. Never disable a security feature to install.',
     '',
     ...gapLines,
-    'Verify your download matches its checksum below (`Get-FileHash <file> -Algorithm SHA256`).',
+    'Verify your download matches its checksum below (`Get-FileHash <file> -Algorithm SHA256` on Windows, `sha256sum <file>` on Linux).',
     '',
     '| Artifact | Who it is for | File | SHA-256 |',
     '|---|---|---|---|',

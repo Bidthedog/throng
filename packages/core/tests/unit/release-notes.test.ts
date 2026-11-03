@@ -234,7 +234,7 @@ describe('composeReleaseBody — a release with nothing user-visible (042 FR-009
 /**
  * 058 FR-032/FR-033 — the MSI gets its own checksum row, and the body says which download suits whom.
  */
-describe('composeReleaseBody — four artifacts and their audiences (058 FR-032/FR-033)', () => {
+describe('composeReleaseBody — every artifact and its audience (058 FR-032/FR-033, 063 FR-019)', () => {
   const notes = lookupReleaseNotes(CHANGELOG, '1.2.3').found!;
   const FOUR = declareArtifactSet('1.2.3').artifacts.map((a, i) => ({
     ...a,
@@ -243,7 +243,7 @@ describe('composeReleaseBody — four artifacts and their audiences (058 FR-032/
   const body = composeReleaseBody({ notes, artifacts: FOUR, commitSha: COMMIT });
 
   it('carries each artifact’s audience line beside its filename', () => {
-    expect(FOUR).toHaveLength(4);
+    expect(FOUR).toHaveLength(7);
     for (const artifact of FOUR) {
       const row = body.split('\n').find((l) => l.includes(artifact.filename));
       expect(row, artifact.filename).toBeDefined();
@@ -253,7 +253,7 @@ describe('composeReleaseBody — four artifacts and their audiences (058 FR-032/
 
   it('has one SHA-256 row per artifact, the MSI’s against its own filename', () => {
     const rows = body.split('\n').filter((l) => /\|\s*`[0-9]{64}`\s*\|$/.test(l));
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(7);
     const msi = FOUR.find((a) => a.role === 'msi')!;
     expect(rows.find((l) => l.includes(msi.filename))).toContain(msi.sha256);
   });

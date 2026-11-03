@@ -67,6 +67,9 @@ describe('artifact-set list --combinations (058 FR-028, FR-030)', () => {
     ['msi-machine', 'msi', 'machine', 'verification-verdict-msi-machine.json'],
     ['portable', 'portable', '-', 'verification-verdict-portable.json'],
     ['archive', 'archive', '-', 'verification-verdict-archive.json'],
+    ['deb', 'deb', '-', 'verification-verdict-deb.json'],
+    ['rpm', 'rpm', '-', 'verification-verdict-rpm.json'],
+    ['tarball', 'tarball', '-', 'verification-verdict-tarball.json'],
   ];
 
   it('prints one tab-separated line per combination — id, role, scope or "-", verdict file — and exits 0', () => {
@@ -169,5 +172,44 @@ describe('artifact-set, unknown input', () => {
       expect(r.code).not.toBe(0);
       expect(r.stderr.trim()).not.toBe('');
     }
+  });
+});
+
+describe('artifact-set --platform (063 FR-016)', () => {
+  const WINDOWS = ['throng-setup-1.2.3.exe', 'throng-1.2.3.msi', 'throng-portable-1.2.3.exe', 'throng-1.2.3.zip'];
+  const LINUX = ['throng-1.2.3-amd64.deb', 'throng-1.2.3-x86_64.rpm', 'throng-1.2.3-linux-x64.tar.gz'];
+
+  it('reconciles a Windows build against the Windows files only', () => {
+    const r = runArtifactSet({ argv: ['reconcile', '--platform', 'win32'], version: VERSION, filenames: WINDOWS });
+    expect(r.code).toBe(0);
+  });
+
+  it('reconciles a Linux build against the Linux files only, and names one that is missing', () => {
+    expect(runArtifactSet({ argv: ['reconcile', '--platform', 'linux'], version: VERSION, filenames: LINUX }).code).toBe(0);
+    const missing = runArtifactSet({ argv: ['reconcile', '--platform', 'linux'], version: VERSION, filenames: LINUX.slice(1) });
+    expect(missing.code).toBe(4);
+    expect(missing.stderr).toContain(LINUX[0]);
+  });
+
+  it('holds a release to both platforms when no platform is named', () => {
+    expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: LINUX }).code).toBe(4);
+    expect(runArtifactSet({ argv: ['reconcile'], version: VERSION, filenames: [...WINDOWS, ...LINUX] }).code).toBe(0);
+  });
+
+  it('narrows the verification matrix to the platform that runs it', () => {
+    const r = runArtifactSet({ argv: ['list', '--combinations', '--json', '--platform', 'linux'], version: VERSION, filenames: [] });
+    expect(JSON.parse(r.stdout).map((c: { id: string }) => c.id)).toEqual(['deb', 'rpm', 'tarball']);
+  });
+
+  it('refuses a platform it does not know', () => {
+    const r = runArtifactSet({ argv: ['list', '--platform', 'darwin'], version: VERSION, filenames: [] });
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('darwin');
+  });
+
+  it('does not read the platform value as the role to resolve', () => {
+    const r = runArtifactSet({ argv: ['resolve', '--platform', 'linux', 'deb'], version: VERSION, filenames: LINUX });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe(LINUX[0]);
   });
 });

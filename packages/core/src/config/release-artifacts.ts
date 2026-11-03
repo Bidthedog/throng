@@ -28,7 +28,10 @@ import type { VerificationStep } from './verification-verdict.js';
  * The set is closed for 042 and deliberately open to growth: #361 adds a machine-wide installer, so
  * no consumer may assume the count.
  */
-export type ReleaseArtifactRole = 'setup' | 'msi' | 'portable' | 'archive';
+export type ReleaseArtifactRole = 'setup' | 'msi' | 'portable' | 'archive' | 'deb' | 'rpm' | 'tarball';
+
+/** The OS an artifact is built and verified on (063 FR-016), in `process.platform`'s spelling. */
+export type ArtifactPlatform = 'win32' | 'linux';
 
 /**
  * Where an installer puts itself (058 FR-003, spec entity *Install scope*): for the signed-in user
@@ -54,6 +57,13 @@ export const END_STATE_STEPS: readonly VerificationStep[] = [
 export interface ReleaseArtifact {
   /** The stable identity every consumer asks for. Unique within a set. */
   role: ReleaseArtifactRole;
+  /** The only OS that can build this file (063 FR-016): a build is held to its own platform's files. */
+  platform: ArtifactPlatform;
+  /**
+   * The container image its clean machine runs in, or null for the runner itself (063 FR-017): no hosted
+   * runner is rpm-based, so the `.rpm` is verified in a Fedora container.
+   */
+  verificationContainer: string | null;
   /** The exact expected filename, version already interpolated. Never a pattern at this point. */
   filename: string;
   /** What the release body calls it, for a reader choosing between artifacts (042 FR-023). */
@@ -97,6 +107,26 @@ export interface ReconcileResult {
 }
 
 /**
+ * A system package's steps (063 FR-017). It installs for the whole machine, so it has one scope and no
+ * scope steps; `in-use-upgrade` here means an open older copy surviving this package's install.
+ */
+const LINUX_PACKAGE_STEPS: readonly VerificationStep[] = [
+  'install',
+  'launch',
+  'version-match',
+  'self-contained',
+  'shortcut',
+  'no-service',
+  'core-journey',
+  'reattach',
+  'in-use-upgrade',
+  'checksum-match',
+  'no-write',
+  'uninstall',
+  'residue-scan',
+];
+
+/**
  * The single authoritative declaration. Every filename carries the version, following the pattern
  * `electron-builder.yml` already uses for the setup installer (`throng-setup-${version}.${ext}`), so
  * an artifact separated from its release is still identifiable (020 FR-004's principle).
@@ -107,6 +137,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
     artifacts: [
       {
         role: 'setup',
+        platform: 'win32',
+        verificationContainer: null,
         filename: `throng-setup-${version}.exe`,
         label: 'Installer (setup)',
         audience: 'Most people: installs for you, or for everyone on the machine',
@@ -135,6 +167,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
       },
       {
         role: 'msi',
+        platform: 'win32',
+        verificationContainer: null,
         filename: `throng-${version}.msi`,
         label: 'Installer (MSI, for managed deployment)',
         audience: 'Administrators deploying with Intune, SCCM or Group Policy',
@@ -161,6 +195,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
       },
       {
         role: 'portable',
+        platform: 'win32',
+        verificationContainer: null,
         filename: `throng-portable-${version}.exe`,
         label: 'Portable (no installation)',
         audience: 'Run without installing',
@@ -187,6 +223,8 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
       },
       {
         role: 'archive',
+        platform: 'win32',
+        verificationContainer: null,
         filename: `throng-${version}.zip`,
         label: 'Archive (extract and run)',
         audience: 'Extract and run anywhere',
@@ -204,8 +242,59 @@ export function declareArtifactSet(version: string): ReleaseArtifactSet {
         ],
         sha256: null,
       },
+      {
+        role: 'deb',
+        platform: 'linux',
+        verificationContainer: null,
+        filename: `throng-${version}-amd64.deb`,
+        label: 'Linux package (.deb)',
+        audience: 'Ubuntu, Debian and their relatives: installs for everyone on the machine',
+        scopes: [],
+        applicableSteps: LINUX_PACKAGE_STEPS,
+        sha256: null,
+      },
+      {
+        role: 'rpm',
+        platform: 'linux',
+        verificationContainer: 'fedora:latest',
+        filename: `throng-${version}-x86_64.rpm`,
+        label: 'Linux package (.rpm)',
+        audience: 'Fedora and its relatives: installs for everyone on the machine',
+        scopes: [],
+        applicableSteps: LINUX_PACKAGE_STEPS,
+        sha256: null,
+      },
+      {
+        role: 'tarball',
+        platform: 'linux',
+        verificationContainer: null,
+        filename: `throng-${version}-linux-x64.tar.gz`,
+        label: 'Linux archive (.tar.gz)',
+        audience: 'Any other 64-bit Linux, or without administrator rights: extract and run',
+        scopes: [],
+        // As the Windows archive: the folder is the installation, so deleting it is the whole removal.
+        applicableSteps: [
+          'launch',
+          'version-match',
+          'self-contained',
+          'no-service',
+          'core-journey',
+          'reattach',
+          'checksum-match',
+          'residue-scan',
+        ],
+        sha256: null,
+      },
     ],
   };
+}
+
+/**
+ * What one platform's build is held to (063 FR-016). The publish gate reads the whole set; a Windows
+ * runner cannot produce a `.deb`, and a Linux runner cannot produce an MSI.
+ */
+export function artifactSetForPlatform(set: ReleaseArtifactSet, platform: ArtifactPlatform): ReleaseArtifactSet {
+  return { version: set.version, artifacts: set.artifacts.filter((a) => a.platform === platform) };
 }
 
 /**
@@ -219,6 +308,10 @@ export interface VerificationCombination {
   /** `<role>-<user|machine>`, or `<role>` for an artifact without scopes. Unique. */
   id: string;
   role: ReleaseArtifactRole;
+  /** The OS whose runner verifies it, which is the one that built it (063 FR-016, FR-017). */
+  platform: ArtifactPlatform;
+  /** The container its clean machine runs in, or `''` for the runner itself: the workflow's `image` value. */
+  container: string;
   /** `null` for an artifact without scopes. */
   scope: InstallScope | null;
   /** The artifact's own steps plus the ones its scope adds. */
@@ -245,6 +338,8 @@ export function combinationsOf(set: ReleaseArtifactSet): readonly VerificationCo
       combinations.push({
         id: artifact.role,
         role: artifact.role,
+        platform: artifact.platform,
+        container: artifact.verificationContainer ?? '',
         scope: null,
         applicableSteps: artifact.applicableSteps,
         verdictFile: `verification-verdict-${artifact.role}.json`,
@@ -256,6 +351,8 @@ export function combinationsOf(set: ReleaseArtifactSet): readonly VerificationCo
       combinations.push({
         id,
         role: artifact.role,
+        platform: artifact.platform,
+        container: artifact.verificationContainer ?? '',
         scope,
         applicableSteps: [...artifact.applicableSteps, ...scopeSteps(artifact.role, scope)],
         verdictFile: `verification-verdict-${id}.json`,

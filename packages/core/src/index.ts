@@ -116,12 +116,14 @@ export type {
 } from './config/verification-verdict.js';
 export {
   END_STATE_STEPS,
+  artifactSetForPlatform,
   combinationsOf,
   declareArtifactSet,
   reconcileArtifactSet,
   resolveArtifact,
 } from './config/release-artifacts.js';
 export type {
+  ArtifactPlatform,
   InstallScope,
   ReconcileResult,
   ReleaseArtifact,
@@ -212,6 +214,12 @@ export type {
 // #199: let a window opened by a terminal command come to the front instead of behind throng.
 export type { IForegroundHandoff } from './abstractions/foreground-handoff.js';
 export { NoForegroundHandoff, submitsCommand } from './abstractions/foreground-handoff.js';
+export {
+  NoInstalledVersion,
+  installedVersionNotice,
+  installedVersionNoticeText,
+} from './abstractions/installed-version.js';
+export type { IInstalledVersion, InstalledCopy, InstalledVersionNotice } from './abstractions/installed-version.js';
 
 // 057 — panel attention marks: the shared vocabulary and the two OS seams (notifications, taskbar badge).
 export type {
