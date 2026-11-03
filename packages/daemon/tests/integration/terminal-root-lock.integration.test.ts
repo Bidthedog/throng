@@ -1,3 +1,5 @@
+import { skipUnlessWindows } from '@throng/core/testing';
+import { resolveIpcAddress } from '@throng/core';
 import { connect } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -7,7 +9,7 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectService, type IUserContext } from '@throng/core';
 import { openDatabase, runMigrations, ProjectRepository, type ThrongDatabase } from '@throng/persistence';
-import { NodePtyHost, WindowsDirectoryLock } from '@throng/platform-windows';
+import { selectPlatform } from '@throng/platform';
 import { IpcServer } from '../../src/ipc-server.js';
 import { RpcRouter } from '../../src/rpc-router.js';
 import { ProjectIpcService } from '../../src/project-service.js';
@@ -15,7 +17,7 @@ import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';
 import { TerminalService } from '../../src/terminal-service.js';
 
-const CMD = process.env.ComSpec ?? 'cmd.exe';
+const CMD = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/bash';
 const userContext: IUserContext = { currentUser: () => ({ userId: 'alice', userName: 'Alice' }) };
 
 let counter = 0;
@@ -40,8 +42,8 @@ beforeEach(async () => {
     now: () => new Date().toISOString(),
   });
   const events = new TerminalEvents();
-  const lockManager = new TerminalLockManager(new WindowsDirectoryLock());
-  terminalService = new TerminalService(new NodePtyHost(), events, lockManager, {
+  const lockManager = new TerminalLockManager(selectPlatform(process.platform).directoryLock());
+  terminalService = new TerminalService(selectPlatform(process.platform).ptyHost(), events, lockManager, {
     isElevated: () => false,
   });
   const router = new RpcRouter();
@@ -66,7 +68,7 @@ afterEach(async () => {
 let rpcId = 0;
 function call(method: string, params: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () => socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params })}\n`));
@@ -118,14 +120,16 @@ describe('project-root lock while terminals are open (FR-022)', () => {
     expect(terminalService.hasOpenTerminals(projectId)).toBe(true);
 
     // The OS refuses to delete the locked root from outside.
-    let deleteBlocked = false;
-    try {
-      rmSync(projectRoot, { recursive: true });
-    } catch {
-      deleteBlocked = true;
+    if (!skipUnlessWindows('a folder cannot be held against deletion on Linux (062 docs/linux.md)')) {
+      let deleteBlocked = false;
+      try {
+        rmSync(projectRoot, { recursive: true });
+      } catch {
+        deleteBlocked = true;
+      }
+      expect(deleteBlocked).toBe(true);
+      expect(existsSync(projectRoot)).toBe(true);
     }
-    expect(deleteBlocked).toBe(true);
-    expect(existsSync(projectRoot)).toBe(true);
 
     // The root-edit guard refuses to change the project's root path.
     const refused = await call('projects.update', { id: projectId, rootFolder: otherRoot });

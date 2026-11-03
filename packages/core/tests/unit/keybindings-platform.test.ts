@@ -18,13 +18,13 @@ import {
 
 describe('platform-keyed shipped defaults (FR-017e)', () => {
   it('keys the shipped record by platform', () => {
-    expect(Object.keys(SHIPPED_KEYBINDINGS_BY_PLATFORM)).toEqual(['windows']);
+    expect(Object.keys(SHIPPED_KEYBINDINGS_BY_PLATFORM)).toEqual(['windows', 'linux']);
     expect(DEFAULT_BINDING_PLATFORM).toBe('windows');
   });
 
-  it('populates ONLY Windows — no macOS or Linux chord is guessed in Part 1', () => {
+  it('populates Windows and Linux (062 FR-033), and no macOS chord is guessed', () => {
     expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.macos).toBeUndefined();
-    expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.linux).toBeUndefined();
+    expect(SHIPPED_KEYBINDINGS_BY_PLATFORM.linux).toBeDefined();
   });
 
   it('carries the chords AND the column-select mouse modifier per platform — the modifier is a default too', () => {
@@ -42,7 +42,7 @@ describe('platform-keyed shipped defaults (FR-017e)', () => {
       macos: { bindings: { 'editor.cutLine': ['Meta+X'] }, columnSelectModifier: 'Alt' as const },
     };
     expect(withMac.windows).toBe(SHIPPED_KEYBINDINGS_BY_PLATFORM.windows);
-    expect(Object.keys(withMac).sort()).toEqual(['macos', 'windows']);
+    expect(Object.keys(withMac).sort()).toEqual(['linux', 'macos', 'windows']);
   });
 
   it('resolves the current platform for an unpopulated one, rather than yielding nothing', () => {

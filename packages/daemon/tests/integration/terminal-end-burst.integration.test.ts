@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CMD,
+  busyCommand,
   openEventsSocket,
   rpcCall,
   startTerminalDaemon,
@@ -144,7 +145,7 @@ describe('ending several terminals at once (#465)', { tags: ['regression'] }, ()
         expect(ids.filter((id) => exitedIds().has(id)), `round ${round}: sessions nobody ended`).toEqual([]);
         // Busy when the next round ends them, as Unload and app close usually find them.
         for (const panelId of ids) {
-          await rpcCall(daemon.pipeName, 'terminal.write', { panelId, data: 'ping -n 60 127.0.0.1\r' });
+          await rpcCall(daemon.pipeName, 'terminal.write', { panelId, data: `${busyCommand(60)}\r` });
         }
         survivors = ids;
       }

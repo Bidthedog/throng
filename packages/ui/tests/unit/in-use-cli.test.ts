@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -117,7 +118,7 @@ describe('the in-use helper: main()', () => {
   });
 });
 
-describe('the staged pair (C1)', () => {
+describe.skipIf(skipUnlessWindows('the helper a Windows installer runs; it lists processes through PowerShell'))('the staged pair (C1)', () => {
   const dirs: string[] = [];
   afterAll(() => {
     for (const d of dirs) rmSync(d, { recursive: true, force: true });

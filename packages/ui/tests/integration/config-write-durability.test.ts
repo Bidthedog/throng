@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -43,7 +44,7 @@ describe('FileConfigStore.write durability', () => {
   // ultimately fails" were the same writes as config-store-retry-exhaustion.test.ts (`ok` false, no
   // `.tmp` strays) and the #265 diagnosis claims; they live there now.
 
-  it('retries a transient rename failure and lands the value', async () => {
+  it.skipIf(skipUnlessWindows('a held target is a Windows failure; POSIX renames do not fail transiently'))('retries a transient rename failure and lands the value', async () => {
     const root = freshRoot();
     const store = new FileConfigStore(root);
     const path = store.pathOf({ kind: 'settings' });

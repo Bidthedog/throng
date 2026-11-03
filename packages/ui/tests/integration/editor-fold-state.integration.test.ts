@@ -93,7 +93,7 @@ describe('fold state is document state, held beside word wrap (047 R3)', () => {
     const a = await file('a.md', '# A\n');
     await coord.load({ ...meta('e1', a) });
     const key = coord.foldKeyForPanel('e1')!;
-    expect(key).toBe(`file:${a.replace(/\\/g, '/').toLowerCase()}`);
+    expect(key).toBe(`file:${process.platform === 'win32' ? a.replace(/\\/g, '/').toLowerCase() : a}`);
 
     expect(coord.foldStateFor(key, 'expanded')).toEqual(initialFold('expanded'));
     // Seeded once: asking again with a different seed does not re-seed.

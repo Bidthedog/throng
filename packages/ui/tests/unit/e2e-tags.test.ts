@@ -220,7 +220,7 @@ describe('E2E significance and category tags', () => {
   });
 
   it('uses no category outside the vocabulary', () => {
-    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, ...RESERVE, '@admin', '@quarantine']);
+    const known = new Set<string>([...SIGNIFICANCE, ...CATEGORIES, ...RESERVE, '@admin', '@quarantine', '@linux']);
     const offenders = all
       .flatMap((d) => d.tags.filter((t) => !known.has(t)).map((t) => `${d.file}:${d.line} ${t}`))
       .sort();

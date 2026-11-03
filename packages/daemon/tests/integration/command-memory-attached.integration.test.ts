@@ -1,8 +1,10 @@
+import { skipUnlessLinux, skipUnlessWindows } from '@throng/core/testing';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { LinuxPtyHost } from '@throng/platform-linux';
 import { NodePtyHost } from '@throng/platform-windows';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
@@ -50,7 +52,7 @@ function pingPids(marker: string): number[] {
   return out.split(/\r?\n/).map(Number).filter((n) => n > 0);
 }
 
-describe('051 FR-040 — a command started through a launcher is remembered, and forgotten when killed', () => {
+describe.skipIf(skipUnlessWindows('a launcher leaving a command on the same console is cmd and conhost behaviour'))('051 FR-040 — a command started through a launcher is remembered, and forgotten when killed', () => {
   it('reports the re-parented command, then nothing once it is killed from outside', async () => {
     const events = new TerminalEvents();
     events.publishCommand = (_panelId: string, command: string | null) => void commands.push(command);
@@ -112,5 +114,41 @@ describe('051 FR-040 — a command started through a launcher is remembered, and
     await call(3, 'terminal.killAll', {});
 
     await waitFor(() => pingPids('127\\.0\\.0\\.8').length === 0, 10_000, 'the launched ping to end with its terminal');
+  }, 60_000);
+});
+
+/** Layer: integration. FR-014 on Linux: a job the shell put in its own process group ends with the terminal. */
+describe('ending a terminal on Linux', () => {
+  /** The pids of a `sleep` with exactly this argument. */
+  const sleepPids = (seconds: number): number[] =>
+    readdirSync('/proc')
+      .filter((name) => /^\d+$/.test(name))
+      .filter((pid) => {
+        try {
+          return readFileSync(`/proc/${pid}/cmdline`, 'utf8') === ['sleep', String(seconds), ''].join(String.fromCharCode(0));
+        } catch {
+          return false;
+        }
+      })
+      .map(Number);
+
+  it.skipIf(skipUnlessLinux('the Linux end path'))('ends a job the shell left in the background (FR-014, Principle III)', async () => {
+    const seconds = 1000 + (process.pid % 8000);
+    service = new TerminalService(
+      new LinuxPtyHost(),
+      new TerminalEvents(),
+      new TerminalLockManager({ acquire: async (p) => ({ path: p }), release: async () => {} }),
+      { isElevated: () => false },
+    );
+    const router = new RpcRouter();
+    service.register(router);
+    const call = (id: number, method: string, params: object) => router.handle({ jsonrpc: '2.0', id, method, params });
+    await call(1, 'terminal.attach', { panelId: 'q', projectId: 'proj', launch: { file: CMD, args: [], cwd }, cols: 120, rows: 30 });
+    await call(2, 'terminal.write', { panelId: 'q', data: `sleep ${seconds} &\r` });
+    await waitFor(() => sleepPids(seconds).length === 1, 15_000, 'the job to be running');
+
+    await call(3, 'terminal.killAll', {});
+
+    await waitFor(() => sleepPids(seconds).length === 0, 10_000, 'the job to end with its terminal');
   }, 60_000);
 });

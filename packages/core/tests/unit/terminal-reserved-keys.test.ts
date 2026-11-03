@@ -152,7 +152,8 @@ describe('terminal keys belong to the terminal (Constitution IV, #164)', () => {
   it('the four 048 split chords are terminal-live, multi-stroke, and start on tier-1 Ctrl+Shift+Alt+End', () => {
     const IDS: ActionId[] = ['panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft'];
     const live = terminalLiveChords().filter((c) => IDS.includes(c.action as ActionId));
-    expect(live.map((c) => c.action).sort()).toEqual([...IDS].sort());
+    // One per platform table: the action set is what is asserted, and each table is checked below (062).
+    expect([...new Set(live.map((c) => c.action))].sort()).toEqual([...IDS].sort());
     for (const c of live) {
       const strokes = parseChordStrokes(c.chord);
       expect(strokes?.length, c.chord).toBe(2);

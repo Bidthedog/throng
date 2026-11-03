@@ -134,11 +134,13 @@ describe('a move heard while a project load is pending (052 T025)', () => {
     await waitFor(() => expect(h.ws().layout).toBeTruthy());
 
     expect(h.pathOf()).toBe(NEW);
-    await waitFor(() => {
-      const last = h.saves.mock.calls.at(-1)?.[0] as { layout: WorkspaceLayout } | undefined;
-      const saved = last?.layout.tabs.flatMap((t) => collectPanels(t.root) as Panel[]).find((p) => p.id === 'ed');
-      expect((saved?.config as { filePath?: string } | undefined)?.filePath).toBe(NEW);
+    // Fire the armed debounce rather than racing it: waiting out its delay failed on a loaded runner (CI, 062).
+    await act(async () => {
+      await settleLayoutSaves();
     });
+    const last = h.saves.mock.calls.at(-1)?.[0] as { layout: WorkspaceLayout } | undefined;
+    const saved = last?.layout.tabs.flatMap((t) => collectPanels(t.root) as Panel[]).find((p) => p.id === 'ed');
+    expect((saved?.config as { filePath?: string } | undefined)?.filePath).toBe(NEW);
   });
 
   it('leaves a layout alone when the move touches none of it, and saves nothing', async () => {

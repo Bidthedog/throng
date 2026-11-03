@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -78,7 +79,7 @@ describe('FilesService failure classification (029 FR-011)', () => {
     await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  it('turns a held folder into a `held` cause, keeping the errno for Copy', async () => {
+  it.skipIf(skipUnlessWindows('a folder can be held against deletion only on Windows'))('turns a held folder into a `held` cause, keeping the errno for Copy', async () => {
     const held = join(root, 'Held');
     await mkdir(held);
     const holder = holdFolder(held);

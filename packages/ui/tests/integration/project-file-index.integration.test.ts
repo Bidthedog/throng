@@ -80,6 +80,18 @@ class SpyWatcher implements IFileWatcher {
   }
 }
 
+/**
+ * A watcher that cannot name what changed. Linux reports every churned file by name, a COMPLETE batch, which by #482
+ * earns no reconcile, and unlike Windows it does not also report the parent folder (which re-lists the root). So S6's
+ * route, an incomplete report under churn, has to be made on Linux.
+ */
+class NamelessWatcher implements IFileWatcher {
+  private readonly inner = new NodeFileWatcher(150);
+  watch(dir: string, onChange: (p: string) => void, options?: WatchOptions): Disposable {
+    return this.inner.watch(dir, (p) => onChange(p), options);
+  }
+}
+
 interface Sent {
   id: number;
   payload: FileIndexUpdate;
@@ -333,7 +345,12 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
      */
     const quietMs = 2500;
     const reconcileMaxWaitMs = 1000;
-    const h = await Harness.create({ quietMs, reconcileMaxWaitMs, globs: ['**/vendor'] });
+    const h = await Harness.create({
+      quietMs,
+      reconcileMaxWaitMs,
+      globs: ['**/vendor'],
+      ...(process.platform === 'win32' ? {} : { watcher: new NamelessWatcher() }),
+    });
     let stopChurn = (): void => {};
     try {
       await seedProject(h.root);

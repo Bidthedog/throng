@@ -84,6 +84,8 @@ async function launchApp(): Promise<ElectronApplication> {
   const userData = tmp('throng-ud-');
   const pipeName = `\\\\.\\pipe\\throng.e2e.app-shell.${process.pid}.${pipeSeq++}`;
   const app = await electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true,
     args: [mainEntry, `--user-data-dir=${userData}`],
     env: {
       ...process.env,

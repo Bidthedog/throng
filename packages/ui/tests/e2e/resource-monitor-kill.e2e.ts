@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { cleanupTemp, createProject, firstPanelId, runApp, runTypedCommand } from './harness.js';
-import { closeMonitorWindow, openMonitorWindow, openProjectsList, setHideEnded } from './helpers/monitor-window.js';
+import { MONITOR_CHORD, closeMonitorWindow, openMonitorWindow, openProjectsList, setHideEnded } from './helpers/monitor-window.js';
 import { processesMatching, processTable } from './helpers/processes.js';
 
 /**
@@ -65,7 +65,7 @@ test('Kill All Below ends a parent and its two children, which show ended while 
 
       // Into the monitor, down to the panel.
       // The monitor is a window of its own (FR-081); everything it shows and asks happens in IT.
-      let mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+      let mon = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
       // Ended processes are hidden by default (FR-105); this asserts them greyed in place, so show them.
       await setHideEnded(mon, false);
       // The top level is the components only (FR-103): the projects are inside Projects.
@@ -103,7 +103,7 @@ test('Kill All Below ends a parent and its two children, which show ended while 
       await runTypedCommand(win, term, 'set /a 6*7', { echoed: 'set /a 6*7', output: '42' });
 
       // Kill All Below on the PANEL ends the shell as well, and the panel keeps its place (FR-066).
-      mon = await openMonitorWindow(app, () => win.keyboard.press('Control+Shift+Alt+R'));
+      mon = await openMonitorWindow(app, () => win.keyboard.press(MONITOR_CHORD));
       // The view is held between openings (FR-087): back to the top, then into Projects again.
       await openProjectsList(mon);
       await mon.locator('[role="treeitem"][data-testid^="breakdown-row-p:"]').first().dblclick();

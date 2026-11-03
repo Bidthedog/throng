@@ -121,6 +121,9 @@
     "titlebar-chrome.e2e.ts": "FOCUS",
     "transient-overlays.e2e.ts": "UNATTRIBUTED",
     "ux-refinements.e2e.ts": "FOCUS",
-    "window-chord-resolution.e2e.ts": "UNATTRIBUTED"
+    "window-chord-resolution.e2e.ts": "UNATTRIBUTED",
+    "linux-files.e2e.ts": "FOCUS",
+    "linux-terminal.e2e.ts": "FOCUS",
+    "linux-window.e2e.ts": "FOCUS"
   }
 }

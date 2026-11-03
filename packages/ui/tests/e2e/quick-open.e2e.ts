@@ -24,6 +24,7 @@
  *                        in `quick-open-target.e2e.ts`, which owns its behaviour. This file asserts
  *                        only its ABSENCE (FR-011), which is the half nothing else covers.
  */
+import { TEST_SHELL } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -178,7 +179,7 @@ test('from a focused terminal the chord opens a centred modal, sends the shell n
 
       const pid = await firstPanelId(win);
       await win.getByTestId(`panel-type-select-${pid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('cmd');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${pid}`).click();
       const term = win.getByTestId(`terminal-${pid}`);
       await expect(term).toContainText(basename(tree.root), { timeout: TERMINAL_OUTPUT_TIMEOUT_MS });

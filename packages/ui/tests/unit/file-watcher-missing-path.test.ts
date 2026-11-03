@@ -19,6 +19,8 @@
  * The seam is mocked because the behaviour under test is `fs.watch`'s ERROR handling, and a real
  * filesystem cannot be made to produce ENOENT-then-recovery on demand and in order.
  */
+import { isWindowsHost } from '@throng/core/testing';
+import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -68,8 +70,8 @@ const watchOn = (dir: string): Watch | undefined =>
   [...watches].reverse().find((w) => w.dir === dir && !w.watcher.closed);
 
 /** The project root, its parent, and the drive — the shape every real case has. */
-const ROOT = 'C:\\code\\project';
-const PARENT = 'C:\\code';
+const ROOT = isWindowsHost() ? 'C:\\code\\project' : '/code/project';
+const PARENT = isWindowsHost() ? 'C:\\code' : '/code';
 
 describe('a watch on a missing path waits for it (027 / #161)', () => {
   beforeEach(() => {
@@ -125,7 +127,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     // And the re-armed watch delivers ordinary changes.
     live!.listener('change', 'after.txt');
     await vi.advanceTimersByTimeAsync(60);
-    expect(changes.at(-1)).toBe('C:\\code\\project\\after.txt');
+    expect(changes.at(-1)).toBe(join(ROOT, 'after.txt'));
 
     handle.dispose();
   });

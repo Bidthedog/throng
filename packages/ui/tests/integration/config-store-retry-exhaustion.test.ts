@@ -115,7 +115,7 @@ describe('FR-009 — a definite outcome once the retries are spent', () => {
     // What a bug report is reconstructed from. It simply is not the sentence.
     expect(failed.detail).toBeTruthy();
     expect(failed.detail).not.toBe(failed.error);
-    expect(failed.detail, 'the errno survives for whoever debugs the write').toMatch(/EPERM|EACCES|EBUSY/);
+    expect(failed.detail, 'the errno survives for whoever debugs the write').toMatch(process.platform === 'win32' ? /EPERM|EACCES|EBUSY/ : /EISDIR/);
     expect(failed.detail, 'and so does the staging path').toContain('.tmp');
   });
 

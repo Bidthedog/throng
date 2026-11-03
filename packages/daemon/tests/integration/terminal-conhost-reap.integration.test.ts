@@ -1,9 +1,11 @@
+import { skipUnlessLinux, skipUnlessWindows } from '@throng/core/testing';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DetectedShell } from '@throng/core';
+import { LinuxPtyHost } from '@throng/platform-linux';
 import { NodePtyHost, WindowsShellDetection } from '@throng/platform-windows';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
@@ -27,7 +29,7 @@ import { waitFor } from './terminal-harness.js';
  * final sweep (`dispose`) kills every console host this process owns and would hide a missing reap on the end path.
  */
 
-const detected: DetectedShell[] = await new WindowsShellDetection().detectInstalledShells();
+const detected: DetectedShell[] = process.platform === 'win32' ? await new WindowsShellDetection().detectInstalledShells() : [];
 
 /** Whether a process with this pid still exists: signal 0 throws ESRCH once it is gone. Any other error means it exists. */
 function isAlive(pid: number): boolean {
@@ -102,7 +104,7 @@ async function endReapsConhost(shell: DetectedShell): Promise<void> {
   );
 }
 
-describe('ending a terminal through terminal.kill reaps its console host, per shell flavour', () => {
+describe.skipIf(skipUnlessWindows('console hosts exist only on Windows'))('ending a terminal through terminal.kill reaps its console host, per shell flavour', () => {
   it.skipIf(prPath.length === 0).each(prPath.map((s) => [s.id, s] as const))('%s', async (_id, shell) => {
     await endReapsConhost(shell);
   }, 60_000);
@@ -114,4 +116,28 @@ describe('ending a terminal through terminal.kill reaps its console host, per sh
       await endReapsConhost(shell);
     },
   );
+});
+
+/** Layer: integration. Linux has no console host, so the process to outlive the end is the shell itself. */
+describe('ending a terminal through terminal.kill on Linux', () => {
+  it.skipIf(skipUnlessLinux('the Linux end path'))('ends the shell', async () => {
+    const host = new LinuxPtyHost();
+    service = new TerminalService(
+      host,
+      new TerminalEvents(),
+      new TerminalLockManager({ acquire: async (p) => ({ path: p }), release: async () => {} }),
+      { isElevated: () => false },
+    );
+    const router = new RpcRouter();
+    service.register(router);
+    const call = (id: number, method: string, params: object) => router.handle({ jsonrpc: '2.0', id, method, params });
+    await call(1, 'terminal.attach', { panelId: 'p', projectId: 'proj', launch: { file: '/bin/bash', args: [], cwd }, cols: 80, rows: 24 });
+    const shell = host.rosterEntries()[0]!.osPid!;
+    expect(isAlive(shell)).toBe(true);
+    expect(host.rosterEntries()[0]!.conhostPid).toBeNull();
+
+    await call(2, 'terminal.kill', { panelId: 'p' });
+
+    await waitFor(() => !isAlive(shell), 15_000, 'the shell to end');
+  }, 30_000);
 });

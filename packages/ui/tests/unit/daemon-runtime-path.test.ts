@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { resolveDaemonNodeExe } from '../../src/main/daemon-lifecycle.js';
@@ -8,7 +9,7 @@ import { resolveDaemonNodeExe } from '../../src/main/daemon-lifecycle.js';
  * falls through to the host Node that launched the app.
  */
 describe('resolveDaemonNodeExe (020 FR-009)', () => {
-  it('uses the bundled runtime when packaged and it exists', () => {
+  it.skipIf(skipUnlessWindows('the bundled runtime is node.exe, inside a Windows install'))('uses the bundled runtime when packaged and it exists', () => {
     const resolved = resolveDaemonNodeExe(
       undefined,
       'C:\\Program Files\\throng\\resources',

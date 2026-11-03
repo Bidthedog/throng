@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { CollectorToMain, ResourceRoster } from '@throng/ipc-contract';
+import { LinuxGpuUsage, LinuxProcessMetrics } from '@throng/platform-linux';
 import { WindowsElevation, WindowsProcessMetrics } from '@throng/platform-windows';
 
 const ENTRY = fileURLToPath(new URL('../../dist/collector/resource-collector-entry.js', import.meta.url));
@@ -71,7 +72,7 @@ async function measure(withTrace: boolean): Promise<void> {
     // Start measuring after the first tick, so process start-up is not counted as running cost.
     await until(() => summaries > 0);
     summaries = 0;
-    const metrics = new WindowsProcessMetrics();
+    const metrics = process.platform === 'win32' ? new WindowsProcessMetrics() : new LinuxProcessMetrics(new LinuxGpuUsage());
     const cpu = async () => (await metrics.snapshot()).readings.find((r) => r.pid === child.pid)!.cpuTime;
     const c0 = await cpu();
     const t0 = performance.now();
@@ -79,6 +80,7 @@ async function measure(withTrace: boolean): Promise<void> {
     const c1 = await cpu();
     const elapsedMs = performance.now() - t0;
     const percentOfOneCore = ((c1 - c0) / 10_000 / elapsedMs) * 100;
+    console.log(`[sla] collector cost: ${percentOfOneCore.toFixed(2)}% of one core`);
     expect(summaries).toBeGreaterThanOrEqual(WINDOW_MS / 2_000 - 1);
     expect(percentOfOneCore).toBeLessThan(1);
   } finally {

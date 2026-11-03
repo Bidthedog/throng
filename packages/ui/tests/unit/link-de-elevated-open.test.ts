@@ -162,9 +162,9 @@ describe('T255 — Open Program on an executable goes through openWithDefaultPro
       pathForms: new WindowsPathForms(),
       executables: new WindowsExecutableExtensions(),
       projectRootFor: () => dirname(file),
-      // The fake clock jumps 2 s at a time: a real-length existence timeout would fire under it
-      // while the real stat is still in flight.
-      readLinkSettings: () => ({ ...DEFAULT_APP_SETTINGS.editor.links, existenceCheckTimeoutMs: 600_000 }),
+      // The fake clock jumps 2 s at a time with no real time passing: 600 s of it went by in about 2 ms, under a real
+      // stat. The largest delay a timer takes (a larger one fires at once) lasts as long as any stat will.
+      readLinkSettings: () => ({ ...DEFAULT_APP_SETTINGS.editor.links, existenceCheckTimeoutMs: 2_147_483_647 }),
       previewRegistry: SHIPPED_PREVIEW_PROVIDERS,
       readPreviewSettings: () => ({
         updateDelayMs: 300,

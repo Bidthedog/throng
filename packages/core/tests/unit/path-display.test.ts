@@ -8,7 +8,8 @@ describe('toDisplayPath native separators (006, FR-101)', () => {
   });
   it('uses forward-slashes on Linux/macOS', () => {
     expect(toDisplayPath('/home/u/file.txt', 'linux')).toBe('/home/u/file.txt');
-    expect(toDisplayPath('a\\b/c.txt', 'macos')).toBe('a/b/c.txt');
+    // A backslash is an ordinary filename character there, so showing it as `/` would name another file (062 FR-021).
+    expect(toDisplayPath('a\\b/c.txt', 'macos')).toBe('a\\b/c.txt');
   });
 });
 

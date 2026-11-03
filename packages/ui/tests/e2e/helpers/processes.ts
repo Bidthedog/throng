@@ -18,6 +18,7 @@ export interface Proc {
 
 /** Every process on the machine. Throws when the query itself fails, so a broken probe never reads as "none". */
 export function processTable(): Proc[] {
+  if (process.platform === 'linux') return linuxProcessTable();
   const out = execFileSync(
     'powershell.exe',
     [
@@ -32,9 +33,23 @@ export function processTable(): Proc[] {
   return rows.map((r) => ({ pid: r.ProcessId, parent: r.ParentProcessId, name: r.Name, cmd: r.CommandLine ?? '' }));
 }
 
+function linuxProcessTable(): Proc[] {
+  const out = execFileSync('ps', ['-eo', 'pid=,ppid=,comm=,args=', '-ww'], { encoding: 'utf8', timeout: 20_000, maxBuffer: 64 * 1024 * 1024 });
+  const rows: Proc[] = [];
+  for (const line of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+    if (m) rows.push({ pid: Number(m[1]), parent: Number(m[2]), name: m[3] ?? '', cmd: m[4] ?? '' });
+  }
+  return rows;
+}
+
 /** The processes named `image` (e.g. `ping.exe`) whose command line contains `marker`. */
 export const processesMatching = (image: string, marker: string, table = processTable()): Proc[] =>
-  table.filter((p) => p.name.toLowerCase() === image.toLowerCase() && p.cmd.includes(marker));
+  table.filter(
+    (p) =>
+      p.name.toLowerCase() === (process.platform === 'win32' ? image : image.replace(/\.exe$/i, '')).toLowerCase() &&
+      p.cmd.includes(marker),
+  );
 
 /** The ping processes aimed at `target`. */
 export const pings = (target: string, table = processTable()): Proc[] => processesMatching('ping.exe', target, table);

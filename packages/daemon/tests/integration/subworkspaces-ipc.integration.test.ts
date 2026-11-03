@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { connect } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -61,7 +62,7 @@ afterEach(async () => {
 let rpcId = 0;
 function call(method: string, params: unknown): Promise<Record<string, any>> {
   return new Promise((resolve, reject) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () =>

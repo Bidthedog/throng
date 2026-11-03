@@ -131,6 +131,8 @@ async function startHarness(): Promise<Harness> {
 function launchApp(pipeName: string): Promise<ElectronApplication> {
   const userData = tempDir('throng-ud-');
   return electron.launch({
+    // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
+    chromiumSandbox: true,
     args: [mainEntry, `--user-data-dir=${userData}`],
     env: {
       ...process.env,

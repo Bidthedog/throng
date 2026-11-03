@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectService, type IUserContext } from '@throng/core';
 import { openDatabase, runMigrations, ProjectRepository, type ThrongDatabase } from '@throng/persistence';
 import { ProjectIpcService } from '../../src/project-service.js';
-import { CMD, rpcCall, startTerminalDaemon, waitFor, type TerminalDaemon } from './terminal-harness.js';
+import { CMD, busyCommand, rpcCall, startTerminalDaemon, waitFor, type TerminalDaemon } from './terminal-harness.js';
 
 /**
  * 051 FR-022 — #468 reproduced at the daemon: Unload with End Terminals on a project with several
@@ -85,7 +85,7 @@ async function startBusyTerminals(projectId: string, round: number): Promise<voi
       cols: 80,
       rows: 24,
     });
-    await rpcCall(daemon.pipeName, 'terminal.write', { panelId, data: 'ping -n 60 127.0.0.1\r\n' });
+    await rpcCall(daemon.pipeName, 'terminal.write', { panelId, data: `${busyCommand(60)}\r\n` });
   }
 }
 

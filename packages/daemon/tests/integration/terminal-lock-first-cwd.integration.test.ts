@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { connect } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -7,7 +8,7 @@ import process from 'node:process';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectService, type IUserContext } from '@throng/core';
 import { openDatabase, runMigrations, ProjectRepository, type ThrongDatabase } from '@throng/persistence';
-import { NodePtyHost, WindowsDirectoryLock } from '@throng/platform-windows';
+import { selectPlatform } from '@throng/platform';
 import { IpcServer } from '../../src/ipc-server.js';
 import { RpcRouter } from '../../src/rpc-router.js';
 import { ProjectIpcService } from '../../src/project-service.js';
@@ -40,7 +41,7 @@ import { TerminalService } from '../../src/terminal-service.js';
  * real `cmd.exe` shells through `NodePtyHost`, and the real `WindowsDirectoryLock`.
  */
 
-const CMD = process.env.ComSpec ?? 'cmd.exe';
+const CMD = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/bash';
 const userContext: IUserContext = { currentUser: () => ({ userId: 'alice', userName: 'Alice' }) };
 
 let counter = 0;
@@ -66,10 +67,10 @@ beforeEach(async () => {
   const events = new TerminalEvents();
   // Wired as the composition root wires it: the lock resolves the project's root from the store.
   const lockManager = new TerminalLockManager(
-    new WindowsDirectoryLock(),
+    selectPlatform(process.platform).directoryLock(),
     (projectId) => store.getById(userContext.currentUser().userId, projectId)?.rootFolder ?? null,
   );
-  terminalService = new TerminalService(new NodePtyHost(), events, lockManager, {
+  terminalService = new TerminalService(selectPlatform(process.platform).ptyHost(), events, lockManager, {
     isElevated: () => false,
   });
   const router = new RpcRouter();
@@ -101,7 +102,7 @@ afterEach(async () => {
 let rpcId = 0;
 function call(method: string, params: unknown): Promise<any> {
   return new Promise((resolve, reject) => {
-    const socket = connect(pipeName);
+    const socket = connect(resolveIpcAddress(pipeName));
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () => socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params })}\n`));

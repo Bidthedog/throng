@@ -17,6 +17,18 @@ import { clearPanel } from '../../src/renderer/preview/highlight-registry.js';
 import { COLD, mountMarkdownPreview, type MountedPreviewWindow } from './helpers/mount-preview-panel.js';
 import { __resetFindState } from '../../src/renderer/search/search-store.js';
 
+const modelBuilds = vi.hoisted(() => ({ count: 0 }));
+vi.mock('../../src/renderer/preview/preview-search-model.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/renderer/preview/preview-search-model.js')>();
+  return {
+    ...actual,
+    buildPreviewTextModel: (...args: Parameters<typeof actual.buildPreviewTextModel>) => {
+      modelBuilds.count++;
+      return actual.buildPreviewTextModel(...args);
+    },
+  };
+});
+
 class FakeHighlight {
   readonly ranges: Range[];
   constructor(...ranges: Range[]) {
@@ -295,9 +307,11 @@ describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', { ta
     });
     // COLD: a selection lands before the idle build ever ran (the model is then built in the frame — correctness
     // first), so the frame also pays for the walk, the offset map and the source text.
+    modelBuilds.count = 0;
     const t1 = performance.now();
     flush();
     const cold = performance.now() - t1;
+    const coldBuilds = modelBuilds.count;
     const painted = registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT)!.ranges.length;
 
     // The body redraws (what `onDrawn` reports); the model is built when the browser is idle, not on the next selection.
@@ -333,11 +347,11 @@ describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', { ta
     expect(made.length).toBeGreaterThanOrEqual(painted);
     expect(afterIdle).toBeLessThan(100);
     expect(warm).toBeLessThan(50);
-    // The correctness-first fallback pays for the model build inside the frame, so it is bounded RELATIVE to that
-    // build measured in this same run: a fixed millisecond figure measured the machine's load instead (255 ms
-    // against a 250 ms cap under the full parallel component run, 134 ms alone). It also runs first, with the JIT
-    // cold, hence the factor. What it catches is a cold path that does more than build once and paint once.
-    expect(cold).toBeLessThan(2 * (idleBuild + afterIdle) + 25);
+    // The correctness-first fallback pays for the model build inside the frame, so what it must not do is build more
+    // than once. Counted, not timed: a duration measured the machine's load instead, first against a fixed cap (255 ms
+    // against 250 under the full parallel run, 134 alone), then against this run's own build (cold was 1.34 and 2.25
+    // times the build on two CI runs of one tree, about 1.55 alone).
+    expect(coldBuilds).toBe(1);
   });
 });
 

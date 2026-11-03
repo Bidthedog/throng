@@ -16,6 +16,7 @@
  * wherever the caret actually is. With the bug it lands at the start of the document;
  * fixed, it lands at the end of the line the user left it on.
  */
+import { TEST_SHELL } from './harness.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -45,8 +46,15 @@ let shared: OpenApp;
 test.beforeAll(async () => {
   shared = await openApp();
 });
+// Removed once the app is gone. On Linux nothing holds a project's folder, so deleting one under the shared app raises
+// its folder-missing notice, which then sits over the next test's form (062 T038).
+const rootsToRemove: string[] = [];
+const removeLater = (root: string): void => {
+  rootsToRemove.push(root);
+};
 test.afterAll(async () => {
   await shared?.close();
+  rootsToRemove.forEach(cleanupTemp);
 });
 
 const runApp = (
@@ -152,7 +160,7 @@ test('the scroll position is restored and the editor re-focuses on switch back (
       expect(lines.filter((l) => l.includes('Z')).join()).toContain('row-199Z');
     });
   } finally {
-    cleanupTemp(root);
+    removeLater(root);
   }
 });
 
@@ -227,8 +235,8 @@ test('the editor takes focus on switching from the workspace to a project whose 
       expect(lines[0]).toBe('ZAAAA');
     });
   } finally {
-    cleanupTemp(rootA);
-    cleanupTemp(rootB);
+    removeLater(rootA);
+    removeLater(rootB);
   }
 });
 
@@ -254,7 +262,7 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
       await expect(win.locator('.panel-box')).toHaveCount(2);
       const termPid = (await panelIds(win)).find((id) => id !== editorPid)!;
       await win.getByTestId(`panel-type-select-${termPid}`).selectOption('terminal');
-      await win.getByTestId('terminal-flavour').selectOption('windows-powershell');
+      await win.getByTestId('terminal-flavour').selectOption(TEST_SHELL);
       await win.getByTestId(`panel-type-confirm-${termPid}`).click();
       // Wait for the shell to be live (prompt shows the project root) so the attach focus has fired.
       await expect(win.getByTestId(`terminal-${termPid}`)).toContainText(basename(root), {
@@ -287,7 +295,7 @@ test('a terminal in the tab does NOT steal focus from the active editor on switc
       expect(termFocused).toBe(false);
     });
   } finally {
-    cleanupTemp(root);
+    removeLater(root);
   }
 });
 

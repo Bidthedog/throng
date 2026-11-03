@@ -10,6 +10,7 @@ import {
   detectPathCandidates,
   SHIPPED_PREVIEW_PROVIDERS,
   type IFileSystem,
+  type IPathForms,
   type IShellIntegration,
   type PreviewSettings,
 } from '@throng/core';
@@ -18,6 +19,8 @@ import {
   WindowsPathForms,
   WindowsShellDetection,
 } from '@throng/platform-windows';
+import { LinuxPathForms } from '@throng/platform-linux';
+import { skipUnlessWindows } from '@throng/core/testing';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
 
@@ -37,6 +40,11 @@ import { FileLinkResolver } from '../../src/main/file-link-resolver.js';
  * take on trust, and a renderer able to name a root could name `C:\`.
  */
 
+const WINDOWS = process.platform === 'win32';
+
+/** This machine's `file:` URI for a path: `file:///C:/x` and `file:///tmp/x` have the same three slashes. */
+const fileUri = (p: string): string => `file:///${p.replace(/\\/g, '/').replace(/^\//, '')}`;
+
 const FIXTURES = fileURLToPath(new URL('../fixtures/links', import.meta.url));
 const OUTSIDE_FIXTURES = fileURLToPath(new URL('../fixtures/links-outside', import.meta.url));
 
@@ -53,7 +61,7 @@ const PROJECT_ROOTS = new Map<string, string>();
 function makeResolver(
   over: {
     previewSettings?: Partial<PreviewSettings>;
-    pathForms?: WindowsPathForms;
+    pathForms?: IPathForms;
     /** 045 T255 — a filesystem whose `stat` calls a case counts (FR-158d's "no check"). */
     fs?: IFileSystem;
     /** 045 T293 — the existence-check timeout, for a case that hangs a root (FR-161). */
@@ -73,7 +81,7 @@ function makeResolver(
   };
   return new FileLinkResolver({
     fs: over.fs ?? new NodeFileSystem(async () => {}),
-    pathForms: over.pathForms ?? new WindowsPathForms(),
+    pathForms: over.pathForms ?? (WINDOWS ? new WindowsPathForms() : new LinuxPathForms()),
     executables: new WindowsExecutableExtensions(),
     projectRootFor: (projectId) =>
       projectId === undefined ? null : (PROJECT_ROOTS.get(projectId) ?? null),
@@ -240,7 +248,7 @@ describe('FileLinkResolver.resolve — R7: the positioned reading is tried first
 describe('FileLinkResolver.resolve — R8: a file: URI, decoded', () => {
   it('a hostless file: URI naming a real file resolves', async () => {
     const target = join(root, 'docs', 'My File.md');
-    const uri = `file:///${target.replace(/\\/g, '/').replace(/ /g, '%20')}`;
+    const uri = fileUri(target).replace(/ /g, '%20');
     const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
     expect(answer.ok && answer.link.path).toBe(target);
   });
@@ -253,7 +261,7 @@ describe('FileLinkResolver.resolve — R8: a file: URI, decoded', () => {
   });
 
   it('US2: a file: URI naming a FOLDER is a link, and its kind says so', async () => {
-    const uri = `file:///${root.replace(/\\/g, '/')}`;
+    const uri = fileUri(root);
     const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
     expect(answer.ok && answer.link.kind).toBe('folder');
   });
@@ -480,23 +488,23 @@ describe('T201 / FR-150 — each spelling of a spaced path resolves to it', () =
     expect(answer.ok && answer.link.path).toBe(spacedPath());
   });
 
-  it('the Git Bash /x/… form', async () => {
+  it.skipIf(skipUnlessWindows('names a drive letter, which Linux paths do not have'))('the Git Bash /x/… form', async () => {
     const answer = await makeResolver().resolve(link(posix(spacedPath(), '')));
     expect(answer.ok && answer.link.path).toBe(spacedPath());
   });
 
-  it('the WSL /mnt/x/… form', async () => {
+  it.skipIf(skipUnlessWindows('names a drive letter, which Linux paths do not have'))('the WSL /mnt/x/… form', async () => {
     const answer = await makeResolver().resolve(link(posix(spacedPath(), '/mnt')));
     expect(answer.ok && answer.link.path).toBe(spacedPath());
   });
 
   it('a file: URI with %20', async () => {
-    const uri = `file:///${spacedPath().replace(/\\/g, '/').replace(/ /g, '%20')}`;
+    const uri = fileUri(spacedPath()).replace(/ /g, '%20');
     const answer = await makeResolver().resolve(link(uri));
     expect(answer.ok && answer.link.path).toBe(spacedPath());
   });
 
-  it('the WSL form with a position, as corpus row 43 prints it', async () => {
+  it.skipIf(skipUnlessWindows('names a drive letter, which Linux paths do not have'))('the WSL form with a position, as corpus row 43 prints it', async () => {
     const answer = await makeResolver().resolve(link(`${posix(spacedPath(), '/mnt')}:3`));
     expect(answer.ok && answer.link.path).toBe(spacedPath());
   });
@@ -518,7 +526,7 @@ describe('T201 / SC-020 — a spaced path inside a sentence is the link, and the
     expect(found?.text, 'the winning reading must not swallow "for details"').toBe(spacedPath());
   });
 
-  it('the same line in Git Bash\u2019s spelling', async () => {
+  it.skipIf(skipUnlessWindows('names a drive letter, which Linux paths do not have'))('the same line in Git Bash\u2019s spelling', async () => {
     const found = await firstLinkOn(`see ${posix(spacedPath(), '')} for details`);
     expect(found?.path).toBe(spacedPath());
     expect(found?.text).toBe(posix(spacedPath(), ''));
@@ -720,7 +728,7 @@ describe('T255 / FR-160 — an in-project first reading with nothing behind it',
   });
 
   it('a file: URI in the project opens in throng — it resolves to an in-project file', async () => {
-    const uri = `file:///${join(root, 'test.txt').replace(/\\/g, '/')}`;
+    const uri = fileUri(join(root, 'test.txt'));
     const answer = await makeResolver().resolve(link(uri, { kind: 'fileHyperlink' }));
     expect(answer).toMatchObject({ ok: true, link: { path: join(root, 'test.txt'), kind: 'file', inProject: true } });
   });
@@ -744,7 +752,7 @@ describe('T255 / FR-158a — an out-of-project location goes to OS Explorer, fil
     expect(calls).toEqual([`reveal:${file}`]);
   });
 
-  it('an absent one goes to its parent, with no notice', async () => {
+  it.skipIf(skipUnlessWindows('on Linux a rooted path also reads as the project own (R6), so the first reading is not this one'))('an absent one goes to its parent, with no notice', async () => {
     const resolver = makeResolver();
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
@@ -752,7 +760,7 @@ describe('T255 / FR-158a — an out-of-project location goes to OS Explorer, fil
     expect(calls).toEqual([`folder:${outside}`]);
   });
 
-  it('a trailing-separator location opens as a folder with NO stat call', async () => {
+  it.skipIf(skipUnlessWindows('on Linux a rooted path has several readings (R6), so the disk is asked; the Linux case is below'))('a trailing-separator location opens as a folder with NO stat call', async () => {
     const { fs, stats } = countingFs();
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
@@ -762,19 +770,19 @@ describe('T255 / FR-158a — an out-of-project location goes to OS Explorer, fil
     expect(stats, 'a folder by grammar is never checked (FR-158d)').toEqual([]);
   });
 
-  it('an OSC 8 target ending in a separator opens as a folder with NO stat call', async () => {
+  it.skipIf(skipUnlessWindows('on Linux a rooted path has several readings (R6), so the disk is asked; the Linux case is below'))('an OSC 8 target ending in a separator opens as a folder with NO stat call', async () => {
     const { fs, stats } = countingFs();
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
-    const uri = `file:///${outside.replace(/\\/g, '/')}/`;
+    const uri = `${fileUri(outside)}/`;
     await expect(resolver.revealInFileManager(link(uri, { kind: 'fileHyperlink' }))).resolves.toEqual({ ok: true });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.replace(/[\\/]+$/, '')).toBe(`folder:${outside}`);
     expect(stats).toEqual([]);
   });
 
-  it('FR-158c: a relative sub\\dir\\ from a working directory outside the project reveals the FIRST reading, unchecked', async () => {
+  it.skipIf(skipUnlessWindows('spelled with backslashes, which are name characters on Linux'))('FR-158c: a relative sub\\dir\\ from a working directory outside the project reveals the FIRST reading, unchecked', async () => {
     const { fs, stats } = countingFs();
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
@@ -802,7 +810,7 @@ describe('T255 / FR-160a, FR-158d — folders open as themselves, and the root n
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
-    const uri = `file:///${root.replace(/\\/g, '/')}`;
+    const uri = fileUri(root);
     await resolver.revealInFileManager(link(uri, { kind: 'fileHyperlink' }));
     expect(calls).toEqual([`folder:${root}`]);
     expect(stats).toEqual([]);
@@ -810,7 +818,7 @@ describe('T255 / FR-160a, FR-158d — folders open as themselves, and the root n
 
   it('the Link menu opening on the project root makes no check either, and answers a folder', async () => {
     const { fs, stats } = countingFs();
-    const answer = await makeResolver({ fs }).resolve(link(`file:///${root.replace(/\\/g, '/')}`, { kind: 'fileHyperlink' }));
+    const answer = await makeResolver({ fs }).resolve(link(fileUri(root), { kind: 'fileHyperlink' }));
     expect(answer).toMatchObject({ ok: true, link: { kind: 'folder', inProject: true, executable: false, preview: 'none' } });
     expect(stats).toEqual([]);
   });
@@ -824,7 +832,7 @@ describe('T255 / FR-160 note — the mixed list: the first reading that EXISTS d
     writeFileSync(join(fakeGit, 'etc', 'hosts'), '127.0.0.1 localhost\n', 'utf8');
   });
 
-  it('/etc/hosts with <root>\\etc\\hosts absent and Git\u2019s etc\\hosts present reveals Git\u2019s file', async () => {
+  it.skipIf(skipUnlessWindows('the mount table of Git for Windows'))('/etc/hosts with <root>\\etc\\hosts absent and Git\u2019s etc\\hosts present reveals Git\u2019s file', async () => {
     const resolver = makeResolver({ pathForms: new WindowsPathForms({ gitRoot: fakeGit }) });
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
@@ -912,7 +920,7 @@ describe('T255 / FR-156 — main re-sanitises every request (SC-024)', () => {
     const resolver = makeResolver();
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
-    const uri = `file:///${join(root, 'test.txt').replace(/\\/g, '/')}%00.exe`;
+    const uri = `${fileUri(join(root, 'test.txt'))}%00.exe`;
     expect(await resolver.revealInFileManager(link(uri, { kind: 'fileHyperlink' }))).toMatchObject({ ok: false, reason: 'refused' });
     expect(calls).toEqual([]);
   });
@@ -973,7 +981,7 @@ describe('T293 — follow: an in-project file opens in throng, and nothing touch
   });
 
   it('a file: URI in the project opens in throng too (M3)', async () => {
-    const uri = `file:///${join(root, 'test.txt').replace(/\\/g, '/')}`;
+    const uri = fileUri(join(root, 'test.txt'));
     await expect(follow(makeResolver(), link(uri, { kind: 'fileHyperlink' }))).resolves.toMatchObject({
       kind: 'openInThrong',
       link: { path: join(root, 'test.txt'), inProject: true },
@@ -1010,7 +1018,7 @@ describe('T293 — follow performs the reveal itself and answers `revealed` (FR-
     expect(calls).toEqual([`reveal:${file}`]);
   });
 
-  it('an absent out-of-project one goes to its parent, with no notice', async () => {
+  it.skipIf(skipUnlessWindows('on Linux a rooted path also reads as the project own (R6), so the first reading is not this one'))('an absent out-of-project one goes to its parent, with no notice', async () => {
     const resolver = makeResolver();
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
@@ -1033,13 +1041,13 @@ describe('T293 — follow performs the reveal itself and answers `revealed` (FR-
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
-    const uri = `file:///${root.replace(/\\/g, '/')}`;
+    const uri = fileUri(root);
     await expect(follow(resolver, link(uri, { kind: 'fileHyperlink' }))).resolves.toEqual({ kind: 'revealed' });
     expect(calls).toEqual([`folder:${root}`]);
     expect(stats).toEqual([]);
   });
 
-  it('a trailing-separator location opens as a folder with NO stat call', async () => {
+  it.skipIf(skipUnlessWindows('on Linux a rooted path has several readings (R6), so the disk is asked; the Linux case is below'))('a trailing-separator location opens as a folder with NO stat call', async () => {
     const { fs, stats } = countingFs();
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
@@ -1049,7 +1057,7 @@ describe('T293 — follow performs the reveal itself and answers `revealed` (FR-
     expect(stats).toEqual([]);
   });
 
-  it('FR-158c: a relative sub\\dir\\ from a working directory outside the project reveals the FIRST reading, unchecked', async () => {
+  it.skipIf(skipUnlessWindows('spelled with backslashes, which are name characters on Linux'))('FR-158c: a relative sub\\dir\\ from a working directory outside the project reveals the FIRST reading, unchecked', async () => {
     const { fs, stats } = countingFs();
     const resolver = makeResolver({ fs });
     const { shell, calls } = recordingShell();
@@ -1083,7 +1091,7 @@ describe('T293 / FR-160 note — through follow, the first reading that EXISTS d
     writeFileSync(join(fakeGit, 'etc', 'hosts'), '127.0.0.1 localhost\n', 'utf8');
   });
 
-  it('/etc/hosts with <root>\\etc\\hosts absent and Git\u2019s etc\\hosts present reveals Git\u2019s file', async () => {
+  it.skipIf(skipUnlessWindows('the mount table of Git for Windows'))('/etc/hosts with <root>\\etc\\hosts absent and Git\u2019s etc\\hosts present reveals Git\u2019s file', async () => {
     const resolver = makeResolver({ pathForms: new WindowsPathForms({ gitRoot: fakeGit }) });
     const { shell, calls } = recordingShell();
     resolver.setShell(shell);
@@ -1100,7 +1108,7 @@ describe('T293 / FR-160 note — through follow, the first reading that EXISTS d
   });
 });
 
-describe('T293 / FR-161, FR-122a — one deadline per follow, and the back-off, through follow', () => {
+describe.skipIf(skipUnlessWindows('hangs a UNC share, the one kind of root a path can name without a mount on Linux'))('T293 / FR-161, FR-122a — one deadline per follow, and the back-off, through follow', () => {
   const SHARE = '\\\\fileserver\\home\\';
   const TIMEOUT_MS = 2000;
 
@@ -1189,5 +1197,31 @@ describe('T293 / FR-156, I2 — what follow refuses, and what it does not', () =
     const file = join(root, 'test.txt');
     await expect(follow(resolver, link(file, { originProjectId: null }))).resolves.toEqual({ kind: 'revealed' });
     expect(calls).toEqual([`reveal:${file}`]);
+  });
+});
+
+/**
+ * Layer: integration. Real folders behind the Linux forms, the path a compiler's absolute output takes (062 FR-022).
+ */
+describe.skipIf(WINDOWS)('Linux: a rooted path means itself when the disk says so', () => {
+  it('a folder outside the project, written with its trailing separator, opens as itself', async () => {
+    const resolver = makeResolver();
+    const { shell, calls } = recordingShell();
+    resolver.setShell(shell);
+    await expect(resolver.revealInFileManager(link(`${outside}/`))).resolves.toEqual({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.replace(/\/+$/, '')).toBe(`folder:${outside}`);
+  });
+
+  it('a path inside the project is one reading, so an absent one is the project own and says so', async () => {
+    const { fs, stats } = countingFs();
+    const answer = await makeResolver({ fs }).resolve(link(join(root, 'no-such.txt')));
+    expect(answer).toEqual(NOT_FOUND);
+    expect(stats).toEqual([join(root, 'no-such.txt')]);
+  });
+
+  it('a backslash ending a name is part of the name, not a folder', async () => {
+    const answer = await makeResolver().resolve(link('nothing-here\\'));
+    expect(answer).toEqual(NOT_FOUND);
   });
 });

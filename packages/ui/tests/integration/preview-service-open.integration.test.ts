@@ -1,3 +1,4 @@
+import { skipUnlessWindows } from '@throng/core/testing';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -522,7 +523,7 @@ describe('destroyed and dropProvider (FR-042, FR-063, FR-110)', () => {
 });
 
 describe('openPaths — the seed a new window starts from (§1 amended, US1 review; FR-012, FR-014)', () => {
-  it('answers the compare-form path of every file with a run, once per path, and follows destroys', async () => {
+  it.skipIf(skipUnlessWindows('spells one file two ways by case, which is two files on Linux'))('answers the compare-form path of every file with a run, once per path, and follows destroys', async () => {
     const a = await file(root, 'A.md');
     const b = await file(root, 'b.md');
     expect(previews.openPaths()).toEqual([]);
@@ -587,7 +588,7 @@ describe('two runs on one path: the path stays open while either remains (FR-012
     expect(previews.isOpen(moved)).toBe(true);
   });
 
-  it('spellings that differ only in case and separators are one path (compare form)', async () => {
+  it.skipIf(skipUnlessWindows('case folds into one path on Windows only'))('spellings that differ only in case and separators are one path (compare form)', async () => {
     const a = await file(root, 'a.md');
     const variant = a.replace(/\\/g, '/').toUpperCase().replace(/\.MD$/, '.md');
     await previews.attach(11, { panelId: 'v1', projectId: 'P', filePath: a });

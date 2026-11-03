@@ -83,9 +83,15 @@ describe('case-only rename (026 / #194)', () => {
     expect(await svc.rename('one.txt', 'two.txt')).toMatchObject({
       error: 'A file or folder with this name already exists.',
     });
-    expect(await svc.rename('one.txt', 'TWO.TXT')).toMatchObject({
-      error: 'A file or folder with this name already exists.',
-    });
+    // 062 FR-020: on Linux `TWO.TXT` is a different name, and free.
+    if (process.platform === 'win32') {
+      expect(await svc.rename('one.txt', 'TWO.TXT')).toMatchObject({
+        error: 'A file or folder with this name already exists.',
+      });
+    } else {
+      expect(await svc.rename('one.txt', 'TWO.TXT')).toEqual({ ok: true });
+      await svc.rename('TWO.TXT', 'one.txt');
+    }
     expect(await names()).toEqual(['one.txt', 'two.txt']);
   });
 
