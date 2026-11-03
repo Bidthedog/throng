@@ -16,13 +16,22 @@
 //   node scripts/artifact-set.mjs resolve <role> [--dir <path>]
 //   node scripts/artifact-set.mjs reconcile [--dir <path>]
 //
+// `list` and `reconcile` take `--platform win32|linux`, for what one OS's build produces and verifies
+// (063 FR-016). Without it they mean the whole release, as the publish gate does.
+//
 // Exit codes: 0 success · 2 unknown role or subcommand · 3 declared artifact missing · 4 reconcile
 // failed. A non-zero exit ALWAYS writes a reason naming the artifact or role — a silent failure here
 // would reintroduce exactly the class of defect this replaces.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { combinationsOf, declareArtifactSet, reconcileArtifactSet, resolveArtifact } from '@throng/core';
+import {
+  artifactSetForPlatform,
+  combinationsOf,
+  declareArtifactSet,
+  reconcileArtifactSet,
+  resolveArtifact,
+} from '@throng/core';
 import { sha256OfFile } from './checksum.mjs';
 
 const SUBCOMMANDS = ['list', 'resolve', 'reconcile', 'checksums'];
@@ -43,7 +52,12 @@ function flagValue(argv, name) {
  */
 export function runArtifactSet({ argv, version, filenames, dir = '' }) {
   const [subcommand, ...rest] = argv;
-  const set = declareArtifactSet(version);
+  const whole = declareArtifactSet(version);
+  const platform = flagValue(rest, '--platform');
+  if (platform !== undefined && platform !== 'win32' && platform !== 'linux') {
+    return { code: 2, stdout: '', stderr: `[artifact-set] unknown platform '${platform}' — expected win32 or linux` };
+  }
+  const set = platform ? artifactSetForPlatform(whole, platform) : whole;
 
   if (subcommand === 'list') {
     if (rest.includes('--combinations')) {
@@ -68,7 +82,7 @@ export function runArtifactSet({ argv, version, filenames, dir = '' }) {
   }
 
   if (subcommand === 'resolve') {
-    const role = rest.find((a) => !a.startsWith('--'));
+    const role = rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--platform' && rest[i - 1] !== '--dir');
     if (!role) {
       const valid = set.artifacts.map((a) => a.role).join(', ');
       return { code: 2, stdout: '', stderr: `[artifact-set] resolve needs a role — one of: ${valid}` };

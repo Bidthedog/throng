@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  artifactSetForPlatform,
   combinationsOf,
   declareArtifactSet,
   END_STATE_STEPS,
@@ -162,8 +163,9 @@ describe('reconcileArtifactSet (042 FR-013)', () => {
 describe('the MSI role and install scopes (058 FR-003a, FR-026, FR-033)', () => {
   const set = declareArtifactSet(VERSION);
 
-  it('declares four artifacts, the MSI among them, resolved by role', () => {
-    expect(set.artifacts.map((a) => a.role).sort()).toEqual(['archive', 'msi', 'portable', 'setup']);
+  it('declares the Windows artifacts, the MSI among them, resolved by role', () => {
+    const windows = artifactSetForPlatform(set, 'win32');
+    expect(windows.artifacts.map((a) => a.role).sort()).toEqual(['archive', 'msi', 'portable', 'setup']);
     const msi = resolveArtifact(set, 'msi');
     expect(msi.filename).toBe(`throng-${VERSION}.msi`);
     expect(msi.label).toBe('Installer (MSI, for managed deployment)');
@@ -211,6 +213,9 @@ describe('combinationsOf (058 FR-028, FR-030)', () => {
       'msi-machine',
       'portable',
       'archive',
+      'deb',
+      'rpm',
+      'tarball',
     ]);
   });
 
@@ -264,5 +269,73 @@ describe('combinationsOf (058 FR-028, FR-030)', () => {
 
   it('stays within the step vocabulary', () => {
     for (const c of combos) for (const step of c.applicableSteps) expect(VERIFICATION_STEPS).toContain(step);
+  });
+});
+
+/** 063 FR-001, FR-016, FR-017, FR-021 — the Linux packages join the set; the Windows half does not move. */
+describe('the Linux artifacts (063)', () => {
+  const set = declareArtifactSet('1.0.0-alpha12');
+  const linux = artifactSetForPlatform(set, 'linux');
+
+  it('declares a .deb, an .rpm and a .tar.gz, each with the version in its filename', () => {
+    expect(linux.artifacts.map((a) => a.filename)).toEqual([
+      'throng-1.0.0-alpha12-amd64.deb',
+      'throng-1.0.0-alpha12-x86_64.rpm',
+      'throng-1.0.0-alpha12-linux-x64.tar.gz',
+    ]);
+  });
+
+  it('keeps the Windows filenames as they were', () => {
+    expect(artifactSetForPlatform(set, 'win32').artifacts.map((a) => a.filename)).toEqual([
+      'throng-setup-1.0.0-alpha12.exe',
+      'throng-1.0.0-alpha12.msi',
+      'throng-portable-1.0.0-alpha12.exe',
+      'throng-1.0.0-alpha12.zip',
+    ]);
+  });
+
+  it('keeps every Windows combination and its steps out of the Linux change', () => {
+    const windows = combinationsOf(artifactSetForPlatform(set, 'win32'));
+    expect(windows.map((c) => c.id)).toEqual([
+      'setup-user',
+      'setup-machine',
+      'msi-user',
+      'msi-machine',
+      'portable',
+      'archive',
+    ]);
+    expect(windows.every((c) => c.platform === 'win32' && c.container === '')).toBe(true);
+  });
+
+  it('holds a build only to the files its own platform can produce', () => {
+    const names = linux.artifacts.map((a) => a.filename);
+    expect(reconcileArtifactSet(linux, names).matched).toBe(true);
+    expect(reconcileArtifactSet(linux, names.slice(1)).missing).toEqual([names[0]]);
+    expect(reconcileArtifactSet(linux, [...names, 'throng-mystery-1.0.0-alpha12.deb']).unexpected).toEqual([
+      'throng-mystery-1.0.0-alpha12.deb',
+    ]);
+  });
+
+  it('still holds a publish to every platform', () => {
+    const linuxOnly = linux.artifacts.map((a) => a.filename);
+    expect(reconcileArtifactSet(set, linuxOnly).missing).toHaveLength(4);
+  });
+
+  it('verifies the .rpm on an rpm-based distribution', () => {
+    const rpm = combinationsOf(set).find((c) => c.role === 'rpm');
+    expect(rpm?.container).toMatch(/^fedora/);
+    expect(combinationsOf(set).find((c) => c.role === 'deb')?.container).toBe('');
+  });
+
+  it('holds a system package to the whole lifecycle, and the archive to the end state', () => {
+    for (const role of ['deb', 'rpm'] as const) {
+      const steps = resolveArtifact(set, role).applicableSteps;
+      for (const step of ['install', 'shortcut', 'in-use-upgrade', 'no-write', 'uninstall', 'residue-scan'] as const) {
+        expect(steps).toContain(step);
+      }
+    }
+    const tarball = resolveArtifact(set, 'tarball').applicableSteps;
+    for (const step of END_STATE_STEPS) expect(tarball).toContain(step);
+    expect(tarball).not.toContain('uninstall');
   });
 });
