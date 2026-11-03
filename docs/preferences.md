@@ -82,6 +82,7 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
+| Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. Takes effect at the next start. |
 | Remove a project | `confirmations.destroyProject` | `double` | `none` · `single` · `double` | Confirmations before a project is removed. It is unregistered; no files are deleted. |
 | Unload project: default terminal action | `projects.unloadTerminalAction` | `keepRunning` | `keepRunning` (Keep terminals running) · `endTerminals` (End terminals) | What the project menu's **Unload Project** row does to the project's terminals; the menu's second Unload row does the other — **Unload Project and End Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep leaves every terminal alive, idle shells included, and reattaches each when the project is next loaded; End ends every terminal, running processes included; one that cannot be ended stays running, says so once, and reattaches when the project is next loaded. Neither row asks anything; the only prompt Unload can show is the usual one for unsaved editors. |
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
@@ -246,7 +247,7 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 | Reload terminals when a project opens | `terminals.reloadMode` | `automatic` | `automatic` · `manual` | Automatic starts every terminal in every tab as a project opens. Manual starts none: each panel waits with a **Reload** action. |
 | Remember the last running command by default | `terminals.defaultRememberCommand` | off | on · off | Ticks **Remember the last running command** on new terminal panels: a command running when the terminal closes runs again next time. A panel keeps its own choice. |
 | Reopen in the last directory by default | `terminals.defaultRememberDirectory` | on | on · off | Ticks **Reopen in the last directory** on new terminal panels. A directory that has gone away falls back to the project root. |
-| Run as administrator by default | `terminals.defaultRunAsAdmin` | off | on · off | Ticks **Run as administrator** on new terminal panels. Whether a terminal can be elevated still depends on throng itself running elevated; this never elevates anything on its own. |
+| Run as administrator by default (Windows only) | `terminals.defaultRunAsAdmin` | off | on · off | Ticks **Run as administrator** on new terminal panels. Whether a terminal can be elevated still depends on throng itself running elevated; this never elevates anything on its own. |
 | Command tracking interval | `terminals.commandPollMs` | 1,000 | 250 – 5,000 ms, step 250 | How often throng checks which command a terminal is running. Lower notices a new command sooner; higher does less work. |
 | Tell programs that links are supported | `terminals.advertiseHyperlinks` | on | on · off | Start terminal programs with `FORCE_HYPERLINK=1`, so tools that can print clickable links — Claude Code among them — do. Applies to terminals started afterwards. A `FORCE_HYPERLINK` the launching environment already carries is never overridden, in either direction, and throng never sets `WT_SESSION` or a borrowed `TERM_PROGRAM`. Off does not stop throng recognising paths printed as plain text. |
 | Terminal title template | `terminals.titleTemplate` | `({title} ? "{app}: {title} \| " : {command} ? "{command} \| " : ""){shell}({path} ? " ({path})" : "")` | a [title template](#terminal-title-templates) | What a terminal panel is named, everywhere it is named. The panel-type icon is always shown beside it. |
@@ -286,7 +287,7 @@ the taskbar counts it, whatever raised it. How it is announced is the Attention 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Clear delay | `attention.clearDelayMs` | 1,000 | 0 – 10,000 ms, step 100 | How long you must stay in a marked panel — keyboard focus inside it — before its mark clears. Switching to its tab or project without moving into the panel leaves the mark. 0 clears it as soon as you focus the panel. |
-| Taskbar badge | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
+| Taskbar badge (Windows only) | `attention.taskbarBadge` | on | on · off | Show the number of marked panels, across every project, on throng's taskbar button, whether or not throng is focused. It is not affected by the notification settings. |
 
 ## Editor · Indentation
 

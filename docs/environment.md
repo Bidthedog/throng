@@ -111,6 +111,7 @@ launches.
 | `THRONG_E2E_WORKERS` | Playwright worker count. See [tiers and workers](../.claude/skills/throng-testing/references/tiers-and-workers.md). | `6` (2 on an elevated runner, 1 on CI); `npm run test:e2e` picks cores − 2, between 2 and 6 |
 | `THRONG_E2E_WARM` | `1` skips the Electron warm-up on CI. `npm run test:e2e` sets it for its second tier. | unset |
 | `THRONG_E2E_RETRIES` | Retries per failing test; `0` shows raw first-attempt results. | `2` |
+| `THRONG_GATE_E2E_GREP` | Narrows the E2E stage of `npm run gate` to a tag expression. The Linux gate job sets it to `@core\|@linux`. | unset (the whole suite) |
 | `THRONG_E2E_FAIL_FAST` | `1` stops the E2E stage at its first failing test. `npm run gate` sets it. | unset |
 | `THRONG_E2E_JSON_OUT` | Writes a JSON report to this path beside the list output. See [measuring durations](../.claude/skills/throng-testing/references/measuring-durations.md). | unset |
 | `THRONG_E2E_TRACE` | Records a Playwright trace, kept only for a failing test. The release lane sets it. | unset |

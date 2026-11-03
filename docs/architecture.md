@@ -136,19 +136,29 @@ flowchart BT
   core["@throng/core"]
   ipc["@throng/ipc-contract"]
   pers["@throng/persistence<br/>(better-sqlite3)"]
+  pn["@throng/platform-node"]
   pw["@throng/platform-windows<br/>(node-pty, koffi)"]
+  pl["@throng/platform-linux<br/>(node-pty, /proc)"]
+  ps["@throng/platform"]
   daemon["@throng/daemon"]
   ui["@throng/ui<br/>(Electron, React)"]
   ipc --> core
   pers --> core
+  pn --> core
   pw --> core
+  pw --> pn
+  pl --> core
+  pl --> pn
+  ps --> pw
+  ps --> pl
+  ps --> pn
   daemon --> core
   daemon --> ipc
   daemon --> pers
-  daemon --> pw
+  daemon --> ps
   ui --> core
   ui --> ipc
-  ui --> pw
+  ui --> ps
 ```
 
 | Package | Role |
@@ -157,6 +167,9 @@ flowchart BT
 | `@throng/ipc-contract` | The JSON-RPC 2.0 message shapes shared by the daemon and UI main: method names, params, results, notifications and error codes. |
 | `@throng/persistence` | The embedded SQLite store: connection, `user_version` migration runner, schema-drift guard, and the repositories that implement core's ports. `better-sqlite3` lives here and nowhere else. |
 | `@throng/platform-windows` | The Windows implementations of core's abstractions. `node-pty`, `koffi` and every Win32 call live here and nowhere else. |
+| `@throng/platform-linux` | The Linux implementations of the same abstractions, reading `/proc` and using Unix sockets. |
+| `@throng/platform-node` | What both platforms share because Node already abstracts it: the user context, the file log, off-loop exec. |
+| `@throng/platform` | Chooses one platform's set at startup. It is the only package a process entry imports for this, and it refuses a platform with no set by name. |
 | `@throng/daemon` | The detached background process: IPC server, RPC router, per-domain RPC services, terminal service and the PTY agent. |
 | `@throng/ui` | The Electron client: main process, preload and the React renderer. |
 
@@ -205,7 +218,7 @@ else, and are passed in as typed settings objects.
 
 1. An interface in `core/src/abstractions/`, written in domain terms.
 2. A DI token in each process that needs it.
-3. A Windows implementation in `platform-windows/src`.
+3. An implementation for each platform in `platform-windows/src` and `platform-linux/src`, selected in `platform/src/index.ts`.
 4. A binding in each of those processes' composition roots.
 5. A contract suite in `core/src/testing`.
 6. A contract test that runs the suite against the real implementation

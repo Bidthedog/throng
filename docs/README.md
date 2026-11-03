@@ -12,6 +12,7 @@ Every guide, one line each. Each topic has one home; the others link to it.
 | [Quick start](quick-start.md) | A short tour from first launch to a working project, and how to get around. |
 | [Key bindings](key-bindings.md) | Every default key binding, the chord conventions, multi-key chords, non-US layouts and rebinding. |
 | [Preferences](preferences.md) | Every setting and what it does, themes, icon packs and where config files live. |
+| [Linux](linux.md) | What differs on Linux: display, bindings, terminals, files and the Resource Monitor. |
 | [Environment](environment.md) | Every environment variable throng, its build and its tests read, and where each instance keeps its data. |
 
 ## Working on throng

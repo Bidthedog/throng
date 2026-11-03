@@ -21,6 +21,8 @@ its default chord or chords, and its **scope**: where the chord is live.
 A command live in several places lists each of them. A chord is only ever acted on where its command
 is live — anywhere else, the key goes to whatever has focus, a shell included.
 
+These are the defaults on Windows and Linux. [The focus moves need the keypad on Linux](linux.md#key-bindings), because the desktop keeps the arrow keys.
+
 ## How the defaults are laid out
 
 The modifiers say how far a chord reaches:
@@ -108,7 +110,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 | Toggle fullscreen | `view.fullscreen` | `F11` | Everywhere | Enter or leave fullscreen mode. |
 | Toggle Projects sidebar | `view.toggleProjects` | `Ctrl+Shift+Alt+J` | Everywhere | Show or hide the Projects & Sub-workspaces pane. |
 | Toggle File Explorer | `view.toggleExplorer` | `Ctrl+Shift+Alt+K` | Everywhere | Show or hide the File Explorer pane. |
-| Resource Monitor | `view.resourceMonitor` | `Ctrl+Shift+Alt+R` | Everywhere | Open the [Resource Monitor](quick-start.md#8-see-what-throng-is-using): what throng and everything it started is using, in its own window; brings it forward when it is already open. |
+| Resource Monitor | `view.resourceMonitor` | `Ctrl+Shift+Alt+Y` | Everywhere | Open the [Resource Monitor](quick-start.md#8-see-what-throng-is-using): what throng and everything it started is using, in its own window; brings it forward when it is already open. |
 | Next Project | `project.next` | `Ctrl+Shift+Alt+PageDown` | Everywhere | Switch to the next project in the Projects pane, skipping the hidden projects of a minimised category (its loaded projects stay listed and are included) and stopping at the end. |
 | Previous Project | `project.previous` | `Ctrl+Shift+Alt+PageUp` | Everywhere | Switch to the previous project, skipping the hidden projects of a minimised category and stopping at the start. |
 | Open context menu | `menu.open` | `Shift+F10`, `ContextMenu` | Everywhere | Open the focused item's context menu from the keyboard. `ContextMenu` is the Menu key. |
@@ -125,7 +127,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 |---|---|---|---|---|
 | Quick Open | `navigate.quickOpen` | `Ctrl+Shift+T` | Everywhere | Open any file in the current project by typing part of its name or path; **Enter** opens it. |
 | Go To Line | `navigate.gotoLine` | `Ctrl+G` | Editor | Jump to a line number in the focused editor. A terminal keeps its own `Ctrl+G`. |
-| Go to Next Marked Panel | `focus.nextMarkedPanel` | `Ctrl+Shift+Alt+G` | Everywhere | Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked. Works from a focused terminal. Also in the right-click menu of a project that has a marked panel, where it goes to that project's next marked panel. |
+| Go to next flagged panel | `focus.nextMarkedPanel` | `Ctrl+Shift+Alt+G` | Everywhere | Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked. Works from a focused terminal. Also in the right-click menu of a project that has a marked panel, where it goes to that project's next marked panel. |
 | Open Preview | `preview.open` | *(unbound)* | Editor · File Explorer | Open a rendered preview of the focused editor's file, or of the file selected in File Explorer. |
 | Back | `navigate.back` | `Alt+ArrowLeft` | Editor · Preview | Show the previous file in the focused editor or preview's history. In an editor this takes the key from moving by syntax. |
 | Forward | `navigate.forward` | `Alt+ArrowRight` | Editor · Preview | Show the next file in the focused editor or preview's history, after going Back. |
