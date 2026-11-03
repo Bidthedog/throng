@@ -341,6 +341,36 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # 062 FR-046: the same gate on Linux. E2E is narrower than Windows' while the rest of the suite still speaks Windows
+  # shells; the lane is named here, so widening it is a one-line change.
+  gate-linux:
+    name: npm run gate (Linux)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.stress_spec == '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      THRONG_GATE_E2E_GREP: '@core|@linux'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Run the gate
+        run: scripts/ci-linux-display.sh npm run gate
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-gate-linux
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
   # A red nightly that nobody is awake for is a red nobody sees. This turns it into an issue.
   #
   # Scheduled runs only: a failed MANUAL dispatch already has someone watching it, and filing an
@@ -351,7 +381,7 @@ jobs:
   # an existing open issue with the same title gets a comment instead.
   report-failure:
     name: Report a failed nightly
-    needs: [gate, admin]
+    needs: [gate, admin, gate-linux]
     if: ${{ failure() && github.event_name == 'schedule' }}
 
     # ubuntu-latest, and hosted ON PURPOSE. This job only calls the API, and it must not queue
@@ -449,6 +479,11 @@ jobs:
           ROUNDS: ${{ inputs.stress_rounds }}
           THRONG_E2E_RETRIES: 0
           THRONG_E2E_WORKERS: 1
+          # So a spec in an @admin file can be stressed: this runner is elevated, and these two stand as
+          # scripts/ci-run-admin-e2e.ps1 sets them, for the reason given there.
+          THRONG_E2E_INCLUDE_ADMIN: 1
+          THRONG_AGENT_CONNECT_TIMEOUT_MS: 20000
+          THRONG_AGENT_READY_TIMEOUT_MS: 8000
         run: |
           set -u
           if [[ "$SPEC" != *.e2e.ts ]]; then echo "::error::stress_spec must be a full path ending .e2e.ts"; exit 2; fi

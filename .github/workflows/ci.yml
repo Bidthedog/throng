@@ -4,11 +4,10 @@ name: CI
 # and Principle V). Lint + type-check + the vitest layers + the Playwright-Electron
 # E2E suite all run on every non-draft pull request to master (see `on:` below).
 #
-# Everything runs on Windows: throng is a Windows-first app whose terminal stack is
-# ConPTY / node-pty and whose de-elevation path shells out to Windows tools, so the
-# suite cannot run on a Linux runner. The Windows runner has a virtual desktop, which
-# the E2E layer requires (the app has no headless mode — inline xterm.js terminals
-# only paint in a visible window; see docs/testing.md).
+# Windows jobs run on Windows, where the ConPTY terminal stack and the de-elevation path are real. The
+# Windows runner has a virtual desktop, which the E2E layer requires (the app has no headless mode — inline
+# xterm.js terminals only paint in a visible window; see docs/testing.md). The `linux-*` jobs at the end run
+# the same layers on Ubuntu (spec 062), with a real X display and window manager for E2E.
 #
 # Runner is pinned to `windows-2022` (not `windows-latest`): `windows-latest` now maps
 # to Windows Server 2025 shipping Visual Studio 2026, which the node-gyp bundled with
@@ -269,6 +268,85 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: test-results-admin
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ── Linux (spec 062 FR-046) ─────────────────────────────────────────────────────────────────────
+  # Ubuntu 24.04 restricts the user namespaces Electron's sandbox needs, as a developer's machine does, and
+  # ci-linux-setup.sh takes the same one step a developer takes. The sandbox stays on throughout (FR-003).
+  linux-fast:
+    name: 'Linux: unit / component'
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npm run test:unit -- --tags-filter='!regression'
+      - name: Component tests
+        run: npm run test:component -- --tags-filter='!regression'
+
+  linux-test:
+    name: 'Linux: integration / contract'
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Integration tests
+        run: npm run test:integration -- --tags-filter='!regression'
+      - name: Contract tests
+        run: npm run test:contract -- --tags-filter='!regression'
+
+  linux-e2e:
+    name: 'Linux: E2E (@core + @linux)'
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      THRONG_E2E_WORKERS: 1
+      THRONG_E2E_RETRIES: 3
+      THRONG_E2E_TRACE: 1
+      # The list reporter prints how many were skipped; this report, uploaded below, says why each one was (SC-008).
+      THRONG_E2E_JSON_OUT: test-results/e2e-report.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Prepare the runner
+        run: sudo scripts/ci-linux-setup.sh
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run E2E
+        run: scripts/ci-linux-display.sh npx playwright test --grep '@core|@linux'
+      - name: Upload traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-results-linux-e2e
           path: test-results/
           retention-days: 14
           if-no-files-found: ignore
