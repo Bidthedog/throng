@@ -1,5 +1,5 @@
 export { WindowsPlatformInfo } from './windows-platform-info.js';
-export { NodeUserContext } from './node-user-context.js';
+export { NodeUserContext } from '@throng/platform-node';
 export { WindowsShellDetection } from './windows-shell-detection.js';
 export { NodePtyHost } from './node-pty-host.js';
 export { WindowsDirectoryLock } from './windows-directory-lock.js';
@@ -19,6 +19,8 @@ export { WindowsExecutableExtensions } from './windows-executable-extensions.js'
 export { WindowsRefusedUriSchemes } from './windows-refused-uri-schemes.js';
 // 029 FR-012/FR-014: who else is holding a path. Deferred, and deliberately present — see the file.
 export { lookupHolder } from './holder-lookup.js';
+// 062 FR-049: the seams that gained a second platform.
+export { WindowsOrphanProcesses, WindowsTrashRestore, WindowsUserDirectories, WindowsVolumeRoots } from './windows-seams.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
-export { CRASH_DIR_NAME, createFileLog, writeCrashReport } from './node-file-log.js';
-export type { DiagnosticLog, FileLogOptions } from './node-file-log.js';
+export { CRASH_DIR_NAME, createFileLog, writeCrashReport } from '@throng/platform-node';
+export type { DiagnosticLog, FileLogOptions } from '@throng/platform-node';

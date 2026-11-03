@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { createFileLog, writeCrashReport, type DiagnosticLog } from '@throng/platform-windows';
+import { createFileLog, writeCrashReport, type DiagnosticLog } from '@throng/platform';
 import type { CrashDetails, LogLevel } from '@throng/core';
 
 /**

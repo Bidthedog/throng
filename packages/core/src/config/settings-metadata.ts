@@ -5,6 +5,7 @@
  * test (`settings-metadata.test.ts`) asserts every leaf except the internal
  * `version` marker has exactly one descriptor (FR-047). Pure; zero OS/DOM.
  */
+import { hostTraits, trashTerm } from '../platform/host-traits.js';
 import {
   DEFAULT_APP_SETTINGS,
   FIND_IN_FILES_GROUPINGS,
@@ -55,6 +56,11 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   // control that can express it, and is hidden here rather than left undescribed.
   'terminals.commandRecipes',
 ];
+
+/** What this platform's Preferences draws: a control that means nothing here is hidden, not disabled (062). */
+export function descriptorsForThisPlatform(all: readonly FieldDescriptor[]): readonly FieldDescriptor[] {
+  return all.filter((d) => d.onlyOn === undefined || d.onlyOn === hostTraits().os);
+}
 
 /**
  * The configurable settings leaves (every leaf minus the internal keys).
@@ -163,7 +169,9 @@ function noticeDescriptors(
       // 057 FR-110: independent of the mode above — "Never display" with this on is a Windows notification alone.
       key: `notifications.${severity}.os`,
       label: 'OS Notify',
-      description: `Raise a Windows notification for ${noun.toLowerCase()} notices, whatever the display setting says — but only while throng is not focused. While it is focused, the in-app notice and its display setting decide. Unavailable while "Operating system notifications" is off, keeping its setting.`,
+      get description() {
+        return `Raise a ${hostTraits().os === 'windows' ? 'Windows' : 'desktop'} notification for ${noun.toLowerCase()} notices, whatever the display setting says — but only while throng is not focused. While it is focused, the in-app notice and its display setting decide. Unavailable while "Operating system notifications" is off, keeping its setting.`;
+      },
       group: 'Notifications',
       row,
       control: 'toggle',
@@ -287,6 +295,16 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   // 046 FR-034a / FR-081 — what the plain Unload Project row does; the menu's second Unload row
   // does the other. FR-111 withdrew `confirmations.unloadProject`, which used to sit here: no Unload
   // row asks anything any more.
+  {
+    // 062 FR-028. Linux only: there is no Wayland anywhere else for it to choose.
+    key: 'window.nativeWayland',
+    label: 'Use native Wayland',
+    description:
+      'Run the window directly on Wayland instead of through XWayland. Dragging a tab out and placing windows work best through XWayland. Takes effect the next time throng starts.',
+    group: 'Window',
+    control: 'toggle',
+    onlyOn: 'linux',
+  },
   {
     key: 'projects.unloadTerminalAction',
     label: 'Unload project: default terminal action',
@@ -509,7 +527,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   {
     key: 'explorer.deleteMode',
     label: 'Delete files to',
-    description: 'Send deleted files to the OS Recycle Bin, or delete permanently.',
+    get description() {
+      return `Send deleted files to the OS ${trashTerm()}, or delete permanently.`;
+    },
     group: 'File Explorer',
     control: 'select',
     allowedValues: ['recycle', 'permanent'],
@@ -518,14 +538,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     // 050 FR-018f — beside the delete mode, and independent of it.
     key: 'explorer.replaceMode',
     label: 'When Paste replaces an item',
-    description:
-      'What happens to an item a paste or drag replaces: move it to the Recycle Bin, so undo can restore it, or delete it permanently.',
+    get description() {
+      return `What happens to an item a paste or drag replaces: move it to the ${trashTerm()}, so undo can restore it, or delete it permanently.`;
+    },
     group: 'File Explorer',
     control: 'select',
     allowedValues: ['recycle', 'permanent'],
-    optionLabels: {
-      recycle: 'Move it to the Recycle Bin',
-      permanent: 'Delete it permanently',
+    get optionLabels() {
+      return { recycle: `Move it to the ${trashTerm()}`, permanent: 'Delete it permanently' };
     },
   },
   {
@@ -1015,6 +1035,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    // 062 FR-008: Linux has no elevated terminal to default to.
+    onlyOn: 'windows',
     key: 'terminals.defaultRunAsAdmin',
     label: 'Run as administrator by default',
     description:
@@ -1198,6 +1220,8 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     step: 100,
   },
   {
+    // 062 FR-008: the badge is an overlay icon, which Electron offers on Windows alone.
+    onlyOn: 'windows',
     key: 'attention.taskbarBadge',
     label: 'Taskbar badge',
     description:

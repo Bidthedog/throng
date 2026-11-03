@@ -5,6 +5,7 @@
  * (016, FR-017b0). No OS/DOM here.
  */
 import type { OsName } from '../abstractions/platform-info.js';
+import { hostTraits } from '../platform/host-traits.js';
 
 export type ActionId =
   | 'zoom.in'
@@ -556,8 +557,9 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      */
     'view.toggleProjects': ['Ctrl+Shift+Alt+J'],
     'view.toggleExplorer': ['Ctrl+Shift+Alt+K'],
-    // 055 R12 — tier 1 like the pane toggles; R is not taken in any scope.
-    'view.resourceMonitor': ['Ctrl+Shift+Alt+R'],
+    // 055 R12 — tier 1 like the pane toggles. Y, not 055's R: GNOME keeps R, and a chord is the same on every platform
+    // where it can be (062 FR-034a).
+    'view.resourceMonitor': ['Ctrl+Shift+Alt+Y'],
     /*
      * 046 iterate round 1 (FR-102) — TIER 1, alongside the rest of the navigation family. Moved
      * from their pre-round Ctrl+Alt values (US2, FR-020/021): none of the four is in the reserved
@@ -724,16 +726,81 @@ const WINDOWS_BINDINGS: PlatformBindings = {
 };
 
 /**
+ * The chords the reference desktop keeps for itself, read from its own settings (`gsettings`, GNOME on Ubuntu 26.04,
+ * 062 research R10). A binding on one of these never reaches throng, so it would be silently dead (SC-005).
+ */
+export const DESKTOP_RESERVED_CHORDS: Readonly<Partial<Record<OsName, readonly string[]>>> = {
+  linux: [
+    'Alt+Tab',
+    'Shift+Alt+Tab',
+    'Alt+Escape',
+    'Shift+Alt+Escape',
+    'Alt+Space',
+    'Alt+F2',
+    'Alt+F4',
+    'Alt+F6',
+    'Shift+Alt+F6',
+    'Alt+F7',
+    'Alt+F8',
+    'Alt+F10',
+    'Alt+PrintScreen',
+    'Shift+PrintScreen',
+    'Ctrl+Escape',
+    'Ctrl+Alt+Tab',
+    'Ctrl+Shift+Alt+Tab',
+    'Ctrl+Alt+Escape',
+    'Ctrl+Shift+Alt+Escape',
+    'Ctrl+Alt+ArrowUp',
+    'Ctrl+Alt+ArrowDown',
+    'Ctrl+Shift+Alt+ArrowUp',
+    'Ctrl+Shift+Alt+ArrowDown',
+    'Ctrl+Alt+ArrowLeft',
+    'Ctrl+Alt+ArrowRight',
+    'Ctrl+Shift+Alt+ArrowLeft',
+    'Ctrl+Shift+Alt+ArrowRight',
+    'Ctrl+Alt+D',
+    'Ctrl+Shift+Alt+R',
+    'Ctrl+Alt+Delete',
+    'Ctrl+Alt+T',
+    ...Array.from({ length: 12 }, (_, i) => `Ctrl+Alt+F${i + 1}`),
+  ],
+};
+
+/**
+ * Reserved chords the keypad still reaches. The desktop holds the arrow keys' own keysyms, while the keypad's 2, 4, 6
+ * and 8 under these modifiers arrive reporting the same arrow, NumLock on or off (measured on GNOME, 062 MT-04), and
+ * `tier1PhysicalKey` reads them as that arrow. So these work from the keypad and from no other key.
+ */
+export const KEYPAD_REACHABLE_CHORDS: Readonly<Partial<Record<OsName, readonly string[]>>> = {
+  linux: ['Ctrl+Shift+Alt+ArrowUp', 'Ctrl+Shift+Alt+ArrowDown', 'Ctrl+Shift+Alt+ArrowLeft', 'Ctrl+Shift+Alt+ArrowRight'],
+};
+
+/**
+ * Where Linux differs, and only there (062 FR-034): a default the desktop reserves and nothing else reaches. There are
+ * none today. The focus moves share Windows' chords, which on Linux come from the keypad ({@link KEYPAD_REACHABLE_CHORDS}).
+ */
+export const LINUX_BINDING_OVERRIDES: Readonly<Record<string, readonly string[]>> = {};
+
+const LINUX_BINDINGS: PlatformBindings = {
+  ...WINDOWS_BINDINGS,
+  bindings: {
+    ...WINDOWS_BINDINGS.bindings,
+    ...Object.fromEntries(Object.entries(LINUX_BINDING_OVERRIDES).map(([action, chords]) => [action, [...chords]])),
+  },
+};
+
+/**
  * Shipped input defaults, KEYED BY PLATFORM (016, FR-017e — Principle II).
  *
- * Windows is the only platform this build ships, and the only key populated. macOS and Linux
- * join by ADDING VALUES — no existing key moves, and no consumer of the record changes shape.
+ * Windows and Linux are populated. macOS joins by ADDING VALUES — no existing key moves, and no
+ * consumer of the record changes shape.
  * That is the whole point: a flat action→chords record would have to be RESHAPED to gain a
  * platform, and by then ~19 call sites read it. No macOS chord is guessed here; an invented
  * default is worse than an absent one, because it looks decided.
  */
 export const SHIPPED_KEYBINDINGS_BY_PLATFORM: Readonly<Partial<Record<OsName, PlatformBindings>>> = {
   windows: WINDOWS_BINDINGS,
+  linux: LINUX_BINDINGS,
 };
 
 /** The platform whose values this build resolves. */
@@ -757,7 +824,10 @@ export function shippedBindingsFor(platform: OsName = DEFAULT_BINDING_PLATFORM):
  */
 export const DEFAULT_KEYBINDINGS: Keybindings = {
   version: 1,
-  bindings: shippedBindingsFor().bindings,
+  // A getter: this module loads before a process has configured its host traits.
+  get bindings() {
+    return shippedBindingsFor(hostTraits().os).bindings;
+  },
 };
 
 /** A normalised input event (keyboard or a named mouse-zoom gesture). */

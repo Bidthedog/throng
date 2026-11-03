@@ -1,3 +1,4 @@
+import { normaliseForCompare } from '@throng/core';
 import {
   DEFAULT_PROTOCOL_ALLOWLIST,
   flavourReportsDirectory,
@@ -173,7 +174,7 @@ let memo: { readonly cwd: string; readonly test: (text: string) => boolean } | n
 function canonicalDirectory(text: string | undefined): string | null {
   if (text === undefined || text.length === 0) return null;
   const absolute = absolutePathByName(text) ?? text;
-  const folded = absolute.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+  const folded = normaliseForCompare(absolute);
   return folded.length === 0 ? null : folded;
 }
 

@@ -147,6 +147,31 @@ export function codePageName(encoding: CodePageId): string {
  * one or none.
  */
 const PLACEHOLDER_BASE = 0xf700;
+
+/**
+ * The bytes WHATWG leaves undefined. Electron's and Node's bundled ICU follow it, but a Node linked against a Linux
+ * distribution's ICU decodes these as Latin-1 instead (*measured*, 062, Node 22 with ICU 78 on Ubuntu 26.04: 0xAA in
+ * windows-1253 gives U+00AA). So the answer is stated here, and such a decoder takes the table path below.
+ */
+const UNDEFINED_BYTES: Partial<Record<CodePageId, ReadonlySet<number>>> = {
+  windows1253: new Set([0xaa, 0xd2, 0xff]),
+  windows1255: new Set([0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf, 0xfb, 0xfc, 0xff]),
+  windows1257: new Set([0xa1, 0xa5]),
+};
+
+const decoderIsConforming = new Map<CodePageId, boolean>();
+function followsWhatwg(encoding: CodePageId): boolean {
+  let known = decoderIsConforming.get(encoding);
+  if (known === undefined) {
+    const undefinedBytes = UNDEFINED_BYTES[encoding];
+    known =
+      undefinedBytes === undefined ||
+      new TextDecoder(CODE_PAGE[encoding].label).decode(Uint8Array.from(undefinedBytes)).replace(/\u{fffd}/gu, '') === '';
+    decoderIsConforming.set(encoding, known);
+  }
+  return known;
+}
+
 const decodeTables = new Map<CodePageId, Uint16Array>();
 function decodeTable(encoding: CodePageId): Uint16Array {
   let table = decodeTables.get(encoding);
@@ -157,7 +182,7 @@ function decodeTable(encoding: CodePageId): Uint16Array {
     table = new Uint16Array(256);
     for (let i = 0; i < 256; i++) {
       const c = chars.charCodeAt(i);
-      table[i] = c === 0xfffd ? PLACEHOLDER_BASE + i : c;
+      table[i] = c === 0xfffd || UNDEFINED_BYTES[encoding]?.has(i) ? PLACEHOLDER_BASE + i : c;
     }
     decodeTables.set(encoding, table);
   }
@@ -183,6 +208,12 @@ function encodeTable(encoding: CodePageId): Int16Array {
  * U+FFFD is never a genuine character of one.
  */
 function decodeCodePage(body: Uint8Array, encoding: CodePageId): string {
+  if (!followsWhatwg(encoding)) {
+    const table = decodeTable(encoding);
+    let out = '';
+    for (const byte of body) out += String.fromCharCode(table[byte] as number);
+    return out;
+  }
   const text = new TextDecoder(CODE_PAGE[encoding].label).decode(body);
   if (!text.includes('\u{fffd}')) return text;
   return text.replace(/\u{fffd}/gu, (_m, i: number) => String.fromCharCode(PLACEHOLDER_BASE + (body[i] as number)));

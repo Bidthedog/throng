@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { connect, type Socket } from 'node:net';
 import { BrowserWindow } from 'electron';
 import type { AttentionSignal } from '@throng/core';
@@ -55,7 +56,7 @@ export class DaemonEvents {
   }
 
   private open(): void {
-    const socket = connect(this.pipeName);
+    const socket = connect(resolveIpcAddress(this.pipeName));
     this.socket = socket;
     let buffer = '';
     socket.setEncoding('utf8');

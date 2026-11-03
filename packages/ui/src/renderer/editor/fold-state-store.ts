@@ -16,6 +16,7 @@
  * (`window.throng.editor.onSync`, filtering on `msg.foldState?.key`) are the CALLER's job, exactly
  * as word wrap's own fetch and sync application live in `use-editor.ts` rather than in its store.
  */
+import { pathCompareKey } from '@throng/core';
 import { useSyncExternalStore } from 'react';
 import type { FoldState } from '@throng/core';
 
@@ -59,7 +60,7 @@ export function documentFoldState(docKey: string, seedDefault: FoldState): FoldS
 export function relayedKeyMatches(relayed: string, docKey: string): boolean {
   if (relayed === docKey) return true;
   if (!relayed.startsWith('file:') || !docKey.startsWith('file:')) return false;
-  return relayed === docKey.replace(/\\/g, '/').toLowerCase();
+  return relayed === pathCompareKey(docKey);
 }
 
 export function hasFoldState(docKey: string): boolean {

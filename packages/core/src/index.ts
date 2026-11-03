@@ -1,3 +1,16 @@
+export {
+  LINUX_PATH_TRAITS,
+  WINDOWS_HOST_TRAITS,
+  WINDOWS_PATH_TRAITS,
+  configureHostTraits,
+  hostTraits,
+  linuxHostTraits,
+  resolveIpcAddress,
+  trashTerm,
+} from './platform/host-traits.js';
+export type { HostTraits, IpcTraits, PathTraits } from './platform/host-traits.js';
+export { WATCH_LIMIT_REASON, watchFailureMessage } from './failure/cause.js';
+export type { IOrphanProcesses, ITrashRestore, IUserDirectories, IVolumeRoots, OrphanCandidate } from './abstractions/platform-seams.js';
 // Public surface of the platform- and process-agnostic core (Principles II/VIII/X).
 // Contains zero OS, Electron, or process-specific calls (verified by the
 // structural guard test in tests/unit/no-os-imports.test.ts).
@@ -149,7 +162,17 @@ export type { FileNode, NodeKind, RenameResult, DedupeStyle, DragModifiers, Drag
 
 // Path identity (019, FR-007): is this the same file, is this file under that folder — asked of
 // paths spelled by different producers (the tree's `/`, `node:path.join`'s `\`). Pure rules.
-export { normaliseForCompare, samePath, isUnderPath, remainderUnder } from './fs/path-id.js';
+export {
+  normaliseForCompare,
+  pathCompareKey,
+  pathSegments,
+  samePath,
+  separatorOf,
+  isUnderPath,
+  remainderUnder,
+  toForwardSlashes,
+  trimTrailingSeparators,
+} from './fs/path-id.js';
 export { toCanonicalPath, isCanonicalPath, type PathSeparator } from './fs/path-canon.js';
 export { canonicalisePersistedPaths, previewPathOf } from './workspace/persisted-paths.js';
 // 050 R19, FR-035 — a panel config after an in-app move: new paths, and `movedOut` set or cleared.
@@ -433,6 +456,9 @@ export type {
 export {
   DEFAULT_KEYBINDINGS,
   DEFAULT_BINDING_PLATFORM,
+  DESKTOP_RESERVED_CHORDS,
+  KEYPAD_REACHABLE_CHORDS,
+  LINUX_BINDING_OVERRIDES,
   SHIPPED_KEYBINDINGS_BY_PLATFORM,
   COMMAND_SCOPES,
   shippedBindingsFor,
@@ -622,6 +648,7 @@ export {
 } from './config/metadata.js';
 export {
   SETTINGS_METADATA,
+  descriptorsForThisPlatform,
   SETTINGS_INTERNAL_KEYS,
   settingsLeaves,
 } from './config/settings-metadata.js';

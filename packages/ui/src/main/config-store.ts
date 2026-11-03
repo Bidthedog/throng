@@ -10,7 +10,7 @@
  * untouched on disk so the user can fix their edit; writes are atomic (temp file
  * + rename) and best-effort (a failure is logged, never thrown).
  */
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, constants, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome } from '@throng/core';
 
@@ -92,6 +92,42 @@ interface FileSnapshot {
   existed: boolean;
   original?: Buffer;
   tmp: string;
+}
+
+/**
+ * What an atomic replace should rename onto. A rename onto a symlink replaces the link, which on Linux is how a settings
+ * file kept in a dotfiles repository would quietly stop being kept there (062 FR-023). So a link is followed, and the
+ * temp file is staged beside the real file, because a rename cannot cross filesystems.
+ */
+async function replaceTarget(path: string): Promise<string> {
+  const info = await lstat(path).catch(() => null);
+  return info?.isSymbolicLink() ? realpath(path) : path;
+}
+
+/**
+ * A replaced file keeps the permissions it had (062 FR-023), and a read-only one is refused: on Windows the rename fails,
+ * but a POSIX rename replaces it without asking (FR-018's "the user's file is untouched"). Windows has no bits to carry.
+ */
+async function keepMode(existing: string, staged: string): Promise<void> {
+  if (process.platform === 'win32') return;
+  const info = await stat(existing).catch(() => null);
+  if (info === null) return;
+  await access(existing, constants.W_OK);
+  await chmod(staged, info.mode & 0o7777);
+}
+
+/**
+ * Replace `path` with a staged file. Through a symlink the temp is beside the link, and a rename cannot cross filesystems,
+ * so the real file is rewritten in place: a symlinked settings file loses atomicity here, and keeps being a symlink.
+ */
+async function renameOntoFile(staged: string, path: string): Promise<void> {
+  const target = await replaceTarget(path);
+  if (target === path) {
+    await renameWithRetry(staged, path);
+    return;
+  }
+  await writeFile(target, await readFile(staged));
+  await rm(staged, { force: true });
 }
 
 export class FileConfigStore implements IConfigStore {
@@ -237,9 +273,11 @@ export class FileConfigStore implements IConfigStore {
     let tmp: string | undefined;
     try {
       await mkdir(dirname(path), { recursive: true });
-      tmp = `${path}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
+      const target = await replaceTarget(path);
+      tmp = `${target}.${(this.writeSeq += 1)}.tmp`; // unique per write (no shared-tmp race)
       await writeFile(tmp, FileConfigStore.serialize(value), 'utf8');
-      await renameWithRetry(tmp, path); // atomic replace (libuv MoveFileEx w/ replace on Windows)
+      await keepMode(target, tmp);
+      await renameWithRetry(tmp, target); // atomic replace (libuv MoveFileEx w/ replace on Windows)
       this.commitGeneration += 1;
       return { ok: true };
     } catch (err) {
@@ -398,6 +436,7 @@ export class FileConfigStore implements IConfigStore {
       try {
         await mkdir(dirname(s.path), { recursive: true });
         await writeFile(s.tmp, s.content, 'utf8');
+        await keepMode(s.path, s.tmp);
       } catch (err) {
         await this.cleanupTemps(snaps);
         return { ok: false, failedPath: s.path, error: errorMessage(err) };
@@ -417,7 +456,7 @@ export class FileConfigStore implements IConfigStore {
     const committed: FileSnapshot[] = [];
     for (const s of snaps) {
       try {
-        await renameWithRetry(s.tmp, s.path);
+        await renameOntoFile(s.tmp, s.path);
         this.commitGeneration += 1;
         committed.push(s);
       } catch (err) {
@@ -443,9 +482,10 @@ export class FileConfigStore implements IConfigStore {
         if (s.existed && s.original !== undefined) {
           const tmp = `${s.path}.${(this.writeSeq += 1)}.rollback`;
           await writeFile(tmp, s.original);
+          await keepMode(s.path, tmp);
           // Retried too: a rollback defeated by the same momentary hold would leave exactly the
           // half-applied mixture 010 FR-012 forbids.
-          await renameWithRetry(tmp, s.path);
+          await renameOntoFile(tmp, s.path);
         } else {
           await rm(s.path, { force: true });
         }

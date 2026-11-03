@@ -18,7 +18,8 @@
 import 'reflect-metadata';
 import { createServer, type Socket } from 'node:net';
 import process from 'node:process';
-import { NodePtyHost, WindowsProcessCwd } from '@throng/platform-windows';
+import { clearStaleSocket, startPlatform, type PlatformPtyHost } from '@throng/platform';
+import { resolveIpcAddress } from '@throng/core';
 import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 import { answerChildPids } from './pty-agent-childpids.js';
@@ -32,6 +33,8 @@ import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 // is one folder rather than a hunt through %TEMP%. It falls back to the temp directory, which is
 // where it has always written: an agent launched by a daemon that has no log directory of its own
 // must still leave a record, and %TEMP% is reachable from the de-elevated side of the boundary.
+// 062: traits first, since the pipe this agent serves is resolved through them.
+const platform = startPlatform();
 const logger = createAgentLogger(process.pid, process.env.THRONG_LOG_DIR || undefined);
 const log = (message: string): void => logger.log(message);
 const errText = (e: unknown): string =>
@@ -86,12 +89,12 @@ if (!pipeName) {
 // natively at this process's (medium) integrity. The construction lazily loads the
 // node-pty native module; if the ABI/borrowed-token context makes that fail, this is
 // the first place it can, so it is bracketed and logged before we listen.
-let pty: NodePtyHost;
+let pty: PlatformPtyHost;
 // Binds its OS calls lazily, on the first read — constructing it cannot fail here.
-const processCwd = new WindowsProcessCwd();
+const processCwd = platform.processCwd();
 try {
   log('constructing NodePtyHost (lazily loads the node-pty native module)');
-  pty = new NodePtyHost();
+  pty = platform.ptyHost();
   log('NodePtyHost constructed OK (node-pty loaded)');
 } catch (error) {
   log(`FATAL constructing NodePtyHost: ${errText(error)}`);
@@ -314,7 +317,9 @@ server.on('error', (error) => {
   log(`FATAL pipe server error: ${errText(error)}; exiting 1`);
   process.exit(1);
 });
-server.listen(pipeName, () => log(`listening on pipe ${pipeName}`));
+void clearStaleSocket(resolveIpcAddress(pipeName)).then(() =>
+  server.listen(resolveIpcAddress(pipeName), () => log(`listening on pipe ${pipeName}`)),
+);
 // Safety net: if no daemon connects within 30s, don't linger.
 const idleExit = setTimeout(() => {
   if (!sock) {

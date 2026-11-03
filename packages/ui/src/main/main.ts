@@ -103,9 +103,8 @@ import { registerRendererDebugLogIpc } from './renderer-debug-log.js';
 import {
   copyExecPath,
   hasUserDataDirSwitch,
-  instanceConfigRoot,
+  configRootFor,
   instanceDatabasePath,
-  instanceUserDataDir,
 } from './instance-paths.js';
 import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon, resolveDaemonNodeExe } from './daemon-lifecycle.js';
 import { fork } from 'node:child_process';
@@ -150,7 +149,7 @@ import { EditorCoordinator, type DocumentLifecycleListener } from './editor-coor
 import { registerEditorIpc } from './editor-ipc.js';
 import { registerClipboardIpc } from './clipboard-ipc.js';
 import type { ClipboardService } from './clipboard-service.js';
-import { WindowsShellDetection, WindowsElevation, lookupHolder } from '@throng/platform-windows';
+import { startPlatform } from '@throng/platform';
 import { createShellDetectionService } from './shell-detection-service.js';
 import { DaemonEvents } from './daemon-events.js';
 import { raiseWindow } from './window-raise.js';
@@ -559,7 +558,8 @@ function createSubWorkspaceWindow(
 app.setName('throng');
 // 057 FR-039: Windows shows a toast and a taskbar overlay only for an app with an identity, and
 // without one the toast is attributed to Electron (or dropped). Set before any notification.
-app.setAppUserModelId('com.throng.throng');
+// The identity is Windows' own idea (062).
+if (process.platform === 'win32') app.setAppUserModelId('com.throng.throng');
 
 /*
  * The `throng-preview:` scheme (044, contracts/preview-ipc.md §4) — registered at MODULE TOP LEVEL
@@ -594,6 +594,18 @@ protocol.registerSchemesAsPrivileged([
 installNavigationGuards(app);
 
 /**
+ * 062: the platform comes first, because everything below reads a path, a pipe or a folder through it.
+ * An unsupported platform throws here, with its name, rather than running on another platform's rules (FR-050).
+ */
+const platform = startPlatform();
+const startupRefusal = platform.startupRefusal();
+if (startupRefusal !== null) {
+  // FR-019. Normally the preflight says this first: Electron itself aborts as root before any of this runs.
+  dialog.showErrorBox('throng', startupRefusal);
+  app.exit(1);
+}
+
+/**
  * Dev-instance isolation: an UNPACKAGED run develops throng while a PACKAGED throng is
  * installed and in daily use on the same account, so it keeps its own userData, config root,
  * database and daemon pipe (see `instance-paths.ts` for why the pipe matters most).
@@ -604,7 +616,9 @@ installNavigationGuards(app);
  */
 const isDevInstance = !app.isPackaged;
 if (isDevInstance && !hasUserDataDirSwitch(process.argv)) {
-  app.setPath('userData', instanceUserDataDir(app.getPath('appData'), true));
+  const userData = platform.userDirectories().dataDir(true);
+  platform.userDirectories().prepare(userData);
+  app.setPath('userData', userData);
 }
 
 /**
@@ -631,7 +645,7 @@ if (isDevInstance && !hasUserDataDirSwitch(process.argv)) {
  */
 function configuredDiagnostics(): AppSettings['diagnostics'] {
   try {
-    const root = instanceConfigRoot(app.getPath('home'), isDevInstance, process.env);
+    const root = configRootFor(platform.userDirectories(), isDevInstance, process.env);
     const raw = JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as unknown;
     // Guarded (031, #227): this runs before the config store exists, so it corrects IN MEMORY and
     // writes nothing. A hand-set 0 KB rotation cap would otherwise rotate the log on every line,
@@ -642,6 +656,24 @@ function configuredDiagnostics(): AppSettings['diagnostics'] {
   }
 }
 const startupDiagnostics = configuredDiagnostics();
+
+/**
+ * 062 FR-028: what reads this switch later agrees with the backend `npm run start:ui` chose on the real command line,
+ * since Chromium chooses before this file runs. So this cannot wait for the config store. A missing or malformed file
+ * yields the default, which is what the store would have produced anyway.
+ */
+function configuredNativeWayland(): boolean {
+  try {
+    const root = configRootFor(platform.userDirectories(), isDevInstance, process.env);
+    return parseSettingsGuarded(JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as unknown).value.window
+      .nativeWayland;
+  } catch {
+    return DEFAULT_APP_SETTINGS.window.nativeWayland;
+  }
+}
+for (const [name, value] of platform.displaySwitches(configuredNativeWayland())) {
+  app.commandLine.appendSwitch(name, value);
+}
 const startupLogLevel: LogLevel = startupDiagnostics.logLevel;
 
 /** The product version (020 FR-001) — for the startup log, and the instance guard's launch message. */
@@ -839,7 +871,7 @@ if (isPrimaryInstance)
     databasePath: instanceDatabasePath(app.getPath('userData'), process.env),
     // FR-025b: if we're elevated but an existing daemon isn't, retire + respawn it
     // elevated (an elevated app spawns an elevated daemon) so terminals can run admin.
-    appElevated: new WindowsElevation().isElevated(),
+    appElevated: platform.elevation().isElevated(),
     // #123 — the daemon logs beside the UI, in the same per-user folder, so "send me your logs"
     // is one folder and not a hunt across two processes that fail for related reasons.
     logDir: diagnostics.logDir,
@@ -1439,6 +1471,7 @@ if (isPrimaryInstance)
     readPreviewSettings: () => currentSettings.editor.previews,
     // FR-120 / SC-008: read per check, so a changed timeout applies to the next one with no restart.
     readLinkSettings: () => currentSettings.editor.links,
+    volumes: platform.volumeRoots(),
   });
   fileLinkResolver.setShell(shellIntegration);
   registerLinkIpc(ipcMain, fileLinkResolver);
@@ -1580,7 +1613,7 @@ if (isPrimaryInstance)
      * and then quietly never invoked. The answer is identical either way, so nothing changes today
      * except that the code now says what it means.
      */
-    return mine ?? (await lookupHolder(absPath));
+    return mine ?? (await platform.lookupHolder(absPath));
   });
 
   // Editor panels (006): UI-main-owned, NOT daemon-backed. File I/O via the same
@@ -1954,7 +1987,7 @@ if (isPrimaryInstance)
   // the FS seams above), merging the machine's built-ins with settings.terminals.
   // The sandboxed renderer reaches it only through this channel (no daemon).
   const shellDetectionService = createShellDetectionService({
-    detection: new WindowsShellDetection(),
+    detection: platform.shellDetection(),
     configStore,
   });
   ipcMain.handle('throng:terminal:listFlavours', () => shellDetectionService.listFlavours());

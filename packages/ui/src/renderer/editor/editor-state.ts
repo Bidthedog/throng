@@ -4,6 +4,7 @@
  * document's content lives in CodeMirror (renderer) and UI main; this holds only
  * the small display/dirty facts the chrome needs.
  */
+import { pathCompareKey } from '@throng/core';
 import { useSyncExternalStore } from 'react';
 
 export interface EditorUiState {
@@ -150,7 +151,7 @@ export function allEditorStates(): EditorUiState[] {
  * second one.
  */
 export function findEditorPanelByPath(absPath: string): string | null {
-  const norm = (p: string): string => p.replace(/\\/g, '/').toLowerCase();
+  const norm = pathCompareKey;
   const target = norm(absPath);
   for (const s of states.values()) {
     if (s.filePath != null && norm(s.filePath) === target) return s.panelId;
@@ -210,7 +211,7 @@ export function useDirtyProjectKey(): string {
 function dirtyPathKey(): string {
   const paths = new Set<string>();
   for (const s of states.values()) {
-    if (s.dirty && s.filePath) paths.add(s.filePath.replace(/\\/g, '/').toLowerCase());
+    if (s.dirty && s.filePath) paths.add(pathCompareKey(s.filePath));
   }
   return [...paths].sort().join('\n');
 }

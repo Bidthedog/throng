@@ -22,6 +22,7 @@
  * Save-All across windows, crash recovery and the cross-window mirror are all served
  * from the authority's text, with no renderer round-trip for content.
  */
+import { pathCompareKey } from '@throng/core';
 import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
@@ -2991,7 +2992,7 @@ export function movedPathOf(absPath: string, moves: readonly MovePair[]): string
  * than through this coordinator's `docs` registry.
  */
 export function fileKey(absPath: string): string {
-  return `file:${absPath.replace(/\\/g, '/').toLowerCase()}`;
+  return `file:${pathCompareKey(absPath)}`;
 }
 
 /** The line format a read found (059 R6) — what the authority is opened, reset or restored with. */

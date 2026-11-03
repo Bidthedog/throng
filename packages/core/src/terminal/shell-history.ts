@@ -71,6 +71,12 @@ export const SHELL_HISTORY_OFF_SNIPPET: Record<string, string> = {
  */
 export const SHELL_HISTORY_OFF_ENV: Record<string, Record<string, string>> = {
   'git-bash': { HISTFILE: '/dev/null', HISTSIZE: '0', HISTFILESIZE: '0' },
+  // 062 FR-015. Each shell's own lever: zsh writes SAVEHIST lines, and fish's private mode writes none.
+  bash: { HISTFILE: '/dev/null', HISTSIZE: '0', HISTFILESIZE: '0' },
+  zsh: { HISTFILE: '/dev/null', SAVEHIST: '0' },
+  fish: { fish_private_mode: '1' },
+  sh: { HISTFILE: '/dev/null' },
+  ksh: { HISTFILE: '/dev/null' },
 };
 
 /** How a flavour is asked to keep no history — a snippet, an environment, or neither. */

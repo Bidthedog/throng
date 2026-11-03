@@ -9,6 +9,7 @@
  * swaps 📁/📂 with open state as a pure indicator. The root selects but never
  * collapses (FR-004); right-click opens the operations menu.
  */
+import { pathCompareKey } from '@throng/core';
 import { useRef, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react';
 import type { NodeRendererProps } from 'react-arborist';
 import { decideClick } from '@throng/core';
@@ -29,11 +30,11 @@ export function TreeRow({
   const isCut = row?.cutPaths.has(data.relPath) ?? false;
   // Case-insensitively, because the set is built from paths the platform treats as one file however
   // they are spelled, and a tree row's own relPath keeps the spelling the filesystem reported.
-  const isDirty = data.kind === 'file' && (row?.dirtyPaths.has(data.relPath.toLowerCase()) ?? false);
+  const isDirty = data.kind === 'file' && (row?.dirtyPaths.has(pathCompareKey(data.relPath)) ?? false);
   // #188 — the file the active editor is showing. Marked separately from the selection, which is
   // hidden whenever another pane holds the keyboard; see explorer-context.ts.
   const isActiveFile =
-    data.kind === 'file' && row?.activeFilePath != null && row.activeFilePath === data.relPath.toLowerCase();
+    data.kind === 'file' && row?.activeFilePath != null && row.activeFilePath === pathCompareKey(data.relPath);
   // Escape cancels a rename and suppresses the follow-on blur-commit (FR-090).
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).

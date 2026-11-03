@@ -1,5 +1,25 @@
 import type { ChildProcess, IPtyHost, PtyExit } from '../abstractions/pty-host.js';
 
+/**
+ * How many times the event loop came round while `work` ran: none if it blocked the loop. Counted per turn rather than
+ * per interval, because a non-blocking read can finish inside any interval: on a small process table the Linux probe
+ * took about 2 ms, which a 10 ms ticker reported as blocking.
+ */
+export async function loopTurnsDuring<T>(work: () => Promise<T>): Promise<{ result: T; turns: number }> {
+  let turns = 0;
+  let pending: ReturnType<typeof setImmediate>;
+  const turn = (): void => {
+    turns += 1;
+    pending = setImmediate(turn);
+  };
+  pending = setImmediate(turn);
+  try {
+    return { result: await work(), turns };
+  } finally {
+    clearImmediate(pending);
+  }
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(`IPtyHost contract violation: ${message}`);
@@ -117,12 +137,11 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     //     Waited out first: a host may serve a probe from a read that settled moments ago, which
     //     answers without a tick and so proves nothing about blocking.
     await sleep(400);
-    let probeTicks = 0;
-    const probeTicker = setInterval(() => (probeTicks += 1), 10);
-    const together = await Promise.all([host.probeChildPids(handle), host.probeChildPids(handle)]);
-    clearInterval(probeTicker);
+    const { result: together, turns: probeTurns } = await loopTurnsDuring(() =>
+      Promise.all([host.probeChildPids(handle), host.probeChildPids(handle)]),
+    );
     assert(together[0].length > 0 && together[1].length > 0, 'concurrent probes must both see the running child');
-    assert(probeTicks > 0, 'probeChildPids must not block the event loop');
+    assert(probeTurns > 0, 'probeChildPids must not block the event loop');
 
     // 4b. listChildProcesses (025 FR-022): the same descendants, WITH command lines, and with
     //     ppids expressed relative to the handle this caller holds.

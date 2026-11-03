@@ -266,10 +266,26 @@ export function startFailurePreservesPanelType(cause: FailureCause | null): bool
  *
  * A spoken sentence never matches these patterns, which is what makes the narrow rule safe.
  */
+export const WATCH_LIMIT_REASON = 'ENOSPC';
+
+/**
+ * What the user reads when live updates stop (026 FR-010a). `ENOSPC` from a watch is not a full disk: it is Linux's
+ * per-user inotify limit, and the setting that lifts it is the one thing the user needs to know (062 T029).
+ */
+export function watchFailureMessage(reason: string): string {
+  if (reason === WATCH_LIMIT_REASON) {
+    return (
+      'Live updates have stopped for this project: this machine allows too few watched folders. ' +
+      'Raise fs.inotify.max_user_watches with sysctl, then reopen the project.'
+    );
+  }
+  return 'Live updates have stopped for this project. Reopen it to resume watching for changes.';
+}
+
 export function isTransportFailure(raw: string): boolean {
   const text = raw.trim();
   // A named pipe in the text, or an ENOENT that mentions one — unambiguous.
-  if (/\\\\[.?]\\pipe\\/i.test(text) || /\bENOENT\b.*\bpipe\b/i.test(text)) return true;
+  if (/\\\\[.?]\\pipe\\/i.test(text) || /\bENOENT\b.*\bpipe\b/i.test(text) || /^connect E[A-Z]+ .*\.sock$/.test(text)) return true;
   // The client's own vocabulary for "I could not talk to it".
   if (/^(daemon-unreachable|invalid-response)$/i.test(text)) return true;
   // A BARE errno token — no path, no sentence. Nothing that speaks to a user looks like this.

@@ -9,6 +9,8 @@
     { "path": "../core" },
     { "path": "../ipc-contract" },
     { "path": "../persistence" },
-    { "path": "../platform-windows" }
+    { "path": "../platform-node" },
+    { "path": "../platform-windows" },
+    { "path": "../platform" }
   ]
 }

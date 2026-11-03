@@ -1,3 +1,4 @@
+import { pathSegments } from '../fs/path-id.js';
 /**
  * 041 FR-003c/FR-003d (#278) — is this removed folder a CAUSE, or a casualty of one?
  *
@@ -39,7 +40,7 @@
 
 /** Split a path on either separator, dropping empties — the stored root may use either. */
 function segments(path: string): string[] {
-  return path.split(/[\\/]/).filter(Boolean);
+  return pathSegments(path);
 }
 
 /**

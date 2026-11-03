@@ -158,7 +158,7 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   chord(
     'focus.nextMarkedPanel',
     'Navigate',
-    'Go to Next Marked Panel',
+    'Go to next flagged panel',
     'Focus the next panel marked as needing you, switching project if it is in another. Does nothing when no panel is marked.',
   ),
 

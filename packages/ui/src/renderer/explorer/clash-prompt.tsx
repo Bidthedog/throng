@@ -11,11 +11,12 @@
  * question that could never be answered would hang the paste; the dismissal paths below all answer the
  * conservative way.
  */
+import { pathSegments } from '@throng/core';
 import { useEffect, type ReactElement } from 'react';
 import { formatGrouped, formatSubject, type ClashQuestion, type ClashSide } from '@throng/core';
 import { useChoose } from '../confirm-dialog.js';
 
-const leaf = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+const leaf = (path: string): string => pathSegments(path).pop() ?? path;
 
 /** One side of the comparison: a file's size and time, or a folder's item count; the newer one marked. */
 function Side({ side, label, testId }: { side: ClashSide; label: string; testId: string }): ReactElement {

@@ -79,6 +79,9 @@ export function resolveCandidate(
     // reading is not tried for it, so `/d/git/x.ts` is never the project's `d\git\x.ts`.
     const drive = driveFormOf(text, ctx.pathForms);
     if (drive !== null) return [drive];
+    // A path already inside the project names itself: the project-root reading could only double it.
+    // Reachable only where a leading `/` can be absolute, since a drive-qualified root never matches (062 FR-022).
+    if (ctx.projectRoot !== null && isUnderPath(text, ctx.projectRoot)) return [text];
     // R6: the project root FIRST.
     if (ctx.projectRoot !== null) out.push(join(ctx.projectRoot, text.slice(1)));
     // R13: a WSL flavour stops here. Its Linux paths name the distro's filesystem, which neither

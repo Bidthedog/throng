@@ -17,6 +17,7 @@
  * after it has worked for a while. This raises the card on the first such event and keeps no clock of
  * its own. A run that never gets one raises nothing (a clean run) or just its failure report.
  */
+import { pathSegments } from '@throng/core';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { formatGrouped, formatSubject, type TransferProgress } from '@throng/core';
 import { IconButton } from '../common/icon-button.js';
@@ -26,7 +27,7 @@ import { pasteFailureNotice } from './paste-failure-notice.js';
 /** The card stays until the run ends: the user's notice timings must not take a live Cancel away. */
 const PERSISTENT = { mode: 'dismiss', timeoutMs: 30_000 } as const;
 
-const leaf = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+const leaf = (path: string): string => pathSegments(path).pop() ?? path;
 
 interface Run {
   /** `''` until the card is raised. */

@@ -69,7 +69,10 @@ export default async function () {
       });
       child.on('error', () => {});
       await new Promise((resolve) => setTimeout(resolve, WARM_UP_MS));
-      if (child.pid !== undefined) spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      if (child.pid !== undefined) {
+        if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+        else child.kill('SIGKILL');
+      }
     } catch {
       // Ignore — worst case the first spec bears the cold start and recovers on retry.
     }

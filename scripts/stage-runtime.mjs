@@ -13,6 +13,11 @@ import { copyFileSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+if (process.platform !== 'win32') {
+  console.error('stage-runtime.mjs is Windows-only: it drives UAC or the Windows packages (spec 062 FR-039).');
+  process.exit(1);
+}
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(repoRoot, 'packages', 'ui', 'build', 'resources', 'runtime');
 const outExe = join(outDir, 'node.exe');

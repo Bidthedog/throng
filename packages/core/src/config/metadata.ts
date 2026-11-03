@@ -231,6 +231,8 @@ export interface FieldDescriptor {
    * Absence means what it has always meant: the control is live whenever it is rendered.
    */
   enabledWhen?: { key: string; is: string | number | boolean };
+  /** The one platform this control means anything on (062). Absent, every platform. Hidden elsewhere, not disabled. */
+  onlyOn?: 'windows' | 'linux' | 'macos';
   /**
    * Committing THIS VALUE costs the user something they must agree to first (030 FR-008; 043 FR-082b).
    *

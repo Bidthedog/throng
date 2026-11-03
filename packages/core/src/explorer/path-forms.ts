@@ -1,3 +1,4 @@
+import { toForwardSlashes } from '../fs/path-id.js';
 /**
  * The four path renderings the "Copy Path" submenu offers (US9, #156): absolute vs relative × Windows
  * (`C:\git\test.txt`) vs POSIX (`/c/git/test.txt`) form. Pure; no OS/DOM. Relative is relative to the
@@ -19,7 +20,7 @@ export interface PathForms {
   relPosix: string;
 }
 
-const toLinux = (p: string): string => p.replace(/\\/g, '/');
+const toLinux = toForwardSlashes;
 const toWin = (p: string): string => p.replace(/\//g, '\\');
 /** `C:/git/test.txt` → `/c/git/test.txt` (MSYS/Git Bash). Leaves a driveless path untouched. */
 const toPosix = (p: string): string => p.replace(/^([A-Za-z]):\//, (_m, d: string) => `/${d.toLowerCase()}/`);

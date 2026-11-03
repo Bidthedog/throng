@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 import { appendFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Container } from 'inversify';
 import {
@@ -35,15 +34,7 @@ import {
   NoSystemNotifier,
   NoTaskbarBadge,
 } from '@throng/core';
-import {
-  WindowsExecutableExtensions,
-  WindowsFontEnumeration,
-  NodeUserContext,
-  WindowsForegroundHandoff,
-  WindowsPathForms,
-  WindowsRefusedUriSchemes,
-  WindowsShellDetection,
-} from '@throng/platform-windows';
+import { NodeUserContext, selectPlatform } from '@throng/platform';
 import { NodeFileSystem } from './node-file-system.js';
 import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { UI_TYPES } from './tokens.js';
@@ -60,7 +51,7 @@ import { ShippedDefaultsService } from './shipped-defaults-service.js';
 import { NodeFileWatcher } from './node-file-watcher.js';
 import { DEFAULT_CONFIG_WATCH_POLICY, type ConfigWatchPolicy } from './config-watcher.js';
 import { numberFromEnv } from './ui-settings.js';
-import { instanceConfigRoot, instancePipeName } from './instance-paths.js';
+import { configRootFor, instancePipeName } from './instance-paths.js';
 
 export { UI_TYPES } from './tokens.js';
 
@@ -86,7 +77,7 @@ function readConfigSettings(
   env: NodeJS.ProcessEnv = process.env,
 ): IConfigSettings {
   return {
-    configRoot: instanceConfigRoot(homedir(), devMode, env),
+    configRoot: configRootFor(selectPlatform(process.platform).userDirectories(), devMode, env),
     hotReloadDebounceMs: numberFromEnv(env.THRONG_HOTRELOAD_DEBOUNCE_MS, DEFAULT_HOTRELOAD_DEBOUNCE_MS),
   };
 }
@@ -114,6 +105,8 @@ export function uiDefaultPipeName(devMode: boolean): string {
  */
 export function createUiContainer(uiSettings: IUiSettings): Container {
   const container = new Container({ defaultScope: 'Singleton' });
+  // main.ts has already started the platform: its host traits are set before the first module reads a path.
+  const platform = selectPlatform(process.platform);
   // An unpackaged run is a DEV instance: its data lives beside — never inside — the installed
   // app's (see `instance-paths.ts`).
   const devMode = !app.isPackaged;
@@ -153,7 +146,7 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
   const foregroundHandoff: IForegroundHandoff =
     underHarness && process.env.THRONG_E2E_FOREGROUND_HANDOFF !== '1'
       ? new NoForegroundHandoff()
-      : new WindowsForegroundHandoff();
+      : platform.foregroundHandoff();
   container.bind<IForegroundHandoff>(UI_TYPES.ForegroundHandoff).toConstantValue(foregroundHandoff);
   /*
    * 057 — the two OS seams attention marks reach the desktop through.
@@ -182,6 +175,9 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
     taskbarBadge = new NoTaskbarBadge();
   } else {
     systemNotifier = new ElectronSystemNotifier((o) => new ElectronNotification(o));
+    taskbarBadge = new NoTaskbarBadge();
+  }
+  if (!underHarness && process.env.THRONG_E2E_ATTENTION_OS !== 'record' && platform.hasTaskbarOverlay) {
     const electronBadge = new ElectronTaskbarBadge(
       () => windowsWithTaskbarButton(BrowserWindow.getAllWindows(), isGhostWindow),
       (dataUrl) => nativeImage.createFromDataURL(dataUrl),
@@ -221,7 +217,7 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
   // 007: the installed-font enumeration OS seam (Windows impl for the first target).
   container
     .bind<IFontEnumeration>(UI_TYPES.FontEnumeration)
-    .toConstantValue(new WindowsFontEnumeration());
+    .toConstantValue(platform.fontEnumeration());
   /*
    * 045 (#394) — the two new path/extension seams, on the #199 pattern.
    *
@@ -230,21 +226,14 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
    * bound at this boundary because main is the process that asks them — the renderer has no
    * filesystem and the daemon is not involved in a link at all.
    */
-  //
-  // FR-151: Git Bash's mount table needs Git's install root, which the shell detection already finds
-  // (005 FR-024). Handed over as a function so that probe — a registry query at worst — runs on the
-  // first rooted path a link asks about, not on the startup path.
-  const gitDetection = new WindowsShellDetection();
-  container
-    .bind<IPathForms>(UI_TYPES.PathForms)
-    .toConstantValue(new WindowsPathForms({ gitRoot: () => gitDetection.gitInstallRoot() }));
+  container.bind<IPathForms>(UI_TYPES.PathForms).toConstantValue(platform.pathForms());
   container
     .bind<IExecutableExtensions>(UI_TYPES.ExecutableExtensions)
-    .toConstantValue(new WindowsExecutableExtensions());
+    .toConstantValue(platform.executableExtensions());
   // 045 FR-159 (round four): the schemes whose handlers on this platform no allowlist may reach.
   container
     .bind<IRefusedUriSchemes>(UI_TYPES.RefusedUriSchemes)
-    .toConstantValue(new WindowsRefusedUriSchemes());
+    .toConstantValue(platform.refusedUriSchemes());
   /*
    * The filesystem, bound at last.
    *
@@ -253,19 +242,17 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
    * (`FileLinkResolver`), and the choice was between a second `new` and a binding. A second `new`
    * would mean two filesystems whose recycle-bin behaviour could drift apart, so it is a binding.
    *
-   * Its two collaborators are why it was never bound before: both are Electron's or Windows's, and
-   * this is the file that is allowed to know that. Recycle-bin RESTORE is Windows-only (PowerShell
-   * `Shell.Application`); elsewhere the default rejecting implementation leaves delete-undo
-   * unavailable and it degrades cleanly rather than throwing at startup (024 US3).
+   * Its two collaborators are why it was never bound before: one is Electron's and one the platform's.
+   * RESTORE is per-platform (062 FR-024): PowerShell `Shell.Application` on Windows, the freedesktop
+   * trash on Linux.
    */
+  const trashRestore = platform.trashRestore((originalPath) => restoreFromRecycleBin(originalPath));
   container
     .bind<IFileSystem>(UI_TYPES.FileSystem)
     .toConstantValue(
       new NodeFileSystem(
         (p) => shell.trashItem(p),
-        process.platform === 'win32'
-          ? (originalPath) => restoreFromRecycleBin(originalPath)
-          : undefined,
+        (originalPath, deletedAt) => trashRestore.restore(originalPath, deletedAt),
       ),
     );
   return container;

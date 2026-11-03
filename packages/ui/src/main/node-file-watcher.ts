@@ -161,7 +161,8 @@ export class NodeFileWatcher implements IFileWatcher {
     const scheduleRetry = (reason: string): void => {
       if (disposed) return;
       attempts += 1;
-      if (attempts > this.maxRetries) {
+      // ENOSPC is the machine's watch limit (062 T029), which a retry cannot change.
+      if (attempts > this.maxRetries || reason === 'ENOSPC') {
         // Diagnostics matter most here: this path is silent to the user until now, and an
         // intermittent failure that leaves no trace is how #186 survived four wrong diagnoses.
         // console.* is tee'd into the durable log (#123), which is why this is not an injected logger.

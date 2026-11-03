@@ -6,7 +6,7 @@
  * (`moved-layout-walk.ts`) and the window that holds a layout, for its panels that are not mounted.
  */
 import { EDITOR_KIND } from '../editor/panel-type.js';
-import { isUnderPath, remainderUnder, samePath } from '../fs/path-id.js';
+import { isUnderPath, remainderUnder, samePath, separatorOf, trimTrailingSeparators } from '../fs/path-id.js';
 import { rewritePaths, serialiseHistory } from '../navigation/history.js';
 import { PREVIEW_KIND } from '../preview/panel-type.js';
 import type { LayoutNode, Panel, PersistedHistory, PreviewPanelConfig, Tab } from './model.js';
@@ -29,9 +29,8 @@ export function movedPathOf(absPath: string, moves: readonly MovedPathPair[]): s
     // Cut by SEGMENTS (`remainderUnder`), never by a lower-cased length: lower-casing can lengthen a name.
     const remainder = remainderUnder(absPath, move.from);
     if (remainder !== null) {
-      const to = move.to.replace(/[\\/]+$/, '');
-      const sep = to.includes('\\') ? '\\' : '/';
-      return to + remainder.replace(/[\\/]/g, sep);
+      const to = trimTrailingSeparators(move.to);
+      return to + (separatorOf(to) === '/' ? remainder : remainder.replace(/[\\/]/g, '\\'));
     }
   }
   return null;

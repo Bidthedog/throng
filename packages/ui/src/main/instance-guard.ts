@@ -1,3 +1,5 @@
+import { resolveIpcAddress } from '@throng/core';
+import { clearStaleSocket } from '@throng/platform-node';
 import { connect, createServer, type Server, type Socket } from 'node:net';
 import {
   copyIdentity,
@@ -124,11 +126,14 @@ export function createInstanceGuard(deps: InstanceGuardDeps): InstanceGuard {
         if (err.code === 'EADDRINUSE') resolve('in-use');
         else reject(err);
       });
-      candidate.listen(deps.lockName, () => {
-        candidate.on('error', (err) => deps.log(`instance guard: pipe error: ${String(err)}`));
-        server = candidate;
-        resolve('listening');
-      });
+      const address = resolveIpcAddress(deps.lockName);
+      void clearStaleSocket(address).then(() =>
+        candidate.listen(address, () => {
+          candidate.on('error', (err) => deps.log(`instance guard: pipe error: ${String(err)}`));
+          server = candidate;
+          resolve('listening');
+        }),
+      );
     });
   }
 
@@ -145,7 +150,7 @@ export function createInstanceGuard(deps: InstanceGuardDeps): InstanceGuard {
    */
   function deliver(): Promise<'told' | 'gone' | 'refused' | 'hung' | 'failed'> {
     const timeoutMs = deps.reachTimeoutMs ?? DEFAULT_REACH_TIMEOUT_MS;
-    const open = deps.connect ?? ((path: string): InstanceSocket => connect(path));
+    const open = deps.connect ?? ((path: string): InstanceSocket => connect(resolveIpcAddress(path)));
     return new Promise((resolve) => {
       let settled = false;
       const settle = (outcome: 'told' | 'gone' | 'refused' | 'hung' | 'failed', message: string): void => {

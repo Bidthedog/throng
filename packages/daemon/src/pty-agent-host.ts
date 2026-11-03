@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
 import {
@@ -125,7 +126,7 @@ export class PtyAgentHost implements IPtyHost {
 
   private connectWithRetry(deadline: number): void {
     if (this.disposing) return;
-    const sock = connect(this.pipeName);
+    const sock = connect(resolveIpcAddress(this.pipeName));
     let connected = false;
     sock.setEncoding('utf8');
     sock.on('connect', () => {

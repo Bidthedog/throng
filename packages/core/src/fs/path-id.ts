@@ -1,3 +1,5 @@
+import { hostTraits } from '../platform/host-traits.js';
+
 /**
  * Path IDENTITY — is this the same file, and is this file under that folder? (019 / FR-007.)
  *
@@ -46,19 +48,51 @@
  * ## Case-insensitivity is a DECISION, not an accident
  *
  * `C:/P/Note.txt` and `c:/p/note.txt` are treated as one path. throng is Windows-first
- * (constitution I), and on Windows they ARE one file. On a case-sensitive filesystem this rule
- * would fuse two genuinely different files — the cost is a false "already open" on a pair of
- * paths differing only in case, and the alternative (matching by spelling) is #87 itself. When
- * throng grows a case-sensitive platform, this is the one place that has to learn about it.
+ * (constitution I), and on Windows they ARE one file. On Linux they are two files, and `\` is a
+ * character a name may hold, so this reads the host's path traits (062 FR-020, FR-021).
  *
- * Pure: no OS calls and no filesystem access. Normalisation is a RULE about strings, not a
- * platform capability, so it belongs in core (Principle II) — nothing here touches a disk, and
- * nothing here resolves a symlink (that is `realpath`'s job, behind the `IFileSystem` seam).
+ * No OS calls and no filesystem access. Normalisation is a RULE about strings, not a platform
+ * capability, so it belongs in core (Principle II) — nothing here touches a disk, and nothing here
+ * resolves a symlink (that is `realpath`'s job, behind the `IFileSystem` seam).
  */
 
-/** `\`→`/`, drop any trailing separator, lowercase. The comparable form of a path. */
+/**
+ * A key for a path in a map or set: the host's separators and case folded, nothing else. On Windows it is exactly
+ * `p.replace(/\\/g, '/').toLowerCase()`, the rule the sites that use it spelled inline.
+ */
+export function pathCompareKey(p: string): string {
+  const { caseSensitive, backslashIsSeparator } = hostTraits().paths;
+  const separated = backslashIsSeparator ? p.replace(/\\/g, '/') : p;
+  return caseSensitive ? separated : separated.toLowerCase();
+}
+
+/** `\` respelled as `/` where `\` is a separator; otherwise the path as given. */
+export function toForwardSlashes(p: string): string {
+  return hostTraits().paths.backslashIsSeparator ? p.replace(/\\/g, '/') : p;
+}
+
+/** A path's names, split on whatever this host counts as a separator, with empties dropped. */
+export function pathSegments(p: string): string[] {
+  const separator = hostTraits().paths.backslashIsSeparator ? /[\\/]+/ : /\/+/;
+  return p.split(separator).filter((s) => s !== '');
+}
+
+/** The separator to continue `dir` with: its own on Windows, always `/` where `\` is a filename character. */
+export function separatorOf(dir: string): string {
+  return hostTraits().paths.backslashIsSeparator && dir.includes('\\') ? '\\' : '/';
+}
+
+/** `p` without trailing separators. */
+export function trimTrailingSeparators(p: string): string {
+  return p.replace(hostTraits().paths.backslashIsSeparator ? /[\\/]+$/ : /\/+$/, '');
+}
+
+/** {@link pathCompareKey}, with any trailing separator dropped. The comparable form of a path. */
 export function normaliseForCompare(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const { caseSensitive, backslashIsSeparator } = hostTraits().paths;
+  const separated = backslashIsSeparator ? p.replace(/\\/g, '/') : p;
+  const trimmed = separated.replace(/\/+$/, '');
+  return caseSensitive ? trimmed : trimmed.toLowerCase();
 }
 
 /** Do these two paths name the same file or folder, however each is spelled? */
@@ -118,5 +152,6 @@ export function isUnderPath(file: string, folder: string): boolean {
 export function remainderUnder(file: string, folder: string): string | null {
   if (samePath(file, folder) || !isUnderPath(file, folder)) return null;
   const depth = normaliseForCompare(folder).split('/').length;
-  return '/' + file.split(/[\\/]/).slice(depth).join('/');
+  const separator = hostTraits().paths.backslashIsSeparator ? /[\\/]/ : /\//;
+  return '/' + file.split(separator).slice(depth).join('/');
 }

@@ -4,7 +4,10 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/ipc-contract" },
+    { "path": "packages/platform-node" },
     { "path": "packages/platform-windows" },
+    { "path": "packages/platform-linux" },
+    { "path": "packages/platform" },
     { "path": "packages/persistence" },
     { "path": "packages/daemon" },
     { "path": "packages/ui" }

@@ -1,3 +1,4 @@
+import { separatorOf, trimTrailingSeparators } from '../fs/path-id.js';
 /**
  * What a file-tree drag carries to a drop target OUTSIDE the tree (024 US2/US4, #155/#114).
  *
@@ -31,8 +32,8 @@ export interface TreeDragInput {
 
 /** An item's OS-native absolute path from the project root + its `/`-joined relPath. */
 export function toAbsPath(rootFolder: string, relPath: string): string {
-  const sep = rootFolder.includes('\\') ? '\\' : '/';
-  const root = rootFolder.replace(/[\\/]+$/, '');
+  const sep = separatorOf(rootFolder);
+  const root = trimTrailingSeparators(rootFolder);
   return relPath ? `${root}${sep}${relPath.split('/').join(sep)}` : root;
 }
 

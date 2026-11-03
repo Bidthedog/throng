@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { hostTraits } from '@throng/core';
 import type { FlavourOption, PanelTypeValues } from '@throng/core';
 
 /**
@@ -74,7 +75,7 @@ export function TerminalInputs({
         <input
           type="text"
           data-testid="terminal-shell-arguments"
-          title="Arguments passed to the shell itself, e.g. -NoLogo"
+          title={`Arguments passed to the shell itself, e.g. ${hostTraits().os === 'windows' ? '-NoLogo' : '--login'}`}
           value={values.shellArguments ?? ''}
           onChange={(e) => onChange({ ...values, shellArguments: e.target.value })}
         />
@@ -123,33 +124,36 @@ export function TerminalInputs({
         />
         <span>Reopen in the last directory</span>
       </label>
-      <label
-        className="panel-type-form__check"
-        title={
-          elevated
-            ? 'Run this terminal elevated ("as administrator")'
-            : 'Relaunch throng as administrator to enable admin terminals'
-        }
-      >
-        <input
-          type="checkbox"
-          data-testid="terminal-admin"
-          /*
-           * 039 FR-008a, display half — and the same treatment "Reopen in the last directory"
-           * gets twenty lines above, for the same reason its comment gives: a control left
-           * TICKED while disabled is a lie in a quieter voice. It told the user this terminal
-           * would be elevated and offered them no way to say otherwise.
-           *
-           * This is display only. The value in `values` is untouched, so nothing is written back
-           * over a Panel's stored `runAsAdmin` (FR-006, and FR-008a's no-rewrite rule) — the
-           * checkbox is disabled, so its `onChange` cannot fire either.
-           */
-          checked={runAsAdmin && elevated}
-          disabled={!elevated}
-          onChange={(e) => onChange({ ...values, runAsAdmin: e.target.checked ? 'true' : 'false' })}
-        />
-        <span>Run as administrator</span>
-      </label>
+      {/* 062 FR-008: elevation is a Windows concept; on Linux, sudo inside the terminal is the route. */}
+      {hostTraits().os === 'windows' && (
+        <label
+          className="panel-type-form__check"
+          title={
+            elevated
+              ? 'Run this terminal elevated ("as administrator")'
+              : 'Relaunch throng as administrator to enable admin terminals'
+          }
+        >
+          <input
+            type="checkbox"
+            data-testid="terminal-admin"
+            /*
+             * 039 FR-008a, display half — and the same treatment "Reopen in the last directory"
+             * gets twenty lines above, for the same reason its comment gives: a control left
+             * TICKED while disabled is a lie in a quieter voice. It told the user this terminal
+             * would be elevated and offered them no way to say otherwise.
+             *
+             * This is display only. The value in `values` is untouched, so nothing is written back
+             * over a Panel's stored `runAsAdmin` (FR-006, and FR-008a's no-rewrite rule) — the
+             * checkbox is disabled, so its `onChange` cannot fire either.
+             */
+            checked={runAsAdmin && elevated}
+            disabled={!elevated}
+            onChange={(e) => onChange({ ...values, runAsAdmin: e.target.checked ? 'true' : 'false' })}
+          />
+          <span>Run as administrator</span>
+        </label>
+      )}
     </div>
   );
 }

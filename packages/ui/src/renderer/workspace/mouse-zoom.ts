@@ -125,16 +125,27 @@ export function MouseZoomHandler(): null {
         { clientX: event.clientX, clientY: event.clientY },
       );
     };
+    let gestureHeld = false;
     const onMouseDown = (event: MouseEvent): void => {
       if (!event.ctrlKey || event.button !== 1) return;
       event.preventDefault(); // suppress middle-click autoscroll, hit or miss
+      gestureHeld = true;
       dispatch(actionForGesture(kbRef.current, 'MiddleClick'), panelIdUnder(event.target));
+    };
+    // Linux pastes the primary selection when the middle button comes UP, whatever the press did (062 FR-033). Read
+    // from the press, not from this event, because Ctrl may already be released.
+    const onMouseUp = (event: MouseEvent): void => {
+      if (event.button !== 1 || !gestureHeld) return;
+      gestureHeld = false;
+      event.preventDefault();
     };
     window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp, true);
     return () => {
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp, true);
     };
   }, []);
 

@@ -1,6 +1,5 @@
-// eslint-disable-next-line no-restricted-imports -- FR-017: startup only, before the service serves (main.ts reaps a dead daemon's orphans before `server.start()`)
-import { execFileSync } from 'node:child_process';
 import process from 'node:process';
+import type { IOrphanProcesses } from '@throng/core';
 
 /**
  * Startup orphan reaper (Constitution VII — no orphaned OS processes). The daemon
@@ -32,7 +31,7 @@ export function isThrongOwned(p: ProcInfo): boolean {
   const name = p.name.toLowerCase();
   const cmd = p.commandLine;
   if (name === 'conhost.exe') return cmd.includes('--headless');
-  if (name === 'node.exe') {
+  if (name === 'node.exe' || name === 'node') {
     // 055 — the resource collector UI main forks: orphaned (and reaped) if UI main dies first.
     return cmd.includes('pty-agent-entry') || cmd.includes('THRONG_LOCK_DIR') || cmd.includes('resource-collector-entry');
   }
@@ -70,42 +69,6 @@ export function findOrphans(procs: ProcInfo[], selfPid = process.pid): number[] 
   return orphans;
 }
 
-/** Snapshot every process (pid, ppid, name, creation ms, command line) via CIM. */
-function snapshotProcesses(): ProcInfo[] {
-  const out = execFileSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      // Pipe-delimited; command line last (its own '|' stripped) so a 5-field split is safe.
-      "Get-CimInstance Win32_Process | ForEach-Object { " +
-        "'{0}|{1}|{2}|{3}|{4}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, " +
-        "([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds(), " +
-        "(($_.CommandLine -replace '\\|',' ') -replace '[\\r\\n]',' ') }",
-    ],
-    { encoding: 'utf8', timeout: 15_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
-  );
-  const procs: ProcInfo[] = [];
-  for (const line of out.split(/\r?\n/)) {
-    if (!line) continue;
-    const parts = line.split('|');
-    if (parts.length < 4) continue;
-    const pid = Number(parts[0]);
-    const ppid = Number(parts[1]);
-    const createdMs = Number(parts[3]);
-    if (!Number.isFinite(pid)) continue;
-    procs.push({
-      pid,
-      ppid: Number.isFinite(ppid) ? ppid : -1,
-      name: parts[2] ?? '',
-      createdMs: Number.isFinite(createdMs) ? createdMs : 0,
-      commandLine: parts.slice(4).join('|'),
-    });
-  }
-  return procs;
-}
-
 /**
  * Reap orphaned throng-owned OS processes. Safe to call at daemon startup: it only
  * kills processes whose parent is already gone, never a live daemon's. Best-effort
@@ -113,24 +76,18 @@ function snapshotProcesses(): ProcInfo[] {
  * THRONG_NO_ORPHAN_REAP=1 (the E2E harness sets it: test daemons are short-lived and
  * spawn many in parallel, and each test cleans up its own tree).
  */
-export function reapOrphans(): number[] {
-  if (process.platform !== 'win32') return [];
+export async function reapOrphans(processes: IOrphanProcesses): Promise<number[]> {
   if (process.env.THRONG_NO_ORPHAN_REAP === '1') return [];
   let orphans: number[];
   try {
-    orphans = findOrphans(snapshotProcesses());
+    orphans = findOrphans(await processes.snapshot());
   } catch {
     return []; // enumeration failed — never block startup
   }
   const reaped: number[] = [];
   for (const pid of orphans) {
     try {
-      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        timeout: 5000,
-        stdio: 'ignore',
-      });
-      reaped.push(pid);
+      if (await processes.kill(pid)) reaped.push(pid);
     } catch {
       /* already gone / access denied — best-effort */
     }

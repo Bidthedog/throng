@@ -10,6 +10,7 @@
 import type { EditorPathDisplay } from '../config/app-settings.js';
 import type { OsName } from '../abstractions/platform-info.js';
 import type { EditorOwnerKind } from './document.js';
+import { pathCompareKey, pathSegments, toForwardSlashes, trimTrailingSeparators } from '../fs/path-id.js';
 
 export interface EditorPathParts {
   /** Directory prefix (native separators, trailing separator); '' for name-only. */
@@ -54,19 +55,19 @@ export function fileNameOf(filePath: string): string {
  */
 export function relativeToRoot(path: string, root: string | undefined | null): string {
   if (!root) return path;
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  const rootParts = root.split(/[\\/]/).filter(Boolean);
+  const parts = pathSegments(path);
+  const rootParts = pathSegments(root);
   if (parts.length <= rootParts.length) return path;
   // Case-insensitive, because Windows roots are — and the stored root and the reported path may have
   // been produced by different code paths with different casing of the drive letter alone.
   for (const [i, part] of rootParts.entries()) {
-    if (parts[i]?.toLowerCase() !== part.toLowerCase()) return path;
+    if (pathCompareKey(parts[i] ?? '') !== pathCompareKey(part)) return path;
   }
   return parts.slice(rootParts.length).join('/');
 }
 
 export function toDisplayPath(path: string, os: OsName): string {
-  return os === 'windows' ? path.replace(/\//g, '\\') : path.replace(/\\/g, '/');
+  return os === 'windows' ? path.replace(/\//g, '\\') : path;
 }
 
 /**
@@ -97,18 +98,18 @@ export function editorPathParts(
 
   // Sub-workspace-owned (or no project context): show the full absolute directory.
   if (ownerKind === 'subworkspace' || !ownerRoot) {
-    const norm = filePath.replace(/\\/g, '/');
+    const norm = toForwardSlashes(filePath);
     const i = norm.lastIndexOf('/');
     return { dir: nat(i < 0 ? '' : norm.slice(0, i + 1)), name };
   }
 
   // Project-owned: the path relative to the project root, rooted at the separator.
-  const root = ownerRoot.replace(/[\\/]+$/, '');
-  const nf = (s: string): string => s.replace(/\\/g, '/');
-  const dirAbs = nf(filePath.slice(0, Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))));
+  const root = trimTrailingSeparators(ownerRoot);
+  const nf = toForwardSlashes;
+  const dirAbs = nf(filePath).slice(0, nf(filePath).lastIndexOf('/'));
   const rootN = nf(root);
-  if (dirAbs.toLowerCase() === rootN.toLowerCase()) return { dir: nat('/'), name };
-  if (dirAbs.toLowerCase().startsWith(rootN.toLowerCase() + '/')) {
+  if (pathCompareKey(dirAbs) === pathCompareKey(rootN)) return { dir: nat('/'), name };
+  if (pathCompareKey(dirAbs).startsWith(pathCompareKey(rootN) + '/')) {
     return { dir: nat('/' + dirAbs.slice(rootN.length + 1) + '/'), name };
   }
   // Outside the declared root (shouldn't happen for a confined save) → absolute.

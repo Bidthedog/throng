@@ -76,6 +76,15 @@ files:
   - from: packages/platform-windows
     to: node_modules/@throng/platform-windows
     filter: ['package.json', 'dist/**/*']
+  - from: packages/platform-node
+    to: node_modules/@throng/platform-node
+    filter: ['package.json', 'dist/**/*']
+  - from: packages/platform-linux
+    to: node_modules/@throng/platform-linux
+    filter: ['package.json', 'dist/**/*']
+  - from: packages/platform
+    to: node_modules/@throng/platform
+    filter: ['package.json', 'dist/**/*']
 
 # The Electron main entry, injected into the packaged app's package.json.
 extraMetadata:

@@ -5,6 +5,7 @@
  * path-normalise (resolve case + separators). No OS calls.
  */
 import { normaliseFolder } from '../projects/project.js';
+import { pathCompareKey, toForwardSlashes } from '../fs/path-id.js';
 
 /** True when `candidateReal` is the root itself or lives inside it. */
 export function isWithinRoot(rootReal: string, candidateReal: string): boolean {
@@ -27,9 +28,9 @@ export function isWithinRoot(rootReal: string, candidateReal: string): boolean {
 export function relPathUnderRoot(root: string, abs: string): string | null {
   // The same tidy-up normaliseFolder does, minus the lower-casing — so the slice below is taken
   // from a string whose LENGTH matches the value being compared, whatever the caller passed in.
-  const absTidy = abs.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '');
+  const absTidy = toForwardSlashes(abs.trim()).replace(/\/+/g, '/').replace(/\/$/, '');
   const r = normaliseFolder(root);
-  if (!r || !absTidy || !absTidy.toLowerCase().startsWith(`${r}/`)) return null;
+  if (!r || !absTidy || !pathCompareKey(absTidy).startsWith(`${r}/`)) return null;
   return absTidy.slice(r.length + 1);
 }
 

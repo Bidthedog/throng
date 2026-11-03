@@ -1,7 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import type { IProcessMetrics, ProcessReading, ProcessSnapshot } from '@throng/core';
 import { FakeProcessMetrics } from '@throng/core/testing';
-import { WindowsGpuCounters, WindowsNetworkTrace, WindowsProcessMetrics } from '@throng/platform-windows';
+import { startPlatform } from '@throng/platform';
 
 /**
  * The collector's one composition root (Principle IX). `THRONG_COLLECTOR_FAKE=1` — set only by the
@@ -25,7 +25,7 @@ class TestDrivenMetrics extends FakeProcessMetrics {
 
 export function composeCollector(env: NodeJS.ProcessEnv): CollectorComposition {
   if (env.THRONG_COLLECTOR_FAKE !== '1') {
-    return { metrics: new WindowsProcessMetrics(new WindowsGpuCounters(), undefined, WindowsNetworkTrace.lazyReader()) };
+    return { metrics: startPlatform().processMetrics() };
   }
   const fake = new TestDrivenMetrics();
   return {
