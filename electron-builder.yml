@@ -1,5 +1,6 @@
-# electron-builder configuration for throng's per-user Windows installer (020 FR-007/009/012/038/040).
-# Run from the repo root: `npm run package` (build → stage:runtime → electron-builder).
+# electron-builder configuration for throng's Windows installers (020 FR-007/009/012/038/040) and Linux packages (063).
+# Run from the repo root: `npm run package` on Windows, `npm run package:linux` on Linux
+# (build → stage:runtime → electron-builder).
 #
 # Layout note (FR-009): the daemon runs as a SEPARATE host-Node process (not Electron), loading
 # native modules built against the host-Node ABI. So the app is NOT asar-packed — every package's
@@ -86,6 +87,9 @@ files:
     to: node_modules/@throng/platform
     filter: ['package.json', 'dist/**/*']
 
+# 063 research D3 -- on Linux, puts the launcher where Electron's binary was. Returns at once on Windows.
+afterPack: packaging/linux/after-pack.cjs
+
 # The Electron main entry, injected into the packaged app's package.json.
 extraMetadata:
   main: packages/ui/dist/main/main.js
@@ -160,6 +164,71 @@ portable:
 # `win.artifactName` above rather than by a block here, because electron-builder has no `zip`
 # configuration section. Neither of the portable target's two risks applies to it: nothing
 # self-extracts, and deleting the folder is the whole uninstall.
+
+# 063 -- the Linux packages. Every filename is declared in release-artifacts.ts, as on Windows. A system package's scripts
+# are packaging/linux/*.sh, with the version filled in by scripts/stage-runtime.mjs (063 research D2, D4, D5).
+linux:
+  target:
+    - deb
+    - rpm
+    - tar.gz
+  icon: packages/ui/assets/throng-256.png
+  category: Development
+  executableName: throng
+  maintainer: Christopher Sebok <throng@users.noreply.github.com>
+  synopsis: Project-first terminal and agent workspace
+  # The tar.gz target has no block of its own, so its name lives here, as the Windows zip's does.
+  artifactName: throng-${version}-linux-x64.${ext}
+  desktop:
+    entry:
+      StartupWMClass: throng
+
+deb:
+  artifactName: throng-${version}-amd64.${ext}
+  afterInstall: packages/ui/build/linux/after-install.sh
+  afterRemove: packages/ui/build/linux/after-remove.sh
+  appArmorProfile: packaging/linux/apparmor-profile.tpl
+  fpm:
+    - --before-install=packages/ui/build/linux/before-install.sh
+    - --before-remove=packages/ui/build/linux/before-remove.sh
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - libgbm1
+    - libdrm2
+    - libasound2
+    - util-linux
+
+rpm:
+  artifactName: throng-${version}-x86_64.${ext}
+  afterInstall: packaging/linux/rpm-post.sh
+  afterRemove: packages/ui/build/linux/after-remove.sh
+  appArmorProfile: packaging/linux/apparmor-profile.tpl
+  fpm:
+    - --before-install=packages/ui/build/linux/before-install.sh
+    - --before-remove=packages/ui/build/linux/before-remove.sh
+    - --rpm-posttrans=packages/ui/build/linux/after-install.sh
+  depends:
+    - gtk3
+    - libnotify
+    - nss
+    - libXScrnSaver
+    - libXtst
+    - xdg-utils
+    - at-spi2-core
+    - libuuid
+    - libsecret
+    - mesa-libgbm
+    - libdrm
+    - alsa-lib
+    - util-linux-core
 
 # The setup offers BOTH scopes (058 FR-001/FR-005): the install-mode page lists "Only for me"
 # (the default, per-user, no administrator; 020 FR-012/040) and "Anyone who uses this computer"

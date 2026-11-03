@@ -11,7 +11,8 @@ harness asserts the recorded package version.
 
 **Decision: a running copy never runs from the package-owned tree.** The package owns `/opt/throng`. Its post-install
 builds `/opt/throng-versions/<version>` as a hard-link farm of that tree (`cp -al`) and points
-`/opt/throng-versions/current` at it. `/usr/bin/throng` and the desktop entry go through `current`.
+`/opt/throng-versions/current` at it. `/usr/bin/throng` goes through `current`. electron-builder fixes the desktop
+entry's `Exec` at `/opt/throng/throng`, so the launcher there hands over to `current` too.
 
 Why this holds: dpkg and rpm replace a file by writing a temporary and renaming it over the target, and unlink files
 that left the package. Neither writes into an existing inode, so a hard link taken before the upgrade keeps the old
@@ -31,7 +32,8 @@ the next package operation once no process runs from it. Package scripts run as 
 `/proc/<pid>/exe`.
 
 rpm installs the new package's files, runs `%post`, and only then removes the old package's obsolete files. The links
-are therefore taken in `%posttrans`, after those are gone. dpkg removes them before `postinst`.
+are therefore taken in `%posttrans`, after those are gone. dpkg removes them before `postinst`. rpm passes `%post` and
+`%posttrans` the same argument (measured on Fedora 45), so `%post` is a stub of its own rather than a branch of one script.
 
 ## D3. The launcher (FR-008, 062 display default)
 

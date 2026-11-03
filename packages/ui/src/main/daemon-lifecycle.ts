@@ -5,7 +5,7 @@ import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { HEALTH_PING_METHOD, type HealthPongResult, type JsonRpcResponse } from '@throng/ipc-contract';
-import { isPackagedEntry, shouldRespawnDaemonElevated } from '@throng/core';
+import { hostTraits, isPackagedEntry, shouldRespawnDaemonElevated } from '@throng/core';
 
 /**
  * Resolve the executable that runs the daemon (020 FR-009). The daemon MUST run on host Node,
@@ -13,7 +13,7 @@ import { isPackagedEntry, shouldRespawnDaemonElevated } from '@throng/core';
  * the host-Node ABI ("no electron-rebuild") and crash under Electron's Node.
  *
  * Order: an explicit `nodePath` (tests) → the **bundled runtime** shipped inside a packaged install
- * (`<resourcesPath>/runtime/node.exe`, staged by scripts/stage-runtime.mjs) → the host Node that
+ * (`<resourcesPath>/runtime/node.exe`, or `node` on Linux, staged by scripts/stage-runtime.mjs) → the host Node that
  * launched `npm start` (dev) → `node` on PATH. `process.resourcesPath` is only set in a packaged
  * Electron app, so in dev and in tests this falls through to the existing behaviour. Pure and
  * unit-testable: `resourcesPath` and `fileExists` are injected.
@@ -26,7 +26,7 @@ export function resolveDaemonNodeExe(
 ): string {
   if (explicit) return explicit;
   if (resourcesPath) {
-    const bundled = join(resourcesPath, 'runtime', 'node.exe');
+    const bundled = join(resourcesPath, 'runtime', hostTraits().os === 'windows' ? 'node.exe' : 'node');
     if (fileExists(bundled)) return bundled;
   }
   return env.npm_node_execpath ?? 'node';
