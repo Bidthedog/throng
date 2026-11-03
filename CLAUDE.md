@@ -28,6 +28,7 @@ gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
   code lies both ways. If `status` is not `completed`, the run is still going.
 - **Never run the gate locally.** It pins every core for the better part of an hour and exhausts the
   interactive desktop heap.
+- **Linux has its own lanes**: `Linux:` jobs in `ci.yml` and `gate-linux` in `gate.yml`. See *On Linux* in `docs/testing.md`.
 - Hosted runners are administrators with UAC disabled, so the `skipIfElevated()` specs cannot run
   there; `admin-reminder.reporter.ts` prints how many were skipped.
 
@@ -55,6 +56,9 @@ for the inner loop; `td audit` and `td rank` read the recorded telemetry.
   when a lower layer cannot show the failure. Push and let CI run the E2E lanes — never run the
   full suite or a tier on the workstation before pushing.
 - **Integration and contract** run locally only for the files the change touches.
+- **Never run `npm run build` in a worktree while its throng is open.** It replaces the hashed renderer
+  chunks the running app still loads, whose next dynamic import fails with "Failed to fetch dynamically
+  imported module".
 
 ## E2E on CI
 

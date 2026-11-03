@@ -15,8 +15,11 @@ core            ← no dependency on any other @throng package. No Electron, no 
 ipc-contract    ← core
 persistence     ← core                      (better-sqlite3 lives here and nowhere else)
 platform-windows← core                      (node-pty, koffi, Win32 live here and nowhere else)
-daemon          ← core, ipc-contract, persistence, platform-windows
-ui              ← core, ipc-contract, platform-windows
+platform-node   ← core                      (what Node already abstracts: file log, user context)
+platform-linux  ← core, platform-node       (node-pty, /proc, Unix sockets live here and nowhere else)
+platform        ← platform-windows, platform-linux, platform-node   (selects one set per process)
+daemon          ← core, ipc-contract, persistence, platform
+ui              ← core, ipc-contract, platform
 ```
 
 An arrow the other way is a defect, not a refactor opportunity. `core` importing `electron`,
@@ -27,7 +30,7 @@ An arrow the other way is a defect, not a refactor opportunity. `core` importing
 - `abstractions/` — the interfaces Principle II demands: `pty-host`, `shell-detection`, `elevation`,
   `de-elevator`, `file-system`, `file-watcher`, `clipboard`, `display-info`, `font-enumeration`,
   `platform-info`, `process-cwd`, `directory-lock`, `shell-integration`, `user-context`,
-  `config-store`. Each has exactly one Windows implementation in `platform-windows/src`.
+  `config-store`. Each has a Windows and a Linux implementation (`platform-linux/src`), chosen in `platform/src/index.ts`; the Windows one is in `platform-windows/src`.
 - `ports/` — storage-side contracts (`project-store`, `workspace-store`, `subworkspace-store`),
   implemented by `persistence` repositories.
 - `config/` — the settings, keybindings, theme and icon-pack models plus their editor-metadata
@@ -44,7 +47,7 @@ Always in this order, in one change:
    vocabulary leaking into the signature.
 2. A DI token for it. Tokens are per-process: `packages/ui/src/main/tokens.ts`,
    `packages/ui/src/renderer/…`, `packages/daemon/src/tokens.ts`.
-3. Windows implementation in `platform-windows/src/windows-<thing>.ts`, `@injectable()`.
+3. Windows implementation in `platform-windows/src/windows-<thing>.ts`, `@injectable()`, and Linux in `platform-linux/src`, both added to `platform/src/index.ts` (constitution: per-OS features deliver both together).
 4. Binding in the composition root of every process that needs it —
    `packages/ui/src/main/composition-root.ts`, `packages/ui/src/renderer/composition-root.tsx`,
    `packages/daemon/src/composition-root.ts`.

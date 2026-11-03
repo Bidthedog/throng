@@ -5,6 +5,9 @@ description: Wipe throng's dev-mode state — stop the dev app, its daemon, its 
 
 # Clear throng's dev state
 
+**On Linux** run `node scripts/clear-dev-state.mjs [--keep-data] [--root <checkout>]`. It matches by checkout path as the
+PowerShell script does, and removes `~/.config/throng-dev` and `~/.local/share/throng-dev`. The rest of this page is Windows.
+
 ## Why this exists
 
 Two things make "just delete the folder" unreliable, and both surprise people.

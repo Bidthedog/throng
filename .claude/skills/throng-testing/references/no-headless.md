@@ -6,6 +6,9 @@ Part of the `throng-testing` skill; the contributor overview is [`docs/testing.m
 
 ## No headless mode
 
+On Linux the same holds: CI gives the app a real display (`scripts/ci-linux-display.sh`, Xvfb and a window manager),
+and a local run opens windows on your desktop.
+
 The E2E app runs with **real, on-screen windows** — there is no headless mode, and no
 `show: false` seam exists to make one. Runs still work unattended on CI (the runner has a virtual
 desktop) and locally; expect windows to appear while a run is in progress.

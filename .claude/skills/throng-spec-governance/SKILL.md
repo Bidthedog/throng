@@ -6,7 +6,7 @@ description: Load before working on Spec Kit artifacts and project governance �
 # throng — specs, constitution and governance
 
 throng runs Spec Kit (`.specify/`) with a heavyweight, genuinely enforced constitution
-(`.specify/memory/constitution.md`, currently v4.4.0, 11 principles). Governance here is not
+(`.specify/memory/constitution.md`; its version is on the line above the end of Governance). Governance here is not
 ceremony: the Constitution Check gate in `plan-template.md` reads the constitution dynamically, and
 several principles are wired to tests that fail the build.
 
@@ -28,13 +28,13 @@ bug fix can touch FRs from every spec in the repo and belong to none of them. Wo
 covers takes the **next** number, even before that directory exists. This same rule names the branch
 (`branch-naming` skill) and therefore the worktree folder, so settle it first.
 
-## The eleven principles, in one line each
+## The twelve principles, in one line each
 
-I Project-first context isolation · II Platform-abstracted core · III Detached, tagged, persistent
-terminals · IV Native terminal support & auto-detection · V Test-first quality discipline
-(NON-NEGOTIABLE) · VI Simple, modern, discoverable UX · VII Change review & approval · VIII SOLID,
-DRY, YAGNI · IX DI & composition root · X Externalised configuration · XI Dockable workspace: panes,
-tabs & panels.
+I Project-first context isolation · II Platform-abstracted core, with per-OS code delivered for
+Windows and Linux together · III Detached, tagged, persistent terminals · IV Native terminal support &
+auto-detection · V Test-first quality discipline (NON-NEGOTIABLE) · VI Simple, modern, discoverable
+UX · VII Change review & approval · VIII SOLID, DRY, YAGNI · IX DI & composition root · X Externalised
+configuration · XI Dockable workspace: panes, tabs & panels · XII Responsive UI (NON-NEGOTIABLE).
 
 Plus, under Development Workflow & Quality Gates: lint + type-check with zero errors, CI on every PR,
 configuration-editor completeness, themeable icon controls, documentation currency, incremental
