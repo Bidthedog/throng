@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
+  descriptorsForThisPlatform,
   buildShippedDefaults,
   canRunAsAdmin,
   emptyValueFor,
@@ -140,7 +141,8 @@ export function SettingsTab({
   searchDebounceMs?: number;
 } = {}): ReactElement {
   const settings = useAppSettings();
-  const metadata = useContext(SettingsMetadataContext);
+  const allMetadata = useContext(SettingsMetadataContext);
+  const metadata = useMemo(() => descriptorsForThisPlatform(allMetadata), [allMetadata]);
   // 039 FR-008a — the daemon capability that gates "Run as administrator by default". The same
   // signal 005 FR-025a requires the per-panel control to use; the renderer never probes the OS.
   const { elevated } = useCapabilities();

@@ -73,6 +73,9 @@ const STAGES = [
   { name: 'e2e', script: 'test:e2e', env: { THRONG_E2E_FAIL_FAST: '1' } },
 ];
 
+/** 062 FR-046: Linux's gate job runs a narrower E2E lane than Windows', and says so here. Unset, the whole suite. */
+const e2eGrep = process.env.THRONG_GATE_E2E_GREP;
+
 function fmt(ms) {
   const s = ms / 1000;
   if (s < 60) return `${s.toFixed(1)}s`;
@@ -108,6 +111,11 @@ function killOrphans(reason) {
 
   console.log(`\n[gate] clearing test orphans (${reason})`);
 
+  // 062: the same clean-up, for a Linux run. Matched by checkout path, so it cannot touch anything else's processes.
+  if (process.platform !== 'win32') {
+    spawnSync(process.execPath, [join(REPO_ROOT, 'scripts', 'clear-dev-state.mjs'), '--keep-data'], { stdio: 'inherit' });
+    return;
+  }
   for (const [label, file, args] of [
     ['app/daemon/pty-agent', clearDevState, ['-KeepData', '-RepoRoot', REPO_ROOT]],
     ['playwright runners', killPlaywright, ['-RepoRoot', REPO_ROOT]],
@@ -147,7 +155,7 @@ let failure = null;
 try {
   for (const stage of STAGES) {
     const t0 = Date.now();
-    const res = spawnSync('npm', ['run', stage.script], {
+    const res = spawnSync('npm', ['run', stage.script, ...(stage.name === 'e2e' && e2eGrep ? ['--', '--grep', `"${e2eGrep}"`] : [])], {
       cwd: REPO_ROOT,
       stdio: 'inherit',
       shell: true,

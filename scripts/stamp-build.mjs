@@ -20,7 +20,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 // change in any of them (e.g. the node-pty kill path in platform-windows) must
 // bump the id. The UI renderer is deliberately excluded — the daemon never loads
 // it, so a renderer-only change should not restart the daemon.
-const DAEMON_DIST_DIRS = ['core', 'ipc-contract', 'persistence', 'platform-windows', 'daemon'].map(
+const DAEMON_DIST_DIRS = ['core', 'ipc-contract', 'persistence', 'platform-node', 'platform-windows', 'platform-linux', 'platform', 'daemon'].map(
   (p) => join(repoRoot, 'packages', p, 'dist'),
 );
 

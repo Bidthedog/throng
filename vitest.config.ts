@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 const pkg = (name: string) =>
   fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url));
@@ -15,6 +15,9 @@ const alias = {
   '@throng/core': pkg('core'),
   '@throng/ipc-contract': pkg('ipc-contract'),
   '@throng/platform-windows': pkg('platform-windows'),
+  '@throng/platform-linux': pkg('platform-linux'),
+  '@throng/platform-node': pkg('platform-node'),
+  '@throng/platform': pkg('platform'),
   '@throng/persistence': pkg('persistence'),
 };
 
@@ -106,7 +109,7 @@ const TD_TAGS = ['critical-path', 'regression', 'benched', 'slow-ok', 'contract'
  * So those files are found by reading them, here, on every run — not listed by hand — and run in
  * `unit-isolated` with the default per-file isolation. A new mocking file is routed automatically.
  */
-const UNIT_GLOB_ROOTS = ['core', 'daemon', 'ipc-contract', 'persistence', 'platform-windows', 'ui'].map(
+const UNIT_GLOB_ROOTS = ['core', 'daemon', 'ipc-contract', 'persistence', 'platform', 'platform-linux', 'platform-node', 'platform-windows', 'ui'].map(
   (p) => `packages/${p}/tests/unit`,
 );
 const NEEDS_OWN_REGISTRY = /\bvi\.(mock|doMock|unmock|doUnmock|stubGlobal|stubEnv|resetModules|spyOn)\(/;
@@ -118,6 +121,15 @@ const isolatedUnitFiles = UNIT_GLOB_ROOTS.flatMap((dir) => {
     .filter((f) => NEEDS_OWN_REGISTRY.test(readFileSync(join(abs, f), 'utf8')))
     .map((f) => `${dir}/${f.replace(/\\/g, '/')}`);
 });
+
+/**
+ * 062 FR-042: these two packages' real-OS layers ARE one platform's classes, ConPTY and `/proc` respectively, so off
+ * that platform there is nothing to run. Named once here instead of a guard on every file.
+ */
+const offPlatformOsTests =
+  process.platform === 'win32'
+    ? ['packages/platform-linux/tests/{contract,integration}/**']
+    : ['packages/platform-windows/tests/{contract,integration}/**'];
 
 export default defineConfig({
   resolve: { alias },
@@ -136,6 +148,7 @@ export default defineConfig({
         esbuild,
         test: {
           name: 'unit',
+          setupFiles: ['./scripts/vitest-default-traits.setup.ts'],
           include: ['packages/**/tests/unit/**/*.test.ts'],
           exclude: [...isolatedUnitFiles, '**/node_modules/**'],
           environment: 'node',
@@ -176,6 +189,7 @@ export default defineConfig({
         esbuild,
         test: {
           // The unit files that mock modules or stub globals, each in its own registry as before.
+          // No traits setup here: each file already has its own module registry, and the setup would load core ahead of a mock.
           name: 'unit-isolated',
           include: isolatedUnitFiles.length > 0 ? isolatedUnitFiles : ['no-isolated-unit-files'],
           environment: 'node',
@@ -243,7 +257,9 @@ export default defineConfig({
         esbuild,
         test: {
           name: 'integration',
+          setupFiles: ['./scripts/vitest-real-platform.setup.ts'],
           include: ['packages/**/tests/integration/**/*.test.ts'],
+          exclude: [...configDefaults.exclude, ...offPlatformOsTests],
           environment: 'node',
           ...osSerial,
         },
@@ -256,7 +272,9 @@ export default defineConfig({
           // (FR-015), not a fourth conceptual test layer. Same OS-heavy
           // serialization as integration (see `osSerial`).
           name: 'contract',
+          setupFiles: ['./scripts/vitest-real-platform.setup.ts'],
           include: ['packages/**/tests/contract/**/*.test.ts'],
+          exclude: [...configDefaults.exclude, ...offPlatformOsTests],
           environment: 'node',
           ...osSerial,
         },

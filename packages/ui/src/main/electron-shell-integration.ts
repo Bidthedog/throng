@@ -9,7 +9,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import { shouldDeElevate, type IShellIntegration, type ShellActionResult } from '@throng/core';
-import { WindowsDeElevatedLauncher, WindowsElevation } from '@throng/platform-windows';
+import { selectPlatform } from '@throng/platform';
 
 /** The slice of Electron's `shell` this impl needs. */
 export interface ElectronShellLike {
@@ -227,10 +227,10 @@ export function createAppShellIntegration(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): ElectronShellIntegration {
   let elevated: boolean | undefined;
-  const probe = overrides.isElevated ?? (() => new WindowsElevation().isElevated());
+  const probe = overrides.isElevated ?? (() => selectPlatform(process.platform).elevation().isElevated());
   const underHarness = env.THRONG_E2E_CLIPBOARD === 'memory';
   return new ElectronShellIntegration(shell, overrides.statKind ?? statKindOnDisk, {
-    launcher: overrides.launcher ?? (underHarness ? NO_DE_ELEVATED_LAUNCH : new WindowsDeElevatedLauncher()),
+    launcher: overrides.launcher ?? (underHarness ? NO_DE_ELEVATED_LAUNCH : selectPlatform(process.platform).deElevatedLauncher()),
     isElevated: () => (elevated ??= probe()),
   });
 }

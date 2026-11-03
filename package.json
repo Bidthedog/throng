@@ -37,7 +37,7 @@
     "start:admin": "npm run build && node scripts/start-admin.mjs",
     "test:e2e:admin": "npm run build && node scripts/test-e2e-admin.mjs",
     "start:daemon": "node packages/daemon/dist/main.js",
-    "start:ui": "electron packages/ui/dist/main/main.js",
+    "start:ui": "node scripts/preflight-start.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -b && npm run typecheck:renderer && npm run typecheck:e2e",
     "typecheck:renderer": "tsc -p packages/ui/tsconfig.renderer.json",

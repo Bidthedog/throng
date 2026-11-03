@@ -12,6 +12,8 @@
     "@throng/core": "*",
     "@throng/ipc-contract": "*",
     "@throng/persistence": "*",
+    "@throng/platform": "*",
+    "@throng/platform-node": "*",
     "@throng/platform-windows": "*",
     "better-sqlite3": "^12.11.1",
     "inversify": "^8.2.3",

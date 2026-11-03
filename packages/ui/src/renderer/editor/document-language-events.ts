@@ -1,3 +1,4 @@
+import { pathCompareKey } from '@throng/core';
 /**
  * "This document's language override changed" — window-local (055 FR-024a; 016 FR-028b).
  *
@@ -48,7 +49,7 @@ export function publishDocumentLanguageChange(change: DocumentLanguageChange): v
 }
 
 function normalise(relPath: string): string {
-  return relPath.replace(/\\/g, '/').toLowerCase();
+  return pathCompareKey(relPath);
 }
 
 /**

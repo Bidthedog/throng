@@ -1,3 +1,5 @@
+import type { IVolumeRoots } from '@throng/core';
+import { hostTraits, normaliseForCompare } from '@throng/core';
 import { dirname, parse as parsePath } from 'node:path';
 import {
   DEFAULT_APP_SETTINGS,
@@ -76,6 +78,8 @@ export interface FileLinkResolverDeps {
    * restart. Absent (a caller that never offers settings), the shipped default applies.
    */
   readonly readLinkSettings?: () => EditorLinkSettings;
+  /** What a "root" is on this platform (062). Absent, `node:path`'s answer, which suits a drive letter. */
+  readonly volumes?: IVolumeRoots;
 }
 
 /** A UNC volume root (`\\server\share\`, `//server/share/`) — the only kind a full stuck map gates. */
@@ -124,6 +128,7 @@ function withoutTrailingSeparator(path: string): string {
 
 /** A path's form for comparison: case and separators folded, no trailing separator. */
 function comparable(path: string): string {
+  if (!hostTraits().paths.backslashIsSeparator) return normaliseForCompare(path);
   return path.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
 }
 
@@ -323,9 +328,15 @@ export class FileLinkResolver {
       }
     }
     const reading = readings[0] ?? null;
+    // 062 FR-021, FR-022: on Linux a backslash is a name character, and a trailing `/` on a rooted path can
+    // be read several ways (R6), so only a single reading may skip the check: the disk has to choose.
+    const windowsSeparators = hostTraits().paths.backslashIsSeparator;
+    const endsInSeparator = windowsSeparators
+      ? /[\\/]$/.test(request.text)
+      : request.text.endsWith('/') && readings.length === 1;
     const folderByGrammar =
       reading !== null &&
-      (/[\\/]$/.test(request.text) ||
+      (endsInSeparator ||
         (projectRoot !== null && comparable(reading) === comparable(projectRoot)));
     // A folder by grammar opens as the folder it names, spelled without the separator that marked it —
     // unless that separator IS the folder (`C:\`, `\\server\share\`).
@@ -433,7 +444,7 @@ export class FileLinkResolver {
    * settles, whichever way, the root leaves the stuck map and is left alone for `LINK_ROOT_BACKOFF_MS`.
    */
   private async kindOf(path: string, deadline: number): Promise<Existence> {
-    const root = parsePath(path).root.toLowerCase();
+    const root = this.deps.volumes?.rootOf(path) ?? parsePath(path).root.toLowerCase();
     const until = this.leftAloneUntil.get(root);
     if (until !== undefined) {
       if (Date.now() < until) return 'unreachable';
@@ -442,7 +453,7 @@ export class FileLinkResolver {
     if (this.stuckRoots.has(root)) return 'unreachable';
     // A full map gates only other NETWORK roots: a healthy local drive is never gated (§13.5), or
     // every local link would go dead once two shares were offline.
-    if (this.stuckRoots.size >= MAX_TIMED_OUT_LINK_CHECKS && isNetworkRoot(root)) return 'unreachable';
+    if (this.stuckRoots.size >= MAX_TIMED_OUT_LINK_CHECKS && (this.deps.volumes?.isNetwork(root) ?? isNetworkRoot(root))) return 'unreachable';
     const remaining = deadline - Date.now();
     if (remaining <= 0) return 'unreachable';
 

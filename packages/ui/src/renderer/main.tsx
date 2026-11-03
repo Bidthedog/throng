@@ -1,3 +1,4 @@
+import './configure-host.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CompositionRoot, SubWorkspaceCompositionRoot } from './composition-root.js';

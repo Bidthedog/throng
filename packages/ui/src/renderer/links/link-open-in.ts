@@ -1,3 +1,4 @@
+import { pathCompareKey } from '@throng/core';
 import { collectPanels, type WorkspaceLayout } from '@throng/core';
 
 /**
@@ -27,8 +28,7 @@ export interface OpenInEditorRow {
 }
 
 /** Separators and case do not distinguish two paths on this platform (#229's trap). */
-const samePath = (a: string, b: string): boolean =>
-  a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
+const samePath = (a: string, b: string): boolean => pathCompareKey(a) === pathCompareKey(b);
 
 /**
  * One row per open editor in this window, every tab, in layout order, named by its panel title —

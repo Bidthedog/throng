@@ -1,3 +1,4 @@
+import { pathCompareKey } from '../fs/path-id.js';
 /**
  * Project domain entity (Constitution Principle I). A project is the root
  * context of the application: it owns a Workspace and a Terminals list. This
@@ -100,12 +101,7 @@ export class ProjectFolderConflictError extends ProjectValidationError {
  * (Windows is case-insensitive). Good enough for the exclusivity check (FR-029).
  */
 export function normaliseFolder(path: string): string {
-  return path
-    .trim()
-    .replace(/\\/g, '/')
-    .replace(/\/+/g, '/')
-    .replace(/\/$/, '')
-    .toLowerCase();
+  return pathCompareKey(path.trim()).replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
 /**

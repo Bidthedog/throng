@@ -8,6 +8,7 @@
  * localStorage, then restored on reopen via `initialOpenState`. Excludes +
  * folders-first sort come from the pure core.
  */
+import { pathCompareKey, pathSegments, toForwardSlashes, trashTerm, watchFailureMessage } from '@throng/core';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { NodeApi, TreeApi } from 'react-arborist';
 
@@ -328,7 +329,7 @@ export function useExplorerData(
    */
   const carryOverride = useCallback(
     (fromRel: string, destDir: string) => {
-      const leaf = fromRel.split(/[\\/]/).pop() ?? fromRel;
+      const leaf = pathSegments(fromRel).pop() ?? fromRel;
       const to = destDir ? `${destDir}/${leaf}` : leaf;
       void documents.movePath(projectId, fromRel, to).catch(() => {
         /* see the doc comment: nothing here is worth failing a move over */
@@ -366,11 +367,11 @@ export function useExplorerData(
   /** Root-relative path for an absolute one, or null when it lies outside this project. */
   const toRel = useCallback(
     (abs: string): string | null => {
-      const norm = (v: string): string => v.replace(/\\/g, '/').replace(/\/+$/, '');
+      const norm = (v: string): string => toForwardSlashes(v).replace(/\/+$/, '');
       const root = norm(rootFolder ?? '');
       const path = norm(abs);
-      if (!root || path.toLowerCase() === root.toLowerCase()) return null;
-      if (!path.toLowerCase().startsWith(`${root.toLowerCase()}/`)) return null;
+      if (!root || pathCompareKey(path) === pathCompareKey(root)) return null;
+      if (!pathCompareKey(path).startsWith(`${pathCompareKey(root)}/`)) return null;
       return path.slice(root.length + 1);
     },
     [rootFolder],
@@ -852,7 +853,7 @@ export function useExplorerData(
   // listing that has quietly stopped being true. Reported as an ordinary dismissable error notice.
   useEffect(() => {
     if (!rootFolder) return;
-    return window.throng?.files?.onWatchFailed?.(() => {
+    return window.throng?.files?.onWatchFailed?.(({ reason }) => {
       /*
         * 030 FR-025 — the FOLDER being watched is the subject, so the action stops standing in for
         * it ("keep this folder up to date" named nothing at all).
@@ -863,7 +864,7 @@ export function useExplorerData(
         * no-op without a single test going red. It restates no subject, so FR-023 is not at stake.
         */
       failRef.current(
-        'Live updates have stopped for this project. Reopen it to resume watching for changes.',
+        watchFailureMessage(reason),
         'keep watch on',
         nodeSubjectRef.current(''),
       );
@@ -1429,7 +1430,7 @@ export function useExplorerData(
       if (rel === '' || next.length === 0) return;
       // Confirming an unchanged name is a no-op — never an "already exists" error
       // (FR-070). The old leaf name is the last path segment of the rel path.
-      const current = rel.split(/[\\/]/).pop() ?? rel;
+      const current = pathSegments(rel).pop() ?? rel;
       if (next === current) return;
       const parentDir = parentRel(rel); // '' at the root, else the containing dir
       const newRel = parentDir ? `${parentDir}/${next}` : next;
@@ -1538,7 +1539,7 @@ export function useExplorerData(
         message:
           deleteMode === 'permanent'
             ? `Permanently delete ${what}? This cannot be undone.`
-            : `Delete ${what}? It will be moved to the Recycle Bin.`,
+            : `Delete ${what}? It will be moved to the ${trashTerm()}.`,
         confirmLabel: 'Delete',
         danger: true,
       });

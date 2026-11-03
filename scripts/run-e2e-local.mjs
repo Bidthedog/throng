@@ -42,7 +42,9 @@ const WORKERS = process.env.THRONG_E2E_WORKERS ?? String(Math.max(2, Math.min(6,
 function play(args, extraEnv = {}) {
   const r = spawnSync('npx', ['playwright', 'test', ...args], {
     stdio: 'inherit',
-    shell: true,
+    // Windows needs a shell to run npx.cmd. Elsewhere a shell would re-read the arguments, and the `|` in the gate's
+    // `--grep @core|@linux` would become a pipe to a command that does not exist (062 FR-046).
+    shell: process.platform === 'win32',
     env: { ...process.env, ...extraEnv },
   });
   return r.status ?? 1;

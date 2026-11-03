@@ -1,3 +1,4 @@
+import { normaliseForCompare } from '@throng/core';
 import type { Holder } from '@throng/core';
 
 /**
@@ -41,7 +42,7 @@ export interface PanelIdentity {
  * lookup simply found nothing and the user was told "another program" about their own terminal.
  */
 function key(path: string): string {
-  return path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return normaliseForCompare(path);
 }
 
 /**

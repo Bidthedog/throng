@@ -25,6 +25,11 @@ export interface DirectoryLockContractEnv {
   tryWriteInside(dir: string): boolean;
   /** Best-effort cleanup. */
   cleanup(dir: string): void;
+  /**
+   * Whether a held folder resists delete and rename on this platform. Windows: yes. Linux: no, a process's working
+   * directory stops neither, so the lock validates and records only (062 contracts/platform-services.md).
+   */
+  holdsAgainstRemoval?: boolean;
 }
 
 /**
@@ -37,6 +42,7 @@ export interface DirectoryLockContractEnv {
  */
 export async function runDirectoryLockContract(env: DirectoryLockContractEnv): Promise<void> {
   const lock = env.make();
+  const holds = env.holdsAgainstRemoval !== false;
 
   // 1. Held lock blocks delete + rename, but not writes inside; release re-permits.
   const dirA = env.makeDir();
@@ -44,8 +50,10 @@ export async function runDirectoryLockContract(env: DirectoryLockContractEnv): P
     const handle = await lock.acquire(dirA);
     assert(handle.path === dirA, `acquire().path must echo the locked path; got ${handle.path}`);
     assert(env.tryWriteInside(dirA) === true, 'writes to files inside a locked dir must still succeed');
-    assert(env.tryDelete(dirA) === false, 'deleting a locked dir must fail');
-    assert(env.tryRename(dirA) === false, 'renaming/moving a locked dir must fail');
+    if (holds) {
+      assert(env.tryDelete(dirA) === false, 'deleting a locked dir must fail');
+      assert(env.tryRename(dirA) === false, 'renaming/moving a locked dir must fail');
+    }
     await lock.release(handle);
     assert(env.tryDelete(dirA) === true, 'deleting must succeed after release');
   } finally {
@@ -78,9 +86,9 @@ export async function runDirectoryLockContract(env: DirectoryLockContractEnv): P
   try {
     const h1 = await lock.acquire(dirD);
     const h2 = await lock.acquire(dirD);
-    assert(env.tryDelete(dirD) === false, 'dir must be locked while any handle is held');
+    if (holds) assert(env.tryDelete(dirD) === false, 'dir must be locked while any handle is held');
     await lock.release(h1);
-    assert(env.tryDelete(dirD) === false, 'dir must stay locked while a second handle is held');
+    if (holds) assert(env.tryDelete(dirD) === false, 'dir must stay locked while a second handle is held');
     await lock.release(h2);
     assert(env.tryDelete(dirD) === true, 'dir must be deletable once all handles release');
   } finally {

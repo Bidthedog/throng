@@ -27,15 +27,7 @@ import {
   parseSettingsGuarded,
   type Tab,
 } from '@throng/core';
-import {
-  WindowsPlatformInfo,
-  NodeUserContext,
-  NodePtyHost,
-  WindowsDirectoryLock,
-  WindowsElevation,
-  WindowsProcessCwd,
-  WindowsDeElevatedLauncher,
-} from '@throng/platform-windows';
+import { NodeUserContext, startPlatform } from '@throng/platform';
 import {
   openDatabase,
   ProjectRepository,
@@ -86,9 +78,9 @@ function numberFromEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function defaultDatabasePath(env: NodeJS.ProcessEnv): string {
-  const base = env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
-  return join(base, 'throng', 'throng.db');
+/** The installed location: a daemon started by hand, with no UI to name a data folder (FR-013). */
+function defaultDatabasePath(dataDir: string): string {
+  return join(dataDir, 'throng.db');
 }
 
 function readDaemonSettings(
@@ -105,9 +97,9 @@ function readDaemonSettings(
   };
 }
 
-function readPersistenceSettings(env: NodeJS.ProcessEnv): IPersistenceSettings {
+function readPersistenceSettings(env: NodeJS.ProcessEnv, dataDir: string): IPersistenceSettings {
   return {
-    databasePath: env.THRONG_DATABASE_PATH ?? defaultDatabasePath(env),
+    databasePath: env.THRONG_DATABASE_PATH ?? defaultDatabasePath(dataDir),
   };
 }
 
@@ -127,13 +119,13 @@ function readPersistenceSettings(env: NodeJS.ProcessEnv): IPersistenceSettings {
  * business editing a document the user owns. Exported so that is a testable claim rather than
  * a comment.
  */
-export function readCommandPollMs(env: NodeJS.ProcessEnv): number {
+export function readCommandPollMs(env: NodeJS.ProcessEnv, installedConfigRoot?: string): number {
   // The config root is `%USERPROFILE%\.throng[-dev]`, NOT `%APPDATA%	hrong` — that is the
   // userData/database directory and has never held a settings.json. UI-main passes the resolved
   // root as THRONG_CONFIG_ROOT precisely because the daemon cannot work out dev-vs-prod itself.
   // The homedir fallback keeps a daemon started without the UI reading the packaged location
   // rather than nothing at all.
-  const root = env.THRONG_CONFIG_ROOT ?? join(homedir(), '.throng');
+  const root = env.THRONG_CONFIG_ROOT ?? installedConfigRoot ?? join(homedir(), '.throng');
   const settingsPath = join(root, 'settings.json');
   try {
     const raw: unknown = JSON.parse(readFileSync(settingsPath, 'utf8'));
@@ -145,10 +137,12 @@ export function readCommandPollMs(env: NodeJS.ProcessEnv): number {
 
 export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Container {
   const container = new Container({ defaultScope: 'Singleton' });
+  const platform = startPlatform();
+  const directories = platform.userDirectories();
 
   // OS abstractions (Principle II) — the only place that selects implementations. The user
   // context is resolved first so the per-user pipe default (below) can derive from its token.
-  container.bind<IPlatformInfo>(DAEMON_TYPES.PlatformInfo).toConstantValue(new WindowsPlatformInfo());
+  container.bind<IPlatformInfo>(DAEMON_TYPES.PlatformInfo).toConstantValue(platform.platformInfo());
   const userContext = new NodeUserContext();
   container.bind<IUserContext>(DAEMON_TYPES.UserContext).toConstantValue(userContext);
 
@@ -160,7 +154,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     .toConstantValue(readDaemonSettings(env, daemonDefaultPipe));
   container
     .bind<IPersistenceSettings>(DAEMON_TYPES.PersistenceSettings)
-    .toConstantValue(readPersistenceSettings(env));
+    .toConstantValue(readPersistenceSettings(env, directories.dataDir(false)));
 
   // Durable store (opened once; migrations run by main on startup).
   const persistenceSettings = container.get<IPersistenceSettings>(DAEMON_TYPES.PersistenceSettings);
@@ -215,23 +209,23 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // loads here (plain-Node daemon) — never in the UI/Electron process.
   const terminalEvents = new TerminalEvents();
   const lockManager = new TerminalLockManager(
-    new WindowsDirectoryLock(),
+    platform.directoryLock(),
     (projectId) => projectStore.getById(userContext.currentUser().userId, projectId)?.rootFolder ?? null,
   );
   // One elevation probe shared by the service (capabilities) and the routing.
-  const elevation = new WindowsElevation();
+  const elevation = platform.elevation();
   // Probed NOW, while composing, rather than on the first terminal start: the probe is a synchronous
   // `whoami`, allowed only before the service serves (051 FR-017), and the answer is cached after.
   elevation.isElevated();
   // Local host: spawns terminals at the daemon's own integrity (elevated when the
   // app was launched elevated). Admin ("run as admin") terminals use this.
-  const localPty = new NodePtyHost();
+  const localPty = platform.ptyHost();
   // De-elevated agent host (FR-025c mixed mode): an unchecked terminal on an
   // elevated daemon runs in a MEDIUM-integrity agent process that owns its own
   // ConPTY. The agent is launched de-elevated (shell-token CreateProcessWithTokenW)
   // when the daemon is elevated, else spawned normally (already medium).
   const agentEntry = fileURLToPath(new URL('./pty-agent-entry.js', import.meta.url));
-  const deElevatedLauncher = new WindowsDeElevatedLauncher();
+  const deElevatedLauncher = platform.deElevatedLauncher();
   const agentPipe = `\\\\.\\pipe\\throng.ptyagent.${process.pid}.${randomUUID().slice(0, 8)}`;
   // `report` arrives as a PARAMETER of this callback rather than closing over
   // `deElevatedPty`: the host's constructor invokes `launch` synchronously, before the
@@ -280,8 +274,8 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
     deElevatedPty,
     forceAgent,
     attachColdStartDelayMs,
-    new WindowsProcessCwd(), // 012: poll each terminal's shell cwd for the panel title
-    readCommandPollMs(env), // 025 FR-019c: the shared command-observation interval
+    platform.processCwd(), // 012: poll each terminal's shell cwd for the panel title
+    readCommandPollMs(env, directories.configRoot(false)), // 025 FR-019c: the shared command-observation interval
     TERMINAL_END_TIMEOUT_MS, // 051 FR-013a: the one limit every end and the shutdown wait read
     {
       // 057 FR-015/FR-033: the daemon holds every layout and project, so it names the panel and project.

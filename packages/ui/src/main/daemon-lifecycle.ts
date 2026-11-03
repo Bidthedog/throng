@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
@@ -136,7 +137,7 @@ export function daemonInfo(pipeName: string, timeoutMs = 800): Promise<HealthPon
   return new Promise<HealthPongResult | null>((resolve) => {
     let settled = false;
     let buffer = '';
-    const socket: Socket = connect(pipeName);
+    const socket: Socket = connect(resolveIpcAddress(pipeName));
 
     const finish = (result: HealthPongResult | null): void => {
       if (settled) return;

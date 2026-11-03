@@ -7,6 +7,7 @@
  * the filesystem only through this service. All failures are returned as
  * `{ error }` (non-fatal, FR-025), never thrown across the bridge.
  */
+import { hostTraits, pathCompareKey, trashTerm } from '@throng/core';
 import { basename, dirname, join } from 'node:path';
 import {
   dedupeName,
@@ -55,7 +56,8 @@ export type DeleteMode = 'recycle' | 'permanent';
 
 const NO_ROOT = 'No active project.';
 const OUTSIDE = 'Target is outside the project root.';
-const SEP = /[\\/]/;
+/** What cannot be in a name here. On Linux a backslash can (062 FR-021). */
+const separatorInName = (name: string): boolean => (hostTraits().paths.backslashIsSeparator ? /[\\/]/ : /\//).test(name);
 
 export class FilesService {
   private root: string | null = null;
@@ -239,7 +241,7 @@ export class FilesService {
     if (!this.root) return { error: NO_ROOT };
     if (relPath === '') return { error: 'The project root cannot be renamed.' };
     const name = newName.trim();
-    if (name.length === 0 || SEP.test(name)) return { error: 'Invalid name.' };
+    if (name.length === 0 || separatorInName(name)) return { error: 'Invalid name.' };
     // A rename IS a move (FR-006), and it had #87's hole identically: the file leaves the path every
     // open editor of it is pointing at. Same bracket, same callbacks — because it is the same fact,
     // and a second signal for it would be a second thing to keep in step.
@@ -270,7 +272,7 @@ export class FilesService {
       // it recommends is NOT needed. Measured on this platform, `fs.rename` performs a case-only
       // rename directly for both files and folders. A temp-name dance would open a window in which
       // the user's file exists under neither name, which is strictly worse (research R1).
-      const isSelfRename = name.toLowerCase() === basename(abs).toLowerCase();
+      const isSelfRename = pathCompareKey(name) === pathCompareKey(basename(abs));
       if (!isSelfRename && (await this.fs.exists(dest))) {
         return { error: 'A file or folder with this name already exists.' };
       }
@@ -457,7 +459,7 @@ export class FilesService {
       return { ok: true };
     } catch (error) {
       return {
-        error: `Could not restore "${basename(abs)}" — it may no longer be in the Recycle Bin. (${(error as Error).message})`,
+        error: `Could not restore "${basename(abs)}" — it may no longer be in the ${trashTerm()}. (${(error as Error).message})`,
       };
     }
   }

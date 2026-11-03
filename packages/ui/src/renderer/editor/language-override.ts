@@ -5,6 +5,7 @@
  * in SQLite rather than the layout blob: a panel opening the file LATER — next week, in another
  * window, in a sub-workspace — must ADOPT the user's decision rather than re-detect and overrule it.
  */
+import { pathCompareKey, toForwardSlashes } from '@throng/core';
 import type { DocumentClient } from '../state/document-client.js';
 import { applyLanguage, claimLanguage, effectiveLanguage, setPanelLanguage } from './editor-language.js';
 import { getEditorView } from './editor-views.js';
@@ -12,7 +13,7 @@ import { publishDocumentLanguageChange } from './document-language-events.js';
 
 /** Normalise a path for comparison: forward slashes, lower-cased (Windows is case-insensitive). */
 function normalise(path: string): string {
-  return path.replace(/\\/g, '/').toLowerCase();
+  return pathCompareKey(path);
 }
 
 /**
@@ -27,7 +28,7 @@ export function toRelPath(projectRoot: string | null, absPath: string | null): s
   const file = normalise(absPath);
   if (!file.startsWith(`${root}/`)) return null;
   // Preserve the ORIGINAL case in what is stored — only the comparison is case-insensitive.
-  return absPath.replace(/\\/g, '/').slice(projectRoot.length).replace(/^\//, '');
+  return toForwardSlashes(absPath).slice(projectRoot.length).replace(/^\//, '');
 }
 
 export interface SetOverrideArgs {

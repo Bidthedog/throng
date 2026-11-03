@@ -5,6 +5,7 @@
  * collapse/expand and load lazily. Open-state, selection, and the level-by-level
  * Expand are driven by useExplorerData. All colours/fonts/icons are themed.
  */
+import { normaliseForCompare, pathCompareKey } from '@throng/core';
 import {
   useCallback,
   useEffect,
@@ -624,7 +625,7 @@ export function FileTree({
   // rows are keyed by, and anything outside this project's root is another project's business.
   const dirtyKey = useDirtyPathKey();
   const dirtyPaths = useMemo(() => {
-    const prefix = `${rootFolder.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()}/`;
+    const prefix = `${normaliseForCompare(rootFolder)}/`;
     const rels = new Set<string>();
     for (const abs of dirtyKey.split('\n')) {
       if (abs.startsWith(prefix)) rels.add(abs.slice(prefix.length));
@@ -634,7 +635,7 @@ export function FileTree({
 
   // Lower-cased for the same reason `dirtyPaths` is: a row's relPath keeps whatever spelling the
   // filesystem reported, and Windows calls those the same file.
-  const activeFilePath = useMemo(() => activeFileRel?.toLowerCase() ?? null, [activeFileRel]);
+  const activeFilePath = useMemo(() => (activeFileRel == null ? null : pathCompareKey(activeFileRel)), [activeFileRel]);
 
   const rowCtx = useMemo(
     () => ({ onContextMenu, cutPaths, openOnClick, onOpenFile, dirtyPaths, activeFilePath }),

@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 
+
 if (process.platform !== 'win32') {
   console.error('start:admin is Windows-only (it relies on UAC / Start-Process -Verb RunAs).');
   process.exit(1);

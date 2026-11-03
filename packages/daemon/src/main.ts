@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLogLevel } from '@throng/core';
-import { createFileLog, writeCrashReport, type DiagnosticLog } from '@throng/platform-windows';
+import { createFileLog, startPlatform, writeCrashReport, type DiagnosticLog } from '@throng/platform';
 import type { IDaemonSettings, IPersistenceSettings, IPlatformInfo } from '@throng/core';
 import { runMigrations, type ThrongDatabase } from '@throng/persistence';
 import { createDaemonContainer, DAEMON_TYPES } from './composition-root.js';
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   // orphaned — the self-termination heartbeat is fooled by PID reuse, and a hard
   // kill skips cleanup (Constitution VII). Only touches processes whose parent is
   // already dead, so it never harms a concurrent live daemon.
-  const reaped = reapOrphans();
+  const reaped = await reapOrphans(startPlatform().orphanProcesses());
   if (reaped.length > 0) {
     console.log(`[throng-daemon] reaped ${reaped.length} orphaned process(es): ${reaped.join(', ')}`);
   }

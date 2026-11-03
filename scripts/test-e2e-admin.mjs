@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 
+
 if (process.platform !== 'win32') {
   console.error('test:e2e:admin is Windows-only (UAC / Start-Process -Verb RunAs).');
   process.exit(1);

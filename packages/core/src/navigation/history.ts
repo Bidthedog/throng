@@ -33,7 +33,7 @@
  *
  * Pure: no OS, no DOM.
  */
-import { remainderUnder, samePath } from '../fs/path-id.js';
+import { remainderUnder, samePath, separatorOf, trimTrailingSeparators } from '../fs/path-id.js';
 import type { PersistedHistory } from '../workspace/model.js';
 
 export interface NavigationEntry {
@@ -141,8 +141,8 @@ function movedPath(path: string, move: { from: string; to: string }): string | n
   // path, and joining it verbatim onto `to` wrote a mixed path (`D:/q\a.md`). This module already
   // treats `\` and `/` as one separator (`samePath`, `isUnderPath`), so rewriting them in the tail
   // names the same file; a destination that carries a backslash is Windows-spelled.
-  const sep = move.to.includes('\\') ? '\\' : '/';
-  return move.to.replace(/[\\/]+$/, '') + remainder.replace(/[\\/]+/g, sep);
+  const sep = separatorOf(move.to);
+  return trimTrailingSeparators(move.to) + (sep === '/' ? remainder : remainder.replace(/[\\/]+/g, sep));
 }
 
 /**

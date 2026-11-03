@@ -7,6 +7,7 @@
  */
 import { normaliseForCompare } from '../fs/path-id.js';
 import { dedupeName } from './naming.js';
+import { pathSegments, separatorOf, trimTrailingSeparators } from '../fs/path-id.js';
 
 /** How one selected item relates to the folder it is being pasted into. */
 export type TopLevelClass = 'same-folder-duplicate' | 'into-own-descendant' | 'ordinary';
@@ -64,7 +65,7 @@ export interface Landing {
   destDir: string;
 }
 
-const segmentsOf = (p: string): string[] => p.split(/[\\/]+/).filter((s) => s !== '');
+const segmentsOf = pathSegments;
 
 /**
  * Where each item of a paste or drag lands, keeping the structure of a selection that spans folders
@@ -94,8 +95,8 @@ export function landingPlan(sources: readonly string[], targetDir: string): Land
       }
     }
   }
-  const sep = targetDir.includes('\\') ? '\\' : '/';
-  const base = targetDir.replace(/[\\/]+$/, '');
+  const sep = separatorOf(targetDir);
+  const base = trimTrailingSeparators(targetDir);
   return kept.map((src, i) => {
     const rest = parents[i].slice(common);
     return { src, destDir: rest.length === 0 ? targetDir : [base, ...rest].join(sep) };

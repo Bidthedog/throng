@@ -513,6 +513,8 @@ export const DEFAULT_EXPLORER_MAX_WIDTH = 700;
 export interface AppSettings {
   version: number;
   appearance: { theme: string };
+  /** How the window reaches the desktop (062 FR-028). */
+  window: { nativeWayland: boolean };
   confirmations: {
     destroyProject: ConfirmLevel;
     destroyTab: ConfirmLevel;
@@ -818,6 +820,7 @@ export interface SearchSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   version: 1,
   appearance: { theme: 'throng' },
+  window: { nativeWayland: false },
   confirmations: {
     destroyProject: 'double',
     destroyTab: 'double',
@@ -1770,6 +1773,10 @@ export function parseAppSettings(raw: unknown): AppSettings {
       ),
       killProcesses: confirmLevel(confirmations.killProcesses, d.confirmations.killProcesses),
     },
+    window: {
+      nativeWayland:
+        isRecord(raw.window) && typeof raw.window.nativeWayland === 'boolean' ? raw.window.nativeWayland : d.window.nativeWayland,
+    },
     projects: projectsSettings(raw.projects, d.projects),
     panes: {
       projects: paneState(panes.projects, d.panes.projects),
@@ -1821,6 +1828,7 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
     version: s.version,
     appearance: { ...s.appearance },
     confirmations: { ...s.confirmations },
+    window: { ...s.window },
     projects: { ...s.projects },
     panes: {
       projects: { ...s.panes.projects },

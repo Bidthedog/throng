@@ -1,3 +1,6 @@
+export { runTrashRestoreContract, runUserDirectoriesContract, type TrashRestoreContractEnv } from './platform-seams-contract.js';
+export { withHostTraits } from './with-host-traits.js';
+export { isLinuxHost, isWindowsHost, skipUnlessLinux, skipUnlessWindows } from './platform-guards.js';
 // Test-only surface of @throng/core, exposed via the "@throng/core/testing"
 // subpath export so the production entry point (".") stays free of test
 // utilities. Consumed by test layers across packages.

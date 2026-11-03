@@ -343,7 +343,11 @@ import { setAtPath } from './metadata.js';
 // `resourceKill`, `resourceKillBelow`, `help`, `activate`, `resourceHideEnded` and `resourceNetwork`
 // (FR-093, FR-105, FR-110, FR-113). The additive case: every payload arrives, no existing value moves.
 // On the 055 branch these were its own 24 → 27; one bump covers them now they land after 060 and 059.
-export const SHIPPED_DEFAULTS_VERSION = 29;
+//
+// Bumped by 062's manual test (29 → 30): a KEYBINDINGS payload only. `view.resourceMonitor` moves from
+// `Ctrl+Shift+Alt+R` to `Ctrl+Shift+Alt+Y` on every platform (FR-034a). `seed()` wrote the old value, so it moves only
+// through FR-108's guarded rewrite, while it is still exactly {@link V29_KEYBINDINGS}'s default.
+export const SHIPPED_DEFAULTS_VERSION = 30;
 
 /**
  * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the
@@ -786,6 +790,14 @@ export const V15_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deep
   'panel.zoomReset': ['Ctrl+Alt+Numpad0', 'Ctrl+MiddleClick'],
 });
 
+/**
+ * 062 FR-034a's version-29 guard source: what versions up to 29 wrote for the Resource Monitor on Windows, before it took
+ * the chord Linux needed. A frozen COPY, for {@link V13_KEYBINDINGS}'s reason.
+ */
+export const V29_KEYBINDINGS: Readonly<Record<string, readonly string[]>> = deepFreeze({
+  'view.resourceMonitor': ['Ctrl+Shift+Alt+R'],
+});
+
 /** The command FR-116 adds — the one FR-118's new-action fill rule guards. */
 const FOCUS_WORKSPACE = 'focus.workspace';
 
@@ -924,6 +936,7 @@ function planFR108Rows(
     ...Object.entries(V13_KEYBINDINGS),
     ...Object.entries(V14_KEYBINDINGS),
     ...Object.entries(V15_KEYBINDINGS),
+    ...Object.entries(V29_KEYBINDINGS),
   ];
   const shippedBindings = d.keybindings.bindings as Record<string, string[]>;
 

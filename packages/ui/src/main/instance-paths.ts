@@ -1,3 +1,4 @@
+import type { IUserDirectories } from '@throng/core';
 import { basename, join } from 'node:path';
 
 /**
@@ -47,6 +48,15 @@ export function instanceConfigRoot(
   return (
     env.THRONG_CONFIG_ROOT ?? join(homeDir, devMode ? DEV_CONFIG_DIR_NAME : PROD_CONFIG_DIR_NAME)
   );
+}
+
+/** {@link instanceConfigRoot} through the platform's folders: what a running process asks (062 FR-013). */
+export function configRootFor(
+  directories: Pick<IUserDirectories, 'configRoot'>,
+  devMode: boolean,
+  env: NodeJS.ProcessEnv,
+): string {
+  return env.THRONG_CONFIG_ROOT ?? directories.configRoot(devMode);
 }
 
 /**

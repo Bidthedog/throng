@@ -83,7 +83,11 @@ function driveOf(path: string): string | null {
   return /^([A-Za-z]):/.exec(path)?.[1]?.toUpperCase() ?? null;
 }
 
-export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFormsGitFixture): void {
+export function runPathFormsContract(
+  makeSubject: () => IPathForms,
+  git?: PathFormsGitFixture,
+  options: { readonly hasDriveForms?: boolean } = {},
+): void {
   const subject = makeSubject();
 
   // ── PF1 ──────────────────────────────────────────────────────────────────────────────────────
@@ -101,31 +105,45 @@ export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFo
     'homeDirectory() must be stable across calls',
   );
 
-  // ── PF2 ──────────────────────────────────────────────────────────────────────────────────────
-  const drive = subject.fromDriveForm('/d/git/x.ts');
-  assert(
-    typeof drive === 'string' && drive.length > 0,
-    `fromDriveForm('/d/git/x.ts') must convert, not refuse; got ${JSON.stringify(drive)}`,
-  );
-  assert(
-    ABSOLUTE.test(drive),
-    `fromDriveForm('/d/git/x.ts') must return an absolute path; got ${JSON.stringify(drive)}`,
-  );
-  assert(
-    endsWithSegments(drive, ['git', 'x.ts']),
-    `fromDriveForm('/d/git/x.ts') must keep the trailing segments git and x.ts; got ${JSON.stringify(drive)}`,
-  );
-  assert(
-    /d/i.test(drive.split(SEPARATOR).filter((p) => p.length > 0)[0] ?? ''),
-    `fromDriveForm('/d/git/x.ts') must name drive d in its root; got ${JSON.stringify(drive)}`,
-  );
+  // 062: on a platform with no drive letters, `/d/x` is an ordinary path and the answer is "not mine".
+  if (options.hasDriveForms === false) {
+    for (const ordinary of ['/d/git/x.ts', '/mnt/d/git/x.ts', '/D/git/x.ts']) {
+      assert(subject.fromDriveForm(ordinary) === null, `fromDriveForm(${JSON.stringify(ordinary)}) must be null where there are no drives`);
+    }
+  } else {
+    // ── PF2 ──────────────────────────────────────────────────────────────────────────────────────
+    const drive = subject.fromDriveForm('/d/git/x.ts');
+    assert(
+      typeof drive === 'string' && drive.length > 0,
+      `fromDriveForm('/d/git/x.ts') must convert, not refuse; got ${JSON.stringify(drive)}`,
+    );
+    assert(
+      ABSOLUTE.test(drive),
+      `fromDriveForm('/d/git/x.ts') must return an absolute path; got ${JSON.stringify(drive)}`,
+    );
+    assert(
+      endsWithSegments(drive, ['git', 'x.ts']),
+      `fromDriveForm('/d/git/x.ts') must keep the trailing segments git and x.ts; got ${JSON.stringify(drive)}`,
+    );
+    assert(
+      /d/i.test(drive.split(SEPARATOR).filter((p) => p.length > 0)[0] ?? ''),
+      `fromDriveForm('/d/git/x.ts') must name drive d in its root; got ${JSON.stringify(drive)}`,
+    );
 
-  // ── PF3 ──────────────────────────────────────────────────────────────────────────────────────
-  const wsl = subject.fromDriveForm('/mnt/d/git/x.ts');
-  assert(
-    wsl === drive,
-    `fromDriveForm('/mnt/d/git/x.ts') must equal fromDriveForm('/d/git/x.ts'); got ${JSON.stringify(wsl)} and ${JSON.stringify(drive)}`,
-  );
+    // ── PF3 ──────────────────────────────────────────────────────────────────────────────────────
+    const wsl = subject.fromDriveForm('/mnt/d/git/x.ts');
+    assert(
+      wsl === drive,
+      `fromDriveForm('/mnt/d/git/x.ts') must equal fromDriveForm('/d/git/x.ts'); got ${JSON.stringify(wsl)} and ${JSON.stringify(drive)}`,
+    );
+
+    // ── PF5 ──────────────────────────────────────────────────────────────────────────────────────
+    assert(
+      subject.fromDriveForm('/D/git/x.ts') === drive,
+      'fromDriveForm must be case-insensitive on the drive letter: /D/… and /d/… must agree',
+    );
+
+  }
 
   // ── PF4 ──────────────────────────────────────────────────────────────────────────────────────
   for (const notADriveForm of ['/etc/hosts', 'x', '', '/', '/dd/x', 'd/x']) {
@@ -134,12 +152,6 @@ export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFo
       `fromDriveForm(${JSON.stringify(notADriveForm)}) must be null; got ${JSON.stringify(subject.fromDriveForm(notADriveForm))}`,
     );
   }
-
-  // ── PF5 ──────────────────────────────────────────────────────────────────────────────────────
-  assert(
-    subject.fromDriveForm('/D/git/x.ts') === drive,
-    'fromDriveForm must be case-insensitive on the drive letter: /D/… and /d/… must agree',
-  );
 
   // ── PF6 ──────────────────────────────────────────────────────────────────────────────────────
   const spaced = subject.fromFileUrl('file:///D:/a%20b/c.txt');
@@ -307,7 +319,8 @@ export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFo
 
   // ── PF16: drive qualification (FR-152) ──────────────────────────────────────────────────────
   const qualify = member(subject, 'qualifyRooted');
-  for (const rooted of ['/tmp', '\\tmp']) {
+  // `\tmp` is rooted only where a backslash is a separator; elsewhere it is one odd name.
+  for (const rooted of options.hasDriveForms === false ? ['/tmp'] : ['/tmp', '\\tmp']) {
     const q = qualify(rooted, home);
     assert(
       typeof q === 'string' && ABSOLUTE.test(q),
@@ -343,7 +356,8 @@ export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFo
     localPath('file:///usr/bin/a%20b') === '/usr/bin/a b',
     `fileUrlLocalPath must percent-decode, as FR-012 does; got ${JSON.stringify(localPath('file:///usr/bin/a%20b'))}`,
   );
-  for (const notLocal of ['file:///D:/x', 'file://localhost/D:/x', 'file://server/share/x', 'http://x/y', '', 'x']) {
+  const driveQualified = options.hasDriveForms === false ? [] : ['file:///D:/x', 'file://localhost/D:/x'];
+  for (const notLocal of [...driveQualified, 'file://server/share/x', 'http://x/y', '', 'x']) {
     assert(
       localPath(notLocal) === null,
       `fileUrlLocalPath(${JSON.stringify(notLocal)}) must be null — drive-qualified, hosted, or not a file: URI; got ${JSON.stringify(localPath(notLocal))}`,
@@ -352,15 +366,18 @@ export function runPathFormsContract(makeSubject: () => IPathForms, git?: PathFo
 
   // ── PF18: the loopback share a localhost URI may name (FR-153) ─────────────────────────────
   const loopback = member(subject, 'loopbackFromFileUrl');
-  const share = loopback('file://localhost/C$/Windows/win.ini');
-  assert(
-    typeof share === 'string' && endsWithSegments(share, ['localhost', 'C$', 'Windows', 'win.ini']),
-    `loopbackFromFileUrl('file://localhost/C$/Windows/win.ini') must name host localhost, share C$, and end in win.ini; got ${JSON.stringify(share)}`,
-  );
-  assert(
-    typeof share === 'string' && share.split(SEPARATOR).filter((p) => p.length > 0)[0] === 'localhost',
-    `the loopback location must BEGIN with the host — it is a network location, not a local one; got ${JSON.stringify(share)}`,
-  );
+  // An administrative share is a Windows idea; a platform with no drives only has to refuse the rest.
+  if (options.hasDriveForms !== false) {
+    const share = loopback('file://localhost/C$/Windows/win.ini');
+    assert(
+      typeof share === 'string' && endsWithSegments(share, ['localhost', 'C$', 'Windows', 'win.ini']),
+      `loopbackFromFileUrl('file://localhost/C$/Windows/win.ini') must name host localhost, share C$, and end in win.ini; got ${JSON.stringify(share)}`,
+    );
+    assert(
+      typeof share === 'string' && share.split(SEPARATOR).filter((p) => p.length > 0)[0] === 'localhost',
+      `the loopback location must BEGIN with the host — it is a network location, not a local one; got ${JSON.stringify(share)}`,
+    );
+  }
   for (const notLoopback of ['file://localhost/D:/x', 'file:///C$/x', 'file://server/C$/x', 'http://localhost/C$/x', '']) {
     assert(
       loopback(notLoopback) === null,

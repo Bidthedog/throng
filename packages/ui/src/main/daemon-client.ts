@@ -1,3 +1,4 @@
+import { resolveIpcAddress } from '@throng/core';
 import 'reflect-metadata';
 import { connect, type Socket } from 'node:net';
 import { injectable, inject } from 'inversify';
@@ -65,7 +66,7 @@ export class DaemonClient {
       let settled = false;
       let buffer = '';
       const id = this.nextId++;
-      const socket: Socket = connect(this.settings.pipeName);
+      const socket: Socket = connect(resolveIpcAddress(this.settings.pipeName));
 
       const finish = (run: () => void): void => {
         if (settled) return;
@@ -114,7 +115,7 @@ export class DaemonClient {
     return new Promise<DaemonStatus>((resolve) => {
       let settled = false;
       let buffer = '';
-      const socket: Socket = connect(this.settings.pipeName);
+      const socket: Socket = connect(resolveIpcAddress(this.settings.pipeName));
 
       const finish = (status: DaemonStatus): void => {
         if (settled) return;

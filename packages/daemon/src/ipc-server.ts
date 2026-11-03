@@ -1,3 +1,5 @@
+import { resolveIpcAddress } from '@throng/core';
+import { clearStaleSocket } from '@throng/platform-node';
 import 'reflect-metadata';
 import { createServer, type Server, type Socket } from 'node:net';
 import { injectable, inject } from 'inversify';
@@ -52,11 +54,12 @@ export class IpcServer {
         }
       };
       server.once('error', onError);
-      server.listen(this.settings.pipeName, () => {
+      const address = resolveIpcAddress(this.settings.pipeName);
+      void clearStaleSocket(address).then(() => server.listen(address, () => {
         server.removeListener('error', onError);
         this.server = server;
         resolve();
-      });
+      }));
     });
   }
 

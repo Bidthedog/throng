@@ -42,6 +42,15 @@ export const BUILTIN_FLAVOUR_COMMAND_RECIPES: Record<string, readonly string[]> 
   pwsh: ['-NoExit', '-Command', COMMAND_PLACEHOLDER],
   cmd: ['/K', COMMAND_PLACEHOLDER],
   'git-bash': ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec bash -i`],
+  // 062 FR-015: the same shape as Git Bash for every POSIX-style shell, for the same reason. fish has a flag for it.
+  bash: ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec bash -i`],
+  zsh: ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec zsh -i`],
+  sh: ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec sh -i`],
+  dash: ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec dash -i`],
+  ksh: ['-c', `trap : INT; ${COMMAND_PLACEHOLDER}; exec ksh -i`],
+  tcsh: ['-c', `${COMMAND_PLACEHOLDER}; exec tcsh -i`],
+  fish: ['--init-command', COMMAND_PLACEHOLDER],
+  nu: ['--execute', COMMAND_PLACEHOLDER],
 };
 
 /**

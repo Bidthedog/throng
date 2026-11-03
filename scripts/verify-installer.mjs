@@ -43,6 +43,11 @@ import {
 import { sha256OfFile } from './checksum.mjs';
 import { scanResidue } from './residue-scan.mjs';
 import { installLayout, parseVerifyArgs } from './verify-installer-args.mjs';
+
+if (process.platform !== 'win32') {
+  console.error('verify-installer.mjs is Windows-only: it drives UAC or the Windows packages (spec 062 FR-039).');
+  process.exit(1);
+}
 import {
   installLabelsCorrect,
   launchShortcutExistsFor,
