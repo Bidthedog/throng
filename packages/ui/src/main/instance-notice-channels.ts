@@ -15,3 +15,12 @@ export const DIFFERENT_COPY_NOTICE_CHANNEL = 'throng:instance:differentCopy';
 
 /** renderer → main: the main window is listening for {@link DIFFERENT_COPY_NOTICE_CHANNEL}. */
 export const DIFFERENT_COPY_READY_CHANNEL = 'throng:instance:differentCopyReady';
+
+/** main → renderer: the package on disk has moved past this running copy (063 FR-010). */
+export const INSTALLED_VERSION_NOTICE_CHANNEL = 'throng:instance:installedVersion';
+
+/** renderer → main: the main window is listening for {@link INSTALLED_VERSION_NOTICE_CHANNEL}. */
+export const INSTALLED_VERSION_READY_CHANNEL = 'throng:instance:installedVersionReady';
+
+/** renderer → main: the user chose to restart into the installed version. */
+export const INSTALLED_VERSION_RESTART_CHANNEL = 'throng:instance:restartInstalled';

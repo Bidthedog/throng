@@ -63,6 +63,11 @@ export class IpcServer {
     });
   }
 
+  /** How many clients are connected now (063 FR-013). */
+  clientCount(): number {
+    return this.sockets.size;
+  }
+
   async stop(): Promise<void> {
     const server = this.server;
     if (!server) return;

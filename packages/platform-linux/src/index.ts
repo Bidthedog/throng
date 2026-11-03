@@ -1,3 +1,4 @@
+export { LinuxInstalledVersion } from './linux-installed-version.js';
 export { LinuxPtyHost, type LinuxPtyHostDeps, type NodePtyModule } from './linux-pty-host.js';
 export { LinuxShellDetection, type LinuxShellDetectionDeps } from './linux-shell-detection.js';
 export { LinuxProcessCwd } from './linux-process-cwd.js';

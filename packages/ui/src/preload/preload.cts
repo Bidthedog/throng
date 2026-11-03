@@ -102,6 +102,14 @@ contextBridge.exposeInMainWorld('throng', {
       return () => ipcRenderer.removeListener('throng:instance:differentCopy', h);
     },
     differentCopyReady: () => ipcRenderer.send('throng:instance:differentCopyReady'),
+    // 063 FR-010 — the package on disk has moved past this running copy.
+    onInstalledVersion: (cb: (notice: unknown) => void) => {
+      const h = (_e: unknown, notice: unknown): void => cb(notice);
+      ipcRenderer.on('throng:instance:installedVersion', h);
+      return () => ipcRenderer.removeListener('throng:instance:installedVersion', h);
+    },
+    installedVersionReady: () => ipcRenderer.send('throng:instance:installedVersionReady'),
+    restartInstalled: () => ipcRenderer.send('throng:instance:restartInstalled'),
   },
   /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
   resources: {

@@ -1,8 +1,9 @@
 import 'reflect-metadata';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseLogLevel } from '@throng/core';
+import { shouldExitForRemovedInstall } from './removed-install-watch.js';
+import { isPackagedEntry, parseLogLevel } from '@throng/core';
 import { createFileLog, startPlatform, writeCrashReport, type DiagnosticLog } from '@throng/platform';
 import type { IDaemonSettings, IPersistenceSettings, IPlatformInfo } from '@throng/core';
 import { runMigrations, type ThrongDatabase } from '@throng/persistence';
@@ -151,6 +152,20 @@ async function main(): Promise<void> {
     diagnostics?.info(`daemon stopped cleanly after ${signal}`);
     process.exit(0);
   };
+
+  // 063 FR-013 — a package removed under this daemon leaves it nothing to come back for. Polled, because a removal
+  // sends no event and the check costs one stat. Unref'd, so it never holds the process up.
+  const entry = process.argv[1];
+  if (entry && startPlatform().exitWhenEntryRemoved && isPackagedEntry(entry)) {
+    setInterval(() => {
+      const end = shouldExitForRemovedInstall({
+        entryExists: existsSync(entry),
+        clients: server.clientCount(),
+        liveSessions: terminals.liveSessionCount(),
+      });
+      if (end) void shutdown('package removed');
+    }, 30_000).unref();
+  }
 
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
