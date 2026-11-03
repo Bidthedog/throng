@@ -9,12 +9,13 @@ $env:THRONG_E2E_WORKERS = '1'
 # Clears playwright.config.ts's grepInvert so @admin is SELECTED rather than excluded.
 $env:THRONG_E2E_INCLUDE_ADMIN = '1'
 $env:PLAYWRIGHT_JSON_OUTPUT_NAME = 'admin-report.json'
-# The de-elevation spec's own LAUNCH_BUDGET_MS is 25s, SHORTER than the production worst case of
-# connect 15s + readiness 15s (019 C7): a connect at ~14s followed by no ack would surface at ~29s and
-# be reported as "it hung (#94)", the very failure the spec exists to detect. 8000/8000 makes the
-# worst case 16s. Production defaults (15000/15000) are untouched; these are injected settings, not
-# code (Principle X).
-$env:THRONG_AGENT_CONNECT_TIMEOUT_MS = '8000'
+# The worst case here, connect + readiness (019 C7), must fit inside the de-elevation spec's own
+# LAUNCH_BUDGET_MS, or a late failure reads as "it hung (#94)", the very failure the spec exists to
+# detect. Connect is 1.5x the slowest launch measured: the launcher compiles C# in PowerShell, which on
+# a cold runner took 5.1, 6.4, 6.6 and 13.4 s (then 0.3 s), so an 8 s budget failed the first launch
+# about one job in four. The second budget covers only the agent's ack, which is quick once it is up.
+# Production defaults (15000/15000) are untouched; these are injected settings, not code (Principle X).
+$env:THRONG_AGENT_CONNECT_TIMEOUT_MS = '20000'
 $env:THRONG_AGENT_READY_TIMEOUT_MS = '8000'
 
 # Quote '@admin': in PowerShell a bare @admin is the splatting operator on an (undefined) variable
