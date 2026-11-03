@@ -1218,6 +1218,11 @@ export class TerminalService {
     return cause;
   }
 
+  /** How many terminals are running now (063 FR-013). */
+  liveSessionCount(): number {
+    return [...this.sessions.values()].filter((s) => s.status === 'running').length;
+  }
+
   private async list(rawParams: unknown): Promise<TerminalListResult> {
     const params = (rawParams && typeof rawParams === 'object' ? rawParams : {}) as TerminalListParams;
     // FR-013 — a caller naming a lock holder cannot use a cwd that is up to a second old; see

@@ -46,6 +46,10 @@ declare global {
       instance?: {
         onDifferentCopy: (cb: (notice: import('@throng/core').DifferentCopyNotice) => void) => () => void;
         differentCopyReady: () => void;
+        /** 063 FR-010 — the package on disk has moved past this running copy. */
+        onInstalledVersion?: (cb: (notice: import('@throng/core').InstalledVersionNotice) => void) => () => void;
+        installedVersionReady: () => void;
+        restartInstalled: () => void;
       };
       /** 055 — the resource monitor (contracts/resources-ipc-055.md). Every invoke resolves. */
       resources?: {

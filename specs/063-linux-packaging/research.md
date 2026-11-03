@@ -75,16 +75,18 @@ from a versions folder, and answers null for an archive, a source run or a missi
 installers already refuse while in use (058). Main asks on focus and once a minute, and raises one notice per installed
 version. The notice's Restart action relaunches through `current`.
 
-Restarting ends the terminals because `ensureDaemon` retires a daemon of a different build (058 FR-021a). The notice
-says so.
+Restarting can end the terminals, because `ensureDaemon` retires a daemon of a different build (058 FR-021a). The
+build id is a content hash of the daemon's code, so a release that did not change it keeps the daemon. The notice says
+"may".
 
 ## D7. A removed copy's daemon (FR-013)
 
-The daemon outlives the window by design, so closing the window does not end it. On Linux it watches its own entry
-file: when the entry is gone and no client is connected, it runs its normal SIGTERM shutdown. The check runs when the
-last client leaves and every 30 seconds. Removal itself kills nothing. An upgrade leaves the entry in place (D2), so an
-upgrade never triggers it. Whether a platform does this is `hostTraits().exitWhenEntryRemoved`, false on Windows, whose
-portable daemon is handled by `ensureDaemon` (#429).
+The daemon outlives the window by design, so closing the window does not end it. A packaged Linux daemon checks every
+30 seconds: when its entry is gone, no client is connected and no terminal is running, it runs its normal shutdown. A
+shell is the user's, so a running one holds the daemon until it finishes, and removal itself kills nothing. An upgrade
+leaves the entry in place (D2), so an upgrade never triggers it. Whether a platform does this is the
+`exitWhenEntryRemoved` flag on `PlatformServices`, false on Windows, whose portable daemon is handled by
+`ensureDaemon` (#429).
 
 ## D8. Verification (FR-017, FR-018, FR-021)
 

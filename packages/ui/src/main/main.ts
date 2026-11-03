@@ -45,6 +45,7 @@ import {
 } from '@throng/core';
 import type {
   DifferentCopyNotice,
+  InstalledVersionNotice,
   IClipboard,
   IExecutableExtensions,
   IFileSystem,
@@ -57,7 +58,14 @@ import type {
   IShellIntegration,
 } from '@throng/core';
 import { createUiContainer, uiDefaultPipeName, UI_TYPES } from './composition-root.js';
-import { DIFFERENT_COPY_NOTICE_CHANNEL, DIFFERENT_COPY_READY_CHANNEL } from './instance-notice-channels.js';
+import {
+  DIFFERENT_COPY_NOTICE_CHANNEL,
+  DIFFERENT_COPY_READY_CHANNEL,
+  INSTALLED_VERSION_NOTICE_CHANNEL,
+  INSTALLED_VERSION_READY_CHANNEL,
+  INSTALLED_VERSION_RESTART_CHANNEL,
+} from './instance-notice-channels.js';
+import { createInstalledVersionMonitor } from './installed-version-monitor.js';
 import { appIcon } from './app-icon.js';
 import { registerLinkUriIpc, registerOpenExternalIpc } from './external-url.js';
 import { notifySettingsSubscribers, type SettingsSubscriber } from './settings-subscribers.js';
@@ -756,6 +764,46 @@ function showDifferentCopyNotice(notice: DifferentCopyNotice): void {
     pendingDifferentCopy = notice;
   }
 }
+
+/**
+ * 063 FR-010 — the package on disk against this running copy, delivered as the different-copy notice is: held until
+ * the main window says it is listening. Asked on focus, which is when the user is looking, and once a minute for a
+ * window left in view. Registered at module scope for the reason the different-copy listener is.
+ */
+const installedVersion = platform.installedVersion(process.execPath);
+let installedVersionListener: WebContents | undefined;
+let pendingInstalledVersion: InstalledVersionNotice | undefined;
+const installedVersionMonitor = createInstalledVersionMonitor({
+  runningVersion: startupVersion,
+  probe: installedVersion,
+  show: (notice) => {
+    if (installedVersionListener && !installedVersionListener.isDestroyed()) {
+      installedVersionListener.send(INSTALLED_VERSION_NOTICE_CHANNEL, notice);
+    } else {
+      pendingInstalledVersion = notice;
+    }
+  },
+});
+ipcMain.on(INSTALLED_VERSION_READY_CHANNEL, (event) => {
+  const contents = event.sender;
+  installedVersionListener = contents;
+  contents.once('destroyed', () => {
+    if (installedVersionListener === contents) installedVersionListener = undefined;
+  });
+  if (pendingInstalledVersion) {
+    contents.send(INSTALLED_VERSION_NOTICE_CHANNEL, pendingInstalledVersion);
+    pendingInstalledVersion = undefined;
+  }
+  installedVersionMonitor.check();
+});
+ipcMain.on(INSTALLED_VERSION_RESTART_CHANNEL, () => {
+  const copy = installedVersion.installed();
+  if (!copy) return;
+  app.relaunch({ execPath: copy.launcher, args: [] });
+  app.quit();
+});
+app.on('browser-window-focus', () => installedVersionMonitor.check());
+setInterval(() => installedVersionMonitor.check(), 60_000).unref();
 
 /** Bring the main window forward for a second launch: restore, onto a visible display, show, focus. */
 function bringMainWindowForward(): void {

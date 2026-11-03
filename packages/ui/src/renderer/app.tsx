@@ -31,6 +31,7 @@ import { AppClosePrompt } from './app-close-prompt.js';
 import { TransferCompletionHost } from './explorer/transfer-completion.js';
 import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
 import { DifferentCopyNotice } from './common/different-copy-notice.js';
+import { InstalledVersionNotice } from './common/installed-version-notice.js';
 import { ClashPrompt } from './explorer/clash-prompt.js';
 import { PasteQuitPrompt } from './explorer/paste-quit-prompt.js';
 import { useResize } from './util/use-resize.js';
@@ -593,6 +594,8 @@ export function App(): ReactElement {
           <PasteProgressNotice />
           {/* 058 FR-018 — a launch of a different copy, reported in the main window only. */}
           <DifferentCopyNotice />
+          {/* 063 FR-010 — a newer package is installed, reported in the main window only. */}
+          <InstalledVersionNotice />
           <ClashPrompt />
           <PasteQuitPrompt />
         </div>

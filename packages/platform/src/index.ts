@@ -1,5 +1,6 @@
 import {
   NoForegroundHandoff,
+  NoInstalledVersion,
   WINDOWS_HOST_TRAITS,
   configureHostTraits,
   type HostTraits,
@@ -9,6 +10,7 @@ import {
   type IExecutableExtensions,
   type IFontEnumeration,
   type IForegroundHandoff,
+  type IInstalledVersion,
   type IOrphanProcesses,
   type IPathForms,
   type IPlatformInfo,
@@ -28,6 +30,7 @@ import {
   LinuxExecutableExtensions,
   LinuxFontEnumeration,
   LinuxGpuUsage,
+  LinuxInstalledVersion,
   LinuxOrphanProcesses,
   LinuxPathForms,
   LinuxPlatformInfo,
@@ -106,6 +109,13 @@ export interface PlatformServices {
   readonly lookupHolder: (absPath: string) => Promise<Holder | undefined>;
   /** Why this process must not start, in words for the user, or null. */
   readonly startupRefusal: () => string | null;
+  /** What a package manager has installed, for the copy running from `execPath` to compare itself with (063 FR-010). */
+  readonly installedVersion: (execPath: string) => IInstalledVersion;
+  /**
+   * Whether a daemon ends by itself once its package is gone and nothing needs it (063 FR-013). Windows has no such
+   * case: an uninstall ends the daemon, and `ensureDaemon` retires a portable copy's orphan (#429).
+   */
+  readonly exitWhenEntryRemoved: boolean;
 }
 
 const WINDOWS: PlatformServices = {
@@ -140,6 +150,8 @@ const WINDOWS: PlatformServices = {
   displaySwitches: () => [],
   lookupHolder: windowsLookupHolder,
   startupRefusal: () => null,
+  installedVersion: () => new NoInstalledVersion(),
+  exitWhenEntryRemoved: false,
 };
 
 const LINUX: PlatformServices = {
@@ -166,6 +178,8 @@ const LINUX: PlatformServices = {
   displaySwitches: (nativeWayland) => (nativeWayland ? [] : [['ozone-platform', 'x11']]),
   lookupHolder: linuxLookupHolder,
   startupRefusal: () => linuxStartupRefusal(),
+  installedVersion: (execPath) => new LinuxInstalledVersion(execPath),
+  exitWhenEntryRemoved: true,
 };
 
 /** A platform with no implementation set. Never answered with another platform's (062 FR-050). */
