@@ -2,16 +2,16 @@
 
 # throng on Linux
 
-throng runs from source on Linux. There is no Linux package yet ([#550](https://github.com/Bidthedog/throng/issues/550)).
-Ubuntu 26.04 with GNOME is the reference desktop, and CI runs on Ubuntu 24.04. To set it up, see
-[running from source](installation.md#running-from-source).
+throng runs on Linux from a [package or archive](installation.md#installing-on-linux), or
+[from source](installation.md#running-from-source). Ubuntu 26.04 with GNOME is the reference desktop, and CI runs on
+Ubuntu 24.04.
 
 This page is the one list of what differs from Windows. Anything not listed here behaves the same.
 
 ## Display
 
 The window runs through XWayland by default, where dragging a tab out and placing windows work as they do elsewhere.
-[`window.nativeWayland`](preferences.md) runs it directly on Wayland instead. `npm start` reads that setting and picks the display backend, so a window started any other way uses Electron's own choice.
+[`window.nativeWayland`](preferences.md) runs it directly on Wayland instead. The `throng` command and `npm start` read that setting and pick the display backend.
 
 ## Key bindings
 
@@ -50,5 +50,6 @@ The taskbar and foreground hand-off features have no Linux equivalent yet, and t
 ## The sandbox
 
 throng keeps Electron's sandbox on. Ubuntu restricts the system feature that sandbox needs, so each checkout is allowed
-once by a small AppArmor profile; see [running from source](installation.md#running-from-source). The profile limits
-nothing else, so throng can open any folder you can, including other Git repositories anywhere on the disk.
+once by a small AppArmor profile; see [running from source](installation.md#running-from-source). A package sets up its
+own, and an archive [says what to do](installation.md#the-sandbox-on-linux). The profile limits nothing else, so throng
+can open any folder you can, including other Git repositories anywhere on the disk.

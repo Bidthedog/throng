@@ -33,7 +33,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 ```
 preflight → branch → CHANGELOG → version bump → dependency audit → docs → test-suite audit
   → local checks → commit → PR → gate.yml → merge → tag → release.yml (full E2E
-  → package → reconcile → verify ×6 combinations → coexistence → render body) → human sign-off → publish
+  → package → reconcile → verify ×9 combinations → coexistence → render body) → human sign-off → publish
 ```
 
 Publication is refused unless all five conditions in
@@ -296,6 +296,9 @@ The jobs, each gating the next (`needs` in brackets):
    built, and a built artifact nobody declared. Four uploads (`throng-setup`, `throng-msi`,
    `throng-portable`, `throng-archive`); a guard step fails if the declared roles and the uploads
    differ. ~5 min.
+4a. **Build the Linux packages** `build-linux` [e2e-full] and **Verify `deb`/`rpm`/`tarball`** `verify-linux` ×3 —
+   on `ubuntu-22.04` and `ubuntu-24.04`, the `.rpm` in a Fedora container. `render-body` and `publish` need both.
+   Detail: [references/verification.md](references/verification.md#linux).
 4. **Verify `<combination>`** `verify-installer` ×6 [build-installer, combinations] — one fresh runner
    per combination, `fail-fast: false`, 40-minute timeout. Each installs (or extracts, or unpacks),
    launches, version-checks, journey-tests (project → terminal → reopen → reattach), checksums and
@@ -311,7 +314,7 @@ The jobs, each gating the next (`needs` in brackets):
 
 **What a passing verdict looks like**, so a skipped check is not mistaken for a clean one. The
 vocabulary is 19 steps. Applicable counts: `setup-user` **15**, `msi-user` **15**, `setup-machine`
-**18**, `msi-machine` **17**, `portable` and `archive` **8** (11 `not-applicable`). The coexistence
+**18**, `msi-machine` **17**, `portable`, `archive` and `tarball` **8** (11 `not-applicable`), `deb` and `rpm` **13** (6 `not-applicable`). The coexistence
 verdict has **5** copies and **7** steps, all `passed`. `second-account` and `not-elevated-launch` are expected to read
 `unproven` on hosted runners — the GUI half is never attempted there, and the runner's desktop is high integrity; the daemon half carries the
 proof, and both gaps are listed in the body. Any other shape deserves a look: a `not-applicable` on an
@@ -323,7 +326,7 @@ gh run download <tag-run-id> --pattern 'verdict-*' --dir <scratch>
 gh run download <tag-run-id> --name release-body --dir <scratch>
 ```
 
-Those carry the seven verdicts and `release-body-preview.md`. Read the body
+Those carry the ten verdicts and `release-body-preview.md`. Read the body
 before asking anyone to approve it.
 
 The declared roles are listed in
@@ -335,7 +338,7 @@ each verification step proves, and the four-outcome verdict model, is
 ## 12. The human QA sign-off
 
 **Blocking, and it is the user's to give.** Put in front of them what they need to decide with,
-rather than a link to go and find it: the rendered body you already downloaded in step 10, the seven
+rather than a link to go and find it: the rendered body you already downloaded in step 10, the ten
 verdicts summarised (steps passed, `not-applicable` and `unproven` per combination, each artifact's SHA-256), and the run
 URL. Then one flagged line asking for the approval.
 
@@ -353,7 +356,7 @@ gh release view v<version> --json name,isPrerelease,assets,publishedAt \
 
 Confirm, and report:
 
-- four assets attached (setup, MSI, portable, archive), named for this version;
+- seven assets attached (setup, MSI, portable, archive, `.deb`, `.rpm`, `.tar.gz`), named for this version;
 - `isPrerelease: true` for any version carrying a suffix;
 - the body carries this release's notes, one SHA-256 row per artifact against its own filename, and
   the source revision;

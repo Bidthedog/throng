@@ -2,15 +2,14 @@
 
 # Installing throng
 
-Everything you need to get throng onto a Windows machine and running: a packaged download for
+Everything you need to get throng onto your machine and running: a packaged download for
 using it, or a source checkout for running a revision that has no release yet. Once it is running,
-the [quick start](quick-start.md) takes it from there.
+the [quick start](quick-start.md) takes it from there. On Linux, go straight to
+[Installing on Linux](#installing-on-linux).
 
 ## Before you start
 
-- **Windows 11 (x64).** throng is Windows-only today; macOS
-  ([#22](https://github.com/Bidthedog/throng/issues/22)) and Linux
-  ([#23](https://github.com/Bidthedog/throng/issues/23)) are planned.
+- **Windows 11 (x64), or 64-bit Linux.** macOS ([#22](https://github.com/Bidthedog/throng/issues/22)) is planned.
 - **No prerequisites.** You do **not** need Node.js, a compiler, or any runtime — the installer bundles
   everything the app needs.
 - **Administrator rights only if you want them.** Installing for yourself never asks for an
@@ -24,8 +23,8 @@ Installing *for everyone* puts one copy where every account on the machine can r
 administrator to approve it once. Either way, each person who uses throng keeps their own projects and
 settings, and runs their own background service.
 
-From the [Releases page](https://github.com/Bidthedog/throng/releases), pick **one** of four downloads.
-They are the same throng; they differ only in how it gets onto your machine.
+From the [Releases page](https://github.com/Bidthedog/throng/releases), pick **one** of the four Windows
+downloads. They are the same throng; they differ only in how it gets onto your machine.
 
 | Download | Choose it when | Just you / everyone |
 |---|---|---|
@@ -191,6 +190,50 @@ Each Windows account runs throng — its own background service, its own project
 whether from its own per-user copy or a single everyone-install. Accounts can run throng at the same time,
 fully isolated: neither account's terminals, projects, or settings are visible to, or disturbed by, the
 other.
+
+## Installing on Linux
+
+Ubuntu 22.04 or later and Fedora's supported releases are tested, on x64. Their relatives are expected to work.
+No Node.js, compiler or other runtime is needed. From the
+[Releases page](https://github.com/Bidthedog/throng/releases), pick the one that suits your machine, and
+[check its checksum](#2-verify-the-download-recommended) with `sha256sum <file>`.
+
+| Download | Choose it when | Install it with |
+|---|---|---|
+| `throng-<version>-amd64.deb` | Ubuntu, Debian and their relatives | `sudo apt install ./throng-<version>-amd64.deb` |
+| `throng-<version>-x86_64.rpm` | Fedora and its relatives | `sudo dnf install ./throng-<version>-x86_64.rpm` |
+| `throng-<version>-linux-x64.tar.gz` | Any other distribution, or no administrator rights | `tar -xzf throng-<version>-linux-x64.tar.gz`, then run `throng` from that folder |
+
+The `.deb` and `.rpm` install one copy for every account on the machine, each with its own data. throng then appears
+in your applications, and `throng` works in a shell.
+
+### The sandbox on Linux
+
+throng keeps its browser sandbox on. On a machine that restricts what the sandbox needs, as recent Ubuntu does, the
+`.deb` and `.rpm` allow it for throng alone and change no system setting. An archive tells you what is wrong, and gives
+the two commands that allow it for that folder. They need administrator rights, and the folder's path must have no
+spaces in it.
+
+### Upgrading on Linux
+
+Install the newer package with the same command. Your projects and settings are kept. No update arrives by itself.
+
+A throng left open keeps running the version it started with, with its terminals, until you restart it. It tells you a
+newer version is installed, and offers the restart. Restarting may end the terminals running in it.
+
+### Downgrading on Linux
+
+Installing an older `.deb` or `.rpm` over a newer one is refused, and changes nothing. To go back, remove throng first,
+then install the older package. Your projects and settings are kept, though an older version may not read everything a
+newer one wrote.
+
+### Removing throng on Linux
+
+`sudo apt remove throng` or `sudo dnf remove throng`. For an archive, delete its folder.
+
+Your projects and settings are always kept, and installing again finds them. To delete them too, delete these folders
+in your home folder: `.config/throng` and `.local/share/throng`. A throng left open during the removal keeps running
+until you close it, and a terminal still running in it is not ended.
 
 ## Running from source
 

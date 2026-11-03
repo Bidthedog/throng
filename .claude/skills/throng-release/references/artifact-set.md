@@ -1,6 +1,6 @@
 # The artifact set and what ships inside it
 
-The four roles, their filenames and what each one is are listed in
+The roles, their filenames and what each one is are listed in
 [`docs/releasing.md`](../../../../docs/releasing.md#the-artifact-set) — that is their home. This file
 holds how the set is declared and enforced, and what every artifact contains. Packaging constraints
 (`npmRebuild: false`, `asar: false`, the bundled host-Node runtime) live in
@@ -8,10 +8,12 @@ holds how the set is declared and enforced, and what every artifact contains. Pa
 
 ## Declared, not discovered
 
-Four roles: `setup`, `msi`, `portable`, `archive`. The two installers each carry two **install
+Seven roles: `setup`, `msi`, `portable`, `archive` on Windows, `deb`, `rpm`, `tarball` on Linux (063), each carrying
+its `platform`. A build is held to its own platform's files (`reconcile --platform`); the publish gate reads the whole
+set. The two Windows installers each carry two **install
 scopes** (`per-user`, `machine`) — spec 058 superseded 020 FR-040 and, for the machine-wide path
 only, FR-012 — and the declaration derives one **verification combination** per artifact and scope
-(`combinationsOf`): `setup-user`, `setup-machine`, `msi-user`, `msi-machine`, `portable`, `archive`.
+(`combinationsOf`): `setup-user`, `setup-machine`, `msi-user`, `msi-machine`, `portable`, `archive`, `deb`, `rpm`, `tarball`.
 An artifact verified in two scopes is still one file with one checksum.
 
 **The declaration is `packages/core/src/config/release-artifacts.ts`, and it is the contract.** Every
@@ -24,7 +26,7 @@ from three places in `release.yml`.
 ```bash
 node scripts/artifact-set.mjs list        # role, filename, label
 node scripts/artifact-set.mjs resolve setup   # the one path for that role
-node scripts/artifact-set.mjs reconcile   # what was built == what was declared?
+node scripts/artifact-set.mjs reconcile   # what was built == what was declared? (--platform win32|linux for one build)
 node scripts/artifact-set.mjs checksums   # the set, with each SHA-256 filled in
 node scripts/artifact-set.mjs list --combinations   # id, role, scope, verdict file — the matrix's one source
 ```
