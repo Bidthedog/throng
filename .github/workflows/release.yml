@@ -1,9 +1,10 @@
 name: Release
 
 # Packaging, clean-machine verification of every artifact in every install scope, and a gated
-# GitHub-Releases publish for throng (features 020 #21, 042, 058).
-# Windows-only (FR-038), windows-2022 + Node 24 to match CI's native builds so the bundled runtime's
-# ABI matches the daemon's native modules (better-sqlite3, node-pty, koffi).
+# GitHub-Releases publish for throng (features 020 #21, 042, 058, 063).
+# windows-2022 + Node 24 to match CI's native builds so the bundled runtime's ABI matches the daemon's
+# native modules (better-sqlite3, node-pty, koffi). Linux builds on ubuntu-22.04, the oldest supported
+# glibc, so its natives run on everything newer (063 FR-020).
 #
 # The shape (058 FR-028 to FR-031):
 #
@@ -13,6 +14,8 @@ name: Release
 #                                         ▼
 #                                    coexistence  (one machine, every copy at once)
 #                                         ▼
+#   e2e-full ─▶ build-linux ─────▶ verify-linux × N  (the .deb, .rpm and .tar.gz, 063 FR-017) ──┐
+#                                                                                              ▼
 #                                    render-body  (the exact body publication will use)
 #                                         ▼
 #                                      publish    (gated by the `release` Environment)
@@ -171,6 +174,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      linux-matrix: ${{ steps.matrix.outputs.linux-matrix }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -188,8 +192,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          matrix=$(node scripts/artifact-set.mjs list --combinations --json | tr -d '\n')
+          matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform win32 | tr -d '\n')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          linux_matrix=$(node scripts/artifact-set.mjs list --combinations --json --platform linux | tr -d '\n')
+          echo "linux-matrix=$linux_matrix" >> "$GITHUB_OUTPUT"
           echo "Verifying these combinations:"
           node scripts/artifact-set.mjs list --combinations
 
@@ -222,7 +228,7 @@ jobs:
       # understood, and this fails here rather than four jobs later at the checksum.
       - name: Reconcile the built artifacts against the declared set
         shell: bash
-        run: node scripts/artifact-set.mjs reconcile
+        run: node scripts/artifact-set.mjs reconcile --platform win32
       # Each artifact is uploaded under its own name, resolved by ROLE (042 FR-012), so a verification
       # runner downloads only the one it checks. The upload steps below name the four roles, so this
       # guard fails the build when the declared set gains a role they do not cover — otherwise a new
@@ -232,7 +238,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          declared=$(node scripts/artifact-set.mjs list | cut -f1 | sort | paste -sd' ' -)
+          declared=$(node scripts/artifact-set.mjs list --platform win32 | cut -f1 | sort | paste -sd' ' -)
           uploaded="archive msi portable setup"
           if [ "$declared" != "$uploaded" ]; then
             echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
@@ -277,6 +283,172 @@ jobs:
           name: throng-archive
           path: ${{ steps.artifacts.outputs.archive }}
           if-no-files-found: error
+          retention-days: 5
+
+  # THE LINUX PACKAGES (063). The oldest supported Ubuntu builds them, because natives compiled against its
+  # glibc run on everything newer (FR-020); the bundled runtime is the build's own node, as on Windows.
+  build-linux:
+    name: Build the Linux packages
+    needs: e2e-full
+    if: ${{ !cancelled() && (needs.e2e-full.result == 'success' || needs.e2e-full.result == 'skipped') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # electron-builder's rpm target drives rpmbuild.
+      - name: Install rpmbuild
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+      - name: Install dependencies
+        run: npm ci
+      - name: Package (build + stage runtime + electron-builder targets)
+        run: npm run package:linux -- --publish never
+      - name: Reconcile the built packages against the declared set
+        run: node scripts/artifact-set.mjs reconcile --platform linux
+      - name: Check every declared role is uploaded below
+        id: artifacts
+        run: |
+          set -euo pipefail
+          declared=$(node scripts/artifact-set.mjs list --platform linux | cut -f1 | sort | paste -sd' ' -)
+          uploaded="deb rpm tarball"
+          if [ "$declared" != "$uploaded" ]; then
+            echo "::error::the declared roles are '$declared' but this job uploads '$uploaded' — add the missing upload step"
+            exit 1
+          fi
+          for role in $uploaded; do
+            echo "$role=$(node scripts/artifact-set.mjs resolve "$role")" >> "$GITHUB_OUTPUT"
+          done
+      - name: Upload the .deb
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-deb
+          path: ${{ steps.artifacts.outputs.deb }}
+          if-no-files-found: error
+          retention-days: 5
+      - name: Upload the .rpm
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-rpm
+          path: ${{ steps.artifacts.outputs.rpm }}
+          if-no-files-found: error
+          retention-days: 5
+      - name: Upload the archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: throng-tarball
+          path: ${{ steps.artifacts.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 5
+      # An older build of this same tree, for the upgrade over a running copy. Its name does not start with
+      # `throng-`, so the jobs that collect the release's artifacts never see it: it is declared nowhere and never
+      # published.
+      - name: Package the older build the upgrade step installs first
+        run: |
+          set -euo pipefail
+          npm version 0.9.0 --workspaces --include-workspace-root --no-git-tag-version
+          npm run package:linux -- --publish never
+          mkdir -p upgrade-fixture
+          cp dist/installer/throng-0.9.0-amd64.deb dist/installer/throng-0.9.0-x86_64.rpm upgrade-fixture/
+      - name: Upload the older build
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture/
+          if-no-files-found: error
+          retention-days: 5
+
+  # ONE CLEAN MACHINE PER LINUX PACKAGE (063 FR-017). ubuntu-24.04 restricts user namespaces, so the .deb's profile and
+  # the archive's refusal are both exercised for real. No hosted runner is rpm-based, so the .rpm's machine is a Fedora
+  # container, privileged because Chromium's sandbox needs what a default container withholds. The image is '' for the
+  # other two, which runs them on the runner itself.
+  verify-linux:
+    name: Verify ${{ matrix.id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [build-linux, combinations]
+    if: ${{ !cancelled() && needs.build-linux.result == 'success' && needs.combinations.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.combinations.outputs.linux-matrix) }}
+    container:
+      image: ${{ matrix.container }}
+      options: --privileged
+    steps:
+      # throng refuses to start as root, and a container's default account is root.
+      - name: Prepare the Fedora machine
+        if: matrix.container != ''
+        run: |
+          dnf install -y -q git tar gzip sudo shadow-utils procps-ng findutils util-linux-core which \
+            xorg-x11-server-Xvfb xfwm4 dbus-daemon dbus-x11
+          useradd -m verify
+          echo 'verify ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/verify
+      - name: Prepare the Ubuntu machine
+        if: matrix.container == ''
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends xvfb xfwm4 dbus-x11
+      # The .deb brings its own dependencies through apt, which is part of what it proves. The archive has no such
+      # route, and a real desktop already has these (spec, Assumptions).
+      - name: Install the desktop libraries an archive expects
+        if: matrix.role == 'tarball'
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+            libdrm2 libgbm1 libgtk-3-0t64 libasound2t64 libnotify4 libsecret-1-0 libxss1 libxtst6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # Only the harness runs from this checkout. Nothing here may stand in for what a package has to bring.
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the package
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        if: matrix.role != 'tarball'
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          artifact=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          older=()
+          if [ "${{ matrix.role }}" = deb ]; then older=(--older upgrade-fixture/throng-0.9.0-amd64.deb); fi
+          if [ "${{ matrix.role }}" = rpm ]; then older=(--older upgrade-fixture/throng-0.9.0-x86_64.rpm); fi
+          command=(bash scripts/ci-linux-display.sh node scripts/verify-linux-package.mjs "$artifact"
+            --role "${{ matrix.role }}" --expected-version "$version"
+            --verdict-out "${{ matrix.verdictFile }}" "${older[@]}")
+          if [ -n "${{ matrix.container }}" ]; then
+            chown -R verify .
+            runuser -u verify -- env PATH="$PATH" HOME=/home/verify "${command[@]}"
+          else
+            "${command[@]}"
+          fi
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: verdict-${{ matrix.id }}
+          path: ${{ matrix.verdictFile }}
+          if-no-files-found: warn
+          retention-days: 5
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v6
+        with:
+          name: installer-logs-${{ matrix.id }}
+          path: installer-logs/
+          if-no-files-found: ignore
           retention-days: 5
 
   # ONE RUNNER PER COMBINATION (058 FR-028). Each starts from a clean machine, so a residue left by one
@@ -483,10 +655,10 @@ jobs:
     name: Render the release body
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux]
     # Even when a verification failed: the preview and the refusal naming it are what a maintainer
-    # needs to see. Not when the build itself never happened.
-    if: ${{ !cancelled() && needs.build-installer.result == 'success' }}
+    # needs to see. Not when a build itself never happened, since the gate could then read nothing.
+    if: ${{ !cancelled() && needs.build-installer.result == 'success' && needs.build-linux.result == 'success' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -568,7 +740,7 @@ jobs:
     name: Publish GitHub Release (gated)
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence, render-body]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, render-body]
     # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
     # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
     #
@@ -636,7 +808,7 @@ jobs:
           version="${{ needs.build-installer.outputs.version }}"
           # 020 FR-042a — each digest is computed from the exact published bytes, here, as the last
           # step that reads them. 042 FR-017 / 058 FR-032 — every artifact gets its own row, against
-          # its own filename: four files, four checksums, whatever their scope count.
+          # its own filename: one checksum per file, whatever its scope count.
           artifacts=$(node scripts/artifact-set.mjs checksums)
           # 042 FR-001/FR-007 — the body is COMPOSED from CHANGELOG.md and the invariant footer,
           # never authored here. This step used to hold a hardcoded string that made every release
