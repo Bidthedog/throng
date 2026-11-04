@@ -24,7 +24,7 @@ describe('resolveDaemonNodeExe (020 FR-009)', () => {
     const before = hostTraits();
     configureHostTraits(linuxHostTraits('/run/user/1000'));
     try {
-      const resolved = resolveDaemonNodeExe(undefined, '/opt/throng-versions/1.0.0/resources', (p) => p.endsWith('runtime/node'), {});
+      const resolved = resolveDaemonNodeExe(undefined, '/opt/throng-versions/1.0.0/resources', (p) => /runtime[\\/]node$/.test(p), {});
       expect(resolved.replace(/\\/g, '/')).toBe('/opt/throng-versions/1.0.0/resources/runtime/node');
     } finally {
       configureHostTraits(before);
