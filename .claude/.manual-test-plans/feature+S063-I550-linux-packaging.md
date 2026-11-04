@@ -7,9 +7,9 @@ Set up once: download the `throng-deb` artifact from the branch's `release.yml` 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
 | MT-01 | Install and find it on the desktop | signed off | 5c9bccc307ae | 2026-11-04 | |
-| MT-02 | The newer-version notice | untested | | | |
-| MT-03 | Remove it | untested | | | |
-| MT-04 | The archive under a sandbox restriction | untested | | | |
+| MT-02 | The newer-version notice | signed off | d0ef04565c40 | 2026-11-04 | |
+| MT-03 | Remove it | signed off | d0ef04565c40 | 2026-11-04 | |
+| MT-04 | The archive under a sandbox restriction | signed off | d0ef04565c40 | 2026-11-04 | |
 
 ## MT-01: Install and find it on the desktop
 
