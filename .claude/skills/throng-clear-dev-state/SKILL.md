@@ -1,12 +1,13 @@
 ---
 name: throng-clear-dev-state
-description: Wipe throng's dev-mode state — stop the dev app, its daemon, its pty-agent and any orphaned child terminals, then delete %APPDATA%\throng-dev and %USERPROFILE%\.throng-dev. Use this whenever a dev throng is behaving oddly and you want to rule out leftover state — a stale layout or database, a wedged session, a daemon still running from a previous launch or from an E2E run, "it works in a fresh instance but not mine", or a data folder that will not delete because something holds it. Also use it when the user says clear/reset/wipe the dev settings, start from a clean slate, kill throng, or asks why a deleted folder comes back. It never touches the INSTALLED throng's data in %APPDATA%\throng.
+description: Wipe throng's dev-mode state — stop the dev app, its daemon, its pty-agent and any orphaned child terminals, then delete %APPDATA%\throng-dev and %USERPROFILE%\.throng-dev, or ~/.config/throng-dev and ~/.local/share/throng-dev on Linux. Use this whenever a dev throng is behaving oddly and you want to rule out leftover state — a stale layout or database, a wedged session, a daemon still running from a previous launch or from an E2E run, "it works in a fresh instance but not mine", or a data folder that will not delete because something holds it. Also use it when the user says clear/reset/wipe the dev settings, start from a clean slate, kill throng, or asks why a deleted folder comes back. It never touches the INSTALLED throng's data in %APPDATA%\throng, or on Linux in the folders without `-dev`.
 ---
 
 # Clear throng's dev state
 
 **On Linux** run `node scripts/clear-dev-state.mjs [--keep-data] [--root <checkout>]`. It matches by checkout path as the
-PowerShell script does, and removes `~/.config/throng-dev` and `~/.local/share/throng-dev`. The rest of this page is Windows.
+PowerShell script does, ends everything under those processes, and removes `~/.config/throng-dev` and
+`~/.local/share/throng-dev` (or their `XDG_*` equivalents). It has no `-WhatIf` or `-Backup`. The rest of this page is Windows.
 
 ## Why this exists
 
