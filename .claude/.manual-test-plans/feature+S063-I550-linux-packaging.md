@@ -59,7 +59,7 @@ Paths: `packaging/linux/before-remove.sh`, `packaging/linux/after-remove.sh`, `p
 
 ### Negative cases
 
-- Your files under `.config/throng` and `.local/share/throng` were not touched by the removal.
+- Your files under `.config/throng` and `.local/share/throng` were not touched by the removal, and your projects' database, `throng.db`, is in `.local/share/throng`.
 
 ## MT-04: The archive under a sandbox restriction
 
@@ -69,9 +69,10 @@ Paths: `packaging/linux/launcher.sh`, `packaging/linux/after-pack.cjs`
 ### Steps
 
 1. Download the `throng-tarball` artifact and extract it into a folder with a space in its name.
-2. Double-click `throng` in the file manager, or run it from a shell. A message says the sandbox cannot start, and gives two commands. It is readable, and throng does not open.
-3. Run those two commands, then start it again. The throng window opens.
-4. Close it, wait a minute, and delete the folder. It deletes with no error, and nothing of it remains running.
+2. Double-click `throng` in the file manager, or run it from a shell. A message says the sandbox cannot start from this folder, names the folder, and says to move it to a path with no spaces. It is readable, and throng does not open.
+3. Move the folder to a path with no spaces, and start it again. A message says the sandbox cannot start, and gives two commands. It is readable, and throng does not open.
+4. Run those two commands, then start it again. The throng window opens.
+5. Close it, wait a minute, and delete the folder. It deletes with no error, and nothing of it remains running.
 
 ### Negative cases
 
