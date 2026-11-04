@@ -94,7 +94,9 @@ afterEach(() => {
 
 describe.skipIf(skipUnlessWindows("the table, the shell and the console host are Windows'"))('051 FR-015a — shutdown escalates an end that fails', () => {
   it('leaves no shell, command or console host of its terminals running', async () => {
-    const before = new Set(survivorsOf([]).map((r) => r.pid));
+    // Every process, not just this one's console hosts: a parent id outlives its process, so a shell given a reused pid
+    // looks like the parent of whatever that pid once started. On a gate runner that was csrss.exe.
+    const before = new Set(processTable().map((r) => r.pid));
     const host = new RefusingHost();
     const events = new TerminalEvents();
     const output = new Map<string, string>();
