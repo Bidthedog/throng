@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isScreenClear,
   shouldDropScrollback,
+  withScrollbackDrop,
   RESIZE_REPAINT_WINDOW_MS,
 } from '../../src/renderer/terminal/clear-detect.js';
 
@@ -88,5 +89,20 @@ describe('a full-screen program’s repaint is indistinguishable from a clear (b
     // buffer-type check at the call site, which is the only place the answer is knowable.
     expect(isScreenClear(ALT_REPAINT, 30)).toBe(true);
     expect(shouldDropScrollback(ALT_REPAINT, 30, 10_000)).toBe(true);
+  });
+});
+
+describe('withScrollbackDrop (008 FR-006c)', () => {
+  it('goes straight after the clear, so what follows it is not dropped', () => {
+    expect(withScrollbackDrop('\x1b[H\x1b[2Jrow')).toBe('\x1b[H\x1b[2J\x1b[3Jrow');
+    expect(withScrollbackDrop('\x1bcrow')).toBe('\x1bc\x1b[3Jrow');
+  });
+
+  it('goes after the LAST clear', () => {
+    expect(withScrollbackDrop('\x1b[2Ja\x1bcb')).toBe('\x1b[2Ja\x1bc\x1b[3Jb');
+  });
+
+  it('goes at the end of a home-and-erase repaint, which has no clear to follow', () => {
+    expect(withScrollbackDrop('\x1b[Ha\x1b[K')).toBe('\x1b[Ha\x1b[K\x1b[3J');
   });
 });
