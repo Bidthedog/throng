@@ -27,6 +27,23 @@ export function isScreenClear(data: string, rows = 24): boolean {
 }
 
 /**
+ * `data` with an erase-scrollback added, so a clear can drop what it pushed up and leave the screen alone (008
+ * FR-006c). Straight after the last clear when the chunk has one, so output drawn after it stays in the
+ * scrollback if it scrolls; at the end for ConPTY's home-and-erase form, which pushes the old contents up as it
+ * goes. `term.clear()` was the old way, and it keeps only the cursor's row.
+ */
+export function withScrollbackDrop(data: string): string {
+  const erase = '\x1b[3J';
+  const at = Math.max(
+    ...['\x1b[2J', '\x1bc'].map((clear) => {
+      const i = data.lastIndexOf(clear);
+      return i < 0 ? -1 : i + clear.length;
+    }),
+  );
+  return at < 0 ? data + erase : data.slice(0, at) + erase + data.slice(at);
+}
+
+/**
  * How long after a PTY resize to treat cls-shaped output as the resize repaint
  * rather than a real clear. Covers the renderer→daemon→ConPTY→renderer round trip
  * for the repaint that a resize triggers; short enough that a genuine `cls` the

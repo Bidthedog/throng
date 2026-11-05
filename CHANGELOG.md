@@ -43,6 +43,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 - The resource monitor and status bar figures now work in installed builds. If the collector cannot start, they say the figures are unavailable and the log says why ([#542](https://github.com/Bidthedog/throng/issues/542)).
 - Switching tabs or mirroring a panel no longer leaves text like `11;rgb:…;1R` at the prompt ([#566](https://github.com/Bidthedog/throng/issues/566)).
+- `top` no longer comes up with part of its display missing, and output arriving together with a `clear` is no longer lost ([#569](https://github.com/Bidthedog/throng/issues/569)).
 
 ## 1.0.0-alpha12 — 2026-10-30
 

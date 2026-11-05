@@ -55,7 +55,7 @@ import { linkScanOptions } from '../links/link-scan-options.js';
 import { logicalLinesBetween } from './logical-line.js';
 import { createLinkMarks, type MarkedLink } from './link-marks.js';
 import { terminalLinkHintAnchor } from './link-hint-anchor.js';
-import { shouldDropScrollback } from './clear-detect.js';
+import { shouldDropScrollback, withScrollbackDrop } from './clear-detect.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
@@ -1364,9 +1364,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     // A shell's very first output clears the screen (cmd/PowerShell emit ESC[2J at
     // launch). That is NOT stale scrollback to drop: the terminal is fresh, so a
-    // drop-scrollback (term.clear, below) has nothing to remove — and worse, it
+    // drop-scrollback (below) has nothing to remove — and worse, it
     // truncates the prompt when the cwd path is long enough to wrap onto a second
-    // row (term.clear keeps only the cursor's row, discarding the first). So we let
+    // row (the old term.clear kept only the cursor's row). So we let
     // xterm handle the startup clear natively and only honour drops AFTER it.
     let startupClearHandled = false;
 
@@ -1396,13 +1396,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
        * callback (the chunk itself may have entered the alt screen in between).
        */
       if (drop && term.buffer.active.type === 'alternate') drop = false;
-      if (drop) {
-        term.write(data, () => {
-          if (!disposed && term.buffer.active.type === 'normal') term.clear();
-        });
-      } else {
-        term.write(data);
-      }
+      term.write(drop ? withScrollbackDrop(data) : data);
     };
 
     // Conform THIS view's xterm to the shared daemon grid (008 FR-009/FR-013). The
