@@ -109,9 +109,10 @@ What the user sees is [Installing on Windows → the unrecognised-app warning](i
 in the repository. Each index points at its release's assets.
 
 - **A release updates them.** Behind the same QA sign-off as publishing, `sign-index` signs that release's indexes with the
-  private key, the `REPO_SIGNING_KEY` secret on the `release` Environment. Once the release is out, `deploy-repositories`
-  attaches the signed bundle to it as `throng-repo-index-<version>.tar.gz` and deploys the site. A full release updates both
-  channels, and a prerelease updates only `prerelease`.
+  private key, the `REPO_SIGNING_KEY` secret on the `release` Environment, before `publish` runs. `publish` attaches the
+  signed bundle as `throng-repo-index-<version>.tar.gz` when it creates the release, because a published release is
+  immutable. Once the release is out, `deploy-repositories` deploys the site. The two gated jobs each ask for approval. A
+  full release updates both channels, and a prerelease updates only `prerelease`.
 - **A change under `site/`** deploys on merge with no key, because each deployment reads the signed bundles back from the
   releases.
 

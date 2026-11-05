@@ -66,6 +66,11 @@ one more click and nothing else differs.
 
 Signing before publication does not change any repository: only `deploy-repositories` does, and it needs `publish`.
 
+**Amended 2026-11-05 (#571).** The first real publish, v1.0.0-alpha13, showed the repository has immutable releases on:
+`deploy-repositories` could not attach the bundle (`HTTP 422: Cannot upload assets to an immutable release`). `publish`
+now needs `sign-index` and attaches the bundle in `gh release create`, and `deploy-repositories` only dispatches
+Pages. The two gated jobs run one after the other, so each asks for its own approval.
+
 ## D4. Deployments are assembled from bundles
 
 A Pages deployment replaces the whole site, and a change to a static file must not need the key. So every deployment downloads the

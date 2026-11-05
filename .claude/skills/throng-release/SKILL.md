@@ -309,12 +309,14 @@ The jobs, each gating the next (`needs` in brackets):
 6. **Render the release body** `render-body` [all of the above, `!cancelled()`] — runs the gate
    without the sign-off (any refusal but the missing sign-off fails it), writes `unproven` steps to the
    job summary, and uploads `release-body` (`release-body-preview.md` + `verification-gaps.json`).
-7. **Publish (gated)** — waits at the `release` Environment for required reviewers, then ~3 min to
-   compute the checksums, compose the body and create the release. **Sign the repository indexes**
-   `sign-index` waits at the same Environment beside it.
-8. **Update the package repositories** `deploy-repositories` [publish, sign-index] — attaches the signed
-   `throng-repo-index-<version>.tar.gz` to the release, and dispatches `pages.yml` on `master`. If it failed, the
-   release is out and the repositories are on the previous version: re-run the failed job.
+7. **Sign the repository indexes (gated)** `sign-index` — waits at the `release` Environment for required
+   reviewers, then builds, signs and uploads the `repo-index-bundle` run artifact.
+8. **Publish (gated)** [… , sign-index] — waits at the Environment for a **second** approval, then ~3 min to
+   compute the checksums, compose the body and create the release with the signed
+   `throng-repo-index-<version>.tar.gz` attached. It has to go in at creation: the repository has immutable releases
+   on, so nothing can be added afterwards (#571, which is why v1.0.0-alpha13 never reached the repositories).
+9. **Update the package repositories** `deploy-repositories` [publish] — dispatches `pages.yml` on `master`. If it
+   failed, the release is out and the repositories are on the previous version: re-run the failed job.
 
 **Verify the repository** `verify-repositories` ×2 [build-linux] is one more gate on `publish`: the apt and dnf routes on
 clean machines, with a throwaway key. What it proves: [`docs/releasing.md`](../../../docs/releasing.md#the-package-repositories).
