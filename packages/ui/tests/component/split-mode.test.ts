@@ -95,7 +95,7 @@ const HELD = { ctrlKey: true, shiftKey: true, altKey: true } as const;
 function press(
   target: HTMLElement,
   key: string,
-  mods: { ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {},
+  mods: { ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; modifierNumLock?: boolean } = {},
   code = key,
 ): boolean {
   let notTaken = true;
@@ -224,6 +224,37 @@ describe('an arrow completes it (FR-020a, FR-022)', () => {
     const parent = parentOf('p1');
     expect(parent?.orientation).toBe('row');
     expect(parent?.ids[0]).toBe('p1');
+  });
+
+  // The keypad's arrows split with NumLock on, in every form a press reports: its digit, or (Shift inverting
+  // NumLock) its arrow name.
+  describe.each([
+    ['UP', 'Numpad8', '8', 'ArrowUp', 'column', 1],
+    ['DOWN', 'Numpad2', '2', 'ArrowDown', 'column', 0],
+    ['LEFT', 'Numpad4', '4', 'ArrowLeft', 'row', 1],
+    ['RIGHT', 'Numpad6', '6', 'ArrowRight', 'row', 0],
+  ])('%s from the keypad with NumLock on', (_direction, code, digit, arrow, orientation, p1At) => {
+    it.each([
+      ['its digit, modifiers released', digit, {}],
+      ['its digit, modifiers held', digit, HELD],
+      ['its arrow, modifiers held', arrow, HELD],
+    ])('reporting %s', (_shape, key, mods) => {
+      const t = terminal();
+      firstStroke(t.el);
+      expect(press(t.el, key, { ...mods, modifierNumLock: true }, code)).toBe(true);
+      expect(panelIds()).toHaveLength(3);
+      const parent = parentOf('p1');
+      expect(parent?.orientation).toBe(orientation);
+      expect(parent?.ids[p1At]).toBe('p1');
+      expect(getSplitModePanel()).toBeNull();
+      expect(getPendingChord()).toBeNull();
+    });
+  });
+
+  it('keypad 1 reporting its digit is the first stroke (End) with NumLock on', () => {
+    const t = terminal();
+    expect(press(t.el, '1', { ...HELD, modifierNumLock: true }, 'Numpad1')).toBe(true);
+    expect(getSplitModePanel()).toBe('p1');
   });
 
   it('the pulse and the text end with the completing key', () => {

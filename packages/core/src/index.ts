@@ -679,6 +679,7 @@ export {
   sameBindingSymbolOfCode,
   tier1PhysicalKey,
   keypadHidesShift,
+  keypadNavKey,
 } from './config/chord-capture.js';
 
 // Project domain (Principle I).

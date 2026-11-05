@@ -4,7 +4,7 @@
 // again the way they did (review fix round CRITICAL/MINOR): a duplicated Ctrl+Alt same-binding match
 // shipped here without core's AltGr guard, folding a German AltGr+ß or an AZERTY AltGr+= onto
 // panel.zoomOut/panel.zoomIn and eating the keystroke.
-import { keypadHidesShift, sameBindingSymbolOfCode, tier1PhysicalKey } from '@throng/core';
+import { keypadHidesShift, keypadNavKey, sameBindingSymbolOfCode, tier1PhysicalKey } from '@throng/core';
 
 /**
  * The layout-independent key segment for a keyboard chord.
@@ -261,6 +261,17 @@ export function withoutCarried(e: ChordEventLike, carried: CarriedModifiers): Ch
     metaKey: (e.metaKey ?? false) && !carried.meta,
     ...(getModifierState ? { getModifierState: (k: 'NumLock') => getModifierState.call(e, k) } : {}),
   };
+}
+
+/**
+ * A keypad press as the navigation key it is, whatever NumLock made it report (`Numpad8` as `ArrowUp`, for
+ * a `8`), or `null` for any other key. The NumLock state stays behind: it is what {@link withKeypadShift}
+ * reads, and this event's modifiers are already the ones that count.
+ */
+export function asKeypadNavKey(e: ChordEventLike): ChordEventLike | null {
+  const key = keypadNavKey(e.code);
+  if (key === undefined) return null;
+  return { code: e.code, key, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey };
 }
 
 /** The event shape the resolvers (`resolveAction`, `resolveScoped`, `eventToToken`) take. */

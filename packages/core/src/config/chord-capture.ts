@@ -51,6 +51,11 @@ const KEYPAD_NAV_KEY_OF_CODE: Readonly<Record<string, string>> = {
   NumpadDecimal: 'Delete',
 };
 
+/** The navigation key a keypad key is (`Numpad8` → `ArrowUp`), or `undefined` for any other key. */
+export function keypadNavKey(code: string): string | undefined {
+  return KEYPAD_NAV_KEY_OF_CODE[code];
+}
+
 /**
  * Whether Windows hid a held Shift from this keypad press (046 FR-120). With NumLock ON, Shift held
  * on a keypad digit key inverts it to its navigation key and Windows synthesises a Shift key-up
@@ -136,8 +141,9 @@ export function sameBindingSymbolOfCode(code: string, key: string): string | und
  * or the literal `Numpad0` (guarded by {@link sameBindingSymbolOfCode}; `Numpad0` is FR-114's named
  * exception to the "no shipped `Numpad…` token" rule, for `zoom.reset` alone at this tier), the
  * backtick (aliased from `Backquote`, as `chordKey` already does for the single-stroke path), a
- * NumLock-off keypad key's own produced name for every OTHER keypad key (never its `Numpad…` code —
- * FR-105 still forbids that token for anything but `Numpad0`), or the code itself for any other
+ * keypad digit key's navigation name whatever NumLock made it report, what any OTHER keypad key
+ * produces (never a `Numpad…` code — FR-105 still forbids that token for anything but `Numpad0`), or
+ * the code itself for any other
  * named key (`ArrowLeft`, `PageDown`, …), which already names it.
  *
  * Exported so `packages/ui/src/renderer/config/chord-key.ts`'s tier-1 rule reuses this exact
@@ -149,7 +155,7 @@ export function tier1PhysicalKey(code: string, key: string): string {
   if (code === 'Backquote') return '`';
   const sameBinding = sameBindingSymbolOfCode(code, key);
   if (sameBinding) return sameBinding;
-  if (code.startsWith('Numpad')) return key;
+  if (code.startsWith('Numpad')) return keypadNavKey(code) ?? key;
   return code;
 }
 
