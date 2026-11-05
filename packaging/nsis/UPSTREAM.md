@@ -5,7 +5,7 @@ exactly what they were taken from and what was changed, so an `app-builder-lib` 
 and not a surprise. `packages/ui/tests/unit/nsis-vendored-templates.test.ts` reads the values below
 and fails when the installed upstream no longer matches them.
 
-Version: 26.17.0
+Version: 26.18.0
 
 Upstream is `node_modules/app-builder-lib/templates/nsis/`. SHA-256 of the upstream bytes:
 

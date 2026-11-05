@@ -1,6 +1,6 @@
 {
   "name": "@throng/daemon",
-  "version": "1.0.0-alpha12",
+  "version": "1.0.0-alpha13",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -16,7 +16,7 @@
     "@throng/platform-node": "*",
     "@throng/platform-windows": "*",
     "better-sqlite3": "^12.11.1",
-    "inversify": "^8.2.3",
+    "inversify": "^8.2.4",
     "reflect-metadata": "^0.2.2"
   }
 }
