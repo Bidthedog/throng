@@ -1,5 +1,6 @@
-import { type HTMLAttributes, type ReactElement, type Ref } from 'react';
+import { type HTMLAttributes, type ReactElement, type Ref, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { markCountLabel } from '@throng/core';
+import { blinkMark } from './mark-blink.js';
 import type { HolderMark } from './use-attention.js';
 
 /**
@@ -46,10 +47,13 @@ export function AttentionMark({
   blockAncestorTitle?: boolean;
   ref?: Ref<HTMLSpanElement>;
 } & Omit<HTMLAttributes<HTMLSpanElement>, 'title' | 'className'>): ReactElement {
+  const own = useRef<HTMLSpanElement>(null);
+  useImperativeHandle(ref, () => own.current as HTMLSpanElement, []);
+  useLayoutEffect(() => (own.current ? blinkMark(own.current) : undefined), []);
   return (
     <span
       {...rest}
-      ref={ref}
+      ref={own}
       className="throng-attention-mark"
       data-testid={testId}
       data-kind={mark.kind}

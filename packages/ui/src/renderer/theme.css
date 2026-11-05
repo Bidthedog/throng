@@ -1344,26 +1344,12 @@ textarea,
   background: var(--throng-colour-attentionMark);
   color: var(--throng-attention-mark-text, #000);
   line-height: 1;
-  /* FR-093 — a slow blink, opacity only (compositor work), slower than the unsaved dot's 1.5 s pulse. */
-  animation: throng-attention-blink 2s ease-in-out infinite;
 }
 
-@keyframes throng-attention-blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-/* Reduced motion (FR-093): still, at full opacity. */
-@media (prefers-reduced-motion: reduce) {
-  .throng-attention-mark {
-    animation: none;
-    opacity: 1;
-  }
+/* FR-093, FR-093a — a slow blink, slower than the unsaved dot's 1.5 s pulse, stepped by `mark-blink.ts`
+ * (which also keeps a mark still under reduced motion). Never a CSS animation: see that file. */
+.throng-attention-mark[data-blink-dim] {
+  opacity: 0.35;
 }
 
 /* FR-092, FR-137 — on a project row the circle takes the colour dot's place: exactly its 14 x 14 box, no

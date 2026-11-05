@@ -802,6 +802,10 @@ lands on a marked panel and clears it.
   well under three cycles a second. When the operating system asks for reduced motion, a mark MUST be
   shown still at full opacity. *(The period, 2 s, and the reduced-motion rule are derived from 011
   FR-023's unsaved-dot pulse; not confirmed by the user.)*
+- **FR-093a** *(2026-11-04; extends FR-093)*: The blink MUST be a stepped toggle, a second at each opacity,
+  and MUST NOT be a CSS animation. A continuous animation presents the whole window on every display frame
+  for as long as a mark stands (measured at 144 Hz: 143 full-window presents a second against 3, 56 W
+  against 38.5 W at the GPU, and a GPU render alongside it taking 27.2 s against 22.1 s).
 - **FR-094** *(2026-10-19; extends 046 FR-072a)*: On the selected project's row, filled with the
   project's colour, an unmarked colour dot MUST carry a ring in the row's contrast colour (black or
   white, as 046 FR-072a picks for the row's text), thick enough to read against the fill whatever the

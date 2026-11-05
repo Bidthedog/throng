@@ -1,13 +1,13 @@
 /**
- * 057 FR-093, FR-094 — the mark blinks slowly and holds still under reduced motion; the highlighted
- * project row's colour dot is ringed so it reads against the fill.
+ * 057 FR-093a, FR-094 — the mark's two opacities and no CSS animation; the highlighted project row's
+ * colour dot is ringed so it reads against the fill. The stepping itself, its period and reduced motion are
+ * `attention-mark-blink.test.ts`'s.
  *
- * jsdom evaluates neither `@keyframes` nor `prefers-reduced-motion`, so — as `split-mode-pulse-css.test.ts`
- * does for 048 — the claims are asserted on the stylesheet text, which is where they are made.
+ * jsdom applies no layout, so — as `split-mode-pulse-css.test.ts` does for 048 — the claims are asserted on
+ * the stylesheet text, which is where they are made.
  *
- * ANTI-VACUITY CONTROL: drop the mark's `animation` and the blink test fails; give it the unsaved dot's
- * 1.5 s and the "slower" test fails; drop it from the reduced-motion blocks and that test fails; put the
- * ring back to 1px and the ring test fails.
+ * ANTI-VACUITY CONTROL: give the mark an `animation` and the blink test fails; drop its dim rule and that
+ * test fails; put the ring back to 1px and the ring test fails.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -31,20 +31,6 @@ function blockOf(source: string, prelude: string): string {
   throw new Error(`unbalanced block for ${prelude}`);
 }
 
-/** Every `@media (prefers-reduced-motion: reduce)` block's body. */
-function reducedMotionBlocks(): string[] {
-  return [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{/g)].map((m) => {
-    const start = m.index! + m[0].length;
-    let depth = 1;
-    let i = start;
-    for (; i < css.length && depth > 0; i++) {
-      if (css[i] === '{') depth++;
-      if (css[i] === '}') depth--;
-    }
-    return css.slice(start, i - 1);
-  });
-}
-
 /** Seconds from an `animation` shorthand's first duration. */
 function durationOf(rule: string): number {
   const m = /animation:\s*[\w-]+\s+([\d.]+)(m?s)/.exec(rule);
@@ -52,29 +38,18 @@ function durationOf(rule: string): number {
   return m![2] === 'ms' ? Number(m![1]) / 1000 : Number(m![1]);
 }
 
-describe('the attention mark blinks slowly (FR-093)', () => {
-  it('animates opacity and nothing else', () => {
-    const rule = blockOf(css, '.throng-attention-mark');
-    const name = /animation:\s*([\w-]+)/.exec(rule)?.[1];
-    expect(name, 'the mark names its keyframes').toBeTruthy();
-    const frames = blockOf(css, `@keyframes ${name}`);
-    const properties = new Set([...frames.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]));
-    expect(properties).toEqual(new Set(['opacity']));
+describe('the attention mark blinks slowly, by stepping (FR-093, FR-093a)', () => {
+  it('has no animation of its own: every frame of one presents the whole window', () => {
+    expect(blockOf(css, '.throng-attention-mark')).not.toMatch(/animation/);
+    expect(css).not.toContain('throng-attention-blink');
   });
 
-  it('cycles every 2 s, slower than the unsaved dot, and well under three times a second', () => {
-    const mark = durationOf(blockOf(css, '.throng-attention-mark'));
-    const unsaved = durationOf(blockOf(css, '.throng-unsaved-dot'));
-    expect(mark).toBe(2);
-    expect(mark).toBeGreaterThan(unsaved);
+  it('dims to a reduced opacity, and changes nothing else', () => {
+    expect(blockOf(css, '.throng-attention-mark[data-blink-dim]').trim()).toBe('opacity: 0.35;');
   });
 
-  it('holds still at full opacity under prefers-reduced-motion', () => {
-    const block = reducedMotionBlocks().find((b) => /\.throng-attention-mark\b/.test(b));
-    expect(block, 'a reduced-motion block covers the mark').toBeDefined();
-    const rule = blockOf(block!, '.throng-attention-mark');
-    expect(rule).toMatch(/animation:\s*none/);
-    expect(rule).toMatch(/opacity:\s*1\b/);
+  it('is slower than the unsaved dot it may sit beside: its 2 s cycle against the dot’s pulse', () => {
+    expect(durationOf(blockOf(css, '.throng-unsaved-dot'))).toBeLessThan(2);
   });
 });
 
