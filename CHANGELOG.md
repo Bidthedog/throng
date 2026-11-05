@@ -29,6 +29,8 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha13 — 2026-11-05
+
 ### Added
 
 - Linux packages: a `.deb`, an `.rpm` and a `.tar.gz` for 64-bit x86, with no source checkout or compiler needed ([#550](https://github.com/Bidthedog/throng/issues/550)).
@@ -38,12 +40,20 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Changed
 
 - An idle throng on Linux asks far less of the GPU and CPU: attention marks and the terminal cursor blink from timers, and a quiet terminal's running command is checked one interval in ten ([#565](https://github.com/Bidthedog/throng/issues/565)).
+- The tab hover popover is a little wider, and its panel rows are easier to tell apart: a line between rows, and each icon at its row's top left.
 
 ### Fixed
 
 - The resource monitor and status bar figures now work in installed builds. If the collector cannot start, they say the figures are unavailable and the log says why ([#542](https://github.com/Bidthedog/throng/issues/542)).
 - Switching tabs or mirroring a panel no longer leaves text like `11;rgb:…;1R` at the prompt ([#566](https://github.com/Bidthedog/throng/issues/566)).
 - `top` no longer comes up with part of its display missing, and output arriving together with a `clear` is no longer lost ([#569](https://github.com/Bidthedog/throng/issues/569)).
+- Splitting from the keypad works with NumLock on.
+- After the window process crashes, its terminals are no longer held to the size of a window that is gone.
+- Selecting all in a preview no longer raises an error after its text has re-rendered.
+
+### Known issues
+
+- On Linux, a full-screen throng running through XWayland can show scanlines across the whole monitor on some systems. Turning on *Use native Wayland* avoids them ([#567](https://github.com/Bidthedog/throng/issues/567)).
 
 ## 1.0.0-alpha12 — 2026-10-30
 
