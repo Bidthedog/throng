@@ -2,17 +2,18 @@
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Attention marks blink without loading the GPU | untested | | | |
+| MT-01 | Attention marks blink without loading the GPU | needs retest | 48bf4a5ba5de | 2026-11-05 | 375e4630 touched packages/ui/src/renderer/theme.css |
 | MT-02 | Terminal cursor blink | untested | | | |
-| MT-03 | Command tracking in a quiet terminal | untested | | | |
-| MT-04 | A remembered command survives a restart on Linux | untested | | | |
-| MT-05 | Keypad split chords with NumLock on and off | untested | | | |
-| MT-06 | A terminal grows again after throng crashes | untested | | | |
-| MT-07 | A .asar file in a project | untested | | | |
-| MT-08 | Install guide split by system | untested | | | |
-| MT-09 | Switching tabs types nothing at the prompt | untested | | | |
-| MT-10 | A mirrored panel types nothing at the prompt | untested | | | |
+| MT-03 | Command tracking in a quiet terminal | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-04 | A remembered command survives a restart on Linux | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-05 | Keypad split chords with NumLock on and off | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-06 | A terminal grows again after throng crashes | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-07 | A .asar file in a project | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-08 | Install guide split by system | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-09 | Switching tabs types nothing at the prompt | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-10 | A mirrored panel types nothing at the prompt | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-11 | Resource monitor in a packaged build | untested | | | |
+| MT-12 | Tab hover popover rows | untested | | | |
 
 ## MT-01: Attention marks blink without loading the GPU
 
@@ -37,8 +38,10 @@ Paths: `packages/ui/src/renderer/terminal/cursor-blink.ts`, `packages/ui/src/ren
 1. Click into a Bash terminal and type `echo hello` without pressing Enter. Press the left arrow three times, so the cursor sits on a letter.
 2. Watch it. The block turns on and off every half second, and the letter stays readable in the off half.
 3. Type quickly. The cursor stays solid while you type and starts blinking when you stop.
-4. Run `printf '\e[4 q'`. The cursor is an underline and blinks. Run `printf '\e[6 q'`. It is a bar and blinks. Run `printf '\e[2 q'` to get the block back.
-5. Click a different window. The cursor becomes a still outline. Click back. It blinks again.
+4. Run `printf '\e[3 q'`. The cursor is an underline and blinks. Run `printf '\e[5 q'`. It is a bar and blinks.
+5. Run `printf '\e[4 q'`, then `printf '\e[6 q'`, then `printf '\e[2 q'`. Each is the steady form, an underline, a bar and a block, and holds still.
+6. Run `printf '\e[0 q'`. The blinking block is back.
+7. Click a different window. The cursor becomes a still outline. Click back. It blinks again.
 
 ### Negative cases
 - A cursor that disappears for good, sticks in the off half when you click away, or hides the letter under it is a failure.
@@ -166,3 +169,19 @@ Paths: `packages/ui/src/collector/**`, `packages/ui/src/main/resource-monitor-ho
 
 ### Negative cases
 - "Collecting the first reading…" that never changes, or no status bar item, is the bug this fixed.
+
+## MT-12: Tab hover popover rows
+
+Covers: 031 FR-051a
+Paths: `packages/ui/src/renderer/workspace/tab-popover.tsx`, `packages/ui/src/renderer/theme.css`
+
+### Steps
+1. Make a tab with three or more panels, one with a long name. Rest the pointer on the tab.
+2. The popover is a little wider than before. A line separates each panel's row from the next.
+3. Each icon sits at the top left of its row. On a name that wraps, the icon stays beside its first line.
+4. Hover a tab with one panel. There is no line above its row.
+5. Hover the last tab in the strip. The popover stays on screen.
+
+### Negative cases
+- A popover running off the window, or rows that run together, is a failure.
+
