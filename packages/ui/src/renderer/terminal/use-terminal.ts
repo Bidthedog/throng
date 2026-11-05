@@ -79,6 +79,7 @@ import { terminalDebug, terminalDebugEnabled } from './debug-log.js';
 
 /** #290 debug — the DEC modes worth a log line: the screens, alternate scroll, and mouse reporting. */
 const DEBUG_LOGGED_MODES = new Set<number>([47, 1047, 1049, 1007, ...MOUSE_REPORTING_MODES]);
+import { attachCursorBlink } from './cursor-blink.js';
 import { registerTerminalFocus, unregisterTerminalFocus } from './focus-registry.js';
 import { isFocusReport } from './focus-reports.js';
 import { registerTerminalBuffer, unregisterTerminalBuffer } from './buffer-registry.js';
@@ -1150,6 +1151,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
     }
 
     term.open(container);
+    const detachCursorBlink = attachCursorBlink(term);
     focusIfActive(term); // only the active panel grabs focus on mount (issue 144)
 
     /*
@@ -1869,6 +1871,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       unregisterTerminalFocus(panelId);
       unregisterTerminalBuffer(panelId);
       unregisterRefresh();
+      detachCursorBlink();
           term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
