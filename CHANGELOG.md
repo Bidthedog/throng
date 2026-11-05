@@ -35,6 +35,15 @@ What changed in each release of throng, written for someone deciding whether to 
 - On Linux, a throng left open across an upgrade keeps working, and tells you a newer version is installed.
 - Signed apt and dnf repositories at `throng-ide.com`, so a Linux install can take upgrades with your system updates ([#554](https://github.com/Bidthedog/throng/issues/554)).
 
+### Changed
+
+- An idle throng on Linux asks far less of the GPU and CPU: attention marks and the terminal cursor blink from timers, and a quiet terminal's running command is checked one interval in ten ([#565](https://github.com/Bidthedog/throng/issues/565)).
+
+### Fixed
+
+- The resource monitor and status bar figures now work in installed builds. If the collector cannot start, they say the figures are unavailable and the log says why ([#542](https://github.com/Bidthedog/throng/issues/542)).
+- Switching tabs or mirroring a panel no longer leaves text like `11;rgb:…;1R` at the prompt ([#566](https://github.com/Bidthedog/throng/issues/566)).
+
 ## 1.0.0-alpha12 — 2026-10-30
 
 ### Added
