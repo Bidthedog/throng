@@ -205,13 +205,18 @@ describe('terminal.attention producer (057)', () => {
       { pid: 2001, ppid: 1000, commandLine: 'npm run dev', startedAt: Date.now() },
     ];
     const finished = (h: AttentionHarness) => h.signals.filter((s) => s.signal === 'commandFinished');
+    /** A real command ending brings the prompt back: that output is what keeps it observed (025 FR-019i). */
+    const promptReturns = (h: AttentionHarness): void => {
+      h.host.children = [];
+      h.host.emit('$ ');
+    };
 
     it('command → nothing publishes commandFinished with the command name', async () => {
       const h = await harness();
       h.host.children = running();
       await sleep(200);
       expect(finished(h)).toEqual([]);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)).toHaveLength(1);
       expect(finished(h)[0]).toMatchObject({ panelId: 'p1', kind: 'attention', detail: 'npm run dev', startup: false });
@@ -232,14 +237,15 @@ describe('terminal.attention producer (057)', () => {
       await h.attach('p1', 'proj', { launch: { file: 'C:/cmd.exe', args: [], cwd: 'C:/proj', startupCommand: true } });
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)).toHaveLength(1);
       expect(finished(h)[0]!.startup).toBe(true);
       await sleep(300); // clear the rate window for the next one
+      h.host.emit('npm run dev\r\n'); // the shell's echo: a terminal gone quiet is observed again on activity
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h).map((s) => s.startup)).toEqual([true, false]);
     });
@@ -250,7 +256,7 @@ describe('terminal.attention producer (057)', () => {
       await h.attach('p1', 'proj', { launch: { file: 'C:/cmd.exe', args: [], cwd: 'C:/proj', writeOnReady: 'npm run dev' } });
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)[0]!.startup).toBe(true);
     });
@@ -262,7 +268,7 @@ describe('terminal.attention producer (057)', () => {
       await h.rpc('terminal.write', { panelId: 'p1', data: 'ls\r' });
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)[0]!.startup).toBe(false);
     });
@@ -276,7 +282,7 @@ describe('terminal.attention producer (057)', () => {
       await h.rpc('terminal.write', { panelId: 'p1', data: `${ESC}[<0;3;4M` });
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)[0]!.startup).toBe(true);
     });
@@ -286,7 +292,7 @@ describe('terminal.attention producer (057)', () => {
       await h.rpc('terminal.detach', { panelId: 'p1' });
       h.host.children = running();
       await sleep(200);
-      h.host.children = [];
+      promptReturns(h);
       await sleep(200);
       expect(finished(h)).toHaveLength(1);
     });
