@@ -10,10 +10,11 @@
 | MT-06 | A terminal grows again after throng crashes | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-07 | A .asar file in a project | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-08 | Install guide split by system | signed off | 48bf4a5ba5de | 2026-11-05 | |
-| MT-09 | Switching tabs types nothing at the prompt | signed off | 48bf4a5ba5de | 2026-11-05 | |
-| MT-10 | A mirrored panel types nothing at the prompt | signed off | 48bf4a5ba5de | 2026-11-05 | |
+| MT-09 | Switching tabs types nothing at the prompt | needs retest | 48bf4a5ba5de | 2026-11-05 | 50ec1a18 touched packages/ui/src/renderer/terminal/use-terminal.ts |
+| MT-10 | A mirrored panel types nothing at the prompt | needs retest | 48bf4a5ba5de | 2026-11-05 | 50ec1a18 touched packages/ui/src/renderer/terminal/use-terminal.ts |
 | MT-11 | Resource monitor in a packaged build | untested | | | |
 | MT-12 | Tab hover popover rows | untested | | | |
+| MT-13 | Output after a clear stays on screen | untested | | | |
 
 ## MT-01: Attention marks blink without loading the GPU
 
@@ -185,3 +186,18 @@ Paths: `packages/ui/src/renderer/workspace/tab-popover.tsx`, `packages/ui/src/re
 ### Negative cases
 - A popover running off the window, or rows that run together, is a failure.
 
+
+## MT-13: Output after a clear stays on screen
+
+Covers: 008 FR-006c, #569
+Paths: `packages/ui/src/renderer/terminal/clear-detect.ts`, `packages/ui/src/renderer/terminal/use-terminal.ts`
+
+### Steps
+1. In a Bash terminal in a large panel, run `top`. The header and the full list show from the first screen. Press q.
+2. Run `top` a few more times. It never starts with part of its display missing.
+3. Run `clear; ls -la; echo done`. The whole listing and `done` show.
+4. Run `seq 1 500`, then `clear`. The screen clears, and scrolling up shows no old lines.
+5. Run `vim` and quit it. The screen comes back as it was.
+
+### Negative cases
+- Old output left in the scrollback after `clear`, or a blank screen after `top` starts, is a failure.
