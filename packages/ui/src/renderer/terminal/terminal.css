@@ -165,6 +165,23 @@
   display: block !important;
 }
 
+/* `cursor-blink.ts` blinks the cursor from a timer: xterm's infinite animation is switched off, and the
+   off half it would have drawn comes from the attribute on the row container, for each cursor style.
+   `!important` because xterm injects its own rules at a higher specificity. */
+.terminal-panel .xterm-rows .xterm-cursor-blink {
+  animation: none !important;
+}
+.terminal-panel .xterm-rows[data-cursor-off] .xterm-cursor-blink.xterm-cursor-block {
+  background-color: inherit !important;
+  color: var(--throng-terminal-cursor, inherit) !important;
+}
+.terminal-panel .xterm-rows[data-cursor-off] .xterm-cursor-blink.xterm-cursor-underline {
+  border-bottom-style: hidden !important;
+}
+.terminal-panel .xterm-rows[data-cursor-off] .xterm-cursor-blink.xterm-cursor-bar {
+  box-shadow: none !important;
+}
+
 /* O10 (research R22): xterm 6.0.0 draws its own link visuals and no option styles them — every OSC 8
    cell renders as `xterm-underline-5` (dashed, in the cell's colour, whatever its target), a hovered
    link gets an INLINE solid underline, and the screen gets `xterm-cursor-pointer`. Inside a terminal
