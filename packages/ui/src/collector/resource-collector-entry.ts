@@ -16,7 +16,7 @@ if (typeof process.send !== 'function') {
   process.exit(1);
 }
 
-const { metrics, onTestMessage } = composeCollector(process.env);
+const { metrics, onTestMessage } = await composeCollector(process.env);
 const collector = new ResourceCollector({
   metrics,
   collectorPid: process.pid,

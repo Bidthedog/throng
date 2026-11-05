@@ -16,9 +16,11 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { formatGrouped } from '@throng/core';
 import { useSession } from './monitor-session.js';
+import { useResourceSummary } from './use-resource-summary.js';
 
 export function Liveness(): ReactElement {
   const { frame } = useSession();
+  const collectorDown = useResourceSummary()?.collectorDown === true;
   const stale = frame?.stale === true;
   const live = frame !== null;
 
@@ -31,6 +33,13 @@ export function Liveness(): ReactElement {
     return () => clearInterval(timer);
   }, [live, frame?.tick]);
 
+  if (frame === null && collectorDown) {
+    return (
+      <p className="monitor-liveness monitor-liveness--stale" role="status" data-testid="monitor-unavailable" data-state="unavailable">
+        Figures unavailable: the resource collector could not start
+      </p>
+    );
+  }
   if (frame === null) {
     return (
       <p className="monitor-liveness" role="status" data-testid="monitor-loading" data-state="collecting">

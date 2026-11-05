@@ -127,6 +127,8 @@ export interface ResourceSummary {
   readonly stale: boolean;
   /** With `stale`: the epoch ms of the newest reading these figures fully reflect, for "N s ago". */
   readonly staleSince?: number;
+  /** The collector has exited without a reading: every figure is unavailable (FR-044a). */
+  readonly collectorDown?: boolean;
   readonly total: Metrics;
   readonly components: readonly ComponentSummary[];
   readonly machine: MachineInfo;

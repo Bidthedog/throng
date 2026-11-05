@@ -7,6 +7,7 @@ import { COLLECTOR_EXIT_GRACE_MS, ResourceMonitorHost, type CollectorChild, type
 /** 055 T033 — UI main's side of the collector: fork, roster, relays, subscriptions, estimates. */
 
 class FakeChild extends EventEmitter implements CollectorChild {
+  readonly stderr = new EventEmitter();
   readonly sent: MainToCollector[] = [];
   connected = true;
   send(msg: MainToCollector): boolean {
@@ -74,6 +75,7 @@ function make(over: Partial<ResourceMonitorHostDeps> = {}) {
     settings: () => settings,
     send: (windowId, channel, payload) => pushes.push({ windowId, channel, payload }),
     mainWindowId: () => 1,
+    log: () => undefined,
     broadcast: (channel, payload) => pushes.push({ windowId: -1, channel, payload }),
     now: () => now,
     ...over,
@@ -324,5 +326,73 @@ describe('ResourceMonitorHost (055 T033, R1, R7)', () => {
     expect(await s.host.kill({ mode: 'process', nodeId: 'x:1:1', targets: ['1:1'] })).toEqual({
       results: [{ key: '1:1', outcome: 'failed', cause: 'collectorUnavailable' }],
     });
+  });
+});
+
+describe('a collector that cannot start (#542, 055 FR-044)', () => {
+  const dies = (c: FakeChild, code: number | null, stderr = ''): void => {
+    c.connected = false;
+    c.stderr.emit('data', Buffer.from(stderr));
+    c.emit('exit', code);
+    c.emit('close', code);
+  };
+
+  it('tells the main window its figures are unavailable, rather than leaving it collecting for ever', () => {
+    const s = make();
+    s.host.start();
+    expect(s.host.latestSummary()).toBeNull();
+    dies(s.child(), 1);
+    const total = s.host.latestSummary()?.total;
+    expect(total?.cpu).toMatchObject({ kind: 'unavailable' });
+    expect(total?.memory).toMatchObject({ kind: 'unavailable' });
+    expect(s.pushes.at(-1)?.channel).toBe('throng:resources:summary');
+  });
+
+  it('never replaces real figures with unavailable ones: those go stale', () => {
+    const s = make();
+    s.host.start();
+    s.child().say({ type: 'summary', summary: summary(1) });
+    dies(s.child(), 1);
+    expect(s.host.latestSummary()).toMatchObject({ stale: true, total: { cpu: 1 } });
+  });
+
+  it('lets a later reading replace the unavailable figures', () => {
+    const s = make();
+    s.host.start();
+    dies(s.child(), 1);
+    expect(s.forks.length).toBeGreaterThan(1);
+    s.child().say({ type: 'summary', summary: summary(1) });
+    expect(s.host.latestSummary()).toMatchObject({ stale: false, total: { cpu: 1 } });
+  });
+
+  it('logs the exit code and what the collector said', () => {
+    const logged: string[] = [];
+    const s = make({ log: (m: string) => logged.push(m) });
+    s.host.start();
+    const c = s.child();
+    dies(c, 1, "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vitest'");
+    expect(logged.join()).toContain('exited with code 1');
+    expect(logged.join()).toContain('ERR_MODULE_NOT_FOUND');
+  });
+
+  it('logs nothing when throng itself stopped the collector', () => {
+    const logged: string[] = [];
+    const s = make({ log: (m: string) => logged.push(m) });
+    s.host.start();
+    const c = s.child();
+    s.host.stop();
+    c.emit('exit', 0);
+    c.emit('close', 0);
+    expect(logged).toEqual([]);
+  });
+
+  it('logs a failing reading once, not once a tick', () => {
+    const logged: string[] = [];
+    const s = make({ log: (m: string) => logged.push(m) });
+    s.host.start();
+    s.child().say({ type: 'error', cause: 'readFailed' });
+    s.child().say({ type: 'error', cause: 'readFailed' });
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('readFailed');
   });
 });
