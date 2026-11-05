@@ -314,6 +314,7 @@ export class TerminalService {
     events.onLastSinkRemoved(() => {
       this.attendedPanels = new Set();
       for (const session of this.sessions.values()) this.tellFocus(session);
+      this.forgetViews();
     });
     if (this.processCwd) {
       this.cwdTimer = setInterval(() => void this.pollCwd(), CWD_POLL_MS);
@@ -1067,6 +1068,19 @@ export class TerminalService {
     }, REPAINT_RESTORE_MS);
     timer.unref?.(); // never keep the daemon alive for a repaint
     this.repaintTimers.set(session.panelId, timer);
+  }
+
+  /**
+   * No UI is attached, so no view is left. A UI main that crashed or was killed never detached its
+   * own, and a dead window's size would cap the terminal for the rest of its life (008 FR-009).
+   * Nothing is terminated here: losing the UI is not a rootless session's owner closing it.
+   */
+  private forgetViews(): void {
+    for (const session of this.sessions.values()) {
+      if (session.views.size === 0) continue;
+      session.views.clear();
+      session.gridStale = true;
+    }
   }
 
   /**
