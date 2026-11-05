@@ -33,6 +33,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 - Linux packages: a `.deb`, an `.rpm` and a `.tar.gz` for 64-bit x86, with no source checkout or compiler needed ([#550](https://github.com/Bidthedog/throng/issues/550)).
 - On Linux, a throng left open across an upgrade keeps working, and tells you a newer version is installed.
+- Signed apt and dnf repositories at `throng-ide.com`, so a Linux install can take upgrades with your system updates ([#554](https://github.com/Bidthedog/throng/issues/554)).
 
 ## 1.0.0-alpha12 — 2026-10-30
 

@@ -15,7 +15,7 @@
  *   1. **The parser never falls back.** No section for the version being published is a refusal —
  *      never the previous version's notes, never generated text. A fallback that produces a
  *      plausible body is exactly how an unreviewed release ships.
- *   2. **The footer is invariant and always last.** `docs/installation.md` tells users the notes
+ *   2. **The footer is invariant and always last.** `docs/install-windows.md` tells users the notes
  *      carry the checksum, and 020 FR-043 makes the notes responsible for explaining the
  *      unrecognised-app warning. New content goes above it, never in place of it — including when
  *      the body has to be shortened to fit (FR-010), where the notes are the half with a fallback

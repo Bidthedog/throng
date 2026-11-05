@@ -8,8 +8,8 @@ know your way around. Every chord mentioned is rebindable; the full list is in
 
 ## Before you start
 
-Install throng from a download, or run it from a clone — both are in
-[installation](installation.md). It runs on Windows 11, and on [Linux](linux.md) from source.
+Install throng on [Windows](install-windows.md) or [Linux](install-linux.md), or
+[run it from a clone](installation.md#running-from-source).
 
 ## First launch
 
