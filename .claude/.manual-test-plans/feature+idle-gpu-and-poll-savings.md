@@ -2,19 +2,19 @@
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Attention marks blink without loading the GPU | needs retest | 48bf4a5ba5de | 2026-11-05 | 375e4630 touched packages/ui/src/renderer/theme.css |
-| MT-02 | Terminal cursor blink | untested | | | |
+| MT-01 | Attention marks blink without loading the GPU | signed off | 50ec1a1839ff | 2026-11-05 | |
+| MT-02 | Terminal cursor blink | signed off | 50ec1a1839ff | 2026-11-05 | |
 | MT-03 | Command tracking in a quiet terminal | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-04 | A remembered command survives a restart on Linux | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-05 | Keypad split chords with NumLock on and off | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-06 | A terminal grows again after throng crashes | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-07 | A .asar file in a project | signed off | 48bf4a5ba5de | 2026-11-05 | |
 | MT-08 | Install guide split by system | signed off | 48bf4a5ba5de | 2026-11-05 | |
-| MT-09 | Switching tabs types nothing at the prompt | needs retest | 48bf4a5ba5de | 2026-11-05 | 50ec1a18 touched packages/ui/src/renderer/terminal/use-terminal.ts |
-| MT-10 | A mirrored panel types nothing at the prompt | needs retest | 48bf4a5ba5de | 2026-11-05 | 50ec1a18 touched packages/ui/src/renderer/terminal/use-terminal.ts |
+| MT-09 | Switching tabs types nothing at the prompt | signed off | 50ec1a1839ff | 2026-11-05 | |
+| MT-10 | A mirrored panel types nothing at the prompt | signed off | 50ec1a1839ff | 2026-11-05 | |
 | MT-11 | Resource monitor in a packaged build | untested | | | |
-| MT-12 | Tab hover popover rows | untested | | | |
-| MT-13 | Output after a clear stays on screen | untested | | | |
+| MT-12 | Tab hover popover rows | signed off | 50ec1a1839ff | 2026-11-05 | |
+| MT-13 | Output after a clear stays on screen | signed off | 50ec1a1839ff | 2026-11-05 | |
 
 ## MT-01: Attention marks blink without loading the GPU
 
