@@ -98,8 +98,8 @@ pane has focus; the caret moves with focus, into whichever control in that panel
 **Ctrl+Wheel** over the title bar or a side pane does nothing, and it never scrolls the panel.
 
 **Split mode.** `Ctrl+Shift+Alt+End` puts the active panel into split mode: its border pulses and its
-status bar says the chord is waiting. An arrow key then splits the panel that way — with
-Ctrl+Shift+Alt still held or already released. **Esc** leaves split mode without splitting; any other
+status bar says the chord is waiting. An arrow key, or the keypad's 8, 2, 4 or 6 with NumLock on or
+off, then splits the panel that way — with Ctrl+Shift+Alt still held or already released. **Esc** leaves split mode without splitting; any other
 key, the chord timeout, or focus moving elsewhere ends it too. Neither key reaches a terminal. The same
 four splits are on every panel's **+** button and in its **Split** menu.
 
@@ -298,7 +298,8 @@ it; use `Ctrl+MiddleClick` there.
 
 **NumLock makes no difference.** Windows reports a keypad key pressed with Shift and NumLock on as a
 different key with Shift released; throng restores the Shift, so `Ctrl+Shift+Alt+Numpad0` resets
-the window zoom with NumLock on or off.
+the window zoom with NumLock on or off. With `Ctrl+Shift+Alt` the other keypad keys are read as their
+navigation keys in either state, so keypad 8 is `ArrowUp` and keypad 1 is `End`.
 
 The **backtick** chords (`` Ctrl+` ``, `` Ctrl+Shift+` ``) are matched on the physical backtick key,
 so they work on layouts where Shift+backtick prints something other than `~`.

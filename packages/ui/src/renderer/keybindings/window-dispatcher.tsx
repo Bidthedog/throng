@@ -40,6 +40,7 @@ import {
   chordKey,
   resolveKeydown,
   windowProducedEvent,
+  asKeypadNavKey,
   withoutCarried,
   type CarriedModifiers,
   type ChordEventLike,
@@ -568,8 +569,12 @@ export function WindowDispatcher({
             });
           // Exactly as pressed first (a second stroke bound WITH modifiers), then with the first
           // stroke's modifiers cleared — FR-020a: an arrow with any of them still held is the bare
-          // arrow, so `Ctrl+Shift+Alt+ArrowDown` here splits and never reaches `focus.down`.
-          const action = resolve(e) ?? resolve(withoutCarried(e, prefix.carried));
+          // arrow, so `Ctrl+Shift+Alt+ArrowDown` here splits and never reaches `focus.down`. Last, a
+          // keypad key as its navigation key: with NumLock on it may report its digit, or read as
+          // Shift held once the modifiers are cleared. A second stroke bound to the digit wins above.
+          const pressed = withoutCarried(e, prefix.carried);
+          const keypad = asKeypadNavKey(pressed);
+          const action = resolve(e) ?? resolve(pressed) ?? (keypad && resolve(keypad));
           // FR-025 — the first stroke again restarts the timeout on the same panel: it EXTENDS the
           // prefix (`begin` again), so the engine keeps it pending rather than stacking a second mode.
           if (!action) return beginIfFirstStroke(e);
