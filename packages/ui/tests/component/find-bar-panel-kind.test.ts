@@ -177,8 +177,13 @@ async function mount(kind: 'editor' | 'terminal') {
    * pressed before the load lands resolves to no panel and returns at `:108` — doing nothing. Every
    * "no bar" assertion in this file would then pass against a component that had simply not started
    * yet, which is the most expensive kind of false green. Waiting on the layout removes the race.
+   *
+   * The probe says the layout was COMMITTED, and the listener takes the panel's kind in a passive
+   * effect after that, so the effects are flushed too. Without it a chord could still beat the listener
+   * (measured under load: 6 runs in 48 across this file and `find-bar-disclosure.test.ts`).
    */
   await waitFor(() => expect(screen.getByTestId('layout-state')).toHaveTextContent('loaded:1'));
+  await act(async () => {});
   return { user };
 }
 

@@ -26,7 +26,7 @@
  * row) before or instead of an absence, so a `FindBar` that had stopped rendering satisfies none of
  * them — including the terminal test, which anchors on the find input first.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createElement, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -137,6 +137,7 @@ async function mount(kind: 'editor' | 'terminal') {
   );
 
   await waitFor(() => expect(screen.getByTestId('layout-state')).toHaveTextContent('loaded:1'));
+  await act(async () => {}); // the listener takes the panel's kind in a passive effect, after that commit
   return { user };
 }
 

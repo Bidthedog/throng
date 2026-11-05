@@ -110,6 +110,7 @@ async function mount(replaceAll: ReturnType<typeof vi.fn>): Promise<void> {
     ),
   );
   await waitFor(() => expect(screen.getByTestId('layout-state')).toHaveTextContent('loaded:1'));
+  await act(async () => {}); // the listener takes the panel's kind in a passive effect, after that commit
 
   // The stand-in for "focus in the document" — no real CodeMirror view is mounted by this harness,
   // exactly as `window-zoom-reset-shift.test.ts` stands in for a terminal/editor/find-bar surface.
@@ -248,6 +249,7 @@ async function mountWithReplaceCurrent(replaceCurrent: ReturnType<typeof vi.fn>)
     ),
   );
   await waitFor(() => expect(screen.getByTestId('layout-state')).toHaveTextContent('loaded:1'));
+  await act(async () => {}); // the listener takes the panel's kind in a passive effect, after that commit
 }
 
 describe('Alt+Enter (replaceCurrent) carries the same replace-section gate (FR-093, derived)', () => {
