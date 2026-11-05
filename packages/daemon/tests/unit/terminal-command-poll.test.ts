@@ -224,6 +224,71 @@ describe('the shared command observation (025 FR-019 / T024)', () => {
     expect(s.published.filter((p) => p.command !== null)).toHaveLength(0);
   });
 
+  describe('a host that reports its shell’s start on its own clock (IPtyHost.shellStartedAt)', () => {
+    /** Linux's clock, which here reads a second behind the wall clock. */
+    const SKEW_MS = 1000;
+    class SkewedHost extends FakeHost {
+      shellStart: number | undefined;
+      shellStartedAt(): Promise<number | undefined> {
+        return Promise.resolve(this.shellStart);
+      }
+    }
+    function makeSkewed(host: SkewedHost): { published: Array<string | null>; attach: () => Promise<unknown> } {
+      const events = new TerminalEvents();
+      const published: Array<string | null> = [];
+      events.addSink({
+        write: (frame: string): void => {
+          const msg = JSON.parse(frame) as { method: string; params: { command: string | null } };
+          if (msg.method === 'terminal.command') published.push(msg.params.command);
+        },
+      });
+      const service = new TerminalService(
+        host,
+        events,
+        new TerminalLockManager(noopLock),
+        { isElevated: () => false },
+        undefined,
+        false,
+        0,
+        undefined,
+        30,
+      );
+      const router = new RpcRouter();
+      service.register(router);
+      const params = { panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 };
+      return { published, attach: () => router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params }) };
+    }
+
+    it('compares against that start, so a child started with the shell is published', async () => {
+      const host = new SkewedHost();
+      const s = makeSkewed(host);
+      await s.attach();
+      host.shellStart = Date.now() - SKEW_MS;
+      host.children = [{ ...child(), startedAt: host.shellStart }];
+      await sleep(200);
+      expect(s.published.at(-1)).toBe('npm run dev');
+    });
+
+    it('still refuses a process older than that start (#280)', async () => {
+      const host = new SkewedHost();
+      const s = makeSkewed(host);
+      await s.attach();
+      host.shellStart = Date.now() - SKEW_MS;
+      host.children = [{ ...child(), startedAt: host.shellStart - 1 }];
+      await sleep(200);
+      expect(s.published.filter((command) => command !== null)).toHaveLength(0);
+    });
+
+    it('falls back to the wall clock when the host cannot say', async () => {
+      const host = new SkewedHost();
+      const s = makeSkewed(host);
+      await s.attach();
+      host.children = [{ ...child(), startedAt: Date.now() - SKEW_MS }];
+      await sleep(200);
+      expect(s.published.filter((command) => command !== null)).toHaveLength(0);
+    });
+  });
+
   it('uses the INJECTED interval, not a constant — a slow one has not fired yet', async () => {
     // If the interval were hardcoded at 1000ms this test would be indistinguishable from the one
     // above; the point is that the value passed in is the value used.

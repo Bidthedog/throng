@@ -124,6 +124,13 @@ export interface IPtyHost {
    */
   listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]>;
   /**
+   * When the shell started, on the SAME clock as {@link ChildProcess.startedAt}: command capture compares the two
+   * (#280). A host needs this when that clock is not the wall clock. Linux derives start times from a boot time in
+   * whole seconds, so a command the shell starts at once reads as older than a `Date.now()` taken before the spawn.
+   * Resolves `undefined` when it cannot say, and never rejects. Optional: without it the wall clock is the floor.
+   */
+  shellStartedAt?(handle: PtyHandle): Promise<number | undefined>;
+  /**
    * 051 FR-040/FR-041 — every process attached to each terminal's console, keyed by `handle.pid`,
    * for all the handles in ONE OS request. A terminal the OS could not answer for is absent from the
    * map (its command falls back to the direct children); the shell appears under its handle's pid.

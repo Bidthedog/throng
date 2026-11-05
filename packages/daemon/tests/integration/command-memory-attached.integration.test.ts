@@ -1,9 +1,10 @@
 import { skipUnlessLinux, skipUnlessWindows } from '@throng/core/testing';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BUILTIN_FLAVOUR_COMMAND_RECIPES, captureDecision, resolveLaunchSpec } from '@throng/core';
 import { LinuxPtyHost } from '@throng/platform-linux';
 import { NodePtyHost } from '@throng/platform-windows';
 import { TerminalService } from '../../src/terminal-service.js';
@@ -151,4 +152,71 @@ describe('ending a terminal on Linux', () => {
 
     await waitFor(() => sleepPids(seconds).length === 0, 10_000, 'the job to end with its terminal');
   }, 60_000);
+});
+
+/**
+ * Layer: integration. The claim is about two real clocks: the wall clock the daemon reads before a spawn, and the
+ * start time Linux reports for the process a real shell then starts. A fake host would only report what it was told.
+ */
+describe('a remembered command on Linux', () => {
+  it.skipIf(skipUnlessLinux('reads real start times from /proc'))('still counts as running when it is relaunched with its terminal, so the next launch keeps it (025 FR-019)', async () => {
+    const seconds = 1000 + (process.pid % 8000);
+    const remembered = `sleep ${seconds}`;
+    const events = new TerminalEvents();
+    events.publishCommand = (_panelId: string, command: string | null) => void commands.push(command);
+    events.addSink({ write: () => {} }); // something is listening, so the observation runs (025 FR-019f)
+    service = new TerminalService(
+      new LinuxPtyHost(),
+      events,
+      new TerminalLockManager({ acquire: async (p) => ({ path: p }), release: async () => {} }),
+      { isElevated: () => false },
+      undefined,
+      false,
+      0,
+      undefined,
+      100,
+    );
+    const router = new RpcRouter();
+    service.register(router);
+
+    // The launch throng builds for a Bash panel holding a remembered command.
+    const launch = resolveLaunchSpec(
+      { id: 'bash', file: '/bin/bash', args: [], commandRecipe: BUILTIN_FLAVOUR_COMMAND_RECIPES.bash },
+      '',
+      cwd,
+      remembered,
+    );
+    await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'terminal.attach',
+      params: { panelId: 'p', projectId: 'proj', launch, cols: 120, rows: 30 },
+    });
+
+    // Polled rather than `waitFor`, so that running out of time reports what the panel was told.
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && commands.at(-1) !== remembered) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    expect(captureDecision(true, remembered, commands.at(-1) ?? null)).toEqual({ save: false, reason: 'unchanged' });
+    expect(commands.at(-1)).toBe(remembered);
+
+    // …and it ends with its terminal, shell included: the recipe's `exec bash -i` must not outlive the end.
+    const listed = async (): Promise<unknown[]> => {
+      const reply = (await router.handle({ jsonrpc: '2.0', id: 3, method: 'terminal.list', params: {} })) as {
+        result: { sessions: unknown[] };
+      };
+      return reply.result.sessions;
+    };
+    const commandPid = Number(execFileSync('pgrep', ['-f', `^${remembered}$`], { encoding: 'utf8' }).trim());
+    const shellPid = Number(readFileSync(`/proc/${commandPid}/stat`, 'utf8').split(') ')[1]?.split(' ')[1]);
+    expect(await listed()).toHaveLength(1);
+
+    await router.handle({ jsonrpc: '2.0', id: 4, method: 'terminal.killAll', params: { escalate: true } });
+
+    expect(await listed()).toHaveLength(0);
+    await waitFor(() => !existsSync(`/proc/${commandPid}`), 5000, 'the command to end with its terminal');
+    await waitFor(() => !existsSync(`/proc/${shellPid}`), 5000, 'the shell to end with its terminal');
+  }, 30_000);
 });

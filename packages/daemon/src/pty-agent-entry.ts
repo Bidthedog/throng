@@ -259,6 +259,7 @@ function onCommand(msg: AgentCommand): void {
       const h = handles.get(msg.key);
       void (async (): Promise<void> => {
         let procs: ChildProcess[];
+        let shellStartedAt: number | undefined;
         try {
           // The daemon knows this terminal only by its synthetic `key`, never by the shell's real
           // OS pid — `PtyAgentHost.start` returns `{ pid: key }`. The children we report carry
@@ -272,11 +273,12 @@ function onCommand(msg: AgentCommand): void {
           procs = raw.map((c) =>
             shellPid !== undefined && c.ppid === shellPid ? { ...c, ppid: msg.key } : c,
           );
+          shellStartedAt = h ? await pty.shellStartedAt?.(h) : undefined;
         } catch (error) {
           log(`childprocs error key=${msg.key}: ${errText(error)}`);
           procs = [];
         }
-        send({ ev: 'childprocs', key: msg.key, reqId: msg.reqId, procs });
+        send({ ev: 'childprocs', key: msg.key, reqId: msg.reqId, procs, ...(shellStartedAt !== undefined ? { shellStartedAt } : {}) });
       })();
       break;
     }

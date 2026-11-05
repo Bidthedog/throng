@@ -71,6 +71,8 @@ export class PtyAgentHost implements IPtyHost {
   private readonly osPids = new Map<number, number>();
   /** 055 T101 — each live key's console host, from the agent's `conhost` event. */
   private readonly conhostPids = new Map<number, number>();
+  /** Each live key's shell start, on the clock of its children, from the agent's `childprocs` (`shellStartedAt`). */
+  private readonly shellStarts = new Map<number, number>();
   /** 055 R5 — the agent's own pid, from its `ready`; null while no agent is connected. */
   private agentOsPid: number | null = null;
   /** Per-key readiness budget, armed at connect and cleared by the `started` ack (C7). */
@@ -217,6 +219,7 @@ export class PtyAgentHost implements IPtyHost {
     this.liveKeys.delete(key);
     this.osPids.delete(key);
     this.conhostPids.delete(key);
+    this.shellStarts.delete(key);
     // A terminal that is gone has ended, whatever its in-flight end was still waiting for.
     for (const [reqId, waiter] of this.endWaiters) {
       if (waiter.key === key) {
@@ -295,6 +298,7 @@ export class PtyAgentHost implements IPtyHost {
         break;
       }
       case 'childprocs': {
+        if (ev.shellStartedAt !== undefined && this.liveKeys.has(ev.key)) this.shellStarts.set(ev.key, ev.shellStartedAt);
         const waiter = this.childprocWaiters.get(ev.reqId);
         if (waiter) {
           this.childprocWaiters.delete(ev.reqId);
@@ -505,6 +509,11 @@ export class PtyAgentHost implements IPtyHost {
       this.childprocWaiters.set(reqId, done);
       this.sendCmd({ op: 'childprocs', key: handle.pid, reqId });
     });
+  }
+
+  /** What the agent last reported with this terminal's children; `undefined` until then, or from a host that cannot say. */
+  shellStartedAt(handle: PtyHandle): Promise<number | undefined> {
+    return Promise.resolve(this.shellStarts.get(handle.pid));
   }
 
   /**

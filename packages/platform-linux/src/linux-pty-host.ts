@@ -37,6 +37,8 @@ interface Session {
   readonly spawnedAt: number;
   readonly exited: Promise<void>;
   ending: Promise<void> | null;
+  /** The shell's start time from `/proc`, once read. It cannot change for the life of the process. */
+  shellStartedAt?: number;
 }
 
 export interface LinuxPtyHostDeps {
@@ -219,6 +221,13 @@ export class LinuxPtyHost implements IPtyHost {
         executablePath: await readExecutablePath(row.pid),
       })),
     );
+  }
+
+  async shellStartedAt(handle: PtyHandle): Promise<number | undefined> {
+    const session = this.sessions.get(handle.pid);
+    if (!session) return undefined;
+    session.shellStartedAt ??= (await readProcRow(handle.pid))?.startedAt;
+    return session.shellStartedAt;
   }
 
   private table(): Promise<ProcRow[]> {

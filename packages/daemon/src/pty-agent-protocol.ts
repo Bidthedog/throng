@@ -45,7 +45,8 @@ export type AgentEvent =
   // `failed`: the agent could not read the process table (046). `pids` is then meaningless — it is
   // NOT "no children", and the daemon treats the terminal as busy.
   | { ev: 'childpids'; key: number; reqId: number; pids: number[]; failed?: true }
-  | { ev: 'childprocs'; key: number; reqId: number; procs: ChildProcess[] }
+  // `shellStartedAt`: the shell's start on the clock of `procs`, when the agent's host can say (IPtyHost.shellStartedAt).
+  | { ev: 'childprocs'; key: number; reqId: number; procs: ChildProcess[]; shellStartedAt?: number }
   // Keyed by terminal key; the shell's own OS pid already rewritten to its key, as `childprocs` does.
   // `failed` is a request that could not be answered — unknown, never "nothing attached".
   | { ev: 'attachedprocs'; reqId: number; byKey: Record<string, ChildProcess[]>; failed?: boolean }

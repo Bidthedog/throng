@@ -426,11 +426,14 @@ export class TerminalService {
   ): Promise<void> {
     let children: ChildProcess[];
     let attachedOnThisHost: Map<number, ChildProcess[]> | null | undefined;
+    let shellStartedAt: number | undefined;
     try {
       [children, attachedOnThisHost] = await Promise.all([
         session.host.listChildProcesses(session.handle),
         attachedOnHost,
       ]);
+      // After the listing: the PTY agent reports the shell's start time with its children.
+      shellStartedAt = await session.host.shellStartedAt?.(session.handle);
     } catch {
       return; // FR-019e: keep the last known value rather than clearing it.
     }
@@ -445,7 +448,7 @@ export class TerminalService {
       session.handle.pid,
       children,
       session.shellImage,
-      session.shellStartedAt,
+      shellStartedAt ?? session.shellStartedAt,
       attachedOnThisHost?.get(session.handle.pid),
     );
     const command = chosen === null ? null : normaliseCommand(chosen.commandLine);
@@ -810,7 +813,9 @@ export class TerminalService {
      * candidate start times against, so it must not be LATER than the shell's own OS creation
      * time — a value read after `start()` returns includes however long the spawn took, and a
      * genuine early child could then fall below it and be discarded as an impostor. Read first
-     * and the floor is guaranteed no later than the shell, which is the safe direction to err.
+     * and the floor is no later than the shell, which is the safe direction to err — when the
+     * host's start times are on the wall clock. A host whose are not says so through
+     * `IPtyHost.shellStartedAt`, which replaces this at the comparison.
      */
     const shellStartedAt = Date.now();
     try {
