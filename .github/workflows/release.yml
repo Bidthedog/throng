@@ -797,7 +797,7 @@ jobs:
     name: Publish GitHub Release (gated)
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body, sign-index]
     # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
     # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
     #
@@ -833,6 +833,13 @@ jobs:
           pattern: verdict-*
           merge-multiple: true
           path: .
+      # 064 FR-006, #571: the signed bundle goes into the release as it is created. The repository has immutable releases
+      # on, so nothing can be attached once the release is out.
+      - name: Download the signed repository bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: repo-index-bundle
+          path: repo-bundle
       - name: Evaluate publish gates (real version + set reconciles + every combination verified + notes + signed off)
         shell: bash
         env:
@@ -883,13 +890,17 @@ jobs:
           case "$version" in *-*) prerelease='--prerelease';; esac
           # Every artifact of the declared set is attached — named, not globbed (042 FR-017).
           mapfile -t files < <(node scripts/artifact-set.mjs list --paths)
-          gh release create "v$version" "${files[@]}" \
+          # The signed repository bundle rides along. It is not a declared artifact, so it has no checksum row: its
+          # indexes are signed instead (064 FR-006, FR-009).
+          bundle="repo-bundle/throng-repo-index-$version.tar.gz"
+          test -f "$bundle" || { echo "::error::$bundle is missing"; exit 1; }
+          gh release create "v$version" "${files[@]}" "$bundle" \
             --title "throng v$version" --notes-file release-body.md $prerelease
 
   # SIGN THE INDEXES (064 FR-006, FR-009). The only job that can read the private key, because the key is a `release`
-  # Environment secret. It has publish's own `needs` and `if`, so both wait at the Environment together, and it is
-  # on Linux so publish's Windows runner stays as it was. Signing changes no repository: only deploy-repositories does,
-  # and that needs publish. Whether one approval clears both is research D3.
+  # Environment secret. It runs before publish, which attaches the bundle it makes (#571), and it is on Linux so
+  # publish's Windows runner stays as it was. Signing changes no repository: only deploy-repositories does, and that
+  # needs publish. Each of the two jobs asks for its own approval (research D3).
   sign-index:
     name: Sign the repository indexes (gated)
     runs-on: ubuntu-24.04
@@ -949,33 +960,20 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-  # UPDATE THE REPOSITORIES (064 FR-010). Only once the release is out. It holds no key: the bundle is already signed,
-  # and the Pages deployment reads it back from the release. A failure here leaves the repositories on the previous
-  # version, and re-running this job repairs it.
+  # UPDATE THE REPOSITORIES (064 FR-010). Only once the release is out. It holds no key and touches no release: the
+  # signed bundle is already attached, and the Pages deployment reads it back from the release. A failure here leaves the
+  # repositories on the previous version, and re-running this job repairs it.
   deploy-repositories:
     name: Update the package repositories
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [publish, sign-index]
+    needs: [publish]
     permissions:
-      contents: write
       actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v5
-      - name: Download the bundle
-        uses: actions/download-artifact@v7
-        with:
-          name: repo-index-bundle
-          path: repo-bundle
-      - name: Attach the bundle to the release
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=$(node -p "require('./package.json').version")
-          gh release upload "v$version" "repo-bundle/throng-repo-index-$version.tar.gz" --clobber
       # On master, because the github-pages Environment does not accept a tag (research D4).
       - name: Deploy the site
         run: gh workflow run pages.yml --ref master
