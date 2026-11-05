@@ -1,0 +1,8 @@
+[throng]
+name=throng (prerelease)
+baseurl=https://throng-ide.com/rpm/prerelease
+enabled=1
+# The metadata is signed and carries each package's digest. The packages themselves are unsigned.
+gpgcheck=0
+repo_gpgcheck=1
+gpgkey=https://throng-ide.com/throng-repo-key.asc
