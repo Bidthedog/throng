@@ -29,6 +29,12 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha14 — 2026-11-05
+
+### Fixed
+
+- The apt and dnf repositories at `throng-ide.com` now take each release. 1.0.0-alpha13 never reached them, so this is the first version they serve ([#571](https://github.com/Bidthedog/throng/issues/571)).
+
 ## 1.0.0-alpha13 — 2026-11-05
 
 ### Added

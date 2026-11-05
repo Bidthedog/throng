@@ -1,6 +1,6 @@
 {
   "name": "@throng/persistence",
-  "version": "1.0.0-alpha13",
+  "version": "1.0.0-alpha14",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
