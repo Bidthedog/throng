@@ -1,0 +1,59 @@
+name: Pages
+
+# Deploys throng-ide.com (064): the static files from site/ and each channel's signed package indexes from the bundles
+# attached to releases. A deployment replaces the whole site, so every one brings the repositories, and none needs the
+# signing key (FR-006, FR-008). A bundle that cannot be fetched fails the job, and Pages keeps serving what it had.
+#
+# Runs on master only: the github-pages Environment accepts the default branch. A published release dispatches it from
+# release.yml's deploy-repositories job, with --ref master.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - 'scripts/site.mjs'
+      - 'scripts/package-repo.mjs'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# One at a time, and never cancel one mid-flight: a queued deployment already reads the newest state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Assemble the site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Assemble
+        run: node scripts/site.mjs assemble --out _site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
