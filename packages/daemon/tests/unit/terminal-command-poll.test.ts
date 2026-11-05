@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { ChildProcess, IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
+import { TERMINAL_WRITE_METHOD } from '@throng/ipc-contract';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';
@@ -117,6 +118,101 @@ function makeService(pollMs: number) {
     attach: (params: object) => router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params }),
   };
 }
+
+/**
+ * 025 FR-019i — a terminal with no input and no output is observed one interval in ten.
+ *
+ * ANTI-VACUITY CONTROL: restore the plain `running` list in `pollCommands` and "backs off" fails; drop
+ * the `lastActivityAt` stamp from either the output or the input path and its "wakes" test fails.
+ */
+describe('observation backs off while a terminal is quiet (025 FR-019i)', () => {
+  const POLL = 100; // active window 500 ms, idle pass every 1000 ms
+
+  class DrivenHost extends FakeHost {
+    observations = 0;
+    private data: ((chunk: string) => void)[] = [];
+    override onData(_h: PtyHandle, cb?: (chunk: string) => void): () => void {
+      if (cb) this.data.push(cb);
+      return () => {};
+    }
+    emit(chunk: string): void {
+      for (const cb of this.data) cb(chunk);
+    }
+    override listChildProcesses(): Promise<ChildProcess[]> {
+      this.observations += 1;
+      return super.listChildProcesses();
+    }
+  }
+
+  async function quietService() {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    const host = new DrivenHost();
+    const events = new TerminalEvents();
+    const service = new TerminalService(
+      host,
+      events,
+      new TerminalLockManager(noopLock),
+      { isElevated: () => false },
+      undefined,
+      false,
+      0,
+      undefined,
+      POLL,
+    );
+    const router = new RpcRouter();
+    service.register(router);
+    const sink = { write: (): void => {} };
+    events.addSink(sink);
+    await router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params: { panelId: 'p1', projectId: 'proj', launch, cols: 80, rows: 24 } });
+    return { host, events, sink, router };
+  }
+
+  /** How many observations happen over `ms`, from now. */
+  async function observationsOver(host: DrivenHost, ms: number): Promise<number> {
+    const before = host.observations;
+    await sleep(ms);
+    return host.observations - before;
+  }
+
+  it('observes every interval just after starting, then backs off to one interval in ten', async () => {
+    const { host } = await quietService();
+    expect(await observationsOver(host, 400)).toBe(4);
+    await sleep(1000); // past the active window
+    expect(await observationsOver(host, 3000)).toBe(3);
+  });
+
+  it('wakes on output, and observes every interval again', async () => {
+    const { host } = await quietService();
+    await sleep(2000);
+    host.emit('hello');
+    expect(await observationsOver(host, 400)).toBe(4);
+  });
+
+  it('wakes on input, so a silent command typed by the user is seen within one interval', async () => {
+    const { host, router } = await quietService();
+    await sleep(2000);
+    await router.handle({ jsonrpc: '2.0', id: 2, method: TERMINAL_WRITE_METHOD, params: { panelId: 'p1', data: 'sleep 100\r' } });
+    expect(await observationsOver(host, 400)).toBe(4);
+  });
+
+  it('does not treat a report xterm wrote by itself as the user being active', async () => {
+    const { host, router } = await quietService();
+    await sleep(2000);
+    await router.handle({ jsonrpc: '2.0', id: 2, method: TERMINAL_WRITE_METHOD, params: { panelId: 'p1', data: '\x1b[I' } });
+    expect(await observationsOver(host, 400)).toBeLessThanOrEqual(1);
+  });
+
+  it('observes at the next pass when a view attaches after none was listening (FR-019f)', async () => {
+    const { host, events, sink } = await quietService();
+    await sleep(2000);
+    // Just after an idle pass, so the next is not due by itself for the whole of this test.
+    while ((await observationsOver(host, POLL)) === 0);
+    events.removeSink(sink);
+    await sleep(POLL);
+    events.addSink(sink);
+    expect(await observationsOver(host, POLL)).toBe(1);
+  });
+});
 
 describe('the shared command observation (025 FR-019 / T024)', () => {
   it('publishes a change, and does NOT publish the same value again', async () => {

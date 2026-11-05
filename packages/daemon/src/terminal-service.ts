@@ -90,6 +90,16 @@ const REPAINT_RESTORE_MS = 60;
 const CWD_POLL_MS = 1000;
 
 /**
+ * 025 FR-019i — for how many observation intervals a terminal stays due after its last input or output.
+ * More than one: the pass right after Enter usually runs before the shell has started the command, and a
+ * silent command would otherwise go unseen until the next idle pass.
+ */
+const COMMAND_ACTIVE_INTERVALS = 5;
+
+/** 025 FR-019i — a pass over every terminal, quiet ones included, comes once in this many intervals. */
+const COMMAND_IDLE_INTERVALS = 10;
+
+/**
  * 053 `{arch}` — the longest an observation waits on an executable's architecture (Principle XII).
  * A read that has not answered by then publishes `null`; the host caches the eventual answer, so a
  * later pass sees it and republishes, because a change of arch alone is a change.
@@ -179,6 +189,8 @@ interface Session {
    * the sequence. Every attach hands it back, so the new view's header names the program as before.
    */
   windowTitle: WindowTitleScan;
+  /** 025 FR-019i — when this terminal last had output or input from the user, for the observation's backoff. */
+  lastActivityAt: number;
   /** 057 FR-102 — the last command this terminal ran, kept after it finishes; null until one runs. */
   lastRanCommand: string | null;
   /**
@@ -337,6 +349,8 @@ export class TerminalService {
    *  FREEZES rather than clearing when nothing is observing (FR-019f). */
   private readonly lastCommand = new Map<string, { command: string | null; arch: string | null }>();
   private readonly commandTimer?: ReturnType<typeof setInterval>;
+  /** 025 FR-019i — when every terminal, quiet ones included, was last observed. */
+  private lastFullObservationAt = 0;
 
   /**
    * Poll every running terminal's shell cwd (012 revision) and publish changes.
@@ -400,23 +414,37 @@ export class TerminalService {
    * uncleanly is still remembered as running (FR-019h) — bounded, documented, and never worse
    * than an unwanted command the user can stop and edit away.
    *
+   * FR-019i: a quiet terminal is observed one interval in ten. Reading the process table is the whole
+   * cost of an idle terminal, and what it reads rarely changes without input or output. A pass that
+   * finds nothing listening forgets the last full pass, so a view that attaches is brought up to date
+   * at once rather than at the next idle pass.
+   *
    * Never throws, and never clears a value on failure (FR-019e).
    */
   private async pollCommands(): Promise<void> {
-    if (this.events.sinkCount === 0) return;
+    if (this.events.sinkCount === 0) {
+      this.lastFullObservationAt = 0;
+      return;
+    }
     const running = [...this.sessions.values()].filter((s) => s.status === 'running' && !s.ending);
     if (running.length === 0) return;
     // Before any reading starts: a window title that arrived after this cannot be the prompt's (053 FR-003).
     const observedAt = Date.now();
+    const full = observedAt - this.lastFullObservationAt >= this.commandPollMs * COMMAND_IDLE_INTERVALS;
+    if (full) this.lastFullObservationAt = observedAt;
+    const due = full
+      ? running
+      : running.filter((s) => observedAt - s.lastActivityAt < this.commandPollMs * COMMAND_ACTIVE_INTERVALS);
+    if (due.length === 0) return;
     // 051 FR-041 — the attached processes of every terminal on a host, in ONE request per host.
     // `null` is a request that FAILED, which is not the same as a terminal with nothing attached.
     const attachedByHost = new Map<IPtyHost, Promise<Map<number, ChildProcess[]> | null>>();
-    for (const s of running) {
+    for (const s of due) {
       if (attachedByHost.has(s.host) || !s.host.listAttachedProcesses) continue;
-      const handles = running.filter((o) => o.host === s.host).map((o) => o.handle);
+      const handles = due.filter((o) => o.host === s.host).map((o) => o.handle);
       attachedByHost.set(s.host, s.host.listAttachedProcesses(handles).catch(() => null));
     }
-    await Promise.all(running.map((s) => this.observeCommand(s, attachedByHost.get(s.host), observedAt)));
+    await Promise.all(due.map((s) => this.observeCommand(s, attachedByHost.get(s.host), observedAt)));
   }
 
   /** Observe one session's foreground command and publish it if it changed. */
@@ -866,6 +894,7 @@ export class TerminalService {
       negotiation: createNegotiationScan(),
       focusTold: 'in',
       windowTitle: createWindowTitleScan(),
+      lastActivityAt: Date.now(),
       lastRanCommand: null,
       promptTitle: '',
       titleSetAt: 0,
@@ -894,6 +923,7 @@ export class TerminalService {
 
     session.disposers.push(
       host.onData(handle, (chunk) => {
+        session.lastActivityAt = Date.now();
         session.scrollback = appendScrollback(session.scrollback, chunk, MAX_SCROLLBACK);
         session.altScreen = trackAltScreen(session.altScreen, chunk);
         // #290 — the other half a rebuilt view must be TOLD rather than left to infer.
@@ -1189,7 +1219,10 @@ export class TerminalService {
     if (session && session.status === 'running' && typeof params.data === 'string') {
       // 057 R8: input from the user means a later command is theirs, not the startup command's. What xterm
       // writes by itself (DA, focus and mouse reports) is not the user, and a startup TUI gets plenty of it.
-      if (!isTerminalReport(params.data)) session.startupPending = false;
+      if (!isTerminalReport(params.data)) {
+        session.startupPending = false;
+        session.lastActivityAt = Date.now();
+      }
       session.host.write(session.handle, params.data);
     }
     return { ok: true };

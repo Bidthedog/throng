@@ -1051,7 +1051,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'terminals.commandPollMs',
     label: 'Command tracking interval',
     description:
-      'How often throng checks which command a terminal is running, in milliseconds. Lower notices a new command sooner; higher does less work. A command running for longer than one interval is always remembered.',
+      'How often throng checks which command a terminal is running, in milliseconds, while it has input or output. A quiet terminal is checked ten times less often. Lower notices a new command sooner; higher does less work. A command you start and leave running for longer than one interval is always remembered.',
     group: 'Terminal',
     // Bounded numerics render a slider in this app (018 FR-034), and the step must be at least 1%
     // of the range so the control can actually be aimed. 250ms-5s is also the range this knob is
