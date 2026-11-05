@@ -16,9 +16,13 @@ name: Release
 #                                         ▼
 #   e2e-full ─▶ build-linux ─────▶ verify-linux × N  (the .deb, .rpm and .tar.gz, 063 FR-017) ──┐
 #                                                                                              ▼
+#                 └─▶ verify-repositories × 2  (the apt and dnf routes, 064 FR-013) ─────────────────┤
+#                                                                                              ▼
 #                                    render-body  (the exact body publication will use)
 #                                         ▼
-#                                      publish    (gated by the `release` Environment)
+#                                      publish + sign-index  (gated by the `release` Environment)
+#                                         ▼
+#                                    deploy-repositories  (attaches the signed indexes, deploys the site)
 #
 # - A COMBINATION is an artifact in one install scope: setup and MSI each in per-user and machine-wide,
 #   plus portable and archive, which have none. Each runs on its own clean runner so a residue left by
@@ -451,6 +455,59 @@ jobs:
           if-no-files-found: ignore
           retention-days: 5
 
+  # THE REPOSITORY ROUTE (064 FR-013). Each package family on a clean machine: install from an index, upgrade through a
+  # newer one, keep the channels apart, and refuse a tampered or unsigned index. It uses its own throwaway key and local
+  # servers, so it needs no secret and it publishes nothing. `publish` needs it.
+  verify-repositories:
+    name: Verify the ${{ matrix.role }} repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: build-linux
+    if: ${{ !cancelled() && needs.build-linux.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { role: deb, container: '' }
+          - { role: rpm, container: 'fedora:43' }
+    container:
+      image: ${{ matrix.container }}
+      options: --privileged
+    steps:
+      - name: Prepare the Fedora machine
+        if: matrix.container != ''
+        run: dnf install -y -q git tar gzip createrepo_c gnupg2
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      # The harness needs the declared filename, and only that, from this checkout.
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core for the harness
+        run: npx tsc -b packages/core
+      - name: Download the package
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-${{ matrix.role }}
+          path: dist/installer
+      - name: Download the older build
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-upgrade-fixture
+          path: upgrade-fixture
+      - name: Verify the route
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          current=$(node scripts/artifact-set.mjs resolve "${{ matrix.role }}")
+          older=upgrade-fixture/throng-0.9.0-amd64.deb
+          if [ "${{ matrix.role }}" = rpm ]; then older=upgrade-fixture/throng-0.9.0-x86_64.rpm; fi
+          command=(node scripts/verify-package-repo.mjs --role "${{ matrix.role }}" --older "$older" --older-version 0.9.0
+            --current "$current" --version "$version")
+          if [ -n "${{ matrix.container }}" ]; then "${command[@]}"; else sudo env "PATH=$PATH" "${command[@]}"; fi
+
   # ONE RUNNER PER COMBINATION (058 FR-028). Each starts from a clean machine, so a residue left by one
   # combination is never the next one's starting state. `fail-fast: false` because every combination's
   # verdict is wanted even when one fails: the gate names exactly which did not pass.
@@ -740,7 +797,7 @@ jobs:
     name: Publish GitHub Release (gated)
     runs-on: windows-2022
     timeout-minutes: 20
-    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, render-body]
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body]
     # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
     # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
     #
@@ -828,3 +885,97 @@ jobs:
           mapfile -t files < <(node scripts/artifact-set.mjs list --paths)
           gh release create "v$version" "${files[@]}" \
             --title "throng v$version" --notes-file release-body.md $prerelease
+
+  # SIGN THE INDEXES (064 FR-006, FR-009). The only job that can read the private key, because the key is a `release`
+  # Environment secret. It has publish's own `needs` and `if`, so both wait at the Environment together, and it is
+  # on Linux so publish's Windows runner stays as it was. Signing changes no repository: only deploy-repositories does,
+  # and that needs publish. Whether one approval clears both is research D3.
+  sign-index:
+    name: Sign the repository indexes (gated)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body]
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)) && !inputs.skip_e2e && !inputs.hand_tests
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install createrepo_c
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends createrepo-c
+      - name: Install the harness (no native builds)
+        run: npm ci --ignore-scripts
+      - name: Build @throng/core to resolve the artifacts
+        run: npx tsc -b packages/core
+      - name: Download the .deb
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-deb
+          path: dist/installer
+      - name: Download the .rpm
+        uses: actions/download-artifact@v7
+        with:
+          name: throng-rpm
+          path: dist/installer
+      - name: Build, sign and bundle the indexes
+        shell: bash
+        env:
+          REPO_SIGNING_KEY: ${{ secrets.REPO_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REPO_SIGNING_KEY" ]; then
+            echo "::error::REPO_SIGNING_KEY is not set on the release Environment. See docs/releasing.md."
+            exit 1
+          fi
+          version=$(node -p "require('./package.json').version")
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          trap 'gpgconf --kill all; rm -rf "$GNUPGHOME"' EXIT
+          printf '%s\n' "$REPO_SIGNING_KEY" | gpg --batch --quiet --import
+          node scripts/package-repo.mjs build --version "$version" --out repo-index \
+            --deb "$(node scripts/artifact-set.mjs resolve deb)" \
+            --rpm "$(node scripts/artifact-set.mjs resolve rpm)"
+          node scripts/package-repo.mjs sign --dir repo-index
+          node scripts/package-repo.mjs bundle --dir repo-index --version "$version" --out repo-bundle
+      # Its name does not start with `throng-`, so the jobs that collect the release's artifacts never see it.
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: repo-index-bundle
+          path: repo-bundle/
+          if-no-files-found: error
+          retention-days: 5
+
+  # UPDATE THE REPOSITORIES (064 FR-010). Only once the release is out. It holds no key: the bundle is already signed,
+  # and the Pages deployment reads it back from the release. A failure here leaves the repositories on the previous
+  # version, and re-running this job repairs it.
+  deploy-repositories:
+    name: Update the package repositories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [publish, sign-index]
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download the bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: repo-index-bundle
+          path: repo-bundle
+      - name: Attach the bundle to the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          gh release upload "v$version" "repo-bundle/throng-repo-index-$version.tar.gz" --clobber
+      # On master, because the github-pages Environment does not accept a tag (research D4).
+      - name: Deploy the site
+        run: gh workflow run pages.yml --ref master
