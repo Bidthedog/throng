@@ -18,7 +18,7 @@ Tests come first in each group.
 
 - [x] T007 `pages.yml` and the `release.yml` jobs, with a test of who can reach the key and what depends on publication (FR-009, FR-010, FR-013, FR-014)
 - [x] T008 `repo-signing-key.sh` (FR-009)
-- [ ] T009 Rehearse with `publish=false skip_e2e=true`; read `verify-repositories`
+- [x] T009 Rehearse with `publish=false skip_e2e=true`; read `verify-repositories`
 
 ## Docs
 
@@ -26,7 +26,7 @@ Tests come first in each group.
 
 ## Live, by the maintainer's go-ahead
 
-- [ ] T012 Create the signing key; create the Pages site; set its custom domain; confirm HTTPS
+- [x] T012 Create the signing key; create the Pages site; set its custom domain; confirm HTTPS
 - [ ] T013 First real release: GitHub's redirects over HTTPS with throng's own assets, and how many approvals it asks for (research D3)
 
 ## Deferred
