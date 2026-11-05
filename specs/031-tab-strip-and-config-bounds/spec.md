@@ -919,6 +919,7 @@ running app.
   text. A native `title` attribute cannot do this, so it MUST become an **HTML popover** with its
   own style.
   - This **supersedes FR-043**'s "one per line" phrasing, which assumed the `title` attribute.
+- **FR-051a** *(2026-11-05; extends FR-051)*: Each panel's row in the popover MUST read as its own entry: its icon at the row's top left, on the first line of its name, and a rule between rows. The popover MUST be wide enough that a typical panel name does not wrap (280px to 440px).
 - **FR-052**: The tab-action controls MUST read, left to right:
   `[ ‹  <hidden-left> ]  [ <hidden-right>  › ]  [ ⌄  <total> ]`
   — the left chevron BEFORE its count, the right chevron AFTER its count, and the show-all chevron

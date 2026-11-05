@@ -2253,7 +2253,8 @@ textarea,
 .tabstrip-popover {
   position: fixed;
   z-index: 1000;
-  max-width: 340px;
+  min-width: 280px;
+  max-width: 440px;
   padding: 8px 10px;
   background: var(--throng-colour-surfaceActive);
   border: 1px solid var(--border);
@@ -2304,10 +2305,16 @@ textarea,
 
 .tabstrip-popover__panel {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+  padding: 4px 0;
   color: var(--text-dim);
   overflow-wrap: anywhere;
+}
+
+/* 031 FR-051a: a rule between rows, so a wrapped name cannot read as two panels or two names as one. */
+.tabstrip-popover__panel + .tabstrip-popover__panel {
+  border-top: 1px solid var(--border);
 }
 
 /*
@@ -2321,6 +2328,8 @@ textarea,
   justify-content: center;
   width: 12px;
   height: 12px;
+  /* Centres the icon on the name's first line (12px at line-height 1.4). */
+  margin-top: 2px;
 }
 
 /* `Icon` renders a `.icon` span holding either inline SVG or a glyph — size both the same way. */
