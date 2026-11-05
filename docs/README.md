@@ -8,7 +8,9 @@ Every guide, one line each. Each topic has one home; the others link to it.
 
 | Guide | What it covers |
 |---|---|
-| [Installation](installation.md) | Downloading, verifying, installing, upgrading and removing throng, and running it from source. |
+| [Installation](installation.md) | Which guide to read, and running throng from source. |
+| [Installing on Windows](install-windows.md) | Quick start, every download, verifying, installing, upgrading and removing throng on Windows. |
+| [Installing on Linux](install-linux.md) | Quick start, the `apt` and `dnf` repositories, downloads, upgrading and removing throng on Linux. |
 | [Quick start](quick-start.md) | A short tour from first launch to a working project, and how to get around. |
 | [Key bindings](key-bindings.md) | Every default key binding, the chord conventions, multi-key chords, non-US layouts and rebinding. |
 | [Preferences](preferences.md) | Every setting and what it does, themes, icon packs and where config files live. |

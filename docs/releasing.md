@@ -100,7 +100,25 @@ re-publish a version that already exists — a published release is immutable.
 Releases are **not code-signed**; each one publishes a SHA-256 checksum instead, which proves
 integrity but not identity. That is a deliberate choice, explained with the reproducibility claim in
 [signing and reproducibility](../.claude/skills/throng-release/references/signing-and-reproducibility.md).
-What the user sees is [Installation → the unrecognised-app warning](installation.md#the-unrecognised-app-warning).
+What the user sees is [Installing on Windows → the unrecognised-app warning](install-windows.md#the-unrecognised-app-warning).
+
+## The package repositories
+
+`throng-ide.com` is one GitHub Pages deployment: the static files from `site/`, and the
+[apt and rpm repositories](install-linux.md#the-package-repository) at `/apt` and `/rpm`. No package file is on the site or
+in the repository. Each index points at its release's assets.
+
+- **A release updates them.** Behind the same QA sign-off as publishing, `sign-index` signs that release's indexes with the
+  private key, the `REPO_SIGNING_KEY` secret on the `release` Environment. Once the release is out, `deploy-repositories`
+  attaches the signed bundle to it as `throng-repo-index-<version>.tar.gz` and deploys the site. A full release updates both
+  channels, and a prerelease updates only `prerelease`.
+- **A change under `site/`** deploys on merge with no key, because each deployment reads the signed bundles back from the
+  releases.
+
+`verify-repositories` proves the route before publication: install, upgrade through a newer index, channel separation, and
+refusal of tampered and unsigned indexes. `scripts/repo-signing-key.sh` creates the key, once. Replacing it means every
+repository user adds the new one by hand. Why it is built this way:
+[spec 064's research](../specs/064-website-and-package-repos/research.md).
 
 ---
 

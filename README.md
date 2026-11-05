@@ -49,14 +49,13 @@ goes away.
 
 ## Getting started
 
-throng runs on **Windows 11** and [**Linux**](docs/installation.md#installing-on-linux); macOS
+throng runs on **Windows 11** and [**Linux**](docs/install-linux.md); macOS
 ([#22](https://github.com/Bidthedog/throng/issues/22)) is planned.
 
-1. **Install it** — download the installer, an MSI, a portable build or a zip from the
-   [Releases page](https://github.com/Bidthedog/throng/releases), for just you or for everyone on the
-   machine. No prerequisites, and no admin rights unless you install for everyone;
-   [installation](docs/installation.md) covers every option, verifying the download, and running from
-   source.
+1. **Install it** — on [Windows](docs/install-windows.md), download the installer, an MSI, a portable build or a zip
+   from the [Releases page](https://github.com/Bidthedog/throng/releases), for just you or for everyone on the machine.
+   On [Linux](docs/install-linux.md), add the `apt` or `dnf` repository once, and upgrades arrive with your system
+   updates. No prerequisites; [installation](docs/installation.md) also covers running from source.
 2. **Take the tour** — the [quick start](docs/quick-start.md) goes from first launch to a working
    project in a few minutes.
 3. **Go deeper** — every guide is listed in the [docs index](docs/README.md): key bindings,

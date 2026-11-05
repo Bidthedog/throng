@@ -2,7 +2,7 @@
 
 # throng on Linux
 
-throng runs on Linux from a [package or archive](installation.md#installing-on-linux), or
+throng runs on Linux from a [package or archive](install-linux.md), or
 [from source](installation.md#running-from-source). Ubuntu 26.04 with GNOME is the reference desktop, and CI runs on
 Ubuntu 24.04.
 
@@ -51,5 +51,5 @@ The taskbar and foreground hand-off features have no Linux equivalent yet, and t
 
 throng keeps Electron's sandbox on. Ubuntu restricts the system feature that sandbox needs, so each checkout is allowed
 once by a small AppArmor profile; see [running from source](installation.md#running-from-source). A package sets up its
-own, and an archive [says what to do](installation.md#the-sandbox-on-linux). The profile limits nothing else, so throng
+own, and an archive [says what to do](install-linux.md#the-sandbox). The profile limits nothing else, so throng
 can open any folder you can, including other Git repositories anywhere on the disk.

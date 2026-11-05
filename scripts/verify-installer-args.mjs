@@ -220,7 +220,7 @@ export function installLayout({ role, scope, version, artifactPath, env }) {
     };
   }
 
-  // The documented switches (docs/installation.md, contracts/install-switches.md): the standard
+  // The documented switches (docs/install-windows.md, contracts/install-switches.md): the standard
   // properties, because Windows Installer fixes the install context from the command line (or the UI
   // sequence), never from an action in the package.
   const scopeArgs = machine ? ['ALLUSERS=1'] : ['MSIINSTALLPERUSER=1'];
