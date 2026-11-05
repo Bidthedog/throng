@@ -2351,7 +2351,7 @@ if (isPrimaryInstance)
       collectorEnv,
     ),
     fork: (entry, execPath) =>
-      fork(entry, [], { execPath, env: collectorEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'ignore', 'ipc'], windowsHide: true }),
+      fork(entry, [], { execPath, env: collectorEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true }),
     daemonRoster: () => daemonClient.call<DaemonRoster>(RESOURCES_ROSTER_METHOD, {}),
     uiProcesses,
     documentEstimates: () => editorCoordinator.documentEstimates(),
@@ -2362,6 +2362,7 @@ if (isPrimaryInstance)
       if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
     },
     mainWindowId: () => currentMainWindow()?.id ?? null,
+    log: (message) => diagnostics.log.warn(message),
     broadcast: (channel, payload) => {
       for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
     },

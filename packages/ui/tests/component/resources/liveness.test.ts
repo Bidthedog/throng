@@ -134,3 +134,31 @@ describe('while the collector is failing (FR-044)', () => {
     expect(screen.queryByTestId('monitor-updated')).toBeNull();
   });
 });
+
+describe('when the collector could not start (#542, FR-044)', () => {
+  const down = {
+    tick: 0,
+    at: 1,
+    stale: false,
+    collectorDown: true,
+    total: { cpu: 0, memory: 0, gpu: 0, ioRead: 0, ioWrite: 0, network: 0 },
+    components: [],
+    machine: { logicalProcessors: 4, installedRamBytes: 8 },
+  };
+
+  it('says the figures are unavailable, instead of collecting for ever', async () => {
+    bridge = installResourcesBridge(down as never);
+    await mountWindow();
+    expect(await screen.findByTestId('monitor-unavailable')).toHaveTextContent('Figures unavailable');
+    expect(screen.queryByTestId('monitor-loading')).toBeNull();
+  });
+
+  it('goes back to the time once a reading arrives', async () => {
+    bridge = installResourcesBridge(down as never);
+    await mountWindow();
+    await screen.findByTestId('monitor-unavailable');
+    await push(1);
+    expect(screen.queryByTestId('monitor-unavailable')).toBeNull();
+    expect(screen.getByTestId('monitor-updated')).toBeInTheDocument();
+  });
+});

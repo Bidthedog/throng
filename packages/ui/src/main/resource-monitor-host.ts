@@ -1,9 +1,13 @@
+import { availableParallelism, totalmem } from 'node:os';
 import {
+  METRIC_NAMES,
   editorMainBytes,
   previewMainBytes,
   resolveResourceMonitorSettings,
   terminalDaemonBytes,
+  unavailable,
   type AppSettings,
+  type Metrics,
 } from '@throng/core';
 import type {
   CollectorToMain,
@@ -22,11 +26,15 @@ import type {
 /** The parts of a forked `ChildProcess` the host uses — a seam for its unit test. */
 export interface CollectorChild {
   readonly connected: boolean;
+  /** What the collector wrote before it died: the only account of a crash on load. */
+  readonly stderr?: { on(event: 'data', cb: (chunk: unknown) => void): unknown } | null;
   send(msg: MainToCollector): boolean;
   kill(): boolean;
   disconnect(): void;
   on(event: 'message', cb: (msg: unknown) => void): this;
   on(event: 'exit', cb: (code: number | null) => void): this;
+  /** After 'exit', once stderr has been read to its end. */
+  on(event: 'close', cb: (code: number | null) => void): this;
   on(event: 'error', cb: (error: Error) => void): this;
 }
 
@@ -69,11 +77,14 @@ export interface ResourceMonitorHostDeps {
   readonly mainWindowId: () => number | null;
   /** Every open window: the detail-demand signal goes to all of them, so each reports its panels. */
   readonly broadcast: (channel: string, payload: unknown) => void;
+  readonly log: (message: string) => void;
   readonly now?: () => number;
 }
 
 const RESTART_SPACING_MS = 60_000;
 const KILL_TIMEOUT_MS = 15_000;
+/** Enough of a stack trace to name the failure, without a chatty collector filling the log. */
+const STDERR_TAIL_CHARS = 2_000;
 
 export const RESOURCES_SUMMARY_CHANNEL = 'throng:resources:summary';
 export const RESOURCES_DETAIL_CHANNEL = 'throng:resources:detail';
@@ -105,6 +116,8 @@ export class ResourceMonitorHost {
    */
   private tickBase = 0;
   private lastTick = 0;
+  /** The failure last logged: a reading that fails every tick is one line, not one a second. */
+  private lastErrorLogged: string | null = null;
   private nextSubscription = 1;
   private readonly subscriptions = new Map<number, number>(); // subscriptionId → windowId
   private readonly contexts = new Map<number, WorkspaceContext>();
@@ -263,10 +276,20 @@ export class ResourceMonitorHost {
     this.child = child;
     child.on('message', (msg) => this.onMessage(child, msg as CollectorToMain));
     child.on('exit', () => this.onExit(child));
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => {
+      stderr = (stderr + String(chunk)).slice(-STDERR_TAIL_CHARS);
+    });
+    child.on('close', (code) => {
+      if (this.stopped) return;
+      this.deps.log(`resource collector exited with code ${String(code)}${stderr ? `: ${stderr.trim()}` : ''}`);
+    });
     // A spawn that fails, or a send on a pipe that is closing, emits 'error'; unheard, it would be an
     // uncaught exception in UI main. A child that never connected will not exit, so treat it as one.
-    child.on('error', () => {
-      if (!child.connected) this.onExit(child);
+    child.on('error', (error) => {
+      if (child.connected) return;
+      this.deps.log(`resource collector could not start: ${error.message}`);
+      this.onExit(child);
     });
     this.configure();
     if (this.subscriptions.size > 0) {
@@ -283,7 +306,10 @@ export class ResourceMonitorHost {
       this.kills.delete(id);
       k.resolve(k.fail('collectorUnavailable'));
     }
-    if (this.summary !== null) this.publishSummary({ ...this.summary, stale: true, staleSince: this.summary.staleSince ?? this.summary.at });
+    if (this.summary === null) this.publishCollectorDown();
+    else if (this.summary.collectorDown !== true) {
+      this.publishSummary({ ...this.summary, stale: true, staleSince: this.summary.staleSince ?? this.summary.at });
+    }
     if (this.stopped) return;
     if (this.now() - this.lastRestart >= RESTART_SPACING_MS) {
       this.restart();
@@ -326,6 +352,8 @@ export class ResourceMonitorHost {
         break;
       }
       case 'error':
+        if (msg.cause !== this.lastErrorLogged) this.deps.log(`resource collector reading failed: ${msg.cause}`);
+        this.lastErrorLogged = msg.cause;
         break;
     }
   }
@@ -339,6 +367,28 @@ export class ResourceMonitorHost {
     this.summary = s;
     const main = this.deps.mainWindowId();
     if (main !== null) this.deps.send(main, RESOURCES_SUMMARY_CHANNEL, s);
+  }
+
+  /**
+   * 055 FR-044a: the collector exited before its first reading. Every figure says so, and the status item
+   * shows it. Any open monitor is told as well, since it would otherwise wait for a frame that never comes.
+   */
+  private publishCollectorDown(): void {
+    const total = Object.fromEntries(METRIC_NAMES.map((m) => [m, unavailable('collector-down')])) as unknown as Metrics;
+    const down: ResourceSummary = {
+      tick: this.lastTick,
+      at: this.now(),
+      stale: false,
+      collectorDown: true,
+      total,
+      components: [],
+      machine: { logicalProcessors: availableParallelism(), installedRamBytes: totalmem() },
+    };
+    this.publishSummary(down);
+    const main = this.deps.mainWindowId();
+    for (const windowId of new Set(this.subscriptions.values())) {
+      if (windowId !== main) this.deps.send(windowId, RESOURCES_SUMMARY_CHANNEL, down);
+    }
   }
 
   private publishFrame(frame: DetailFrame): void {

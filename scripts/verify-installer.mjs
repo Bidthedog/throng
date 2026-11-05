@@ -13,7 +13,7 @@
 // refused for the ones that do not (portable, archive).
 //
 // Steps (each recorded pass/fail; the first failure names the verdict's failedStep):
-//   interrupted-install → install → install-labels → launch → version-match → self-contained →
+//   interrupted-install → install → install-labels → launch → version-match → self-contained → collector →
 //   shortcut → no-service → core-journey → reattach → checksum-match → no-write → uninstall →
 //   residue-scan
 // plus, by scope (contracts/verification-matrix.md):
@@ -192,6 +192,14 @@ function daemonRunsSelfContained(installDir) {
   // do NOT spawn a second daemon here: a detached daemon (Principle III) would hold the runtime
   // locked and block the uninstall step. The scrub-PATH probe lives in the manual quickstart instead.
   return existsSync(node) && existsSync(daemon) && existsSync(runtimeVersion);
+}
+
+/** The bundled runtime can start the shipped resource collector (#542). */
+function collectorStarts(installDir) {
+  const probe = fileURLToPath(new URL('./collector-probe.mjs', import.meta.url));
+  const run = spawnSync(join(installDir, 'resources', 'runtime', 'node.exe'), [probe, installDir], { encoding: 'utf8', timeout: 60_000 });
+  console.log(`collector: ${run.stdout}${run.stderr}`.trim());
+  return run.status === 0;
 }
 
 /** PIDs of throng.exe processes running from under a given directory. */
@@ -650,6 +658,8 @@ async function main() {
   if (onDisk) {
     step('self-contained');
     results['self-contained'] = daemonRunsSelfContained(appRoot); // T027 / T023a
+    step('collector');
+    results.collector = collectorStarts(appRoot);
     results['no-service'] = noThrongService(); // T034d
     if (installs) {
       results.shortcut = launchShortcutExistsFor(layout); // T034e, in this scope's Start menu

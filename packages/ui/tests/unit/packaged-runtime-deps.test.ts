@@ -31,6 +31,7 @@ const NON_BUNDLED_DIRS = [
   'packages/daemon/src',
   'packages/ui/src/main',
   'packages/ui/src/preload',
+  'packages/ui/src/collector',
 ];
 
 // `electron` is provided by the Electron runtime; `@throng/*` are the workspace libraries, mapped

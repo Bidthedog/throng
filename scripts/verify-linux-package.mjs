@@ -25,6 +25,7 @@ import { connect } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { buildArtifactVerdict, combinationsOf, declareArtifactSet, matchReleaseVersions } from '@throng/core';
 import { _electron as electron } from '@playwright/test';
 import { sha256OfFile } from './checksum.mjs';
@@ -242,6 +243,14 @@ function daemonIsSelfContained(root) {
   return daemons.length > 0 && daemons.every((p) => p.exe === join(root, 'resources', 'runtime', 'node'));
 }
 
+/** The bundled runtime can start the shipped resource collector (#542). */
+function collectorStarts(root) {
+  const probe = fileURLToPath(new URL('./collector-probe.mjs', import.meta.url));
+  const run = spawnSync(join(root, 'resources', 'runtime', 'node'), [probe, root], { encoding: 'utf8', timeout: 60_000 });
+  log(`collector: ${run.stdout}${run.stderr}`.trim());
+  return run.status === 0;
+}
+
 const projectRoot = (name) => {
   const folder = join(homedir(), 'throng-verify', name);
   mkdirSync(folder, { recursive: true });
@@ -400,6 +409,7 @@ async function verifyPackage(results) {
   log(`launch: running from the version folder: ${fromVersionFolder}`);
   results.launch = sandboxIsOn() && fromVersionFolder;
   results['self-contained'] = daemonIsSelfContained(root);
+  results.collector = collectorStarts(root);
   results['core-journey'] = await journeyHolds('verify-one');
   await rpc('terminal.killAll', {});
   await close(session);
@@ -578,6 +588,7 @@ async function verifyArchive(results) {
   });
   results.launch = fixed && sandboxIsOn();
   results['self-contained'] = daemonIsSelfContained(root);
+  results.collector = collectorStarts(root);
   results['core-journey'] = await journeyHolds('verify-archive');
   await rpc('terminal.killAll', {});
   await close(session);

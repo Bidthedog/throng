@@ -905,6 +905,7 @@ reopens from it.
 - **FR-043**: Clicking the item MUST open the monitor modal (FR-050).
   *Amended by FR-086 (Session 2026-10-15) — it opens the monitor window, or brings it forward.*
 - **FR-044**: A total whose source is unavailable or stale MUST be shown as such, never as zero.
+- **FR-044a** *(2026-11-05; #542)*: A collector that exits before its first reading MUST leave the status bar and the monitor saying the figures are unavailable, not collecting. Each exit that throng did not ask for MUST be logged with its exit code and what the collector wrote to stderr. A later reading MUST replace the unavailable figures.
 - **FR-045**: When the status bar is too narrow to show every figure, figures MUST be dropped one at a
   time in this order: **GPU, then I/O, then memory, then CPU**, and restored in reverse as width
   returns. With every figure dropped, the item MUST remain as its icon alone, still opening the modal.
