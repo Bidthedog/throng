@@ -45,6 +45,8 @@ When all five hold, publication:
 | Render the release body | CI, the `render-body` job, after every verdict exists; uploaded with `verification-gaps.json` for the approver to read. It runs the gate without the sign-off and accepts exactly one refusal — the missing sign-off — so any other refusal fails it before anyone is asked. |
 | QA sign-off | A human, via the GitHub `release` Environment. |
 | Publish the GitHub Release | **CI only**, gated as above. |
+| Sign the repository indexes | **CI only**, `sign-index`, gated the same way. The only job that can read `REPO_SIGNING_KEY`. |
+| Update the package repositories | **CI only**, `deploy-repositories`, after the release is out. It uses no key, and dispatches `pages.yml` on `master`. |
 
 ## One thing only a real release can prove
 

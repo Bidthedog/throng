@@ -15,12 +15,14 @@ other file mentions it in a clause and links there. The rules below are the main
 |---|---|---|
 | `README.md` | The pitch: an exciting first paragraph on what throng is and its use-cases, the problems it solves, a one-line-per-feature list (feature name + one sentence), getting started in a few lines pointing at installation and quick-start, and a short Contributing section pointing at `CONTRIBUTING.md` | Key bindings, settings, environment variables, architecture, how anything works, command tables beyond the few lines to start it |
 | `docs/README.md` | The docs index: every file under `docs/`, one line each, grouped by reader | Anything else |
-| `docs/installation.md` | Everything to install throng and get it running: downloads, verification, install, first launch, upgrade, downgrade, uninstall, prerequisites for a source build | Feature or settings detail |
+| `docs/installation.md` | Which install guide to read, and running from source | Anything specific to installing on one system |
+| `docs/install-windows.md` | Installing on Windows: a quick start first, then downloads, verification, install, first launch, upgrade, downgrade, uninstall | Feature or settings detail |
+| `docs/install-linux.md` | Installing on Linux: a quick start first, then the package repositories, downloads, sandbox, upgrade, downgrade, removal | Feature or settings detail |
 | `docs/quick-start.md` | "Getting started for dummies": a short whistle-stop tour, high to medium detail, of how to start and get around; one section per major feature, updated as features are added | Exhaustive binding or settings lists (link to key-bindings.md / preferences.md) |
 | `docs/key-bindings.md` | Every default key binding, by group, with its action id, chord(s), scope and one-line description; the tier convention; multi-key chords; non-US layouts; rebinding | Settings detail |
 | `docs/preferences.md` | Every preference by group, with its key, default, allowed values and what it does; themes, icon packs, config file locations | Key bindings |
 | `docs/environment.md` | Every environment variable, by audience (running the app, development, testing). A variable that overrides an app setting is *listed* and linked to its preferences.md entry, never described again | Setting descriptions |
-| `docs/linux.md` | The one list of what differs on Linux | How to set it up (installation.md), or the bindings themselves beyond the ones that differ |
+| `docs/linux.md` | The one list of what differs on Linux | How to set it up (install-linux.md), or the bindings themselves beyond the ones that differ |
 | `docs/architecture.md` | All architecture, per domain, with mermaid component and topology diagrams | User instructions |
 | `docs/testing.md` | High level: the layers, the commands, the gate, the two E2E lanes; points at the `throng-testing` skill and its references | The detail the skill's references hold |
 | `docs/releasing.md` | High level: what a release is; points at the `throng-release` skill and its references | The procedure |

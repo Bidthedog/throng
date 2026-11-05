@@ -89,7 +89,7 @@ npm run package    # electron-builder → dist/installer/, one file per declared
 Both installers refuse a **downgrade** of the copy they replace, in its own scope (setup: exit `2`;
 MSI: `MajorUpgrade`, exit `1603`); installing an older version as a *separate* copy is allowed. The
 message tells the user to uninstall first (the user's side is
-[Installation → Downgrading](../../../../docs/installation.md#downgrading)).
+[Installing on Windows → Downgrading](../../../../docs/install-windows.md#downgrading)).
 
 ## Requirements behind it
 
