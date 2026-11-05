@@ -13,6 +13,7 @@ import {
   encodeEnterKey,
   encodeModifiedKey,
   DEFAULT_APP_SETTINGS,
+  isTerminalReport,
   type EditorLinkSettings,
   type KittyCsiPrefix,
   type PreviewProviderRegistry,
@@ -1548,6 +1549,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
      */
     term.onData((data) => {
       if (isFocusReport(data)) return;
+      // 008 FR-006a — the tail still holds every question a program ever asked, and xterm answers them as it
+      // parses. Nobody is asking now: sent on, the answers land at the shell's prompt as if typed.
+      if (replayingTail && isTerminalReport(data)) return;
       // 028 (#200) — count what left the renderer and what the daemon acknowledged. The reported
       // defect is a character the SHELL never received, which is invisible from the rendered view:
       // a test can only tell "typed" from "arrived" by counting both ends (FR-009b/FR-023).
