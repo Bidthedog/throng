@@ -283,7 +283,7 @@ declare global {
            */
           meta?: { projectName?: string; tabName?: string; panelName?: string };
         }) => Promise<TerminalAttachEnvelope>;
-        write: (panelId: string, data: string) => Promise<unknown>;
+        write: (panelId: string, data: string, answerFrom?: string) => Promise<unknown>;
         resize: (panelId: string, cols: number, rows: number, viewId?: string) => Promise<unknown>;
         /** A view is going away (008 FR-007/FR-010) — remove it from the daemon's grid set. */
         detach: (panelId: string, viewId?: string) => Promise<unknown>;

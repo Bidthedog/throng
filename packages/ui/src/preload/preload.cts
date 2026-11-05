@@ -507,7 +507,8 @@ contextBridge.exposeInMainWorld('throng', {
     },
     // Phase C — session commands (request/response → daemon) and push streams.
     attach: (req: unknown) => ipcRenderer.invoke('throng:terminal:attach', req),
-    write: (panelId: string, data: string) => ipcRenderer.invoke('throng:terminal:write', panelId, data),
+    write: (panelId: string, data: string, answerFrom?: string) =>
+      ipcRenderer.invoke('throng:terminal:write', panelId, data, answerFrom),
     resize: (panelId: string, cols: number, rows: number, viewId?: string) =>
       ipcRenderer.invoke('throng:terminal:resize', panelId, cols, rows, viewId),
     // A view is going away (008 FR-007/FR-010): remove it from the daemon's grid set.

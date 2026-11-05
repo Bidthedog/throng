@@ -264,6 +264,11 @@ export interface TerminalAttachResult {
 export interface TerminalWriteParams {
   panelId: string;
   data: string;
+  /**
+   * 008 FR-006b: this is the terminal answering a program, not the user, and this view sent it. Every view of
+   * a mirrored panel answers the same question, so the daemon keeps one view's answer. Absent: always written.
+   */
+  answerFrom?: string;
 }
 
 export interface TerminalResizeParams {
