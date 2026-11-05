@@ -440,7 +440,7 @@ export function registerTerminalIpc(deps: {
     });
   });
 
-  ipcMain.handle('throng:terminal:write', (_e, panelId: string, data: string) => {
+  ipcMain.handle('throng:terminal:write', (_e, panelId: string, data: string, answerFrom?: string) => {
     /*
      * #199 — a window opened by the command the user just submitted must be able to come to the
      * FRONT, instead of appearing behind throng with the terminal looking hung.
@@ -458,7 +458,7 @@ export function registerTerminalIpc(deps: {
      */
     if (submitsCommand(data)) foregroundHandoff.allow();
     return serializeWrite(panelId)(() =>
-      daemonClient.call('terminal.write', { panelId, data }).catch(() => ({ ok: false })),
+      daemonClient.call('terminal.write', { panelId, data, answerFrom }).catch(() => ({ ok: false })),
     );
   });
   ipcMain.handle(

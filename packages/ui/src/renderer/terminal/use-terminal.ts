@@ -13,7 +13,7 @@ import {
   encodeEnterKey,
   encodeModifiedKey,
   DEFAULT_APP_SETTINGS,
-  isTerminalReport,
+  isQueryAnswer,
   type EditorLinkSettings,
   type KittyCsiPrefix,
   type PreviewProviderRegistry,
@@ -1006,7 +1006,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       kitty = state;
       rememberKitty();
       if (reply !== undefined) {
-        void bridge.write(panelId, reply);
+        void bridge.write(panelId, reply, viewId); // 008 FR-006b
       }
       return true;
     };
@@ -1547,19 +1547,26 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * xterm answers a re-asserted 1004 with a report when focus never moved, turning a lone Escape into
      * `ESC` `ESC [ I`.
      */
+    // xterm fires onKey immediately before the key's onData. Shift+F3 is the same bytes as a cursor report, so
+    // the bytes alone cannot say who sent them.
+    let keyInFlight = false;
+    term.onKey(() => {
+      keyInFlight = true;
+    });
     term.onData((data) => {
       if (isFocusReport(data)) return;
+      const answer = !keyInFlight && isQueryAnswer(data);
+      keyInFlight = false;
       // 008 FR-006a — the tail still holds every question a program ever asked, and xterm answers them as it
       // parses. Nobody is asking now: sent on, the answers land at the shell's prompt as if typed.
-      if (replayingTail && isTerminalReport(data)) return;
+      if (replayingTail && answer) return;
       // 028 (#200) — count what left the renderer and what the daemon acknowledged. The reported
       // defect is a character the SHELL never received, which is invisible from the rendered view:
       // a test can only tell "typed" from "arrived" by counting both ends (FR-009b/FR-023).
       countInputWritten(panelId);
       recordKeyBytes(panelId, data);
       recordWrite(panelId, data); // what the PROGRAM got, next to what throng decided
-      void bridge
-        .write(panelId, data)
+      void (answer ? bridge.write(panelId, data, viewId) : bridge.write(panelId, data))
         .then(() => countInputAcked(panelId, true))
         .catch(() => countInputAcked(panelId, false));
     });

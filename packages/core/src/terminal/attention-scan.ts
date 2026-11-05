@@ -43,6 +43,14 @@ export function isTerminalReport(data: string): boolean {
   return data.length > 0 && REPORT.test(data);
 }
 
+/** Mouse and focus reports: the terminal's format, but the user's doing. */
+const USER_REPORT = new RegExp(`${ESC}\\[(?:<[\\d;]+[Mm]|[IO])`);
+
+/** A report answering a question a program asked (008 FR-006a, FR-006b). */
+export function isQueryAnswer(data: string): boolean {
+  return isTerminalReport(data) && !USER_REPORT.test(data);
+}
+
 /** What the scanner found. `detail` is sanitised message text, or null. */
 export interface AttentionHit {
   signal: 'bell' | 'notification' | 'progressEnded';

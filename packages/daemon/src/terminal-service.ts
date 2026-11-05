@@ -1217,6 +1217,11 @@ export class TerminalService {
     const params = asObject(rawParams) as unknown as TerminalWriteParams;
     const session = this.sessions.get(params.panelId);
     if (session && session.status === 'running' && typeof params.data === 'string') {
+      // 008 FR-006b: one question, one answer. The oldest view answers; the program would read one and leave
+      // the rest at the shell's prompt.
+      if (typeof params.answerFrom === 'string' && params.answerFrom !== session.views.keys().next().value) {
+        return { ok: true };
+      }
       // 057 R8: input from the user means a later command is theirs, not the startup command's. What xterm
       // writes by itself (DA, focus and mouse reports) is not the user, and a startup TUI gets plenty of it.
       if (!isTerminalReport(params.data)) {

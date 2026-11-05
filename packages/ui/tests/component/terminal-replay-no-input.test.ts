@@ -166,3 +166,31 @@ describe('replaying scrollback', () => {
     unmount();
   });
 });
+
+describe('what a view sends (008 FR-006b)', () => {
+  const viewIdOfAttach = (): string => {
+    const attach = (window as unknown as { throng: { terminal: { attach: ReturnType<typeof vi.fn> } } }).throng.terminal.attach;
+    return (attach.mock.calls[0] as unknown as [{ viewId: string }])[0].viewId;
+  };
+
+  it('marks an answer to a live question as coming from this view', async () => {
+    const { unmount } = mountTerminal();
+    await replayed();
+    await act(async () => {
+      for (const listener of outputListeners) listener({ panelId: PANEL, data: `${ESC}[6n` });
+      await new Promise<void>((resolve) => xterm().write('', resolve));
+    });
+    expect(write.mock.calls.at(-1)?.[2]).toBe(viewIdOfAttach());
+    unmount();
+  });
+
+  it('never marks a key as an answer, even Shift+F3, which is the same bytes as a cursor report', async () => {
+    const { unmount } = mountTerminal();
+    await replayed();
+    act(() => {
+      xterm().textarea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', code: 'F3', keyCode: 114, shiftKey: true, bubbles: true }));
+    });
+    expect(write.mock.calls.at(-1)?.slice(1)).toEqual([`${ESC}[1;2R`]);
+    unmount();
+  });
+});
