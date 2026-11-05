@@ -251,6 +251,31 @@ test('reflects external filesystem changes live, preserving expansion (US2)', { 
   }
 });
 
+/**
+ * Layer: E2E — only Electron's own `fs` treats a `.asar` as an archive, and its answer for one it cannot open
+ * crashed UI main from inside Node's recursive watcher on Linux. A build or an install does this in any Electron project.
+ */
+test('a .asar file changing in a project is an ordinary file change', { tag: ['@extended', '@explorer', '@reserve:runtime'] }, async () => {
+  const projectRoot = makeProjectFolder();
+  try {
+    writeFileSync(join(projectRoot, 'app.asar'), 'not really an archive');
+    await runApp(async (_app, win) => {
+      await createProject(win, 'Demo', projectRoot);
+      const tree = win.getByTestId('file-explorer-tree');
+      await expect(tree.getByText('app.asar', { exact: true })).toBeVisible();
+
+      rmSync(join(projectRoot, 'app.asar'));
+      await expect(tree.getByText('app.asar', { exact: true })).toHaveCount(0);
+
+      // The watch is still alive after it.
+      writeFileSync(join(projectRoot, 'after.md'), '# after\n');
+      await expect(tree.getByText('after.md', { exact: true })).toBeVisible();
+    });
+  } finally {
+    cleanupTemp(projectRoot);
+  }
+});
+
 test('file operations via context menu + toolbar (US3): delete, copy/paste, new folder, cut/paste, rename, delete a folder', { tag: ['@extended', '@explorer', '@reserve:native'] }, async () => {
   const projectRoot = makeProjectFolder();
   try {

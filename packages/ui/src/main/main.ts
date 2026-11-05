@@ -687,6 +687,13 @@ for (const [name, value] of platform.displaySwitches(configuredNativeWayland()))
 }
 const startupLogLevel: LogLevel = startupDiagnostics.logLevel;
 
+/*
+ * A `.asar` in a project is a file like any other. throng ships unpacked (`asar: false`), so Electron's archive
+ * handling in `fs` only ever meets the user's files, and its `statSync` answers `null` for one it cannot open. Node's
+ * recursive watcher on Linux reads that as a stat, in a callback nothing here can catch, and UI main crashed.
+ */
+process.noAsar = true;
+
 /** The product version (020 FR-001) — for the startup log, and the instance guard's launch message. */
 const startupVersion = readProductInfo([
   resolveFromHere('../../../../package.json'),
