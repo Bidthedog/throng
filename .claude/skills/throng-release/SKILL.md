@@ -310,7 +310,14 @@ The jobs, each gating the next (`needs` in brackets):
    without the sign-off (any refusal but the missing sign-off fails it), writes `unproven` steps to the
    job summary, and uploads `release-body` (`release-body-preview.md` + `verification-gaps.json`).
 7. **Publish (gated)** — waits at the `release` Environment for required reviewers, then ~3 min to
-   compute the checksums, compose the body and create the release.
+   compute the checksums, compose the body and create the release. **Sign the repository indexes**
+   `sign-index` waits at the same Environment beside it.
+8. **Update the package repositories** `deploy-repositories` [publish, sign-index] — attaches the signed
+   `throng-repo-index-<version>.tar.gz` to the release, and dispatches `pages.yml` on `master`. If it failed, the
+   release is out and the repositories are on the previous version: re-run the failed job.
+
+**Verify the repository** `verify-repositories` ×2 [build-linux] is one more gate on `publish`: the apt and dnf routes on
+clean machines, with a throwaway key. What it proves: [`docs/releasing.md`](../../../docs/releasing.md#the-package-repositories).
 
 **What a passing verdict looks like**, so a skipped check is not mistaken for a clean one. The
 vocabulary is 19 steps. Applicable counts: `setup-user` **15**, `msi-user` **15**, `setup-machine`
@@ -356,8 +363,11 @@ gh release view v<version> --json name,isPrerelease,assets,publishedAt \
 
 Confirm, and report:
 
-- seven assets attached (setup, MSI, portable, archive, `.deb`, `.rpm`, `.tar.gz`), named for this version;
+- seven assets attached (setup, MSI, portable, archive, `.deb`, `.rpm`, `.tar.gz`), named for this version, plus the
+  `throng-repo-index-<version>.tar.gz` bundle, which is not part of the declared set;
 - `isPrerelease: true` for any version carrying a suffix;
+- `https://throng-ide.com/apt/dists/<channel>/InRelease` names this version's channel, and its `Packages` this version;
+- at the first full release, `docs/install-linux.md`'s commands change from `prerelease` to `stable`;
 - the body carries this release's notes, one SHA-256 row per artifact against its own filename, and
   the source revision;
 - `## Unreleased` is back on `master`, empty, ready for the next cycle.

@@ -19,7 +19,7 @@ arrived intact. A checksum proves **integrity**, not **identity** — and, unlik
 download. The release notes therefore **explain that warning and how to verify against the
 checksum**, and never tell anyone to disable a security feature. What the user sees, and what to do
 about it, is
-[Installation → the unrecognised-app warning](../../../../docs/installation.md#the-unrecognised-app-warning).
+[Installing on Windows → the unrecognised-app warning](../../../../docs/install-windows.md#the-unrecognised-app-warning).
 
 ## Reproducibility (SC-008)
 

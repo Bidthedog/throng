@@ -99,7 +99,7 @@ archive front-loads the same work: one 58-second extraction, then launches as fa
 copy.
 
 Both are comfortably inside SC-005's three-minute download-to-terminal bar, so this is a trade to
-tell users about (`docs/installation.md` does), not a reason to drop either. The measurement was
+tell users about (`docs/install-windows.md` does), not a reason to drop either. The measurement was
 042's T047.
 
 ## Running it on a developer machine
