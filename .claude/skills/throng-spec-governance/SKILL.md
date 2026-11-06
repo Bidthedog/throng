@@ -28,13 +28,14 @@ bug fix can touch FRs from every spec in the repo and belong to none of them. Wo
 covers takes the **next** number, even before that directory exists. This same rule names the branch
 (`branch-naming` skill) and therefore the worktree folder, so settle it first.
 
-## The twelve principles, in one line each
+## The thirteen principles, in one line each
 
 I Project-first context isolation · II Platform-abstracted core, with per-OS code delivered for
 Windows and Linux together · III Detached, tagged, persistent terminals · IV Native terminal support &
 auto-detection · V Test-first quality discipline (NON-NEGOTIABLE) · VI Simple, modern, discoverable
 UX · VII Change review & approval · VIII SOLID, DRY, YAGNI · IX DI & composition root · X Externalised
-configuration · XI Dockable workspace: panes, tabs & panels · XII Responsive UI (NON-NEGOTIABLE).
+configuration · XI Dockable workspace: panes, tabs & panels · XII Responsive UI (NON-NEGOTIABLE) · XIII
+Every failure leaves a trace.
 
 Plus, under Development Workflow & Quality Gates: lint + type-check with zero errors, CI on every PR,
 configuration-editor completeness, themeable icon controls, documentation currency, incremental

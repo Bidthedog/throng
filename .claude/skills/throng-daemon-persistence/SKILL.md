@@ -42,7 +42,7 @@ re-run is a no-op.
 ## Environment the daemon reads
 
 `THRONG_PIPE_NAME`, `THRONG_DATABASE_PATH`, `THRONG_CONFIG_ROOT`, `THRONG_LOCK_DIR`, `THRONG_LOG_DIR`
-/ `THRONG_LOG_LEVEL` / `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP`,
+/ `THRONG_LOG_LEVEL` / `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP_DAYS` / `THRONG_LOG_MAX_TOTAL_MB`,
 `THRONG_PING_TIMEOUT_MS`, `THRONG_SHUTDOWN_DRAIN_TIMEOUT_MS`, `THRONG_NO_ORPHAN_REAP`. Tests set these
 to isolate a run; production defaults come from the user profile. Never hardcode a pipe name or a
 database path in a test — take it from the harness.

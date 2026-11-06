@@ -50,7 +50,7 @@ Do not add a sixth kind casually; widening a closed set is a spec-level decision
   `file-changed-notice.ts` / `editor-missing-notice.ts`, and the terminal's exit notices.
 - `packages/ui/src/main/diagnostics.ts` and `packages/core/src/diagnostics/`
   (`log-format`, `log-level`, `rotation`), driven by `THRONG_LOG_DIR` / `THRONG_LOG_LEVEL` /
-  `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP`.
+  `THRONG_LOG_MAX_KB` / `THRONG_LOG_KEEP_DAYS` / `THRONG_LOG_MAX_TOTAL_MB`.
 
 Tests that pin the behaviour. The pure model is proven at the unit layer, in
 `packages/core/tests/unit/notice/` — `subject`, `display-mode`, `grouping`, `affected`, `log-level`,
