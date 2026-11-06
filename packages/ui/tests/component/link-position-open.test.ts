@@ -11,6 +11,7 @@ import { followLinkInPanel } from '../../src/renderer/editor/link-decorations.js
 import { useWorkspace } from '../../src/renderer/state/workspace-store.js';
 import { EditorPanel } from '../../src/renderer/editor/editor-panel.js';
 import { disposeEditor } from '../../src/renderer/editor/use-editor.js';
+import { registerPreviewOpener, type PreviewOpenIntent } from '../../src/renderer/preview/open-preview.js';
 
 /**
  * 045 T174 — REPRODUCTION of D2: a position suffix is not honoured (FR-004, FR-033, FR-052, FR-110,
@@ -513,5 +514,35 @@ describe('T293 — a follow with NO prior answer: one follow request, its outcom
     await waitFor(() => expect(sent).toEqual(['follow:src/missing.ts']));
     await new Promise((r) => setTimeout(r, 100));
     expect(h.view().state.doc.toString(), 'the editor still holds its own file').toBe(start.text);
+  });
+});
+
+/**
+ * Reported 2026-11-06: a `.md` link followed from a terminal opens an EDITOR although the Markdown
+ * provider is enabled with *Default open action* = Preview. FR-110 clause 3 says an unpositioned link
+ * opens the preview; FR-052 sends only a POSITIONED one to an editor.
+ */
+describe('a terminal follow of an UNPOSITIONED .md link, Preview the default (FR-110 clause 3)', () => {
+  const c: Case = { ...CASES[0]!, line: 'see test.md here' };
+  const opened: PreviewOpenIntent[] = [];
+
+  beforeEach(() => {
+    opened.length = 0;
+    registerPreviewOpener((intent) => {
+      opened.push(intent);
+      return Promise.resolve({ kind: 'placed', panelId: 'p-preview' });
+    });
+  });
+  afterEach(() => registerPreviewOpener(null));
+
+  it('opens the preview, and no editor', async () => {
+    harness = await mountBoth(c, { absPath: NOTES, text: 'unrelated notes\n' }, false);
+    const [follow] = terminalCtrlClick(c);
+    expect(follow!.position, 'the link carries no position').toBeUndefined();
+
+    await followLink({ request: follow!.request, deps: captured.terminal!.linkActions as LinkFollowDeps });
+
+    await waitFor(() => expect(opened.map((i) => i.absPath)).toEqual([TEST_MD]));
+    expect(harness.view().state.doc.toString(), 'the editor still holds its own file').toBe('unrelated notes\n');
   });
 });
