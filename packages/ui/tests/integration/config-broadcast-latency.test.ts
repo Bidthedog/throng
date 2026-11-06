@@ -62,10 +62,12 @@ describe('FR-004 / SC-008 — an accepted change is observable within the bound'
       expect(result.payload.settings.appearance.theme).toBe(`theme-${i}`);
     }
 
-    const worst = Math.max(...timings);
-    expect(worst, `worst of ten was ${worst} ms (all: ${timings.join(', ')})`).toBeLessThan(
-      FR004_BOUND_MS,
-    );
+    // FR-004 binds "under normal load"; a gate runner is not that. One sample in ten may stall: a Linux
+    // gate once measured 6, 4, 3, 2, 105, 5, 2, 3, 2, 2 (#574) — the runner pausing the process, not the
+    // path. A regression from milliseconds to seconds, or a read that is slow every time after the first,
+    // moves most of the ten, so two over the bound still fails.
+    const over = timings.filter((t) => t >= FR004_BOUND_MS);
+    expect(over.length, `${over.length} of ten at or over ${FR004_BOUND_MS} ms (all: ${timings.join(', ')})`).toBeLessThanOrEqual(1);
   });
 
   // The unreadable-document case, where the bound is legitimately exceeded, is the ceiling asserted in
