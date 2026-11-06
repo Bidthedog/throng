@@ -8,6 +8,7 @@ assignees: []
 
 <!--
 A maintainer must AGREE this issue, in a comment, before a fix PR is opened.
+A maintainer's own issue is agreed by ticking the Maintainer agreement box.
 Non-trivial fixes follow the full Spec Kit lifecycle; tiny obviously-correct
 fixes may skip it but still need an agreed issue.
 
@@ -48,5 +49,6 @@ in at a glance. All the detail belongs in the body below, not the title.
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
+<!-- Leave blank unless you are a maintainer. A maintainer agrees someone else's issue in a comment
+     below; on their own issue, ticking this box is the agreement. -->
 - [ ] Agreed by maintainer. Contributor may proceed with a fix (full lifecycle unless trivially small).

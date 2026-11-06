@@ -21,7 +21,7 @@ contributions and bar repeat offenders. Report concerns privately to the maintai
 
 A PR **cannot merge** unless all of these hold:
 
-- [ ] A **GitHub issue exists and a maintainer has explicitly agreed it in a comment** on that issue, before the PR was opened. Agreement is a written "agreed" from a maintainer — there is no label for it.
+- [ ] A **GitHub issue exists and a maintainer has agreed it** before the PR was opened. A maintainer agrees their own issue by ticking its **Maintainer agreement** box; anyone else's issue is agreed by a maintainer's written "agreed" in a comment, because an issue's author can tick their own box. There is no label for it.
 - [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*`. See [Labelling](#labelling).
 - [ ] **Authoring** — either produced with the recommended AI toolchain, driven by **Claude Opus 4.8 or a more capable model**, *or* hand-written without AI. Either way every gate below applies.
 - [ ] **Tested at the layer that can prove it** — unit, component, integration and E2E observed green (not merely built/type-checked); every change ships coverage at the **lowest layer that can prove it**, and E2E is reserved for what no lower layer can observe (constitution V). Hand-written work is tested **at least as thoroughly as the AI workflow produces**.
@@ -58,7 +58,7 @@ issue (agreed) → /speckit-specify → /speckit-clarify → /speckit-plan → /
               → tests green (unit + integration + e2e) → docs current → pull request
 ```
 
-1. **Issue, agreed** — search first, open with a template, [label it](#labelling), describe *intent* (what a user needs and why), and wait for a maintainer to **agree it in a comment**. A PR without an agreed issue is closed. *(Trivial typo/link/doc fixes may skip the spec steps but still need an agreed issue.)*
+1. **Issue, agreed** — search first, open with a template, [label it](#labelling), describe *intent* (what a user needs and why), and wait for a maintainer to **agree it in a comment** (a maintainer's own issue is agreed by ticking its **Maintainer agreement** box). A PR without an agreed issue is closed. *(Trivial typo/link/doc fixes may skip the spec steps but still need an agreed issue.)*
 2. **Spec** — `/speckit-specify` then `/speckit-clarify` until every `[NEEDS CLARIFICATION]` is gone and requirements are testable and unambiguous.
 3. **Plan & analyse** — `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze`; resolve every critical/high finding before building.
 4. **Implement (TDD)** — `/speckit-implement` drives test-first execution (Red → Green → Refactor). Hand-writing instead is fine, but apply the same discipline and coverage by hand.

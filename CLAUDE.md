@@ -123,6 +123,13 @@ A single condition raises a single notice, and the actions that resolve it live 
 - **Say what is wrong, not what the user may not do.**
 - **Inline, not a toast, for anything with an action attached** — a toast cannot carry a button.
 
+## Issue agreement
+
+An issue filed at the maintainer's request is the maintainer's: tick its **Maintainer agreement** box
+when filing it, and it needs no agreement comment. This overrides the `github-issues` skill's "leave
+maintainer-only sections blank". Anyone else's issue still needs the maintainer's comment
+(`CONTRIBUTING.md`).
+
 ## Cutting a release
 
 **Load the `throng-release` skill** the moment a release is in play, before touching a file. It

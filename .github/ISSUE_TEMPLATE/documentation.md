@@ -15,6 +15,7 @@ If the docs are correct and the code disagrees with them, that is a Bug in the
 code, not a documentation issue.
 
 A maintainer must AGREE this issue, in a comment, before a PR is opened.
+A maintainer's own issue is agreed by ticking the Maintainer agreement box.
 
 TITLE: keep it short and scannable — "[Docs] " plus a summary a reader can take
 in at a glance. All the detail belongs in the body below, not the title.
@@ -52,5 +53,6 @@ in at a glance. All the detail belongs in the body below, not the title.
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
+<!-- Leave blank unless you are a maintainer. A maintainer agrees someone else's issue in a comment
+     below; on their own issue, ticking this box is the agreement. -->
 - [ ] Agreed by maintainer. Contributor may proceed.
