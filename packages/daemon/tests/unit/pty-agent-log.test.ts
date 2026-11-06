@@ -1,27 +1,24 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAgentLogger } from '../../src/pty-agent-log.js';
+import { sessionFileName } from '@throng/core';
+import { APPDATA_LOG_DIR_PREFIX, encodeAgentLogDir, openAgentLog } from '../../src/pty-agent-log.js';
 
 /**
- * 019 #94 follow-up — the de-elevated agent dies AFTER connecting, and because it runs
- * detached at medium integrity with no console, nobody has ever seen WHY. This logger is
- * the durable channel that survives the crash, so its two load-bearing guarantees are
- * pinned here: (1) a written line lands on disk, and (2) a FAILED write never throws —
- * a diagnostic sink must not be able to take down the very process it exists to observe.
+ * 066 FR-017 / contract *PTY agent* — the de-elevated agent is launched with NO environment
+ * (`CreateProcessWithTokenW`, env NULL), so it cannot inherit `THRONG_LOG_DIR` and used to land in the
+ * desktop user's `%TEMP%`. Its log folder now arrives as its second argument: `appdata:<rel>` resolved
+ * against the agent's own `APPDATA` (so a different user writes to their own throng folder), or an
+ * absolute path used as is. Never `tmpdir()`.
  */
 
 const dirs: string[] = [];
+const logs: Array<{ close(): void }> = [];
 
 afterEach(() => {
-  for (const dir of dirs.splice(0)) {
-    try {
-      rmSync(dir, { recursive: true, force: true });
-    } catch {
-      /* best-effort scratch cleanup */
-    }
-  }
+  for (const log of logs.splice(0)) log.close();
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 function scratch(): string {
@@ -30,33 +27,79 @@ function scratch(): string {
   return dir;
 }
 
-describe('createAgentLogger', () => {
-  it('names the file throng-agent-<pid>.log under the given dir', () => {
-    const dir = scratch();
-    const logger = createAgentLogger(4321, dir);
-    expect(logger.path).toBe(join(dir, 'throng-agent-4321.log'));
+const STARTED = new Date(2026, 10, 6, 9, 30, 15);
+const PID = 4321;
+const FILE = sessionFileName('pty-agent', STARTED, PID);
+
+function open(arg: string | undefined, env: NodeJS.ProcessEnv): ReturnType<typeof openAgentLog> {
+  const log = openAgentLog({ arg, env, pid: PID, startedAt: STARTED });
+  if (log) logs.push(log);
+  return log;
+}
+
+describe('openAgentLog', () => {
+  it('resolves an appdata: argument against the agent’s own APPDATA', () => {
+    const appData = scratch();
+    const log = open(`${APPDATA_LOG_DIR_PREFIX}${join('throng', 'logs')}`, { APPDATA: appData });
+    expect(log?.path).toBe(join(appData, 'throng', 'logs', FILE));
+    log?.info('agent start');
+    expect(readFileSync(log?.path ?? '', 'utf8')).toContain('agent start');
   });
 
-  it('appends each logged line durably to disk', () => {
+  it('uses an absolute argument as is', () => {
     const dir = scratch();
-    const logger = createAgentLogger(1, dir);
-    logger.log('agent start pid=1');
-    logger.log('about to pty.start (native ConPTY spawn) key=7');
-
-    const contents = readFileSync(logger.path, 'utf8');
-    const lines = contents.trimEnd().split('\n');
-    expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain('agent start pid=1');
-    expect(lines[1]).toContain('about to pty.start (native ConPTY spawn) key=7');
-    // Each line is timestamped (ISO-8601 prefix) so a crash can be located in time.
-    expect(lines[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(open(dir, { APPDATA: scratch(), THRONG_LOG_DIR: scratch() })?.path).toBe(join(dir, FILE));
   });
 
-  it('NEVER throws when the write fails (the simulated crash-path invariant)', () => {
-    // A directory that does not exist and cannot be created implicitly makes every
-    // appendFileSync fail with ENOENT — the stand-in for any I/O failure during a
-    // crash. The logger must swallow it: losing a line beats crashing the agent.
-    const logger = createAgentLogger(99, join(tmpdir(), 'throng-nonexistent', 'deeper', 'still'));
-    expect(() => logger.log('this write will fail')).not.toThrow();
+  it('falls back to THRONG_LOG_DIR with no argument', () => {
+    const dir = scratch();
+    expect(open(undefined, { THRONG_LOG_DIR: dir })?.path).toBe(join(dir, FILE));
+  });
+
+  it('never falls back to the temp folder', () => {
+    const before = readdirSync(tmpdir()).filter((n) => n.startsWith('pty-agent-'));
+    expect(open(undefined, {})).toBeNull();
+    // An appdata: argument with no APPDATA to resolve it against cannot be honoured either.
+    expect(open(`${APPDATA_LOG_DIR_PREFIX}throng`, {})).toBeNull();
+    expect(readdirSync(tmpdir()).filter((n) => n.startsWith('pty-agent-'))).toEqual(before);
+  });
+
+  it('records under the pty-agent component at the configured level', () => {
+    const dir = scratch();
+    const log = open(dir, { THRONG_LOG_LEVEL: 'warn' });
+    log?.info('below the threshold');
+    log?.warn('at the threshold');
+    const text = readFileSync(log?.path ?? '', 'utf8');
+    expect(text).not.toContain('below the threshold');
+    expect(text).toContain('at the threshold');
+    expect(text).toContain('pty-agent');
+  });
+
+  it('rolls over at the configured size', () => {
+    const dir = scratch();
+    const log = open(dir, { THRONG_LOG_MAX_KB: '1' });
+    for (let i = 0; i < 40; i += 1) log?.info(`line ${i} ${'x'.repeat(60)}`);
+    expect(existsSync(join(dir, FILE.replace(/\.log$/, '.1.log')))).toBe(true);
+  });
+});
+
+describe('encodeAgentLogDir', () => {
+  it('encodes a folder under APPDATA as appdata:<relative path>', () => {
+    const appData = scratch();
+    expect(encodeAgentLogDir(join(appData, 'throng', 'logs'), appData)).toBe(
+      `${APPDATA_LOG_DIR_PREFIX}${join('throng', 'logs')}`,
+    );
+  });
+
+  it('passes any other folder through as an absolute path', () => {
+    const dir = scratch();
+    expect(encodeAgentLogDir(dir, join(dir, 'elsewhere'))).toBe(dir);
+    expect(encodeAgentLogDir(dir, undefined)).toBe(dir);
+  });
+
+  it('round-trips through openAgentLog', () => {
+    const appData = scratch();
+    const arg = encodeAgentLogDir(join(appData, 'throng', 'logs'), appData);
+    expect(open(arg, { APPDATA: appData })?.path).toBe(join(appData, 'throng', 'logs', FILE));
   });
 });

@@ -29,6 +29,7 @@ const GUARDS: readonly { dir: string; file: string }[] = [
   { dir: CORE_UNIT, file: 'slider-descriptors.test.ts' }, // FR-016 — every slider has a sane step
   { dir: CORE_UNIT, file: 'project-scope-isolation.test.ts' }, // FR-045 — project scope stays out
   { dir: CORE_UNIT, file: 'drop-confinement.test.ts' }, // SC-011/012 — read scope equals write scope
+  { dir: UNIT, file: 'failure-logging-guard.test.ts' }, // 066 SC-002/003 — constitution XIII, no silent failure
 ];
 
 describe('T126 — no guard this feature added is skipped', () => {

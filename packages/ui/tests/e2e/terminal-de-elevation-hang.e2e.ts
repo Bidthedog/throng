@@ -41,21 +41,24 @@ async function daemonElevated(win: Page): Promise<boolean> {
 }
 
 /**
- * What the agent's own log says about this launch. A de-elevated agent gets the desktop user's environment rather than the
- * run's, so its log is in that user's temp folder as well as, for an agent spawned normally, the run's.
+ * What the agent's own log says about this launch. Every agent writes `pty-agent-<start>-<pid>.log` into the
+ * app's logs folder (066 FR-017) — a de-elevated one too, since the folder reaches it as an argument.
  */
-function agentEvidence(since: number): { timings: string; log: string } {
-  const folders = [tmpdir(), join(process.env.LOCALAPPDATA ?? tmpdir(), 'Temp')];
-  const logs = folders.flatMap((folder) =>
-    readdirSync(folder)
-      .filter((name) => /^throng-agent-\d+\.log$/.test(name))
-      .map((name) => join(folder, name))
-      .filter((path) => statSync(path).mtimeMs >= since),
-  );
+function agentEvidence(logDir: string, since: number): { timings: string; log: string } {
+  let names: string[] = [];
+  try {
+    names = readdirSync(logDir);
+  } catch {
+    // No logs folder yet: reported below as "no agent log", which is itself the evidence.
+  }
+  const logs = names
+    .filter((name) => /^pty-agent-.*\.log$/.test(name))
+    .map((name) => join(logDir, name))
+    .filter((path) => statSync(path).mtimeMs >= since);
   if (logs.length === 0) return { timings: 'no agent log', log: 'no agent log was written during this launch' };
   const log = readFileSync(logs[logs.length - 1], 'utf8');
   const after = (line: string): string => {
-    const at = new RegExp(`^(\\S+) ${line}`, 'm').exec(log)?.[1];
+    const at = new RegExp(`^(\\S+) \\S+\\s+\\[pty-agent\\] ${line}`, 'm').exec(log)?.[1];
     return at === undefined ? 'never' : `+${new Date(at).getTime() - since}ms`;
   };
   return { timings: `agent started ${after('agent start')}, connected ${after('daemon connected')}, since launch`, log };
@@ -76,7 +79,7 @@ adminTest(
     const root = mkdtempSync(join(tmpdir(), 'throng-94-hang-'));
     const launchedAt = Date.now();
     try {
-      await runApp(async (_app, win) => {
+      await runApp(async (app, win) => {
         await createProject(win, 'DeElevationHang', root);
         const marker = basename(root); // every flavour's prompt shows the cwd
         const pid = await firstPanelId(win);
@@ -137,7 +140,8 @@ adminTest(
           /* fall through — the assertion below reports the #94 diagnostic with the terminal text */
         }
 
-        const agent = agentEvidence(launchedAt);
+        const userData = await app.evaluate(({ app: electronApp }) => electronApp.getPath('userData'));
+        const agent = agentEvidence(join(userData, 'logs'), launchedAt);
         console.log(`[#94] ${outcome ?? 'no outcome'}; ${agent.timings}`);
 
         expect(

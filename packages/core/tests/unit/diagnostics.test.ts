@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LOG_LEVEL,
-  DEFAULT_ROTATION,
   crashFileName,
   formatCrashReport,
   formatLogLine,
   isLogLevel,
-  normaliseRotation,
   parseLogLevel,
   passesThreshold,
   rotatedName,
-  rotationPlan,
   shouldRotate,
 } from '@throng/core';
 
@@ -47,6 +44,17 @@ describe('log levels', () => {
     expect(parseLogLevel('nonsense', 'error')).toBe('error');
     expect(isLogLevel('warn')).toBe(true);
     expect(isLogLevel('trace')).toBe(false);
+  });
+
+  it('066 FR-009a: fatal sits above error and passes every threshold, so a crash is always written', () => {
+    for (const threshold of ['fatal', 'error', 'warn', 'info', 'debug'] as const) {
+      expect(passesThreshold(threshold, 'fatal'), `threshold ${threshold}`).toBe(true);
+    }
+    expect(passesThreshold('fatal', 'error'), 'a fatal threshold admits fatal records only').toBe(false);
+    expect(parseLogLevel('fatal')).toBe('fatal');
+    expect(formatLogLine({ at: '2026-11-06T09:15:00.000Z', level: 'fatal', component: 'panel', message: 'x' })).toBe(
+      '2026-11-06T09:15:00.000Z FATAL [panel] x',
+    );
   });
 });
 
@@ -111,46 +119,20 @@ describe('crash reports', () => {
   });
 });
 
-describe('rotation and retention', () => {
+describe('rotation', () => {
+  // Retention — what is deleted — is 066's active-day policy, in diagnostics-retention.test.ts. The
+  // keep-N-files rule these tests used to pin (031 FR-015) is superseded by 066 FR-020.
   it('rotates before a write that would exceed the cap, not after', () => {
-    const policy = { maxBytes: 100, keep: 3 };
-    expect(shouldRotate(90, 5, policy)).toBe(false);
-    expect(shouldRotate(90, 20, policy)).toBe(true);
+    expect(shouldRotate(90, 5, 100)).toBe(false);
+    expect(shouldRotate(90, 20, 100)).toBe(true);
     // An empty file never rotates, however large the incoming record: a single oversized record
     // still gets written whole rather than being lost to an endless rotate loop.
-    expect(shouldRotate(0, 1000, policy)).toBe(false);
-  });
-
-  it('shifts generations oldest-first and drops what falls off the end', () => {
-    const plan = rotationPlan('main.log', { maxBytes: 100, keep: 3 });
-    expect(plan.renames).toEqual([
-      { from: 'main.1.log', to: 'main.2.log' },
-      { from: 'main.log', to: 'main.1.log' },
-    ]);
-    expect(plan.remove).toEqual(['main.3.log']);
-  });
-
-  it('keeps exactly one file when asked to keep one', () => {
-    const plan = rotationPlan('daemon.log', { maxBytes: 100, keep: 1 });
-    expect(plan.renames).toEqual([]); // nothing to preserve — the live file is simply replaced
-    expect(plan.remove).toEqual(['daemon.1.log']);
+    expect(shouldRotate(0, 1000, 100)).toBe(false);
   });
 
   it('suffixes the generation before the extension', () => {
     expect(rotatedName('main.log', 2)).toBe('main.2.log');
     expect(rotatedName('main', 2)).toBe('main.2');
     expect(rotatedName('a.b.log', 1)).toBe('a.b.1.log');
-  });
-
-  it('clamps a configured policy into one that cannot misbehave', () => {
-    // keep:0 would delete the file it is writing; a tiny cap would rotate on every line.
-    expect(normaliseRotation({ keep: 0, maxBytes: 10 })).toEqual({ keep: 1, maxBytes: 1024 });
-    expect(normaliseRotation({ keep: -5 }).keep).toBe(1);
-    expect(normaliseRotation(undefined)).toEqual(DEFAULT_ROTATION);
-    expect(normaliseRotation({ keep: 2.7 }).keep).toBe(2);
-  });
-
-  it('bounds a long-lived daemon well under anything a user would notice', () => {
-    expect(DEFAULT_ROTATION.maxBytes * DEFAULT_ROTATION.keep).toBeLessThanOrEqual(8 * 1024 * 1024);
   });
 });

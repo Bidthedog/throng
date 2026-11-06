@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_APP_SETTINGS, editorMainBytes, previewMainBytes, terminalDaemonBytes } from '@throng/core';
+import { DEFAULT_APP_SETTINGS, editorMainBytes, previewMainBytes, terminalDaemonBytes, type LogLevel } from '@throng/core';
 import type { CollectorToMain, DaemonRoster, MainToCollector, ResourceSummary } from '@throng/ipc-contract';
 import { COLLECTOR_EXIT_GRACE_MS, ResourceMonitorHost, type CollectorChild, type ResourceMonitorHostDeps } from '../../src/main/resource-monitor-host.js';
 
 /** 055 T033 — UI main's side of the collector: fork, roster, relays, subscriptions, estimates. */
 
 class FakeChild extends EventEmitter implements CollectorChild {
-  readonly stderr = new EventEmitter();
+  readonly stderr = Object.assign(new EventEmitter(), { setEncoding: () => undefined });
   readonly sent: MainToCollector[] = [];
   connected = true;
   send(msg: MainToCollector): boolean {
@@ -365,34 +365,73 @@ describe('a collector that cannot start (#542, 055 FR-044)', () => {
     expect(s.host.latestSummary()).toMatchObject({ stale: false, total: { cpu: 1 } });
   });
 
-  it('logs the exit code and what the collector said', () => {
-    const logged: string[] = [];
-    const s = make({ log: (m: string) => logged.push(m) });
+  const recorder = () => {
+    const logged: Array<{ level: LogLevel; message: string }> = [];
+    return { logged, log: (level: LogLevel, message: string) => logged.push({ level, message }) };
+  };
+
+  it('logs the exit code and what the collector said, at fatal (066 FR-005)', () => {
+    const r = recorder();
+    const s = make({ log: r.log });
     s.host.start();
     const c = s.child();
     dies(c, 1, "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vitest'");
-    expect(logged.join()).toContain('exited with code 1');
-    expect(logged.join()).toContain('ERR_MODULE_NOT_FOUND');
+    expect(r.logged).toHaveLength(1);
+    expect(r.logged[0]!.level).toBe('fatal');
+    expect(r.logged[0]!.message).toContain('exited with code 1');
+    expect(r.logged[0]!.message).toContain('ERR_MODULE_NOT_FOUND');
   });
 
-  it('logs nothing when throng itself stopped the collector', () => {
-    const logged: string[] = [];
-    const s = make({ log: (m: string) => logged.push(m) });
+  it('logs an exit nobody asked for at fatal even when its code is 0 (066 FR-005: long-lived)', () => {
+    const r = recorder();
+    const s = make({ log: r.log });
+    s.host.start();
+    dies(s.child(), 0);
+    expect(r.logged.map((l) => l.level)).toEqual(['fatal']);
+    expect(r.logged[0]!.message).toContain('exited with code 0');
+  });
+
+  it('logs a failed fork at fatal, once', () => {
+    const r = recorder();
+    const s = make({ log: r.log });
+    s.host.start();
+    const c = s.child();
+    c.connected = false;
+    c.emit('error', new Error('spawn node ENOENT'));
+    c.emit('close', -2);
+    expect(r.logged.map((l) => l.level)).toEqual(['fatal']);
+    expect(r.logged[0]!.message).toContain('ENOENT');
+  });
+
+  it('records a stop throng asked for as expected, never as a failure (066 FR-008)', () => {
+    const r = recorder();
+    const s = make({ log: r.log });
     s.host.start();
     const c = s.child();
     s.host.stop();
     c.emit('exit', 0);
     c.emit('close', 0);
-    expect(logged).toEqual([]);
+    expect(r.logged.filter((l) => l.level !== 'debug')).toEqual([]);
   });
 
   it('logs a failing reading once, not once a tick', () => {
-    const logged: string[] = [];
-    const s = make({ log: (m: string) => logged.push(m) });
+    const r = recorder();
+    const s = make({ log: r.log });
     s.host.start();
     s.child().say({ type: 'error', cause: 'readFailed' });
     s.child().say({ type: 'error', cause: 'readFailed' });
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toContain('readFailed');
+    expect(r.logged).toHaveLength(1);
+    expect(r.logged[0]!.level).toBe('warn');
+    expect(r.logged[0]!.message).toContain('readFailed');
+  });
+
+  it('logs the same failing reading again when it recurs after a good one (066 FR-005)', () => {
+    const r = recorder();
+    const s = make({ log: r.log });
+    s.host.start();
+    s.child().say({ type: 'error', cause: 'readFailed' });
+    s.child().say({ type: 'summary', summary: summary(1) });
+    s.child().say({ type: 'error', cause: 'readFailed' });
+    expect(r.logged.map((l) => l.message.includes('readFailed'))).toEqual([true, true]);
   });
 });

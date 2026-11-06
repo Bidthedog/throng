@@ -123,7 +123,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
    * replaced by a native HTML `title`, whose delay belongs to the OS and cannot be configured. This
    * used to be the load-bearing example of a descriptor and a hand-written clamp disagreeing (031
    * T033, #227: declared 0–2000, clamped 0–5000) — that history now lives on `bounds-guard.test.ts`'s
-   * `commandPollMs`/`diagnostics.keepFiles`/`search.asYouTypeDebounceMs` cases instead.
+   * `commandPollMs`/`diagnostics.keepDays`/`search.asYouTypeDebounceMs` cases instead.
    */
   it('drops a persisted linkHoverDelayMs — no field on the shipped defaults or a parsed document', () => {
     expect('linkHoverDelayMs' in DEFAULT_APP_SETTINGS.terminals).toBe(false);

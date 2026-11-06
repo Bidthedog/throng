@@ -98,7 +98,7 @@ describe('hard bounds — the control range is not always the enforced one (FR-0
     // `terminals.linkHoverDelayMs` was the third worked example here until it was retired (045 round
     // five, #408); the pattern it demonstrated is unaffected by which settings still carry it.
     for (const [key, max] of [
-      ['diagnostics.keepFiles', 20],
+      ['diagnostics.keepDays', 30],
       ['search.asYouTypeDebounceMs', 1000],
     ] as const) {
       const raw = withValue(DEFAULT_APP_SETTINGS, key, max + 5000);
@@ -253,7 +253,9 @@ describe('the declared range wins over the range the parser used to accept', () 
   };
 
   const cases = [
-    { key: 'diagnostics.keepFiles', min: 1, max: 20, wasAccepted: 50 },
+    // 066 FR-020 replaced `diagnostics.keepFiles` (declared 1–20, parsed 1–50) with keepDays; the
+    // point — a declared range with no hard bound wins — is the same.
+    { key: 'diagnostics.keepDays', min: 1, max: 30, wasAccepted: 365 },
     { key: 'search.asYouTypeDebounceMs', min: 0, max: 1000, wasAccepted: 60_000 },
   ] as const;
 
@@ -320,11 +322,11 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
   it('passes an out-of-range value straight through — clamping is not its job', () => {
     const parsed = parseAppSettings({
       terminals: { commandPollMs: 1 },
-      diagnostics: { keepFiles: 999, maxFileSizeKb: 1 },
+      diagnostics: { keepDays: 999, maxFileSizeKb: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(parsed.terminals.commandPollMs).toBe(1);
-    expect(parsed.diagnostics.keepFiles).toBe(999);
+    expect(parsed.diagnostics.keepDays).toBe(999);
     expect(parsed.diagnostics.maxFileSizeKb).toBe(1);
     expect(parsed.search.asYouTypeDebounceMs).toBe(-5);
   });
@@ -332,11 +334,11 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
   it('still rejects values that are not numbers at all — TYPE tolerance is its job', () => {
     const parsed = parseAppSettings({
       terminals: { commandPollMs: 'often' },
-      diagnostics: { keepFiles: {}, maxFileSizeKb: Number.NaN },
+      diagnostics: { keepDays: {}, maxFileSizeKb: Number.NaN },
       search: { asYouTypeDebounceMs: 'soon' },
     });
     expect(parsed.terminals.commandPollMs).toBe(DEFAULT_APP_SETTINGS.terminals.commandPollMs);
-    expect(parsed.diagnostics.keepFiles).toBe(DEFAULT_APP_SETTINGS.diagnostics.keepFiles);
+    expect(parsed.diagnostics.keepDays).toBe(DEFAULT_APP_SETTINGS.diagnostics.keepDays);
     expect(parsed.diagnostics.maxFileSizeKb).toBe(DEFAULT_APP_SETTINGS.diagnostics.maxFileSizeKb);
     expect(parsed.search.asYouTypeDebounceMs).toBe(DEFAULT_APP_SETTINGS.search.asYouTypeDebounceMs);
   });
@@ -345,11 +347,11 @@ describe('parseAppSettings no longer enforces a range of its own (FR-009)', () =
     const { value } = parseSettingsGuarded({
       ...structuredClone(DEFAULT_APP_SETTINGS),
       terminals: { ...DEFAULT_APP_SETTINGS.terminals, commandPollMs: 1 },
-      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, keepFiles: 999, maxFileSizeKb: 1 },
+      diagnostics: { ...DEFAULT_APP_SETTINGS.diagnostics, keepDays: 999, maxFileSizeKb: 1 },
       search: { asYouTypeDebounceMs: -5 },
     });
     expect(value.terminals.commandPollMs).toBe(250);
-    expect(value.diagnostics.keepFiles).toBe(20);
+    expect(value.diagnostics.keepDays).toBe(30);
     expect(value.diagnostics.maxFileSizeKb).toBe(64);
     expect(value.search.asYouTypeDebounceMs).toBe(0);
   });

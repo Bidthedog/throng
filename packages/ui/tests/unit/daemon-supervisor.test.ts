@@ -163,4 +163,43 @@ describe('DaemonSupervisor (029 FR-006)', () => {
     s.onConnected();
     expect(s.current().status).toBe('running');
   });
+
+  it('logs each daemon state change once, however many closes report it (066 FR-010)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const s = new DaemonSupervisor(() => Date.now());
+      s.onConnected();
+      s.onDisconnected();
+      s.onDisconnected();
+      s.onDisconnected();
+      vi.advanceTimersByTime(DAEMON_GRACE_MS + 1);
+      s.onDisconnected();
+
+      // One condition, one line each: the loss, then the verdict — not one per failed reconnect.
+      const lines = [...info.mock.calls, ...warn.mock.calls].map((c) => String(c[0]));
+      expect(lines.filter((l) => l.includes('→ reconnecting'))).toHaveLength(1);
+      expect(warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('→ stopped'))).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+      info.mockRestore();
+    }
+  });
+
+  it('logs why a restart threw', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const s = new DaemonSupervisor(() => Date.now());
+      s.setRestartHandler(() => Promise.reject(new Error('spawn EACCES')));
+      s.onConnected();
+      s.onDisconnected();
+      vi.advanceTimersByTime(DAEMON_GRACE_MS + 1);
+
+      await s.requestRestart();
+
+      expect(warn.mock.calls.some((c) => String(c[0]).includes('spawn EACCES'))).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
