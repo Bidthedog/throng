@@ -314,27 +314,39 @@ describe('cost on a 10,000-line rendered document (Principle XII, SC-005)', { ta
     const coldBuilds = modelBuilds.count;
     const painted = registry.get(PREVIEW_OCCURRENCE_HIGHLIGHT)!.ranges.length;
 
-    // The body redraws (what `onDrawn` reports); the model is built when the browser is idle, not on the next selection.
-    window.getSelection()!.removeAllRanges();
-    o.invalidate();
-    flush(); // the redraw's re-evaluation: nothing is selected-and-new yet, so it must not build the model
-    const t2 = performance.now();
-    runIdle();
-    const idleBuild = performance.now() - t2;
+    // The body redraws (what `onDrawn` reports); the model is built when the browser is idle, not on the next
+    // selection. AFTER IDLE: the first selection over a draw whose model is ready — SC-005's case. Redrawn three
+    // times and the best frame kept, for the reason the warm frames below give.
+    let idleBuild = 0;
+    const afterIdleFrames: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      window.getSelection()!.removeAllRanges();
+      o.invalidate();
+      flush(); // the redraw's re-evaluation: nothing is selected-and-new yet, so it must not build the model
+      const t2 = performance.now();
+      runIdle();
+      if (i === 0) idleBuild = performance.now() - t2;
+      select(second);
+      document.dispatchEvent(new Event('selectionchange'));
+      const t3 = performance.now();
+      flush();
+      afterIdleFrames.push(performance.now() - t3);
+    }
+    const afterIdle = Math.min(...afterIdleFrames);
 
-    // AFTER IDLE: the first selection over a draw whose model is ready — SC-005's case.
-    select(second);
-    document.dispatchEvent(new Event('selectionchange'));
-    const t3 = performance.now();
-    flush();
-    const afterIdle = performance.now() - t3;
-
-    // WARM: the next selection change over the same draw — what the user does while dragging.
-    select(third);
-    document.dispatchEvent(new Event('selectionchange'));
-    const t4 = performance.now();
-    flush();
-    const warm = performance.now() - t4;
+    // WARM: the next selection changes over the same draw — what the user does while dragging. The best of five
+    // frames, not one: a single frame once measured 99 ms on a CI gate against ~5 ms alone, a stall in the runner
+    // rather than in this code (#465). A warm path that did real extra work — rebuilding the model, ~80 ms here —
+    // would slow every frame, so the best of five still catches it.
+    const warmFrames: number[] = [];
+    for (const node of [third, second, third, second, third]) {
+      select(node);
+      document.dispatchEvent(new Event('selectionchange'));
+      const t4 = performance.now();
+      flush();
+      warmFrames.push(performance.now() - t4);
+    }
+    const warm = Math.min(...warmFrames);
     vi.restoreAllMocks();
 
     const summary =
