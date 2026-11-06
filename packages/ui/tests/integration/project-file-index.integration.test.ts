@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { DEFAULT_APP_SETTINGS, type Disposable, type IFileWatcher, type WatchOptions } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { NodeFileWatcher } from '../../src/main/node-file-watcher.js';
+import { SharedFileWatcher } from '../../src/main/shared-file-watcher.js';
 import {
   ProjectFileIndexService,
   type FileIndexUpdate,
@@ -735,6 +736,31 @@ describe('ProjectFileIndexService over a real tree and a real watcher (033, §2)
       await h.destroy();
     }
   }, 40_000);
+
+  /*
+   * #274 — flipping the exclusion toggle opens no second watch on the root. Each index still asks
+   * for one at the service seam (above); as main wires it, both reach the OS through the ONE shared
+   * project watch, so the flipped index costs a walk and nothing that stays armed.
+   */
+  it('both exclusion states of one root share ONE underlying watch, as main wires them (#274)', async () => {
+    const spy = new SpyWatcher();
+    const h = await Harness.create({ globs: ['**/node_modules'], watcher: new SharedFileWatcher(spy) });
+    try {
+      await seedProject(h.root);
+      h.service.subscribe(1, h.root, false);
+      await waitForReadyAt(h, 1, false);
+      expect(spy.live).toBe(1);
+
+      h.service.subscribe(1, h.root, true); // the toggle flipped
+      await waitForReadyAt(h, 1, true);
+      expect(spy.live, 'the flipped index opened a watch of its own').toBe(1);
+
+      h.service.unsubscribe(1, h.root, true); // and flipped back
+      expect(spy.live, 'flipping back took the standing index’s watch with it').toBe(1);
+    } finally {
+      await h.destroy();
+    }
+  }, 30_000);
 
   it('the delta protocol is unchanged for each index (I2, S7, S8)', async () => {
     const h = await Harness.create({ globs: ['**/node_modules'] });
