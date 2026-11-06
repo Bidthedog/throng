@@ -109,7 +109,7 @@ A maintainer changes a static file and deploys the site, and the repositories st
 
 **Trust**
 
-- **FR-009**: The private signing key MUST be held only as a `release` Environment secret, so only a job behind the human QA sign-off can use it. No other job or workflow MAY reference it.
+- **FR-009**: The private signing key MUST be held only as a `release` Environment secret, so only a job behind the human QA sign-off can use it. No other job or workflow MAY reference it. *(The sign-off is superseded by 065 FR-001; the key is now read only by a `v*` tag run, after 065 FR-003's on-master check.)*
 - **FR-010**: The repositories MUST change only after the release has published, by a job that depends on publication.
 - **FR-011**: The public key MUST be served from the site. The instructions MUST scope trust in it to throng's source alone, and MUST NOT add it to a system-wide keyring.
 - **FR-012**: The package manager MUST refuse a tampered or unsigned index, as configured by the published instructions and repo file.

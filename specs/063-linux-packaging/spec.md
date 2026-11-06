@@ -164,7 +164,7 @@ A maintainer cuts a release. The pipeline builds the Linux packages beside the W
 - **FR-018**: A step a hosted runner cannot exercise MUST be recorded `unproven` with its reason and listed in the release body (058), never passed. Which steps may be `unproven` MUST be named, not open-ended.
 - **FR-019**: The publish gate, the checksums and the release body MUST cover the Linux artifacts with the same conditions as the Windows ones, and the body MUST say who each one is for.
 - **FR-020**: Native components MUST be built so the packages run on every supported distribution, not only the one that built them.
-- **FR-021**: The names, contents and verification steps of the Windows artifacts MUST NOT change, and the human QA sign-off MUST remain the only route to publication.
+- **FR-021**: The names, contents and verification steps of the Windows artifacts MUST NOT change, and the human QA sign-off MUST remain the only route to publication. *(Second clause superseded by 065 FR-002 and FR-003.)*
 
 **Documentation**
 
