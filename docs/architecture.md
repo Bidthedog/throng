@@ -813,11 +813,11 @@ string was thrown.
 
 **Code.** Core: `core/src/failure/cause.ts` (the cause model) and `daemon-state.ts` (daemon
 reachability); `core/src/notice/` (display modes, subjects, grouping, affected panels, severity, log
-records); `core/src/diagnostics/` (log format, levels, rotation). Main: `diagnostics.ts`,
+records); `core/src/diagnostics/` (log format, levels, rotation and retention, the caught-error helpers). Main: `diagnostics.ts`,
 `notice-log.ts`, `open-logs.ts`, `renderer-debug-log.ts`. Renderer: `common/notification.tsx`,
 `notice-suppression.ts`, `notice-text.ts`, `panel-failure-banner.tsx`, and
 `workspace/panel-failure-notice.ts`. Platform: `node-file-log.ts` (the rotating file log and crash
-reports).
+reports) and `watch-child.ts`.
 
 A **cause** is derived from an error. Its set of kinds is closed. It owns the wording and the
 de-duplication key, and it lives in core because every process takes part: the daemon classifies,
@@ -826,15 +826,30 @@ JSON-RPC error's `data` payload. An error that matches no kind keeps its origina
 One condition raises one notice, owned by whatever owns the state. For example, a stopped daemon is
 reported once, from the supervisor's state, not once for every call that failed. Panels that one
 action defeated share a notice when their error is the same: the same cause, or with no cause, the
-same message. A different error raises a notice of its own (`core/src/notice/grouping.ts`). Each process writes
-its own durable log (`daemon.log`, the agent's log, main's log) into one log folder, which main
-passes down as `THRONG_LOG_DIR`. The daemon's output from before its logger starts goes to
-`daemon-startup.log`.
+same message. A different error raises a notice of its own (`core/src/notice/grouping.ts`).
+
+**The log.** Every process writes its own durable log into the one logs folder main opens from the
+cog menu: `main.log`, `daemon.log`, and one session-named file per PTY agent and resource collector.
+Main passes the folder down as `THRONG_LOG_DIR`; the de-elevated PTY agent, whose launch drops the
+environment, gets it as an argument instead. The daemon's output from before its logger starts goes to
+`daemon-startup.log`. A log rolls over at a size and the folder keeps the last few days throng ran,
+under a total cap; a live file is never deleted (`core/src/diagnostics/rotation.ts`).
+
+**Nothing fails silently.** `console` is the logging seam in every process: main, the daemon, the agent
+and the collector route it into their file, and main forwards the renderer's. A caught error goes
+through `logCaught` (warn), `logExpected` (debug, with the reason it is expected) or `logFatal`
+(`core/src/diagnostics/caught.ts`). Fatal sits above error and is written at every threshold: a
+process, window or panel crash. Each panel body sits in an error boundary that renders the failure
+banner and logs the crash. Every child process is passed to `watchChild`
+(`platform-node/src/watch-child.ts`), so its parent records a failed start, an exit nobody asked for,
+and the tail of its stderr. `packages/ui/tests/unit/failure-logging-guard.test.ts` fails the build on
+a new silent catch or an unwatched process start.
 
 Binds: [II. Platform-Abstracted Core](../.specify/memory/constitution.md#ii-platform-abstracted-core-os-agnostic),
 [III. Detached, Tagged & Persistent Terminals](../.specify/memory/constitution.md#iii-detached-tagged--persistent-terminals)
 (no silent exits),
-[VI. Simple, Modern, Discoverable UX](../.specify/memory/constitution.md#vi-simple-modern-discoverable-ux).
+[VI. Simple, Modern, Discoverable UX](../.specify/memory/constitution.md#vi-simple-modern-discoverable-ux),
+[XIII. Every Failure Leaves a Trace](../.specify/memory/constitution.md#xiii-every-failure-leaves-a-trace).
 
 ## Build and packaging
 

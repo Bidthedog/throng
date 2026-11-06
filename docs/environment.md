@@ -49,7 +49,8 @@ They are set by throng; each only mirrors a preference, so change the preference
 |---|---|
 | `THRONG_LOG_LEVEL` | [`diagnostics.logLevel`](preferences.md#logging) |
 | `THRONG_LOG_MAX_KB` | [`diagnostics.maxFileSizeKb`](preferences.md#logging) |
-| `THRONG_LOG_KEEP` | [`diagnostics.keepFiles`](preferences.md#logging) |
+| `THRONG_LOG_KEEP_DAYS` | [`diagnostics.keepDays`](preferences.md#logging) |
+| `THRONG_LOG_MAX_TOTAL_MB` | [`diagnostics.maxTotalMb`](preferences.md#logging) |
 | `THRONG_LOG_DIR` | The [log folder](preferences.md#logging). A daemon started by hand without it logs nothing; the terminal agent falls back to `%TEMP%`. |
 | `FORCE_HYPERLINK` | Set to `1` in each new terminal by [`terminals.advertiseHyperlinks`](preferences.md#terminal), unless the environment already carries it. |
 
@@ -127,6 +128,7 @@ launches.
 | `THRONG_PREFS_SECTIONS_OPEN` | `1` makes Preferences sections start unfolded, as before 056 FR-016; the harness sets it. | unset |
 | `THRONG_TEST_RUN_DIR` | The one scratch folder a test run and all its workers write into. See [temp files](../.claude/skills/throng-testing/references/temp-files.md). | created per run |
 | `THRONG_TEST_RUN_OWNED_DIR` | Set by Playwright's global setup when it created the run folder, so teardown removes it. | set internally |
+| `THRONG_TEST_PANEL_THROW` | Any value but `0` or `false` makes every typed panel body throw (an untyped panel never does), so each shows the failure banner and writes one `FATAL [panel]` record — the hand check for crash logging. Ignored by an installed build. | unset |
 | `THRONG_NON_REFERENCE_HARDWARE` | Marks a machine whose timings are not representative, so wall-clock SLA ceilings are recorded rather than asserted. See [performance SLAs](../.claude/skills/throng-testing/references/performance-sla.md). | unset |
 | `THRONG_NO_REENCODED_KEY_DELIVERY` | Declares the host cannot deliver CSI-u key sequences into a program, so those specs skip. | unset |
 | `THRONG_CALIBRATE` | Which parts of the Resource Monitor's memory-estimate calibration spec run. Unset, it runs the gate: editors and previews at 1 and 10 MB and terminals filled to their scrollback limit, each within 10% of live heap, then the three benchmark runs, each ranking its panels at a Spearman ρ of at least 0.85 with each panel kind's share of the total within 5 points; shapes the estimates are known to miss are logged, not asserted. `full` runs the whole sweep, 50 MB included, and the benchmarks. A comma list of `editor`, `preview` and `terminal` runs those sections' full case lists alone; `bench-a`, `bench-b` or `bench-c` runs that benchmark alone. `none` runs nothing; the gate sets it on a dispatched run, so SC-009 is asserted by the nightly gate. | unset (the nightly gate) |
