@@ -1,0 +1,125 @@
+# Feature Specification: Unattended Releases
+
+**Feature Branch**: `feature/S065-unattended-releases`
+
+**Created**: 2026-11-06
+
+**Status**: Draft
+
+**Input**: The maintainer, 2026-11-06: "Update the release skill and pipelines so there are no human gates. If I ask for a release, either by version number or the default of the next alpha or beta, the release runs completely unattended, end to end. Everything required for the release is automated." And: "The release skill should also run npm audit, update patches and minor versions, automatically fix any issues it encounters, PR those in, and run the release process again until we have a published package. The full gate must run for a release." A nightly release that starts itself is the next step and is out of scope here.
+
+## Requirements this feature changes
+
+This feature removes the human QA sign-off from publication. Each requirement below is superseded where it makes a person the last gate, and stands in every other respect.
+
+| Requirement | What it said | What replaces it |
+|---|---|---|
+| 020 FR-028 (c) | Publication needs a human QA sign-off recorded for the exact package. | Withdrawn. Conditions (a) and (b) stand, with 042 FR-005 and FR-013 and 058 FR-030 beside them. FR-003 below stands in for the review a person gave. |
+| 020 FR-029 | The sign-off is an explicit act by a person, never automation, a default or time. | Withdrawn (FR-001). |
+| 020 FR-030 | A sign-off binds to the exact package. | Withdrawn with the sign-off. The binding of a release to its package stands through FR-033 and SC-002's four-way version match. |
+| 020 SC-005 | No release publishes without version, verification **and QA sign-off**. | No release publishes without every machine gate satisfied; each refusal still names the unmet gate. |
+| 042 FR-006 | The body is rendered before publication so the person signing off approves the text that ships. | The body is still rendered before publication, and any refusal stops the release there (FR-004). It is the record of what shipped, not something a person approves. |
+| 063 FR-021, second clause | The human QA sign-off remains the only route to publication. | A `v*` tag on a commit already on master is the only route (FR-002, FR-003). |
+| 064 FR-009 | The signing key is usable only by a job behind the human QA sign-off. | The key stays a `release` Environment secret, readable only by a job running for a `v*` tag, after the on-master check (FR-003, FR-005). |
+
+020 FR-037 stands: no gate has an override, and nothing in this feature adds one.
+
+## Clarifications
+
+### Session 2026-11-06
+
+- Q: What reviews a release once no person does? → A: Every release commit reaches master through a pull request whose required checks passed, and the full gate runs on that tree. The tag must point at a commit already on master. A tag pushed on any other commit is refused before a key is read.
+- Q: Can a dispatch still publish? → A: No. A dispatch is always a rehearsal. Only a `v*` tag publishes, so nothing can publish a branch that never merged.
+- Q: How does the release continue after a failure? → A: The runbook fixes the cause on its own branch, merges it through a PR with green checks, and runs the release again. A version that never published may be re-cut on the fixed commit. A published version is never reused.
+- Q: When does the release stop instead of continuing? → A: When the fix needs a decision only the maintainer can make, or the same failure survives three attempts. It reports what it found and what it tried.
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Ask for a release and get a published package (Priority: P1)
+
+The maintainer asks for a release, naming a version or not, and walks away. The next thing they see is a published release, or a report saying exactly why there is none.
+
+**Independent Test**: Ask for "the next alpha" with `1.0.0-alpha14` published. Without any further input, `1.0.0-alpha15` is published with its notes, its seven artifacts and its signed repository bundle, and `apt` and `dnf` serve it.
+
+**Acceptance Scenarios**:
+
+1. **Given** the latest release is `1.0.0-alpha14`, **When** the maintainer asks for a release without a version, **Then** `1.0.0-alpha15` is released.
+2. **Given** a version is named, **When** the release runs, **Then** that exact version is released, prerelease suffix included.
+3. **Given** every check passes, **When** the tag's pipeline reaches publication, **Then** it publishes without waiting for anyone.
+
+---
+
+### User Story 2 - A failure is fixed, not handed back (Priority: P1)
+
+Something breaks on the way: an advisory, a dependency that no longer builds, a failing test, a pipeline fault. The release fixes it through a pull request and tries again.
+
+**Independent Test**: Introduce a failure the gate catches into the release branch. The release opens a fix PR, merges it once its checks pass, and publishes on the next attempt.
+
+**Acceptance Scenarios**:
+
+1. **Given** `npm audit` reports an advisory with a fix, **When** the release runs, **Then** the fix lands on master through its own PR before the release commit.
+2. **Given** a release run fails after its tag was pushed and before it published, **When** the cause is fixed on master, **Then** the same version is re-cut on the fixed commit and released.
+3. **Given** a failure needs a decision only the maintainer can make, **When** the release meets it, **Then** it stops and reports the decision needed, publishing nothing.
+
+---
+
+### User Story 3 - Nothing unreviewed can publish (Priority: P1)
+
+Removing the person must not open a route around review.
+
+**Independent Test**: Push a `v*` tag on a commit that is not on master. The run refuses before reading the signing key or creating a release.
+
+**Acceptance Scenarios**:
+
+1. **Given** a tag on a branch commit, **When** its pipeline reaches sign-index or publish, **Then** both refuse, naming the commit.
+2. **Given** a dispatched run, **When** it completes, **Then** nothing is signed or published, whatever its inputs.
+
+### Edge Cases
+
+- **A tag whose run failed before publication**: the version was never published, so its tag may be deleted and re-cut on the fixed commit. A published version stays immutable (020 FR-034).
+- **A major upgrade is needed to clear an advisory**: that is a maintainer decision. The release stops and says so.
+- **A package deliberately held back** (for example `better-sqlite3` at 12.x): the sweep honours the hold.
+- **`deploy-repositories` fails after publication**: the release is out. The job is re-run, and the release counts as published once the repositories serve it.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+**The pipeline**
+
+- **FR-001**: Publication MUST NOT wait for any human act. Every publish condition MUST be evaluated by the machine. *(Supersedes 020 FR-028(c), FR-029, FR-030.)*
+- **FR-002**: Only a run for a `v*` tag MAY sign indexes or publish. A dispatched run MUST NOT, whatever its inputs.
+- **FR-003**: Each job that reads the signing key or creates a release MUST first refuse a tag whose commit is not on master, before reading any secret.
+- **FR-004**: The release body MUST be rendered, from every publish condition except "already published", before any signing or publishing job starts. Any refusal MUST fail that render and stop the release. *(Restates 042 FR-006.)*
+- **FR-005**: The `release` Environment MUST have no required reviewers, and MUST accept deployments only from `v*` tags.
+
+**The runbook (`throng-release`)**
+
+- **FR-006**: A request naming a version MUST release that version. A request naming none MUST release the next version on the current prerelease track (`alpha14` → `alpha15`). "The next beta" or "the next rc" MUST start that track at 1, or advance it if it has started. A version without a prerelease suffix MUST be released only when named.
+- **FR-007**: Every release MUST first run `npm audit` and fix every advisory that has a fix, and take every patch and minor update. Each MUST reach master through its own pull request before the release commit. Majors and deliberately held packages MUST be left as they are, and named in the release PR.
+- **FR-008**: The full gate (`gate.yml`) MUST pass on the release commit's tree before the tag is pushed.
+- **FR-009**: On any failure (gate, required check, release pipeline), the runbook MUST diagnose the cause, fix it on its own branch, merge it through a PR whose checks pass, and run the release again until a release is published.
+- **FR-010**: The runbook MUST stop, publishing nothing further, and report when a fix needs a maintainer decision (a major upgrade, an advisory with no fix, a requirement change) or when the same failure survives three attempts.
+- **FR-011**: A tag whose release never published MAY be deleted and re-cut. A published version MUST NOT be reused or moved.
+
+**Documentation**
+
+- **FR-012**: `docs/releasing.md`, `docs/environment.md` and the `throng-release` skill MUST describe the unattended release, and MUST NOT describe a sign-off.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: A release request reaches a published release, or a stop report, with no human input after the request.
+- **SC-002**: No run for a tag on a commit outside master signs or publishes anything.
+- **SC-003**: Every published release's commit has a green `gate.yml` run on its tree.
+
+## Assumptions
+
+- Branch protection on master stays as it is: a pull request with the required checks passing, no approvals needed.
+- The maintainer can still stop a release at any time by cancelling its run.
+
+## Out of Scope
+
+- A release that starts itself (nightly or on a schedule). This feature is the manual half of that.
+- Code signing (#118).

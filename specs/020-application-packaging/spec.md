@@ -191,9 +191,9 @@ A release reaches GitHub Releases only when every condition is true: the package
 
 #### QA sign-off & publication gates
 
-- **FR-028**: Publishing a release MUST be refused unless ALL of the following hold: (a) the package carries a real, non-placeholder product version; (b) installer verification passed for that exact package; (c) a human QA sign-off is recorded for that exact package.
-- **FR-029**: The QA sign-off MUST be an explicit act by a person. It MUST NOT be satisfiable by an automated check, by a default, or by the passage of time.
-- **FR-030**: A QA sign-off MUST bind to the exact package it certifies. A sign-off recorded against a different build MUST NOT satisfy the gate.
+- **FR-028**: Publishing a release MUST be refused unless ALL of the following hold: (a) the package carries a real, non-placeholder product version; (b) installer verification passed for that exact package; (c) a human QA sign-off is recorded for that exact package. *(Condition (c) superseded by 065 FR-001: no human sign-off; FR-003 there stands in for it.)*
+- **FR-029**: The QA sign-off MUST be an explicit act by a person. It MUST NOT be satisfiable by an automated check, by a default, or by the passage of time. *(Superseded by 065 FR-001.)*
+- **FR-030**: A QA sign-off MUST bind to the exact package it certifies. A sign-off recorded against a different build MUST NOT satisfy the gate. *(Superseded by 065 FR-001; the release-to-package binding stands through FR-033.)*
 - **FR-031**: A refusal to publish MUST state which condition was unmet.
 - **FR-032**: Publishing MUST create a GitHub Release for the product version, carrying the installer as a downloadable artifact, together with the checksum of that installer (FR-042).
 - **FR-033**: The version of a published release MUST equal the version inside the package it carries. A mismatch MUST prevent publication.
@@ -236,7 +236,7 @@ A release reaches GitHub Releases only when every condition is true: the package
 - **SC-002**: The version displayed in the application, the version inside the package, the version in the package's filename, and the version of the published release are identical for 100% of published releases, verified automatically rather than by inspection.
 - **SC-003**: Upgrading between any two releases preserves 100% of per-user data — projects, sub-workspaces, layouts, settings, keybindings, custom themes and the edit list — with zero user action.
 - **SC-004**: After an uninstall, zero throng executable components remain in the install root and zero throng processes remain running, measured at the process level rather than from the interface.
-- **SC-005**: Zero releases can be published without every gate satisfied — version, verification and QA sign-off. Every attempt with a gate unmet is refused and names the unmet gate.
+- **SC-005**: Zero releases can be published without every gate satisfied — version, verification and QA sign-off. Every attempt with a gate unmet is refused and names the unmet gate. *(The QA sign-off clause is superseded by 065 FR-001.)*
 - **SC-006**: Two user accounts on one machine can each run throng with live terminals concurrently, with zero cross-account interference in terminals, projects or settings.
 - **SC-007**: 100% of installer verification runs exercise install, launch, version check, a core journey, uninstall and a no-residue check; a package with any one of those broken fails verification 100% of the time.
 - **SC-008**: The artifacts of any published release can be rebuilt from the source revision that release identifies, producing the same installed component set.

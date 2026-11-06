@@ -208,7 +208,7 @@ left behind.
   bypassable.)*
 - **FR-006**: The complete release body that publication will use MUST be rendered and made
   inspectable **before** the gated publication step runs, so the person giving the QA sign-off is
-  approving the text that will actually be published.
+  approving the text that will actually be published. *(Restated by 065 FR-004: nobody approves the body; any refusal stops the release here.)*
 - **FR-007**: Every release body MUST continue to carry, beneath the notes content: the
   unrecognised-app warning and how to proceed past it, how to verify a download against its checksum,
   the SHA-256 table, and the exact source revision the artifacts were built from. This content is
