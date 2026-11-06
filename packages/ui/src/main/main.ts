@@ -2088,11 +2088,13 @@ if (isPrimaryInstance)
    * return is the one that could not be established. `IFileWatcher` is the same seam
    * `EditorCoordinator` uses per document for 027 / #161.
    *
-   * A separate watcher instance rather than a shared signal, deliberately: see spec 039 Finding 2
-   * and decision D-1, and #306 for the consolidation this defers.
+   * It reads through the SAME shared watcher as the tree, the index, editors and previews (#306),
+   * not an instance of its own (039 D-1's deferral). The folder it waits on is usually inside the
+   * project root, so it joins the root's one watch rather than opening another recursive watch over
+   * part of the same tree — two of which over one `node_modules` is half of what #585 measured.
    */
   const terminalReconnect = new TerminalReconnect({
-    fileWatcher: new NodeFileWatcher(150),
+    fileWatcher: projectWatcher,
     exists: (p) => {
       try {
         return statSync(p).isDirectory();
