@@ -1,5 +1,5 @@
 import { KNOWN_FILE_EXTENSIONS } from './known-extensions.js';
-import { MAX_PATH_SPACE_WORDS } from './limits.js';
+import { MAX_PATH_SPACE_WORDS, MAX_RELATIVE_PATH_SPACE_WORDS } from './limits.js';
 import type { LinkCandidate, LinkPosition, Span } from './types.js';
 
 /**
@@ -41,7 +41,8 @@ import type { LinkCandidate, LinkPosition, Span } from './types.js';
  *     segment ends in a KNOWN extension (FR-178), ends the span. With no such word the default
  *     applies. The scan never takes a word that begins an anchored path, a URL, a quote or backtick,
  *     or a path-holding enclosure, and the whole span is at most `MAX_PATH_SPACE_WORDS` words
- *     (FR-179f). An unbalanced bracket is trimmed (FR-005) rather than ending it.
+ *     (FR-179f) — `MAX_RELATIVE_PATH_SPACE_WORDS` for a token with no anchor (#526). An unbalanced
+ *     bracket is trimmed (FR-005) rather than ending it.
  *  4. Words a scan did not consume are judged on their own.
  *  5. The known extensions are an input (`DetectOptions.knownExtensions`), defaulting to the shipped
  *     `KNOWN_FILE_EXTENSIONS`; matching ignores case.
@@ -126,6 +127,7 @@ export function detectPathCandidates(
     const raw = token[0].slice(skip);
     if (raw.length === 0) continue;
     const at = token.index + skip;
+    if (isSlashCommand(line, at, raw)) continue;
 
     const crossedTo = scanAcrossSpaces(line, at, tokenEnd, known, blocked, options.namesKnownDirectory);
     if (crossedTo !== null) {
@@ -179,8 +181,13 @@ const CLOSERS = ')]}>';
 /** FR-005's trailing sentence punctuation. */
 const TRAILING_PUNCTUATION = ',.:;';
 
-/** `:42`, `:42:7` or `(42,7)` at the very end of a token. */
-const POSITION_SUFFIX = /(?::(\d+)(?::(\d+))?|\((\d+),(\d+)\))$/;
+/**
+ * `:42`, `:42:7` or `(42,7)` at the very end of a token — and (#526) a line RANGE, `:42-50` or
+ * `:42–50` as Claude Code writes one, or a GitHub-style `#L42` / `#L42-L50`. A range opens at its
+ * first line; nothing reads the last.
+ */
+const POSITION_SUFFIX =
+  /(?::(?<line>\d+)(?::(?<column>\d+)|[-–]\d+)?|\((?<pline>\d+),(?<pcolumn>\d+)\)|#L(?<aline>\d+)(?:-L?\d+)?)$/;
 
 /** A scheme prefix — `https://`, `file://`, `mailto:`. Only `file:` is ours (FR-003f, FR-013). */
 const SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//;
@@ -303,11 +310,13 @@ function scanAcrossSpaces(
   if (!PATH_CHARACTER.test(token)) return null;
   if (terminates(line.slice(at, tokenEnd), known)) return null;
 
+  // #526: a relative token crosses one space at most; an anchored one keeps the full cap.
+  const cap = isAnchored(token) ? MAX_PATH_SPACE_WORDS : MAX_RELATIVE_PATH_SPACE_WORDS;
   let words = 1;
   let pos = tokenEnd;
   /** The furthest word at which the span named the known directory, or `null` for none. */
   let directoryEnd: number | null = null;
-  while (words < MAX_PATH_SPACE_WORDS && line[pos] === ' ') {
+  while (words < cap && line[pos] === ' ') {
     WORD.lastIndex = pos + 1;
     const word = WORD.exec(line);
     if (word === null) break;
@@ -334,6 +343,21 @@ function terminates(reading: string, known: ReadonlySet<string>): boolean {
   const last = segments[segments.length - 1];
   const dot = last.lastIndexOf('.');
   return dot > 0 && known.has(last.slice(dot + 1).toLowerCase());
+}
+
+/** `/clear`, `/skill-name`, `/plugin:skill` — one rooted segment, no further separator, no dot. */
+const SLASH_COMMAND = /^\/[A-Za-z][A-Za-z0-9_:-]*$/;
+
+/** What may stand before a slash command on its line: nothing, or a prompt glyph (#418). */
+const PROMPT_PREFIX = /^\s*(?:[>❯›»]\s*)?$/;
+
+/**
+ * #418, superseding FR-174 in part: a single-segment rooted token that opens its line, or follows a
+ * prompt glyph, is a slash command — how Claude Code's menu and echoed input print `/clear` — and not a
+ * path. Anywhere else in a line `/help` is still FR-174's rooted path.
+ */
+function isSlashCommand(line: string, at: number, raw: string): boolean {
+  return SLASH_COMMAND.test(trim(raw).text) && PROMPT_PREFIX.test(line.slice(0, at));
 }
 
 /** The anchored forms: drive, UNC, a rooted `/`, `./`, `../`, `~/`, or a `file:` URI. */
@@ -461,8 +485,9 @@ function splitPosition(
   if (!m) return null;
   const base = text.slice(0, m.index);
   if (base.length === 0) return null;
-  const line = Number(m[1] ?? m[3]);
-  const columnRaw = m[2] ?? m[4];
+  const g = m.groups ?? {};
+  const line = Number(g.line ?? g.pline ?? g.aline);
+  const columnRaw = g.column ?? g.pcolumn;
   if (!Number.isSafeInteger(line)) return null;
   const position: LinkPosition =
     columnRaw === undefined ? { line } : { line, column: Number(columnRaw) };

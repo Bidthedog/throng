@@ -57,6 +57,15 @@ export const MAX_LINK_CANDIDATES_PER_LINE = 64;
 export const MAX_PATH_SPACE_WORDS = 6;
 
 /**
+ * The same bound for a RELATIVE scan — one that starts at a token with a separator but no anchor
+ * (`src/my file.ts`): two words, so it crosses one space at most (#526, superseding FR-179f for
+ * relative tokens). Prose is full of `dir/name` tokens followed by sentences that later name a file —
+ * `Updated src/components and the docs/readme.md file` — and at the anchored cap every one of them was
+ * drawn as one long link. A relative folder with two spaces in one segment needs quotes or backticks.
+ */
+export const MAX_RELATIVE_PATH_SPACE_WORDS = 2;
+
+/**
  * How often the terminal's view pass may recompute the marks for the rows in view (FR-172, SC-021;
  * plan Complexity Tracking, round four).
  *
