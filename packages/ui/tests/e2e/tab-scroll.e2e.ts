@@ -391,13 +391,13 @@ test.describe('an eased strip', () => {
      * deliberately auto-opens NO project at startup, so a reload restores nothing to look at.)
      */
     await freshProject(shared.win);
-    await shared.win
-      .locator('.project-item', { hasText: name })
-      .locator('[data-testid^="project-switch-"]')
-      .click();
-    await expect(shared.win.locator('.project-item', { hasText: name })).toHaveClass(
-      /project-item--active/,
-    );
+    // By the name alone (#576): a row also shows its folder, and another project's random folder suffix can contain
+    // this one's name.
+    const row = shared.win.locator('.project-item').filter({
+      has: shared.win.locator('.project-item__name').getByText(name, { exact: true }),
+    });
+    await row.locator('[data-testid^="project-switch-"]').click();
+    await expect(row).toHaveClass(/project-item--active/);
     await expect(shared.win.getByTestId(wanted)).toBeVisible();
     /*
      * The measurement that identified the original defect is worth keeping, because the number IS
