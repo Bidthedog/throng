@@ -65,6 +65,13 @@ vi.mock('node:fs', () => ({
 
 const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
 
+/**
+ * These tests drive the wrapper's state machine against a mocked NATIVE recursive `fs.watch`, so
+ * they pin that strategy — on Linux the default is the per-directory watch (#585), tested in
+ * `directory-tree-watch.integration.test.ts`.
+ */
+const NATIVE = { recursiveStrategy: 'native' } as const;
+
 /** The watch the OS would currently be delivering events through — i.e. the newest one still open. */
 const liveWatch = (): Watch | undefined => [...watches].reverse().find((w) => !w.watcher.closed);
 
@@ -80,7 +87,7 @@ describe('watcher survives an fs.watch runtime error (026 / #186)', () => {
 
   it('re-establishes the watch after a runtime error, and changes keep arriving', async () => {
     const changes: string[] = [];
-    const handle = new NodeFileWatcher(50).watch('C:/proj', (p) => changes.push(p));
+    const handle = new NodeFileWatcher(50, NATIVE).watch('C:/proj', (p) => changes.push(p));
     expect(watches).toHaveLength(1);
 
     // Baseline: while the watch is healthy, a change is reported. Without this a later silence
@@ -117,7 +124,7 @@ describe('watcher survives an fs.watch runtime error (026 / #186)', () => {
   it('stops for good once disposed — recovery must not outlive the handle', async () => {
     // The regression fence for the fix. A re-establish that survives `dispose()` leaves a watcher
     // running on the OLD root after a project switch, for the rest of the session.
-    const handle = new NodeFileWatcher(50).watch('C:/proj', () => {});
+    const handle = new NodeFileWatcher(50, NATIVE).watch('C:/proj', () => {});
     handle.dispose();
     expect(watches.every((w) => w.watcher.closed)).toBe(true);
 
