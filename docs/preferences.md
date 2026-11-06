@@ -384,9 +384,10 @@ Logs never leave the machine.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Log detail | `diagnostics.logLevel` | `info` | `error` · `warn` · `info` · `debug` | How much throng records. Raise it to `debug` before reproducing a problem, then send the logs with your report. At `debug`, terminals also write `[renderer-terminal]` lines to `main.log` — what each view was handed when it attached, screen and mouse mode changes, wheel routing, selections, menu copies and redraws. |
+| Log detail | `diagnostics.logLevel` | `info` | `fatal` · `error` · `warn` · `info` · `debug` | How much throng records. A crash of a process, window or panel is recorded at `fatal` whatever this is set to. Raise it to `debug` before reproducing a problem, then send the logs with your report. At `debug`, terminals also write `[renderer-terminal]` lines to `main.log` — what each view was handed when it attached, screen and mouse mode changes, wheel routing, selections, menu copies and redraws. |
 | Log file size (KB) | `diagnostics.maxFileSizeKb` | 1,024 | 64 – 4,096 KB, step 64; up to 65,536 by hand | How large one log file grows before throng starts a new one. |
-| Log files kept | `diagnostics.keepFiles` | 5 | 1 – 20 | How many files to keep for each part of throng, including the one being written. Older files are deleted. |
+| Days of logs kept | `diagnostics.keepDays` | 3 | 1 – 30 | How many days of logs to keep, counting only days throng was running. Older logs are deleted. |
+| Log folder limit (MB) | `diagnostics.maxTotalMb` | 100 | 50 – 2,000 MB, step 50; up to 65,536 by hand | The most space all of throng's logs and crash reports may take. Past it, the oldest files are deleted first, and the log records that it did. A log still being written is never deleted. |
 
 ## Resource Monitor
 
