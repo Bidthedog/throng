@@ -119,6 +119,8 @@ const CROSSES: readonly Case[] = [
   { line: 'The fix lives in src/renderer/terminal so see logical-line.ts', spans: ['logical-line.ts'], why: '#526, Claude Code sample' },
   { line: 'see src/my new folder/x.ts', spans: ['folder/x.ts'], why: '#526, the accepted cost: a relative segment with two spaces needs quotes or backticks' },
   { line: '"src/my new folder/x.ts"', spans: ['src/my new folder/x.ts'], why: '#526: an enclosure still holds any number of spaces' },
+  { line: 'echo "📁 src/a/b.ts and 日本語 src/c/d.ts"', spans: ['src/a/b.ts', 'src/c/d.ts'], why: '#526, maintainer hand-test: quotes around a sentence holding two paths enclose a sentence, not one path' },
+  { line: 'echo "see src/a.ts and src/b.ts"', spans: ['src/a.ts', 'src/b.ts'], why: '#526: the same, plain' },
   { line: String.raw`C:\Program Files (x86)\Microsoft Visual Studio\x.exe`, spans: [String.raw`C:\Program Files (x86)\Microsoft Visual Studio\x.exe`], why: '#526: an anchored scan keeps the full cap' },
 ];
 

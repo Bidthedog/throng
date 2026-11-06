@@ -426,7 +426,7 @@ export function StatusStrip({
             text: hoveredLink.request.text,
             baseDirectory: hoveredLink.request.baseDirectory,
             projectRoot,
-          });
+          }) + (hoveredLink.positionText ?? ''); // FR-188g
 
   /*
    * 040 US3 — the two readout preferences (FR-030, FR-031).

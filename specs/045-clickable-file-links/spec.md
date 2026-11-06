@@ -3415,7 +3415,9 @@ Three things make it a rule change rather than a narrowing:
     next row starts at the same indent (at least one column; or the column after the row's bullet
     glyph) with a non-space after it, and the row's last word does not already end in a known
     extension (FR-178). The continuation's indent is not part of the link's text. A path a program
-    breaks **at a space** is still two lines.
+    breaks **at a space** is still two lines. "Its last column" is the width the row was **written**
+    at: a resize MUST NOT undo the join (maintainer hand-test, 2026-11-06 — after a resize each half
+    opened on its own and was not found).
   - **FR-188c — a relative scan crosses one space at most** *(supersedes FR-179f in part; S15)*: a
     token with a separator and no anchor scans across at most one space
     (`MAX_RELATIVE_PATH_SPACE_WORDS`, 2 words). An anchored token keeps `MAX_PATH_SPACE_WORDS`.
@@ -3428,6 +3430,16 @@ Three things make it a rule change rather than a narrowing:
   - **FR-188e — line ranges and anchors are positions** *(extends FR-004)*: `path:line-line`,
     `path:line–line`, `path#Lline` and `path#Lline-Lline` MUST carry the range's **first** line as the
     link's position, exactly as `path:line` does.
+  - **FR-188f — a quoted sentence is not one path** *(refines FR-179e; maintainer hand-test)*: an
+    enclosure whose contents hold two paths by the default rules with a word belonging to neither
+    between them (`echo "📁 src/a/b.ts and src/c/d.ts"`) encloses a sentence; it is ignored and its
+    paths are found one by one.
+  - **FR-188g — the position is part of the link's span** *(supersedes FR-004 in part; S17)*: the
+    underline, the hover title and the status-bar readout MUST include the position suffix
+    (`src/foo.ts:113-120`). The link's **text** — what is resolved and opened — is still the path alone.
+  - **FR-188h — a revealed line is centred**: opening a link at a position (and any other reveal of a
+    range in an editor) MUST scroll the line to the vertical middle of the editor where the document
+    allows.
 
   Repro tests, written failing first and confirmed by the maintainer before any production change:
   `packages/ui/tests/component/terminal-link-wide-cells.test.ts` (FR-188a, FR-188b, against a real
@@ -3463,6 +3475,7 @@ where it is.
 | S14 *(2026-11-06, maintainer, #526)* | **FR-132**, "Two separate lines are never joined into one link on a guess", for a program's break at the right edge | Such a break is joined under FR-188b's three conditions | A break anywhere else — short of the edge, at a different indent, or after a word ending in a known extension — is two lines; the OSC 8 exception; FR-133 | Claude Code wraps its own text, so every path it cut at the edge was two links naming nothing |
 | S15 *(2026-11-06, maintainer, #526)* | **FR-179f**'s cap, for a **relative** token; the confirmed table's `50/50 split see readme.md` row | A relative scan crosses one space at most (FR-188c) | The anchored cap of 6; every other confirmed row | Prose in agent output is full of `dir/name` tokens, and each drew a run-on link to the next file named |
 | S16 *(2026-11-06, maintainer, #418)* | **FR-174**'s "`/help` in prose is a link", where the token opens its line or follows a prompt glyph; the confirmed table's `/file 1` row (now `see /file 1`) | Not a link there (FR-188d) | FR-174 mid-line; every multi-segment rooted path | Slash commands in agent terminals were underlined as files |
+| S17 *(2026-11-06, maintainer, #526 hand-test)* | **FR-004**'s "the span of a positioned candidate covers its path only" (made visible in the underline) | The underline, hover title and readout include the position (FR-188g) | The position is still not part of the path that is resolved and opened | The maintainer could not see that a range was recognised |
 | S13 *(2026-09-20, round five, maintainer M12)* | **044 FR-094**, "Hovering a link MUST show its target **and the gesture that follows it**" — the half **S6** kept unchanged for the Markdown preview, and FR-168's note that refined its wording | The preview's `title` is the **target alone**, by the same function the terminal and the editor use (FR-169a) | The preview's hover itself, its status-bar readout (044 FR-118), its Ctrl+click and what a preview link does when followed (044 FR-090 – FR-096, S6); the gesture wording, which the preview shows in the shared hint S6 already gave it | The same answer as S12, applied to the third surface: a preview whose title reads differently from a terminal's is precisely the second wording M12 removed |
 
 **024 is not edited in place.** The repository has two conventions for a superseded requirement — a
