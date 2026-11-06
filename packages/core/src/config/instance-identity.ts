@@ -13,6 +13,7 @@
  *   - the one-line launch message a losing launch sends;
  *   - the different-copy notice's wording.
  */
+import { logExpected } from '../diagnostics/caught.js';
 
 /** Suffix that turns a namespace (the daemon pipe name) into its instance-lock pipe. */
 export const INSTANCE_LOCK_SUFFIX = '.instance';
@@ -77,7 +78,8 @@ export function parseLaunchMessage(raw: string): LaunchMessage | null {
   let value: unknown;
   try {
     value = JSON.parse(raw);
-  } catch {
+  } catch (error) {
+    logExpected('instance-identity: parse launch message', 'a line on the instance pipe that is not JSON is refused as not a launch message', error);
     return null;
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;

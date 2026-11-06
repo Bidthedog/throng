@@ -26,6 +26,7 @@
  *
  * Pure and total.
  */
+import { logExpected } from '../diagnostics/caught.js';
 export type Sanitised =
   | { readonly ok: true; readonly value: string }
   | { readonly ok: false; readonly why: 'control' | 'nul' | 'malformed' | 'device' };
@@ -96,7 +97,8 @@ export function sanitiseLinkTarget(raw: string): Sanitised {
   if (!URI_SCHEME.test(value)) return { ok: true, value };
   try {
     return { ok: true, value: new URL(value).href };
-  } catch {
+  } catch (error) {
+    logExpected('sanitise: parse link', 'a link with a scheme the URL parser rejects is refused as malformed', error);
     return { ok: false, why: 'malformed' };
   }
 }

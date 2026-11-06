@@ -7,6 +7,8 @@
  * asked for `diagnostics.logLevel: debug`, and must cost nothing otherwise.
  */
 
+import { reportOwnFailure } from '@throng/platform-node';
+
 /** One-way, like the notice channel: a diagnostics write that failed must never surface. */
 export const RENDERER_DEBUG_LOG_CHANNEL = 'throng:diagnostics:debug';
 
@@ -33,8 +35,11 @@ export function registerRendererDebugLogIpc(
       if (typeof payload !== 'string' || payload === '') return;
       const line = payload.replace(/[\r\n]+/g, ' ').slice(0, MAX_LINE);
       sink.debug(`${RENDERER_DEBUG_PREFIX} ${line}`);
-    } catch {
-      /* an uncaught throw in an ipcMain listener would take main down */
+    } catch (error) {
+      // An uncaught throw in an ipcMain listener would take main down. The log that failed cannot
+      // record its own failure, so it goes to stderr (066 contract *The logger's own failures*).
+      reportOwnFailure('write a renderer debug line', error);
     }
   });
 }
+

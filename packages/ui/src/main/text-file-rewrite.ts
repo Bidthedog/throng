@@ -15,6 +15,7 @@
 import {
   UnrepresentableTextError,
   encode,
+  logCaught,
   readText,
   type EncodeOptions,
   type EncodingId,
@@ -71,6 +72,7 @@ export async function textFileRewrite<T>(
     if (!(await fs.exists(absPath))) return { kind: 'failed', reason: 'missing' };
     realPath = await fs.realpath(absPath);
   } catch (e) {
+    logCaught('text-file-rewrite: resolve path', e);
     return { kind: 'failed', reason: rewriteFailureFor(e) };
   }
   if (!options.allowed(realPath)) return { kind: 'failed', reason: 'outOfTree' };
@@ -100,6 +102,7 @@ export async function textFileRewrite<T>(
     await fs.writeBytes(realPath, out);
     return { kind: 'written', value: decision.value, next: decision.next };
   } catch (e) {
+    logCaught('text-file-rewrite: rewrite file', e);
     return { kind: 'failed', reason: rewriteFailureFor(e) };
   }
 }

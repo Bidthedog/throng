@@ -5,6 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { logExpected } from '@throng/core';
 
 function readStored(key: string | undefined, min: number, max: number): number | null {
   if (!key) return null;
@@ -12,7 +13,8 @@ function readStored(key: string | undefined, min: number, max: number): number |
     const raw = localStorage.getItem(key);
     const n = raw === null ? NaN : Number(raw);
     return Number.isFinite(n) && n >= min && n <= max ? n : null;
-  } catch {
+  } catch (error) {
+    logExpected('use-resize: read a stored size', 'localStorage may be unavailable; the default size is used', error);
     return null;
   }
 }
@@ -49,8 +51,9 @@ export function useResize(opts: {
     if (!storageKey) return;
     try {
       localStorage.setItem(storageKey, String(value));
-    } catch {
+    } catch (error) {
       /* storage unavailable — keep the in-memory value */
+      logExpected('use-resize: persist a size', 'localStorage may be full or unavailable; the size holds for this session only', error);
     }
   }, [value, storageKey]);
 

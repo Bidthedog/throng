@@ -19,6 +19,7 @@ import { promptDirtyClose } from '../editor/dirty-close-store.js';
 import { failedBeyondSaveAs, saveDirtyMovedOutEditors } from '../editor/moved-out-save.js';
 import { settleLayoutSaves } from '../state/layout-saves.js';
 import type { EditorSaveAllResult } from '../global.js';
+import { logExpected } from '@throng/core';
 
 export interface UnloadCollaborators {
   settings: {
@@ -127,6 +128,7 @@ export async function unloadProject(
     try {
       collaborators.disposeEditor(panelId);
     } catch (err) {
+      logExpected('unload-project: dispose an editor', 'collected into the one unload notice, whose log record carries the first such reason', err);
       disposeFailure ??= err;
     }
   }
@@ -149,6 +151,7 @@ export async function unloadProject(
         );
       }
     } catch (err) {
+      logExpected('unload-project: end the project\'s terminals', 'collected into the one unload notice, whose log record carries this reason', err);
       problems.push(
         `throng could not end its terminals (${reasonOf(err)}). Some of them may still be running; they reattach when you open ${projectName} again`,
       );

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logExpected } from '@throng/core';
 
 /**
  * A boolean persisted to localStorage. Bridges pane-visibility persistence until
@@ -13,15 +14,17 @@ export function usePersistedBool(
     try {
       const raw = localStorage.getItem(key);
       return raw === null ? initial : raw === 'true';
-    } catch {
+    } catch (error) {
+      logExpected('use-persisted-bool: read a pane flag', 'localStorage may be unavailable; the default stands', error);
       return initial;
     }
   });
   useEffect(() => {
     try {
       localStorage.setItem(key, String(value));
-    } catch {
+    } catch (error) {
       /* storage unavailable — keep the in-memory value */
+      logExpected('use-persisted-bool: persist a pane flag', 'localStorage may be full or unavailable; the in-memory value stands', error);
     }
   }, [key, value]);
   return { value, toggle: () => setValue((v) => !v), set: setValue };

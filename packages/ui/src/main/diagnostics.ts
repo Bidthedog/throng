@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { createFileLog, writeCrashReport, type DiagnosticLog } from '@throng/platform';
-import type { CrashDetails, LogLevel } from '@throng/core';
+import { DEFAULT_LOG_LEVEL, passesThreshold, type CrashDetails, type LogLevel, type RetentionPolicy } from '@throng/core';
 
 /**
  * Durable diagnostics for the Electron main process (#123).
@@ -29,6 +29,8 @@ export interface UiDiagnostics {
   recordCrash(details: Omit<CrashDetails, 'version' | 'buildId'>): void;
   /** Apply the user's configured level once settings have been read. */
   setLevel(level: LogLevel): void;
+  /** Whether a record at `level` passes the threshold in force now (066: the renderer's records). */
+  passes(level: LogLevel): boolean;
   /**
    * Write a record the configured threshold must not be allowed to drop (030 FR-006b).
    *
@@ -47,7 +49,7 @@ export interface UiDiagnosticsOptions {
   /** The level to start at, before settings are read. */
   level?: LogLevel;
   /** Rotation/retention, from settings (Principle X) — see DiagnosticsSettings. */
-  policy?: { maxBytes?: number; keep?: number };
+  retention?: Partial<RetentionPolicy>;
   /** Test seam: where crash reports go (defaults beside the log). */
   logDir?: string;
 }
@@ -59,13 +61,20 @@ export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics
     fileName: 'main.log',
     component: 'ui-main',
     level: options.level,
-    policy: options.policy,
+    retention: options.retention,
   });
+  // Mirrors the log's own threshold, which it does not expose: records written with a component of
+  // their own go through `logAlways`, so the threshold test is made here.
+  let threshold: LogLevel = options.level ?? DEFAULT_LOG_LEVEL;
 
   return {
     log,
     logDir,
-    setLevel: (level) => log.setLevel(level),
+    setLevel: (level) => {
+      threshold = level;
+      log.setLevel(level);
+    },
+    passes: (level) => passesThreshold(threshold, level),
     logAlways: (level, message, component) => log.logAlways(level, message, component),
     recordCrash(details): void {
       const full: CrashDetails = { ...details, version: options.version, buildId: options.buildId };
@@ -73,7 +82,9 @@ export function startUiDiagnostics(options: UiDiagnosticsOptions): UiDiagnostics
       // The log gets a one-line summary and a POINTER. The report itself is the document a user
       // attaches; the log is the timeline that says a crash happened here, among everything else
       // that was going on at the time — and neither is much use without the other.
-      log.error(
+      // 066 FR-009a — a component that died is fatal, which no threshold drops.
+      log.log(
+        'fatal',
         `CRASH ${details.component}: ${details.reason}` +
           (details.exitCode === undefined || details.exitCode === null
             ? ''
@@ -127,7 +138,8 @@ export function installCrashHandlers(
     diagnostics.recordCrash({
       component: 'ui-main',
       at: new Date(),
-      reason: 'uncaughtException',
+      // The message rides in the reason so the log line names the failure, not only the report.
+      reason: `uncaughtException: ${error.message}`,
       output: error.stack ?? `${error.name}: ${error.message}`,
     });
     // Hand the error back to the platform once it is recorded. MERELY HAVING A LISTENER suppresses
@@ -143,5 +155,70 @@ export function installCrashHandlers(
     // worse bug than the rejection. It goes in the timeline, where it belongs.
     const text = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
     diagnostics.log.error(`unhandledRejection: ${text}`);
+  });
+}
+
+/**
+ * How long a window may stay unresponsive, after Electron says it is, before it counts as a crash
+ * (066 research R3). A window that answers again inside it was busy, not dead.
+ */
+export const UNRESPONSIVE_FATAL_MS = 15_000;
+
+/** The Electron surface `watchWindowHealth` needs: a BrowserWindow, narrowed for the unit test. */
+export interface WatchedWindow {
+  on(event: 'unresponsive' | 'responsive', listener: () => void): unknown;
+  readonly webContents: {
+    on(event: 'preload-error', listener: (event: unknown, preloadPath: string, error: Error) => void): unknown;
+    on(
+      event: 'did-fail-load',
+      listener: (event: unknown, errorCode: number, errorDescription: string, url: string, isMainFrame: boolean) => void,
+    ): unknown;
+    once(event: 'did-finish-load', listener: () => void): unknown;
+  };
+}
+
+/** Chromium's ERR_ABORTED: a load superseded by another navigation — not a failure of the window. */
+const ERR_ABORTED = -3;
+
+/**
+ * 066 FR-005 / FR-009a — a window's own ways of dying, per window: unresponsive past
+ * `UNRESPONSIVE_FATAL_MS`, a preload script that threw (the window has no `window.throng`), and a
+ * first load that failed (the window is blank). Each is fatal. `label` names the window in the record.
+ */
+export function watchWindowHealth(diagnostics: UiDiagnostics, win: WatchedWindow, label: string): void {
+  let hung: ReturnType<typeof setTimeout> | undefined;
+  win.on('unresponsive', () => {
+    diagnostics.log.warn(`window ${label} is unresponsive`);
+    clearTimeout(hung);
+    hung = setTimeout(() => {
+      hung = undefined;
+      diagnostics.log.log('fatal', `window ${label} unresponsive for ${UNRESPONSIVE_FATAL_MS} ms`);
+    }, UNRESPONSIVE_FATAL_MS);
+    hung.unref?.();
+  });
+  win.on('responsive', () => {
+    if (hung === undefined) return;
+    clearTimeout(hung);
+    hung = undefined;
+    diagnostics.log.info(`window ${label} is responsive again`);
+  });
+
+  win.webContents.on('preload-error', (_event, preloadPath, error) => {
+    diagnostics.log.log('fatal', `window ${label}: preload ${preloadPath} threw: ${error.stack ?? error.message}`);
+  });
+
+  let loaded = false;
+  win.webContents.once('did-finish-load', () => {
+    loaded = true;
+  });
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, url, isMainFrame) => {
+    if (!isMainFrame) return;
+    if (errorCode === ERR_ABORTED) {
+      diagnostics.log.debug(`window ${label}: load of ${url} aborted — expected: superseded by another navigation`);
+      return;
+    }
+    const what = `window ${label}: load of ${url} failed: ${errorDescription} (${errorCode})`;
+    if (loaded) diagnostics.log.warn(what);
+    else diagnostics.log.log('fatal', `${what} — the window never loaded`);
   });
 }

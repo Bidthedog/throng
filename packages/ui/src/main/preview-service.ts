@@ -40,6 +40,8 @@ import {
   effectiveMaxWaitMs,
   enabledProviderFor,
   isUnderPath,
+  logCaught,
+  logExpected,
   normaliseForCompare,
   previewPathOf,
   samePath,
@@ -408,8 +410,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     let relPath = resolved.relPath;
     try {
       relPath = decodeURIComponent(relPath);
-    } catch {
-      // A stray % is part of the name as written.
+    } catch (error) {
+      logExpected('preview-service: decode embed path', 'a stray % is part of the name as written', error);
     }
     const absPath = join(run.projectRoot, relPath);
     if (!(await this.isFile(absPath))) return { ref, ok: false, reason: 'missing' };
@@ -583,7 +585,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     try {
       // Two windows attaching one panel at once must end with one run — the second waits for the first.
       const inFlight = this.attaching.get(panelId);
-      if (inFlight) await inFlight.catch(() => undefined);
+      if (inFlight) {
+        await inFlight.catch((error: unknown) => {
+          logExpected('preview-service: wait for in-flight attach', 'the first attach reports its own failure to its caller; this one only waits for it to settle', error);
+        });
+      }
       if (this.destroyedWhileAttaching.has(panelId)) return this.abandonAttach(req);
 
       const existing = this.runs.get(panelId);
@@ -869,7 +875,13 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     if (!provider) return refused('no-provider');
 
     let missing = !(await this.isFile(target));
-    if (missing && (await this.deps.fs.exists(target).catch(() => false))) return refused('not-a-file');
+    const existsAsOther =
+      missing &&
+      (await this.deps.fs.exists(target).catch((error: unknown) => {
+        logCaught('preview-service: probe navigate target', error);
+        return false;
+      }));
+    if (existsAsOther) return refused('not-a-file');
     if (!missing) {
       const real = await this.realContainment(target, run.projectRoot);
       if (real === false) return refused('outside-project');
@@ -1292,7 +1304,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
   private async isFile(absPath: string): Promise<boolean> {
     try {
       return (await this.deps.fs.stat(absPath)).kind === 'file';
-    } catch {
+    } catch (error) {
+      logExpected('preview-service: stat', 'a previewed or linked file may not exist; it is reported as missing', error);
       return false;
     }
   }
@@ -1302,7 +1315,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     try {
       const [realFile, realRoot] = await Promise.all([this.deps.fs.realpath(absPath), this.deps.fs.realpath(root)]);
       return isUnderPath(realFile, realRoot);
-    } catch {
+    } catch (error) {
+      logExpected('preview-service: resolve real paths', 'a file can vanish between its stat and its realpath; it is reported as missing', error);
       return null;
     }
   }
@@ -1715,7 +1729,8 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         ownerKind: 'project',
         allProjectRoots: [run.projectRoot],
       });
-    } catch {
+    } catch (error) {
+      logCaught('preview-service: read document', error);
       return { ok: false, notice: { kind: 'unreadable' } };
     }
     if (result.ok) return { ok: true, content: { kind: 'text', text: result.text } };
@@ -1733,7 +1748,10 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
         return { ok: false, notice: { kind: 'deleted' } };
       case 'io': {
         // A vanished file surfaces from the read path as an I/O failure; ask the disk which it was.
-        const exists = await this.deps.fs.exists(path).catch(() => false);
+        const exists = await this.deps.fs.exists(path).catch((error: unknown) => {
+          logCaught('preview-service: probe unreadable document', error);
+          return false;
+        });
         return { ok: false, notice: { kind: exists ? 'unreadable' : 'deleted' } };
       }
       default:

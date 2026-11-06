@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { IFontEnumeration } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 
 const run = promisify(execFile);
 
@@ -36,7 +37,8 @@ export class WindowsFontEnumeration implements IFontEnumeration {
         }
       }
       return families;
-    } catch {
+    } catch (error) {
+      logChildFailure('windows-font-enumeration: list font families', error, (error as { stderr?: string }).stderr);
       return [];
     }
   }

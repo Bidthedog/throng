@@ -2,15 +2,16 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { injectable } from 'inversify';
 import { HEALTH_PING_METHOD, type HealthPongResult } from '@throng/ipc-contract';
-import { isPackagedEntry, type IElevationState } from '@throng/core';
+import { isPackagedEntry, logExpected, type IElevationState } from '@throng/core';
 import type { RpcRouter } from './rpc-router.js';
 
 /** Build id stamped into dist/BUILD_ID by the build; identifies the running code. */
 function readBuildId(): string {
   try {
     return readFileSync(fileURLToPath(new URL('./BUILD_ID', import.meta.url)), 'utf8').trim();
-  } catch {
-    return 'dev'; // not stamped (partial/tsc-only build) — treat as a stable id
+  } catch (error) {
+    logExpected('health-service: read BUILD_ID', 'a partial or tsc-only build is not stamped; it answers as the stable id dev', error);
+    return 'dev';
   }
 }
 

@@ -1,5 +1,6 @@
 import {
   countPanels,
+  logCaught,
   type ISubWorkspaceStore,
   type SubWorkspace,
   type SubWorkspaceMeta,
@@ -24,7 +25,8 @@ function countsOf(contentJson: string): { tabCount: number; panelCount: number }
       tabCount: tabs.length,
       panelCount: tabs.reduce((n, tab) => n + countPanels(tab.root), 0),
     };
-  } catch {
+  } catch (error) {
+    logCaught('subworkspace-repository: count tabs and panels', error);
     return { tabCount: 0, panelCount: 0 };
   }
 }
@@ -76,7 +78,8 @@ export class SubWorkspaceRepository implements ISubWorkspaceStore {
         tabs: content.tabs,
         activeTabId: content.activeTabId,
       };
-    } catch {
+    } catch (error) {
+      logCaught('subworkspace-repository: read sub-workspace', error);
       return null; // a corrupt record is treated as absent
     }
   }

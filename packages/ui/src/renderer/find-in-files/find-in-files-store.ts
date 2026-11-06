@@ -43,6 +43,7 @@ import {
   type SnippetView,
 } from '@throng/core';
 import { forgetFindInFilesPanel } from './last-active-find-in-files.js';
+import { logCaught } from '@throng/core';
 
 /**
  * The `throng:fileSearch:update` payload, as the renderer sees it.
@@ -884,7 +885,8 @@ export function runFindInFiles(panelId: string): void {
         markFindInFilesScopeMissing(panelId);
       }
     })
-    .catch(() => {
+    .catch((error: unknown) => {
+      logCaught('find-in-files-store: start a scan', error);
       /*
        * The channel never answered — a window mid-teardown, a main-side throw. Nothing started, so
        * the panel must stop saying it is searching: a status line reading "Searching…" for the life

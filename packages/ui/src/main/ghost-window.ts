@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
-import type { IShellIntegration } from '@throng/core';
+import { logExpected, type IShellIntegration } from '@throng/core';
 import { denyRendererWindows } from './window-open-guard.js';
 
 /**
@@ -120,8 +120,8 @@ function ensureGhost(shellIntegration: IShellIntegration): BrowserWindow {
   ghost.setAlwaysOnTop(true, 'screen-saver');
   denyRendererWindows(ghost.webContents, shellIntegration); // 024 US7: no in-app browser windows (FR-019b)
   // Load the shell ONCE; never re-navigate (see file header).
-  ghostReady = ghost.webContents.loadURL(shellHtml()).catch(() => {
-    /* a destroyed/closing ghost can reject the load; ignore */
+  ghostReady = ghost.webContents.loadURL(shellHtml()).catch((error: unknown) => {
+    logExpected('ghost-window: load shell', 'a ghost destroyed or closing mid-load rejects its load', error);
   });
   applyGhostColours(); // in case the theme changed since the shell literals
   return ghost;
@@ -141,8 +141,8 @@ function applyGhostColours(): void {
     `s.setProperty('--g-border',${JSON.stringify(c.border)});})()`;
   void ghostReady.then(() => {
     if (win.isDestroyed()) return;
-    win.webContents.executeJavaScript(js).catch(() => {
-      /* shell not ready / window gone — ignore */
+    win.webContents.executeJavaScript(js).catch((error: unknown) => {
+      logExpected('ghost-window: apply colours', 'the ghost shell may not be ready or its window may be gone', error);
     });
   });
 }
@@ -165,8 +165,8 @@ function renderGhost(kind: 'panel' | 'tab', title: string): void {
     if (win.isDestroyed()) return;
     win.webContents
       .executeJavaScript(`window.__renderGhost(${JSON.stringify(kind)}, ${JSON.stringify(title)})`)
-      .catch(() => {
-        /* shell not ready / window gone — ignore */
+      .catch((error: unknown) => {
+        logExpected('ghost-window: render ghost', 'the ghost shell may not be ready or its window may be gone', error);
       });
   });
 }
@@ -239,8 +239,8 @@ export function registerGhostIpc(shellIntegration: IShellIntegration): void {
     const js = label
       ? `(()=>{const h=document.getElementById('ghost-hint');if(h){h.textContent=${JSON.stringify(label)};h.classList.${warn ? 'add' : 'remove'}('warn');h.classList.add('show')}})()`
       : `(()=>{const h=document.getElementById('ghost-hint');if(h){h.classList.remove('warn');h.classList.remove('show')}})()`;
-    ghost.webContents.executeJavaScript(js).catch(() => {
-      /* ghost may be mid-reload; ignore */
+    ghost.webContents.executeJavaScript(js).catch((error: unknown) => {
+      logExpected('ghost-window: show hint', 'the ghost may be mid-reload or closing when a hint arrives', error);
     });
   });
 

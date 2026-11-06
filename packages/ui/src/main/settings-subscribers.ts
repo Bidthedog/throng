@@ -15,13 +15,13 @@ export function notifySettingsSubscribers(
   subscribers: readonly SettingsSubscriber[],
   previous: AppSettings,
   next: AppSettings,
-  logError: (message: string, err: unknown) => void = (message, err) => console.error(message, err),
+  log: (message: string, err: unknown) => void = (message, err) => console.error(message, err),
 ): void {
   for (const subscriber of subscribers) {
     try {
       subscriber(previous, next);
     } catch (err) {
-      logError('[settings] a settings-change subscriber threw:', err);
+      log('[settings] a settings-change subscriber threw:', err);
     }
   }
 }

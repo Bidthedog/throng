@@ -1,5 +1,5 @@
 import process from 'node:process';
-import type { IOrphanProcesses } from '@throng/core';
+import { logCaught, logExpected, type IOrphanProcesses } from '@throng/core';
 
 /**
  * Startup orphan reaper (Constitution VII — no orphaned OS processes). The daemon
@@ -81,15 +81,16 @@ export async function reapOrphans(processes: IOrphanProcesses): Promise<number[]
   let orphans: number[];
   try {
     orphans = findOrphans(await processes.snapshot());
-  } catch {
-    return []; // enumeration failed — never block startup
+  } catch (error) {
+    logCaught('reap-orphans: snapshot processes', error);
+    return []; // never block startup
   }
   const reaped: number[] = [];
   for (const pid of orphans) {
     try {
       if (await processes.kill(pid)) reaped.push(pid);
-    } catch {
-      /* already gone / access denied — best-effort */
+    } catch (error) {
+      logExpected(`reap-orphans: kill ${pid}`, 'an orphan may exit between the snapshot and the kill, or belong to another account', error);
     }
   }
   return reaped;

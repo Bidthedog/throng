@@ -1,5 +1,6 @@
 import { execFile, type ExecFileOptions } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
+import { logCaught } from '@throng/core';
 
 /**
  * `execFile`, with the process START made on a worker thread (051 FR-010).
@@ -85,7 +86,9 @@ function theWorker(): Worker | null {
     made.on('exit', (code) => fail(`exit ${code}`));
     made.unref();
     worker = made;
-  } catch {
+  } catch (error) {
+    // Requests fall back to execFile on the caller's thread: slower, never lost.
+    logCaught('off-loop-exec: start the process runner', error);
     workerBroken = true;
   }
   return worker;
@@ -95,6 +98,7 @@ function theWorker(): Worker | null {
 export function execFileOffLoop(file: string, args: readonly string[], options: ExecFileOptions, callback: ExecCallback): void {
   const w = theWorker();
   if (!w) {
+    // child-exempt: a pass-through runner; the error, stdout and stderr go to the caller's callback, which watches the start.
     execFile(file, [...args], { ...options, encoding: 'utf8' }, (error, stdout, stderr) =>
       callback(error, String(stdout ?? ''), String(stderr ?? '')),
     );

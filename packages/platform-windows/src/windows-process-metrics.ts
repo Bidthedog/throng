@@ -11,7 +11,7 @@ import type {
   TerminateResult,
   Unavailable,
 } from '@throng/core';
-import { NETWORK_ELEVATION_REQUIRED } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, logCaught, logExpected } from '@throng/core';
 
 /**
  * Windows {@link IProcessMetrics} (055 research R2, R8). One `NtQuerySystemInformation
@@ -119,7 +119,9 @@ function loadFfi(): ProcessMetricsFfi | null {
         return (await callAsync<boolean>(ProcessIdToSessionId, pid, out)) ? (out[0] ?? null) : null;
       },
     };
-  } catch {
+  } catch (error) {
+    // koffi ships with throng and kernel32/ntdll are part of Windows: failing here is a broken install.
+    logCaught('windows-process-metrics: load kernel32/ntdll', error);
     ffi = null;
   }
   return ffi;
@@ -161,14 +163,19 @@ export class WindowsProcessMetrics implements IProcessMetrics {
 
   snapshot(): Promise<ProcessSnapshot> {
     const next = this.reading.then(() => this.read());
-    this.reading = next.catch(() => undefined);
+    this.reading = next.catch((error: unknown) =>
+      logExpected('windows-process-metrics: snapshot queue', 'the same rejection reaches the snapshot() caller through the promise returned here; this copy only keeps the queue moving', error),
+    );
     return next;
   }
 
   private async read(): Promise<ProcessSnapshot> {
     const api = this.ffi();
     if (api === null) throw new Error('process table unavailable on this platform');
-    if (this.session === undefined) this.session = api.sessionOf ? await api.sessionOf(process.pid).catch(() => null) : null;
+    if (this.session === undefined) this.session = api.sessionOf ? await api.sessionOf(process.pid).catch((error: unknown) => {
+      logCaught('windows-process-metrics: read own session (reading the whole machine instead)', error);
+      return null;
+    }) : null;
     for (let attempt = 0; attempt < 4; attempt++) {
       const needed = [0];
       const session = this.session;
@@ -233,10 +240,12 @@ export class WindowsProcessMetrics implements IProcessMetrics {
         if (len > 0 && rel >= 0 && rel + len <= cmdBuf.length) out.commandLine = cmdBuf.toString('utf16le', rel, rel + len);
       }
       return out;
-    } catch {
+    } catch (error) {
+      // The calls answer a gone process with false/a status; a throw is the FFI call itself failing.
+      logCaught('windows-process-metrics: describe process', error);
       return unavailable('The process could not be read');
     } finally {
-      await api.closeHandle(handle).catch(() => false);
+      await api.closeHandle(handle).catch((error: unknown) => logCaught('windows-process-metrics: close process handle', error));
     }
   }
 
@@ -251,10 +260,11 @@ export class WindowsProcessMetrics implements IProcessMetrics {
     try {
       if ((await this.createTimeOf(api, handle)) !== createTime) return { outcome: 'gone' };
       return (await api.terminate(handle, 1)) ? { outcome: 'ended' } : { outcome: 'failed', cause: 'terminateFailed' };
-    } catch {
+    } catch (error) {
+      logCaught('windows-process-metrics: terminate process', error);
       return { outcome: 'failed', cause: 'terminateFailed' };
     } finally {
-      await api.closeHandle(handle).catch(() => false);
+      await api.closeHandle(handle).catch((error: unknown) => logCaught('windows-process-metrics: close process handle', error));
     }
   }
 
@@ -266,7 +276,9 @@ export class WindowsProcessMetrics implements IProcessMetrics {
     if (!Number.isInteger(pid) || pid <= 0) return null;
     try {
       return await api.openProcess(access, pid);
-    } catch {
+    } catch (error) {
+      // A gone or denied process is a null handle, not a throw: a throw is the FFI call failing.
+      logCaught('windows-process-metrics: open process', error);
       return null;
     }
   }

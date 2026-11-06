@@ -11,6 +11,7 @@ import {
 import type { NoticeSubject } from '@throng/core';
 import type { SubWorkspaceMetaDto } from '@throng/ipc-contract';
 import type { SubWorkspacesClient } from './subworkspaces-client.js';
+import { logCaught } from '@throng/core';
 
 export interface SubWorkspacesContextValue {
   subWorkspaces: SubWorkspaceMetaDto[];
@@ -95,8 +96,9 @@ export function SubWorkspacesProvider({
   const refresh = useCallback(async () => {
     try {
       setSubWorkspaces(await client.list());
-    } catch {
+    } catch (error) {
       /* leave the current list on a transient failure */
+      logCaught('subworkspaces-store: list sub-workspaces', error);
     }
   }, [client]);
 

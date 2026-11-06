@@ -1,3 +1,4 @@
+import { logExpected } from '../diagnostics/caught.js';
 import picomatch from 'picomatch';
 
 /**
@@ -56,7 +57,8 @@ function isValidGlob(glob: string): boolean {
   try {
     picomatch.makeRe(glob, { strictBrackets: true });
     return true;
-  } catch {
+  } catch (error) {
+    logExpected('search-exclude: compile glob', 'a glob typed into the exclude box may not compile; it is refused, not guessed at', error);
     return false;
   }
 }

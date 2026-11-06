@@ -1,3 +1,4 @@
+import { logCaught } from '../diagnostics/caught.js';
 import type { IPathForms } from '../abstractions/path-forms.js';
 
 /**
@@ -259,6 +260,7 @@ export function runPathFormsContract(
       try {
         answer = call();
       } catch (e) {
+        logCaught(`path-forms-contract: ${name}`, e);
         threw = e;
       }
       assert(
@@ -402,6 +404,7 @@ export function runPathFormsContract(
       try {
         answer = call();
       } catch (e) {
+        logCaught(`path-forms-contract: ${name}`, e);
         threw = e;
       }
       assert(

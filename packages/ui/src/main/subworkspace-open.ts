@@ -22,7 +22,7 @@
  * creates a window (and fires Electron's `window` event), `focused` does not. A test that expects a
  * new window and gets a focus has not had a slow window; it has had a different answer.
  */
-import type { WindowBounds } from '@throng/core';
+import { logCaught, logExpected, type WindowBounds } from '@throng/core';
 
 /** The minimal window surface this decision needs. Electron's `BrowserWindow` satisfies it. */
 export interface OpenableWindow {
@@ -86,7 +86,8 @@ export async function openSubWorkspace<TWin extends OpenableWindow>(
   let bounds: WindowBounds | undefined;
   try {
     bounds = await deps.loadBounds(id);
-  } catch {
+  } catch (error) {
+    logCaught('subworkspace-open: load bounds', error);
     bounds = undefined;
   }
 
@@ -109,6 +110,7 @@ export async function openSubWorkspace<TWin extends OpenableWindow>(
     // bug — so a non-Error still yields something a log can carry.
     const reason =
       error instanceof Error ? (error.stack ?? error.message) : `non-Error thrown: ${String(error)}`;
+    logExpected('subworkspace-open: open window', 'the failure is returned, and the main.ts IPC handler logs every failed open at error', error);
     return { kind: 'failed', reason };
   }
 }

@@ -1,4 +1,4 @@
-import type { IClipboard } from '@throng/core';
+import { logCaught, type IClipboard } from '@throng/core';
 
 /**
  * The slice of Electron's `clipboard` module this needs — constructor-injected, so tests drive a
@@ -57,7 +57,8 @@ export class ElectronClipboard implements IClipboard {
   async readText(): Promise<string> {
     try {
       return (await this.clipboard.readText()) ?? '';
-    } catch {
+    } catch (error) {
+      logCaught('electron-clipboard: read text', error);
       return '';
     }
   }

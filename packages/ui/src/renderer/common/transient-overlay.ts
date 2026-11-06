@@ -47,6 +47,7 @@
  * and `workspace/tab-picker.ts`'s opener are module-level.
  */
 import { useEffect, useRef } from 'react';
+import { logCaught } from '@throng/core';
 
 let current: { token: object; dismiss: () => void; scrim: boolean } | null = null;
 
@@ -128,7 +129,8 @@ export function claimTransientOverlay(dismiss: () => void, options: TransientOve
   if (incumbent) {
     try {
       incumbent.dismiss();
-    } catch {
+    } catch (error) {
+      logCaught('transient-overlay: dismiss the incumbent overlay', error);
       /*
        * An overlay tearing down badly must not be able to stop the new one opening. The claim is
        * already recorded above, so swallowing here leaves the registry consistent: the incumbent is

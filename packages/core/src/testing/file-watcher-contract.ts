@@ -3,6 +3,7 @@
  * contracts/os-config-store.md). Filesystem- and timing-bound, so impls run it
  * in the integration/contract layer with a real temp directory.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { describe, it, expect } from 'vitest';
 import type { IFileWatcher } from '../abstractions/file-watcher.js';
 
@@ -95,8 +96,8 @@ export function runFileWatcherContract(
           // timer is re-armed long before any plausible quiet period elapses, so only a real
           // ceiling can satisfy this.
           stopChurn = setInterval(() => {
-            void h.touch(`churn-${n++ % 20}.tmp`).catch(() => {
-              /* teardown race; churn is noise, never an assertion */
+            void h.touch(`churn-${n++ % 20}.tmp`).catch((error) => {
+              logExpected('file-watcher-contract: churn a file', 'a churn tick can land after cleanup removed the folder; churn is noise, never an assertion', error);
             });
           }, 5);
 
@@ -164,7 +165,9 @@ export function runFileWatcherContract(
         for (const f of files) await h.touch(f);
         // An unbatched implementation may never name all three, so the wait is allowed to lapse;
         // the assertion only binds an implementation that claimed its batch was complete.
-        await waitFor(() => files.every((f) => named.has(f)), 2000).catch(() => {});
+        await waitFor(() => files.every((f) => named.has(f)), 2000).catch((error) => {
+          logExpected('file-watcher-contract: wait for every name', 'an unbatched implementation may never name all three files, so the wait may lapse', error);
+        });
         if (batched) expect([...named]).toEqual(expect.arrayContaining(files));
       } finally {
         sub.dispose();

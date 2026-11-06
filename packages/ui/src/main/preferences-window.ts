@@ -12,7 +12,7 @@
  * (FR-010).
  */
 import { BrowserWindow } from 'electron';
-import type { IShellIntegration } from '@throng/core';
+import { logExpected, type IShellIntegration } from '@throng/core';
 import { wireWindowMaximizeEvents } from './window-controls-ipc.js';
 import { denyRendererWindows } from './window-open-guard.js';
 import { appIcon } from './app-icon.js';
@@ -77,8 +77,8 @@ function broadcastBlurred(blurred: boolean, except?: BrowserWindow): void {
     try {
       if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
       w.webContents.send(WINDOW_BLURRED_CHANNEL, blurred);
-    } catch {
-      /* destroyed between the check and the send — it needs no blur notice either way */
+    } catch (error) {
+      logExpected('preferences-window: broadcast blur', 'a window destroyed between the check and the send needs no blur notice', error);
     }
   }
 }

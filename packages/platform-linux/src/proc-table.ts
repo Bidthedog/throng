@@ -2,6 +2,8 @@ import { basename } from 'node:path';
 import { readlinkSync } from 'node:fs';
 import { readFile, readdir, readlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { logExpected } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 
 /** One process, from `/proc/<pid>/stat`. */
 export interface ProcRow {
@@ -27,7 +29,8 @@ interface KernelUnits {
 
 function getconf(name: string, fallback: number): Promise<number> {
   return new Promise((resolve) => {
-    execFile('getconf', [name], { timeout: 2000, encoding: 'utf8' }, (error, stdout) => {
+    execFile('getconf', [name], { timeout: 2000, encoding: 'utf8' }, (error, stdout, stderr) => {
+      if (error) logChildFailure(`getconf ${name}`, error, stderr);
       const value = Number(String(stdout).trim());
       resolve(!error && value > 0 ? value : fallback);
     });
@@ -84,8 +87,9 @@ export async function readProcRow(pid: number): Promise<ProcRow | null> {
   try {
     const [text, u] = await Promise.all([readFile(`/proc/${pid}/stat`, 'utf8'), kernelUnits()]);
     return parseStat(text, u);
-  } catch {
-    return null; // gone, which is an ordinary answer here
+  } catch (error) {
+    logExpected('proc-table: read stat', 'a process can exit between the /proc listing and this read', error);
+    return null;
   }
 }
 
@@ -102,7 +106,8 @@ export async function readCommandLine(pid: number): Promise<string> {
     const raw = await readFile(`/proc/${pid}/cmdline`, 'utf8');
     const nul = String.fromCharCode(0);
     return raw.split(nul).filter((part) => part.length > 0).join(' ');
-  } catch {
+  } catch (error) {
+    logExpected('proc-table: read cmdline', 'a process can exit before its command line is read', error);
     return '';
   }
 }
@@ -110,8 +115,9 @@ export async function readCommandLine(pid: number): Promise<string> {
 export async function readExecutablePath(pid: number): Promise<string | undefined> {
   try {
     return await readlink(`/proc/${pid}/exe`);
-  } catch {
-    return undefined; // another user's, or gone
+  } catch (error) {
+    logExpected('proc-table: read exe link', "another user's process, or one that has exited, has no readable executable link", error);
+    return undefined;
   }
 }
 
@@ -123,7 +129,8 @@ export function programName(row: ProcRow): string {
   if (row.comm !== 'MainThread') return row.comm;
   try {
     return basename(readlinkSync(`/proc/${row.pid}/exe`));
-  } catch {
+  } catch (error) {
+    logExpected('proc-table: name a MainThread row', "another user's process, or one that has exited, keeps its kernel name", error);
     return row.comm;
   }
 }
@@ -136,7 +143,8 @@ export function trySignal(pid: number, signal: NodeJS.Signals | 0): boolean {
   try {
     process.kill(pid, signal);
     return true;
-  } catch {
+  } catch (error) {
+    logExpected('proc-table: signal', 'the process may have exited or be another user\'s; the caller acts on the false it gets', error);
     return false;
   }
 }

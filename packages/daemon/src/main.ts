@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { shouldExitForRemovedInstall } from './removed-install-watch.js';
-import { isPackagedEntry, parseLogLevel } from '@throng/core';
+import { isPackagedEntry, logExpected, logFatal, parseLogLevel } from '@throng/core';
 import { createFileLog, startPlatform, writeCrashReport, type DiagnosticLog } from '@throng/platform';
 import type { IDaemonSettings, IPersistenceSettings, IPlatformInfo } from '@throng/core';
 import { runMigrations, type ThrongDatabase } from '@throng/persistence';
@@ -39,11 +39,12 @@ function startDaemonDiagnostics(): DiagnosticLog | null {
     fileName: 'daemon.log',
     component: 'daemon',
     level: parseLogLevel(process.env.THRONG_LOG_LEVEL),
-    // Rotation/retention arrive with the level, from the same settings the UI is using — one
-    // "Logging" section governs both halves of one application (Principle X).
-    policy: {
-      maxBytes: Number(process.env.THRONG_LOG_MAX_KB) * 1024 || undefined,
-      keep: Number(process.env.THRONG_LOG_KEEP) || undefined,
+    // Roll-over and retention arrive with the level, from the same settings the UI is using — one
+    // "Logging" section governs both halves of one application (Principle X, 066 FR-019).
+    retention: {
+      maxFileBytes: Number(process.env.THRONG_LOG_MAX_KB) * 1024 || undefined,
+      keepDays: Number(process.env.THRONG_LOG_KEEP_DAYS) || undefined,
+      maxTotalBytes: Number(process.env.THRONG_LOG_MAX_TOTAL_MB) * 1024 * 1024 || undefined,
     },
   });
   // Everything the daemon already prints becomes durable, without rewriting a single call site —
@@ -56,7 +57,8 @@ function startDaemonDiagnostics(): DiagnosticLog | null {
 function daemonBuildId(): string {
   try {
     return readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'BUILD_ID'), 'utf8').trim() || 'unknown';
-  } catch {
+  } catch (error) {
+    logExpected('main: read BUILD_ID', 'a partial or tsc-only build is not stamped; crash reports name the build unknown', error);
     return 'unknown';
   }
 }
@@ -79,9 +81,13 @@ async function main(): Promise<void> {
         pid: process.pid,
         output: error.stack ?? String(error),
       });
-      diagnostics.error(`FATAL uncaughtException: ${error.stack ?? String(error)}`);
+      // 066 FR-009a: a crash is fatal, written whatever the threshold (`[FATAL]` → the fatal level).
+      logFatal('daemon', error);
+      diagnostics.close();
       process.exit(1);
     });
+    // Any exit — asked for or not — writes a pending repeat count rather than dropping it (066 FR-015).
+    process.on('exit', () => diagnostics.close());
     process.on('unhandledRejection', (reason: unknown) => {
       diagnostics.error(
         `unhandledRejection: ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}`,
@@ -89,7 +95,8 @@ async function main(): Promise<void> {
     });
   }
 
-  const container = createDaemonContainer();
+  // The agent host records its failures here, not only on the panel it fails (066 FR-005).
+  const container = createDaemonContainer(process.env, diagnostics ? (level, message) => diagnostics.log(level, message) : undefined);
 
   const platform = container.get<IPlatformInfo>(DAEMON_TYPES.PlatformInfo);
   console.log(`[throng-daemon] platform: ${platform.osName()}`);
@@ -172,6 +179,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('[throng-daemon] fatal startup error:', error);
+  // A daemon that cannot start is a crash (066 FR-009a): fatal, into `daemon.log` when it is open, else
+  // `daemon-startup.log` (its redirected stderr), which the UI reads back.
+  logFatal('daemon', error);
   process.exit(1);
 });

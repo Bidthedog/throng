@@ -12,7 +12,7 @@
  */
 import { access, chmod, constants, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome } from '@throng/core';
+import { ALL_DEFAULT_THEMES, checkRename, type ConfigDocId, type ConfigReadOptions, type ConfigValidator, type IConfigStore, type ThemeRenameResult, type ValidatedConfig, type WriteOutcome, logCaught, logExpected } from '@throng/core';
 
 /** Result of a transactional multi-file write (010, FR-012/012a). */
 export type WriteAllResult = { ok: true } | { ok: false; failedPath: string; error: string };
@@ -61,6 +61,11 @@ async function withTransientRetry<R>(op: () => Promise<R>): Promise<R> {
   }
 }
 
+/** Did this fail because the path does not exist? */
+function isAbsent(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -100,7 +105,11 @@ interface FileSnapshot {
  * temp file is staged beside the real file, because a rename cannot cross filesystems.
  */
 async function replaceTarget(path: string): Promise<string> {
-  const info = await lstat(path).catch(() => null);
+  const info = await lstat(path).catch((e: unknown) => {
+    if (isAbsent(e)) logExpected('config-store: inspect write target', 'a document written for the first time does not exist yet', e);
+    else logCaught('config-store: inspect write target', e);
+    return null;
+  });
   return info?.isSymbolicLink() ? realpath(path) : path;
 }
 
@@ -110,7 +119,11 @@ async function replaceTarget(path: string): Promise<string> {
  */
 async function keepMode(existing: string, staged: string): Promise<void> {
   if (process.platform === 'win32') return;
-  const info = await stat(existing).catch(() => null);
+  const info = await stat(existing).catch((e: unknown) => {
+    if (isAbsent(e)) logExpected('config-store: read write target mode', 'a document written for the first time has no mode to keep', e);
+    else logCaught('config-store: read write target mode', e);
+    return null;
+  });
   if (info === null) return;
   await access(existing, constants.W_OK);
   await chmod(staged, info.mode & 0o7777);
@@ -183,7 +196,9 @@ export class FileConfigStore implements IConfigStore {
   private chainAll<R>(paths: readonly string[], op: () => Promise<R>): Promise<R> {
     const keys = [...new Set(paths.map((p) => resolve(p)))];
     // A prior write that rejected must not strand the queue, hence the catch on each tail.
-    const prior = Promise.all(keys.map((k) => (this.writeChains.get(k) ?? Promise.resolve()).catch(() => undefined)));
+    const prior = Promise.all(keys.map((k) => (this.writeChains.get(k) ?? Promise.resolve()).catch((e: unknown) => {
+      logExpected('config-store: wait for prior write', 'a prior write that rejected has already been reported to its own caller', e);
+    })));
     const run = prior.then(op);
     const settled = run.then(
       () => undefined,
@@ -215,6 +230,8 @@ export class FileConfigStore implements IConfigStore {
     try {
       raw = await readFile(path, 'utf8');
     } catch (err) {
+      if (isAbsent(err)) logExpected(`config-store: read ${path}`, 'a config document is absent on first run and is created from defaults', err);
+      else logCaught(`config-store: read ${path}`, err);
       // Absent → create from defaults and return them (first-run), UNLESS the
       // caller opted out (e.g. a theme named by settings that doesn't exist —
       // we must not write a stray file; we fall back to the hardcoded defaults).
@@ -226,7 +243,8 @@ export class FileConfigStore implements IConfigStore {
     let validated;
     try {
       validated = asValidatedConfig(validate(JSON.parse(raw) as unknown));
-    } catch {
+    } catch (err) {
+      logExpected(`config-store: parse ${path}`, 'a hand-edited config document may be malformed; defaults are used and the file is left to fix', err);
       // Malformed JSON → defaults; leave the user's file intact (D1).
       return defaults;
     }
@@ -260,7 +278,9 @@ export class FileConfigStore implements IConfigStore {
       let current: string;
       try {
         current = await readFile(path, 'utf8');
-      } catch {
+      } catch (err) {
+        if (isAbsent(err)) logExpected('config-store: re-read before write-back', 'the document was removed between its read and its correction', err);
+        else logCaught('config-store: re-read before write-back', err);
         return; // it went away; nothing to correct
       }
       if (current !== seen) return; // superseded — see above
@@ -284,7 +304,7 @@ export class FileConfigStore implements IConfigStore {
       // Never throw (contract) — but never claim success either (issue #75): the caller decides
       // what a lost edit means. Drop the staged temp so a failed write leaves no litter behind.
       console.error(`[config-store] failed to write ${path}:`, err);
-      if (tmp) await rm(tmp, { force: true }).catch(() => undefined);
+      if (tmp) await rm(tmp, { force: true }).catch((e: unknown) => logCaught('config-store: remove staged temp', e));
       return {
         ok: false,
         error: await describeWriteFailure(err, path),
@@ -300,7 +320,9 @@ export class FileConfigStore implements IConfigStore {
   async readRaw(doc: ConfigDocId): Promise<string> {
     try {
       return await readFile(this.pathOf(doc), 'utf8');
-    } catch {
+    } catch (err) {
+      if (isAbsent(err)) logExpected('config-store: read raw document', 'a document not yet written has no text to show', err);
+      else logCaught('config-store: read raw document', err);
       return '';
     }
   }
@@ -327,7 +349,9 @@ export class FileConfigStore implements IConfigStore {
           names.add(entry.name.slice(0, -'.json'.length));
         }
       }
-    } catch {
+    } catch (err) {
+      if (isAbsent(err)) logExpected('config-store: list themes folder', 'the themes folder does not exist until a theme is written', err);
+      else logCaught('config-store: list themes folder', err);
       // themes dir absent → just the built-in default
     }
     return [...names].sort((a, b) => a.localeCompare(b));
@@ -368,7 +392,9 @@ export class FileConfigStore implements IConfigStore {
       // `throng` present) so a deleted default file is genuinely re-created.
       try {
         await readFile(this.pathOf({ kind: 'theme', name }), 'utf8');
-      } catch {
+      } catch (err) {
+        if (isAbsent(err)) logExpected('config-store: check default theme', 'a deleted default theme is what restoring re-creates', err);
+        else logCaught('config-store: check default theme', err);
         await this.write({ kind: 'theme', name }, theme);
       }
     }
@@ -423,6 +449,8 @@ export class FileConfigStore implements IConfigStore {
         original = await withTransientRetry(() => readFile(f.path));
         existed = true;
       } catch (err) {
+        if (isAbsent(err)) logExpected('config-store: snapshot before multi-file write', 'a file the write creates did not exist before it', err);
+        else logCaught('config-store: snapshot before multi-file write', err);
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
           return { ok: false, failedPath: f.path, error: errorMessage(err) };
         }
@@ -438,6 +466,7 @@ export class FileConfigStore implements IConfigStore {
         await writeFile(s.tmp, s.content, 'utf8');
         await keepMode(s.path, s.tmp);
       } catch (err) {
+        logCaught(`config-store: stage ${s.path}`, err);
         await this.cleanupTemps(snaps);
         return { ok: false, failedPath: s.path, error: errorMessage(err) };
       }
@@ -460,6 +489,7 @@ export class FileConfigStore implements IConfigStore {
         this.commitGeneration += 1;
         committed.push(s);
       } catch (err) {
+        logCaught(`config-store: commit ${s.path}`, err);
         await this.rollback(committed);
         await this.cleanupTemps(snaps.filter((x) => !committed.includes(x)));
         return { ok: false, failedPath: s.path, error: errorMessage(err) };
@@ -470,9 +500,7 @@ export class FileConfigStore implements IConfigStore {
 
   private async cleanupTemps(snaps: FileSnapshot[]): Promise<void> {
     for (const s of snaps) {
-      await rm(s.tmp, { force: true }).catch(() => {
-        /* best-effort */
-      });
+      await rm(s.tmp, { force: true }).catch((e: unknown) => logCaught('config-store: remove staging file', e));
     }
   }
 
@@ -550,7 +578,9 @@ async function describeWriteFailure(err: unknown, target: string): Promise<strin
     // A CAUSE CLAUSE, not a whole sentence — the reporting surface supplies "Saving X failed." and
     // "Nothing was changed.", so a self-contained sentence here would read as a stutter.
     if (info.isDirectory()) return `"${name}" is a folder, not a file.`;
-  } catch {
+  } catch (statErr) {
+    if (isAbsent(statErr)) logExpected('config-store: inspect failed write target', 'the destination of a failed first write does not exist yet', statErr);
+    else logCaught('config-store: inspect failed write target', statErr);
     // The target does not exist, which is not itself a problem — the write creates it. Fall through
     // to the ambiguous wording rather than inventing a cause from its absence.
   }

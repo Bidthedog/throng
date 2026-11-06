@@ -1,4 +1,5 @@
 import { linkReadoutTarget } from '@throng/core';
+import { logExpected } from '@throng/core';
 
 /**
  * 045 FR-155, FR-167a, FR-168, FR-176 (review round four, I1/I2) — the path SPELLINGS a link surface
@@ -59,7 +60,8 @@ export function absolutePathByName(text: string): string | null {
   let path: string;
   try {
     path = decodeURIComponent(url[2] ?? '');
-  } catch {
+  } catch (error) {
+    logExpected('path-by-name: decode a file: URI', 'text from a terminal or document may hold a malformed percent-escape; it is not read as a path', error);
     return null;
   }
   const host = (url[1] ?? '').slice(2);

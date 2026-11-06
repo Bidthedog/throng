@@ -1,5 +1,7 @@
 import type { IFileWatcher, Disposable } from '@throng/core';
 import {
+  logCaught,
+  logExpected,
   reconnectsReleasedBy,
   watchTargetFor,
   type PendingReconnect,
@@ -100,9 +102,10 @@ export class TerminalReconnect {
     let watching: string | null;
     try {
       watching = watchTargetFor(target, this.deps.exists, this.deps.parentOf);
-    } catch {
+    } catch (error) {
       // `exists` is a filesystem call and CAN throw — a path too long, a permission refusal on an
       // ancestor, a drive that disappeared between two calls.
+      logCaught('terminal-reconnect: probe watch target', error);
       return { ok: false, reason: 'probe-failed' };
     }
     // Nothing in the chain exists — an unmounted drive, a disconnected share. There is nowhere to
@@ -112,7 +115,8 @@ export class TerminalReconnect {
       let handle: Disposable;
       try {
         handle = this.deps.fileWatcher.watch(watching, () => this.onChanged(watching!));
-      } catch {
+      } catch (error) {
+        logCaught('terminal-reconnect: watch ancestor', error);
         return { ok: false, reason: 'watch-failed' };
       }
       this.watches.set(watching, handle);
@@ -161,8 +165,9 @@ export class TerminalReconnect {
     for (const [, w] of this.watches) {
       try {
         w.dispose();
-      } catch {
+      } catch (error) {
         // Nothing to unwind — the map is cleared below regardless.
+        logCaught('terminal-reconnect: dispose watch on shutdown', error);
       }
     }
     this.watches.clear();
@@ -190,7 +195,8 @@ export class TerminalReconnect {
           ...reconnectsReleasedBy(this.pending, { projectId, path: watching }, this.deps.exists),
         );
       }
-    } catch {
+    } catch (error) {
+      logCaught('terminal-reconnect: re-check pending targets', error);
       /*
        * `exists` touches the filesystem and can throw — and this runs inside a WATCHER CALLBACK, so
        * a throw here is an unhandled exception in the main process rather than something a caller
@@ -206,7 +212,8 @@ export class TerminalReconnect {
     for (const p of released) this.disarm(p.panelId);
     try {
       this.deps.notify(released.map((p) => p.panelId));
-    } catch {
+    } catch (error) {
+      logExpected('terminal-reconnect: notify released panels', 'broadcasting to a window that is being destroyed can throw', error);
       // Broadcasting to a window that is being destroyed can throw. The panels are already
       // disarmed, so there is nothing to unwind — and a throw escaping a watcher callback would
       // take down more than this feature.
@@ -217,7 +224,8 @@ export class TerminalReconnect {
     if (this.pending.some((p) => p.watching === dir)) return;
     try {
       this.watches.get(dir)?.dispose();
-    } catch {
+    } catch (error) {
+      logCaught('terminal-reconnect: release unused watch', error);
       // A watcher that fails to close is not worth propagating out of a disarm — the entry is
       // dropped either way, so the alternative is a leaked map entry AND an exception.
     }

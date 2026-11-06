@@ -236,6 +236,7 @@ import {
 } from './task-toggle.js';
 import './preview.css';
 import './match-frames.css';
+import { logCaught, logExpected } from '@throng/core';
 
 /** The refusals that mean the preview must not be restored here (FR-067). Everything else is kept. */
 const CLEARING_REFUSALS: ReadonlySet<string> = new Set(['no-provider', 'disabled', 'outside-project']);
@@ -503,6 +504,7 @@ export function PreviewPanel({
     } catch (error) {
       // Failures are returned, never thrown, across this bridge — a throw is a broken bridge, and it is
       // shown the same way as main's own `failed`, with the cause logged.
+      logExpected('preview-panel: attach', 'returned as failed and reported on the panel\'s failure banner, whose log record carries this error', error);
       return { outcome: 'failed', error };
     }
   }, [panelId, panel.originProjectId]);
@@ -629,6 +631,7 @@ export function PreviewPanel({
         }
         return true;
       } catch (error) {
+        logExpected('preview-panel: load the preview body', 'reported on the panel\'s failure banner, whose log record carries this error; an unmounted panel has nothing left to show it on', error);
         if (mounted.current) reportFailure('body', BODY_FAILED, error);
         return false;
       }
@@ -833,7 +836,10 @@ export function PreviewPanel({
       const askedAt = revisionRef.current;
       void preview
         .toggleTask({ panelId, filePath, ...task })
-        .catch((): TaskToggleResponse => ({ ok: false, reason: 'io' }))
+        .catch((error: unknown): TaskToggleResponse => {
+          logCaught('preview-panel: toggle a task', error);
+          return { ok: false, reason: 'io' };
+        })
         .then((answer) => {
           if (answer.ok) {
             // Held until the next render of the document; nothing to wait for if it already arrived.
@@ -1100,8 +1106,9 @@ export function PreviewPanel({
       .then((next) => {
         if (live && next) applyFoldStateFromSync(key, next);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         /* The authority failed to answer (a torn-down window): the local seed stands. */
+        logExpected('preview-panel: ask main for the fold state', 'the window is being torn down, so main no longer answers; the local seed stands', error);
       });
     return () => {
       live = false;

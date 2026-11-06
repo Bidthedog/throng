@@ -1,4 +1,4 @@
-import { resolveIpcAddress } from '@throng/core';
+import { logCaught, logExpected, resolveIpcAddress } from '@throng/core';
 import { connect, type Socket } from 'node:net';
 import { BrowserWindow } from 'electron';
 import type { AttentionSignal } from '@throng/core';
@@ -90,14 +90,20 @@ export class DaemonEvents {
         setTimeout(() => this.open(), 500);
       }
     });
-    socket.on('error', () => socket.destroy());
+    socket.on('error', (error) => {
+      // The socket closes next, and the supervisor logs that state change once (066); every retry
+      // against a stopped daemon errors the same way, so this line is the detail, not the report.
+      logExpected('daemon-events: events socket', 'the daemon is stopped or restarting; the supervisor reports the disconnect', error);
+      socket.destroy();
+    });
   }
 
   private dispatch(line: string): void {
     let msg: { method?: string; params?: unknown };
     try {
       msg = JSON.parse(line) as { method?: string; params?: unknown };
-    } catch {
+    } catch (error) {
+      logCaught('daemon-events: parse notification', error);
       return;
     }
     if (msg.method === TERMINAL_ATTENTION_NOTIFICATION) {
@@ -116,7 +122,12 @@ export class DaemonEvents {
               : msg.method === TERMINAL_COMMAND_NOTIFICATION
                 ? 'throng:terminal:command'
                 : null;
-    if (!channel) return;
+    if (!channel) {
+      // A message with no method is the reply to the subscribe call; a method this build does not
+      // forward is a daemon newer than the UI, which is worth a line, not a notice.
+      if (typeof msg.method === 'string') logCaught('daemon-events: dispatch notification', new Error(`unknown method ${msg.method}`));
+      return;
+    }
     broadcastToWindows(BrowserWindow.getAllWindows(), channel, msg.params);
   }
 }

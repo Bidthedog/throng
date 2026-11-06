@@ -29,6 +29,7 @@ import { useWorkspace } from '../state/workspace-store.js';
 import { useServices } from '../composition-root.js';
 import { useSubWorkspaces } from '../state/subworkspaces-store.js';
 import { stashPanelState } from './panel-state-capture.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * The "sync" hub for the main window (US7 / 003 clone-and-sync model). Tabs and
@@ -107,8 +108,9 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
         {},
       );
       setFullSubs(all);
-    } catch {
+    } catch (error) {
       /* leave the cached list on a transient failure */
+      logCaught('detach-context: load sub-workspaces for the menus', error);
     }
   }, [bridge]);
 
@@ -162,6 +164,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           open(subId);
         } catch (err) {
+          logExpected('detach-context: create a sub-workspace', 'reported as the sub-workspace error notice, whose log record carries this message', err);
           // A swallowed failure here is what made "nothing happens" so baffling —
           // surface it instead (FR: no silent persistence failures).
           // The sub-workspace the detach was creating — named before the persist, so the notice can
@@ -211,6 +214,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
+          logExpected('detach-context: sync a panel to a sub-workspace', 'reported as the sub-workspace error notice, whose log record carries this message', err);
           // Resolved from the list rather than from `target`, which is scoped to the try and may be
           // the very thing that failed to load.
           reportError(messageOf(err), 'sync this to', subjectForSub(subId));
@@ -251,6 +255,7 @@ export function DetachProvider({ children }: { children: ReactNode }): ReactElem
           await refresh();
           await loadFull();
         } catch (err) {
+          logExpected('detach-context: purge a destroyed panel from sub-workspaces', 'reported as the sub-workspace error notice, whose log record carries this message', err);
           // NO SUBJECT: a destroyed panel can be mirrored in SEVERAL sub-workspaces at once, and
           // `NoticeSubject` names one thing. Naming the first would be a guess (FR-027); the
           // many-things mechanism is US3's affected list.

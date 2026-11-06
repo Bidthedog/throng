@@ -5,6 +5,7 @@ import {
 } from '@throng/ipc-contract';
 import { emptyStack, type FileOpUndoStack } from '@throng/core';
 import type { ThrongBridge } from './bridge.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * The per-project file-operation undo/redo stack, over the daemon (024 US3, #85).
@@ -23,7 +24,8 @@ export class FileOpUndoClient {
         projectId,
       });
       return parseStack(result.stackJson);
-    } catch {
+    } catch (error) {
+      logCaught('fileop-undo-client: load the undo history', error);
       return emptyStack(); // no history is never a reason to fail opening a project
     }
   }
@@ -34,8 +36,9 @@ export class FileOpUndoClient {
         projectId,
         stackJson: JSON.stringify(stack),
       });
-    } catch {
+    } catch (error) {
       /* history that could not be persisted still works for this session */
+      logCaught('fileop-undo-client: save the undo history', error);
     }
   }
 }
@@ -49,7 +52,8 @@ export function parseStack(json: string | null): FileOpUndoStack {
       undo: Array.isArray(raw.undo) ? raw.undo : [],
       redo: Array.isArray(raw.redo) ? raw.redo : [],
     };
-  } catch {
+  } catch (error) {
+    logExpected('fileop-undo-client: parse the undo history', 'a stack written by an older build, or corrupted, is not JSON; the history starts empty', error);
     return emptyStack();
   }
 }

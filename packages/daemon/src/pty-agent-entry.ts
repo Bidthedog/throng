@@ -7,36 +7,38 @@
  * {@link AgentCommand}/{@link AgentEvent} protocol. Plain Node (node-pty ABI), never
  * loaded in the UI/Electron process.
  *
- * DIAGNOSTICS (019 #94 follow-up): this process is detached, has no console, and its
- * stdout/stderr go nowhere — so a crash AFTER it connects (the observed failure) is
- * invisible. Everything below is wired to a durable `%TEMP%/throng-agent-<pid>.log`
- * (see {@link createAgentLogger}) so the next elevated run reveals the true cause. The
- * most likely crash is the native node-pty ConPTY spawn inside a borrowed-token
- * context — that path is bracketed with a BEFORE/AFTER marker so its signature in the
- * log is a `start` line with no following `started`/`exit`/`error` line.
+ * DIAGNOSTICS (019 #94 follow-up, 066 FR-017): this process is detached, has no console, and
+ * its stdout/stderr go nowhere when it is launched de-elevated — so a crash AFTER it connects
+ * is invisible to everything but its own log. That log is a session file in throng's logs
+ * folder, named by argv[3] because the de-elevated launch passes no environment (see
+ * {@link openAgentLog}). The most likely crash is the native node-pty ConPTY spawn inside a
+ * borrowed-token context — that path is bracketed with a BEFORE/AFTER marker so its signature
+ * in the log is a `start` line with no following `started`/`exit`/`error` line.
  */
 import 'reflect-metadata';
 import { createServer, type Socket } from 'node:net';
 import process from 'node:process';
 import { clearStaleSocket, startPlatform, type PlatformPtyHost } from '@throng/platform';
-import { resolveIpcAddress } from '@throng/core';
+import { logExpected, logFatal, resolveIpcAddress, type LogLevel } from '@throng/core';
 import type { ChildProcess, PtyHandle } from '@throng/core';
 import { encodeLine, type AgentCommand, type AgentEvent } from './pty-agent-protocol.js';
 import { answerChildPids } from './pty-agent-childpids.js';
 import { answerAttachedProcs } from './pty-agent-attached.js';
 import { answerCwds } from './pty-agent-cwds.js';
-import { createAgentLogger } from './pty-agent-log.js';
+import { openAgentLog } from './pty-agent-log.js';
 import { probeErrorMeansDaemonGone } from './pty-agent-liveness.js';
 
-// #123 — the agent logs BESIDE the rest of throng's diagnostics when the daemon told it where
-// that is (`THRONG_LOG_DIR`, inherited from the UI that started the chain), so "send me your logs"
-// is one folder rather than a hunt through %TEMP%. It falls back to the temp directory, which is
-// where it has always written: an agent launched by a daemon that has no log directory of its own
-// must still leave a record, and %TEMP% is reachable from the de-elevated side of the boundary.
 // 062: traits first, since the pipe this agent serves is resolved through them.
 const platform = startPlatform();
-const logger = createAgentLogger(process.pid, process.env.THRONG_LOG_DIR || undefined);
-const log = (message: string): void => logger.log(message);
+const agentLog = openAgentLog({ arg: process.argv[3], env: process.env, pid: process.pid, startedAt: new Date() });
+// `console.*` — including `logFatal` below — lands in the log as well. With no log folder the console
+// is left alone: stderr is what the daemon's `watchChild` reads for a plainly spawned agent.
+agentLog?.attachConsole();
+const log = (message: string, level: LogLevel = 'info'): void => {
+  if (agentLog) agentLog.log(level, message);
+  // No folder: a failure still reaches stderr, the tail the parent's `watchChild` records.
+  else if (level === 'fatal' || level === 'error') console.error(`pty-agent: ${message}`);
+};
 const errText = (e: unknown): string =>
   e instanceof Error ? e.stack ?? e.message : String(e);
 
@@ -44,43 +46,53 @@ const errText = (e: unknown): string =>
 // so a node warning or a JS-level banner would otherwise vanish. NOTE: a NATIVE
 // access-violation banner is written below the JS layer (straight to fd 2) and cannot
 // be captured here — its signature is instead the ABSENCE of a post-`start` line (see
-// DEBUG-agent-crash.md).
-function tee(stream: NodeJS.WriteStream, name: string): void {
+// DEBUG-agent-crash.md). The file log reports its OWN failures to stderr (`throng log: …`);
+// those are not fed back into it, or a failing write would loop.
+function tee(stream: NodeJS.WriteStream, name: string, level: LogLevel): void {
   const original = stream.write.bind(stream) as (...a: unknown[]) => boolean;
+  let teeing = false;
   stream.write = function (chunk: unknown, ...rest: unknown[]): boolean {
-    try {
-      const trimmed = String(chunk).replace(/\r?\n$/, '');
-      if (trimmed) log(`[${name}] ${trimmed}`);
-    } catch {
-      /* never let teeing break real output */
+    if (!teeing) {
+      teeing = true;
+      try {
+        const trimmed = String(chunk).replace(/\r?\n$/, '');
+        if (trimmed && !trimmed.startsWith('throng log:')) log(`[${name}] ${trimmed}`, level);
+      } catch (error) {
+        logExpected('pty-agent tee', 'a chunk that cannot be read as text is still written to the stream', error);
+      } finally {
+        teeing = false;
+      }
     }
     return original(chunk, ...rest);
   } as typeof stream.write;
 }
-tee(process.stdout, 'stdout');
-tee(process.stderr, 'stderr');
+if (agentLog) {
+  tee(process.stdout, 'stdout', 'info');
+  tee(process.stderr, 'stderr', 'warn');
+}
 
 process.on('uncaughtException', (err) => {
-  log(`FATAL uncaughtException: ${errText(err)}`);
+  logFatal('pty-agent', err);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  log(`unhandledRejection: ${errText(reason)}`);
+  log(`unhandledRejection: ${errText(reason)}`, 'error');
 });
 process.on('exit', (code) => {
   log(`process exit code=${code}`);
+  agentLog?.close();
 });
 
 log(
   `agent start pid=${process.pid} argv=${JSON.stringify(process.argv)} cwd=${process.cwd()} ` +
     `execPath=${process.execPath} node=${process.version} platform=${process.platform} ` +
     `ELECTRON_RUN_AS_NODE=${process.env.ELECTRON_RUN_AS_NODE ?? '(unset)'} ` +
-    `USERNAME=${process.env.USERNAME ?? '(unset)'} log=${logger.path}`,
+    `USERNAME=${process.env.USERNAME ?? '(unset)'} log=${agentLog?.path ?? '(none)'}`,
 );
 
 const pipeName = process.argv[2];
 if (!pipeName) {
-  log('FATAL missing pipe name argument (argv[2]); exiting 2');
+  log('missing pipe name argument (argv[2]); exiting 2', 'fatal');
   process.stderr.write('pty-agent: missing pipe name argument\n');
   process.exit(2);
 }
@@ -97,7 +109,7 @@ try {
   pty = platform.ptyHost();
   log('NodePtyHost constructed OK (node-pty loaded)');
 } catch (error) {
-  log(`FATAL constructing NodePtyHost: ${errText(error)}`);
+  log(`constructing NodePtyHost failed: ${errText(error)}`, 'fatal');
   process.stderr.write(`pty-agent: failed to load node-pty: ${(error as Error).message}\n`);
   process.exit(3);
 }
@@ -126,7 +138,7 @@ function shutdown(): void {
   if (heartbeat) clearInterval(heartbeat);
   void pty
     .dispose()
-    .catch((error: unknown) => log(`shutdown: pty.dispose failed (ignored): ${errText(error)}`))
+    .catch((error: unknown) => log(`shutdown: pty.dispose failed (ignored): ${errText(error)}`, 'warn'))
     .finally(() => process.exit(0));
 }
 
@@ -201,7 +213,7 @@ function onCommand(msg: AgentCommand): void {
           if (conhost !== null && handles.has(msg.key)) send({ ev: 'conhost', key: msg.key, pid: conhost });
         });
       } catch (error) {
-        log(`ERROR pty.start threw key=${msg.key}: ${errText(error)}`);
+        log(`pty.start threw key=${msg.key}: ${errText(error)}`, 'error');
         send({ ev: 'error', key: msg.key, message: (error as Error).message });
       }
       break;
@@ -224,7 +236,7 @@ function onCommand(msg: AgentCommand): void {
       void (h ? pty.end(h, msg.timeoutMs) : Promise.resolve()).then(
         () => send({ ev: 'ended', reqId: msg.reqId, ok: true }),
         (error: unknown) => {
-          log(`end failed key=${msg.key}: ${errText(error)}`);
+          log(`end failed key=${msg.key}: ${errText(error)}`, 'warn');
           send({ ev: 'ended', reqId: msg.reqId, ok: false, reason: (error as Error).message });
         },
       );
@@ -275,7 +287,7 @@ function onCommand(msg: AgentCommand): void {
           );
           shellStartedAt = h ? await pty.shellStartedAt?.(h) : undefined;
         } catch (error) {
-          log(`childprocs error key=${msg.key}: ${errText(error)}`);
+          log(`childprocs error key=${msg.key}: ${errText(error)}`, 'warn');
           procs = [];
         }
         send({ ev: 'childprocs', key: msg.key, reqId: msg.reqId, procs, ...(shellStartedAt !== undefined ? { shellStartedAt } : {}) });
@@ -301,12 +313,12 @@ const server = createServer((connection) => {
       try {
         onCommand(JSON.parse(line) as AgentCommand);
       } catch (error) {
-        log(`ignored malformed line (${errText(error)}): ${line.slice(0, 200)}`);
+        log(`ignored malformed line (${errText(error)}): ${line.slice(0, 200)}`, 'warn');
       }
     }
   });
   connection.on('error', (error) => {
-    log(`pipe connection error: ${errText(error)}`);
+    log(`pipe connection error: ${errText(error)}`, 'warn');
   });
   // When the daemon disconnects, reap every terminal (close each ConPTY host) then
   // exit — never leave orphaned conhost.exe processes behind.
@@ -316,7 +328,7 @@ const server = createServer((connection) => {
   });
 });
 server.on('error', (error) => {
-  log(`FATAL pipe server error: ${errText(error)}; exiting 1`);
+  log(`pipe server error: ${errText(error)}; exiting 1`, 'fatal');
   process.exit(1);
 });
 void clearStaleSocket(resolveIpcAddress(pipeName)).then(() =>

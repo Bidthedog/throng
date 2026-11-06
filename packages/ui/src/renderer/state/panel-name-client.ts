@@ -5,6 +5,7 @@ import {
   type PanelNameReconcileResult,
 } from '@throng/ipc-contract';
 import type { ThrongBridge } from './bridge.js';
+import { logCaught } from '@throng/core';
 
 /**
  * Globally unique panel names, over the daemon (024 follow-up).
@@ -25,7 +26,8 @@ export class PanelNameClient {
         panelId,
         desired,
       });
-    } catch {
+    } catch (error) {
+      logCaught('panel-name-client: claim a panel name', error);
       return { granted: desired, adjusted: false };
     }
   }
@@ -33,7 +35,8 @@ export class PanelNameClient {
   async reconcile(): Promise<PanelNameReconcileResult> {
     try {
       return await this.bridge.invoke<PanelNameReconcileResult>(PANEL_NAME_RECONCILE_METHOD, {});
-    } catch {
+    } catch (error) {
+      logCaught('panel-name-client: reconcile panel names', error);
       return { renamed: 0 };
     }
   }

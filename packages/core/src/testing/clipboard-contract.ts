@@ -1,3 +1,4 @@
+import { logCaught } from '../diagnostics/caught.js';
 import type { IClipboard } from '../abstractions/clipboard.js';
 
 /**
@@ -85,6 +86,7 @@ export async function runClipboardContract(name: string, make: () => IClipboard)
       await cb.writeText('x');
       await cb.readText();
     } catch (err) {
+      logCaught('clipboard-contract: read and write', err);
       fail(`it threw: ${String(err)}`);
     }
   }

@@ -79,6 +79,8 @@ import {
   type ScanStatus,
   type SearchScope,
   type CodePageId,
+  logCaught,
+  logExpected,
 } from '@throng/core';
 import { Text } from '@codemirror/state';
 
@@ -391,7 +393,8 @@ export class FileSearchService {
      * that reached nothing, plus an unhandled rejection in the main process. The panel is told
      * instead, in the only vocabulary the wire has: the scan was abandoned.
      */
-    void this.scan(run, generation, base).catch(() => {
+    void this.scan(run, generation, base).catch((error: unknown) => {
+      logCaught('file-search-service: scan', error);
       if (this.stale(run, generation) || run.status !== 'running') return;
       run.status = 'cancelled';
       this.clearFlush(run);
@@ -604,7 +607,8 @@ export class FileSearchService {
         let now: FileStamp | null = null;
         try {
           now = await this.fs.modifiedAt(toAbsPath(run.scope.projectRoot, relPath));
-        } catch {
+        } catch (error) {
+          logExpected('file-search-service: re-stat result file', 'a file named by results can be deleted or renamed after the scan; its rows are marked stale', error);
           // Gone, or unreadable. Either way the rows naming it can no longer be trusted, which is
           // exactly the edge case FR-045a's "deleted or renamed" clause names.
         }
@@ -662,7 +666,8 @@ export class FileSearchService {
       // different question, and re-stamping it would answer for a scan that never read this file.
       if (this.stale(run, generation)) return;
       run.held.set(relPath, now);
-    } catch {
+    } catch (error) {
+      logExpected('file-search-service: re-stamp written file', 'a file can vanish a moment after being written; the watcher re-stat marks it stale', error);
       // Gone or unreadable a moment after being written. The watcher's own re-stat is the right
       // reporter for that, and it will mark it.
     }
@@ -1040,7 +1045,8 @@ export class FileSearchService {
           continue;
         }
         bytes = await this.fs.readBytes(abs);
-      } catch {
+      } catch (error) {
+        logExpected('file-search-service: read file to search', 'a file gone or unreadable since the walk is counted as skipped, and the panel reports the count', error);
         // A read that fails for ANY reason — permission, a file gone since the walk, a device
         // error. FR-045e requires this separately because it is not a named member of the editor's
         // refusal set: a permission denial surfaces there as a generic I/O fault.

@@ -57,6 +57,7 @@ import { clearFileClipboard, setFileClipboard, useFileClipboard } from './file-c
 import { hasPendingReveal, subscribeReveal, takeReveal } from './pending-reveal.js';
 import { useTransferFailureReporter } from './paste-failure-notice.js';
 import { carryOverrides, onTransferCompleted, onUndoStacksChanged } from './transfer-completion.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /** react-arborist rejects empty-string ids, so the root (relPath "") uses this
  *  non-empty sentinel as its node id; logic keys off `relPath`, not `id`. */
@@ -171,8 +172,9 @@ function loadPersisted(projectId: string): Persisted {
         selectedId: typeof o.selectedId === 'string' ? o.selectedId : null,
       };
     }
-  } catch {
+  } catch (error) {
     /* corrupt/unavailable storage → empty */
+    logExpected('use-explorer-data: read the persisted tree state', 'localStorage may be unavailable or hold a corrupt entry; the tree starts collapsed', error);
   }
   return { expanded: [], selectedId: null };
 }
@@ -213,8 +215,9 @@ function toExpandNode(node: NodeApi<TreeNodeData>): ExpandNode {
 function savePersisted(projectId: string, expanded: string[], selectedId: string | null): void {
   try {
     localStorage.setItem(storageKey(projectId), JSON.stringify({ expanded, selectedId }));
-  } catch {
+  } catch (error) {
     /* storage unavailable → skip */
+    logExpected('use-explorer-data: persist the tree state', 'localStorage may be full or unavailable; the tree state is simply not remembered', error);
   }
 }
 
@@ -273,7 +276,10 @@ async function suppressedByAncestor(
    */
   const absent = new Set<string>();
   for (const ancestor of ancestors) {
-    const stillThere = await window.throng?.files?.exists?.(ancestor).catch(() => true);
+    const stillThere = await window.throng?.files?.exists?.(ancestor).catch((error: unknown) => {
+      logCaught('use-explorer-data: probe an ancestor of a failed listing', error);
+      return true;
+    });
     if (stillThere === false) absent.add(ancestor);
   }
   if (!isSuppressedByAncestor(relDir, '', (path) => absent.has(path))) return false;
@@ -331,8 +337,9 @@ export function useExplorerData(
     (fromRel: string, destDir: string) => {
       const leaf = pathSegments(fromRel).pop() ?? fromRel;
       const to = destDir ? `${destDir}/${leaf}` : leaf;
-      void documents.movePath(projectId, fromRel, to).catch(() => {
+      void documents.movePath(projectId, fromRel, to).catch((error: unknown) => {
         /* see the doc comment: nothing here is worth failing a move over */
+        logCaught('use-explorer-data: carry a language override', error);
       });
     },
     [documents, projectId],
@@ -400,7 +407,10 @@ export function useExplorerData(
   const loadStack = useCallback(async (): Promise<FileOpUndoStack> => {
     const [loaded, list] = await Promise.all([
       fileOpUndo.load(projectId),
-      projectsClient.list().catch(() => null),
+      projectsClient.list().catch((error: unknown) => {
+        logCaught('use-explorer-data: list projects to prune the undo stack', error);
+        return null;
+      }),
     ]);
     if (!list) return loaded;
     const live = dropFileOpEntriesNamingProjects(
@@ -588,8 +598,9 @@ export function useExplorerData(
     // deleted OUTSIDE throng. Fire-and-forget, deliberately: FR-028e forbids this from sitting on
     // the path that opens a file, so it must not be awaited before the tree loads. The daemon
     // checks each ROW against the project folder, so this costs one round-trip and nothing else.
-    void documents.pruneMissing(projectId).catch(() => {
+    void documents.pruneMissing(projectId).catch((error: unknown) => {
       /* a store that cannot be pruned is not a reason to fail opening a project */
+      logCaught('use-explorer-data: prune missing document rows', error);
     });
 
     void (async () => {
@@ -1476,8 +1487,9 @@ export function useExplorerData(
         }
         // The document's language override follows the FILE, not its name (016, FR-028e).
         // Without this, renaming a file silently discards the user's explicit choice about it.
-        void documents.movePath(projectId, rel, newRel).catch(() => {
+        void documents.movePath(projectId, rel, newRel).catch((error: unknown) => {
           /* no override to carry is the common case, and a failure must not break the rename */
+          logCaught('use-explorer-data: carry a language override on rename', error);
         });
       });
     },
@@ -1605,8 +1617,9 @@ export function useExplorerData(
         // backstop for files deleted OUTSIDE throng — relying on it here would let a file
         // re-created at the same path silently inherit the deleted file's language.
         for (const rel of items) {
-          void documents.setState(projectId, rel, null).catch(() => {
+          void documents.setState(projectId, rel, null).catch((error: unknown) => {
             /* a file with no override is the common case */
+            logCaught('use-explorer-data: drop a deleted file\'s language override', error);
           });
         }
       });
@@ -1721,8 +1734,9 @@ export function useExplorerData(
           // A MOVE carries the override with the file; a COPY deliberately does not — the copy
           // is a new document, and inheriting a language the user chose for a different file
           // would be a guess, not a decision.
-          void documents.movePath(projectId, from, to).catch(() => {
+          void documents.movePath(projectId, from, to).catch((error: unknown) => {
             /* nothing here is worth failing a move over */
+            logCaught('use-explorer-data: carry a language override on move', error);
           });
         }
         // Reconcile the moved-from parents + destination from the awaited result,

@@ -27,6 +27,8 @@ import {
   type IFileSystem,
   type LineEndingId,
   type Unrepresentable,
+  logCaught,
+  logExpected,
 } from '@throng/core';
 import { codePageHint } from './code-page-guess.js';
 
@@ -182,6 +184,7 @@ export class EditorService {
         relativeFolder: relativeFolderOf(decision.absPath, req.ownerRoot),
       };
     } catch (e) {
+      logCaught('editor-service: load', e);
       return { ok: false, reason: 'io', error: message(e) };
     }
   }
@@ -250,8 +253,10 @@ export class EditorService {
     } catch (e) {
       // Encoding fails BEFORE the write, so nothing reached the file (059 FR-021).
       if (e instanceof UnrepresentableTextError) {
+        logExpected('editor-service: save', 'the text holds characters the chosen encoding cannot represent; the user is asked what to do', e);
         return { ok: false, reason: 'unrepresentable', error: e.message, unrepresentable: e.detail };
       }
+      logCaught('editor-service: save', e);
       return { ok: false, reason: 'io', error: message(e) };
     }
   }

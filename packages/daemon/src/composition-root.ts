@@ -14,6 +14,7 @@ import type {
   IProjectCategoryStore,
   IProjectStore,
   IUserContext,
+  LogLevel,
 } from '@throng/core';
 import {
   DEFAULT_APP_SETTINGS,
@@ -23,11 +24,13 @@ import {
   collectPanels,
   countPanels,
   defaultPipeName,
+  logExpected,
   panelDisplayTitle,
   parseSettingsGuarded,
   type Tab,
 } from '@throng/core';
 import { NodeUserContext, startPlatform } from '@throng/platform';
+import { STDERR_TAIL_CHARS, watchChild } from '@throng/platform-node';
 import {
   openDatabase,
   ProjectRepository,
@@ -54,7 +57,8 @@ import { PanelNameIpcService } from './panel-name-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalService } from './terminal-service.js';
-import { DEFAULT_AGENT_BUDGETS, PtyAgentHost } from './pty-agent-host.js';
+import { DEFAULT_AGENT_BUDGETS, PtyAgentHost, logToConsole } from './pty-agent-host.js';
+import { encodeAgentLogDir } from './pty-agent-log.js';
 
 export { DAEMON_TYPES } from './tokens.js';
 
@@ -130,12 +134,20 @@ export function readCommandPollMs(env: NodeJS.ProcessEnv, installedConfigRoot?: 
   try {
     const raw: unknown = JSON.parse(readFileSync(settingsPath, 'utf8'));
     return parseSettingsGuarded(raw).value.terminals.commandPollMs;
-  } catch {
+  } catch (error) {
+    logExpected(
+      'composition-root: read terminals.commandPollMs',
+      'settings.json may not exist yet or may be hand-edited into invalid JSON; the default poll interval applies and UI main reports the file',
+      error,
+    );
     return DEFAULT_APP_SETTINGS.terminals.commandPollMs;
   }
 }
 
-export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Container {
+/** Where the daemon's own failures are recorded — its file log when it has one (066 FR-005). */
+export type DaemonLog = (level: LogLevel, message: string) => void;
+
+export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?: DaemonLog): Container {
   const container = new Container({ defaultScope: 'Singleton' });
   const platform = startPlatform();
   const directories = platform.userDirectories();
@@ -231,17 +243,31 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
   // `deElevatedPty`: the host's constructor invokes `launch` synchronously, before the
   // const is assigned — a closure reference would be a temporal dead zone.
   const daemonSettings = container.get<IDaemonSettings>(DAEMON_TYPES.DaemonSettings);
-  const deElevatedPty = new PtyAgentHost(
+  // 066 FR-017: the agent's log folder travels as its second argument, because the de-elevated launch
+  // drops the environment `THRONG_LOG_DIR` would arrive in. A folder under `%APPDATA%` goes relative to
+  // it, so an agent running as another user writes to that user's throng folder (contract *PTY agent*).
+  const agentLogArgs = env.THRONG_LOG_DIR ? [encodeAgentLogDir(env.THRONG_LOG_DIR, env.APPDATA)] : [];
+  const agentLog: DaemonLog = log ?? logToConsole;
+  const deElevatedPty: PtyAgentHost = new PtyAgentHost(
     agentPipe,
     (pipe, report) => {
+      const agentArgs = [agentEntry, pipe, ...agentLogArgs];
       if (elevation.isElevated() && deElevatedLauncher.isAvailable()) {
-        deElevatedLauncher.launch(process.execPath, [agentEntry, pipe], report);
+        deElevatedLauncher.launch(process.execPath, agentArgs, report);
       } else {
         // Already medium: a plain spawn. Its stderr is piped for the same reason the
         // de-elevated shim's is — a launch that fails must be able to say why (FR-015).
-        const child = spawn(process.execPath, [agentEntry, pipe], {
+        const child = spawn(process.execPath, agentArgs, {
           stdio: ['ignore', 'ignore', 'pipe'],
           windowsHide: true,
+        });
+        // 066 FR-005: the agent is long-lived — any exit the daemon did not ask for is recorded with its
+        // stderr tail. Read at exit time, so `deElevatedPty` is assigned by then.
+        watchChild(child, {
+          name: 'pty-agent',
+          log: agentLog,
+          longLived: true,
+          expectedExit: () => (deElevatedPty.disposed ? 'the daemon closed the agent on shutdown' : undefined),
         });
         let stderr = '';
         // Observe the failure without holding the daemon's loop open: the agent outlives
@@ -249,16 +275,18 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env): Con
         (child.stderr as unknown as { unref?(): void } | null)?.unref?.();
         child.stderr?.setEncoding('utf8');
         child.stderr?.on('data', (chunk: string) => {
-          stderr += chunk;
+          stderr = (stderr + chunk).slice(-STDERR_TAIL_CHARS); // FR-014: a tail, never the whole stream
         });
-        child.on('error', (error: Error) => report(error.message));
+        // watchChild above has recorded each of these; the reason goes to the host for the panel only.
+        child.on('error', (error: Error) => report(error.message, true));
         child.on('exit', (code) => {
-          if (code !== 0) report(stderr.trim() || `exit ${code}`);
+          if (code !== 0) report(stderr.trim() || `exit ${code}`, true);
         });
         child.unref();
       }
     },
     { connectMs: daemonSettings.agentConnectTimeoutMs, readyMs: daemonSettings.agentReadyTimeoutMs },
+    agentLog,
   );
   // Test hook: force EVERY terminal through the agent so its plumbing is verifiable
   // at medium integrity (THRONG_FORCE_PTY_AGENT=1).

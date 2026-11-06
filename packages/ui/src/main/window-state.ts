@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { logCaught, logExpected } from '@throng/core';
 
 /** Persisted main-window geometry (FR-047). */
 export interface SavedWindowState {
@@ -22,8 +23,8 @@ export function loadWindowState(path: string): SavedWindowState | null {
     ) {
       return parsed as SavedWindowState;
     }
-  } catch {
-    /* missing or corrupt — fall back to defaults */
+  } catch (error) {
+    logExpected('window-state: load', 'the file is absent until the window first closes; defaults apply', error);
   }
   return null;
 }
@@ -33,7 +34,8 @@ export function saveWindowState(path: string, state: SavedWindowState): void {
   try {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(state));
-  } catch {
-    /* storage unavailable — losing window geometry is non-fatal */
+  } catch (error) {
+    // Storage unavailable — losing window geometry is non-fatal.
+    logCaught('window-state: save', error);
   }
 }

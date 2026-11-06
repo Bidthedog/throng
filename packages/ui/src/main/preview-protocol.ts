@@ -22,6 +22,7 @@
  * `preview-protocol.integration.test.ts` drives over a real temp tree.
  */
 import {
+  logExpected,
   relPathUnderRoot,
   resolvePreviewAsset,
   type AppSettings,
@@ -93,7 +94,8 @@ function parseRoute(url: string): Route | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
-  } catch {
+  } catch (error) {
+    logExpected('preview-protocol: parse URL', 'a request URL that does not parse names no route', error);
     return null;
   }
   if (parsed.protocol !== `${PREVIEW_SCHEME}:`) return null;
@@ -115,8 +117,9 @@ function parseRoute(url: string): Route | null {
         relPath: decodeURIComponent(path.slice(slash + 1)),
       };
     }
-  } catch {
-    return null; // a malformed percent escape
+  } catch (error) {
+    logExpected('preview-protocol: decode route', 'a document link may carry a malformed percent escape', error);
+    return null;
   }
   return null;
 }
@@ -131,7 +134,8 @@ export function createPreviewProtocolHandler(
   return async (request) => {
     try {
       return await serve(request);
-    } catch {
+    } catch (error) {
+      logExpected('preview-protocol: serve', 'a document may reference an asset that is missing or unreadable; it answers 404', error);
       return refuse(404);
     }
   };

@@ -6,6 +6,7 @@ import {
   createDefaultLayout,
   isMainLayoutValid,
   LAYOUT_SCHEMA_VERSION,
+  logCaught,
   type IWorkspaceStore,
   type PathSeparator,
   type SubWorkspace,
@@ -110,6 +111,7 @@ export class WorkspaceRepository implements IWorkspaceStore {
         });
       } catch (error) {
         // Skip a corrupt sub-workspace row; a caller that must account for it (052 FR-009) is told.
+        logCaught(`workspace-repository: load sub-workspace ${row.id}`, error);
         onCorrupt?.(row.id, error);
       }
     }
@@ -191,8 +193,14 @@ export class WorkspaceRepository implements IWorkspaceStore {
       if (layout.projectId === projectId && isMainLayoutValid(layout)) {
         return layout;
       }
-    } catch {
+      // Parsed, but not a layout this project can use — the same fallback, and just as worth a record.
+      logCaught(
+        'workspace-repository: parse stored layout',
+        layout.projectId === projectId ? 'the layout breaks its invariants' : `the layout belongs to project ${layout.projectId}`,
+      );
+    } catch (error) {
       // fall through to fallback
+      logCaught('workspace-repository: parse stored layout', error);
     }
     return null;
   }

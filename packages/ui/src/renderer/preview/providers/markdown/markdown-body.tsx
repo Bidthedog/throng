@@ -136,6 +136,7 @@ import {
 // The rendered document's own styles (fix round 1, item 2): loaded with this body's chunk, not with
 // the panel chrome's `preview.css`, which never mentions a provider (FR-070).
 import './markdown.css';
+import { logCaught, logExpected } from '@throng/core';
 
 let renderer: Promise<MarkdownRenderer> | null = null;
 
@@ -939,7 +940,7 @@ export function MarkdownBody({
         const active = body.ownerDocument.activeElement;
         onLinkTargetRef.current?.('focus', active !== null && body.contains(active) ? linkTargetOf(active) : null);
         // Highlighting only rebuilds code elements' children, so it can land after the anchor restore.
-        void highlightCodeBlocks(body).catch(() => undefined);
+        void highlightCodeBlocks(body).catch((error: unknown) => logCaught('markdown-body: highlight code blocks', error));
         // 047 R2 — this render's heading tree, the same moment as onDrawn (data-model §13 amended).
         onHeadingsRef.current?.(buildSymbolTree(headings));
         /*
@@ -958,7 +959,8 @@ export function MarkdownBody({
               if (current === null) return;
               applyWikiResolution(current, resolved);
             })
-            .catch(() => undefined); // main unreachable: links stay unmarked rather than failing the draw
+            // main unreachable: links stay unmarked rather than failing the draw
+            .catch((error: unknown) => logCaught('markdown-body: resolve wikilink targets', error));
         }
         // 054 — (re)read this draw's embeds; an answer that differs from what was drawn redraws once.
         if (embedRefs.length > 0 && readEmbedsRef.current) {
@@ -974,7 +976,7 @@ export function MarkdownBody({
               }
               if (changed) setEmbedTick((t) => t + 1);
             })
-            .catch(() => undefined);
+            .catch((error: unknown) => logCaught('markdown-body: read embeds', error));
         }
         // Exactly one of `onDrawn` / `onBodyFailure` per draw (data-model §13): this is the draw's report.
         onDrawnRef.current(file);
@@ -983,6 +985,7 @@ export function MarkdownBody({
         // The renderer could not be imported or built, or it threw on this text. The chrome says so
         // through the shared banner; its Try again remounts this body, and the cleared cache above
         // means the import is really attempted again.
+        logExpected('markdown-body: draw', 'reported on the panel\'s failure banner, whose log record carries this error; a superseded draw has nothing to report to', error);
         if (!cancelled) onFailureRef.current(error);
       });
     return () => {

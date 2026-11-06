@@ -11,6 +11,7 @@ import {
   type LineFormat,
   type SerialisedHistory,
   type SerialisedUndoEntry,
+  logCaught,
 } from '@throng/core';
 import { UndoHistory, type UndoEntry } from './undo-service.js';
 
@@ -483,7 +484,8 @@ export class DocumentAuthority {
         ...(entry.encoding ? { encoding: entry.encoding } : {}),
       });
       this.history.restore(history.undo.map(fromJson), history.redo.map(fromJson));
-    } catch {
+    } catch (error) {
+      logCaught('document-authority: restore undo history', error);
       this.history.clear();
     }
   }

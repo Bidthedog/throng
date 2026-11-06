@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import process from 'node:process';
-import { TERMINAL_END_TIMEOUT_MS, type IProcessCwd } from '@throng/core';
+import { TERMINAL_END_TIMEOUT_MS, logCaught, type IProcessCwd } from '@throng/core';
 
 /**
  * Windows {@link IProcessCwd} (012 revision). Reads a process's current working
@@ -78,8 +78,10 @@ function loadFfi(): ProcessCwdFfi | null {
       ntQueryBasic: (handle, buf, size) => callAsync(NtQueryInformationProcess, handle, 0, buf, size, null),
       readMemory: (handle, address, buf, size) => callAsync(ReadProcessMemory, handle, address, buf, size, null),
     };
-  } catch {
-    ffi = null; // koffi missing or the libraries failed to load → feature simply off
+  } catch (error) {
+    // koffi ships with throng and kernel32/ntdll are part of Windows: failing here is a broken install.
+    logCaught('windows-process-cwd: load kernel32/ntdll', error);
+    ffi = null; // feature simply off
   }
   return ffi;
 }
@@ -150,13 +152,14 @@ async function readOne(api: ProcessCwdFfi, pid: number): Promise<string | null> 
     if (!(await api.readMemory(handle, bufferPtr, pathBuf, length))) return null;
     const cwd = pathBuf.toString('utf16le').replace(/\\+$/, ''); // drop a trailing separator
     return cwd.length > 0 ? cwd : null;
-  } catch {
+  } catch (error) {
+    // A gone or denied process answers with a null handle or a false read, never a throw: a throw is
+    // the FFI call itself failing. Per poll, so repeats collapse in the log (066 FR-015).
+    logCaught('windows-process-cwd: read cwd', error);
     return null;
   } finally {
     if (handle) {
-      await api.closeHandle(handle).catch(() => {
-        /* handle already invalid */
-      });
+      await api.closeHandle(handle).catch((error: unknown) => logCaught('windows-process-cwd: close process handle', error));
     }
   }
 }

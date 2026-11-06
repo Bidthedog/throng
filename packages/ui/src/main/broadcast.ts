@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron';
+import { logExpected } from '@throng/core';
 
 /**
  * The subset of a BrowserWindow the cross-window broadcaster touches. Declared
@@ -41,9 +42,10 @@ export function broadcastToWindows(
       if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
       if (excludeWebContentsId !== undefined && w.webContents.id === excludeWebContentsId) continue;
       w.webContents.send(channel, payload);
-    } catch {
+    } catch (error) {
       // Window/webContents destroyed between the guard and the send — skip it and
       // keep broadcasting to the remaining windows.
+      logExpected(`broadcast: send ${channel}`, 'a window closed between the destroyed check and the send', error);
     }
   }
 }
@@ -52,7 +54,8 @@ export function broadcastToWindows(
 export function senderWebContentsId(sender: Pick<WebContents, 'id' | 'isDestroyed'>): number | null {
   try {
     return sender.isDestroyed() ? null : sender.id;
-  } catch {
+  } catch (error) {
+    logExpected('broadcast: read sender id', 'the sending window was destroyed while its message was in flight', error);
     return null;
   }
 }

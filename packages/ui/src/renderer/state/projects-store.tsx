@@ -23,6 +23,7 @@ import {
   getActivePane,
   markProjectSwitchPending,
 } from '../workspace/active-pane.js';
+import { logExpected } from '@throng/core';
 
 export interface ProjectsContextValue {
   projects: ProjectDto[];
@@ -271,6 +272,7 @@ export function ProjectsProvider({
         window.throng?.projects?.notifyChanged?.(); // sync other windows
         return true;
       } catch (err) {
+        logExpected(`projects-store: ${label}`, 'reported as the project error notice, whose log record carries this message', err);
         fail(messageOf(err), label, subject);
         return false;
       }
@@ -328,6 +330,7 @@ export function ProjectsProvider({
           window.throng?.projects?.notifyChanged?.(); // sync other windows
           return true;
         } catch (err) {
+          logExpected('projects-store: create a project', 'reported as the project error notice, whose log record carries this message', err);
           // The name the user typed: the project does not exist yet, so the list cannot supply it.
           fail(messageOf(err), 'create', { kind: 'project', name: input.name });
           return false;
@@ -434,6 +437,7 @@ export function ProjectsProvider({
           window.throng?.projects?.notifyChanged?.();
           return created;
         } catch (err) {
+          logExpected('projects-store: create a category', 'reported as the project error notice, whose log record carries this message', err);
           fail(messageOf(err), 'create', { kind: 'category', name });
           return null;
         }

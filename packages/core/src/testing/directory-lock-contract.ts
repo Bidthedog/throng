@@ -1,3 +1,4 @@
+import { logExpected } from '../diagnostics/caught.js';
 import type { IDirectoryLock } from '../abstractions/directory-lock.js';
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -64,7 +65,8 @@ export async function runDirectoryLockContract(env: DirectoryLockContractEnv): P
   let threw = false;
   try {
     await lock.acquire(env.nonExistentPath());
-  } catch {
+  } catch (error) {
+    logExpected('directory-lock-contract: acquire a missing path', 'the contract requires acquire on a non-existent path to reject', error);
     threw = true;
   }
   assert(threw, 'acquire() on a non-existent path must reject');

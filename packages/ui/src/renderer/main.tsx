@@ -8,7 +8,9 @@ import { AboutApp } from './about/about-app.js';
 import { MonitorApp } from './resources/monitor-app.js';
 import { settleConfigWrites } from './config/write-config.js';
 import { settleLayoutSaves } from './state/layout-saves.js';
+import { installWindowErrorListeners, rootErrorOptions } from './error-hooks.js';
 import './theme.css';
+import { logCaught } from '@throng/core';
 
 /**
  * The shutdown drain (019 / FR-010, issue #86).
@@ -34,7 +36,7 @@ import './theme.css';
 function registerShutdownDrain(): void {
   window.throng?.onAppCloseDrain?.(({ requestId }) => {
     void Promise.all([settleLayoutSaves(), settleConfigWrites()])
-      .catch(() => undefined)
+      .catch((error: unknown) => logCaught('main: settle pending writes before the app closes', error))
       .then(() => window.throng?.appCloseDrained?.({ requestId }));
   });
 }
@@ -55,7 +57,11 @@ const identity = parseWindowIdentity(window.location.search);
 // The drain applies to EVERY window — that is the whole point of it (C22/C23).
 registerShutdownDrain();
 
-createRoot(container).render(
+// 066 FR-009: this entry point serves every window kind, so the failure hooks are installed once here —
+// the window listeners for what no boundary sees, the root callbacks for what React tore down.
+installWindowErrorListeners();
+
+createRoot(container, rootErrorOptions).render(
   <StrictMode>
     {prefsTab !== null ? (
       <PreferencesApp initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'} />

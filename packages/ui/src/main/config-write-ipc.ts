@@ -14,6 +14,7 @@ import { ipcMain } from 'electron';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import {
   applyConfigPatch,
+  logExpected,
   parseSettingsGuarded,
   type ConfigChange,
   type ConfigDocId,
@@ -78,7 +79,8 @@ export async function writeConfigDoc(
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
-  } catch {
+  } catch (err) {
+    logExpected('config-write-ipc: parse JSON tab text', 'the JSON tab may submit text the user has not finished editing; it is refused as invalid', err);
     return { ok: false, error: 'invalid-json' };
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -132,7 +134,8 @@ export async function writeConfigPatch(
     if (raw.trim().length > 0) {
       try {
         base = JSON.parse(raw);
-      } catch {
+      } catch (err) {
+        logExpected('config-write-ipc: parse settings before patch', 'a hand-edited settings.json may be malformed; the patch is refused rather than overwrite it', err);
         return { ok: false, error: 'read-failed' };
       }
     }

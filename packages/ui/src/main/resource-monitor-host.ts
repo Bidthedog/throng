@@ -1,12 +1,16 @@
+import type { ChildProcess } from 'node:child_process';
 import { availableParallelism, totalmem } from 'node:os';
+import { watchChild } from '@throng/platform-node';
 import {
   METRIC_NAMES,
   editorMainBytes,
+  logCaught,
   previewMainBytes,
   resolveResourceMonitorSettings,
   terminalDaemonBytes,
   unavailable,
   type AppSettings,
+  type LogLevel,
   type Metrics,
 } from '@throng/core';
 import type {
@@ -27,7 +31,7 @@ import type {
 export interface CollectorChild {
   readonly connected: boolean;
   /** What the collector wrote before it died: the only account of a crash on load. */
-  readonly stderr?: { on(event: 'data', cb: (chunk: unknown) => void): unknown } | null;
+  readonly stderr?: { on(event: 'data', cb: (chunk: unknown) => void): unknown; setEncoding(encoding: 'utf8'): unknown } | null;
   send(msg: MainToCollector): boolean;
   kill(): boolean;
   disconnect(): void;
@@ -77,14 +81,12 @@ export interface ResourceMonitorHostDeps {
   readonly mainWindowId: () => number | null;
   /** Every open window: the detail-demand signal goes to all of them, so each reports its panels. */
   readonly broadcast: (channel: string, payload: unknown) => void;
-  readonly log: (message: string) => void;
+  readonly log: (level: LogLevel, message: string) => void;
   readonly now?: () => number;
 }
 
 const RESTART_SPACING_MS = 60_000;
 const KILL_TIMEOUT_MS = 15_000;
-/** Enough of a stack trace to name the failure, without a chatty collector filling the log. */
-const STDERR_TAIL_CHARS = 2_000;
 
 export const RESOURCES_SUMMARY_CHANNEL = 'throng:resources:summary';
 export const RESOURCES_DETAIL_CHANNEL = 'throng:resources:detail';
@@ -276,19 +278,19 @@ export class ResourceMonitorHost {
     this.child = child;
     child.on('message', (msg) => this.onMessage(child, msg as CollectorToMain));
     child.on('exit', () => this.onExit(child));
-    let stderr = '';
-    child.stderr?.on('data', (chunk) => {
-      stderr = (stderr + String(chunk)).slice(-STDERR_TAIL_CHARS);
-    });
-    child.on('close', (code) => {
-      if (this.stopped) return;
-      this.deps.log(`resource collector exited with code ${String(code)}${stderr ? `: ${stderr.trim()}` : ''}`);
+    // 066 FR-005 / FR-008 — the collector is long-lived: any exit throng did not ask for is fatal,
+    // code 0 included, with the tail of its stderr; a stop throng asked for is recorded at debug.
+    watchChild(child as unknown as ChildProcess, {
+      name: 'resource collector',
+      longLived: true,
+      log: this.deps.log,
+      expectedExit: () => (this.stopped ? 'throng stopped the resource monitor' : undefined),
     });
     // A spawn that fails, or a send on a pipe that is closing, emits 'error'; unheard, it would be an
-    // uncaught exception in UI main. A child that never connected will not exit, so treat it as one.
-    child.on('error', (error) => {
+    // uncaught exception in UI main (watchChild records it). A child that never connected will not
+    // exit, so treat it as one.
+    child.on('error', () => {
       if (child.connected) return;
-      this.deps.log(`resource collector could not start: ${error.message}`);
       this.onExit(child);
     });
     this.configure();
@@ -337,6 +339,8 @@ export class ResourceMonitorHost {
         void this.answerRoster(msg.requestId);
         break;
       case 'summary':
+        // A good reading ends the failure: the same cause recurring later is a new failure (066 FR-005).
+        this.lastErrorLogged = null;
         this.publishSummary({ ...msg.summary, tick: this.renumber(msg.summary.tick) });
         break;
       case 'detailFrame':
@@ -352,7 +356,7 @@ export class ResourceMonitorHost {
         break;
       }
       case 'error':
-        if (msg.cause !== this.lastErrorLogged) this.deps.log(`resource collector reading failed: ${msg.cause}`);
+        if (msg.cause !== this.lastErrorLogged) this.deps.log('warn', `resource collector reading failed: ${msg.cause}`);
         this.lastErrorLogged = msg.cause;
         break;
     }
@@ -400,7 +404,8 @@ export class ResourceMonitorHost {
     try {
       this.lastDaemon = await this.deps.daemonRoster();
       this.lastDaemonAt = this.now();
-    } catch {
+    } catch (error) {
+      logCaught('resource-monitor-host: daemon roster', error);
       // Keep the last good roster: dropping it would detach every shell from its panel and lose the
       // collector's lineage for good. The figures say how old it is instead (FR-021, FR-044).
       fresh = false;

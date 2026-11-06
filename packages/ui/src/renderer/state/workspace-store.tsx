@@ -77,6 +77,7 @@ import { destroySubWorkspace } from '../workspace/destroy-sub-workspace.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { emptiesLayout, isUnrestorablePreview, withoutUnrestorablePreviews } from '../preview/preview-panel-match.js';
 import { SubWorkspaceWorkspaceClient } from './subworkspace-window-client.js';
+import { logCaught } from '@throng/core';
 
 /**
  * How long an edit sits before it is written (019 FR-010, #86).
@@ -329,7 +330,7 @@ export function WorkspaceProvider({
           void settled.then(() =>
             client
               .followMoves({ moves, held: { projectIds: [], subWorkspaceIds: [] }, only: { projectIds: [projectId] } })
-              .catch(() => undefined),
+              .catch((error: unknown) => logCaught('workspace-store: follow moved files into a saved layout', error)),
           );
         }
       }),
@@ -485,7 +486,8 @@ export function WorkspaceProvider({
         // user opens and does not edit would stay unsaved forever.
         if (result.restored === false) scheduleSave(loaded);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        logCaught('workspace-store: load the layout', error);
         if (!cancelled) setRestoreFailed(false);
       })
       .finally(() => {

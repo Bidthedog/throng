@@ -5,7 +5,7 @@
  * EditorCoordinator}; the renderer never touches the filesystem or the lock.
  */
 import { ipcMain, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
-import { isCodePageId, isEncodingId, type FoldState, type SaveAllScope, type SerialisedHistory } from '@throng/core';
+import { isCodePageId, isEncodingId, logExpected, type FoldState, type SaveAllScope, type SerialisedHistory } from '@throng/core';
 import { senderWebContentsId } from './broadcast.js';
 import { parseFormat } from './editor-recovery.js';
 import type { EditorCoordinator, DocMeta } from './editor-coordinator.js';
@@ -124,7 +124,8 @@ export function registerEditorIpc(coordinator: EditorCoordinator, deps: EditorIp
     let projects: readonly OwnedProject[];
     try {
       projects = await deps.listProjects();
-    } catch {
+    } catch (error) {
+      logExpected('editor-ipc: list projects for confinement', 'the daemon is unreachable; the supervisor reports the disconnect and this request fails closed', error);
       return null;
     }
     const ownerRoot =

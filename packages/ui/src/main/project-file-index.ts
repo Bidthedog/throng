@@ -35,6 +35,7 @@ import {
   compileExcluder,
   diffPaths,
   hiddenPathGlobs,
+  logExpected,
   normaliseForCompare,
   toAbsPath,
   walkFiles,
@@ -301,8 +302,8 @@ export class ProjectFileIndexService {
 
   /** Run `task` after everything already queued for this root, and never reject the chain. */
   private enqueue(index: RootIndex, task: () => Promise<void>): void {
-    index.queue = index.queue.then(task).catch(() => {
-      /* a failed read is an ordinary event here — the next reconcile settles it */
+    index.queue = index.queue.then(task).catch((error: unknown) => {
+      logExpected('project-file-index: queued index task', 'a read can fail while files churn; the next reconcile settles it', error);
     });
   }
 
@@ -453,8 +454,9 @@ export class ProjectFileIndexService {
     let entries;
     try {
       entries = await this.fs.list(toAbsPath(index.root, relDir));
-    } catch {
-      return current; // it has gone since the signal — its parent's rescan forgets it
+    } catch (error) {
+      logExpected('project-file-index: rescan folder', "the folder has gone since the signal; its parent's rescan forgets it", error);
+      return current;
     }
     const prefix = relDir === '' ? '' : `${relDir}/`;
     const inDir: string[] = [];

@@ -7,6 +7,7 @@ import {
   type NoticeLogRecord,
   type NoticeSeverity,
 } from '@throng/core';
+import { reportOwnFailure } from '@throng/platform-node';
 
 /**
  * 030 FR-006 — the renderer→main notice log channel.
@@ -172,8 +173,12 @@ export function registerNoticeLogIpc(sink: NoticeLogSink, ipc: NoticeLogIpc): vo
       for (const line of noticeLogLines(record)) {
         sink.logAlways(record.level, line, NOTICE_LOG_COMPONENT);
       }
-    } catch {
-      /* see above: the log is an observer, and an observer may not kill what it observes */
+    } catch (error) {
+      // See above: the log is an observer, and an observer may not kill what it observes. The log
+      // that failed cannot record its own failure, so it goes to stderr (066 contract *The logger's
+      // own failures*).
+      reportOwnFailure('write a notice record', error);
     }
   });
 }
+

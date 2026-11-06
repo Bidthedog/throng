@@ -33,6 +33,7 @@
  *
  * Pure: no OS, no DOM.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { remainderUnder, samePath, separatorOf, trimTrailingSeparators } from '../fs/path-id.js';
 import type { PersistedHistory } from '../workspace/model.js';
 
@@ -80,7 +81,8 @@ function keepableViewState(viewState: unknown): boolean {
   let json: string | undefined;
   try {
     json = JSON.stringify(viewState);
-  } catch {
+  } catch (error) {
+    logExpected('history: serialise view state', 'a view state that cannot be serialised is simply not kept in the history entry', error);
     return false;
   }
   return typeof json === 'string' && utf8Bytes(json) <= MAX_VIEW_STATE_BYTES;

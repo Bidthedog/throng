@@ -3,6 +3,7 @@
  * the whole renderer (FR-025: non-fatal). Shows a small inline message instead.
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { describeError, reportToLog } from '../diagnostics-log.js';
 
 export class TreeErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null as string | null };
@@ -13,6 +14,8 @@ export class TreeErrorBoundary extends Component<{ children: ReactNode }, { erro
 
   componentDidCatch(error: unknown, info: ErrorInfo): void {
     console.error('File tree error:', error, info.componentStack);
+    // 066 FR-009: the console line is gone with the window; the log folder keeps it.
+    reportToLog('error', 'explorer', `file tree failed to render: ${describeError(error)}${info.componentStack ?? ''}`);
   }
 
   render(): ReactNode {

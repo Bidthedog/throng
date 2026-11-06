@@ -15,6 +15,7 @@
 import type { MarkdownIt as MarkdownItInstance, StateInline } from 'markdown-it';
 import { isMermaidEmbedRef, parseWikilink } from '@throng/core';
 import { DIAGRAM_HEIGHT_ATTRIBUTE, DIAGRAM_PENDING_ATTRIBUTE, parseDiagramHeight } from '../../diagram/diagram-host.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /** The placeholder's attribute: the reference as written, URI-encoded. */
 export const EMBED_ATTRIBUTE = 'data-throng-embed';
@@ -65,8 +66,9 @@ export function installEmbeds(md: MarkdownItInstance): void {
       let ref = src;
       try {
         ref = decodeURI(src); // markdown-it percent-encodes the destination; carry it as written
-      } catch {
+      } catch (error) {
         // keep the encoded form
+        logExpected('embeds: decode an embed destination', 'the document may carry a malformed percent-escape; the encoded form is kept', error);
       }
       return placeholder(md, ref, self.renderInlineAsText(token.children ?? [], options, env));
     }
@@ -80,7 +82,9 @@ export function embedRefOf(el: Element): string | null {
   if (raw === null) return null;
   try {
     return decodeURIComponent(raw);
-  } catch {
+  } catch (error) {
+    // The attribute is written by `placeholder` with `encodeURIComponent`, so one that does not decode is a surprise.
+    logCaught('embeds: decode an embed placeholder', error);
     return null;
   }
 }

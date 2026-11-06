@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { performance } from 'node:perf_hooks';
 import {
+  logCaught,
+  logExpected,
   type IProcessMetrics,
   type MachineInfo,
   type ProcessDescription,
@@ -31,7 +33,8 @@ function readIo(pid: number): { read: number; write: number } {
     const value = (key: string): number => Number(new RegExp(`^${key}: (\\d+)$`, 'm').exec(text)?.[1] ?? 0);
     // rchar and wchar count all I/O, device and pipe included, which is what the column is labelled as (055 R3).
     return { read: value('rchar'), write: value('wchar') };
-  } catch {
+  } catch (error) {
+    logExpected('linux-process-metrics: read io', "only a process's owner may read its io counters, and a process can exit mid-tick", error);
     return { read: 0, write: 0 };
   }
 }
@@ -46,7 +49,8 @@ function readPrivateBytes(pid: number, pageSize: number): number {
   try {
     const [, resident, shared] = readFileSync(`/proc/${pid}/statm`, 'utf8').split(' ').map(Number);
     return Math.max(0, (resident ?? 0) - (shared ?? 0)) * pageSize;
-  } catch {
+  } catch (error) {
+    logExpected('linux-process-metrics: read statm', 'a process gone since the table was read holds nothing', error);
     return 0;
   }
 }
@@ -120,6 +124,11 @@ export class LinuxProcessMetrics implements IProcessMetrics {
       process.kill(pid, 'SIGTERM');
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH' || code === 'EPERM') {
+        logExpected('linux-process-metrics: SIGTERM', "the process exited after its row was read, or is another user's; the caller shows the outcome", error);
+      } else {
+        logCaught('linux-process-metrics: SIGTERM', error);
+      }
       if (code === 'ESRCH') return { outcome: 'gone' };
       if (code === 'EPERM') return { outcome: 'denied', cause: 'It belongs to another user.' };
       return { outcome: 'failed', cause: String(error) };

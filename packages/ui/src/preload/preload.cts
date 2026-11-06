@@ -20,16 +20,19 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
  * `script-src 'self'`, which blocks inline scripts — the preload is the only
  * pre-paint hook available.
  */
-function applyBootstrapTheme(): void {
-  let boot: { name?: unknown; vars?: unknown; colorScheme?: unknown } | undefined;
+function applyBootstrapTheme(): boolean {
+  let boot: { name?: unknown; vars?: unknown; colorScheme?: unknown; testPanelThrow?: unknown } | undefined;
   try {
     boot = ipcRenderer.sendSync('throng:theme:bootstrap') as typeof boot;
-  } catch {
+  } catch (error) {
     // Main not ready or no handler — the renderer still themes itself on mount; only
     // the pre-paint guard is lost, so we degrade to the old behaviour rather than crash.
-    return;
+    // A sandboxed preload cannot load @throng/core, so this is logExpected's shape by hand; main
+    // forwards the renderer's console into main.log (066 FR-007).
+    console.debug('[preload] theme bootstrap: expected — main may not be ready yet; the renderer themes itself on mount', error);
+    return false;
   }
-  if (!boot || typeof boot !== 'object') return;
+  if (!boot || typeof boot !== 'object') return false;
   const vars = boot.vars;
   const name = boot.name;
   const colorScheme = boot.colorScheme;
@@ -54,9 +57,11 @@ function applyBootstrapTheme(): void {
   // `document.documentElement` exists this early in an Electron renderer, but if the
   // document is somehow not ready yet, apply as soon as it is (still before paint).
   if (!paint()) document.addEventListener('DOMContentLoaded', paint, { once: true });
+  return boot.testPanelThrow === true;
 }
 
-applyBootstrapTheme();
+/** 066 T026 — the panel-throw dev seam, carried by the theme bootstrap reply; false when main cannot be asked. */
+const testPanelThrow = applyBootstrapTheme();
 
 contextBridge.exposeInMainWorld('throng', {
   // The host OS family, so the renderer can render paths with native separators
@@ -149,7 +154,8 @@ contextBridge.exposeInMainWorld('throng', {
         let rect: unknown;
         try {
           rect = cb();
-        } catch {
+        } catch (error) {
+          console.warn('[preload] status-rect request: the callback threw', error);
           rect = null;
         }
         ipcRenderer.send('throng:resources:status-rect:reply', { requestId, rect });
@@ -382,7 +388,15 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.invoke('throng:diagnostics:openLogs'),
     /** #290/#162 — terminal debug lines into main.log; the renderer sends only at level `debug`. */
     debug: (message: string) => ipcRenderer.send('throng:diagnostics:debug', message),
+    /**
+     * 066 contract *Preload → main* — one record into main.log: `fatal` whatever the threshold, the
+     * rest by it; capped at 8 KB in main. One-way: a failed diagnostics write never reaches the view.
+     */
+    log: (level: string, component: string, message: string) =>
+      ipcRenderer.send('throng:diagnostics:log', { level, component, message }),
   },
+  // 066 T026 — the dev seam `THRONG_TEST_PANEL_THROW`, decided by main (always false when packaged).
+  testPanelThrow,
   about: {
     // Cog → About throng (020, FR-003): create-or-focus the single shared, app-modal
     // About window. This is the discoverable entry point — throng draws its own title

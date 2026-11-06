@@ -4,6 +4,7 @@ import { formatGrouped, parseGrouped, type AppSettings, type FieldDescriptor } f
 import { FolderPicker } from '../common/folder-picker.js';
 import { IconButton } from '../common/icon-button.js';
 import { MapControl } from './map-control.js';
+import { logExpected } from '@throng/core';
 
 /**
  * Generic descriptor-driven form controls (feature 007, FR-028/029). One control
@@ -666,7 +667,8 @@ function JsonArrayControl({ descriptor, value, onCommit }: SettingControlProps):
       if (!Array.isArray(parsed)) throw new Error('not an array');
       setInvalid(false);
       onCommit(parsed);
-    } catch {
+    } catch (error) {
+      logExpected('form-controls: parse a JSON array field', 'the user typed something that is not a JSON array; the field is marked invalid', error);
       setInvalid(true);
     }
   };

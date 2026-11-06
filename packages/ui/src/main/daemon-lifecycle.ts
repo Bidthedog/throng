@@ -1,6 +1,7 @@
-import { resolveIpcAddress } from '@throng/core';
+import { logAt, logCaught, logExpected, resolveIpcAddress, type LogLevel } from '@throng/core';
+import { STDERR_TAIL_CHARS, watchChild, type WatchChildOptions } from '@throng/platform-node';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
@@ -89,6 +90,13 @@ export interface EnsureDaemonOptions {
    * why this is the user's call and never the default.
    */
   replaceForeign?: boolean;
+  /**
+   * 066 FR-005 / FR-014 — where the record of a spawned daemon's failure goes (UI main's log).
+   *
+   * A daemon that dies while loading its modules never had a logger; only this parent saw it go.
+   * Omitted → the console, with a `[FATAL]` prefix that `attachConsole` maps back to the fatal level.
+   */
+  log?: (level: LogLevel, message: string) => void;
 }
 
 export interface EnsureDaemonResult {
@@ -123,9 +131,66 @@ function openDaemonStdio(logDir: string | undefined): number | null {
   try {
     mkdirSync(logDir, { recursive: true });
     return openSync(join(logDir, 'daemon-startup.log'), 'w');
-  } catch {
+  } catch (error) {
+    logCaught('daemon-lifecycle: open daemon-startup.log', error);
     return null;
   }
+}
+
+/** The end of `daemon-startup.log` (≤ STDERR_TAIL_CHARS): where a load failure's error is. */
+function readStartupTail(logDir: string | undefined): string {
+  if (!logDir) return '';
+  let fd: number | undefined;
+  try {
+    fd = openSync(join(logDir, 'daemon-startup.log'), 'r');
+    const size = fstatSync(fd).size;
+    const length = Math.min(size, STDERR_TAIL_CHARS);
+    const buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, size - length);
+    return buffer.toString('utf8').trim();
+  } catch (error) {
+    logExpected('daemon-lifecycle: read daemon-startup.log', "no log folder was usable, so the daemon's output went nowhere and there is no file", error);
+    return `(daemon-startup.log unreadable: ${error instanceof Error ? error.message : String(error)})`;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+/** Pids of daemons THIS process asked to stop (a stale or wrong-elevation one retired): their exit is expected. */
+const stopRequested = new Set<number>();
+
+/** The console route for a daemon failure when no log is injected: `[FATAL]` maps back to fatal. */
+const consoleLog = logAt;
+
+/**
+ * 066 FR-005 / FR-007 / FR-008 / FR-014 — how the spawn site's `watchChild` watches a daemon for the
+ * rest of its life.
+ *
+ * Its stdout/stderr go to `daemon-startup.log`, not a pipe, so `watchChild` sees no stderr of its own;
+ * the startup file's tail is appended to every failure record instead. Two exits are expected and
+ * logged at debug: one this process asked for (a retired daemon), and the loser of the pipe race,
+ * which exits because a sibling daemon already holds the pipe.
+ */
+function daemonWatch(child: ChildProcess, logDir: string | undefined, log: (level: LogLevel, message: string) => void): WatchChildOptions {
+  return {
+    name: 'daemon',
+    longLived: true,
+    log: (level, message) => {
+      if (level === 'debug') {
+        log(level, message);
+        return;
+      }
+      const tail = readStartupTail(logDir);
+      log(level, tail ? `${message} — daemon-startup.log: ${tail}` : message);
+    },
+    expectedExit: () => {
+      if (child.pid !== undefined && stopRequested.delete(child.pid)) return 'throng asked it to stop';
+      if (/daemon pipe ".*" is already in use/.test(readStartupTail(logDir))) {
+        return 'another daemon already holds the pipe (lost the start-up race)';
+      }
+      return undefined;
+    },
+  };
 }
 
 /**
@@ -160,7 +225,8 @@ export function daemonInfo(pipeName: string, timeoutMs = 800): Promise<HealthPon
       try {
         const response = JSON.parse(buffer.slice(0, nl).trim()) as JsonRpcResponse<HealthPongResult>;
         finish('result' in response && response.result?.status === 'ok' ? response.result : null);
-      } catch {
+      } catch (error) {
+        logCaught('daemon-lifecycle: parse health ping reply', error);
         finish(null);
       }
     });
@@ -177,7 +243,8 @@ export async function pingDaemon(pipeName: string, timeoutMs = 800): Promise<boo
 function currentBuildId(daemonEntry: string): string | null {
   try {
     return readFileSync(join(dirname(daemonEntry), 'BUILD_ID'), 'utf8').trim();
-  } catch {
+  } catch (error) {
+    logExpected('daemon-lifecycle: read BUILD_ID', 'a build that was not stamped has no BUILD_ID', error);
     return null; // not stamped — can't tell, so never force a restart on this basis
   }
 }
@@ -291,9 +358,15 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
     // terminals; a fresh one starts clean.
     restarted = true;
     try {
-      if (typeof info.pid === 'number') process.kill(info.pid);
-    } catch {
-      /* already gone */
+      if (typeof info.pid === 'number') {
+        stopRequested.add(info.pid);
+        process.kill(info.pid);
+      }
+    } catch (error) {
+      if (typeof info.pid === 'number') stopRequested.delete(info.pid);
+      // expected: the daemon exited between the ping and the kill (ESRCH) — it is already gone.
+      const log = opts.log ?? consoleLog;
+      log('debug', `retiring daemon ${String(info.pid)}: already gone — ${error instanceof Error ? error.message : String(error)}`);
     }
     const freeBy = Date.now() + 5000;
     while (Date.now() < freeBy && (await daemonInfo(opts.pipeName, pingTimeout))) {
@@ -328,6 +401,7 @@ export async function ensureDaemon(opts: EnsureDaemonOptions): Promise<EnsureDae
       ...opts.env,
     },
   });
+  watchChild(child, daemonWatch(child, stdio === null ? undefined : opts.logDir, opts.log ?? consoleLog));
   child.unref();
 
   // Poll until it (or the race winner) is answering, bounded by readyTimeout.

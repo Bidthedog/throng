@@ -1,4 +1,5 @@
 import type { AttentionMark } from '@throng/core';
+import { logExpected } from '@throng/core';
 
 /**
  * This window's copy of main's attention mark set (057 R5, the `command-store.ts` pattern).
@@ -43,7 +44,9 @@ export function ensureAttentionBridge(): void {
       if (broadcasts === seen) setAttentionMarks(answer.marks);
     })
     // A preload without it, or main gone: the next broadcast still arrives, so there is nothing to report.
-    .catch(() => {});
+    .catch((error: unknown) =>
+      logExpected('attention-store: ask main for the current marks', 'main is gone or the window is closing; the next broadcast still delivers the set', error),
+    );
 }
 
 /** Replace the snapshot. The bridge calls it; a test calls it to stand in for main. */

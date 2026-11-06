@@ -1,5 +1,5 @@
 import os from 'node:os';
-import type { IPathForms } from '@throng/core';
+import { logExpected, type IPathForms } from '@throng/core';
 
 /**
  * How Linux spells a path (062 FR-021, FR-022). `/d/x` is an ordinary path here, so there is no drive form. A leading
@@ -56,7 +56,8 @@ function parseFileUrl(url: string): { host: string; pathname: string } | null {
   try {
     const parsed = new URL(url);
     return { host: parsed.hostname, pathname: decodeURIComponent(parsed.pathname) };
-  } catch {
+  } catch (error) {
+    logExpected('linux-path-forms: parse file URL', 'a file: URL from a link or a paste may be malformed; it names no path', error);
     return null;
   }
 }

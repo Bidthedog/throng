@@ -9,6 +9,7 @@
  *
  * Pure: no OS, no DOM, no `node:path`.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { isUnderPath } from '../fs/path-id.js';
 import { relPathUnderRoot } from '../explorer/path-rules.js';
 import { resolveAgainst, separatorOf } from './path-resolve.js';
@@ -55,7 +56,8 @@ function pathOfFileUrl(url: string): string | null {
   let path: string;
   try {
     path = decodeURIComponent(encoded);
-  } catch {
+  } catch (error) {
+    logExpected('request-policy: decode file URL path', 'a file: URL with a malformed percent escape names no path and is refused', error);
     return null;
   }
   if (host !== '' && host.toLowerCase() !== 'localhost') return `//${host}${path}`;

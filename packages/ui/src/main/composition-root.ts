@@ -30,6 +30,7 @@ import type {
 import {
   buildShippedDefaults,
   defaultPipeName,
+  logCaught,
   NoForegroundHandoff,
   NoSystemNotifier,
   NoTaskbarBadge,
@@ -161,8 +162,9 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
   const recordOsCall = (call: OsCall): void => {
     try {
       appendFileSync(attentionOsLog, `${JSON.stringify(call)}\n`);
-    } catch {
+    } catch (error) {
       // A harness log that cannot be written must not break the app under test.
+      logCaught('composition-root: append attention OS log', error);
     }
   };
   let systemNotifier: ISystemNotifier;

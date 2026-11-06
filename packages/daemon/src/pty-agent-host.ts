@@ -2,7 +2,10 @@ import { resolveIpcAddress } from '@throng/core';
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
 import {
+  logAt,
   TERMINAL_END_TIMEOUT_MS,
+  logExpected,
+  type LogLevel,
   type ChildProcess,
   type IPtyHost,
   type ProcessSurvivor,
@@ -27,6 +30,11 @@ export interface AgentBudgets {
   /** Time from CONNECT for a started terminal to ack `started` (019 FR-013). */
   readonly readyMs: number;
 }
+
+/** The host's log when none is injected: the console, which the daemon's file log has attached. */
+export const logToConsole = logAt;
+
+const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** Documented defaults, used when a caller constructs the host without budgets. */
 export const DEFAULT_AGENT_BUDGETS: AgentBudgets = { connectMs: 15_000, readyMs: 15_000 };
@@ -93,10 +101,20 @@ export class PtyAgentHost implements IPtyHost {
    *  with no terminal live at all (#94). Cleared by a relaunch, which starts a fresh deadline. */
   private connectLapsed = false;
 
+  /**
+   * @param log 066 FR-005 / FR-007 — where every failure this host surfaces to a panel is also recorded,
+   *   once per condition (not once per terminal it fails). Injected (Principle X); the daemon binds it to
+   *   its own log. Defaults to the console, which the daemon's log has attached.
+   */
   constructor(
     private readonly pipeName: string,
-    private readonly launch: (pipeName: string, report: (reason: string) => void) => void,
+    /**
+     * Starts the agent. `report` hands back why a launch failed, for the panel; `alreadyLogged` says the
+     * launcher recorded it itself (a watched spawn), so the host does not record the same failure twice.
+     */
+    private readonly launch: (pipeName: string, report: (reason: string, alreadyLogged?: boolean) => void) => void,
     private readonly budgets: AgentBudgets = DEFAULT_AGENT_BUDGETS,
+    private readonly log: (level: LogLevel, message: string) => void = logToConsole,
   ) {
     // The agent (medium) owns the pipe SERVER; the daemon (possibly elevated)
     // connects DOWN to it. Launch the agent, then connect with retry — it needs a
@@ -119,10 +137,19 @@ export class PtyAgentHost implements IPtyHost {
     const generation = ++this.launchGeneration;
     if (!carryReason) this.launchReason = undefined;
     this.connectLapsed = false;
-    this.launch(this.pipeName, (reason) => {
+    this.launch(this.pipeName, (reason, alreadyLogged) => {
       if (generation !== this.launchGeneration) return; // a superseded launch's reason
       this.launchReason = reason;
+      // Recorded when it ARRIVES, not only when a lapse quotes it: the report often lands after the
+      // lapse, with no terminal open, and would then reach nobody (066 FR-007). Unless the launcher
+      // already recorded it — one condition, one record.
+      if (!alreadyLogged) this.log('error', `PTY agent launch failed: ${reason}`);
     });
+  }
+
+  /** True once the daemon has closed this host on purpose: an agent exit after it was asked for (FR-008). */
+  get disposed(): boolean {
+    return this.disposing;
   }
 
   /** The connect lapse, composed at the moment it is surfaced so that a launch reason arriving
@@ -174,6 +201,7 @@ export class PtyAgentHost implements IPtyHost {
       // terminals can start rather than queueing into the outbox indefinitely.
       // A crashed agent's exit code is genuinely unknown: `null` ("exited (code —)") is
       // the honest render, so this caller keeps it (C28).
+      this.logFailure('fatal', { kind: 'agent-stopped' });
       this.failAllLive({ kind: 'agent-stopped' }, null);
       this.launchAgent();
       this.connectWithRetry(Date.now() + this.budgets.connectMs);
@@ -201,8 +229,17 @@ export class PtyAgentHost implements IPtyHost {
       // iterates nothing — and the terminal that suffers is the one opened a minute later.
       // `start()` reads this flag and retries for that terminal (#94, #556).
       this.connectLapsed = true;
-      this.failAllLive(this.lapseFailure(), 1);
+      const lapse = this.lapseFailure();
+      this.logFailure('fatal', lapse, `no connection within ${this.budgets.connectMs} ms`);
+      this.failAllLive(lapse, 1);
     });
+  }
+
+  /** One record for one condition, whatever number of terminals it fails (066 FR-005). */
+  private logFailure(level: LogLevel, failure: PtyExitFailure, context?: string): void {
+    const text = terminalExitFailureText(failure.kind);
+    const detail = [context, failure.detail].filter(Boolean).join('; ');
+    this.log(level, `PTY agent: ${text}${detail ? ` (${detail})` : ''}`);
   }
 
   /** Fire an unexpected exit for every live terminal and forget them. */
@@ -235,6 +272,7 @@ export class PtyAgentHost implements IPtyHost {
       // The agent took the `start` and never acked `{ev:'started'}`. Fail THIS key only —
       // other terminals are unaffected. Readiness is the ack, never first output: a slow
       // shell that has printed nothing is still starting and must not be killed (FR-013).
+      this.log('error', `PTY agent: terminal ${key}: ${terminalExitFailureText('terminal-never-started')} (no ack within ${this.budgets.readyMs} ms)`);
       this.failKey(key, { kind: 'terminal-never-started' }, 1);
     }, this.budgets.readyMs);
     this.readyTimers.set(key, timer);
@@ -277,8 +315,9 @@ export class PtyAgentHost implements IPtyHost {
       if (!line) continue;
       try {
         this.onEvent(JSON.parse(line) as AgentEvent);
-      } catch {
-        /* ignore malformed */
+      } catch (error) {
+        // A line the agent sent and the daemon cannot read is a protocol fault, not noise (066 FR-009).
+        this.log('warn', `PTY agent: ignored a malformed line (${errorText(error)}): ${line.slice(0, 200)}`);
       }
     }
   }
@@ -295,6 +334,7 @@ export class PtyAgentHost implements IPtyHost {
       case 'error':
         // A start failure in the agent — surface it as output + a non-zero exit so
         // the Panel reverts with a visible message (FR-019), never a silent blank.
+        this.log('error', `PTY agent: terminal ${ev.key} failed to start: ${ev.message}`);
         this.failKey(ev.key, { kind: 'terminal-failed-to-start', detail: ev.message }, 1);
         break;
       case 'ended': {
@@ -589,8 +629,8 @@ export class PtyAgentHost implements IPtyHost {
     this.readyTimers.clear();
     try {
       this.socket?.end();
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logExpected('PtyAgentHost.dispose', 'the agent pipe may already be closed when the daemon shuts down', error);
     }
   }
 }

@@ -86,6 +86,7 @@ import { isFocusReport } from './focus-reports.js';
 import { registerTerminalBuffer, unregisterTerminalBuffer } from './buffer-registry.js';
 import { styledLineCount } from './styled-lines.js';
 import { getActivePane } from '../workspace/active-pane.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /*
  * 045 round five — the terminal's own floating hover tooltip is GONE, and with it
@@ -928,7 +929,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
         void bridge
           .write(panelId, seq) // we transmit the newline / CSI-u ourselves…
           .then(() => countInputAcked(panelId, true))
-          .catch(() => countInputAcked(panelId, false));
+          .catch((error: unknown) => {
+            logCaught('use-terminal: write a translated key sequence', error);
+            countInputAcked(panelId, false);
+          });
         return false; // …so xterm must not ALSO send its \r
       }
       return true;
@@ -1298,8 +1302,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
             }
           });
         }
-      } catch {
+      } catch (error) {
         /* xterm's internals moved: OSC 8 links lose only their at-rest mark */
+        logCaught('use-terminal: collect OSC 8 links in view', error);
       }
       return found;
     };
@@ -1345,8 +1350,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
 
     try {
       fit.fit();
-    } catch {
+    } catch (error) {
       /* container not measured yet */
+      logExpected('use-terminal: first fit', 'the container has not been laid out yet on mount; a later resize fits it', error);
     }
 
     // Honour OSC 52 clipboard writes (xterm.js ignores them by default). A program
@@ -1456,8 +1462,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
          */
         try {
           term.refresh(0, term.rows - 1);
-        } catch {
+        } catch (error) {
           /* not measurable yet — the periodic repaint below will catch it */
+          logExpected('use-terminal: repaint', 'the view is not measurable yet (hidden or still mounting); the periodic repaint catches it', error);
         }
         return;
       }
@@ -1477,8 +1484,8 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // would wipe a shell's visible output, which is not repainted on a resize — and
         // only on a shrink, so a grow never flashes empty before the repaint.
         if (wasAlt && shrank) term.write('\u001b[H\u001b[2J'); // clear stale alt-screen cells
-      } catch {
-        /* not measurable yet */
+      } catch (error) {
+        logExpected('use-terminal: resize', 'the view is not measurable yet (hidden or still mounting); the next resize applies the grid', error);
       }
     };
 
@@ -1572,7 +1579,10 @@ export function useTerminal(opts: UseTerminalOptions): void {
       recordWrite(panelId, data); // what the PROGRAM got, next to what throng decided
       void (answer ? bridge.write(panelId, data, viewId) : bridge.write(panelId, data))
         .then(() => countInputAcked(panelId, true))
-        .catch(() => countInputAcked(panelId, false));
+        .catch((error: unknown) => {
+          logCaught('use-terminal: write typed input', error);
+          countInputAcked(panelId, false);
+        });
     });
 
     /*
@@ -1773,6 +1783,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       .catch((err: unknown) => {
         // No cause here by construction: this is a THROWN transport failure (the IPC bridge itself
         // rejected), not a daemon-classified one, so the panel reverts as it does today.
+        logCaught('use-terminal: attach', err);
         if (!disposed) onErrorRef.current(err instanceof Error ? err.message : 'terminal attach failed');
       });
 

@@ -7,7 +7,7 @@
  * the filesystem only through this service. All failures are returned as
  * `{ error }` (non-fatal, FR-025), never thrown across the bridge.
  */
-import { hostTraits, pathCompareKey, trashTerm } from '@throng/core';
+import { hostTraits, logCaught, logExpected, pathCompareKey, trashTerm } from '@throng/core';
 import { basename, dirname, join } from 'node:path';
 import {
   dedupeName,
@@ -151,6 +151,7 @@ export class FilesService {
   private failed(e: unknown, operation: FailureOperation = 'access', holder?: Holder): FailureEnvelope {
     const envelope = failure(e, operation, holder);
     if (envelope.cause) this.logRaw?.(`[files] ${envelope.cause.raw}`);
+    else logCaught(`files-service: ${operation}`, e);
     return envelope;
   }
 
@@ -175,7 +176,8 @@ export class FilesService {
     if (!this.resolveHolder) return undefined;
     try {
       return await this.resolveHolder(absPath, reportingWindowId);
-    } catch {
+    } catch (error) {
+      logExpected('files-service: identify holder', 'the holding process can exit between the failure and the lookup; the holder is reported as not identified', error);
       // Identifying a holder is inherently racy — the process can go between the failure and the
       // lookup. A lookup that fails degrades to "not identified", which is a stated outcome
       // (FR-012), never a second error on top of the first.
@@ -225,6 +227,7 @@ export class FilesService {
       if (!(await this.within(abs))) return { error: OUTSIDE };
       return { entries: await this.fs.list(abs) };
     } catch (e) {
+      logExpected('files-service: list', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
   }
@@ -285,6 +288,7 @@ export class FilesService {
       moved.push({ from: abs, to: await this.fs.rename(abs, name) });
       return { ok: true };
     } catch (e) {
+      logExpected('files-service: rename', 'failed() logs the raw error and the explorer reports the cause', e);
       /*
        * The holder is looked up ONLY when the failure can actually name one.
        *
@@ -345,6 +349,7 @@ export class FilesService {
       }
       return { ok: true };
     } catch (e) {
+      logExpected('files-service: move', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e, 'lock');
     } finally {
       // ALWAYS close a bracket that opened — on success, on the early error return above, and on
@@ -371,6 +376,7 @@ export class FilesService {
       }
       return { ok: true };
     } catch (e) {
+      logExpected('files-service: copy', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e, 'lock');
     }
   }
@@ -401,7 +407,8 @@ export class FilesService {
         if (mode === 'recycle') await this.fs.trash(abs);
         else await this.fs.delete(abs);
         removed.push(abs);
-      } catch {
+      } catch (error) {
+        logCaught(`files-service: delete ${abs}`, error);
         failures.push(basename(abs));
       }
     }
@@ -427,7 +434,8 @@ export class FilesService {
       const abs = this.absOf(relPath);
       if (!(await this.fs.exists(abs))) return false;
       return await this.within(abs);
-    } catch {
+    } catch (error) {
+      logExpected('files-service: check exists in project', 'a path removed between the existence check and resolving it reads as absent', error);
       return false;
     }
   }
@@ -458,6 +466,7 @@ export class FilesService {
       this.onRestored?.([abs]);
       return { ok: true };
     } catch (error) {
+      logCaught('files-service: restore deleted item', error);
       return {
         error: `Could not restore "${basename(abs)}" — it may no longer be in the ${trashTerm()}. (${(error as Error).message})`,
       };
@@ -474,6 +483,7 @@ export class FilesService {
       await this.fs.mkdir(join(destAbs, name));
       return { relPath: joinRel(destRelDir, name) };
     } catch (e) {
+      logExpected('files-service: new folder', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
   }
@@ -490,6 +500,7 @@ export class FilesService {
       await this.fs.writeBytes(join(destAbs, name), new Uint8Array());
       return { relPath: joinRel(destRelDir, name) };
     } catch (e) {
+      logExpected('files-service: new file', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
   }
@@ -536,6 +547,7 @@ export class FilesService {
       else await this.shell.openFolder(absPath);
       return { ok: true };
     } catch (e) {
+      logExpected('files-service: reveal document', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
   }
@@ -562,6 +574,7 @@ export class FilesService {
       else await this.shell.openFolder(abs);
       return { ok: true };
     } catch (e) {
+      logExpected('files-service: reveal', 'failed() logs the raw error and the explorer reports the cause', e);
       return this.failed(e);
     }
   }
@@ -578,7 +591,9 @@ export class FilesService {
    */
   exclusive<T>(op: () => Promise<T>): Promise<T> {
     const run = this.moveQueue.then(op, op);
-    this.moveQueue = run.catch(() => undefined);
+    this.moveQueue = run.catch((error: unknown) => {
+      logExpected('files-service: file-operation queue', 'a rejected operation was reported to its own caller; the queue only waits for it', error);
+    });
     return run;
   }
 

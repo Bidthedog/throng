@@ -50,6 +50,7 @@ export class WindowsDeElevatedLauncher {
     const cwd = process.env.SystemRoot ?? 'C:\\Windows';
     const script = buildLaunchScript(file, args, cwd);
     const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    // child-exempt: watched by hand below — its error and a non-zero exit with stderr go to `report`, which PtyAgentHost logs at error (066 FR-007); watchChild would log each failure twice
     const child = spawn(powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
       // stdout stays ignored — the agent's own output belongs on the pipe, not here.
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -76,14 +77,24 @@ function psLit(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-function buildLaunchScript(file: string, args: string[], cwd: string): string {
+/**
+ * The command line `CreateProcessWithTokenW` starts: each argument quoted when it holds whitespace or a
+ * quote, embedded quotes escaped. Built here rather than in the shim so what the agent receives — its
+ * pipe and its log folder (066 contract *PTY agent*) — can be checked without PowerShell.
+ */
+export function deElevatedCommandLine(file: string, args: readonly string[]): string {
+  const quote = (s: string): string => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
+  return [file, ...args].map(quote).join(' ');
+}
+
+/** The shim script; exported for its tests. */
+export function buildLaunchScript(file: string, args: string[], cwd: string): string {
   const fileLit = psLit(file);
-  const argsLit = args.length > 0 ? `@(${args.map(psLit).join(',')})` : '@()';
+  const cmdLineLit = psLit(deElevatedCommandLine(file, args));
   const cwdLit = psLit(cwd);
   return `
 $ErrorActionPreference = 'Stop'
 $targetFile = ${fileLit}
-$targetArgs = ${argsLit}
 $targetCwd = ${cwdLit}
 Add-Type -Namespace Throng -Name DeElevLaunch -MemberDefinition @'
 [DllImport("user32.dll")] static extern IntPtr GetShellWindow();
@@ -116,8 +127,7 @@ public static void Run(string appName, string cmdLine, string cwd) {
   CloseHandle(pi.hThread); CloseHandle(pi.hProcess); CloseHandle(dup); CloseHandle(token); CloseHandle(proc);
 }
 '@
-function Quote([string]$s) { if ($s -match '[\\s"]') { '"' + ($s -replace '"','\\"') + '"' } else { $s } }
-$cmdLine = (@($targetFile) + $targetArgs | ForEach-Object { Quote $_ }) -join ' '
+$cmdLine = ${cmdLineLit}
 [Throng.DeElevLaunch]::Run($targetFile, $cmdLine, $targetCwd)
 `.trim();
 }

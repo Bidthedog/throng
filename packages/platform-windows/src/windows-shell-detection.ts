@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import type { DetectedShell, IShellDetection, ShellProbe, ShellResolver } from '@throng/core';
-import { resolveShellFile } from '@throng/core';
+import { logExpected, resolveShellFile } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 
 /**
  * Windows concrete `IShellDetection` (005 Phase B; batch-2 FR-024). Resolves each
@@ -180,8 +181,15 @@ function readRegistryInstallPath(key: string): string | null {
         const value = parts[parts.length - 1]?.trim();
         if (value && value !== valueName) return value;
       }
-    } catch {
-      /* key/value absent or reg unavailable → try the next value name */
+    } catch (error) {
+      // `reg query` exits 1 for an absent key or value — the normal "not installed via this key"
+      // answer. Anything else (reg missing, killed, another code) is the probe itself failing.
+      if ((error as { status?: number | null }).status === 1) {
+        logExpected('windows-shell-detection: reg query', `${key}\\${valueName} is absent when the shell was not installed through this key`);
+      } else {
+        logChildFailure(`windows-shell-detection: reg query ${key}`, error);
+      }
+      // Either way, try the next value name.
     }
   }
   return null;

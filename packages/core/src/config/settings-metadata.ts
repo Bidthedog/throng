@@ -1586,7 +1586,7 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'diagnostics.maxFileSizeKb',
     label: 'Log file size (KB)',
     description:
-      'How large a single log file may grow before throng starts a new one. Older files are kept up to the limit below.',
+      'How large a single log file may grow before throng starts a new one. Older files are kept for the days set below, up to the folder limit.',
     group: 'Logging',
     control: 'slider',
     min: 64,
@@ -1607,15 +1607,32 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     hardMax: 65_536,
   },
   {
-    key: 'diagnostics.keepFiles',
-    label: 'Log files kept',
+    // 066 FR-019 — supersedes 031 FR-015's `diagnostics.keepFiles` (066 FR-020). Days throng actually
+    // ran, so coming back from a fortnight away still finds the last sessions' logs.
+    key: 'diagnostics.keepDays',
+    label: 'Days of logs kept',
     description:
-      'How many log files to keep for each part of throng, including the one being written. Older files are deleted, so logs cannot grow without bound.',
+      'How many days of logs to keep, counting only days throng was running. Older logs are deleted.',
     group: 'Logging',
     control: 'slider',
     min: 1,
-    max: 20,
+    max: 30,
     step: 1,
+  },
+  {
+    // 066 FR-019a — the backstop for a crash loop, which can fill a day's worth of files in minutes.
+    key: 'diagnostics.maxTotalMb',
+    label: 'Log folder limit (MB)',
+    description:
+      'The most space all of throng’s logs may take. When the folder grows past it, the oldest logs are deleted first.',
+    group: 'Logging',
+    control: 'slider',
+    // Steps of 50: the slider guard wants a step of at least 1% of the range.
+    min: 50,
+    max: 2000,
+    step: 50,
+    // A larger cap is settable by hand, as for the file size above.
+    hardMax: 65_536,
   },
   ...RESOURCE_MONITOR_DESCRIPTORS,
 ];

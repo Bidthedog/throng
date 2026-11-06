@@ -33,6 +33,8 @@ import {
   type LineEndingId,
   type LineFormat,
   type SerialisedHistory,
+  logCaught,
+  logExpected,
 } from '@throng/core';
 
 /** What a recovery snapshot remembers of a document's format (059 FR-015). */
@@ -75,9 +77,15 @@ function safeName(panelId: string): string {
 function decodeName(name: string): string {
   try {
     return decodeURIComponent(name);
-  } catch {
+  } catch (error) {
+    logExpected('editor-recovery: decode snapshot name', 'a file in the recovery folder that throng did not write need not be an encoded panel id', error);
     return name;
   }
+}
+
+/** A missing recovery folder or snapshot is the ordinary state; any other read failure is not. */
+function isAbsent(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 }
 
 /**
@@ -144,7 +152,8 @@ function parseSnapshot(raw: string): RecoverySnapshot | null {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
-    } catch {
+    } catch (error) {
+      logExpected('editor-recovery: parse snapshot', 'a snapshot torn by a crash mid-write is refused rather than recovered', error);
       return null; // …torn. Better no recovery than a corrupt one.
     }
     if (typeof parsed !== 'object' || parsed === null) return null;
@@ -205,12 +214,18 @@ export class EditorRecovery {
     // Queue behind this panel's previous write, whatever became of it — a failed snapshot must not
     // wedge the next one, so the chain is joined on settle rather than on success.
     const previous = this.writeChains.get(panelId) ?? Promise.resolve();
-    const mine = previous.catch(() => undefined).then(() => this.writeOnce(panelId, snapshot));
+    const mine = previous
+      .catch((error: unknown) => {
+        logExpected('editor-recovery: wait for prior snapshot write', 'a prior write that failed has already been reported to its own caller', error);
+      })
+      .then(() => this.writeOnce(panelId, snapshot));
     // Held in a local so the cleanup below can recognise it. Comparing against
     // `writeChains.get(panelId)` alone cannot: it returns whatever is stored, which right after
     // this line is always THIS promise, so the old `=== undefined` test never fired and the map
     // grew one entry per panel for the life of the process (#305).
-    const settled = mine.catch(() => undefined);
+    const settled = mine.catch((error: unknown) => {
+      logExpected('editor-recovery: settle snapshot write', 'this write\'s failure is rethrown to its caller by the await below', error);
+    });
     this.writeChains.set(panelId, settled);
     try {
       await mine;
@@ -250,7 +265,7 @@ export class EditorRecovery {
     } catch (e) {
       // A failed write leaves nothing behind. `list()` skips `.tmp` already, but an orphan that
       // accumulates once per failure is a directory that grows for as long as the failure lasts.
-      await rm(temp, { force: true }).catch(() => undefined);
+      await rm(temp, { force: true }).catch((error: unknown) => logCaught('editor-recovery: remove failed snapshot temp', error));
       throw e;
     }
   }
@@ -272,7 +287,9 @@ export class EditorRecovery {
     let names: string[];
     try {
       names = await readdir(this.dir);
-    } catch {
+    } catch (error) {
+      if (isAbsent(error)) logExpected('editor-recovery: list snapshots to purge', 'the recovery folder does not exist until a document is first edited', error);
+      else logCaught('editor-recovery: list snapshots to purge', error);
       return;
     }
     for (const name of names) {
@@ -281,8 +298,9 @@ export class EditorRecovery {
         const snap = parseSnapshot(await readFile(join(this.dir, name), 'utf8'));
         if (!snap?.history) continue;
         await this.write(decodeName(name), { version: snap.version, text: snap.text });
-      } catch {
-        /* skip unreadable temp */
+      } catch (error) {
+        if (isAbsent(error)) logExpected('editor-recovery: purge snapshot history', 'a snapshot removed by a save or close after the folder was listed', error);
+        else logCaught('editor-recovery: purge snapshot history', error);
       }
     }
   }
@@ -292,7 +310,9 @@ export class EditorRecovery {
     let names: string[];
     try {
       names = await readdir(this.dir);
-    } catch {
+    } catch (error) {
+      if (isAbsent(error)) logExpected('editor-recovery: list snapshots', 'the recovery folder does not exist until a document is first edited', error);
+      else logCaught('editor-recovery: list snapshots', error);
       return [];
     }
     const out: RecoveredDoc[] = [];
@@ -303,8 +323,9 @@ export class EditorRecovery {
       try {
         const snap = parseSnapshot(await readFile(join(this.dir, name), 'utf8'));
         if (snap) out.push({ panelId: decodeName(name), ...snap });
-      } catch {
-        /* skip unreadable temp */
+      } catch (error) {
+        if (isAbsent(error)) logExpected('editor-recovery: read listed snapshot', 'a snapshot removed by a save or close after the folder was listed', error);
+        else logCaught('editor-recovery: read listed snapshot', error);
       }
     }
     return out;
@@ -314,7 +335,9 @@ export class EditorRecovery {
   async read(panelId: string): Promise<RecoverySnapshot | null> {
     try {
       return parseSnapshot(await readFile(join(this.dir, safeName(panelId)), 'utf8'));
-    } catch {
+    } catch (error) {
+      if (isAbsent(error)) logExpected('editor-recovery: read snapshot', 'a panel with no unsaved edits has no snapshot', error);
+      else logCaught('editor-recovery: read snapshot', error);
       return null;
     }
   }

@@ -4,7 +4,8 @@
  */
 export { NodeUserContext } from './node-user-context.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
-export { CRASH_DIR_NAME, createFileLog, writeCrashReport } from './node-file-log.js';
+export { CRASH_DIR_NAME, createFileLog, reportOwnFailure, writeCrashReport } from './node-file-log.js';
 export type { DiagnosticLog, FileLogOptions } from './node-file-log.js';
 export { execFileOffLoop } from './off-loop-exec.js';
+export { STDERR_TAIL_CHARS, logChildFailure, watchChild, type WatchChildOptions } from './watch-child.js';
 export { clearStaleSocket } from './stale-socket.js';

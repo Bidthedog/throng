@@ -1,6 +1,7 @@
 import type { NoticeSubject } from '@throng/core';
 
 import type { NoticeInput } from './notification.js';
+import { logExpected } from '@throng/core';
 
 /**
  * 030 US4 / FR-045 — RUNNING A FAILURE BANNER'S RETRY, AND SAYING SO WHEN IT COULD NOT RUN.
@@ -59,6 +60,7 @@ export async function attemptRetry(
     // before its first await never produces one, and awaiting a call that already threw is too late.
     return await onRetry();
   } catch (error) {
+    logExpected('panel-retry: retry', 'reported as the "Couldn\'t retry" notice, whose own log record carries this error', error);
     deps.notify({
       severity: 'error',
       subject,

@@ -13,6 +13,7 @@
  * until it registers either way.
  */
 import { useCallback, useEffect, useRef, type FocusEvent, type RefCallback } from 'react';
+import { logExpected } from '@throng/core';
 
 const registry = new Map<string, () => void>();
 
@@ -83,8 +84,9 @@ export function registerPanelFocus(panelId: string, focus: () => void): void {
     pendingFocusPanelId = null;
     try {
       focus();
-    } catch {
+    } catch (error) {
       /* view may already be tearing down — a missed focus is non-fatal */
+      logExpected('panel-focus: honour a pending focus', 'the panel\'s view may already be tearing down as it registers; a missed focus is non-fatal', error);
     }
   }
 }
@@ -200,8 +202,9 @@ export function focusPanel(panelId: string): boolean {
   if (!focus) return false;
   try {
     focus();
-  } catch {
+  } catch (error) {
     /* the view may be tearing down — a missed focus is non-fatal */
+    logExpected('panel-focus: focus a panel', 'the panel\'s view may be tearing down when focus is asked of it; a missed focus is non-fatal', error);
   }
   return true;
 }

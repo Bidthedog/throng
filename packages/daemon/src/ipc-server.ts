@@ -1,4 +1,4 @@
-import { resolveIpcAddress } from '@throng/core';
+import { logCaught, resolveIpcAddress } from '@throng/core';
 import { clearStaleSocket } from '@throng/platform-node';
 import 'reflect-metadata';
 import { createServer, type Server, type Socket } from 'node:net';
@@ -111,8 +111,10 @@ export class IpcServer {
     let request: JsonRpcRequest;
     try {
       request = JSON.parse(line) as JsonRpcRequest;
-    } catch {
-      return; // malformed line: no id to respond to
+    } catch (error) {
+      // Only UI main writes to this socket, so a line that is not JSON is a client defect, not input.
+      logCaught(`ipc-server: parse request line (${line.length} chars)`, error);
+      return; // no id to respond to
     }
     // A `terminal.subscribe` makes this a long-lived events socket: register it to
     // receive server-initiated notifications, then ack (don't route).

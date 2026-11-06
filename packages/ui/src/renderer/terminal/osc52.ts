@@ -1,3 +1,4 @@
+import { logExpected } from '@throng/core';
 /**
  * Decode an OSC 52 clipboard-write sequence (005 / clipboard support). A program
  * running inside the terminal (Claude Code, tmux, vim, …) copies to the system
@@ -21,7 +22,8 @@ export function parseOsc52(data: string): string | null {
     const binary = atob(payload);
     const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    return null; // invalid base64 / not valid UTF-8
+  } catch (error) {
+    logExpected('osc52: decode a clipboard write', 'the program in the terminal sent invalid base64 or text that is not UTF-8; the write is ignored', error);
+    return null;
   }
 }

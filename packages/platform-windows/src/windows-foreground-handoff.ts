@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import process from 'node:process';
-import type { IForegroundHandoff } from '@throng/core';
+import { logCaught, type IForegroundHandoff } from '@throng/core';
 
 /**
  * Windows {@link IForegroundHandoff} (#199) — `user32!AllowSetForegroundWindow`.
@@ -71,8 +71,10 @@ function loadFfi(): AllowFn | null {
     const koffi = require('koffi');
     const user32 = koffi.load('user32.dll');
     allowFn = user32.func('AllowSetForegroundWindow', 'bool', ['int32']) as AllowFn;
-  } catch {
-    allowFn = null; // koffi missing or user32 failed to load → feature simply off
+  } catch (error) {
+    // koffi ships with throng and user32 is always present, so this failing is a broken install.
+    logCaught('windows-foreground-handoff: load AllowSetForegroundWindow', error);
+    allowFn = null; // feature simply off
   }
   return allowFn;
 }
@@ -83,8 +85,10 @@ export class WindowsForegroundHandoff implements IForegroundHandoff {
     if (!fn) return false;
     try {
       return fn(ASFW_ANY) === true;
-    } catch {
-      // A refused or failed grant is an ordinary outcome, not an error: the caller is a keystroke.
+    } catch (error) {
+      // A refused grant returns false and is ordinary; a THROW is the FFI call itself failing. The
+      // caller is a keystroke, so it still answers false — repeats collapse in the log (066 FR-015).
+      logCaught('windows-foreground-handoff: AllowSetForegroundWindow', error);
       return false;
     }
   }

@@ -20,6 +20,8 @@ import {
 import {
   DEFAULT_APP_SETTINGS,
   instanceLockName,
+  logCaught,
+  logExpected,
   parseKeybindings,
   parseSettingsGuarded,
   // 033 FR-069a — the index is keyed by root, the daemon keys projects by id; this is what makes
@@ -105,7 +107,9 @@ import { buildAppMenu } from './app-menu.js';
 import { openAbout, type AboutWindowDeps } from './about-window.js';
 import { createInstanceGuard } from './instance-guard.js';
 import { readUiSettings } from './ui-settings.js';
-import { installCrashHandlers, startUiDiagnostics } from './diagnostics.js';
+import { installCrashHandlers, startUiDiagnostics, watchWindowHealth } from './diagnostics.js';
+import { forwardRendererConsole, registerDiagnosticsLogIpc } from './diagnostics-ipc.js';
+import { testPanelThrowEnabled } from './test-panel-throw-seam.js';
 import { registerNoticeLogIpc } from './notice-log.js';
 import { registerRendererDebugLogIpc } from './renderer-debug-log.js';
 import {
@@ -181,6 +185,7 @@ async function invokeDaemon(
     const result = await daemonClient.call<unknown>(method, params);
     return { ok: true, result };
   } catch (error) {
+    logCaught(`main: daemon call ${method}`, error);
     const code = error instanceof DaemonRpcError ? error.code : null;
     return { ok: false, error: { code, message: (error as Error).message } };
   }
@@ -199,7 +204,8 @@ function resolveFromHere(relativePath: string): string {
 function readBuildId(buildIdPath: string): string {
   try {
     return readFileSync(buildIdPath, 'utf8').trim() || 'unknown';
-  } catch {
+  } catch (error) {
+    logExpected('main: read build id', 'a partial tsc-only build is not stamped; About shows unknown', error);
     return 'unknown';
   }
 }
@@ -214,8 +220,8 @@ function readLicenseText(candidates: string[]): string {
   for (const path of candidates) {
     try {
       return readFileSync(path, 'utf8');
-    } catch {
-      /* try the next candidate */
+    } catch (error) {
+      logExpected('main: read licence text', 'only one of the dev and packaged licence locations exists; the next is tried', error);
     }
   }
   return 'Licence text unavailable in this build. See https://www.gnu.org/licenses/agpl-3.0.html';
@@ -254,8 +260,8 @@ function readProductInfo(candidates: string[]): {
         .replace(/\.git$/, '')
         .replace(/#.*$/, '');
       if (pkg.version) return { version: pkg.version, author, repoUrl };
-    } catch {
-      /* try the next candidate */
+    } catch (error) {
+      logExpected('main: read product info', 'only one of the dev and packaged manifest locations exists; the next is tried', error);
     }
   }
   return { version: '0.0.0', author: '', repoUrl: '' };
@@ -279,8 +285,8 @@ function readThirdPartyLicences(candidates: string[]): ThirdPartyLicence[] {
   for (const path of candidates) {
     try {
       return JSON.parse(readFileSync(path, 'utf8')) as ThirdPartyLicence[];
-    } catch {
-      /* try the next candidate */
+    } catch (error) {
+      logExpected('main: read third-party licences', 'only one of the dev and packaged manifest locations exists; the next is tried', error);
     }
   }
   return [];
@@ -295,7 +301,8 @@ async function isFirstRun(store: IConfigStore): Promise<boolean> {
   try {
     await readFile(store.pathOf({ kind: 'settings' }), 'utf8');
     return false;
-  } catch {
+  } catch (error) {
+    logExpected('main: probe first run', 'on first run the settings document does not exist yet', error);
     return true;
   }
 }
@@ -662,7 +669,8 @@ function configuredDiagnostics(): AppSettings['diagnostics'] {
     // writes nothing. A hand-set 0 KB rotation cap would otherwise rotate the log on every line,
     // for the whole of startup — the earliest window, and the one hardest to diagnose afterwards.
     return parseSettingsGuarded(raw).value.diagnostics;
-  } catch {
+  } catch (error) {
+    logExpected('main: read startup diagnostics settings', 'settings.json is absent on first run and may be malformed by hand; defaults apply', error);
     return DEFAULT_APP_SETTINGS.diagnostics;
   }
 }
@@ -678,7 +686,8 @@ function configuredNativeWayland(): boolean {
     const root = configRootFor(platform.userDirectories(), isDevInstance, process.env);
     return parseSettingsGuarded(JSON.parse(readFileSync(join(root, 'settings.json'), 'utf8')) as unknown).value.window
       .nativeWayland;
-  } catch {
+  } catch (error) {
+    logExpected('main: read native Wayland setting', 'settings.json is absent on first run and may be malformed by hand; the default applies', error);
     return DEFAULT_APP_SETTINGS.window.nativeWayland;
   }
 }
@@ -702,9 +711,10 @@ const startupVersion = readProductInfo([
 
 const diagnostics = startUiDiagnostics({
   level: startupLogLevel,
-  policy: {
-    maxBytes: startupDiagnostics.maxFileSizeKb * 1024,
-    keep: startupDiagnostics.keepFiles,
+  retention: {
+    maxFileBytes: startupDiagnostics.maxFileSizeKb * 1024,
+    keepDays: startupDiagnostics.keepDays,
+    maxTotalBytes: startupDiagnostics.maxTotalMb * 1024 * 1024,
   },
   userDataDir: app.getPath('userData'),
   version: startupVersion,
@@ -715,9 +725,18 @@ diagnostics.log.info(
   `throng starting — pid ${process.pid}, packaged=${app.isPackaged}, data=${app.getPath('userData')}`,
 );
 installCrashHandlers(diagnostics, app);
+// 066 FR-005 — every window, whoever opens it: its hangs, preload and first-load failures are fatal
+// records, and its console reaches main.log as component `renderer` (the backstop, research R1).
+app.on('browser-window-created', (_event, win) => {
+  watchWindowHealth(diagnostics, win, `#${win.id}`);
+  forwardRendererConsole(diagnostics, win.webContents);
+});
+// 066 T026 — the dev seam that makes every panel body throw; inert in a packaged build.
+const testPanelThrow = testPanelThrowEnabled(process.env, app.isPackaged);
 // A clean quit is recorded too, and that is the point: without it a log that simply STOPS is
 // ambiguous — the user closed the app, or it vanished. One line tells the two apart.
 app.on('before-quit', () => diagnostics.log.info('throng quitting (requested)'));
+process.on('exit', () => diagnostics.log.close());
 
 /**
  * The windows that can answer the shutdown drain (019 FR-010, issue #86) — by webContents id.
@@ -933,6 +952,8 @@ if (isPrimaryInstance)
     // #123 — the daemon logs beside the UI, in the same per-user folder, so "send me your logs"
     // is one folder and not a hunt across two processes that fail for related reasons.
     logDir: diagnostics.logDir,
+    // 066 FR-005 — a daemon that dies, even while loading its modules, leaves its record here.
+    log: (level, message) => diagnostics.log.log(level, message),
     // The daemon's threshold is injected, never hardcoded (Principle X) — the same value the UI
     // is using, so one setting governs both halves of one application.
     env: {
@@ -944,7 +965,8 @@ if (isPrimaryInstance)
       THRONG_CONFIG_ROOT: container.get<IConfigSettings>(UI_TYPES.ConfigSettings).configRoot,
       THRONG_LOG_LEVEL: startupLogLevel,
       THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
-      THRONG_LOG_KEEP: String(startupDiagnostics.keepFiles),
+      THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
+      THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
       THRONG_VERSION: productInfo.version,
     },
   });
@@ -1043,7 +1065,8 @@ if (isPrimaryInstance)
   // modal ever flashes the default theme before the saved one resolves (issue 132).
   let currentTheme = initialPayload.theme;
   ipcMain.on('throng:theme:bootstrap', (event) => {
-    event.returnValue = themeBootstrap(currentTheme);
+    // 066 T026: the panel-throw dev seam rides on this one synchronous ask rather than adding its own.
+    event.returnValue = { ...themeBootstrap(currentTheme), testPanelThrow: testPanelThrow };
   });
   // The window `backgroundColor` shown before the web contents paint must also match
   // the saved theme (not a hardcoded dark), or a light theme flashes dark first.
@@ -1149,6 +1172,8 @@ if (isPrimaryInstance)
   registerNoticeLogIpc(diagnostics, ipcMain);
   // #290/#162 — the renderer's terminal debug lines, written only at `diagnostics.logLevel: debug`.
   registerRendererDebugLogIpc(diagnostics.log, ipcMain);
+  // 066 contract *Preload → main* — the renderer's own records: fatal always, the rest by threshold.
+  registerDiagnosticsLogIpc(diagnostics, ipcMain);
 
   /*
    * Nullable ref to the main window, for the Preferences and About windows' parent.
@@ -1447,7 +1472,8 @@ if (isPrimaryInstance)
         projects: ListedProject[];
       }>('projects.list', {});
       projects = result.projects;
-    } catch {
+    } catch (error) {
+      logCaught('main: refresh project index from daemon', error);
       // The daemon is the authority and it is momentarily unreachable. Keeping the previous cache is
       // the conservative answer: emptying it would silently UNHIDE every hidden file.
       return [];
@@ -1654,7 +1680,10 @@ if (isPrimaryInstance)
       // wrong here: it answers "another program" about the user's own terminal. Paid on a failure
       // path only.
       .call('terminal.list', { refreshCwd: true })
-      .catch(() => null)) as { sessions?: Array<{ panelId: string; cwd?: string }> } | null;
+      .catch((error: unknown) => {
+        logCaught('main: list terminals for holder lookup', error);
+        return null;
+      })) as { sessions?: Array<{ panelId: string; cwd?: string }> } | null;
     // The reporting window decides whether the holder's window gets NAMED (FR-013a).
     const mine = resolveThrongHolder(
       absPath,
@@ -2067,7 +2096,8 @@ if (isPrimaryInstance)
     exists: (p) => {
       try {
         return statSync(p).isDirectory();
-      } catch {
+      } catch (error) {
+        logExpected('main: probe terminal cwd', 'this probes a terminal folder that has gone missing; absence is the answer', error);
         return false;
       }
     },
@@ -2342,6 +2372,16 @@ if (isPrimaryInstance)
     return out;
   };
   const { ELECTRON_RUN_AS_NODE: _dropRunAsNode, ...collectorEnv } = process.env;
+  // 066 FR-005 / FR-017 — the collector keeps its own session log in the one logs folder, levelled and
+  // retained by the same settings as the daemon's (`collector-log.ts` reads these).
+  const collectorLogEnv: NodeJS.ProcessEnv = {
+    ...collectorEnv,
+    THRONG_LOG_DIR: diagnostics.logDir,
+    THRONG_LOG_LEVEL: startupLogLevel,
+    THRONG_LOG_MAX_KB: String(startupDiagnostics.maxFileSizeKb),
+    THRONG_LOG_KEEP_DAYS: String(startupDiagnostics.keepDays),
+    THRONG_LOG_MAX_TOTAL_MB: String(startupDiagnostics.maxTotalMb),
+  };
   const resourceMonitor = new ResourceMonitorHost({
     collectorEntry: resolveFromHere('../collector/resource-collector-entry.js'),
     nodeExe: resolveDaemonNodeExe(
@@ -2350,8 +2390,9 @@ if (isPrimaryInstance)
       existsSync,
       collectorEnv,
     ),
+    // child-exempt: ResourceMonitorHost watches the collector it forks through this seam (watchChild there)
     fork: (entry, execPath) =>
-      fork(entry, [], { execPath, env: collectorEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true }),
+      fork(entry, [], { execPath, env: collectorLogEnv, serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true }),
     daemonRoster: () => daemonClient.call<DaemonRoster>(RESOURCES_ROSTER_METHOD, {}),
     uiProcesses,
     documentEstimates: () => editorCoordinator.documentEstimates(),
@@ -2362,7 +2403,7 @@ if (isPrimaryInstance)
       if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
     },
     mainWindowId: () => currentMainWindow()?.id ?? null,
-    log: (message) => diagnostics.log.warn(message),
+    log: (level, message) => diagnostics.log.log(level, message),
     broadcast: (channel, payload) => {
       for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(channel, payload);
     },
@@ -2662,8 +2703,8 @@ if (isPrimaryInstance)
           // 051 FR-015a (R8): nothing may be left behind, so an end that fails is forced; the call
           // settles within two end limits, which the 2 s default budget cannot cover.
           await daemonClient.call('terminal.killAll', { escalate: true }, UNLOAD_RPC_TIMEOUT_MS);
-        } catch {
-          /* best-effort; still allow the close */
+        } catch (error) {
+          logCaught('main: terminate all terminals on close', error); // still allow the close
         }
       }
       // BOTH exits drain — 'terminate' and 'leave' alike. These are the paths that survive
@@ -2703,7 +2744,8 @@ if (isPrimaryInstance)
               width: Math.max(saved.width, MIN_WIDTH),
               height: Math.max(saved.height, MIN_HEIGHT),
             });
-          } catch {
+          } catch (error) {
+            logCaught('main: load sub-workspace bounds', error);
             return undefined;
           }
         },
@@ -2724,8 +2766,8 @@ if (isPrimaryInstance)
                 id: childId,
                 bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
               })
-              .catch(() => {
-                /* best-effort; bounds restore is non-critical */
+              .catch((error: unknown) => {
+                logCaught('main: persist sub-workspace bounds', error);
               });
           };
           const schedulePersist = (): void => {

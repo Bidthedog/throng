@@ -1,4 +1,4 @@
-import type { ITaskbarBadge } from '@throng/core';
+import { logExpected, type ITaskbarBadge } from '@throng/core';
 
 /** The slice of a BrowserWindow the badge touches. */
 export interface BadgeWindow {
@@ -50,8 +50,9 @@ export class ElectronTaskbarBadge implements ITaskbarBadge {
     if (current === null) return;
     try {
       if (!win.isDestroyed()) win.setOverlayIcon(current.icon, current.description);
-    } catch {
+    } catch (error) {
       // Destroyed between the guard and the call.
+      logExpected('electron-taskbar-badge: reapply badge', 'a window closed between the destroyed check and the call', error);
     }
   }
 
@@ -59,8 +60,9 @@ export class ElectronTaskbarBadge implements ITaskbarBadge {
     for (const w of this.windows()) {
       try {
         if (!w.isDestroyed()) apply(w);
-      } catch {
+      } catch (error) {
         // Destroyed between the guard and the call; the remaining windows still get the badge.
+        logExpected('electron-taskbar-badge: set badge', 'a window closed between the destroyed check and the call', error);
       }
     }
   }

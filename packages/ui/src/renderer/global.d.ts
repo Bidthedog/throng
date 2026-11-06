@@ -131,7 +131,14 @@ declare global {
         openLogs: () => Promise<{ ok: true; path: string } | { ok: false; error: string }>;
         /** #290/#162 — one terminal debug line into main.log (written only at level `debug`). */
         debug?: (message: string) => void;
+        /**
+         * 066 contract *Preload → main* — one record into main.log under `component`: `fatal` is
+         * written whatever the threshold, every other level through it; capped at 8 KB.
+         */
+        log?: (level: 'fatal' | 'error' | 'warn' | 'info' | 'debug', component: string, message: string) => void;
       };
+      /** 066 T026 — dev seam `THRONG_TEST_PANEL_THROW`: every panel body throws. Never true when packaged. */
+      testPanelThrow?: boolean;
       about?: {
         open: () => void;
         // US4 (#139) — static identity only; the third-party list is fetched via getThirdParty().

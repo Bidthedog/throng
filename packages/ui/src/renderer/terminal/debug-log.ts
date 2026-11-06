@@ -1,3 +1,4 @@
+import { logCaught, logExpected } from '@throng/core';
 /**
  * Terminal DEBUG lines for the diagnostic log (#290, #162).
  *
@@ -26,7 +27,8 @@ export function terminalDebugEnabled(): boolean {
 function field(value: unknown): string {
   try {
     return JSON.stringify(value) ?? 'undefined';
-  } catch {
+  } catch (error) {
+    logExpected('debug-log: serialise a field', 'a circular or BigInt value cannot be JSON-serialised; written as <unserialisable>', error);
     return '"<unserialisable>"';
   }
 }
@@ -46,7 +48,8 @@ export function terminalDebug(
     const parts = [`panel=${panelId}`, `event=${event}`];
     for (const [key, value] of Object.entries(fields)) parts.push(`${key}=${field(value)}`);
     window.throng?.diagnostics?.debug?.(parts.join(' '));
-  } catch {
+  } catch (error) {
     /* an observer may not kill what it observes */
+    logCaught('debug-log: write a terminal debug line', error);
   }
 }

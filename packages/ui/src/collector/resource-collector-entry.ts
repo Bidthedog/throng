@@ -9,7 +9,15 @@
 import process from 'node:process';
 import type { MainToCollector } from '@throng/ipc-contract';
 import { ResourceCollector } from './collector.js';
+import { installCollectorCrashHooks, openCollectorLog } from './collector-log.js';
 import { composeCollector } from './composition-root.js';
+
+// 066 FR-005 — the collector's own log, before anything else can fail: its console goes there, and a
+// throw nobody caught is a fatal record. A failure while loading the modules above is UI main's to log.
+const log = openCollectorLog({ env: process.env, pid: process.pid, startedAt: new Date() });
+log?.attachConsole();
+installCollectorCrashHooks(process, log, (code) => process.exit(code));
+process.on('exit', () => log?.close());
 
 if (typeof process.send !== 'function') {
   process.stderr.write('resource collector: must be started with an IPC channel\n');

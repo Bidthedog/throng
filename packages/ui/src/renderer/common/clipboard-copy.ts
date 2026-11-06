@@ -1,6 +1,7 @@
 import type { ClipboardMode, NoticeSubject } from '@throng/core';
 
 import type { NoticeInput } from './notification.js';
+import { logExpected } from '@throng/core';
 
 /**
  * 030 US5 / FR-055 — PUTTING TEXT ON THE CLIPBOARD, AND SAYING SO WHEN IT FAILS.
@@ -57,6 +58,7 @@ export async function copyToClipboard(
     await deps.write({ text, mode: 'verbatim' });
     return true;
   } catch (error) {
+    logExpected('clipboard-copy: write', 'reported as the "Couldn\'t copy" notice, whose own log record carries this error', error);
     deps.notify({
       severity: 'error',
       subject,

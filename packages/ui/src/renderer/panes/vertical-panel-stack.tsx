@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react';
+import { logExpected } from '@throng/core';
 
 export interface StackPanel {
   key: string;
@@ -59,8 +60,8 @@ function load(storageKey: string, count: number): number[] | null {
     if (Array.isArray(parsed) && parsed.length === count && parsed.every((n) => typeof n === 'number')) {
       return parsed as number[];
     }
-  } catch {
-    /* ignore */
+  } catch (error) {
+    logExpected('vertical-panel-stack: read panel sizes', 'localStorage may be unavailable or hold a corrupt entry; the default sizes are used', error);
   }
   return null;
 }
@@ -125,8 +126,8 @@ export function VerticalPanelStack({
       setDragging(null);
       try {
         localStorage.setItem(storageKey, JSON.stringify(sizesRef.current));
-      } catch {
-        /* ignore */
+      } catch (error) {
+        logExpected('vertical-panel-stack: persist panel sizes', 'localStorage may be full or unavailable; the sizes hold for this session only', error);
       }
     };
     window.addEventListener('pointermove', onMove, true);

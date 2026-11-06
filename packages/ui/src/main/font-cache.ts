@@ -7,7 +7,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { IFontEnumeration } from '@throng/core';
+import { logCaught, logExpected, type IFontEnumeration } from '@throng/core';
 
 export class FontCache {
   private readonly cachePath: string;
@@ -26,8 +26,9 @@ export class FontCache {
         const families = await this.enumeration.listInstalledFamilies();
         await mkdir(dirname(this.cachePath), { recursive: true });
         await writeFile(this.cachePath, `${JSON.stringify({ families }, null, 2)}\n`, 'utf8');
-      } catch {
+      } catch (error) {
         // best-effort: a failed enumeration just leaves the picker on its fallback
+        logCaught('font-cache: populate', error);
       }
     })();
   }
@@ -39,7 +40,12 @@ export class FontCache {
       return Array.isArray(raw.families)
         ? raw.families.filter((f): f is string => typeof f === 'string')
         : [];
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+        logExpected('font-cache: read', 'the cache does not exist until the first background populate finishes', error);
+      } else {
+        logCaught('font-cache: read', error);
+      }
       return [];
     }
   }
