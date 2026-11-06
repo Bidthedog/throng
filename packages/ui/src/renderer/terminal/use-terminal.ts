@@ -1309,7 +1309,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
       },
       logicalLinesInView: () => {
         const { top, bottom } = viewRows();
-        return logicalLinesBetween(term.buffer.active, top, bottom);
+        // #526: a program's own line break is joined unless its last word ends in a KNOWN extension —
+        // the user's set, the same one the scan reads.
+        const known = linkScanOptions(readLinkSettings()).knownExtensions;
+        return known === undefined
+          ? logicalLinesBetween(term.buffer.active, top, bottom)
+          : logicalLinesBetween(term.buffer.active, top, bottom, known);
       },
       // FR-060, FR-159, FR-178: the user's extensions and allowlist, the detection switch, and
       // (round five) the terminal's own working directory, all read per line — an edit or a `cd`
