@@ -9,6 +9,7 @@
  * default rejecting `restoreItem` there.
  */
 import { spawn } from 'node:child_process';
+import { watchChild } from '@throng/platform-node';
 
 /**
  * PowerShell that restores the most-recent recycle-bin item whose original path equals $env:THRONG_RESTORE_TARGET.
@@ -99,6 +100,13 @@ export function restoreFromRecycleBin(originalPath: string): Promise<void> {
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', RESTORE_SCRIPT],
       { env: { ...process.env, THRONG_RESTORE_TARGET: originalPath }, windowsHide: true },
     );
+    // 066 FR-016 — a one-shot helper: a failed start or a non-zero exit is one warn line in main.log,
+    // with the script's stderr (which names what the bin held), beside the refusal the caller shows.
+    watchChild(child, {
+      name: 'recycle-bin restore',
+      longLived: false,
+      log: (level, message) => console[level === 'fatal' ? 'error' : level](message),
+    });
     let stderr = '';
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (c: string) => (stderr += c));

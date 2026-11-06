@@ -30,6 +30,7 @@ import {
   SubWorkspaceWindowContext,
   type SubWorkspaceWindowIdentity,
 } from './workspace/subworkspace-window-context.js';
+import { logCaught } from '@throng/core';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -99,8 +100,9 @@ export function PanelStateGate({
         const sub = subWorkspaces.find((s) => s.id === subWorkspaceId);
         const ids = sub ? sub.tabs.flatMap((t) => collectPanels(t.root).map((p) => p.id)) : [];
         await claimAndSeedPanelState(ids);
-      } catch {
+      } catch (error) {
         // No hand-off: the panels mount with default state.
+        logCaught('subworkspace-app: hand panel state to the sub-workspace', error);
       }
       if (!cancelled) setReadyKey(reloadKey);
     })();

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import type { IVolumeRoots } from '@throng/core';
+import { logCaught, type IVolumeRoots } from '@throng/core';
 
 const REFRESH_MS = 5000;
 
@@ -59,7 +59,8 @@ export class LinuxVolumeRoots implements IVolumeRoots {
   private readInitial(): readonly MountPoint[] {
     try {
       return parseMountInfo(this.readNow());
-    } catch {
+    } catch (error) {
+      logCaught('linux-volume-roots: read mount table', error);
       return [];
     }
   }
@@ -83,7 +84,7 @@ export class LinuxVolumeRoots implements IVolumeRoots {
       .then((text) => {
         this.mounts = parseMountInfo(text);
       })
-      .catch(() => undefined)
+      .catch((error: unknown) => logCaught('linux-volume-roots: refresh mount table', error))
       .finally(() => {
         this.readAt = Date.now();
         this.refreshing = false;

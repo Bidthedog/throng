@@ -1,7 +1,7 @@
 import { access, constants, readFile, realpath } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
-import type { DetectedShell, IShellDetection } from '@throng/core';
+import { logCaught, logExpected, type DetectedShell, type IShellDetection } from '@throng/core';
 
 /** Interactive shells throng knows, by file name. `/etc/shells` also lists `rbash`, `git-shell` and `tmux`. */
 const KNOWN: readonly { readonly id: string; readonly label: string; readonly names: readonly string[] }[] = [
@@ -47,7 +47,10 @@ export class LinuxShellDetection implements IShellDetection {
   }
 
   async detectInstalledShells(): Promise<DetectedShell[]> {
-    const listed = await this.readShellsFile().catch(() => '');
+    const listed = await this.readShellsFile().catch((error: unknown) => {
+      logExpected('linux-shell-detection: read /etc/shells', 'a minimal system may have no /etc/shells; PATH is searched instead', error);
+      return '';
+    });
     const candidates = listed
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -62,12 +65,20 @@ export class LinuxShellDetection implements IShellDetection {
     for (const file of candidates) {
       const known = KNOWN.find((k) => k.names.includes(basename(file)));
       if (!known || byId.has(known.id) || !(await isExecutable(file))) continue;
-      const real = await realpath(file).catch(() => file);
+      const real = await realpath(file).catch((error: unknown) => {
+        logCaught('linux-shell-detection: resolve shell path', error);
+        return file;
+      });
       realOf.set(known.id, real);
       byId.set(known.id, { id: known.id, label: known.label, file, defaultArgs: [] });
     }
 
-    const loginReal = login ? await realpath(login).catch(() => login) : undefined;
+    const loginReal = login
+      ? await realpath(login).catch((error: unknown) => {
+          logExpected('linux-shell-detection: resolve login shell', '$SHELL may name a shell that is no longer installed', error);
+          return login;
+        })
+      : undefined;
     const shells = [...byId.values()];
     const first = shells.find((s) => s.file === login || realOf.get(s.id) === loginReal);
     return first ? [first, ...shells.filter((s) => s !== first)] : shells;

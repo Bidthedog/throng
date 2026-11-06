@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { IPathForms } from '@throng/core';
+import { logCaught, logExpected, type IPathForms } from '@throng/core';
 
 /**
  * Where Git for Windows is installed, or `null` when it is not. A function is accepted so the
@@ -149,12 +149,14 @@ export class WindowsPathForms implements IPathForms {
     let parsed: URL;
     try {
       parsed = new URL(url);
-    } catch {
+    } catch (error) {
+      logExpected('windows-path-forms: parse file URL', 'the text comes from terminal output or a pasted link and may not be a well-formed URL', error);
       return null;
     }
     try {
       return { host: parsed.hostname, pathname: decodeURIComponent(parsed.pathname) };
-    } catch {
+    } catch (error) {
+      logExpected('windows-path-forms: decode file URL path', 'a link from terminal output may carry a stray % that is not a valid escape', error);
       return null;
     }
   }
@@ -191,7 +193,8 @@ export class WindowsPathForms implements IPathForms {
     let root: string | null;
     try {
       root = typeof this.gitRoot === 'function' ? this.gitRoot() : this.gitRoot;
-    } catch {
+    } catch (error) {
+      logCaught('windows-path-forms: resolve Git install root', error);
       return null;
     }
     if (root === null || root.length === 0) return null;
@@ -208,7 +211,8 @@ export class WindowsPathForms implements IPathForms {
     let text: string;
     try {
       text = readFileSync(path.win32.join(root, 'etc', 'fstab'), 'utf8');
-    } catch {
+    } catch (error) {
+      logExpected('windows-path-forms: read fstab', 'Git for Windows only has etc\\fstab when it has been customised; without one there are no extra mounts', error);
       return [];
     }
     const mounts: Mount[] = [];

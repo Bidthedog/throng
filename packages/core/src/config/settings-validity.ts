@@ -20,6 +20,7 @@
  * writing is how the caret got pulled out from under them in the first place. This reports, and the
  * user fixes it.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
 import { getAtPath, type FieldDescriptor } from './metadata.js';
 import { SETTINGS_METADATA } from './settings-metadata.js';
@@ -193,6 +194,7 @@ export function checkSettingsText(text: string, context?: SettingsCheckContext):
   try {
     parsed = JSON.parse(text);
   } catch (err) {
+    logExpected('settings-validity: parse settings text', 'settings text the user is mid-way through editing need not parse; the editor shows the parse error', err);
     const message = err instanceof Error ? err.message : String(err);
     return { kind: 'unparseable', message, ...locate(message, text) };
   }

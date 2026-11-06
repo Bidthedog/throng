@@ -35,6 +35,7 @@ import {
   type CommittedEdit,
   type CommittedEdits,
 } from './find-in-files-store.js';
+import { logExpected } from '@throng/core';
 
 /** One file's worth of matches, in the shape the commit channel takes. */
 interface CommitTargetPayload {
@@ -238,6 +239,7 @@ export async function commitReplace(
   try {
     result = asCommitResult(await deps.invoke(payload));
   } catch (error) {
+    logExpected('commit-replace: commit the replacement', 'reported as the "Replace in files" notice, whose log record carries this error as its detail', error);
     deps.notify(failureNotice(error, deps.display));
     return;
   }
@@ -258,6 +260,7 @@ export async function commitReplace(
     try {
       result = asCommitResult(await deps.invoke({ ...payload, confirmedIrreversible: true }));
     } catch (error) {
+      logExpected('commit-replace: commit the confirmed replacement', 'reported as the "Replace in files" notice, whose log record carries this error as its detail', error);
       deps.notify(failureNotice(error, deps.display));
       return;
     }

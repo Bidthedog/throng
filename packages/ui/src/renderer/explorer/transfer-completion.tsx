@@ -22,6 +22,7 @@ import {
 } from '@throng/core';
 import { useServices, type Services } from '../composition-root.js';
 import { queueReveal } from './pending-reveal.js';
+import { logCaught } from '@throng/core';
 
 type CompletedListener = (result: TransferResult) => void;
 const completed = new Set<CompletedListener>();
@@ -78,8 +79,9 @@ async function recordUndo(result: TransferResult, services: Services): Promise<v
     try {
       const stack = await services.fileOpUndo.load(id);
       await services.fileOpUndo.save(id, recordFileOp(stack, withId));
-    } catch {
+    } catch (error) {
       /* history that could not be recorded must not fail the paste */
+      logCaught('transfer-completion: record the undo entry', error);
     }
   }
   for (const l of [...stacksChanged]) l(ids);
@@ -104,7 +106,10 @@ export async function carryOverrides(
   services: Services,
 ): Promise<void> {
   if (pairs.length === 0) return;
-  const projects = await services.projects.list().catch(() => []);
+  const projects = await services.projects.list().catch((error: unknown) => {
+    logCaught('transfer-completion: list projects to carry overrides', error);
+    return [];
+  });
   const rel = (project: string, abs: string): string | null => {
     const root = projects.find((p) => p.id === project)?.rootFolder;
     return root ? relPathUnderRoot(root, abs) : null;
@@ -115,8 +120,9 @@ export async function carryOverrides(
     if (!fromRel || !toRel) continue;
     try {
       await services.documents.movePath(fromProject, fromRel, toRel, toProject);
-    } catch {
+    } catch (error) {
       /* see the doc comment: nothing here is worth failing an operation over */
+      logCaught('transfer-completion: carry a language override', error);
     }
   }
 }

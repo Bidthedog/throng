@@ -17,7 +17,7 @@
  * Electron is not imported: `ipcMain` and the window lookups are handed in, so the contract test drives
  * the real handlers on a fake `ipcMain` (T060).
  */
-import { MAX_EMBED_REF_LENGTH, MAX_EMBEDS_PER_READ } from '@throng/core';
+import { logCaught, logExpected, MAX_EMBED_REF_LENGTH, MAX_EMBEDS_PER_READ } from '@throng/core';
 import type {
   PersistedHistory,
   PreviewAttachRequest,
@@ -228,7 +228,8 @@ export function registerPreviewIpc(
     if (req === null) return OPEN_FAILED;
     try {
       return await service.open(event.sender.id, req);
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: open', error);
       return OPEN_FAILED;
     }
   });
@@ -269,7 +270,8 @@ export function registerPreviewIpc(
     if (panelId === null) return none;
     try {
       return await service.refresh(panelId);
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: refresh', error);
       return none;
     }
   });
@@ -279,7 +281,8 @@ export function registerPreviewIpc(
     if (absPath === null) return false;
     try {
       return service.isOpen(absPath);
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: isOpen', error);
       return false;
     }
   });
@@ -289,7 +292,8 @@ export function registerPreviewIpc(
   ipc.handle('throng:preview:openPaths', () => {
     try {
       return service.openPaths();
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: openPaths', error);
       return [];
     }
   });
@@ -303,7 +307,8 @@ export function registerPreviewIpc(
     if (panelId === null || targets === null) return { resolved: [] };
     try {
       return await service.resolveWikiTargets(panelId, targets);
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: resolveWikiTargets', error);
       return { resolved: targets.map(() => null) };
     }
   });
@@ -319,7 +324,8 @@ export function registerPreviewIpc(
       .filter((r): r is string => typeof r === 'string' && r.length > 0 && r.length <= MAX_EMBED_REF_LENGTH);
     try {
       return await service.readEmbeds(panelId, refs);
-    } catch {
+    } catch (error) {
+      logCaught('preview-ipc: readEmbeds', error);
       return { results: [] };
     }
   });
@@ -365,8 +371,9 @@ export function createPreviewPush(windows: PreviewPushWindows): PreviewPush {
       if (!target || target.isDestroyed()) return false;
       target.send(channel, payload);
       return true;
-    } catch {
+    } catch (error) {
       // Destroyed between the guard and the send — the same race `broadcastToWindows` absorbs.
+      logExpected('preview-ipc: send to one window', 'a window destroyed between the guard and the send is a decline', error);
       return false;
     }
   };

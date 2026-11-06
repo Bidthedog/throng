@@ -31,6 +31,7 @@ import { ROW_ACTION_TOKENS } from './row-action-tokens.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useNotify } from '../common/notification.js';
 import { NameDialog } from './name-dialog.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * The Themes tab (feature 007 base + feature 014 restore/create controls).
@@ -291,11 +292,17 @@ export function ThemesTab(): ReactElement {
   };
 
   const refreshThemes = (): void => {
-    void window.throng?.config?.listThemes?.().then(setThemes).catch(() => {});
+    void window.throng?.config
+      ?.listThemes?.()
+      .then(setThemes)
+      .catch((error: unknown) => logCaught('themes-tab: list themes', error));
   };
   useEffect(refreshThemes, []);
   useEffect(() => {
-    void window.throng?.config?.listFonts?.().then(setFonts).catch(() => {});
+    void window.throng?.config
+      ?.listFonts?.()
+      .then(setFonts)
+      .catch((error: unknown) => logCaught('themes-tab: list fonts', error));
   }, []);
 
   // The PRESENT themes only, tagged built-in | custom (pure, unit-tested in @throng/core). A built-in
@@ -475,7 +482,8 @@ export function ThemesTab(): ReactElement {
     let base: Theme;
     try {
       base = JSON.parse(raw) as Theme;
-    } catch {
+    } catch (error) {
+      logExpected('themes-tab: parse the theme being cloned', 'a hand-edited theme file may be malformed; reported in the tab\'s error line', error);
       setError(`“${source}” is not valid JSON — nothing was created.`);
       return;
     }

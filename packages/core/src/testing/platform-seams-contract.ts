@@ -1,3 +1,4 @@
+import { logExpected } from '../diagnostics/caught.js';
 import type { ITrashRestore, IUserDirectories } from '../abstractions/platform-seams.js';
 
 /**
@@ -43,6 +44,7 @@ export async function runTrashRestoreContract(env: TrashRestoreContractEnv): Pro
   try {
     await subject.restore(env.neverTrashed(), Date.now());
   } catch (error) {
+    logExpected('platform-seams-contract: restore', 'the contract requires this restore to reject', error);
     refused = error instanceof Error && error.message.length > 0;
   }
   assert(refused, 'restoring what is not in the trash must reject with a reason');
@@ -52,6 +54,7 @@ export async function runTrashRestoreContract(env: TrashRestoreContractEnv): Pro
   try {
     await subject.restore(occupied, Date.now());
   } catch (error) {
+    logExpected('platform-seams-contract: restore', 'the contract requires this restore to reject', error);
     refused = error instanceof Error && error.message.length > 0;
   }
   assert(refused, 'restore must not replace what now stands at the original path');

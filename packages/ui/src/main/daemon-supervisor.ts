@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { DAEMON_GRACE_MS, initialDaemonState, nextDaemonState, type DaemonState } from '@throng/core';
+import { DAEMON_GRACE_MS, initialDaemonState, logCaught, nextDaemonState, type DaemonState } from '@throng/core';
 import { broadcastToWindows } from './broadcast.js';
 
 /**
@@ -109,6 +109,7 @@ export class DaemonSupervisor {
       this.apply({ type: 'restart-failed' });
       return { ok: false, error: 'throng could not restart its daemon.' };
     } catch (error) {
+      logCaught('daemon-supervisor: restart the daemon', error);
       this.apply({ type: 'restart-failed' });
       return { ok: false, error: (error as Error).message };
     }
@@ -130,6 +131,11 @@ export class DaemonSupervisor {
     // Identity means nothing changed — a duplicate event, which a socket can legitimately produce.
     // Broadcasting anyway would re-render every window's status bar for no reason.
     if (next === this.state) return;
+    // 066 — a disconnect is ONE condition, so it is logged here, once per state change, rather than by
+    // every call and every retry that bounced off the dead socket.
+    const line = `daemon-supervisor: daemon ${this.state.status} → ${next.status} (${event.type})`;
+    if (next.status === 'stopped') console.warn(line);
+    else console.info(line);
     this.state = next;
     broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:daemon:state', next);
   }

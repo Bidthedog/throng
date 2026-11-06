@@ -77,6 +77,7 @@ import {
 import type { PipelineContext } from './pipeline.js';
 import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX } from './wikilinks.js';
 import { DIAGRAM_IMAGE_ATTRIBUTE, DIAGRAM_PNG_DATA_URI } from '../../diagram/diagram-host.js';
+import { logExpected } from '@throng/core';
 
 type Profile = Config & { RETURN_DOM_FRAGMENT: true };
 
@@ -133,7 +134,8 @@ function displayTarget(raw: string): string {
   let shown: string;
   try {
     shown = decodeURI(raw.trim());
-  } catch {
+  } catch (error) {
+    logExpected('sanitise: decode a link target for display', 'the document may carry a malformed percent-escape; the target is shown as written', error);
     shown = raw.trim();
   }
   return stripBidiControls(shown);

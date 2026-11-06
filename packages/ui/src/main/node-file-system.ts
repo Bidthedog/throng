@@ -22,7 +22,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
-import type { DirEntry, IFileSystem } from '@throng/core';
+import { logCaught, logExpected, type DirEntry, type IFileSystem } from '@throng/core';
 
 /** Move a path to the OS Recycle Bin / Trash (Electron `shell.trashItem`). */
 export type TrashItem = (path: string) => Promise<void>;
@@ -133,7 +133,9 @@ export class NodeFileSystem implements IFileSystem {
     } catch (error) {
       // `wx` refused an existing dest: that file is not ours to remove.
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        await rm(dest, { force: true, maxRetries: 5, retryDelay: 20 }).catch(() => undefined);
+        await rm(dest, { force: true, maxRetries: 5, retryDelay: 20 }).catch((rmError: unknown) => {
+          logCaught('node-file-system: remove partial copy', rmError);
+        });
       }
       throw error;
     }
@@ -155,7 +157,8 @@ export class NodeFileSystem implements IFileSystem {
     try {
       await lstat(path);
       return true;
-    } catch {
+    } catch (error) {
+      logExpected('node-file-system: exists', 'an existence probe answers false for a path that is not there', error);
       return false;
     }
   }
@@ -191,7 +194,8 @@ async function symlinkKind(path: string): Promise<'file' | 'folder'> {
   try {
     const s = await stat(path);
     return s.isDirectory() ? 'folder' : 'file';
-  } catch {
+  } catch (error) {
+    logExpected('node-file-system: resolve symlink kind', 'a broken symlink has no target to stat; it shows as a file', error);
     return 'file';
   }
 }
@@ -206,7 +210,8 @@ async function folderHasChildren(path: string): Promise<boolean> {
     } finally {
       await dh.close();
     }
-  } catch {
+  } catch (error) {
+    logExpected('node-file-system: probe folder children', 'a folder may be unreadable or gone between list and probe; it shows no expander', error);
     return false;
   }
 }

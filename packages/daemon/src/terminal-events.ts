@@ -8,7 +8,7 @@ import {
   TERMINAL_COMMAND_NOTIFICATION,
   TERMINAL_ATTENTION_NOTIFICATION,
 } from '@throng/ipc-contract';
-import type { AttentionSignal, PtyExitFailure } from '@throng/core';
+import { logExpected, type AttentionSignal, type PtyExitFailure } from '@throng/core';
 
 /** Anything that can receive a serialized notification frame (a connected socket). */
 export interface NotificationSink {
@@ -98,8 +98,9 @@ export class TerminalEvents {
     for (const sink of this.sinks) {
       try {
         sink.write(frame);
-      } catch {
-        this.sinks.delete(sink); // a dead socket drops out
+      } catch (error) {
+        logExpected('terminal-events: write to subscriber', 'a UI main that has gone leaves a dead socket, which drops out here', error);
+        this.sinks.delete(sink);
       }
     }
   }

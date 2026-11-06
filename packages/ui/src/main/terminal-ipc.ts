@@ -3,6 +3,8 @@ import { ipcMain, type WebContents } from 'electron';
 import { statSync } from 'node:fs';
 import {
   hyperlinkAdvertisementEnv,
+  logCaught,
+  logExpected,
   resolveLaunchSpec,
   resolveShellHistorySuppression,
   shellHistoryOff,
@@ -190,7 +192,10 @@ export function registerTerminalIpc(deps: {
   const viewKey = (panelId: string, viewId?: string): string => `${panelId}::${viewId ?? ''}`;
 
   const detachView = (panelId: string, viewId?: string): void => {
-    void daemonClient.call('terminal.detach', { panelId, viewId }).catch(() => ({ ok: false }));
+    void daemonClient.call('terminal.detach', { panelId, viewId }).catch((error: unknown) => {
+      logCaught('terminal-ipc: detach on window close', error);
+      return { ok: false };
+    });
   };
 
   const trackView = (wc: WebContents, panelId: string, viewId?: string): void => {
@@ -264,7 +269,8 @@ export function registerTerminalIpc(deps: {
       const dirExists = (p: string): boolean => {
         try {
           return statSync(p).isDirectory();
-        } catch {
+        } catch (error) {
+          logExpected('terminal-ipc: probe start folder', 'a remembered folder may be gone; the terminal falls back to the project root', error);
           return false;
         }
       };
@@ -390,8 +396,10 @@ export function registerTerminalIpc(deps: {
       // "still starting" state so the renderer can offer a retry instead of reverting
       // the panel to the type form or presenting a hard error.
       if (error instanceof RpcTimeoutError) {
+        logExpected('terminal-ipc: attach', 'the daemon may still be launching the shell; the panel offers a retry', error);
         return { ok: false, stillStarting: true, error: { code: null, message: 'still starting' } };
       }
+      logCaught('terminal-ipc: attach', error);
       /*
        * 029 — carry the CAUSE the daemon classified (contract §4).
        *
@@ -458,30 +466,45 @@ export function registerTerminalIpc(deps: {
      */
     if (submitsCommand(data)) foregroundHandoff.allow();
     return serializeWrite(panelId)(() =>
-      daemonClient.call('terminal.write', { panelId, data, answerFrom }).catch(() => ({ ok: false })),
+      daemonClient.call('terminal.write', { panelId, data, answerFrom }).catch((error: unknown) => {
+        logCaught('terminal-ipc: write', error);
+        return { ok: false };
+      }),
     );
   });
   ipcMain.handle(
     'throng:terminal:resize',
     (_e, panelId: string, cols: number, rows: number, viewId?: string) =>
-      daemonClient.call('terminal.resize', { panelId, viewId, cols, rows }).catch(() => ({ ok: false })),
+      daemonClient.call('terminal.resize', { panelId, viewId, cols, rows }).catch((error: unknown) => {
+        logCaught('terminal-ipc: resize', error);
+        return { ok: false };
+      }),
   );
   // A view is going away (008 FR-007/FR-010). Detach removes it from the daemon's grid
   // set; the daemon terminates the session only for the last view of a sub-workspace-
   // owned panel — a detach is never a kill.
   ipcMain.handle('throng:terminal:detach', (event, panelId: string, viewId?: string) => {
     untrackView(event.sender, panelId, viewId); // a clean unmount handles its own detach
-    return daemonClient.call('terminal.detach', { panelId, viewId }).catch(() => ({ ok: false }));
+    return daemonClient.call('terminal.detach', { panelId, viewId }).catch((error: unknown) => {
+      logCaught('terminal-ipc: detach', error);
+      return { ok: false };
+    });
   });
   // 028 (#162/#163): force the running program to redraw. A tab switch unmounts every panel, so a
   // returning tab rebuilds its terminal from a replayed byte tail — which cannot represent a
   // full-screen program's screen. Only the program can, and it redraws only when the window changes.
   ipcMain.handle('throng:terminal:repaint', (_e, panelId: string) =>
-    daemonClient.call('terminal.repaint', { panelId }).catch(() => ({ ok: false })),
+    daemonClient.call('terminal.repaint', { panelId }).catch((error: unknown) => {
+      logCaught('terminal-ipc: repaint', error);
+      return { ok: false };
+    }),
   );
   ipcMain.handle('throng:terminal:kill', (_e, panelId: string) => {
     writeQueues.delete(panelId); // the panel is gone; its queue must not outlive it
-    return daemonClient.call('terminal.kill', { panelId }).catch(() => ({ ok: false }));
+    return daemonClient.call('terminal.kill', { panelId }).catch((error: unknown) => {
+      logCaught('terminal-ipc: kill', error);
+      return { ok: false };
+    });
   });
   ipcMain.handle('throng:terminal:list', (_e, projectId?: string, opts?: { includeBusy?: boolean }) => {
     // 046 FR-034c: Unload counts busy sessions to decide whether to ask before ending anything, so a
@@ -491,7 +514,10 @@ export function registerTerminalIpc(deps: {
     if (opts?.includeBusy === true) {
       return daemonClient.call('terminal.list', { projectId, includeBusy: true }, UNLOAD_RPC_TIMEOUT_MS);
     }
-    return daemonClient.call('terminal.list', { projectId }).catch(() => ({ sessions: [] }));
+    return daemonClient.call('terminal.list', { projectId }).catch((error: unknown) => {
+      logCaught('terminal-ipc: list', error);
+      return { sessions: [] };
+    });
   });
   /*
    * 046 FR-034, FR-037 — Unload's release step (contracts/unload.md §2 step 6). The params are
@@ -515,7 +541,10 @@ export function registerTerminalIpc(deps: {
   ipcMain.handle('throng:terminal:capabilities', () =>
     process.env.THRONG_FAKE_ELEVATED === '1'
       ? Promise.resolve({ elevated: true })
-      : daemonClient.call('terminal.capabilities', {}).catch(() => ({ elevated: false })),
+      : daemonClient.call('terminal.capabilities', {}).catch((error: unknown) => {
+          logCaught('terminal-ipc: capabilities', error);
+          return { elevated: false };
+        }),
   );
 
   // The inline terminal's right-click menu is the app's THEMED ContextMenu, built and

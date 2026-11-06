@@ -29,6 +29,8 @@ import {
   isFlowingDocument,
 } from '@throng/core';
 import { PanelBody } from './panel-body.js';
+import { PanelErrorBoundary } from './panel-error-boundary.js';
+import { TestPanelThrow } from './test-panel-throw.js';
 import { ZoomIndicator, useChangeCue } from './zoom-indicator.js';
 import { panelHeaderMenu, removalVerbFor } from './panel-header-menu.js';
 import { placeholderContentMenu, splitMenuItems } from './split-menu.js';
@@ -245,6 +247,40 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
    * below is gated on the kind as the editor's state is (see the unsaved-dot note).
    */
   const isPreview = panel.kind === PREVIEW_KIND;
+  /*
+   * *Clear panel type*, as every banner on this panel runs it — the header menu's failure items, and the
+   * crash boundary's banner (066 FR-009a, MT-01). One function, so a crashed editor is cleared exactly as
+   * an unreadable one is, rather than by a bare `clearPanelType` that leaves its renderer state and
+   * navigation history behind.
+   */
+  const clearThisPanelType = (): void => {
+    /*
+     * 044 T123 — on a preview: no prompt (a preview owns no document, FR-042), and `preview.destroyed`
+     * FIRST when this view ends the preview, so main drops the run and every window hears the file has no
+     * preview (FR-012) — then the type is cleared and the panel stays (030 FR-043).
+     */
+    if (isPreview) {
+      releasePreviewView(panel, {
+        inSubWorkspace: subWin !== null,
+        layoutProjectId: ws.layout?.projectId,
+      });
+      ws.clearPanelType(panel.id);
+      return;
+    }
+    if (panel.kind === 'editor') {
+      void clearEditorPanelType(panel.id, {
+        dirty: editorUi?.dirty ?? false,
+        name: editorUi?.displayName ?? panel.title,
+        // 044 T179 (FR-110) — `killsSession`'s rule, as the preview branch above takes it: a synced
+        // project panel keeps its history in the window that still holds it.
+        endsPanel: subWin === null || panel.originProjectId === ws.layout?.projectId,
+        confirm,
+        clearPanelType: ws.clearPanelType,
+      });
+      return;
+    }
+    ws.clearPanelType(panel.id);
+  };
   const previewUi = usePreviewState(panel.id);
   // A preview failure the banner shows that main's update does not carry (attach, body load). Only a
   // preview ever records one.
@@ -786,31 +822,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                     copyToClipboard(panelFailureText({ ...facts, subject }), subject);
                   }
                 },
-                clearPanelType: () => {
-                  /*
-                   * 044 T123 — on a preview, the banner's Clear panel type: no prompt (a preview owns no
-                   * document, FR-042), and `preview.destroyed` FIRST when this view ends the preview, so
-                   * main drops the run and every window hears the file has no preview (FR-012) — then the
-                   * type is cleared and the panel stays (030 FR-043).
-                   */
-                  if (isPreview) {
-                    releasePreviewView(panel, {
-                      inSubWorkspace: subWin !== null,
-                      layoutProjectId: ws.layout?.projectId,
-                    });
-                    ws.clearPanelType(panel.id);
-                    return;
-                  }
-                  void clearEditorPanelType(panel.id, {
-                    dirty: editorUi?.dirty ?? false,
-                    name: editorUi?.displayName ?? panel.title,
-                    // 044 T179 (FR-110) — `killsSession`'s rule, as the preview branch above takes it: a
-                    // synced project panel keeps its history in the window that still holds it.
-                    endsPanel: subWin === null || panel.originProjectId === ws.layout?.projectId,
-                    confirm,
-                    clearPanelType: ws.clearPanelType,
-                  });
-                },
+                clearPanelType: clearThisPanelType,
                 redraw: () => requestRedraw(panel.id, 'manual'),
                 sendToNewTab: () => ws.addTabFromPanel(panel.id),
                 sendToTab: (targetTabId) => ws.movePanelToTab(panel.id, targetTabId),
@@ -1103,7 +1115,16 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
             : undefined
         }
       >
-        <PanelBody panel={panel} tabId={tabId} onDestroy={() => void destroyPanel()} />
+        {/* 066 FR-009a — a body that throws while rendering or in an effect is torn down alone: its banner
+            replaces it here, and the panels beside it keep going. */}
+        <PanelErrorBoundary
+          panelId={panel.id}
+          subject={panelSubject(place)}
+          onClear={clearThisPanelType}
+        >
+          <TestPanelThrow typed={panel.kind !== undefined} />
+          <PanelBody panel={panel} tabId={tabId} onDestroy={() => void destroyPanel()} />
+        </PanelErrorBoundary>
       </div>
       {showZones ? (
         <div className="edge-zones">

@@ -1,4 +1,4 @@
-import type { IDirectoryLock, LockHandle } from '@throng/core';
+import { logExpected, type IDirectoryLock, type LockHandle } from '@throng/core';
 
 /**
  * Ref-counted project-root lock (005 Phase C, FR-022). While a project has one or
@@ -66,7 +66,14 @@ export class TerminalLockManager {
     existing.count -= 1;
     if (existing.count <= 0) {
       this.locks.delete(projectId);
-      const handle = await existing.ready.catch(() => null);
+      const handle = await existing.ready.catch((error: unknown) => {
+        logExpected(
+          'terminal-lock-manager: release',
+          'a lock that could not be taken was reported to the terminal that asked for it; there is nothing to release',
+          error,
+        );
+        return null;
+      });
       if (handle) await this.directoryLock.release(handle);
     }
   }

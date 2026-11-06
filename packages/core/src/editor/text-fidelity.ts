@@ -20,6 +20,7 @@
  * Every decoder here is FATAL, and {@link encode} throws rather than substitute. A replacement
  * character that was not in the file can therefore never reach the buffer, and so never reach disk.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { CODE_PAGE_IDS, type CodePageId, type EncodingId, type LineEndingId } from '../workspace/model.js';
 
 const BOM_0 = 0xef;
@@ -269,7 +270,8 @@ function decodeBody(body: Uint8Array, encoding: EncodingId): string | null {
   try {
     // `ignoreBOM`: the BOM, if any, was already stripped — a second one is content, and must survive.
     return new TextDecoder(decoderLabel(encoding), { fatal: true, ignoreBOM: true }).decode(body);
-  } catch {
+  } catch (error) {
+    logExpected('text-fidelity: decode body', `bytes that are not valid ${encoding} are the ordinary answer when detection tries an encoding that does not fit the file`, error);
     return null;
   }
 }

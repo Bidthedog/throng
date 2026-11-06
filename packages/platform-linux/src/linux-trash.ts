@@ -2,7 +2,7 @@ import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from 'node:f
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import process from 'node:process';
-import type { ITrashRestore } from '@throng/core';
+import { logExpected, type ITrashRestore } from '@throng/core';
 
 export interface TrashEntry {
   readonly infoPath: string;
@@ -19,7 +19,8 @@ export function parseTrashInfo(text: string, topDir: string | null): { originalP
   let decoded: string;
   try {
     decoded = decodeURIComponent(rawPath);
-  } catch {
+  } catch (error) {
+    logExpected('linux-trash: decode trashinfo path', 'any program can write the trash, and a .trashinfo with a malformed path is skipped', error);
     return null;
   }
   // The home trash stores an absolute path. A volume's trash may store one relative to the volume.
@@ -61,7 +62,10 @@ export class LinuxTrash implements ITrashRestore {
 
   async restore(originalPath: string, deletedAt: number): Promise<void> {
     // A project opened through a symlink: the record holds the real location, and the trash is on the real volume.
-    const realParent = await realpath(dirname(originalPath)).catch(() => dirname(originalPath));
+    const realParent = await realpath(dirname(originalPath)).catch((error: unknown) => {
+      logExpected('linux-trash: resolve parent', 'the folder the item was deleted from may itself be gone; its path is used as written', error);
+      return dirname(originalPath);
+    });
     const realPath = join(realParent, basename(originalPath));
     const entries: TrashEntry[] = [];
     for (const { trashDir, topDir } of await this.trashDirsFor(realPath)) {
@@ -109,7 +113,10 @@ export class LinuxTrash implements ITrashRestore {
     let dir = dirname(originalPath);
     let device: number | undefined;
     for (;;) {
-      const info = await stat(dir).catch(() => null);
+      const info = await stat(dir).catch((error: unknown) => {
+        logExpected('linux-trash: stat ancestor', 'ancestors of a deleted item may no longer exist; the walk skips them', error);
+        return null;
+      });
       if (info !== null) {
         if (device === undefined) device = info.dev;
         if (info.dev !== device) break;
@@ -124,13 +131,19 @@ export class LinuxTrash implements ITrashRestore {
 
   private async readEntries(trashDir: string, topDir: string | null): Promise<TrashEntry[]> {
     const infoDir = join(trashDir, 'info');
-    const names = await readdir(infoDir).catch(() => [] as string[]);
+    const names = await readdir(infoDir).catch((error: unknown): string[] => {
+      logExpected('linux-trash: list trash info', 'a volume without a trash folder has no entries', error);
+      return [];
+    });
     const entries = await Promise.all(
       names
         .filter((name) => name.endsWith('.trashinfo'))
         .map(async (name): Promise<TrashEntry | null> => {
           const infoPath = join(infoDir, name);
-          const text = await readFile(infoPath, 'utf8').catch(() => '');
+          const text = await readFile(infoPath, 'utf8').catch((error: unknown) => {
+            logExpected('linux-trash: read trash info', 'another program may empty or restore the entry while it is being read', error);
+            return '';
+          });
           const parsed = parseTrashInfo(text, topDir);
           if (parsed === null) return null;
           const filesPath = join(trashDir, 'files', name.slice(0, -'.trashinfo'.length));

@@ -1,5 +1,5 @@
 import type { IVolumeRoots } from '@throng/core';
-import { hostTraits, normaliseForCompare } from '@throng/core';
+import { hostTraits, logCaught, normaliseForCompare } from '@throng/core';
 import { dirname, parse as parsePath } from 'node:path';
 import {
   DEFAULT_APP_SETTINGS,
@@ -301,6 +301,7 @@ export class FileLinkResolver {
       }
       return { ok: true };
     } catch (error) {
+      logCaught('file-link-resolver: shell action', error);
       return { ok: false, reason: 'refused', path, ...osReasonOf(error instanceof Error ? error.message : '') };
     }
   }

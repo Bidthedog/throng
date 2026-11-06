@@ -17,6 +17,8 @@ import {
   countPanels,
   moveLayoutTabs,
   ProjectNotFoundError,
+  logCaught,
+  logExpected,
   type IProjectStore,
   type IUserContext,
   type IWorkspaceStore,
@@ -184,9 +186,10 @@ export class WorkspaceIpcService {
     // every record a window does not hold.
     const walks = (id: string, heldIds: readonly string[], onlyIds: readonly string[] | undefined): boolean =>
       only !== undefined ? (onlyIds ?? []).includes(id) : !heldIds.includes(id);
-    const skip = (kind: string, id: string, why: unknown): void => {
+    // Counts the record as skipped and names it for the log line every skip writes.
+    const skip = (kind: string, id: string): string => {
       result.skipped += 1;
-      console.warn(`[workspace] followMoves skipped ${kind} ${id}: ${why instanceof Error ? why.message : String(why)}`);
+      return `workspace-service: followMoves skipped ${kind} ${id}`;
     };
 
     const store = this.deps.workspaceStore;
@@ -202,7 +205,10 @@ export class WorkspaceIpcService {
           const loaded = store.load(this.owner, projectId);
           if (!loaded.restored) {
             // Never write a record that did not restore: saving would persist the default the store synthesised.
-            if (loaded.reason === 'corrupt') skip('project', projectId, 'its saved layout could not be read');
+            // One condition, one line: the repository logged the unreadable record at warn as it read it.
+            if (loaded.reason === 'corrupt') {
+              logExpected(skip('project', projectId), 'the workspace repository logged this unreadable layout as it read it; it is left as it is');
+            }
             continue;
           }
           const layout = migratePanelTitles(loaded.layout);
@@ -211,12 +217,14 @@ export class WorkspaceIpcService {
           store.save(this.owner, projectId, { ...layout, tabs });
           result.changedProjectIds.push(projectId);
         } catch (error) {
-          skip('project', projectId, error);
+          logCaught(skip('project', projectId), error);
         }
       }
 
       const corrupt = (id: string, error: unknown): void => {
-        if (walks(id, held.subWorkspaceIds, only?.subWorkspaceIds)) skip('sub-workspace', id, error);
+        if (walks(id, held.subWorkspaceIds, only?.subWorkspaceIds)) {
+          logExpected(skip('sub-workspace', id), 'the workspace repository logged this unreadable row as it read it; it is left as it is', error);
+        }
       };
       for (const sub of store.loadSubWorkspaces(this.owner, corrupt)) {
         if (!walks(sub.id, held.subWorkspaceIds, only?.subWorkspaceIds)) continue;
@@ -226,7 +234,7 @@ export class WorkspaceIpcService {
           store.saveSubWorkspace(this.owner, migratePanelTitles({ ...sub, tabs }));
           result.changedSubWorkspaceIds.push(sub.id);
         } catch (error) {
-          skip('sub-workspace', sub.id, error);
+          logCaught(skip('sub-workspace', sub.id), error);
         }
       }
     });

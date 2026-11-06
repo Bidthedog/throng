@@ -211,6 +211,7 @@ import {
   type DocumentFormat,
 } from './document-format-store.js';
 import { requestEncodingPicker, type EncodingPickerMode } from './picker-request.js';
+import { logExpected } from '@throng/core';
 
 /**
  * Marks a transaction as coming FROM the document's authority (016, FR-028f).
@@ -464,8 +465,9 @@ export function useEditor(params: UseEditorParams): void {
       .then((on) => {
         if (live && typeof on === 'boolean') applyWordWrapFromSync(key, on);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         /* No authority to ask (a torn-down window): the local seed stands. */
+        logExpected('use-editor: ask main for the word-wrap state', 'the window is being torn down, so main no longer answers; the local seed stands', error);
       });
     return () => {
       live = false;
@@ -518,8 +520,9 @@ export function useEditor(params: UseEditorParams): void {
       .then((state) => {
         if (live && state) applyFoldStateFromSync(key, state);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         /* No authority to ask (a torn-down window): the local seed stands. */
+        logExpected('use-editor: ask main for the fold state', 'the window is being torn down, so main no longer answers; the local seed stands', error);
       });
     return () => {
       live = false;
@@ -2787,8 +2790,9 @@ export function useEditor(params: UseEditorParams): void {
           .then((h) => {
             if (!cancelled) setPanelHistory(panelId, h);
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             /* No authority to ask (a torn-down window): the next `changed` broadcast seeds it. */
+            logExpected('use-editor: attach the panel history', 'the window is being torn down, so main no longer answers; the next changed broadcast seeds it', error);
           });
         // …and CHECK, rather than take the authority's last answer on trust (027 / #161). This
         // branch never touches the disk, so a path that broke while this panel was unmounted — a

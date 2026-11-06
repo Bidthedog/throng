@@ -46,7 +46,7 @@
  * reset paths, which never touch the renderer at all. They solve adjacent problems and neither
  * replaces the other.
  */
-import type { ConfigDocId } from '@throng/core';
+import { logExpected, type ConfigDocId } from '@throng/core';
 
 /**
  * The tail of the in-flight critical section per document.
@@ -101,7 +101,11 @@ export async function withDocumentsLock<T>(
   // Snapshot every tail, then wait for all of them. A failed predecessor must not sink the sections
   // queued behind it — they are unrelated writes that happen to share a file.
   const previous = Promise.all(
-    keys.map((k) => (chains.get(k) ?? Promise.resolve()).catch(() => undefined)),
+    keys.map((k) =>
+      (chains.get(k) ?? Promise.resolve()).catch((e: unknown) => {
+        logExpected('config-write-lock: wait for prior section', 'a prior section that rejected has already been reported to its own caller', e);
+      }),
+    ),
   );
   const result = previous.then(section);
 

@@ -2,6 +2,7 @@ import {
   DEFAULT_APP_SETTINGS,
   ATTENTION_SIGNAL_NAMES,
   createAttentionScan,
+  logCaught,
   type AttentionKind,
   type AttentionLedgerEntry,
   type AttentionProducerConfig,
@@ -242,8 +243,8 @@ export class TerminalAttention {
     try {
       const names = this.options.resolveNames?.(subject.panelId, subject.projectId, this.liveTitleOf(subject));
       if (names) return { ...names, tabTitle: names.tabTitle ?? '' };
-    } catch {
-      /* a name that cannot be read must not lose the signal */
+    } catch (error) {
+      logCaught('terminal-attention: resolve names', error); // a name that cannot be read must not lose the signal
     }
     return { panelTitle: 'Terminal', projectName: '', tabTitle: '' };
   }
@@ -252,7 +253,8 @@ export class TerminalAttention {
     try {
       const title = this.options.liveTitle?.(subject) ?? null;
       return title === null || title === '' ? null : title;
-    } catch {
+    } catch (error) {
+      logCaught('terminal-attention: read live title', error);
       return null;
     }
   }
@@ -260,8 +262,9 @@ export class TerminalAttention {
   private doingOf(subject: AttentionSubject): string | null {
     try {
       return this.options.describeDoing?.(subject) ?? null;
-    } catch {
-      return null; // as for names: never lose the signal over its description
+    } catch (error) {
+      logCaught('terminal-attention: describe doing', error); // never lose the signal over its description
+      return null;
     }
   }
 

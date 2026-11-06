@@ -35,6 +35,7 @@ import {
   DIAGRAM_SOURCE_ATTRIBUTE,
 } from './diagram/diagram-host.js';
 import { rasteriseSvg } from './diagram/rasterise.js';
+import { logExpected } from '@throng/core';
 
 /** 054 FR-049a — a diagram the selection reached, in the order its placeholder carries. */
 export interface CapturedDiagram {
@@ -102,7 +103,8 @@ async function withDiagramImages(
       img.setAttribute('alt', 'Diagram');
       img.setAttribute(DIAGRAM_IMAGE_ATTRIBUTE, '');
       replacement = img;
-    } catch {
+    } catch (error) {
+      logExpected('copy: rasterise a diagram for the clipboard', 'a diagram the preview could not draw (its source has an error) is copied as its source text instead', error);
       const pre = doc.createElement('pre');
       const code = doc.createElement('code');
       code.textContent = diagram?.source ?? '';

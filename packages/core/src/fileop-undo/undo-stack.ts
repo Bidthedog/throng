@@ -7,6 +7,7 @@
  * stack is bounded to the most recent 50 operations (FR-010) and serialises to JSON for the
  * per-project SQLite store (migration v8); a corrupt/old blob parses back to an empty stack (FR-010a).
  */
+import { logExpected } from '../diagnostics/caught.js';
 
 /**
  * The two projects a cross-project entry spans, by id (050 FR-020). The entry sits in BOTH projects'
@@ -234,7 +235,8 @@ export function parse(json: string | null | undefined): FileOpUndoStack {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
-  } catch {
+  } catch (error) {
+    logExpected('undo-stack: parse stored stack', 'a corrupt stored undo stack degrades to empty rather than failing the project load (FR-010a)', error);
     return emptyStack();
   }
   if (typeof raw !== 'object' || raw === null) return emptyStack();

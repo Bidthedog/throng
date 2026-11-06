@@ -15,6 +15,7 @@
 import { useSyncExternalStore } from 'react';
 import { normaliseForCompare, type FileClipboard } from '@throng/core';
 import type { FilesOkOrError } from '../global.js';
+import { logExpected } from '@throng/core';
 
 let value: FileClipboard = null;
 const listeners = new Set<() => void>();
@@ -45,8 +46,9 @@ function attach(): void {
       // A push that arrived while `get` was in flight is the newer fact.
       if (mine === epoch && !pushedSinceAttach) publish(fromMain);
     })
-    .catch(() => {
+    .catch((error: unknown) => {
       /* no answer leaves the cached value standing */
+      logExpected('file-clipboard-store: ask main for the file clipboard', 'main stops answering while the window closes; the cached value and the next push stand', error);
     });
 }
 

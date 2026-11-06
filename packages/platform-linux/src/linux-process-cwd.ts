@@ -1,5 +1,5 @@
 import { readlink } from 'node:fs/promises';
-import type { IProcessCwd } from '@throng/core';
+import { logExpected, type IProcessCwd } from '@throng/core';
 
 /** A shell's working directory, read from the operating system (062 FR-017). A gone or foreign process is absent. */
 export class LinuxProcessCwd implements IProcessCwd {
@@ -11,8 +11,8 @@ export class LinuxProcessCwd implements IProcessCwd {
           const cwd = await readlink(`/proc/${pid}/cwd`);
           // The kernel marks a working directory that has been removed.
           if (!cwd.endsWith(' (deleted)')) found.set(pid, cwd);
-        } catch {
-          // Gone, or another user's: absent, as the interface says.
+        } catch (error) {
+          logExpected('linux-process-cwd: read cwd', "a shell that has exited, or another user's process, has no readable cwd and is absent, as the interface says", error);
         }
       }),
     );

@@ -20,6 +20,7 @@ import type {
 } from '@throng/core';
 import type { SubjectFailureReport } from '../workspace/panel-failure-notice.js';
 import { refusedSchemes } from './refused-schemes-client.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * The ONE router both surfaces call to perform a link target (045 FR-033 – FR-037, FR-054, FR-055).
@@ -390,6 +391,7 @@ async function sendFollow(request: LinkResolutionRequest): Promise<LinkFollowOut
   try {
     return await follow(request);
   } catch (error) {
+    logExpected('link-actions: follow a link', 'returned as a failed outcome and reported as the link-failure notice, whose log record carries this message as its detail', error);
     return { kind: 'failed', path: request.text, message: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -405,7 +407,8 @@ export async function resolveLinkForMenu(request: LinkResolutionRequest): Promis
   if (resolve === undefined) return { ok: false };
   try {
     return await resolve(request);
-  } catch {
+  } catch (error) {
+    logCaught('link-actions: resolve a link for its menu', error);
     return { ok: false };
   }
 }

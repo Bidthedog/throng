@@ -28,6 +28,7 @@ import { FoldAllButtons, FoldHeading } from './fold-heading.js';
 import { useTabFolding } from './use-preference-folds.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { createApplyClient } from './apply-client.js';
+import { logCaught } from '@throng/core';
 
 /**
  * The Settings tab (feature 007, US2 — FR-026/027/028). A generic form rendered
@@ -197,7 +198,7 @@ export function SettingsTab({
       .then((list) => {
         if (active) setThemes(list);
       })
-      .catch(() => {});
+      .catch((error: unknown) => logCaught('settings-tab: list themes', error));
     return () => {
       active = false;
     };
@@ -219,7 +220,7 @@ export function SettingsTab({
         // Detection finding nothing renders an EMPTY picker — never a text box (007 FR-029).
         if (active && Array.isArray(list)) setDetected(list);
       })
-      .catch(() => {});
+      .catch((error: unknown) => logCaught('settings-tab: list detected shells', error));
     return () => {
       active = false;
     };

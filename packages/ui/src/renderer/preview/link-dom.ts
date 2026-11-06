@@ -21,6 +21,7 @@ import {
   type LinkHoverDestination,
   type PreviewLink,
 } from '@throng/core';
+import { logCaught } from '@throng/core';
 
 /**
  * Bidirectional formatting controls: the Arabic letter mark (U+061C), embeddings and overrides
@@ -128,7 +129,9 @@ function parseLink(raw: string): PreviewLink | null {
   let value: unknown;
   try {
     value = JSON.parse(raw);
-  } catch {
+  } catch (error) {
+    // The attribute is written by the preview's own pipeline as JSON, so one that does not parse is a surprise.
+    logCaught('link-dom: parse a preview link attribute', error);
     return null;
   }
   if (typeof value !== 'object' || value === null) return null;

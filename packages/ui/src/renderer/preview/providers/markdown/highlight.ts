@@ -31,6 +31,7 @@ import { StyleModule } from 'style-mod';
 import { languageForFenceInfo } from '@throng/core';
 import { LONG_LINE_THRESHOLD, throngHighlightStyle } from '../../../editor/highlight-style.js';
 import { loadLanguage } from '../../../editor/language-loaders.js';
+import { logCaught } from '@throng/core';
 
 /** Set on a code element once it has been highlighted, so a second pass leaves it alone. */
 const DONE = 'data-highlighted';
@@ -107,8 +108,9 @@ export async function highlightCodeElement(code: HTMLElement): Promise<boolean> 
   let support: Awaited<ReturnType<typeof loadLanguage>>;
   try {
     support = await supportFor(languageId);
-  } catch {
+  } catch (error) {
     // A grammar chunk that did not arrive leaves the code readable, as plain text.
+    logCaught('highlight: load a grammar', error);
     return false;
   }
   if (support === null || !code.isConnected || code.hasAttribute(DONE)) return false;

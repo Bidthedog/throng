@@ -29,6 +29,7 @@
  */
 import type { MarkdownIt as MarkdownItInstance, StateInline } from 'markdown-it';
 import { parseWikilink } from '@throng/core';
+import { logCaught } from '@throng/core';
 
 const OPEN = 0x5b; // [
 const BANG = 0x21; // !
@@ -67,7 +68,8 @@ export function decodeWikiHref(body: string): { path: string; rooted: boolean } 
   let path: string;
   try {
     path = decodeURIComponent(encodedPath);
-  } catch {
+  } catch (error) {
+    logCaught('wikilinks: decode a wikilink href', error);
     return null;
   }
   const rooted = path.startsWith('/');

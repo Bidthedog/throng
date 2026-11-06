@@ -24,6 +24,7 @@
  * This is the ONE scheme gate (plan *Corrections after analysis*, fourth pass): every surface asks it, so
  * a terminal, an editor and a hyperlink target cannot disagree about what a scheme is. Pure and total.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { isDeviceNamespacePath } from './sanitise.js';
 
 export type ResourceClass = 'web' | 'loopback' | 'unc' | 'onDevice' | 'protocol';
@@ -68,7 +69,8 @@ function webClass(text: string): 'web' | 'loopback' | null {
   let host: string;
   try {
     host = new URL(text).hostname.toLowerCase();
-  } catch {
+  } catch (error) {
+    logExpected('resource-class: parse web link', 'text that starts like an http link but does not parse as a URL is not classed as a link', error);
     return null;
   }
   if (host.length === 0) return null;

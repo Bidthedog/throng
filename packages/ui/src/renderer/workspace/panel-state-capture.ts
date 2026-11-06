@@ -20,6 +20,7 @@ import { peekEditorViewState, seedEditorViewState } from '../editor/editor-view-
 import { peekTerminalViewState, seedTerminalViewState } from '../terminal/terminal-view-state.js';
 import { seedFindSession, snapshotFindSession } from '../search/search-store.js';
 import { peekPreviewSelection, seedPreviewSelection } from '../preview/preview-selection-store.js';
+import { logCaught } from '@throng/core';
 
 /** The sections a mounted view captures live (the find session is read from the search store instead). */
 export type LiveSection = 'editor' | 'terminal' | 'previewSelection';
@@ -77,8 +78,9 @@ export async function stashPanelState(panelIds: readonly string[]): Promise<void
   if (panelIds.length === 0) return;
   try {
     await window.throng?.panelState.stash(panelIds.map(snapshotPanel));
-  } catch {
+  } catch (error) {
     // The panel still moves; it simply arrives without its view state.
+    logCaught('panel-state-capture: stash panel state', error);
   }
 }
 
@@ -98,7 +100,8 @@ export async function claimAndSeedPanelState(panelIds: readonly string[]): Promi
   try {
     const claimed = await window.throng?.panelState.claim(panelIds);
     if (claimed) seedPanelState(claimed);
-  } catch {
+  } catch (error) {
     // No hand-off: the panels mount with default state.
+    logCaught('panel-state-capture: claim panel state', error);
   }
 }

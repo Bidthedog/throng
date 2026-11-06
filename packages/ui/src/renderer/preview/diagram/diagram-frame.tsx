@@ -75,6 +75,7 @@ import {
   type DiagramZoomPoint,
 } from './diagram-zoom.js';
 import './diagram.css';
+import { logCaught } from '@throng/core';
 
 export const DIAGRAM_MIN_SCALE = 0.1;
 /** B5 — how long a resize must pause before a diagram re-fits (the tables' `TABLE_RESIZE_DEBOUNCE_MS`). */
@@ -369,7 +370,7 @@ export function DiagramFrame({
         copyImage: () => {
           void rasteriseSvg(svg)
             .then((dataUri) => window.throng?.clipboard?.writeImage?.({ dataUri }))
-            .catch(() => undefined);
+            .catch((error: unknown) => logCaught('diagram-frame: copy the diagram as an image', error));
         },
         toggleFocus: () => {
           if (maximisable) onFullPaneRef.current();

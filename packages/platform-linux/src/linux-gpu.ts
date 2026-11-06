@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
-import type { Unavailable } from '@throng/core';
+import { logExpected, type Unavailable } from '@throng/core';
 
 const NO_SOURCE = 'This machine\'s graphics driver does not publish per-process GPU use.';
 const OWN_PROCESS = /electron|throng/i;
@@ -59,7 +59,8 @@ function engineNanoseconds(pid: number): number | null {
   let names: string[];
   try {
     names = readdirSync(`/proc/${pid}/fdinfo`);
-  } catch {
+  } catch (error) {
+    logExpected('linux-gpu: list descriptors', 'the process may have exited since it was listed', error);
     return null;
   }
   const clients = new Map<string, number>();
@@ -67,8 +68,8 @@ function engineNanoseconds(pid: number): number | null {
     try {
       const parsed = parseDrmFdinfo(readFileSync(`/proc/${pid}/fdinfo/${name}`, 'utf8'));
       if (parsed) clients.set(parsed.client, parsed.engineNs);
-    } catch {
-      // The descriptor closed while it was being read.
+    } catch (error) {
+      logExpected('linux-gpu: read descriptor info', 'a descriptor can close while it is being read', error);
     }
   }
   if (clients.size === 0) return null;
@@ -82,8 +83,8 @@ function listOwnPids(): number[] {
     if (!/^\d+$/.test(name)) continue;
     try {
       if (OWN_PROCESS.test(readFileSync(`/proc/${name}/comm`, 'utf8'))) pids.push(Number(name));
-    } catch {
-      // Gone, which is an ordinary answer here.
+    } catch (error) {
+      logExpected('linux-gpu: read process name', 'a process can exit between the /proc listing and this read', error);
     }
   }
   return pids;

@@ -14,6 +14,7 @@ import { copyLinkAddress, performLinkTarget, resolveLinkForMenu, type LinkAction
 import { linkMenuActions, type LinkMenuPerformers } from './link-menu.js';
 import { currentLinkOpenInEditors, performLinkOpenIn } from './link-open-in-perform.js';
 import { openLinkMenu, type LinkMenuOpener } from './open-link-or-panel-menu.js';
+import { logCaught } from '@throng/core';
 
 /**
  * 045 FR-169 – FR-171, FR-170a – FR-170c — opening the ONE Link menu over a link, for every surface
@@ -190,7 +191,8 @@ export function openFileLinkMenu(args: {
         if (answer.link.kind === 'file') {
           try {
             fileOpen = (await window.throng?.editor?.isOpen?.(answer.link.path)) ?? false;
-          } catch {
+          } catch (error) {
+            logCaught('file-link-menu: ask whether the linked file is open', error);
             fileOpen = false;
           }
         }

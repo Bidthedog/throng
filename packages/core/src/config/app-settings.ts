@@ -9,7 +9,7 @@ import { isCodePageId, type CodePageId } from '../workspace/model.js';
 import type { DragModifierKey } from '../explorer/drag.js';
 import { SHIPPED_INDENT_BY_LANGUAGE, type IndentProfile } from '../editor/languages.js';
 import { DEFAULT_LOG_LEVEL, parseLogLevel, type LogLevel } from '../diagnostics/log-level.js';
-import { DEFAULT_ROTATION } from '../diagnostics/rotation.js';
+import { DEFAULT_RETENTION } from '../diagnostics/rotation.js';
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   NOTIFICATION_TYPES,
@@ -593,12 +593,14 @@ export interface ResourceMonitorSettings {
  * (Constitution Principle X).
  */
 export interface DiagnosticsSettings {
-  /** Threshold for what reaches the log files: error | warn | info | debug. */
+  /** Threshold for what reaches the log files: fatal | error | warn | info | debug. Fatal is always written. */
   logLevel: LogLevel;
-  /** Size (KB) a log file may reach before it rotates. */
+  /** Size (KB) a log file may reach before it rolls over (066 FR-018). */
   maxFileSizeKb: number;
-  /** How many files to keep per log, INCLUDING the live one — the retention window. */
-  keepFiles: number;
+  /** How many ACTIVE days of logs to keep — days throng ran, not calendar days (066 FR-019). */
+  keepDays: number;
+  /** The most the logs folder may hold, in MB; oldest files go first (066 FR-019a). */
+  maxTotalMb: number;
 }
 
 /**
@@ -1008,8 +1010,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   diagnostics: {
     logLevel: DEFAULT_LOG_LEVEL,
-    maxFileSizeKb: DEFAULT_ROTATION.maxBytes / 1024,
-    keepFiles: DEFAULT_ROTATION.keep,
+    maxFileSizeKb: DEFAULT_RETENTION.maxFileBytes / 1024,
+    keepDays: DEFAULT_RETENTION.keepDays,
+    maxTotalMb: DEFAULT_RETENTION.maxTotalBytes / (1024 * 1024),
   },
   // IMPORTED, never retyped (030 T017): the parse falls back to this same object, so a divergence
   // between "what the file resolves to when the section is absent" and "what a reset returns you
@@ -1050,7 +1053,10 @@ function diagnosticsSettings(raw: unknown, d: DiagnosticsSettings): DiagnosticsS
   return {
     logLevel: parseLogLevel(v.logLevel, d.logLevel),
     maxFileSizeKb: wholeNumber(v.maxFileSizeKb, d.maxFileSizeKb),
-    keepFiles: wholeNumber(v.keepFiles, d.keepFiles),
+    keepDays: wholeNumber(v.keepDays, d.keepDays),
+    maxTotalMb: wholeNumber(v.maxTotalMb, d.maxTotalMb),
+    // `keepFiles` (031 FR-015) is superseded by 066 FR-020: a file that still carries it is read
+    // without complaint and the key simply dropped.
   };
 }
 

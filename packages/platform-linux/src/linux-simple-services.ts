@@ -14,6 +14,8 @@ import type {
   LockHandle,
   OsName,
 } from '@throng/core';
+import { logExpected } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 
 export class LinuxPlatformInfo implements IPlatformInfo {
   osName(): OsName {
@@ -62,7 +64,10 @@ export class LinuxDirectoryLock implements IDirectoryLock {
 
   async acquire(absPath: string): Promise<LockHandle> {
     // Async: a folder on a stuck mount must not stop the daemon's event loop.
-    const info = await stat(absPath).catch(() => null);
+    const info = await stat(absPath).catch((error: unknown) => {
+      logExpected('linux-simple-services: stat folder to hold', 'a folder deleted or never created is refused just below with ENOENT, which the caller reports', error);
+      return null;
+    });
     if (info === null) throw fail(`Cannot use "${absPath}": the path does not exist`, 'ENOENT');
     if (!info.isDirectory()) throw fail(`Cannot use "${absPath}": not a directory`, 'ENOTDIR');
     const handle: LockHandle = { path: absPath };
@@ -88,8 +93,9 @@ export class LinuxFontEnumeration implements IFontEnumeration {
         'fc-list',
         [':', 'family'],
         { timeout: 10_000, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
           if (error) {
+            logChildFailure('fc-list', error, stderr);
             resolve([]);
             return;
           }

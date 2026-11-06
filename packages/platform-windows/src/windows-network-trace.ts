@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { Worker } from 'node:worker_threads';
-import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, type Unavailable } from '@throng/core';
+import { NETWORK_ELEVATION_REQUIRED, NETWORK_TRACE_FAILED, logCaught, logExpected, type Unavailable } from '@throng/core';
 import { KERNEL_NETWORK_PAYLOAD, NetworkByteCounter, SEND_RECEIVE_EVENT_IDS } from './etw-network-events.js';
 import type { NetworkReader } from './windows-process-metrics.js';
 
@@ -263,7 +263,9 @@ function loadFfi(): TraceFfi | null {
       queryAll: (pointers, count, found) => callAsync(QueryAllTracesW, pointers, count, found),
       addressOf: (buf) => koffi.address(buf) as bigint,
     };
-  } catch {
+  } catch (error) {
+    // koffi ships with throng and advapi32 is part of Windows: failing here is a broken install.
+    logCaught('windows-network-trace: load advapi32', error);
     ffi = null;
   }
   return ffi;
@@ -291,6 +293,7 @@ function isRunning(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
+    logExpected('windows-network-trace: probe session owner', "a stale session's owner has usually exited — finding that is what this probe is for", error);
     return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
@@ -430,12 +433,21 @@ export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
     private readonly name: string,
     private readonly worker: Worker,
   ) {
-    worker.on('message', (m: { type: string; counts?: Map<number, number> }) => {
+    worker.on('message', (m: { type: string; counts?: Map<number, number>; status?: number }) => {
       if (m.type === 'counts' && m.counts) for (const [pid, bytes] of m.counts) this.counter.add(pid, bytes);
-      else if (m.type === 'ended' && !this.disposed) this.failed = true;
+      else if (m.type === 'ended' && !this.disposed) {
+        // 066 FR-008 — the consumer stopping before dispose leaves every later read `trace-failed`.
+        logCaught('windows-network-trace: ETW consumer', `ended before it was stopped (status ${m.status ?? 'unknown'})`);
+        this.failed = true;
+      }
     });
-    worker.on('error', () => {
-      if (!this.disposed) this.failed = true;
+    worker.on('error', (error) => {
+      if (this.disposed) {
+        logExpected('windows-network-trace: ETW consumer', 'the trace was being disposed, which terminates the worker', error);
+        return;
+      }
+      logCaught('windows-network-trace: ETW consumer worker', error);
+      this.failed = true;
     });
     worker.unref();
     process.once('exit', this.stopOnExit);
@@ -450,7 +462,7 @@ export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
     if (api === null) return { kind: 'unavailable', reason: NETWORK_TRACE_FAILED };
     const name = `${SESSION_PREFIX}${process.pid}`;
     try {
-      await stopStaleSessions(api).catch(() => undefined);
+      await stopStaleSessions(api).catch((error: unknown) => logCaught('windows-network-trace: stop stale sessions', error));
       const handle: unknown[] = [0n];
       let status = await api.start(handle, name, properties(api.layout, true));
       if (status === ERROR_ALREADY_EXISTS) {
@@ -467,8 +479,10 @@ export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
         return { kind: 'unavailable', reason: enabled === ERROR_ACCESS_DENIED ? NETWORK_ELEVATION_REQUIRED : NETWORK_TRACE_FAILED };
       }
       return WindowsNetworkTrace.consume(api, name);
-    } catch {
-      await api.stop(name, properties(api.layout, false)).catch(() => undefined);
+    } catch (error) {
+      // The trace calls answer with status codes; a throw is the FFI call (or the worker start) failing.
+      logCaught('windows-network-trace: start', error);
+      await api.stop(name, properties(api.layout, false)).catch((stopError: unknown) => logCaught('windows-network-trace: stop after a failed start', stopError));
       return { kind: 'unavailable', reason: NETWORK_TRACE_FAILED };
     }
   }
@@ -476,7 +490,7 @@ export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
   /** The collector's reader: see {@link lazyNetworkReader}. Sessions a crashed collector left are stopped now. */
   static lazyReader(): NetworkReader {
     const api = process.arch === 'x64' ? loadFfi() : null;
-    if (api !== null) void stopStaleSessions(api).catch(() => undefined);
+    if (api !== null) void stopStaleSessions(api).catch((error: unknown) => logCaught('windows-network-trace: stop stale sessions', error));
     return lazyNetworkReader({ start: () => WindowsNetworkTrace.start() });
   }
 
@@ -514,10 +528,10 @@ export class WindowsNetworkTrace implements NetworkReader, NetworkTraceHandle {
     if (this.disposed) return;
     this.disposed = true;
     process.removeListener('exit', this.stopOnExit);
-    await this.api.stop(this.name, properties(this.api.layout, false)).catch(() => undefined);
+    await this.api.stop(this.name, properties(this.api.layout, false)).catch((error: unknown) => logCaught('windows-network-trace: stop session', error));
     const ended = new Promise<void>((resolve) => this.worker.once('exit', () => resolve()));
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 2_000).unref());
     await Promise.race([ended, timeout]);
-    await this.worker.terminate().catch(() => undefined);
+    await this.worker.terminate().catch((error: unknown) => logCaught('windows-network-trace: terminate ETW consumer worker', error));
   }
 }

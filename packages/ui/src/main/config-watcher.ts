@@ -9,6 +9,7 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   isValidThemeName,
+  logExpected,
   parseKeybindings,
   parseSettingsGuarded,
   THRONG_THEME,
@@ -148,7 +149,8 @@ export async function readConfigOnce(
       // A document that parses to something other than an object is unusable too — an array or a
       // bare string is not settings, and `parseSettingsGuarded` reports it for the same reason.
       settingsUnreadable = parseSettingsGuarded(parsed).unreadable === true;
-    } catch {
+    } catch (err) {
+      logExpected('config-watcher: parse settings', 'settings.json may be mid-write or hand-edited into invalid JSON; it is retried as unreadable', err);
       settingsUnreadable = true;
     }
   }

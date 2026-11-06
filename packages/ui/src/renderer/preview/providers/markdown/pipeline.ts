@@ -59,6 +59,7 @@ import type { PreviewLinkWording } from '../../link-dom.js';
 import { decodeWikiHref, installWikilinks, WIKI_HREF_ATTRIBUTE, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
 import { installEmbeds } from './embeds.js';
 import { DIAGRAM_HEIGHT_ATTRIBUTE, parseDiagramHeight } from '../../diagram/diagram-host.js';
+import { logExpected } from '@throng/core';
 
 /**
  * The document a render is FOR — what the sanitiser's link and image hooks resolve against
@@ -247,7 +248,8 @@ function renderFrontMatter(raw: string): string {
       })
       .join('');
     return `<table data-source-line="0"><tbody>${rows}</tbody></table>\n`;
-  } catch {
+  } catch (error) {
+    logExpected('pipeline: parse front matter', 'the document\'s front matter may be pathological enough to throw the YAML parser; it is shown as code', error);
     // A parser that THROWS — pathological nesting, a library defect — is front matter that could not be
     // read, and FR-085 says what that is: its source as code. Never a failure of the whole document.
     return asCode;

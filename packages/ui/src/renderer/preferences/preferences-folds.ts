@@ -1,3 +1,4 @@
+import { logCaught, logExpected } from '@throng/core';
 /**
  * The persisted fold state of the Preferences window (056 FR-010, FR-011, FR-011a, FR-016, FR-017).
  *
@@ -50,7 +51,8 @@ function readAll(): Stored {
       }
     }
     return doc;
-  } catch {
+  } catch (error) {
+    logExpected('preferences-folds: read stored folds', 'localStorage may be unavailable or hold a corrupt entry; every heading takes its default', error);
     return emptyDoc();
   }
 }
@@ -71,8 +73,9 @@ export function writeFolds(tab: FoldTab, choices: ReadonlyMap<string, boolean>, 
     for (const [k, v] of choices) if (currentKeys.has(k)) next[k] = v;
     doc[tab] = next;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: VERSION, ...doc }));
-  } catch {
+  } catch (error) {
     // Folding keeps working for the session; only the memory of it is lost.
+    logExpected('preferences-folds: persist folds', 'localStorage may be full or unavailable; folding works for this session only', error);
   }
 }
 
@@ -86,7 +89,9 @@ export function defaultFolded(key: string, sectionsOpen: boolean): boolean {
   try {
     const path: unknown = JSON.parse(key);
     return Array.isArray(path) && path.length === 1;
-  } catch {
+  } catch (error) {
+    // Every FoldKey is built as JSON, so one that does not parse is a surprise.
+    logCaught('preferences-folds: parse a fold key', error);
     return false;
   }
 }

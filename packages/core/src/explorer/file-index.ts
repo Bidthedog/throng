@@ -8,6 +8,7 @@
  * and its debounce lives in UI-main; none of that belongs here, and none of it is needed to test
  * the rules below.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import type { IFileSystem } from '../abstractions/file-system.js';
 import { toAbsPath } from './tree-drag-payload.js';
 
@@ -61,8 +62,10 @@ export async function walkFiles(
     let entries;
     try {
       entries = await fs.list(toAbsPath(root, relDir));
-    } catch {
-      continue; // W6 — it was there when its parent was read, and it is not there now.
+    } catch (error) {
+      // W6 — it was there when its parent was read, and it is not there now.
+      logExpected('file-index: list a directory', 'a directory deleted or made unreadable after its parent was listed is skipped (W6)', error);
+      continue;
     }
 
     for (const entry of entries) {

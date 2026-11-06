@@ -21,6 +21,8 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  logCaught,
+  logExpected,
   parseIconPack,
   sanitiseSvg,
   THRONG_THEME,
@@ -198,16 +200,16 @@ export class IconPackService {
       try {
         await readFile(join(dir, 'pack.json'), 'utf8');
         continue; // already seeded — never overwrite a user edit
-      } catch {
-        // fall through to seed
+      } catch (error) {
+        logExpected('icon-pack-service: probe seeded pack', 'a pack not yet seeded has no pack.json; it is seeded now', error);
       }
       try {
         await mkdir(dir, { recursive: true });
         for (const [file, content] of Object.entries(pack.files)) {
           await writeFile(join(dir, file), content, 'utf8');
         }
-      } catch {
-        // best-effort
+      } catch (error) {
+        logCaught('icon-pack-service: seed default pack', error);
       }
     }
   }
@@ -221,14 +223,14 @@ export class IconPackService {
     try {
       await readFile(path, 'utf8');
       return; // already present
-    } catch {
-      // fall through to write
+    } catch (error) {
+      logExpected('icon-pack-service: probe README', 'the README is absent until first seeded; it is written now', error);
     }
     try {
       await mkdir(this.iconPacksDir, { recursive: true });
       await writeFile(path, README_CONTENT, 'utf8');
-    } catch {
-      // best-effort
+    } catch (error) {
+      logCaught('icon-pack-service: write README', error);
     }
   }
 
@@ -255,7 +257,8 @@ export class IconPackService {
       const markup = sanitiseSvg(await readFile(join(dir, file), 'utf8'));
       // `null` = the file is not an SVG at all, whatever it is called.
       return markup === null ? { kind: 'missing' } : { kind: 'svg', markup };
-    } catch {
+    } catch (error) {
+      logExpected('icon-pack-service: load asset', 'a hand-authored pack may name a file it lacks; the icon falls back down the chain', error);
       return { kind: 'missing' };
     }
   }
@@ -271,7 +274,8 @@ export class IconPackService {
     let entries;
     try {
       entries = await readdir(this.iconPacksDir, { withFileTypes: true });
-    } catch {
+    } catch (error) {
+      logExpected('icon-pack-service: list packs', 'the icon-packs folder is absent until seeded; there are no packs', error);
       return packs; // icon-packs dir absent → no packs
     }
 
@@ -284,6 +288,7 @@ export class IconPackService {
         const raw = await readFile(join(dir, 'pack.json'), 'utf8'); // a pack must have a manifest
         tokens = parseIconPack(JSON.parse(raw)).tokens;
       } catch (err) {
+        logExpected('icon-pack-service: read pack.json', 'a hand-authored pack.json may be missing or malformed; the pack is listed with this error', err);
         packs.push({
           name: entry.name,
           tokens: {},

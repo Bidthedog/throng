@@ -13,6 +13,7 @@ export {
   passesThreshold,
   type LogLevel,
 } from './log-level.js';
+export { FATAL_CONSOLE_PREFIX, describeError, logAt, logCaught, logExpected, logFatal } from './caught.js';
 export {
   crashFileName,
   formatCrashReport,
@@ -21,11 +22,18 @@ export {
   type LogRecord,
 } from './log-format.js';
 export {
-  DEFAULT_ROTATION,
-  normaliseRotation,
+  DEFAULT_RETENTION,
+  FIXED_LOG_NAMES,
+  RETENTION_BOUNDS,
+  logDayOf,
+  logFilePid,
+  nextRotatedName,
+  normaliseRetention,
+  retentionPlan,
   rotatedName,
-  rotationPlan,
+  sessionFileName,
   shouldRotate,
-  type RotationPlan,
-  type RotationPolicy,
+  type LogFileInfo,
+  type RetentionPlan,
+  type RetentionPolicy,
 } from './rotation.js';

@@ -1,4 +1,4 @@
-import type { LinkActionOutcome, LinkFollowOutcome, LinkResolution, LinkResolutionRequest } from '@throng/core';
+import { logCaught, type LinkActionOutcome, type LinkFollowOutcome, type LinkResolution, type LinkResolutionRequest } from '@throng/core';
 
 /**
  * `throng:links:*` — the only way a renderer learns anything about a file link
@@ -83,7 +83,8 @@ export function registerLinkIpc(ipcMain: LinkIpcMain, service: LinkIpcService): 
     if (request === null) return { ok: false };
     try {
       return await service.resolve(request);
-    } catch {
+    } catch (error) {
+      logCaught('link-ipc: resolve', error);
       return { ok: false };
     }
   });
@@ -99,6 +100,7 @@ export function registerLinkIpc(ipcMain: LinkIpcMain, service: LinkIpcService): 
     try {
       return await service.follow(request);
     } catch (error) {
+      logCaught('link-ipc: follow', error);
       return { kind: 'failed', path: request.text, message: error instanceof Error ? error.message : String(error) };
     }
   });
@@ -112,7 +114,8 @@ export function registerLinkIpc(ipcMain: LinkIpcMain, service: LinkIpcService): 
       if (request === null) return { ok: false, reason: 'refused', path: '' };
       try {
         return await act(request);
-      } catch {
+      } catch (error) {
+        logCaught(`link-ipc: ${channel}`, error);
         // The path the user named, not a resolved one — we have no resolved one to give.
         return { ok: false, reason: 'refused', path: request.text };
       }

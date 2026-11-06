@@ -20,6 +20,7 @@ import {
   type Theme,
 } from '@throng/core';
 import { onConfigPatched, onConfigWritten } from './write-config.js';
+import { logCaught } from '@throng/core';
 
 /**
  * Renderer-side mirror of the user configuration (T039). On mount it pulls the
@@ -121,8 +122,10 @@ export function ConfigProvider({ children }: { children: ReactNode }): ReactElem
       let parsed: unknown;
       try {
         parsed = JSON.parse(json);
-      } catch {
-        return; // main refuses invalid JSON anyway; nothing to adopt
+      } catch (error) {
+        // main refuses invalid JSON anyway, so a written document that does not parse is a surprise
+        logCaught('config-store: parse a just-written document', error);
+        return; // nothing to adopt
       }
       setState((prev) => {
         /*

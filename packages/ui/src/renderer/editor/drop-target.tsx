@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type DragEvent, type ReactElement, ty
 import { useNotify } from '../common/notification.js';
 import { isPanelHiddenAnywhere } from '../workspace/maximise-store.js';
 import './drop-target.css';
+import { logCaught } from '@throng/core';
 
 /**
  * Dropping a file in from the operating system (018 / US9, FR-057 … FR-066a).
@@ -115,8 +116,10 @@ export function useDropHandler(
             tabId: c.tabId,
             absPath,
           });
-        } catch {
-          // The bridge itself failed. Still a failure, still not silent.
+        } catch (error) {
+          // The bridge itself failed. Still a failure, still not silent. The notice below carries no
+          // raw error, so the error is logged here.
+          logCaught('drop-target: resolve a dropped file', error);
           // FR-023: the heading names the file, so the sentence does not repeat its path — which is
           // also 029 FR-017's rule, since a raw absolute path was never the readable half anyway.
           refuse(absPath, 'throng could not check whether it may be opened here.');

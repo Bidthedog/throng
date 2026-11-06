@@ -40,6 +40,7 @@ import { StatusPopover } from './status-popover.js';
 import { StatusHistory } from './status-history.js';
 import { useResourceSummary } from './use-resource-summary.js';
 import { useResourceMonitorSettings } from './use-monitor-settings.js';
+import { logExpected } from '@throng/core';
 
 /** Pixels the bar keeps for its own padding, and for the project path on its left (which ellipsises). */
 const BAR_PADDING_PX = 20;
@@ -59,7 +60,8 @@ const CLOSE_GRACE_MS = 120;
 function focusVisible(el: Element): boolean {
   try {
     return el.matches(':focus-visible');
-  } catch {
+  } catch (error) {
+    logExpected('status-resources: match :focus-visible', 'an engine without the :focus-visible selector (jsdom) throws on it; treated as keyboard focus', error);
     return true;
   }
 }

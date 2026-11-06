@@ -1,4 +1,4 @@
-import type { IProjectStore, Project } from '@throng/core';
+import { logCaught, type IProjectStore, type Project } from '@throng/core';
 import type { ThrongDatabase } from './database.js';
 
 interface ProjectRow {
@@ -20,7 +20,8 @@ function parseHidden(raw: string | null): string[] {
   try {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr.filter((p): p is string => typeof p === 'string') : [];
-  } catch {
+  } catch (error) {
+    logCaught('project-repository: parse hidden paths', error);
     return [];
   }
 }

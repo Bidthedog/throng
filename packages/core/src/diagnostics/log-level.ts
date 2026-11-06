@@ -10,10 +10,10 @@
  * (Constitution Principle X): an installed build a user cannot rebuild must be able to turn the
  * detail up, and the only way that is true is if the level arrives from settings.
  */
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug';
 
 /** Most severe first. Index IS severity, which is what {@link passesThreshold} compares. */
-export const LOG_LEVELS: readonly LogLevel[] = ['error', 'warn', 'info', 'debug'];
+export const LOG_LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'info', 'debug'];
 
 /** What an installed build logs unless told otherwise: the narrative, without the detail. */
 export const DEFAULT_LOG_LEVEL: LogLevel = 'info';
@@ -28,7 +28,11 @@ export function parseLogLevel(value: unknown, fallback: LogLevel = DEFAULT_LOG_L
   return isLogLevel(value) ? value : fallback;
 }
 
-/** True when a record at `level` should be written under `threshold`. */
+/**
+ * True when a record at `level` should be written under `threshold`. A fatal record — a component that
+ * crashed — is written whatever the threshold (066 FR-009a): no setting may hide a crash.
+ */
 export function passesThreshold(threshold: LogLevel, level: LogLevel): boolean {
+  if (level === 'fatal') return true;
   return LOG_LEVELS.indexOf(level) <= LOG_LEVELS.indexOf(threshold);
 }

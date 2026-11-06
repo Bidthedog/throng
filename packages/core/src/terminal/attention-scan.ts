@@ -10,6 +10,7 @@
  * (SC-004). An unterminated OSC string is carried into the next chunk up to {@link MAX_OSC}; a longer one is
  * discarded, along with whatever eventually terminates it, so the terminator is never read as a bell.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import type { AttentionKind } from '../attention/attention-types.js';
 
 const ESC = String.fromCharCode(27);
@@ -123,7 +124,8 @@ export function createAttentionScan(): AttentionScanner {
         try {
           const binary = atob(payload);
           payload = new TextDecoder('utf-8').decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
-        } catch {
+        } catch (error) {
+          logExpected('attention-scan: decode OSC 99 payload', 'a program in the terminal may send a notification whose base64 payload is malformed; it is dropped', error);
           return;
         }
       }

@@ -10,6 +10,7 @@ import {
   useProjectMarkKey,
   type HolderMark,
 } from './use-attention.js';
+import { logExpected } from '@throng/core';
 
 /*
  * One small component per holder KIND, because a holder is usually drawn inside a `.map` where a hook
@@ -138,7 +139,8 @@ function ListHolderMark({
 function focusVisible(el: Element): boolean {
   try {
     return el.matches(':focus-visible');
-  } catch {
+  } catch (error) {
+    logExpected('holder-marks: match :focus-visible', 'an engine without the :focus-visible selector (jsdom) throws on it; treated as keyboard focus', error);
     return true;
   }
 }

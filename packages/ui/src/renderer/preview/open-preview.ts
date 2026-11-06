@@ -53,6 +53,7 @@ import { findHeading } from './link-dom.js';
 import { revealPreviewFragment, setPendingReveal, type PreviewReveal } from './preview-panel-handles.js';
 import { candidateFor, recordLastActivePreview } from './last-active-preview.js';
 import { getPreviewState } from './preview-store.js';
+import { logExpected } from '@throng/core';
 
 /** What asking for a preview names: the file, its project, and the panel that asked, if one did. */
 export interface PreviewOpenIntent {
@@ -478,7 +479,8 @@ function scrollPreviewToHeading(panelId: string, fragment: string, framesLeft = 
 function safeDecode(value: string): string {
   try {
     return decodeURIComponent(value);
-  } catch {
+  } catch (error) {
+    logExpected('open-preview: decode a heading fragment', 'a link the user wrote may carry a malformed percent-escape; the fragment is matched as written', error);
     return value;
   }
 }

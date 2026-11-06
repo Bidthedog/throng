@@ -3,6 +3,7 @@
  * contracts/os-file-system.md). Filesystem-bound, so impls run it in the
  * integration/contract layer against a real temp directory.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { describe, it, expect } from 'vitest';
 import type { IFileSystem } from '../abstractions/file-system.js';
 
@@ -182,7 +183,8 @@ export function runFileSystemContract(
         let supported = true;
         try {
           await h.symlink('real.txt', 'link.txt');
-        } catch {
+        } catch (error) {
+          logExpected('file-system-contract: create a symlink', 'Windows refuses symlinks without a privilege the account may lack; the check is skipped there', error);
           supported = false;
         }
         if (supported) {

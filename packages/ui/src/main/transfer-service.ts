@@ -26,6 +26,8 @@ import {
   isWithinRoot,
   keepBothName,
   landingPlan,
+  logCaught,
+  logExpected,
   newerOf,
   parseFileOpStack,
   plannedMoves,
@@ -433,6 +435,7 @@ export class TransferService {
       }
       return { ok: true, entry: { ...valid, replaced } };
     } catch (e) {
+      logCaught('transfer-service: undo', e);
       const holder = holdsTheAnswer(e) && current ? await this.deps.files.holderFor(current, windowId) : undefined;
       const envelope = failure(e, 'lock', holder);
       return envelope.cause ? { error: envelope.error, cause: envelope.cause } : { error: envelope.error };
@@ -470,8 +473,8 @@ export class TransferService {
     for (const p of await this.deps.projects()) {
       try {
         out.push(await this.deps.fs.realpath(p.rootFolder));
-      } catch {
-        // A project whose root is gone confines nothing.
+      } catch (error) {
+        logExpected('transfer-service: resolve project root', 'a project whose root is gone confines nothing', error);
       }
     }
     return out;
@@ -489,7 +492,8 @@ export class TransferService {
         const real = await this.deps.fs.realpath(probe);
         const full = rest ? join(real, rest) : real;
         return roots.some((r) => isWithinRoot(r, full) && !isWithinRoot(full, r));
-      } catch {
+      } catch (error) {
+        logExpected('transfer-service: confine path', 'a path not created yet is judged by its nearest existing ancestor', error);
         const parent = dirname(probe);
         if (parent === probe) return false;
         rest = rest ? join(basename(probe), rest) : basename(probe);
@@ -668,6 +672,7 @@ export class TransferService {
             break;
         }
       } catch (e) {
+        logCaught('transfer-service: roll back journal entry', e);
         kept.unshift(op);
         const path = op.op === 'placed' || op.op === 'moved' ? op.to : op.path;
         failures.push({ name: basename(path), dir: basename(dirname(path)), message: (e as Error).message });
@@ -702,7 +707,9 @@ export class TransferService {
     try {
       await this.copyWalk(new AbortController().signal, from, to);
     } catch (e) {
-      await fs.delete(to).catch(() => undefined);
+      await fs.delete(to).catch((error: unknown) => {
+        logCaught('transfer-service: remove partial put-back copy', error);
+      });
       throw e;
     }
     await fs.delete(from);
@@ -725,8 +732,8 @@ export class TransferService {
     for (const p of await this.deps.projects()) {
       try {
         roots.push({ id: p.id, real: await fs.realpath(p.rootFolder) });
-      } catch {
-        // A project whose root is gone confines nothing.
+      } catch (error) {
+        logExpected('transfer-service: resolve project root', 'a project whose root is gone confines nothing', error);
       }
     }
     const active = this.deps.files.activeRoot();
@@ -736,7 +743,8 @@ export class TransferService {
     try {
       activeReal = await fs.realpath(active);
       targetReal = await fs.realpath(job.targetDir);
-    } catch {
+    } catch (error) {
+      logExpected('transfer-service: resolve paste target', 'the folder pasted into can be deleted before the paste starts; the user is told', error);
       return { error: 'The folder to paste into could not be found.' };
     }
     if (!isWithinRoot(activeReal, targetReal)) return { error: 'Target is outside the project root.' };
@@ -762,8 +770,9 @@ export class TransferService {
         total.files += m.files;
       }
       return total;
-    } catch {
+    } catch (error) {
       // The item's own failure is reported when it is placed; its size simply does not count.
+      logExpected('transfer-service: measure', 'an unreadable item is reported when it is placed; its size does not count', error);
       return NOTHING;
     }
   }
@@ -836,8 +845,11 @@ export class TransferService {
         }
       }
     } catch (e) {
+      logCaught('transfer-service: place item', e);
       // Nothing of this item stands, so neither do the folders made for it.
-      await this.dropCreated(job, created).catch(() => undefined);
+      await this.dropCreated(job, created).catch((error: unknown) => {
+        logCaught('transfer-service: drop folders made for a failed item', error);
+      });
       // A cancelled item is not a failed one: its partial copy is already gone (R5, R7).
       if (job.controller.signal.aborted) return;
       await this.fail(job, src, e);
@@ -855,8 +867,9 @@ export class TransferService {
       try {
         const real = await this.deps.fs.realpath(src);
         if (ctx.roots.some((r) => isWithinRoot(r.real, real))) confined.push(src);
-      } catch {
+      } catch (error) {
         // Gone: it fails when placed, and has no say in the structure either.
+        logExpected('transfer-service: plan landing', 'a source deleted since it was copied fails when placed', error);
       }
     }
     const planned = new Map(landingPlan(confined, job.targetDir).map((l) => [l.src, l]));
@@ -874,7 +887,8 @@ export class TransferService {
     if (destDir === job.targetDir) return ctx.targetReal;
     try {
       return await this.deps.fs.realpath(destDir);
-    } catch {
+    } catch (error) {
+      logExpected('transfer-service: landing real path', 'a landing folder not created yet is resolved under the target', error);
       return join(ctx.targetReal, relative(job.targetDir, destDir));
     }
   }
@@ -1093,13 +1107,17 @@ export class TransferService {
     try {
       asidePath = await fs.rename(src, aside);
     } catch (e) {
+      logCaught('transfer-service: rename source aside', e);
       await this.fail(job, src, e);
       return false;
     }
     try {
       await fs.delete(asidePath);
     } catch (e) {
-      await fs.rename(asidePath, basename(src)).catch(() => undefined);
+      logCaught('transfer-service: remove moved source', e);
+      await fs.rename(asidePath, basename(src)).catch((error: unknown) => {
+        logCaught('transfer-service: restore source name', error);
+      });
       await this.fail(job, src, e);
       return false;
     }
@@ -1117,7 +1135,9 @@ export class TransferService {
     try {
       await this.copyWalk(job.controller.signal, src, dest, job.kind === 'paste' ? job : undefined);
     } catch (e) {
-      await this.deps.fs.delete(dest).catch(() => undefined);
+      await this.deps.fs.delete(dest).catch((error: unknown) => {
+        logCaught('transfer-service: remove partial copy', error);
+      });
       throw e;
     }
     job.journal.push({ op: 'placed', from: src, to: dest, undoable });

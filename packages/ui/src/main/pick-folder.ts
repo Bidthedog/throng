@@ -12,6 +12,8 @@
  * unit-testable without touching disk or the OS dialog (Principle II keeps the
  * OS-specific fs check behind this seam).
  */
+import { logExpected } from '@throng/core';
+
 /**
  * What the `throng:pickFolder` handler needs from its surroundings.
  *
@@ -62,8 +64,9 @@ export function resolvePickerDefaultPath(
   for (const candidate of candidates) {
     try {
       if (existsAsDir(candidate)) return candidate;
-    } catch {
+    } catch (error) {
       // Treat a throwing check (e.g. a disconnected drive) as unresolvable; cascade.
+      logExpected('pick-folder: check start folder', 'a candidate may sit on a disconnected or inaccessible drive; the next is tried', error);
     }
   }
   return home;

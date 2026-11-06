@@ -5,7 +5,7 @@
  * edits before applying, FR-016 immediate-apply). Kept free of React/DOM
  * module-scope so the debounce timing is unit-testable in the node env.
  */
-import type { ConfigChange, ConfigDocId } from '@throng/core';
+import { logCaught, type ConfigChange, type ConfigDocId } from '@throng/core';
 
 /** `error` is the sentence the user reads; `detail` is the raw errno for Copy and the log (#265). */
 export type ConfigWriteResult = { ok: true } | { ok: false; error: string; detail?: string };
@@ -29,7 +29,8 @@ function publishFailure(id: ConfigDocId, error: string, detail?: string): void {
   for (const listener of failureListeners) {
     try {
       listener(id, error, detail);
-    } catch {
+    } catch (thrown) {
+      logCaught('write-config: a write-failure listener', thrown);
       // A listener that throws is its own problem; the write path is already on a failure branch and
       // must not acquire a second one.
     }
@@ -106,7 +107,8 @@ export async function writeConfig(id: ConfigDocId, json: string): Promise<Config
   const key = docKey(id);
   const previous = writeChains.get(key) ?? Promise.resolve();
   const result = previous
-    .catch(() => undefined) // a failed earlier write must not sink the ones after it
+    // A failed earlier write must not sink the ones after it; its own caller also received the rejection.
+    .catch((error: unknown) => logCaught('write-config: an earlier queued write', error))
     .then(() => write(id, json))
     .then((res) => {
       if (res.ok) {
@@ -171,7 +173,8 @@ export async function writeConfigPatch(
   const key = docKey(id);
   const previous = writeChains.get(key) ?? Promise.resolve();
   const result = previous
-    .catch(() => undefined) // a failed earlier write must not sink the ones after it
+    // A failed earlier write must not sink the ones after it; its own caller also received the rejection.
+    .catch((error: unknown) => logCaught('write-config: an earlier queued write', error))
     .then(() => writePatch(id, changes))
     .then((res) => {
       if (res.ok) {
@@ -301,12 +304,13 @@ export async function settleConfigWrites(): Promise<void> {
   for (const commit of [...pendingCommits]) {
     try {
       commit();
-    } catch {
+    } catch (error) {
       // A buffer that cannot commit must not stop the others, and must not wedge the close.
+      logCaught('write-config: commit a pending buffer on flush', error);
     }
   }
   for (const armed of [...armedWrites.values()]) armed.fire();
-  await Promise.all([...writeChains.values()].map((p) => p.catch(() => undefined)));
+  await Promise.all([...writeChains.values()].map((p) => p.catch((error: unknown) => logCaught('write-config: a write awaited on flush', error))));
 }
 
 /** A debounced function with imperative {@link Debounced.cancel}/{@link Debounced.flush}. */

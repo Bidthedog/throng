@@ -8,7 +8,7 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
-import { shouldDeElevate, type IShellIntegration, type ShellActionResult } from '@throng/core';
+import { logCaught, logExpected, shouldDeElevate, type IShellIntegration, type ShellActionResult } from '@throng/core';
 import { selectPlatform } from '@throng/platform';
 
 /** The slice of Electron's `shell` this impl needs. */
@@ -66,7 +66,12 @@ async function statKindOnDisk(path: string): Promise<PathKind> {
   try {
     const info = await stat(path);
     return info.isDirectory() ? 'folder' : 'file';
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') {
+      logExpected('electron-shell-integration: stat target', 'a path shown in the app can be deleted on disk; the action is refused as missing', error);
+    } else {
+      logCaught('electron-shell-integration: stat target', error);
+    }
     return null;
   }
 }
@@ -101,6 +106,7 @@ export class ElectronShellIntegration implements IShellIntegration {
       this.shell.showItemInFolder(path);
       return { ok: true };
     } catch (error) {
+      logCaught('electron-shell-integration: reveal in file manager', error);
       // T229: the OS's words travel as a value, so the one notice can name them (§7.2).
       return { ok: false, osReason: reasonOf(error, path) };
     }

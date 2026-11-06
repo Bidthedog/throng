@@ -3,6 +3,8 @@ import { homedir } from 'node:os';
 import { join, parse } from 'node:path';
 import process from 'node:process';
 import type { IOrphanProcesses, ITrashRestore, IUserDirectories, IVolumeRoots, OrphanCandidate } from '@throng/core';
+import { logChildFailure, watchChild } from '@throng/platform-node';
+import { consoleLog } from './console-log.js';
 
 /** The folders Windows has always used (003 D1, 020). */
 export class WindowsUserDirectories implements IUserDirectories {
@@ -55,8 +57,10 @@ export class WindowsOrphanProcesses implements IOrphanProcesses {
         "(($_.CommandLine -replace '\\|',' ') -replace '[\\r\\n]',' ') }";
       const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
         windowsHide: true,
-        stdio: ['ignore', 'pipe', 'ignore'],
+        // stderr piped so a failure's log line carries PowerShell's own words (066 FR-008).
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
+      watchChild(child, { name: 'orphan sweep process snapshot (powershell)', longLived: false, log: consoleLog });
       let out = '';
       const timer = setTimeout(() => child.kill(), 15_000);
       child.stdout.setEncoding('utf8');
@@ -75,9 +79,10 @@ export class WindowsOrphanProcesses implements IOrphanProcesses {
 
   kill(pid: number): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }, (error) =>
-        resolve(!error),
-      );
+      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }, (error, _stdout, stderr) => {
+        if (error) logChildFailure(`windows-seams: taskkill orphan ${pid}`, error, stderr);
+        resolve(!error);
+      });
     });
   }
 }

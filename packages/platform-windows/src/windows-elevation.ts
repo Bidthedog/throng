@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import process from 'node:process';
 import type { IElevationState } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 
 /**
  * Windows {@link IElevationState} (005 Phase G, FR-025a). Reports whether THIS
@@ -37,7 +38,8 @@ function probeElevated(): boolean {
       windowsHide: true,
     });
     return out.includes(HIGH_INTEGRITY_SID);
-  } catch {
+  } catch (error) {
+    logChildFailure('windows-elevation: whoami /groups', error, (error as { stderr?: string }).stderr);
     // If the probe fails we cannot prove elevation — default to NOT elevated so
     // the "run as admin" control stays disabled rather than falsely enabled.
     return false;

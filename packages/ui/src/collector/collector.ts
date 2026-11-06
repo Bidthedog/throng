@@ -3,6 +3,7 @@ import {
   heldFolders,
   isUnavailable,
   killOrder,
+  logCaught,
   NETWORK_TRACE_FAILED,
   processKey,
   processMetrics,
@@ -179,6 +180,7 @@ export class ResourceCollector {
       await this.awaitRoster();
       await this.measure();
     } catch (error) {
+      logCaught('collector: tick', error);
       this.deps.send({ type: 'error', cause: error instanceof Error && error.message ? error.message : 'readFailed' });
       // The previous figures, marked stale with the time they are from; an open monitor gets the same,
       // so it says so instead of freezing (FR-044, Edge Cases).
@@ -207,11 +209,17 @@ export class ResourceCollector {
     const [snapshot, gpu, network] = await Promise.all([
       within(metrics.snapshot(), this.limitMs),
       readGpu
-        ? within(metrics.gpu(), this.limitMs).catch((): Unavailable => ({ kind: 'unavailable', reason: 'GPU counters did not answer in time' }))
+        ? within(metrics.gpu(), this.limitMs).catch((error: unknown): Unavailable => {
+            logCaught('collector: read GPU counters', error);
+            return { kind: 'unavailable', reason: 'GPU counters did not answer in time' };
+          })
         : Promise.resolve(this.lastGpu!),
       // Network only while the monitor is open: the status bar does not show it (FR-113).
       this.detail
-        ? within(metrics.network(), this.limitMs).catch((): Unavailable => ({ kind: 'unavailable', reason: NETWORK_TRACE_FAILED }))
+        ? within(metrics.network(), this.limitMs).catch((error: unknown): Unavailable => {
+            logCaught('collector: read network trace', error);
+            return { kind: 'unavailable', reason: NETWORK_TRACE_FAILED };
+          })
         : Promise.resolve(undefined),
     ]);
     this.lastGpu = gpu;
@@ -285,9 +293,10 @@ export class ResourceCollector {
     walk(root);
     const read = await Promise.all(
       missing.map((p) =>
-        within(this.deps.metrics.describe(p.pid, p.createTime), this.limitMs).catch(
-          (): Unavailable => ({ kind: 'unavailable', reason: 'It did not answer in time' }),
-        ),
+        within(this.deps.metrics.describe(p.pid, p.createTime), this.limitMs).catch((error: unknown): Unavailable => {
+          logCaught('collector: describe process', error);
+          return { kind: 'unavailable', reason: 'It did not answer in time' };
+        }),
       ),
     );
     let any = false;
@@ -326,10 +335,10 @@ export class ResourceCollector {
         continue;
       }
       const [pid, createTime] = key.split(':').map(Number) as [number, number];
-      const r = await within(this.deps.metrics.terminate(pid, createTime), this.limitMs).catch(() => ({
-        outcome: 'failed' as const,
-        cause: TIMED_OUT,
-      }));
+      const r = await within(this.deps.metrics.terminate(pid, createTime), this.limitMs).catch((error: unknown) => {
+        logCaught('collector: end process', error);
+        return { outcome: 'failed' as const, cause: TIMED_OUT };
+      });
       results.push({ key, outcome: r.outcome, ...(r.cause !== undefined ? { cause: r.cause } : {}) });
     }
     for (const key of req.targets) if (!order.includes(key)) results.push({ key, outcome: 'denied', cause: 'notUsersProcess' });

@@ -1,5 +1,6 @@
 import { lstat, unlink } from 'node:fs/promises';
 import { connect } from 'node:net';
+import { logExpected } from '@throng/core';
 
 /**
  * Remove a socket file left by a process that crashed, so it cannot stop the next start (062 FR-011). A socket something
@@ -9,7 +10,10 @@ import { connect } from 'node:net';
  */
 export async function clearStaleSocket(address: string): Promise<void> {
   if (!address.startsWith('/')) return;
-  const info = await lstat(address).catch(() => null);
+  const info = await lstat(address).catch((error: unknown) => {
+    logExpected('stale-socket: stat socket', 'no socket file is the ordinary case after a clean exit', error);
+    return null;
+  });
   if (info === null || !info.isSocket()) return;
   const live = await new Promise<boolean>((resolve) => {
     const socket = connect(address);
@@ -20,5 +24,9 @@ export async function clearStaleSocket(address: string): Promise<void> {
     // Only "nobody is listening" makes it stale: a socket throng may not reach is not throng's to remove.
     socket.once('error', (error) => resolve((error as NodeJS.ErrnoException).code !== 'ECONNREFUSED'));
   });
-  if (!live) await unlink(address).catch(() => undefined);
+  if (!live) {
+    await unlink(address).catch((error: unknown) => {
+      logExpected('stale-socket: remove stale socket', 'a second start racing this one may already have removed it', error);
+    });
+  }
 }

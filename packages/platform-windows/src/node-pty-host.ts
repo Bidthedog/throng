@@ -5,6 +5,8 @@ import {
   TERMINAL_END_TIMEOUT_MS,
   assignConhosts,
   escalationTargets,
+  logCaught,
+  logExpected,
   passthroughDeElevator,
   sanitizeSpawnEnv,
   shouldDeElevate,
@@ -17,6 +19,7 @@ import {
   type PtyStartOptions,
   type PtyRosterEntry,
 } from '@throng/core';
+import { logChildFailure } from '@throng/platform-node';
 import { dropInheritedModulePath } from './spawn-env-windows.js';
 import { descendantsOf, type ProcessTreeRow } from './process-tree.js';
 import { ATTACHED_HELPER_SOURCE, readAttachedProcesses } from './attached-processes.js';
@@ -195,6 +198,7 @@ export class NodePtyHost implements IPtyHost {
     const spawnArgs: string[] | string =
       opts.commandLine !== undefined && file === opts.file ? opts.commandLine : args;
     const spawnedAt = Date.now();
+    // child-exempt: node-pty's shell is not a ChildProcess — a failed spawn throws to the terminal service, and its exit is reported through onExit to the terminal's own exit path.
     const proc = this.pty.spawn(file, spawnArgs, {
       cwd: opts.cwd,
       cols: opts.cols,
@@ -296,7 +300,9 @@ export class NodePtyHost implements IPtyHost {
   async conhostOf(pid: number): Promise<number | null> {
     const session = this.sessions.get(pid);
     if (session === undefined) return null;
-    await session.conhostReady.catch(() => undefined);
+    // conhostReady is the attribution queue, which already logs and swallows a failed pass — so a
+    // rejection reaching here is unexpected.
+    await session.conhostReady.catch((error: unknown) => logCaught('node-pty-host: wait for console host attribution', error));
     return session.conhostPid;
   }
 
@@ -313,7 +319,9 @@ export class NodePtyHost implements IPtyHost {
     if (host !== null) this.reaping.add(host);
     if (this.sessions.get(pid) === session) this.sessions.delete(pid);
     if (host === null) return;
-    await this.taskkill(host, true, this.limitMs).catch(() => {});
+    await this.taskkill(host, true, this.limitMs).catch((error: unknown) =>
+      logExpected('node-pty-host: reap console host', 'taskkill() has already logged the refusal with its stderr', error),
+    );
     this.reaping.delete(host);
   }
 
@@ -323,7 +331,8 @@ export class NodePtyHost implements IPtyHost {
    */
   private queueAttribution(): Promise<void> {
     const pass = this.attribution.then(() => this.attributeConhosts());
-    this.attribution = pass.catch(() => {});
+    // The only record of a failed pass: callers wait on the caught queue, and the next pass retries.
+    this.attribution = pass.catch((error: unknown) => logCaught('node-pty-host: attribute console hosts', error));
     return this.attribution;
   }
 
@@ -363,7 +372,9 @@ export class NodePtyHost implements IPtyHost {
       const left = Math.max(0, deadline - Date.now());
       await within(nativeExitSeen(session, left), left);
     });
-    this.shellKills = run.catch(() => {});
+    this.shellKills = run.catch((error: unknown) =>
+      logExpected('node-pty-host: shell kill queue', 'the same rejection reaches the caller through the promise returned here; this copy only keeps the queue moving', error),
+    );
     return run;
   }
 
@@ -380,6 +391,7 @@ export class NodePtyHost implements IPtyHost {
         (error, _stdout, stderr) => {
           if (!error) return resolve();
           if ((error as { code?: unknown }).code === 128) return resolve(); // not found: already gone
+          logChildFailure(`node-pty-host: taskkill ${pid}`, error, stderr);
           reject(new Error(String(stderr || error.message).trim() || 'the operating system refused to end it'));
         },
       );
@@ -393,8 +405,8 @@ export class NodePtyHost implements IPtyHost {
   resize(handle: PtyHandle, cols: number, rows: number): void {
     try {
       this.sessions.get(handle.pid)?.proc.resize(cols, rows);
-    } catch {
-      /* a dead/closing pty rejects resize — safe to ignore */
+    } catch (error) {
+      logExpected('node-pty-host: resize', 'a pty whose shell has just exited rejects a resize that was already on its way', error);
     }
   }
 
@@ -432,12 +444,15 @@ export class NodePtyHost implements IPtyHost {
     // Not awaited on its own: a taskkill that never returns must not outlast the limit.
     void this.killShell(session, () => this.taskkill(pid, true, Math.max(1, deadline - Date.now())), deadline).catch(
       (error: Error) => {
+        logExpected('node-pty-host: end shell', 'taskkill() has logged the refusal; it is thrown below if the shell outlives the deadline', error);
         refusal = error;
       },
     );
     for (const other of attached) {
       if (other === pid || other === session.conhostPid || other === process.pid) continue;
-      void this.taskkill(other, true, Math.max(1, deadline - Date.now())).catch(() => {});
+      void this.taskkill(other, true, Math.max(1, deadline - Date.now())).catch((error: unknown) =>
+        logExpected('node-pty-host: end attached process', 'taskkill() has already logged the refusal with its stderr', error),
+      );
     }
     // A refusal is only final if the shell is still there: taskkill /T also reports children it
     // could not reach, while the shell itself is gone.
@@ -470,10 +485,16 @@ export class NodePtyHost implements IPtyHost {
     await this.killShell(
       session,
       async () => {
-        await Promise.all(targets.map((pid) => this.taskkill(pid, false, timeoutMs).catch(() => {})));
+        await Promise.all(
+          targets.map((pid) =>
+            this.taskkill(pid, false, timeoutMs).catch((error: unknown) =>
+              logExpected('node-pty-host: forced end', 'taskkill() has already logged the refusal; what survives is reported next', error),
+            ),
+          ),
+        );
       },
       Date.now() + timeoutMs,
-    ).catch(() => {});
+    ).catch((error: unknown) => logCaught('node-pty-host: forced end', error));
     return { survivors: await aliveAmong(targets, timeoutMs) };
   }
 
@@ -487,7 +508,8 @@ export class NodePtyHost implements IPtyHost {
       [...this.sessions.keys()].map(async (pid) => {
         try {
           await this.end({ pid }, this.limitMs);
-        } catch {
+        } catch (error) {
+          logCaught(`node-pty-host: end terminal ${pid} at shutdown (escalating to a forced end)`, error);
           const { survivors } = await this.forceEnd({ pid }, this.limitMs);
           logSurvivors(survivors);
         }
@@ -495,7 +517,13 @@ export class NodePtyHost implements IPtyHost {
     );
     this.sessions.clear();
     const hosts = await conhostChildren(process.pid, this.limitMs);
-    await Promise.all(hosts.map(({ pid }) => this.taskkill(pid, true, this.limitMs).catch(() => {})));
+    await Promise.all(
+      hosts.map(({ pid }) =>
+        this.taskkill(pid, true, this.limitMs).catch((error: unknown) =>
+          logExpected('node-pty-host: reap unattributed console host', 'taskkill() has already logged the refusal with its stderr', error),
+        ),
+      ),
+    );
   }
 
   onData(handle: PtyHandle, cb: (chunk: string) => void): () => void {
@@ -574,7 +602,11 @@ async function attachedPids(shellPid: number, limitMs: number): Promise<number[]
       const pids = (JSON.parse(out) as Record<string, number[] | null>)[String(shellPid)];
       return Array.isArray(pids) ? pids : [];
     })
-    .catch(() => []);
+    .catch((error: unknown) => {
+      // The end goes ahead and ends less: a command attached outside the shell's tree may outlive it.
+      logCaught('node-pty-host: read attached processes for an end', error);
+      return [];
+    });
   const pids = await Promise.race([read, late]);
   clearTimeout(timer);
   return pids;
@@ -600,7 +632,11 @@ function runAttachedHelper(shellPids: readonly number[]): Promise<string> {
         // Sanitised like every environment this host hands a child (#172); run as plain node.
         env: { ...sanitizeSpawnEnv(process.env), ELECTRON_RUN_AS_NODE: '1' },
       },
-      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+      (error, stdout, stderr) => {
+        if (!error) return resolve(String(stdout));
+        logChildFailure('node-pty-host: attached-process helper', error, stderr);
+        reject(error);
+      },
     );
   });
 }
@@ -617,7 +653,11 @@ function run(file: string, args: string[], timeoutMs: number): Promise<string> {
       file,
       args,
       { encoding: 'utf8', timeout: Math.max(1, timeoutMs), windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
-      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+      (error, stdout, stderr) => {
+        if (!error) return resolve(String(stdout));
+        logChildFailure(`node-pty-host: ${file}`, error, stderr);
+        reject(error);
+      },
     );
   });
 }
@@ -647,7 +687,8 @@ async function conhostChildren(
       .map((l) => l.trim().split(/\s+/).map(Number))
       .filter(([pid, at]) => Number.isFinite(pid) && pid! > 0 && Number.isFinite(at))
       .map(([pid, at]) => ({ pid: pid!, createdAt: at! }));
-  } catch {
+  } catch (error) {
+    logExpected('node-pty-host: find console hosts', 'run() has already logged why powershell failed; attribution retries on the next pass', error);
     return [];
   }
 }
@@ -748,7 +789,11 @@ function pidTableSnapshot(): Promise<Map<number, ProcessTreeRow[]>> {
       'powershell.exe',
       PID_TABLE_ARGS,
       { encoding: 'utf8', timeout: PID_TABLE_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
-      (error, stdout) => (error ? reject(error) : resolve(String(stdout))),
+      (error, stdout, stderr) => {
+        if (!error) return resolve(String(stdout));
+        logChildFailure('node-pty-host: pid table snapshot (powershell)', error, stderr);
+        reject(error);
+      },
     );
   }).then(parsePidTable);
   pidTableInFlight = snapshot;
@@ -818,7 +863,11 @@ async function readProcessTable(): Promise<Map<number, ChildProcess[]>> {
           "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate,ExecutablePath | ConvertTo-Json -Compress",
         ],
         { timeout: TERMINAL_END_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
-        (error, stdout) => (error ? reject(error) : resolve(stdout)),
+        (error, stdout, stderr) => {
+          if (!error) return resolve(stdout);
+          logChildFailure('node-pty-host: process table (powershell)', error, stderr);
+          reject(error);
+        },
       ),
     );
   } catch (error) {
@@ -871,7 +920,11 @@ export function parseProcessTable(json: string): Map<number, ChildProcess[]> {
 async function descendantProcesses(rootPid: number): Promise<ChildProcess[]> {
   // FR-019e: for command memory's child list a failed read is `[]`, which leaves the last known value
   // in place. The attached path takes the rejection instead (FR-042, review finding 5).
-  const byParent = await processSnapshot(Date.now()).catch(() => new Map<number, ChildProcess[]>());
+  // Logged here as well as at the powershell run: a table that ran but did not parse is only seen here.
+  const byParent = await processSnapshot(Date.now()).catch((error: unknown) => {
+    logCaught('node-pty-host: read process table for command memory', error);
+    return new Map<number, ChildProcess[]>();
+  });
   return descendantsOf(byParent, rootPid);
 }
 

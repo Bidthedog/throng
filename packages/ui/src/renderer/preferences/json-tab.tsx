@@ -5,6 +5,7 @@ import { StandaloneEditor } from '../editor/standalone-editor.js';
 import { useCopyToClipboard } from '../common/use-copy.js';
 import { useJsonEditGate } from './json-edit-gate.js';
 import { JsonDocumentNotice, type JsonProblem } from './json-document-notice.js';
+import { logCaught, logExpected } from '@throng/core';
 
 /**
  * A JSON editor tab (feature 007, US5 — FR-016/017/021/022a/043; lifecycle reworked by 032,
@@ -94,6 +95,7 @@ function problemsIn(
     }
     return [];
   } catch (err) {
+    logExpected('json-tab: parse the edited document', 'the user is mid-edit or typed invalid JSON; shown in the tab as a problem', err);
     return [
       { kind: 'document', text: 'This is not valid JSON.' },
       { kind: 'document', text: err instanceof Error ? err.message : String(err) },
@@ -179,7 +181,7 @@ export function JsonTab({ docId }: JsonTabProps): ReactElement {
         // the list itself needs no state of its own.
         setProblems(problemsIn(docId, textRef.current, themes));
       })
-      .catch(() => {});
+      .catch((error: unknown) => logCaught('json-tab: list themes', error));
     return () => {
       active = false;
     };

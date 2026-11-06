@@ -31,6 +31,7 @@ import { Text } from '@codemirror/state';
 import {
   MAX_COMMIT_SNIPPET_CHARS,
   applyReplacements,
+  logCaught,
   postCommitSnippets,
   resolveSaveConfinement,
   toAbsPath,
@@ -512,6 +513,7 @@ export class ReplaceCommitService {
         refusedAny: checked.gone.length > 0,
       };
     } catch (e) {
+      logCaught('replace-commit-service: write replacements to disk', e);
       return { kind: 'failed', reason: reasonFor(e) };
     }
   }

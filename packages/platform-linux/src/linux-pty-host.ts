@@ -5,6 +5,8 @@ import {
   TERMINAL_END_TIMEOUT_MS,
   descendantsOf,
   escalationTargets,
+  logCaught,
+  logExpected,
   sanitizeSpawnEnv,
   type ChildProcess,
   type IPtyHost,
@@ -95,6 +97,7 @@ export class LinuxPtyHost implements IPtyHost {
 
   start(opts: PtyStartOptions): PtyHandle {
     const spawnedAt = Date.now();
+    // child-exempt: node-pty's shell; its exit is tracked through onExit and reported by the agent's terminal lifecycle.
     const proc = this.pty.spawn(opts.file, opts.args, {
       cwd: opts.cwd,
       cols: opts.cols,
@@ -133,8 +136,9 @@ export class LinuxPtyHost implements IPtyHost {
   resize(handle: PtyHandle, cols: number, rows: number): void {
     try {
       this.sessions.get(handle.pid)?.proc.resize(cols, rows);
-    } catch {
+    } catch (error) {
       // The shell exited between the check and the call; its exit is on its way.
+      logExpected('linux-pty-host: resize', 'the shell can exit between the lookup and the resize; its exit is on its way', error);
     }
   }
 
@@ -211,7 +215,10 @@ export class LinuxPtyHost implements IPtyHost {
   }
 
   async listChildProcesses(handle: PtyHandle): Promise<ChildProcess[]> {
-    const rows = await this.descendants(handle.pid).catch(() => []);
+    const rows = await this.descendants(handle.pid).catch((error: unknown): ProcRow[] => {
+      logCaught('linux-pty-host: list child processes', error);
+      return [];
+    });
     return Promise.all(
       rows.map(async (row) => ({
         pid: row.pid,
@@ -265,7 +272,10 @@ export class LinuxPtyHost implements IPtyHost {
 
   /** The shell and everything below it now, read fresh. The daemon itself is never in the list. */
   private async treeOf(pid: number, session: Session): Promise<ProcRow[]> {
-    const rows = await this.freshTable().catch((): ProcRow[] => []);
+    const rows = await this.freshTable().catch((error: unknown): ProcRow[] => {
+      logCaught('linux-pty-host: read process tree', error);
+      return [];
+    });
     // The shell's own row when it has one: the same clock as its children's, which a wall clock step cannot separate.
     const shellStart = rows.find((row) => row.pid === pid)?.startedAt ?? session.spawnedAt - 1000;
     const targets = new Set(escalationTargets(rows, pid, null, process.pid, shellStart));

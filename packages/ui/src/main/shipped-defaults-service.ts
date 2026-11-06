@@ -13,6 +13,7 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_KEYBINDINGS,
   guardedSettingsValidator,
+  logExpected,
   parseKeybindings,
   planSettingsUpgrade,
   planThemeUpgrade,
@@ -53,7 +54,8 @@ async function fileExists(path: string): Promise<boolean> {
   try {
     await readFile(path);
     return true;
-  } catch {
+  } catch (error) {
+    logExpected('shipped-defaults-service: file exists', 'an existence probe answers false for a config file not yet written', error);
     return false;
   }
 }
@@ -223,8 +225,9 @@ export class ShippedDefaultsService {
     } else {
       try {
         current = guard(JSON.parse(raw));
-      } catch {
+      } catch (error) {
         // Present but unparseable — the case FR-006a exists for. Refuse; write nothing.
+        logExpected('shipped-defaults-service: reset leaf', 'a hand-edited config file may not parse; the reset is refused and the user told', error);
         return { ok: false, reason: 'unreadable' };
       }
     }
@@ -299,7 +302,8 @@ export class ShippedDefaultsService {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
-    } catch {
+    } catch (error) {
+      logExpected('shipped-defaults-service: upgrade settings', 'a hand-edited settings.json may not parse; it is left alone for the user to repair', error);
       return null;
     }
     const leaves = planSettingsUpgrade(parsed, this.shipped);
@@ -327,7 +331,8 @@ export class ShippedDefaultsService {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
-    } catch {
+    } catch (error) {
+      logExpected('shipped-defaults-service: upgrade keybindings', 'a hand-edited keybindings.json may not parse; it is left alone for the user to repair', error);
       return null;
     }
     const next = applyKeybindingsUpgrade(parsed, this.shipped);
@@ -456,7 +461,8 @@ export class ShippedDefaultsService {
         return (parsed as { version: number }).version;
       }
       return null;
-    } catch {
+    } catch (error) {
+      logExpected('shipped-defaults-service: read applied version', 'the marker is absent before the first seed; defaults are then applied', error);
       return null;
     }
   }
@@ -469,7 +475,8 @@ export class ShippedDefaultsService {
       if (!raw || raw.trim().length === 0) continue; // phantom (e.g. throng with no file)
       try {
         present[name] = JSON.parse(raw) as Theme;
-      } catch {
+      } catch (error) {
+        logExpected('shipped-defaults-service: read present theme', 'a hand-edited theme may not parse; a custom one is left for repair, a built-in restored', error);
         // Malformed on disk → omit from `present`. A malformed CUSTOM theme is thus
         // left untouched for the user to repair. A malformed BUILT-IN, being absent
         // from `present`, is recreated from the record by planThemeUpgrade.addThemes

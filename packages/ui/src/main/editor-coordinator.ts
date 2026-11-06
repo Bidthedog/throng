@@ -22,7 +22,7 @@
  * Save-All across windows, crash recovery and the cross-window mirror are all served
  * from the authority's text, with no renderer round-trip for content.
  */
-import { pathCompareKey } from '@throng/core';
+import { logExpected, pathCompareKey } from '@throng/core';
 import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
@@ -535,7 +535,8 @@ export class EditorCoordinator {
   }): Promise<DropDecision> {
     try {
       return await this.service.resolveEntry(req);
-    } catch {
+    } catch (error) {
+      logExpected('editor-coordinator: resolve drop', 'a dropped file can vanish or become unreachable between pick-up and drop; the drop is refused with a reason', error);
       // `stat` REJECTS when the path is gone — a file deleted between picking it up and letting go, a
       // dangling symlink, a directory whose parent denies traversal. Left bare, that rejection crossed
       // the bridge, rejected the renderer's `resolveDrop` promise, and was swallowed by the `void` on
@@ -1892,7 +1893,10 @@ export class EditorCoordinator {
         ownerKind: doc.ownerKind,
         allProjectRoots: doc.allProjectRoots,
       };
-      const decision = await this.service.resolveEntry(req).catch(() => ({ ok: false }) as const);
+      const decision = await this.service.resolveEntry(req).catch((error: unknown) => {
+        logExpected('editor-coordinator: re-resolve open document', 'an open file can be deleted or made unreachable on disk; the panel is marked unloadable', error);
+        return { ok: false } as const;
+      });
       // The document can be re-pointed or destroyed inside that await (019) — anything decided about
       // the old path is an answer to a question nobody is asking any more.
       if (this.docFor(panelId) !== doc || doc.absPath !== abs) return;

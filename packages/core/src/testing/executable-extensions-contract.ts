@@ -1,3 +1,4 @@
+import { logCaught } from '../diagnostics/caught.js';
 import type { IExecutableExtensions } from '../abstractions/executable-extensions.js';
 
 /**
@@ -117,6 +118,7 @@ export function runExecutableExtensionsContract(makeSubject: () => IExecutableEx
     try {
       answer = subject.isExecutable(input);
     } catch (e) {
+      logCaught('executable-extensions-contract: isExecutable', e);
       threw = e;
     }
     assert(

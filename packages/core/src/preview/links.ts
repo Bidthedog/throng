@@ -22,6 +22,7 @@
  *
  * Pure: no OS, no DOM, no `node:path`.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { isUnderPath } from '../fs/path-id.js';
 import { relPathUnderRoot } from '../explorer/path-rules.js';
 import { LANGUAGES, PLAIN_TEXT_ID, languageById } from '../editor/languages.js';
@@ -93,7 +94,8 @@ function decodeEntities(value: string): string | null {
 function decodePercent(value: string): string | null {
   try {
     return decodeURIComponent(value);
-  } catch {
+  } catch (error) {
+    logExpected('links: percent-decode a preview link', 'a document may carry a link with a malformed percent escape; it is treated as undecodable', error);
     return null;
   }
 }

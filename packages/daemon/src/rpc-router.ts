@@ -5,7 +5,7 @@ import {
   type JsonRpcRequest,
   type JsonRpcResponse,
 } from '@throng/ipc-contract';
-import { ProjectNotFoundError, ProjectValidationError } from '@throng/core';
+import { ProjectNotFoundError, ProjectValidationError, logCaught, logExpected } from '@throng/core';
 
 export type RpcHandler = (params: unknown) => unknown | Promise<unknown>;
 
@@ -56,6 +56,11 @@ export class RpcRouter {
       const result = await handler(request.params);
       return { jsonrpc: '2.0', id: request.id, result };
     } catch (error) {
+      if (error instanceof ProjectValidationError || error instanceof ProjectNotFoundError || error instanceof RpcError) {
+        logExpected(`rpc-router: ${request.method}`, 'a typed refusal is answered to the caller as a JSON-RPC error it presents', error);
+      } else {
+        logCaught(`rpc-router: ${request.method}`, error);
+      }
       return this.mapError(request.id, error);
     }
   }

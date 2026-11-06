@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import process from 'node:process';
-import type { Unavailable } from '@throng/core';
+import { logCaught, type Unavailable } from '@throng/core';
 import type { GpuReader } from './windows-process-metrics.js';
 
 /**
@@ -52,7 +52,9 @@ function loadFfi(): GpuCountersFfi | null {
       formattedArray: (c, size, count, buf) => callAsync(PdhGetFormattedCounterArrayW, c, PDH_FMT_DOUBLE, size, count, buf),
       addressOf: (buf) => koffi.address(buf) as bigint,
     };
-  } catch {
+  } catch (error) {
+    // koffi ships with throng and pdh.dll is part of Windows: failing here is a broken install.
+    logCaught('windows-gpu-counters: load pdh.dll', error);
     ffi = null;
   }
   return ffi;
@@ -131,7 +133,9 @@ export class WindowsGpuCounters implements GpuReader {
       const buf = Buffer.alloc(size[0]!);
       if ((await api.formattedArray(this.counter, size, count, buf)) !== 0) return unavailable('GPU counters could not be read');
       return gpuByPid(parseItems(buf, count[0] ?? 0, api.addressOf(buf)));
-    } catch {
+    } catch (error) {
+      // The PDH calls answer with status codes; a throw is the FFI itself failing.
+      logCaught('windows-gpu-counters: read', error);
       return unavailable('GPU counters could not be read');
     }
   }

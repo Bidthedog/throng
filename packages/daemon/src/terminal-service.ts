@@ -23,6 +23,8 @@ import {
   type NegotiationScan,
   classifyFailure,
   type FailureCause,
+  logCaught,
+  logExpected,
 } from '@throng/core';
 import { basename } from 'node:path';
 import {
@@ -390,7 +392,8 @@ export class TerminalService {
             ? await host.readCwds([...panels.keys()].map((pid) => ({ pid })))
             : await processCwd.read([...panels.keys()]);
           return { panels, cwds };
-        } catch {
+        } catch (error) {
+          logCaught('terminal-service: poll terminal cwds', error);
           return { panels, cwds: new Map<number, string>() }; // a poll failure must never disturb the daemon
         }
       }),
@@ -442,7 +445,13 @@ export class TerminalService {
     for (const s of due) {
       if (attachedByHost.has(s.host) || !s.host.listAttachedProcesses) continue;
       const handles = due.filter((o) => o.host === s.host).map((o) => o.handle);
-      attachedByHost.set(s.host, s.host.listAttachedProcesses(handles).catch(() => null));
+      attachedByHost.set(
+        s.host,
+        s.host.listAttachedProcesses(handles).catch((error: unknown) => {
+          logCaught('terminal-service: list attached processes', error);
+          return null;
+        }),
+      );
     }
     await Promise.all(due.map((s) => this.observeCommand(s, attachedByHost.get(s.host), observedAt)));
   }
@@ -463,7 +472,8 @@ export class TerminalService {
       ]);
       // After the listing: the PTY agent reports the shell's start time with its children.
       shellStartedAt = await session.host.shellStartedAt?.(session.handle);
-    } catch {
+    } catch (error) {
+      logCaught('terminal-service: observe foreground command', error);
       return; // FR-019e: keep the last known value rather than clearing it.
     }
     const attached = attachedOnThisHost?.get(session.handle.pid);
@@ -513,7 +523,15 @@ export class TerminalService {
       timer.unref?.();
     });
     try {
-      return await Promise.race([host.executableArch(path).catch(() => null), limit]);
+      const arch = host.executableArch(path).catch((error: unknown) => {
+        logExpected(
+          'terminal-service: read executable arch',
+          'a command image the daemon may not open (another account\'s process, or one deleted since it started) has no arch to show',
+          error,
+        );
+        return null;
+      });
+      return await Promise.race([arch, limit]);
     } finally {
       clearTimeout(timer);
     }
@@ -585,8 +603,8 @@ export class TerminalService {
     session.focusTold = now;
     try {
       session.host.write(session.handle, now === 'in' ? '\x1b[I' : '\x1b[O');
-    } catch {
-      // A PTY that refuses a write is ending; its exit is reported on its own path.
+    } catch (error) {
+      logExpected('terminal-service: tell focus', 'a PTY that refuses a write is ending; its exit is reported on its own path', error);
     }
   }
 
@@ -656,8 +674,8 @@ export class TerminalService {
     for (const host of [this.pty, this.deElevatedPty]) {
       try {
         await host?.dispose?.();
-      } catch {
-        /* best-effort */
+      } catch (error) {
+        logCaught('terminal-service: dispose PTY host on shutdown', error); // best-effort
       }
     }
   }
@@ -944,6 +962,7 @@ export class TerminalService {
           try {
             host.write(handle, `${writeOnReady}\r`);
           } catch (error) {
+            logCaught('terminal-service: write startup command', error);
             // FR-026b: a throwing `write` produces NO terminal output at all, so unlike a command
             // the shell rejected, the user would otherwise have no way to know their startup
             // command never ran. Surface it as terminal output rather than swallowing it.
@@ -1005,8 +1024,8 @@ export class TerminalService {
     if (session.status === 'running') {
       try {
         session.host.resize(session.handle, cols, rows);
-      } catch {
-        /* best-effort — the process may already be gone */
+      } catch (error) {
+        logExpected('terminal-service: resize to shared grid', 'the shell may already have exited; its exit is reported on its own path', error);
       }
     }
   }
@@ -1071,8 +1090,9 @@ export class TerminalService {
     if (nudged === rows) return; // already at the floor — a nudge would be a no-op
     try {
       session.host.resize(session.handle, cols, nudged);
-    } catch {
-      return; // best-effort — the process may already be gone
+    } catch (error) {
+      logExpected('terminal-service: repaint nudge', 'the shell may already have exited; its exit is reported on its own path', error);
+      return;
     }
     /*
      * Restore on a LATER tick, not this one.
@@ -1092,8 +1112,8 @@ export class TerminalService {
       if (session.status !== 'running') return;
       try {
         session.host.resize(session.handle, session.grid.cols, session.grid.rows);
-      } catch {
-        /* best-effort — the process may already be gone */
+      } catch (error) {
+        logExpected('terminal-service: repaint restore', 'the shell may already have exited; its exit is reported on its own path', error);
       }
     }, REPAINT_RESTORE_MS);
     timer.unref?.(); // never keep the daemon alive for a repaint
@@ -1154,8 +1174,8 @@ export class TerminalService {
     for (const dispose of session.disposers) {
       try {
         dispose();
-      } catch {
-        /* ignore */
+      } catch (error) {
+        logCaught('terminal-service: dispose session listener', error);
       }
     }
     if (this.sessions.get(session.panelId) === session) this.sessions.delete(session.panelId);
@@ -1178,8 +1198,8 @@ export class TerminalService {
     for (const dispose of session.disposers) {
       try {
         dispose();
-      } catch {
-        /* ignore */
+      } catch (error) {
+        logCaught('terminal-service: dispose session listener', error);
       }
     }
     // A superseded session's panel already has a fresh terminal (051 FR-004): it is not this
@@ -1194,7 +1214,7 @@ export class TerminalService {
     // folder released, then told — without the release stopping every other terminal.
     const released = session.rootless ? Promise.resolve() : this.locks.release(session.projectId);
     void released
-      .catch(() => {})
+      .catch((error: unknown) => logCaught('terminal-service: release folder lock on exit', error))
       .then(() => {
         // A release can take seconds (the folder is polled until free), and the panel may have been
         // given a fresh terminal meanwhile: this exit is no longer its terminal's (051 MT-01).
@@ -1272,6 +1292,7 @@ export class TerminalService {
   private classifyAndLog(error: unknown, cwd: string): FailureCause | undefined {
     const cause = classifyFailure(error, { subject: basename(cwd), operation: 'lock' }) ?? undefined;
     if (cause) console.warn(`[terminal] launch failed: ${cause.raw}`);
+    else logCaught('terminal-service: launch failed', error);
     return cause;
   }
 
@@ -1329,7 +1350,8 @@ export class TerminalService {
     if (session.status !== 'running' || session.ending) return false;
     try {
       return isBusy(await session.host.probeChildPids(session.handle));
-    } catch {
+    } catch (error) {
+      logCaught('terminal-service: probe busy', error); // counts as busy (FR-012)
       return true;
     }
   }

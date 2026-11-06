@@ -8,7 +8,7 @@
  */
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Disposable, IFileWatcher, WatchBatch, WatchOptions } from '@throng/core';
+import { logExpected, type Disposable, type IFileWatcher, type WatchBatch, type WatchOptions } from '@throng/core';
 
 /** Tuning, all overridable per instance (Principle X). */
 export interface NodeFileWatcherOptions {
@@ -250,6 +250,7 @@ export class NodeFileWatcher implements IFileWatcher {
           scheduleRetry(error.code ?? error.message);
         });
       } catch (error) {
+        logExpected('node-file-watcher: wait for missing path', 'the ancestor may vanish too; scheduleRetry retries and warns', error);
         scheduleRetry(
           (error as NodeJS.ErrnoException)?.code ?? 'the missing path could not be waited on',
         );
@@ -293,6 +294,7 @@ export class NodeFileWatcher implements IFileWatcher {
           onChange(whole, { paths: [whole], complete: false });
         }
       } catch (error) {
+        logExpected('node-file-watcher: establish watch', 'a missing folder is waited for; any other failure is retried and warned by scheduleRetry', error);
         const code = (error as NodeJS.ErrnoException)?.code;
         // Not there yet — wait for it (see `waitForPath`), rather than burning the retry budget
         // on a directory whose only problem is that it does not exist.

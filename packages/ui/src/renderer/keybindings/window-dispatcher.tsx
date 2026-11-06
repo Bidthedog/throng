@@ -68,6 +68,7 @@ import { openResourceMonitor } from '../resources/monitor-store.js';
 import { zoomFocusedDiagram, zoomPanelDiagram } from '../preview/diagram/diagram-zoom.js';
 import { useSidePaneActions, type SidePaneActions } from '../workspace/side-pane-actions.js';
 import { endSplitMode, getSplitModePanel, startSplitMode, subscribeSplitMode } from '../workspace/split-mode.js';
+import { logExpected } from '@throng/core';
 
 /**
  * 031 FR-032a — the command that opens the tab picker (`Ctrl+Alt+T` by default, rebindable).
@@ -252,15 +253,17 @@ function caretRect(el: HTMLElement): DOMRect | null {
       atCursor.collapse(true);
       const cursor = atCursor.getBoundingClientRect();
       if (cursor.height !== 0 || cursor.width !== 0) return cursor;
-    } catch {
+    } catch (error) {
       /* an offset the node cannot take — fall through to the selection's own box */
+      logExpected('window-dispatcher: measure the caret', 'a selection focus offset the node cannot take; the selection\'s own box is used instead', error);
     }
   }
   try {
     const rect = range.getBoundingClientRect();
     if (rect.height === 0 && rect.width === 0) return null;
     return rect;
-  } catch {
+  } catch (error) {
+    logExpected('window-dispatcher: measure the selection', 'a Range with no layout engine behind it (a test environment) cannot report its box; the element\'s box is used', error);
     // A Range that cannot report its own box (e.g. a test environment with no layout engine) falls
     // back to the element's own box, exactly as "an all-zero rect" already does above.
     return null;

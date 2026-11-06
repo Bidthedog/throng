@@ -32,6 +32,7 @@
  * opened showing the shipped default for that key, because that is what the app runs on when a
  * document omits it.
  */
+import { logExpected } from '../diagnostics/caught.js';
 import { DEFAULT_APP_SETTINGS } from './app-settings.js';
 import type { ConfigChange } from './config-patch.js';
 import { getAtPath, leavesOfDeclared } from './metadata.js';
@@ -80,7 +81,8 @@ export function planRevertAll(snapshot: OnEntrySnapshot): RevertPlan {
   let captured: unknown;
   try {
     captured = JSON.parse(snapshot.settings);
-  } catch {
+  } catch (error) {
+    logExpected('revert-plan: parse captured settings', 'the captured settings are the hand-edited text the user had on entry, which need not parse; there is then nothing to revert settings to', error);
     return { settingsChanges: [], documents };
   }
   if (captured === null || typeof captured !== 'object' || Array.isArray(captured)) {

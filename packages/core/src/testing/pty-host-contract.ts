@@ -1,3 +1,4 @@
+import { logCaught, logExpected } from '../diagnostics/caught.js';
 import type { ChildProcess, IPtyHost, PtyExit } from '../abstractions/pty-host.js';
 
 /**
@@ -181,7 +182,10 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
 
     // 4c. listChildProcesses never REJECTS (FR-019e): a failed observation must leave the last
     //     known command in place, so the caller is never handed an exception to swallow.
-    const dead = await host.listChildProcesses({ pid: 999_999_999 }).catch(() => 'REJECTED');
+    const dead = await host.listChildProcesses({ pid: 999_999_999 }).catch((error: unknown) => {
+      logCaught('pty-host-contract: list children of a dead handle', error);
+      return 'REJECTED';
+    });
     assert(dead !== 'REJECTED', 'listChildProcesses must resolve, never reject, for a dead handle');
 
     // 6. end → resolves only after onExit has fired, without blocking the caller (051 FR-010).
@@ -199,7 +203,9 @@ export async function runPtyHostContract(env: PtyHostContractEnv): Promise<void>
     // 6a. ending a terminal that is already gone resolves (edge case: ending one already exiting).
     await host.end(handle, 8000);
   } finally {
-    await host.end(handle, 8000).catch(() => {});
+    await host.end(handle, 8000).catch((error: unknown) => {
+      logExpected('pty-host-contract: end in teardown', 'the body has normally ended this terminal already; this end only stops one a failed assertion left running', error);
+    });
   }
 
   // 6b. 051 FR-014: an end immediately after start — before the host process can have been
