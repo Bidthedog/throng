@@ -1,6 +1,31 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.2.0 → 6.3.0
+Bump rationale: MINOR — a new principle, XIII "Every Failure Leaves a Trace", from spec 066 (#543) and its
+                clarifications of 2026-11-06 (the fatal level and what counts as a component crash). Nothing is
+                withdrawn and no existing principle is redefined. It is a new constraint that the codebase
+                failed when it was written — the ordinary MINOR case (v6.1.0, v5.9.0, v3.15.0) — and spec 066
+                closes the gap in the same change: its audit (specs/066-failure-logging/audit.md) classifies every
+                site, and a build guard keeps it closed.
+Modified principles: none. Development Workflow "all eleven principles" → "every principle" (a count that
+                was already stale at twelve).
+Added sections: Core Principles › XIII. Every Failure Leaves a Trace.
+Removed sections: none.
+Audit (2026-11-06, at 661a08e2): 85 empty or comment-only catches, ~90 silent promise catches and ~190
+                catches returning a fallback without logging across packages/*/src; 21 child-process start
+                sites, 9 recording nothing on failure; no fatal level; the renderer recorded no error of its own;
+                the de-elevated PTY agent logged to the desktop user's %TEMP%. Spec 066 fixes each.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+           ✅ .claude/skills/throng-spec-governance/SKILL.md — principle list brought current in the same change.
+           ✅ .claude/skills/throng-failure-notices/SKILL.md — reviewed; notices and logs stay separate (a log
+              never replaces a notice), so no rule changes.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.1.0 → 6.2.0
 Bump rationale: MINOR — Principle IV gains one additive rule, settled by the maintainer in 062's manual
                 test on 2026-11-03: a default key chord is the same on every platform wherever it can be.
@@ -2966,6 +2991,35 @@ table on every resize frame — ~176ms blocked per resize step on a 21-table doc
 046 specs stopped answering, and a resize feedback loop flashed the window — while every unit,
 component and E2E test passed, because none of them measured the cost.
 
+### XIII. Every Failure Leaves a Trace
+
+A failure anywhere in throng MUST leave a record in the diagnostic log that says what failed and why.
+No feature may fail in a way that leaves the diagnostic log empty.
+
+- **Every process is watched.** Every process throng starts MUST have its startup failure, its abnormal
+  exit and the reason for both recorded in the diagnostic log — by the process itself where it can, and
+  by its parent always. A process that fails while resolving its imports cannot log anything; only its
+  parent saw it go. An exit throng asked for is not a failure.
+- **Every caught error is logged.** An error reported by a child, or caught and not re-thrown, MUST be
+  logged. A failure the code expects in normal operation is logged at `debug` with the reason it is
+  expected, stated at the site; any other at `warn` or above. A catch that only discards is a
+  violation, whatever it guards.
+- **A crash is fatal.** The log has a `fatal` level above `error`. The crash of any component — a
+  process throng starts, a window, a panel — is logged at it, and fatal records are written whatever
+  log level is configured. A panel that throws while rendering, or is torn down by a failure rather
+  than by the user, has crashed.
+- **The log is where the user can find it.** Every process writes into the one logs folder the
+  application opens for the user — never a temporary folder — and logging never crashes or stalls the
+  process doing it.
+- **Enforced by the build.** A new silent catch or an unwatched process start fails the unit layer,
+  naming the file and line. A process start the parent deliberately does not watch says why at the site;
+  nothing else is exempt.
+
+Rationale: an installed build has no console, so the log is the only thing a user can send. #542 —
+the resource collector died resolving an import and left the log empty — was invisible for every
+reason this principle names: the parent ignored the child's output, the error was swallowed, and the
+symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
+
 ## Technology & Architecture Constraints
 
 - **Baseline stack (chosen):** Electron + TypeScript for the UI, an xterm.js-family
@@ -3030,7 +3084,7 @@ component and E2E test passed, because none of them measured the cost.
   weakened or dropped — only its delivery is sequenced. Introducing a structural seam
   (e.g. a pane shell) ahead of its content is the canonical example. Incremental
   delivery MUST NOT be used to ship a permanently incomplete capability.
-- Every plan MUST be evaluated against all eleven principles; any violation MUST
+- Every plan MUST be evaluated against every principle; any violation MUST
   be recorded and justified in the plan's Complexity Tracking section or the
   design MUST be revised to comply.
 - **Static analysis & linting MUST pass as a quality gate (NON-NEGOTIABLE).**
@@ -3177,7 +3231,7 @@ component and E2E test passed, because none of them measured the cost.
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.2.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-03
+**Version**: 6.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-06
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
