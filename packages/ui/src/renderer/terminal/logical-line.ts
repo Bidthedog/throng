@@ -175,8 +175,11 @@ export function logicalLineAt(
  *    are measured together;
  *  - `row` starts at the same indent as `above` (or at the column after `above`'s bullet glyph), that
  *    indent is at least one column, and a non-space follows it;
- *  - `above`'s last word does not already end in a KNOWN extension — that word is complete, and the
- *    next row starts a new one.
+ *  - `above`'s last word is not complete: it does not end in `,` or `;`, nor in a KNOWN extension once
+ *    a trailing position is set aside (unless the edge cut the position itself, `:12` + `0`);
+ *  - a row up to `NEAR_EDGE_CELLS` short of its width (Claude Code's input box breaks there) joins only
+ *    a break INSIDE a path: its last word has a separator, and with the next row's first word it ends
+ *    in a known extension or a separator.
  *
  * Both rows must be read cell by cell; a source without cells only ever soft-wraps.
  */
@@ -219,7 +222,8 @@ function continuation(
   const lastAt = top.text.length - 1;
   if (lastAt < 0 || /\s/.test(top.text[lastAt] as string)) return null;
   const widths = widthsAt?.(groupStart) ?? new Set([above.length]);
-  if (!widths.has(written)) return null;
+  const full = widths.has(written);
+  if (!full && ![...widths].some((w) => w > written && w - written <= NEAR_EDGE_CELLS)) return null;
 
   const indent = /^ */.exec(next.text)![0].length;
   if (indent === 0 || indent >= next.text.length || /\s/.test(next.text[indent] as string)) return null;
@@ -228,9 +232,37 @@ function continuation(
   if (indent !== topIndent && indent !== bullet) return null;
 
   const lastWord = top.text.slice(top.text.lastIndexOf(' ') + 1);
-  const dot = lastWord.lastIndexOf('.');
-  if (dot > 0 && knownExtensions.has(lastWord.slice(dot + 1).toLowerCase())) return null;
+  const firstWord = /^\S+/.exec(next.text.slice(indent))![0];
+
+  // 1. A word ending in sentence punctuation is complete (#526 hand-test: `…txt:2500,` + `reads`).
+  if (/[,;]$/.test(lastWord)) return null;
+  // …and so is one ending in a known extension once its position is set aside — unless the position
+  // itself is what the edge cut (`foo.ts:12` + `0 more` is line 120).
+  const positionCut = /:\d+$/.test(lastWord) && /^\d/.test(firstWord);
+  if (!positionCut && endsInKnownExtension(lastWord.replace(POSITION_AT_END, ''), knownExtensions)) return null;
+
+  // 2. Short of the edge (Claude Code's input box breaks there): only a break INSIDE a path joins —
+  // the row's last word has a separator, and the two words together end the way a path ends.
+  if (!full) {
+    if (!SEPARATOR.test(lastWord)) return null;
+    const together = (lastWord + firstWord).replace(/[,.;:]+$/, '').replace(POSITION_AT_END, '');
+    if (!SEPARATOR.test(together.slice(-1)) && !endsInKnownExtension(together, knownExtensions)) return null;
+  }
   return indent;
+}
+
+/** How far short of its written width a row may end and still be a program's break inside a path. */
+const NEAR_EDGE_CELLS = 4;
+
+const SEPARATOR = /[\\/]/;
+
+/** A position suffix at the end of a word, as `detect.ts` reads one. */
+const POSITION_AT_END = /(?::\d+(?::\d+|[-–]\d+)?|\(\d+,\d+\)|#L\d+(?:-L?\d+)?)$/;
+
+function endsInKnownExtension(word: string, knownExtensions: ReadonlySet<string>): boolean {
+  const last = word.split(/[\\/]/).pop() ?? '';
+  const dot = last.lastIndexOf('.');
+  return dot > 0 && knownExtensions.has(last.slice(dot + 1).toLowerCase());
 }
 
 /** The widths (in cells) a 0-based buffer row may have been written at. */

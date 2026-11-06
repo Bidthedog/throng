@@ -149,6 +149,45 @@ describe('#526 — a path a program broke at the right edge is one link', () => 
     expect((await joined(50, `${row}\n  more/y.md`, 1)).map((l) => l.path)).toEqual(['x.ts']);
   });
 
+  /** `text` padded with `fill` to exactly `width` characters, for rows that must end at a known column. */
+  const exactly = (width: number, text: string): string => {
+    expect(text.length, `fixture row ${JSON.stringify(text)} must fit in ${width}`).toBeLessThanOrEqual(width);
+    return text;
+  };
+
+  it('#526 hand-test 1: a full row ending in `path.txt:2500,` does not take the next word', async () => {
+    // Claude Code, 50 columns: the path, its position and a comma fill the row exactly.
+    const row = exactly(50, '  rong_tests/encodings/.backup/eol-lines.txt:2500,');
+    expect(row.length).toBe(50);
+    const text = [row, '  reads "Line 2500 of 5000" and ends'].join('\n');
+    expect(await joined(50, text, 1)).toEqual([
+      { path: 'rong_tests/encodings/.backup/eol-lines.txt', position: { line: 2500 }, underlined: 'rong_tests/encodings/.backup/eol-lines.txt:2500' },
+    ]);
+  });
+
+  it('a position split at the edge is joined: `foo.ts:12` + `0 more` is line 120', async () => {
+    const row = exactly(50, `  ${'w'.repeat(32)} src/a/foo.ts:12`);
+    expect(row.length).toBe(50);
+    expect((await joined(50, `${row}\n  0 more`, 1)).map((l) => l.position)).toEqual([{ line: 120 }]);
+  });
+
+  it('#526 hand-test 2: Claude Code’s input box wraps short of the edge, and the path is still one link', async () => {
+    // The input box breaks two columns before the terminal's edge.
+    const row = exactly(50, '❯ Mention /data/storage/git/t/encodings/.backup/');
+    expect(row.length).toBe(48);
+    const text = [row, '  codepage-western-1252.txt with a line number'].join('\n');
+    expect((await joined(50, text, 1)).map((l) => l.path)).toEqual([
+      '/data/storage/git/t/encodings/.backup/codepage-western-1252.txt',
+    ]);
+  });
+
+  it('a prose row ending short of the edge never glues its last word onto a path below', async () => {
+    const row = exactly(50, `  ${'w'.repeat(40)} in the`);
+    expect(row.length).toBe(49);
+    expect((await joined(50, `${row}\n  src/foo.ts folder`, 1)).map((l) => l.path)).toEqual([]);
+    expect((await joined(50, `${row}\n  src/foo.ts folder`, 2)).map((l) => l.path)).toEqual(['src/foo.ts']);
+  });
+
   it('a row at a different indent is not joined', async () => {
     const row = `  see packages/ui/src/renderer/terminal/abcdefghij`;
     expect(row.length).toBe(50);
