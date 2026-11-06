@@ -19,9 +19,10 @@ import {
  * established. There is nothing else in the preload bridge that watches an arbitrary path.
  *
  * Main has `IFileWatcher`, which is what `EditorCoordinator` already uses for the same purpose at
- * `editor-coordinator.ts:1110` — a watch on the containing directory, armed per document. This is
- * the terminal's equivalent, and it is deliberately a separate instance rather than a shared signal:
- * see the 039 spec, Finding 2 and decision D-1, and #306 for the consolidation.
+ * `editor-coordinator.ts` — a watch on the containing directory, armed per document. This is the
+ * terminal's equivalent. 039 D-1 first gave it a watcher instance of its own; since #306 it is handed
+ * the same shared watcher as the tree and the editors, so a folder inside the project root is
+ * served by the root's one watch.
  *
  * ══ ONE WATCH PER DIRECTORY, NOT PER PANEL ══
  *
