@@ -7,6 +7,8 @@ import {
   type IPtyHost,
   type ProcessSurvivor,
   type PtyExit,
+  type PtyExitFailure,
+  terminalExitFailureText,
   type PtyHandle,
   type PtyStartOptions,
   type PtyRosterEntry,
@@ -105,12 +107,17 @@ export class PtyAgentHost implements IPtyHost {
 
   /** Launch the agent, capturing any failure the launcher can report (FR-015). The
    *  launch itself stays fire-and-forget; only its failure becomes observable. */
-  private launchAgent(): void {
-    // A fresh attempt starts with no reason of its own: the previous attempt's failure
-    // explains the previous agent, and quoting it here would explain this lapse confidently
-    // and wrongly. The generation makes that hold for a report that arrives late, too.
+  private launchAgent(carryReason = false): void {
+    // A fresh attempt after a CRASH starts with no reason of its own: the previous attempt's
+    // failure explains the previous agent, which did connect, and quoting it here would explain
+    // this lapse confidently and wrongly. The generation makes that hold for a report that arrives
+    // late, too.
+    //
+    // A retry after a LAPSE carries it (#556): the previous launch never produced an agent, so its
+    // reason is still the best account of why the agent is missing, until this launch reports one
+    // of its own. Dropping it would hide a systemic launcher failure behind every retry (FR-015).
     const generation = ++this.launchGeneration;
-    this.launchReason = undefined;
+    if (!carryReason) this.launchReason = undefined;
     this.connectLapsed = false;
     this.launch(this.pipeName, (reason) => {
       if (generation !== this.launchGeneration) return; // a superseded launch's reason
@@ -118,15 +125,27 @@ export class PtyAgentHost implements IPtyHost {
     });
   }
 
-  /** The connect-lapse message, composed at the moment it is surfaced so that a launch reason
-   *  arriving AFTER the lapse still reaches the user (FR-015) rather than being dropped. */
-  private lapseMessage(): string {
+  /** The connect lapse, composed at the moment it is surfaced so that a launch reason arriving
+   *  AFTER the lapse still reaches the user (FR-015) rather than being dropped. */
+  private lapseFailure(): PtyExitFailure {
     return this.launchReason
-      ? `the de-elevated terminal agent never started: ${this.launchReason}`
-      : 'the de-elevated terminal agent never started';
+      ? { kind: 'agent-never-started', detail: this.launchReason }
+      : { kind: 'agent-never-started' };
   }
 
-  private connectWithRetry(deadline: number): void {
+  /**
+   * The user opened a terminal after the connect budget lapsed (#556): that is the deliberate retry
+   * 019 C8 leaves them, so it gets a fresh budget. The agent may have arrived late — a cold first
+   * launch can outlast the budget — so the existing pipe is tried first, and only if nothing is
+   * listening is the agent launched again. One relaunch per retry, never a loop: a lapse on its own
+   * still relaunches nothing.
+   */
+  private retryAfterLapse(): void {
+    this.connectLapsed = false;
+    this.connectWithRetry(Date.now() + this.budgets.connectMs, () => this.launchAgent(true));
+  }
+
+  private connectWithRetry(deadline: number, onFirstMiss?: () => void): void {
     if (this.disposing) return;
     const sock = connect(resolveIpcAddress(this.pipeName));
     let connected = false;
@@ -155,7 +174,7 @@ export class PtyAgentHost implements IPtyHost {
       // terminals can start rather than queueing into the outbox indefinitely.
       // A crashed agent's exit code is genuinely unknown: `null` ("exited (code —)") is
       // the honest render, so this caller keeps it (C28).
-      this.failAllLive('the terminal agent stopped unexpectedly', null);
+      this.failAllLive({ kind: 'agent-stopped' }, null);
       this.launchAgent();
       this.connectWithRetry(Date.now() + this.budgets.connectMs);
     });
@@ -163,6 +182,8 @@ export class PtyAgentHost implements IPtyHost {
       // Agent not listening yet (ENOENT) or gone — retry until the deadline. A drop
       // of an already-connected socket is handled by 'close' above, not here.
       if (this.disposing || connected || this.socket) return;
+      // A retry after a lapse found nobody on the pipe: only now launch again (#556).
+      if (onFirstMiss) onFirstMiss();
       if (Date.now() < deadline) {
         this.retryTimer = setTimeout(() => this.connectWithRetry(deadline), 200);
         return;
@@ -172,28 +193,35 @@ export class PtyAgentHost implements IPtyHost {
       // that never produced an agent indicates the shim, and retrying it just buries the
       // error in a loop. Instead surface it the way an agent-side start failure is
       // surfaced — output + a NON-ZERO exit — so the panel reverts with a visible message
-      // (005 FR-019/FR-020) rather than believing it is running forever.
+      // (005 FR-019/FR-020) rather than believing it is running forever. The user's next
+      // terminal is the deliberate retry, and gets a fresh launch (`retryAfterLapse`, #556).
       //
       // Recording the lapse is load-bearing, not bookkeeping: this host is constructed at
       // daemon BOOT, so the lapse usually fires when NO terminal exists — `failAllLive`
       // iterates nothing — and the terminal that suffers is the one opened a minute later.
-      // `start()` reads this flag and fails that terminal the same way (#94).
+      // `start()` reads this flag and retries for that terminal (#94, #556).
       this.connectLapsed = true;
-      this.failAllLive(this.lapseMessage(), 1);
+      this.failAllLive(this.lapseFailure(), 1);
     });
   }
 
   /** Fire an unexpected exit for every live terminal and forget them. */
-  private failAllLive(reason: string, code: number | null): void {
+  private failAllLive(failure: PtyExitFailure, code: number | null): void {
     for (const key of new Set([...this.liveKeys, ...this.dataCbs.keys(), ...this.exitCbs.keys()])) {
-      this.failKey(key, reason, code);
+      this.failKey(key, failure, code);
     }
   }
 
-  /** Surface a failure on ONE terminal: a message in the terminal + an exit, then forget it. */
-  private failKey(key: number, reason: string, code: number | null): void {
-    this.dataCbs.get(key)?.forEach((cb) => cb(`\r\n[throng] ${reason}\r\n`));
-    this.exitCbs.get(key)?.forEach((cb) => cb({ code }));
+  /**
+   * Surface a failure on ONE terminal: a message in the terminal + an exit carrying the failure, then
+   * forget it. The exit carries it because the panel reverts to its type form on this exit and the
+   * terminal text goes with it — the notice is all that is left to say why (#555).
+   */
+  private failKey(key: number, failure: PtyExitFailure, code: number | null): void {
+    const text = terminalExitFailureText(failure.kind);
+    const line = failure.detail ? `${text}: ${failure.detail}` : text;
+    this.dataCbs.get(key)?.forEach((cb) => cb(`\r\n[throng] ${line}\r\n`));
+    this.exitCbs.get(key)?.forEach((cb) => cb({ code, failure }));
     this.forgetKey(key);
   }
 
@@ -207,7 +235,7 @@ export class PtyAgentHost implements IPtyHost {
       // The agent took the `start` and never acked `{ev:'started'}`. Fail THIS key only —
       // other terminals are unaffected. Readiness is the ack, never first output: a slow
       // shell that has printed nothing is still starting and must not be killed (FR-013).
-      this.failKey(key, 'the terminal never started', 1);
+      this.failKey(key, { kind: 'terminal-never-started' }, 1);
     }, this.budgets.readyMs);
     this.readyTimers.set(key, timer);
   }
@@ -267,9 +295,7 @@ export class PtyAgentHost implements IPtyHost {
       case 'error':
         // A start failure in the agent — surface it as output + a non-zero exit so
         // the Panel reverts with a visible message (FR-019), never a silent blank.
-        this.dataCbs.get(ev.key)?.forEach((cb) => cb(`\r\n[throng] terminal failed to start: ${ev.message}\r\n`));
-        this.exitCbs.get(ev.key)?.forEach((cb) => cb({ code: 1 }));
-        this.forgetKey(ev.key);
+        this.failKey(ev.key, { kind: 'terminal-failed-to-start', detail: ev.message }, 1);
         break;
       case 'ended': {
         const waiter = this.endWaiters.get(ev.reqId);
@@ -360,22 +386,13 @@ export class PtyAgentHost implements IPtyHost {
   start(opts: PtyStartOptions): PtyHandle {
     const key = this.nextKey++;
     this.liveKeys.add(key);
-    if (this.connectLapsed) {
-      // The connect budget already lapsed and, by C8, nothing will retry it: there is no agent
-      // and there will not be one. Queueing this start into the outbox is the hang (#94) — the
-      // panel would sit at 'running' with no prompt and no error, forever. Fail it instead,
-      // with the SAME message and non-zero exit the lapse itself surfaces, reading the launch
-      // reason as it stands NOW so a reason that arrived after the lapse is still told.
-      //
-      // On a timer, not inline: `IPtyHost.start` is synchronous and its caller registers
-      // `onData`/`onExit` immediately AFTER it returns (terminal-service.ts), so firing here
-      // would fire into no listeners — the very race the live-key set exists to avoid.
-      setTimeout(() => {
-        if (this.disposing || !this.liveKeys.has(key)) return;
-        this.failKey(key, this.lapseMessage(), 1);
-      }, 0);
-      return { pid: key };
-    }
+    // The connect budget already lapsed, so nothing is trying to reach an agent. Queueing this start
+    // into the outbox and waiting was the hang (#94); failing it at once made the lapse permanent for
+    // the daemon's life (#556), however late the agent arrived. This start is the user retrying
+    // deliberately (019 C8), so it gets a fresh connect budget: it is queued below like any other,
+    // and if the retry lapses too, the lapse fails it with the same message and non-zero exit —
+    // asynchronously, so its caller has registered `onData`/`onExit` by then (terminal-service.ts).
+    if (this.connectLapsed) this.retryAfterLapse();
     this.sendCmd({
       op: 'start',
       key,

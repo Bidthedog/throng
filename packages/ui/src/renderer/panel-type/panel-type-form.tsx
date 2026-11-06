@@ -184,6 +184,7 @@ export function PanelTypeForm({
       severity: noticeSeverityForExit(lastExit),
       subject: exitSubjectRef.current,
       message: lastExit.message,
+      ...(lastExit.detail ? { copyDetail: lastExit.detail } : {}),
       testId: `panel-exit-${panelId}`,
       testIds: { dismiss: `exit-dismiss-${panelId}` },
       onDismiss: () => dismissPanelExit(panelId),

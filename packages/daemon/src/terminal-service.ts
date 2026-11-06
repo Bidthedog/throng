@@ -1200,7 +1200,7 @@ export class TerminalService {
         // given a fresh terminal meanwhile: this exit is no longer its terminal's (051 MT-01).
         const now = this.sessions.get(session.panelId);
         if (now && now !== session) return;
-        this.events.publishExit(session.panelId, exit.code, exit.signal, unexpected, session.id);
+        this.events.publishExit(session.panelId, exit.code, exit.signal, unexpected, session.id, exit.failure);
         // 057 FR-064 / R7: only an end throng did not ask for raises a mark; non-zero is a failure.
         if (unexpected) {
           this.attention.raise(

@@ -1,3 +1,5 @@
+import type { PtyExitFailureKind } from '../abstractions/pty-host.js';
+
 /**
  * Terminal idle/busy classification + close/attach decisions (005 Phase C / US3,
  * research D12). Pure logic over the descendant-pid set the `IPtyHost` reports.
@@ -74,6 +76,7 @@ export interface TerminalIdentity {
 export function terminalExitNotice(
   code: number | null | undefined,
   identity: TerminalIdentity = {},
+  failure?: PtyExitFailureKind,
 ): string {
   const where = [identity.projectName, identity.tabName, identity.panelName]
     .map((part) => part?.trim())
@@ -81,6 +84,25 @@ export function terminalExitNotice(
     .join(' › ');
   const flavour = identity.flavourLabel?.trim();
   const suffix = [where, flavour ? `(${flavour})` : ''].filter((p) => p !== '').join(' ');
-  const head = `Terminal exited (code ${code ?? '—'})`;
+  // #555: when throng ended the terminal itself, the code alone says nothing — say why.
+  const why = failure === undefined ? '' : `: ${terminalExitFailureText(failure)}`;
+  const head = `Terminal exited (code ${code ?? '—'})${why}`;
   return suffix === '' ? head : `${head} — ${suffix}`;
+}
+
+/**
+ * The wording for each failure throng ends a terminal with (#555). One place, so the daemon's text in
+ * the terminal and the panel's notice cannot drift apart; the raw detail behind it is never part of it.
+ */
+export function terminalExitFailureText(kind: PtyExitFailureKind): string {
+  switch (kind) {
+    case 'agent-never-started':
+      return 'the de-elevated terminal agent never started';
+    case 'agent-stopped':
+      return 'the terminal agent stopped unexpectedly';
+    case 'terminal-never-started':
+      return 'the terminal never started';
+    case 'terminal-failed-to-start':
+      return 'the terminal failed to start';
+  }
 }

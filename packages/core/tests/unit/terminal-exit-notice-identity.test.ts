@@ -47,4 +47,13 @@ describe('the terminal exit notice (025 FR-041b)', () => {
     // FR-041b: an unreadable code surfaces rather than being hidden.
     expect(terminalExitNotice(null, { panelName: 'Panel 1' })).toContain('code —');
   });
+
+  it('#555: says why when throng itself ended the terminal, and keeps the code and the place', () => {
+    expect(terminalExitNotice(1, FULL, 'agent-never-started')).toBe(
+      'Terminal exited (code 1): the de-elevated terminal agent never started — throng › Build › Panel 2 (Command Prompt)',
+    );
+    expect(terminalExitNotice(null, {}, 'agent-stopped')).toBe(
+      'Terminal exited (code —): the terminal agent stopped unexpectedly',
+    );
+  });
 });

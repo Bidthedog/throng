@@ -325,7 +325,7 @@ declare global {
         /** 025 FR-019: the terminal's current foreground command, or null when idle; 053 `arch` of its program. */
         onCommand?: (cb: (e: { panelId: string; command: string | null; arch?: string | null; observedAt?: number }) => void) => () => void;
         onExit: (
-          cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number }) => void,
+          cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number; failure?: import('@throng/core').PtyExitFailure }) => void,
         ) => () => void;
       };
       /**

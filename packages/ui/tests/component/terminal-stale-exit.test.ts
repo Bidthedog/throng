@@ -11,12 +11,13 @@
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PtyExitFailure } from '@throng/core';
 import { useTerminal } from '../../src/renderer/terminal/use-terminal.js';
 
 const PANEL = 'p-term-stale-exit';
 const noop = (): void => undefined;
 
-type ExitEvent = { panelId: string; code: number | null; unexpected: boolean };
+type ExitEvent = { panelId: string; code: number | null; unexpected: boolean; failure?: PtyExitFailure };
 type ExitEventWithSession = ExitEvent & { sessionId?: number };
 let exitListeners: ((e: ExitEventWithSession) => void)[] = [];
 let answerAttach: (() => void) | null = null;
@@ -152,6 +153,19 @@ describe('MT-01 — a reopened terminal and the exits of other sessions in its p
     await answer();
     expect(onExit).toHaveBeenCalledTimes(1);
     expect(onExit).toHaveBeenCalledWith({ code: 3, unexpected: true });
+    unmount();
+  });
+
+  it('#555: the failure an exit carries reaches the panel, whether held for the answer or not', async () => {
+    installBridge();
+    const onExit = vi.fn();
+    const { unmount } = mount(onExit);
+    await waitFor(() => expect(attach).toHaveBeenCalled());
+
+    const failure = { kind: 'agent-never-started' as const, detail: 'exit 5' };
+    publishExit({ code: 1, unexpected: true, sessionId: FRESH_SESSION, failure });
+    await answer();
+    expect(onExit).toHaveBeenCalledWith({ code: 1, unexpected: true, failure });
     unmount();
   });
 

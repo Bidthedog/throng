@@ -29,7 +29,7 @@ import {
   createTerminalSearchController,
   type TerminalSearchDecorations,
 } from '../search/terminal-search.js';
-import type { FailureCause } from '@throng/core';
+import type { FailureCause, PtyExitFailure } from '@throng/core';
 import type { SearchCount } from '../search/search-model.js';
 import {
   hoveredLinkReadoutText,
@@ -123,6 +123,8 @@ interface OscLinkSource {
 export interface TerminalExit {
   code: number | null;
   unexpected: boolean;
+  /** Why throng ended a terminal it could not run (#555); absent for a shell's own exit. */
+  failure?: PtyExitFailure;
 }
 
 /** Imperative handle exposed for the right-click menu (current text selection). */
@@ -1500,7 +1502,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
      */
     let attachedSession: number | undefined;
     let attachAnswered = false;
-    const heldExits: { code: number | null; unexpected: boolean; sessionId?: number }[] = [];
+    const heldExits: { code: number | null; unexpected: boolean; sessionId?: number; failure?: PtyExitFailure }[] = [];
     const isOurs = (e: { sessionId?: number }): boolean =>
       e.sessionId === undefined || attachedSession === undefined || e.sessionId === attachedSession;
     const forgetProgram = (): void => {
@@ -1514,9 +1516,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // life of the session and Reset Name could not bring it back.
       clearTerminalTitle(panelId);
     };
-    const takeExit = (e: { code: number | null; unexpected: boolean }): void => {
+    const takeExit = (e: { code: number | null; unexpected: boolean; failure?: PtyExitFailure }): void => {
       forgetProgram();
-      if (!disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected });
+      if (!disposed) onExitRef.current({ code: e.code, unexpected: e.unexpected, ...(e.failure ? { failure: e.failure } : {}) });
     };
     const offExit = bridge.onExit((e) => {
       if (e.panelId !== panelId) return;
