@@ -34,12 +34,12 @@ node scripts/release-notes.mjs render --version <v> --artifacts "$(node scripts/
 Its exit codes are listed in [`SKILL.md`](../SKILL.md) step 7. The source revision comes from
 `--sha`, else `GITHUB_SHA`.
 
-## The approver reads the exact body
+## The exact body is rendered first
 
-The verify job renders the **exact body** publication will use and uploads it as
-`release-body-preview.md`, before the gated job runs — so the person giving the sign-off approves the
-text that actually ships, and a non-publishing `workflow_dispatch` rehearses the whole composition
-without releasing anything.
+`render-body` renders the **exact body** publication will use and uploads it as
+`release-body-preview.md` before anything is signed. A composition failure stops the release there,
+the preview is the record of what shipped, and a `workflow_dispatch` rehearses the whole composition
+without releasing anything. Nobody approves it (spec 065).
 
 ## Requirements behind it
 

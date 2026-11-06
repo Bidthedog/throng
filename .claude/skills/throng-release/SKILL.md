@@ -1,6 +1,6 @@
 ---
 name: throng-release
-description: Cut a throng release end to end — settle the version, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, audit the dependencies, bring the docs current, gate it, tag it, watch release.yml build and verify all four artifacts in every install scope, and publish behind the human QA sign-off. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. Do NOT guess the version — if the request does not name one unambiguously, ask before touching a file. This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
+description: Cut a throng release end to end, UNATTENDED — settle the version (the one named, or the next on the current prerelease track), sweep the dependencies (npm audit, patch and minor updates) through their own PR, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, bring the docs current, run the full gate, tag it, watch release.yml build, verify and publish every artifact with no human gate, and fix whatever breaks through its own PR and go again until a release is published. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. A release request is the whole authorisation: never stop to ask for the version, a sign-off, a merge or a re-run — the only stops are the ones in "When to stop". This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
 ---
 
 # Releasing throng
@@ -10,30 +10,58 @@ pipeline is shaped the way it is lives in [`references/`](references/) — see
 [Where the detail lives](#where-the-detail-lives); `docs/releasing.md` is the maintainer-facing
 overview.
 
+## A release runs unattended
+
+**The maintainer asks once, and the next thing they hear is a published release or a stop report.**
+Nobody signs off, approves a merge, or answers a question on the way (spec 065). The request is the
+authorisation for every run this skill dispatches — `gate.yml`, `release.yml`, re-runs — and every PR
+it opens and merges, the dependency PR and fix PRs included.
+
+So: never end a turn mid-release to report progress or ask. A one-line progress note, then the next
+step. The waits are long (the gate ~1 h, `release.yml` ~1.5 h): one blocking watch each, and a
+`PushNotification` only for the final result or a stop.
+
+### When to stop
+
+Only these end a release before it publishes. Each ends with a report: what failed, what was tried,
+what decision is needed.
+
+- **A fix needs the maintainer's decision**: a major upgrade, an advisory with no fix, a requirement
+  that has to change (a supersession), a test that would have to be weakened or benched.
+- **The same failure survives three fix attempts.** Three different fixes for one symptom means the
+  diagnosis is wrong; stop rather than thrash.
+- **Something outside the repo is down**: GitHub Actions, npm, the Pages deployment, after a re-run.
+- **The tree has uncommitted work that isn't yours** (preflight). It is the user's; never stash it.
+
 ## Settle the version first
 
 **One authoritative version: `version` in the root `package.json`.** Everything else derives from it,
 and four values must agree at publish time — installer filename, package version, the version the
-installed app reports, and the tag. A wrong guess here is not caught until the gated job.
+installed app reports, and the tag.
 
-Ask the user unless the request settles it beyond doubt:
+Never ask. The rule (065 FR-006):
 
-- "release alpha5" with `1.0.0-alpha4` current → `1.0.0-alpha5`. Clear enough; say which version you
-  read it as, then proceed.
-- "do a release", "ship the milestone", "cut a new version", "release the current work" → **ask**.
-  Offer the obvious successor, and the alternatives that fit (`1.0.0-rc.1`, `1.0.1`).
-- Anything that would leave the prerelease track (`1.0.0` itself) → **ask**, always. A version with
-  no prerelease suffix publishes as the repository's *latest* release and the install docs point
-  people at it.
+| Request | Version |
+|---|---|
+| Names one — "release alpha15", "ship 1.0.0-rc.1", "release 1.0.0" | Exactly that, suffix included. |
+| Names none — "do a release", "the next alpha", "release the current work" | The next on the current track: `1.0.0-alpha14` → `1.0.0-alpha15`. |
+| "The next beta" / "the next rc" | `beta1` / `rc.1` if that track has not started, otherwise its successor. |
+
+The current version is the highest published tag (`gh release list`), not the manifest — a failed
+release can leave the manifest ahead. A version with no prerelease suffix is released **only when
+named**: it publishes as the repository's *latest* release and the install docs point people at it.
+State the version in the first progress line.
 
 How prerelease suffixes are compared and published: [references/versioning.md](references/versioning.md#prereleases).
 
 ## The shape of it
 
 ```
-preflight → branch → CHANGELOG → version bump → dependency audit → docs → test-suite audit
-  → local checks → commit → PR → gate.yml → merge → tag → release.yml (full E2E
-  → package → reconcile → verify ×9 combinations → coexistence → render body) → human sign-off → publish
+preflight → dependency sweep (own PR, merged) → branch → CHANGELOG → version bump → docs
+  → test-suite audit → local checks → commit → PR → gate.yml (full) → merge → tag
+  → release.yml (full E2E → package → reconcile → verify ×9 combinations → coexistence
+  → render body → sign → publish → repositories)
+any failure → fix (own PR, merged) → back to the earliest step the fix invalidates
 ```
 
 Publication is refused unless all five conditions in
@@ -44,9 +72,9 @@ There is no override path; how they are evaluated is
 ## 1. Preflight
 
 ```sh
-git -C D:/git/throng status --porcelain -uall     # must be empty
-git -C D:/git/throng fetch origin --tags
-git -C D:/git/throng log --oneline origin/master -1
+git status --porcelain -uall     # must be empty
+git fetch origin --tags
+git log --oneline origin/master -1
 git tag --sort=-creatordate | head -5
 gh release list --limit 5
 ```
@@ -54,23 +82,24 @@ gh release list --limit 5
 - The tree must be clean. Uncommitted work belongs to the user — never stash or discard it to make a
   release tidy; stop and report it.
 - `master` must be the release base and must be up to date with `origin/master`.
-- The version must not already be tagged or released. A published version is immutable and the
-  publish gate refuses to re-publish one.
-- Check what is in flight: `gh pr list --state open`. Anything the user expects *in* this release
-  must be merged before the changelog is written, not after.
+- The version must not already be released. A published version is immutable and the publish gate
+  refuses to re-publish one. A tag whose release never published is a failed attempt, not a release:
+  see [Re-cutting an unpublished tag](#re-cutting-an-unpublished-tag).
+- A release ships what is on `master`. Open PRs are not waited for, and the release says nothing to
+  them.
 
 ## 2. Branch
 
 Never commit release prep to `master` directly.
 
 ```sh
-git -C D:/git/throng switch -c release/v<version> origin/master
+git switch -c release/v<version> origin/master
 ```
 
-`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). Work in the
-main checkout rather than a fresh worktree: the dependency sweep in step 5 needs an installed
-`node_modules` and runs the non-E2E stages against it, which a bare worktree would have to build
-from nothing.
+`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). Cut it **after**
+the dependency sweep (step 5) has merged, so the release commit sits on the tree the sweep left. Work
+in the main checkout rather than a fresh worktree: the local checks need an installed `node_modules`,
+which a bare worktree would have to build from nothing.
 
 ## 3. The release notes are `CHANGELOG.md`, and they are written before the tag
 
@@ -128,27 +157,38 @@ That rewrites the root and all six workspace manifests. Confirm the lockfile mov
 Nothing else carries the version, and it is **not** `BUILD_ID` — how each process reads it, and
 why the two differ: [references/versioning.md](references/versioning.md).
 
-## 5. Audit the dependencies, and take what fits
+## 5. Sweep the dependencies — its own PR, merged before the release branch
 
-A release is the right moment for this and the only one anybody remembers. Do it **on the release
-branch, before the gate and long before the tag** — an advisory found after the tag costs the whole
-pipeline.
+**Run this first, straight after preflight** — it is numbered 5 for history, not order. Every release
+sweeps (065 FR-007): an advisory found after the tag costs the whole pipeline, and a sweep that rides
+inside the release commit makes a dependency failure look like a release failure.
+
+On its own branch from `origin/master` — `feature/dependency-sweep-<version>` (no spec, no issue):
 
 ```sh
 npm audit                      # 0 vulnerabilities is the bar, not "none critical"
 npm outdated                   # current / wanted / latest
 ```
 
-**Fix every advisory.** `npm audit fix` where it stays in range; a direct upgrade where it does not.
-An advisory with no fix available is a decision for the user, not something to carry silently into
-a release — name the package, the severity and what reaches it.
+**Fix every advisory.** `npm audit fix` where it stays in range; a minor or patch upgrade where it does
+not. An advisory whose only fix is a major, or that has no fix, is a [stop](#when-to-stop): name the
+package, the severity and what reaches it.
 
-**Take the in-range upgrades, leave the majors.**
+**Take every patch and minor update, leave the majors.** `npm update --save` takes what each declared
+range already allows; `npm-check-updates --target minor` raises ranges that stop short of the latest
+minor (`~`, exact pins):
 
 ```sh
-npm update --save              # everything `wanted` allows; --save raises the declared floors
+npm update --save
+npx --yes npm-check-updates --target minor --upgrade --workspaces --root
+npm install
 npm audit                      # again, on the tree that will ship
 ```
+
+**Then PR it, and merge it green.** Run the local checks below, commit with **git-commit**, push,
+`gh pr create` as a non-draft (a draft starts no CI), wait on its required checks with one blocking
+watch, and `gh pr merge --squash` once they pass. A check that fails is a [failure to fix](#fix-and-go-again)
+on this branch. A sweep with nothing to take (no advisory, nothing outdated within range) opens no PR.
 
 Two traps, both from the alpha5 run:
 
@@ -158,15 +198,14 @@ Two traps, both from the alpha5 run:
   before you commit — `git diff -- packages/*/package.json | grep @throng` is the check.
 - **A major upgrade does not belong on a release branch.** ESLint 10, TypeScript 7, Vitest 5,
   Electron 44 and their kind each deserve their own PR and their own gate, because the failure mode
-  is discovering at tag time that one of them does not hold. List them in the commit message as
-  deliberately deferred, and tell the user.
+  is discovering at tag time that one of them does not hold. List them in the sweep PR and the release
+  PR as deliberately deferred, and in the final report.
 
 `better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
 
-**Then prove it, because native code moved.** Electron and `koffi` ship binaries the daemon loads
-under the bundled host-Node runtime, so a patch bump is not a no-op. Run the cheap stages locally,
-then push and dispatch `gate.yml` for the OS-heavy layers (*Verifying done-ness* in `CLAUDE.md`),
-and quote the counts from both:
+**Prove it locally before the PR, because native code moved.** Electron and `koffi` ship binaries the
+daemon loads under the bundled host-Node runtime, so a patch bump is not a no-op. The OS-heavy layers
+are proved by the release's full gate (step 9), which runs on the tree this sweep leaves:
 
 ```sh
 npm run build && npm run typecheck && npm run lint
@@ -174,9 +213,9 @@ npm run test:unit && npm run test:component
 ```
 
 Capture the output to a scratch file rather than filtering it — the **running-tests** skill owns
-how. If anything moved that a user would notice, the changelog entry for it goes in this cycle's
-section; a patch sweep that clears no advisory and changes no behaviour usually needs no entry, and
-saying so in the commit message is enough.
+how. If anything moved that a user would notice, the sweep PR adds its entry under `## Unreleased`; a
+patch sweep that clears no advisory and changes no behaviour needs no entry, and saying so in the
+commit message is enough.
 
 ## 6. Documentation currency — the step that gets skipped
 
@@ -210,8 +249,8 @@ already become slow. Do it on the release branch, alongside the docs audit, **be
    and the proposed actions (delete, move down a layer, share setup, re-tier) with predicted savings.
    Applying them is ordinary work on its own branch after the release, never part of the release
    commit — the release ships the tree the gate tested.
-4. **Ask the user** which proposals to schedule. A suite that grew since the last release, or a tier
-   newly over budget, is called out first.
+4. **Carry the proposals into the final report**, not a question mid-release. A suite that grew since
+   the last release, or a tier newly over budget, is listed first. Nothing waits on them.
 
 ## 8. Prove it locally before spending a runner
 
@@ -241,11 +280,11 @@ verdict == tag, and what the release carries over the previous one.
 
 ```sh
 git push -u origin release/v<version>
-gh pr create --title "chore(release): <version>" --body-file <file>
+gh pr create --title "chore(release): <version>" --body-file <file>      # not a draft: CI must run
 ```
 
-Then the gate, dispatched against the branch — CI's lanes run on the push, but `npm run gate` is
-what establishes done-ness:
+Then **the full gate — every release, no exceptions** (065 FR-008). CI's lanes run on the PR, but
+`gate.yml` is what establishes done-ness:
 
 ```sh
 gh workflow run gate.yml --ref release/v<version>
@@ -256,7 +295,10 @@ gh run view <run-id> --json status,conclusion --jq '"\(.status)/\(.conclusion)"'
 Take the verdict from `run view`. `gh run watch` detaches early and its exit code lies in both
 directions. If `status` is not `completed`, the watch gave up and the run is still going.
 
-Merge once it is green and the PR's own checks pass.
+Merge once the gate is green and the PR's required checks pass on the head commit:
+`gh pr merge <n> --rebase` (merge commits are disabled). Any red is a [failure to fix](#fix-and-go-again).
+A change to the release branch after a green gate needs the gate again, unless the tree is unchanged
+(`git diff --stat <green-sha> HEAD` empty).
 
 ## 10. Tag
 
@@ -269,13 +311,30 @@ git tag -a v<version> -m "throng v<version>"
 git push origin v<version>
 ```
 
-Never force-push a tag, and never move one that has published.
+Never force-push a tag, and never move one that has published. The tagged commit must be on `master`:
+`sign-index` and `publish` refuse any other (065 FR-003).
+
+### Re-cutting an unpublished tag
+
+A tag whose `release.yml` run failed **before `publish` created the release** was never released, so
+the version is still free (065 FR-011). Once the fix has merged and the release branch is rebased and
+re-gated:
+
+```sh
+gh release view v<version> >/dev/null 2>&1 && echo "PUBLISHED: cut the next version instead"
+git push origin --delete v<version> && git tag -d v<version>
+# then step 10 again, on the new master commit
+```
+
+If `publish` created the release, the version is spent: the fix goes into the next version. A failure
+in `deploy-repositories` alone never needs a re-cut — re-run that job.
 
 ## 11. Watch `release.yml`
 
 ```sh
 gh run list --workflow release.yml --limit 3
-gh run watch <run-id>
+gh run watch <run-id> --exit-status                              # one blocking watch, ~1.5 h
+gh run view <run-id> --json status,conclusion,jobs --jq '{status,conclusion,failed:[.jobs[]|select(.conclusion=="failure")|.name]}'
 ```
 
 **Two runs start, not one.** `release.yml` triggers on a push to `master` and on a `v*` tag, so the
@@ -307,11 +366,11 @@ The jobs, each gating the next (`needs` in brackets):
 5. **Verify coexistence** `coexistence` [build-installer, verify-installer] — only when the whole
    matrix is green. Uploads `verdict-coexistence`.
 6. **Render the release body** `render-body` [all of the above, `!cancelled()`] — runs the gate
-   without the sign-off (any refusal but the missing sign-off fails it), writes `unproven` steps to the
-   job summary, and uploads `release-body` (`release-body-preview.md` + `verification-gaps.json`).
-7. **Sign the repository indexes (gated)** `sign-index` — waits at the `release` Environment for required
-   reviewers, then builds, signs and uploads the `repo-index-bundle` run artifact.
-8. **Publish (gated)** [… , sign-index] — waits at the Environment for a **second** approval, then ~3 min to
+   (any refusal fails it), writes `unproven` steps to the job summary, and uploads `release-body`
+   (`release-body-preview.md` + `verification-gaps.json`).
+7. **Sign the repository indexes** `sign-index` — tag runs only. Refuses a tag not on `master`, then
+   builds, signs and uploads the `repo-index-bundle` run artifact. No approval.
+8. **Publish** [… , sign-index] — tag runs only, the same on-`master` check, then ~3 min to
    compute the checksums, compose the body and create the release with the signed
    `throng-repo-index-<version>.tar.gz` attached. It has to go in at creation: the repository has immutable releases
    on, so nothing can be added afterwards (#571, which is why v1.0.0-alpha13 never reached the repositories).
@@ -335,8 +394,8 @@ gh run download <tag-run-id> --pattern 'verdict-*' --dir <scratch>
 gh run download <tag-run-id> --name release-body --dir <scratch>
 ```
 
-Those carry the ten verdicts and `release-body-preview.md`. Read the body
-before asking anyone to approve it.
+Those carry the ten verdicts and `release-body-preview.md`. Read them when a job fails, and summarise
+them in the final report.
 
 The declared roles are listed in
 [`docs/releasing.md` → The artifact set](../../../docs/releasing.md#the-artifact-set); why nothing
@@ -344,17 +403,28 @@ globs or resolves by extension is [references/artifact-set.md](references/artifa
 each verification step proves, and the four-outcome verdict model, is
 [references/verification.md](references/verification.md).
 
-## 12. The human QA sign-off
+## 12. Fix and go again
 
-**Blocking, and it is the user's to give.** Put in front of them what they need to decide with,
-rather than a link to go and find it: the rendered body you already downloaded in step 10, the ten
-verdicts summarised (steps passed, `not-applicable` and `unproven` per combination, each artifact's SHA-256), and the run
-URL. Then one flagged line asking for the approval.
+**Any failure — a local check, a required check, the gate, a `release.yml` job — is diagnosed, fixed
+through its own PR, and the release resumes** (065 FR-009). Nothing is handed back unless a
+[stop condition](#when-to-stop) holds.
 
-They may be away — this is the point in the release where an hour can pass, so it is worth a push
-notification rather than a message they see when they next look.
+1. **Read the failure from its log**, not its summary: `gh run view <id> --log-failed`, captured to a
+   scratch file (**running-tests**). Name the job, the step and the line.
+2. **Classify it.** A flake gets the **throng-testing** skill's treatment — a test that fails then
+   passes is a defect, fixed, never re-run into green. A product, test or pipeline defect gets a fix.
+   An infrastructure fault (runner lost, network, GitHub outage) gets **one** re-run of that job:
+   `gh run rerun <id> --failed`.
+3. **Fix it on its own branch** from `origin/master` (**branch-naming**; a bug gets **replicating-bugs**'
+   failing test first, without waiting for confirmation — the release request is the go-ahead), PR it
+   as a non-draft, wait on its required checks, and `gh pr merge --squash` once green. Never fix it on
+   the release branch: the release commit carries only the release.
+4. **Resume from the earliest step the fix invalidates.** Rebase the release branch on `origin/master`,
+   re-run step 8's local checks, push, and re-run the full gate (step 9). If a tag was already pushed,
+   [re-cut it](#re-cutting-an-unpublished-tag).
+5. **Count attempts per failure.** The third fix for the same symptom that still fails is a stop.
 
-No automation, default or timeout can satisfy it. Do not try to approve it yourself.
+Every fix PR and its link goes in the final report.
 
 ## 13. After it publishes
 
@@ -374,7 +444,9 @@ Confirm, and report:
   the source revision;
 - `## Unreleased` is back on `master`, empty, ready for the next cycle.
 
-Then say it plainly: the version, the release URL, the gate run URL, and anything left undone.
+Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
+the dependency-sweep and fix PRs (links), majors deliberately deferred, the test-suite audit proposals,
+and anything left undone. Send a `PushNotification` with the version and release URL.
 
 ## When something breaks
 
@@ -385,8 +457,9 @@ Then say it plainly: the version, the release URL, the gate run URL, and anythin
 | `reconcile` names an unexpected filename | A target's output changed | Fix `electron-builder.yml`'s `artifactName`. **Never** loosen the declaration. |
 | `reconcile` names a missing artifact | A target did not run | Read the packaging log; do not publish a partial set. |
 | Publish gate: "verdict missing" | A role verified but its verdict was not uploaded, or a role was skipped | A partial verdict set is a refusal, not a partial pass. Re-run verification. |
+| `sign-index` or `publish`: "is not on master" | The tag was pushed on a commit outside `master` | Merge the release PR, then [re-cut the tag](#re-cutting-an-unpublished-tag) on the merged commit. |
 | Publish gate: version mismatch | The four-way match failed | Tag, manifest, filename and reported version must agree exactly, suffix included. |
-| Publish gate: already published | The version exists | Published bytes are immutable. Cut the next version; never delete and re-push a tag. |
+| Publish gate: already published | The version exists | Published bytes are immutable. Cut the next version; never delete and re-push a published tag. |
 | A single E2E fails in the full lane | Possibly a flake | The **throng-testing** skill owns this. The lane retries once only on an infrastructure fault (0 unexpected, 0 flaky). |
 | Verification fails locally but passes on CI | Almost always the harness colliding with your session | The launch probe needs its own `--user-data-dir`; the residue scan attributes processes by path. See [references/verification.md](references/verification.md#running-it-on-a-developer-machine). |
 | Publish gate or render-body: `<combination>: no verification verdict` | That matrix leg failed before writing, or was cancelled | Read that leg's log; a partial set is a refusal. |
@@ -398,11 +471,11 @@ Then say it plainly: the version, the release URL, the gate run URL, and anythin
 | `*-machine: not-elevated-launch` fails | The run-after-finish app ran elevated — or another throng was already running on the runner | Setup: `ExecShellAsUser`; MSI: the `explorer.exe` launch. |
 | The portable role fails verification | Three known traps | Copy the unpacked tree *before* stopping the launcher, wait for it to settle, and pass **no** `PORTABLE_EXECUTABLE_*` variables. Why: [references/verification.md](references/verification.md#the-portable-role). |
 
-**Rehearsing without releasing** — a dispatch with `publish: false` runs the full suite, packages,
+**Rehearsing without releasing** — every dispatch is a rehearsal: it runs the full suite, packages,
 reconciles, verifies every artifact and renders the body, releasing nothing:
 
 ```sh
-gh workflow run release.yml --ref master -f publish=false
+gh workflow run release.yml --ref master
 ```
 
 Use it when the pipeline itself is what is being fixed.
@@ -413,7 +486,7 @@ already runs that suite on the same tree. The publish job refuses to run when `s
 release can never follow a skipped suite:
 
 ```sh
-gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true
+gh workflow run release.yml --ref <branch> -f skip_e2e=true
 ```
 
 ## Never
@@ -421,7 +494,11 @@ gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true
 - **Never publish by hand.** No manual upload, rename or copy of an artifact; no `gh release create`
   outside the pipeline. The checksum is computed as the last step that reads the bytes, and a
   hand-uploaded file breaks that binding.
-- **Never delete a published release or move its tag** to retry. Cut the next version.
+- **Never delete a published release or move its tag** to retry. Cut the next version. An unpublished
+  tag may be re-cut ([how](#re-cutting-an-unpublished-tag)).
+- **Never ask mid-release.** Not for the version, a sign-off, a merge or a re-run. Only a
+  [stop condition](#when-to-stop) ends a release before it publishes.
+- **Never skip the full gate** on a release commit, and never merge or tag on a red or stale one.
 - **Never write release prose in the workflow or the release body.** It comes from `CHANGELOG.md` or
   it does not exist.
 - **Never bypass the full E2E lane** to make a release finish sooner. It is the other half of CI's
@@ -450,7 +527,7 @@ set or a step in this runbook.
 ## Where the detail lives
 
 - `docs/releasing.md` — the maintainer-facing overview: versions, the artifact set, notes, gates,
-  sign-off, publish. The home of the role table and the five refusal conditions.
+  publish. The home of the role table and the five refusal conditions.
 - `references/` — the reasoning and measurements behind each stage, loaded when that stage is the
   question:
   - [versioning.md](references/versioning.md) — the single version, `BUILD_ID`, prereleases.

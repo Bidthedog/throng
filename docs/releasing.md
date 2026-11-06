@@ -10,15 +10,20 @@ procedure: the running order, the commands, and what every past failure turned o
 [`references/`](../.claude/skills/throng-release/references/) folder holds the detail behind each
 stage. This page is the overview.
 
-A release is cut by pushing a `v*` tag on `master`.
+A release runs **unattended**: the maintainer asks for one, naming a version or taking the next on the
+current prerelease track, and the next thing they see is a published release or a report of why there
+is none. The skill sweeps the dependencies, writes the notes, runs the full gate, fixes what breaks
+through its own pull requests, and pushes a `v*` tag on `master`.
 [`release.yml`](../.github/workflows/release.yml) then builds every artifact, verifies each one on a
-clean runner, and publishes the GitHub Release once a person has signed it off.
+clean runner, and publishes the GitHub Release. Nobody approves it.
 
 ```
-version  →  release notes  →  build & package  →  verify every artifact  →  QA sign-off  →  publish
+dependencies  →  version  →  release notes  →  full gate  →  tag  →  build & package  →  verify every artifact  →  publish
 ```
 
-Nothing about a release is done by hand copying files around, and no step has an override.
+Nothing about a release is done by hand copying files around, and no step has an override. What
+stands in for a person's review is that a release can only come from a commit already on `master`,
+so it went through a pull request and its required checks. Why: [spec 065](../specs/065-unattended-releases/spec.md).
 
 ## Versions
 
@@ -55,8 +60,8 @@ The notes come from [`CHANGELOG.md`](../CHANGELOG.md). Entries collect under `##
 merges; before the tag, that section is renamed to the version and committed, so the notes are
 **reviewed as a diff** in the release PR. The pipeline composes the release body from that section
 plus a fixed footer (the unrecognised-app warning, one SHA-256 per artifact, the source revision). It
-never writes prose and never falls back to another version's notes. The person giving the QA
-sign-off reads the exact rendered body before approving it. Detail:
+never writes prose and never falls back to another version's notes. The exact body is rendered and
+checked before anything is signed, so a release whose body cannot be composed stops there. Detail:
 [release notes](../.claude/skills/throng-release/references/release-notes.md).
 
 ## Verification
@@ -85,11 +90,11 @@ Publication is refused, with no override, unless all five hold:
    a refusal names the combination that did not.
 4. **The release notes bind to this version** — not missing, not empty, not headed with another
    version.
-5. **Human QA sign-off** — a required reviewer approves the release on the GitHub `release`
-   Environment. No automation, default or timeout can satisfy it.
+5. **The tag is on `master`** — the tagged commit must already be on `master`. A tag anywhere else is
+   refused before the signing key is read. A dispatched run never publishes.
 
-The first four are checked before the person is asked, so a release that could never publish does
-not use up an approval. Detail: [publishing](../.claude/skills/throng-release/references/publishing.md).
+The first four are checked when the body is rendered, before anything is signed. Detail:
+[publishing](../.claude/skills/throng-release/references/publishing.md).
 
 ## Publishing
 
@@ -108,11 +113,12 @@ What the user sees is [Installing on Windows → the unrecognised-app warning](i
 [apt and rpm repositories](install-linux.md#the-package-repository) at `/apt` and `/rpm`. No package file is on the site or
 in the repository. Each index points at its release's assets.
 
-- **A release updates them.** Behind the same QA sign-off as publishing, `sign-index` signs that release's indexes with the
-  private key, the `REPO_SIGNING_KEY` secret on the `release` Environment, before `publish` runs. `publish` attaches the
-  signed bundle as `throng-repo-index-<version>.tar.gz` when it creates the release, because a published release is
-  immutable. Once the release is out, `deploy-repositories` deploys the site. The two gated jobs each ask for approval. A
-  full release updates both channels, and a prerelease updates only `prerelease`.
+- **A release updates them.** `sign-index` signs that release's indexes with the private key, the `REPO_SIGNING_KEY`
+  secret on the `release` Environment, before `publish` runs. The Environment accepts only `v*` tags, and the job makes
+  the same on-`master` check as `publish` before reading the key. `publish` attaches the signed bundle as
+  `throng-repo-index-<version>.tar.gz` when it creates the release, because a published release is immutable. Once the
+  release is out, `deploy-repositories` deploys the site. A full release updates both channels, and a prerelease updates
+  only `prerelease`.
 - **A change under `site/`** deploys on merge with no key, because each deployment reads the signed bundles back from the
   releases.
 
@@ -127,4 +133,5 @@ repository user adds the new one by hand. Why it is built this way:
 [Testing](testing.md) · [Contributing](../CONTRIBUTING.md) ·
 [spec 020 — packaging](../specs/020-application-packaging/) ·
 [spec 042 — release notes and artifacts](../specs/042-release-notes-and-artifacts/) ·
-[spec 058 — machine-wide installation and the MSI](../specs/058-machine-wide-install-msi/).
+[spec 058 — machine-wide installation and the MSI](../specs/058-machine-wide-install-msi/) ·
+[spec 065 — unattended releases](../specs/065-unattended-releases/).

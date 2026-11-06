@@ -9,7 +9,6 @@
 //                             verification-verdict-coexistence.json (058 FR-030/FR-031). A file that
 //                             is absent is a failed combination, and the refusal names it.
 //   THRONG_ARTIFACT_DIR     — where the built artifacts are (default dist/installer)
-//   THRONG_QA_SIGNED_OFF    — "1" only when a human approved via the GitHub `release` Environment
 //   THRONG_ALREADY_PUBLISHED— "1" when a release for this version already exists
 //   THRONG_GAPS_OUT         — optional path; the unproven steps allowed to pass are written there as
 //                             JSON, for `release-notes.mjs render --gaps` and the job summary
@@ -128,7 +127,7 @@ async function main() {
 
       // Four-way version match (SC-002): filename == package == reported (verdict) == release tag.
       // The tag is the push ref on a version-tag publish; a dispatch creates `v<version>`, so
-      // default to that. This binds the release + human sign-off to the exact package (FR-030/033).
+      // default to that. This binds the release to the exact package (FR-033).
       // The `setup` artifact carries the filename, as it did when it was the only one.
       const releaseTag = process.env.THRONG_RELEASE_TAG || process.env.GITHUB_REF_NAME || `v${version}`;
       const match = matchReleaseVersions({
@@ -147,7 +146,6 @@ async function main() {
     }
   }
 
-  const isSignedOff = process.env.THRONG_QA_SIGNED_OFF === '1';
   const isAlreadyPublished = process.env.THRONG_ALREADY_PUBLISHED === '1';
 
   // Release notes (042 FR-005): CHANGELOG.md must hold a non-empty section for exactly this
@@ -163,7 +161,6 @@ async function main() {
     isRealVersion,
     versionsAligned,
     isVerified,
-    isSignedOff,
     isAlreadyPublished,
     notesBindToVersion,
     artifactSetReconciles,

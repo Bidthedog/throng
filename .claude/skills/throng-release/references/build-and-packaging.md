@@ -32,12 +32,12 @@ runtime dependency means checking both.
 ## Release (overview: docs/releasing.md; reasoning: .claude/skills/throng-release/references/)
 
 **Cutting one is the `throng-release` skill's running order, not this file's** — it holds the running order,
-the version question and the sign-off. What follows is the area knowledge that runbook assumes.
+the version rules and the fix-and-retry loop. What follows is the area knowledge that runbook assumes.
 
-Versioning → packaging → **reconcile** → **verification** (one verdict per artifact) → **QA
-sign-off** → publish via `gh release create`, gated by `scripts/publish-gates.mjs`
-(`THRONG_QA_SIGNED_OFF`, `THRONG_VERDICT_FILES`, `THRONG_ARTIFACT_DIR`, `THRONG_RELEASE_TAG`,
-`THRONG_ALREADY_PUBLISHED`). There is a published **checksum instead of code signing** — that is a
+Versioning → packaging → **reconcile** → **verification** (one verdict per artifact) → publish via
+`gh release create`, unattended, gated by `scripts/publish-gates.mjs` (`THRONG_VERDICT_FILES`,
+`THRONG_ARTIFACT_DIR`, `THRONG_RELEASE_TAG`, `THRONG_ALREADY_PUBLISHED`) and by the tag being on
+`master`. There is a published **checksum instead of code signing** — that is a
 deliberate, documented choice, not an omission to fix.
 
 **A release is a DECLARED SET of artifacts, not a file the pipeline finds** (042). The declaration
@@ -64,8 +64,8 @@ resolves by file extension: `nsis` and `portable` both produce a `.exe`, which i
   diff. `scripts/release-notes.mjs` composes the body; it never writes prose and never falls back to
   another version's notes. Publication is refused when the notes are missing, empty, or headed with
   a different version.
-- **The gate has five conditions**, the four cheap ones before the human: real version → artifact
-  set reconciles → verified → notes bind to this version → QA sign-off.
+- **The gate has five conditions**, none of them human: real version → artifact set reconciles →
+  verified → notes bind to this version → the tag is on `master` (spec 065).
 
 When running `verify-installer.mjs` on a developer machine, two things look like product bugs and
 are not: every launch the probe makes needs its own `THRONG_PIPE_NAME` (the one-running-throng lock
