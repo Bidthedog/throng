@@ -146,7 +146,11 @@ export function createFileLinkProvider(deps: FileLinkProviderDeps): FileLinkProv
     // FR-060 (round five): the switch is the whole terminal's now, not the guessed half's. Off means
     // this row has no links of any kind — nothing to underline, hover, put in a menu or Ctrl+click.
     if (!deps.detect()) return [];
-    const line = logicalLineAt(deps.terminal.buffer.active, bufferLineNumber);
+    const known = deps.scanOptions?.().knownExtensions;
+    const line =
+      known === undefined
+        ? logicalLineAt(deps.terminal.buffer.active, bufferLineNumber)
+        : logicalLineAt(deps.terminal.buffer.active, bufferLineNumber, known);
     if (line === null) return [];
     const site = deps.site();
     // Round five: the space rule may be told the directory this terminal is sitting in, so a prompt
