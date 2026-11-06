@@ -1389,16 +1389,20 @@ for (const bench of BENCH_NAMES) {
             })}`,
           );
         }
-        const rho = spearman(estimates, rows.map((r) => r.measured));
-        console.info(`bench-summary ${JSON.stringify({ run: bench, panels: rows.length, spearman: rho, totalEstimated: totalEst, totalMeasured: totalMeas, ratio: totalEst / totalMeas })}`);
-        // Representative relative to each other: the monitor ranks the panels as their memory does…
-        if (!LOG_ONLY) expect.soft(rho, `${bench}: rank agreement of estimate and measured across ${rows.length} panels (SC-009 ρ ≥ ${RHO_FLOOR})`).toBeGreaterThanOrEqual(RHO_FLOOR);
-        // …and divides the total among the kinds as their memory does. A known-miss row is logged, not
-        // asserted (SC-009), so it is left out of the shares too: the narrow 1.5 MB "lines" editor alone,
-        // at ~0.25×, moved bench-a's editor share 5–6 points on a hosted runner.
+        // A known-miss row is logged, not asserted (SC-009), so it is left out of both checks below. In the
+        // ranking it was pure noise: bench-a's three ~2 MB terminals (each ±0.5 MB run to run) swapped places
+        // with each other and with the ~2–3 MB editors, which held ρ over all ten rows at 0.84–0.88 against
+        // the 0.85 floor, while the asserted rows ranked at 1.0 in the same runs (#465). In the shares, the
+        // narrow 1.5 MB "lines" editor alone, at ~0.25×, moved bench-a's editor share 5–6 points.
         const asserted = rows.flatMap((r, i) =>
           benchKnownMiss(r.kind, r.file, r.measured, r.width) === undefined ? [{ kind: r.kind, est: estimates[i] as number, measured: r.measured }] : [],
         );
+        const rhoAll = spearman(estimates, rows.map((r) => r.measured));
+        const rho = spearman(asserted.map((r) => r.est), asserted.map((r) => r.measured));
+        console.info(`bench-summary ${JSON.stringify({ run: bench, panels: rows.length, asserted: asserted.length, spearman: rho, spearmanAll: rhoAll, totalEstimated: totalEst, totalMeasured: totalMeas, ratio: totalEst / totalMeas })}`);
+        // Representative relative to each other: the monitor ranks the panels as their memory does…
+        if (!LOG_ONLY) expect.soft(rho, `${bench}: rank agreement of estimate and measured across the ${asserted.length} asserted panels (SC-009 ρ ≥ ${RHO_FLOOR})`).toBeGreaterThanOrEqual(RHO_FLOOR);
+        // …and divides the total among the kinds as their memory does.
         const assertedEst = asserted.reduce((s, r) => s + r.est, 0);
         const assertedMeas = asserted.reduce((s, r) => s + r.measured, 0);
         for (const kind of ['terminal', 'editor', 'preview'] as const) {
