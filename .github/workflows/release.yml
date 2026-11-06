@@ -20,7 +20,7 @@ name: Release
 #                                                                                              ▼
 #                                    render-body  (the exact body publication will use)
 #                                         ▼
-#                                      publish + sign-index  (gated by the `release` Environment)
+#                                      publish + sign-index  (a version tag on master only; no human gate, 065)
 #                                         ▼
 #                                    deploy-repositories  (attaches the signed indexes, deploys the site)
 #
@@ -33,9 +33,11 @@ name: Release
 # - build-installer + verify-installer run on every push to master and on demand, so the artifacts are
 #   actually built and CLEAN-INSTALLED on a fresh runner (the closest thing to a clean machine for a
 #   GUI app — the runner has a virtual desktop the Electron app needs).
-# - publish runs only for a version tag or an explicit dispatch, and is gated on the `release`
-#   Environment's required reviewers (the human QA sign-off, FR-029) — it cannot be triggered from a
-#   developer machine or an unreviewed branch (FR-037).
+# - publish and sign-index run only for a `v*` tag, never a dispatch, and nobody approves them (065
+#   FR-001, FR-002): a release that passes every machine gate publishes unattended. What stands in for the
+#   human review is that the tagged commit must already be on master, so it reached master through a PR
+#   and its required checks (065 FR-003, 020 FR-037), and the `release` Environment accepts only `v*`
+#   tags, so no branch run can read its secrets.
 # - A step the hosted runner cannot exercise is recorded `unproven` with its reason and is listed in the
 #   job summary and the release body on every run; it never counts as a pass (058 spec Assumptions).
 #   Only the GUI half of the second-account step may be unproven.
@@ -43,15 +45,11 @@ name: Release
 # The MSI's interactive dialogs (scope page, elevation prompt, in-use refusal) are NOT exercised here:
 # the matrix drives every installer silently. They are checked by hand (the branch's manual test plan).
 #
-# A rehearsal that publishes nothing:  gh workflow run Release --ref <branch> -f publish=false
+# A rehearsal that publishes nothing (every dispatch is one):  gh workflow run Release --ref <branch>
 
 on:
   workflow_dispatch:
     inputs:
-      publish:
-        description: 'Publish a GitHub Release (requires the release Environment approval)'
-        type: boolean
-        default: false
       trace:
         description: 'Capture Playwright traces + terminal diagnostics on failure (perturbs timing)'
         type: boolean
@@ -256,10 +254,9 @@ jobs:
       # which does not expire. At the 90-day default, seventeen superseded builds from one afternoon
       # of packaging iteration sat in Actions storage until mid-October.
       #
-      # They cannot go to 1 day. `publish` is gated on the release Environment's required reviewers,
-      # so the artifacts have to outlive however long the human takes to approve — expire them first
-      # and the gated job fails at download-artifact, having passed every check. Five days is the
-      # approval window, not a storage target.
+      # Five days, not one: a failed `publish` (a repository outage, a transient `gh` error) is
+      # repaired by re-running that job, which downloads these. Expire them first and the re-run fails
+      # at download-artifact, having passed every check.
       - name: Upload the setup
         uses: actions/upload-artifact@v6
         with:
@@ -630,7 +627,7 @@ jobs:
   # Windows UI Automation (scripts/verify-hand-tests.mjs) and uploads `hand-test-MT-0N.json` — every
   # step passed, failed, or a named runner-gap with its stand-in — plus a screenshot at each dialog.
   #   node scripts/verify-hand-tests.mjs --list     shows every step a run will claim
-  #   gh workflow run release.yml --ref <branch> -f publish=false -f skip_e2e=true -f hand_tests=true
+  #   gh workflow run release.yml --ref <branch> -f skip_e2e=true -f hand_tests=true
   hand-tests:
     name: Hand test ${{ matrix.group }}
     runs-on: windows-2022
@@ -702,12 +699,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # THE BODY THE HUMAN APPROVES (042 FR-006), with the verification gaps in it (058 FR-032, FR-033).
+  # THE BODY PUBLICATION WILL USE (042 FR-006, as 065 FR-004 restates it), with the verification gaps in
+  # it (058 FR-032, FR-033).
   #
-  # It collects every verdict, asks the publish gate everything EXCEPT the sign-off (which is the only
-  # thing the human supplies), renders the exact release body publication will use, and writes each
-  # `unproven` step to the job summary. A non-publishing `workflow_dispatch` rehearses all of it
-  # without releasing anything.
+  # It collects every verdict, asks the publish gate EVERY condition, renders the exact release body
+  # publication will use, and writes each `unproven` step to the job summary. Nobody approves the body
+  # any more; it is the record of what shipped, and a refusal here stops the release before any key is
+  # read. A `workflow_dispatch` rehearses all of it without releasing anything.
   render-body:
     name: Render the release body
     runs-on: windows-2022
@@ -738,10 +736,10 @@ jobs:
           pattern: verdict-*
           merge-multiple: true
           path: .
-      # Everything the publish gate checks except the human's sign-off. The only acceptable refusal
-      # here is "QA sign-off is missing": it is the last condition evaluated, so reaching it means
-      # every verdict, the artifact set and the notes all passed. Anything else is a failure to read.
-      - name: Ask the publish gate (all but the sign-off)
+      # Every condition the publish job will check, except "already published", which only publish can
+      # know. Any refusal fails this job, so sign-index and publish never start on a release that would
+      # be refused.
+      - name: Ask the publish gate
         shell: bash
         env:
           THRONG_GAPS_OUT: verification-gaps.json
@@ -759,17 +757,17 @@ jobs:
           set -e
           cat gates.log
           if [ ! -f verification-gaps.json ]; then echo '[]' > verification-gaps.json; fi
-          if [ "$code" -ne 0 ] && ! grep -q "QA sign-off is missing" gates.log; then
-            echo "::error::the publish gate would refuse for a reason other than the missing sign-off"
+          if [ "$code" -ne 0 ]; then
+            echo "::error::the publish gate would refuse this release (see the reason above)"
             exit 1
           fi
       - name: Report the verification gaps
         if: always()
         shell: bash
         run: node scripts/verification-summary.mjs verification-gaps.json | tee -a "$GITHUB_STEP_SUMMARY"
-      # 042 FR-006 — render the EXACT body publication will use, before the gated job, so the
-      # person giving the QA sign-off approves the text that actually ships. It also means a
-      # non-publishing `workflow_dispatch` rehearses the composition without releasing anything.
+      # 042 FR-006 / 065 FR-004 — render the EXACT body publication will use, before publish runs, so
+      # a composition failure stops the release before anything is signed, and a `workflow_dispatch`
+      # rehearses the composition without releasing anything.
       - name: Render the release body
         shell: bash
         run: |
@@ -794,12 +792,12 @@ jobs:
           retention-days: 5
 
   publish:
-    name: Publish GitHub Release (gated)
+    name: Publish GitHub Release
     runs-on: windows-2022
     timeout-minutes: 20
     needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body, sign-index]
-    # Only for a version tag or an explicit dispatch with publish=true. The Environment's required
-    # reviewers are the human QA sign-off (FR-029); approval gates this job's run.
+    # Only for a `v*` tag whose commit is on master, and nobody approves it (065 FR-001 to FR-003). A
+    # dispatch never publishes: it is a rehearsal whatever its inputs say.
     #
     # Never when the full E2E suite was skipped (`skip_e2e`): publish does not `need` e2e-full, so
     # without this a skipped suite would simply not be consulted. The gate runs the same suite on the
@@ -807,12 +805,25 @@ jobs:
     #
     # And never when `hand_tests` is set: that dispatch is a rehearsal of the manual test plan, which
     # installs and removes things on its own runners, and is not a release candidate.
-    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)) && !inputs.skip_e2e && !inputs.hand_tests
+    if: startsWith(github.ref, 'refs/tags/v') && !inputs.skip_e2e && !inputs.hand_tests
     environment: release
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # 065 FR-003 — what stands in for the human review: the tagged commit reached master through a PR and its
+      # required checks. A tag pushed on a branch commit is refused before anything is read or created.
+      - name: Refuse a tag whose commit is not on master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on master. Tag the merged release commit."
+            exit 1
+          fi
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -840,13 +851,12 @@ jobs:
         with:
           name: repo-index-bundle
           path: repo-bundle
-      - name: Evaluate publish gates (real version + set reconciles + every combination verified + notes + signed off)
+      - name: Evaluate publish gates (real version + set reconciles + every combination verified + notes)
         shell: bash
         env:
-          THRONG_QA_SIGNED_OFF: '1' # the release Environment approval gates this job's run
-          # The release tag this run publishes — the sign-off/version binding (T041a/T038a): the gate
-          # refuses unless the installer filename, package version, verdict-reported version and this
-          # tag all agree, so an approval cannot satisfy the gate for a different build.
+          # The release tag this run publishes — the version binding (T041a/T038a): the gate refuses
+          # unless the installer filename, package version, verdict-reported version and this tag all
+          # agree, so a tag cannot publish a different build.
           THRONG_RELEASE_TAG: ${{ github.ref_name }}
           THRONG_GAPS_OUT: verification-gaps.json
         run: |
@@ -877,7 +887,7 @@ jobs:
           # 042 FR-001/FR-007 — the body is COMPOSED from CHANGELOG.md and the invariant footer,
           # never authored here. This step used to hold a hardcoded string that made every release
           # textually identical apart from a version number and a hash. Any unproven step the gate
-          # let through is listed in it (058 SC-008), exactly as in the preview that was approved.
+          # let through is listed in it (058 SC-008), exactly as in the preview render-body uploaded.
           node scripts/release-notes.mjs render \
             --version "$version" \
             --artifacts "$artifacts" \
@@ -900,18 +910,30 @@ jobs:
   # SIGN THE INDEXES (064 FR-006, FR-009). The only job that can read the private key, because the key is a `release`
   # Environment secret. It runs before publish, which attaches the bundle it makes (#571), and it is on Linux so
   # publish's Windows runner stays as it was. Signing changes no repository: only deploy-repositories does, and that
-  # needs publish. Each of the two jobs asks for its own approval (research D3).
+  # needs publish. Nobody approves it (065 FR-001); it runs on the same condition as publish and makes the same
+  # on-master check before the key is read (065 FR-003).
   sign-index:
-    name: Sign the repository indexes (gated)
+    name: Sign the repository indexes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [build-installer, verify-installer, coexistence, build-linux, verify-linux, verify-repositories, render-body]
-    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish)) && !inputs.skip_e2e && !inputs.hand_tests
+    if: startsWith(github.ref, 'refs/tags/v') && !inputs.skip_e2e && !inputs.hand_tests
     environment: release
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Refuse a tag whose commit is not on master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on master. Tag the merged release commit."
+            exit 1
+          fi
       - uses: actions/setup-node@v5
         with:
           node-version: 24

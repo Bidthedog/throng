@@ -149,7 +149,6 @@ the `throng-release` skill's [publishing reference](../.claude/skills/throng-rel
 | `THRONG_VERDICT_FILES` | Comma-separated verification verdicts, one per artifact-and-scope combination plus the coexistence run. Absent or partial means verification failed. | unset |
 | `THRONG_GAPS_OUT` | Where `publish-gates.mjs` writes the runner-limited checks that passed as `unproven`, so the release body and job summary can name them. | unset (not written) |
 | `THRONG_ARTIFACT_DIR` | Where the built artifacts are. | `dist/installer` |
-| `THRONG_QA_SIGNED_OFF` | `1` only when a human approved the release in the GitHub `release` Environment. | unset |
 | `THRONG_ALREADY_PUBLISHED` | `1` when a release for this version already exists. | unset |
 | `THRONG_RELEASE_TAG` | The tag the artifacts are matched against. | `GITHUB_REF_NAME`, then `v<version>` |
 | `GITHUB_REF_NAME` / `GITHUB_SHA` | Fallbacks for the release tag and the commit the release notes name. | set by GitHub Actions |

@@ -1,12 +1,15 @@
 /**
  * Publish-gate evaluation (020 FR-028/031/034).
  *
- * Publishing a release is refused unless ALL hold: a real (non-placeholder) version, a passed
- * installer verification, and a recorded human QA sign-off — and a version that is already
- * published is refused rather than overwritten. Each refusal names the single unmet condition
- * (FR-031). This is the PURE decision; the workflow (`scripts/publish-gates.mjs`, `release.yml`)
- * supplies the inputs (the human sign-off comes from a GitHub Environment reviewer approval, which
- * cannot be satisfied by automation — FR-029).
+ * Publishing a release is refused unless ALL hold: a real (non-placeholder) version, the four
+ * version representations agree, the built set reconciles with the declared one, every
+ * combination passed verification, and the notes bind to the version — and a version that is
+ * already published is refused rather than overwritten. Each refusal names the single unmet
+ * condition (FR-031). This is the PURE decision; the workflow (`scripts/publish-gates.mjs`,
+ * `release.yml`) supplies the inputs.
+ *
+ * Every condition is evaluated by the machine. There is no human sign-off: 065 FR-001 supersedes
+ * 020 FR-028(c) and FR-029, so a release that passes runs from tag to publish unattended.
  */
 
 import type { UnprovenGap } from './verification-verdict.js';
@@ -16,14 +19,12 @@ export interface PublishGateInput {
   isRealVersion: boolean;
   /**
    * The four version representations agree (installer filename == package == reported == release
-   * tag; `matchReleaseVersions`, SC-002). This is what binds the release and the human sign-off to
-   * the exact package (FR-030/033) — a tag or filename for a different build fails here.
+   * tag; `matchReleaseVersions`, SC-002). This is what binds the release to the exact package
+   * (FR-033) — a tag or filename for a different build fails here.
    */
   versionsAligned: boolean;
   /** This exact package passed installer verification (a recorded, passing verdict). */
   isVerified: boolean;
-  /** A human recorded a QA sign-off for this exact package. */
-  isSignedOff: boolean;
   /** This version has already been published (re-publish must be refused, FR-034). */
   isAlreadyPublished: boolean;
   /**
@@ -61,7 +62,7 @@ export interface PublishGateResult {
 }
 
 /**
- * Evaluate the three publish gates plus the no-re-publish rule. There is NO override path: the
+ * Evaluate the publish gates plus the no-re-publish rule. There is NO override path: the
  * result is a pure function of the inputs.
  */
 export function evaluatePublishGate(input: PublishGateInput): PublishGateResult {
@@ -88,13 +89,9 @@ export function evaluatePublishGate(input: PublishGateInput): PublishGateResult 
         : 'the installer is not verified',
     );
   }
-  // Cheap and deterministic, so it is checked BEFORE the human condition: a release whose notes
-  // were never written should be refused before anyone is asked to certify the build (042 FR-005).
+  // 042 FR-005 — notes absent, empty or bound to another version.
   if (!input.notesBindToVersion) {
     return refuse('the release notes are missing, empty, or written for a different version');
-  }
-  if (!input.isSignedOff) {
-    return refuse('QA sign-off is missing');
   }
   return { allowed: true, reason: null, reportedGaps };
 }

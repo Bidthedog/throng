@@ -123,9 +123,9 @@ A single condition raises a single notice, and the actions that resolve it live 
 
 **Load the `throng-release` skill** the moment a release is in play, before touching a file. It
 owns the running order, the refusal conditions and the past failures, and supersedes the generic
-`github-workflow:release` skill and `release-manager` agent. It asks for the version rather than
-guessing, and the QA sign-off on the `release` Environment is a human act. `docs/releasing.md` is the
-overview.
+`github-workflow:release` skill and `release-manager` agent. A release runs unattended (spec 065): no
+sign-off, no questions, failures fixed through their own PRs until it publishes or hits one of the
+skill's stop conditions. `docs/releasing.md` is the overview.
 
 ## Documentation
 

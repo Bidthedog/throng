@@ -17,14 +17,15 @@ import type {
 } from '../../src/index.js';
 
 /**
- * 020 FR-028/031/034 — publishing is refused unless version-real AND verified AND signed-off, and
- * an already-published version is refused. Each refusal names the single unmet condition.
+ * 020 FR-028/031/034 — publishing is refused unless version-real AND verified, and an
+ * already-published version is refused. Each refusal names the single unmet condition. 065 FR-001
+ * supersedes 020 FR-028(c)/FR-029: there is no human sign-off input — every condition is evaluated
+ * by the machine, so a release runs unattended from tag to publish.
  */
 const ALL_GOOD = {
   isRealVersion: true,
   versionsAligned: true,
   isVerified: true,
-  isSignedOff: true,
   isAlreadyPublished: false,
   notesBindToVersion: true,
   artifactSetReconciles: true,
@@ -53,15 +54,16 @@ describe('evaluatePublishGate (020 FR-028/031/034)', () => {
     expect(r.reason).toMatch(/not verified/i);
   });
 
-  it('refuses a missing QA sign-off, naming it', () => {
-    const r = evaluatePublishGate({ ...ALL_GOOD, isSignedOff: false });
-    expect(r.allowed).toBe(false);
-    expect(r.reason).toMatch(/sign-off/i);
+  // 065 FR-001 — the gate has no human input to wait for: a release that passes every machine
+  // condition is allowed, and a stray sign-off field cannot refuse it.
+  it('allows with no human sign-off at all', () => {
+    expect(Object.keys(ALL_GOOD).some((k) => /sign/i.test(k))).toBe(false);
+    expect(evaluatePublishGate({ ...ALL_GOOD, isSignedOff: false } as typeof ALL_GOOD).allowed).toBe(true);
   });
 
-  // 020 FR-030/033 / SC-002 — the sign-off and release bind to the exact package: the installer
-  // filename, internal package version, reported app version and release tag must all agree, so a
-  // sign-off/release for a different build cannot satisfy the gate.
+  // 020 FR-033 / SC-002 — the release binds to the exact package: the installer filename, internal
+  // package version, reported app version and release tag must all agree, so a release for a
+  // different build cannot satisfy the gate.
   it('refuses when the four version representations do not all match, naming it', () => {
     const r = evaluatePublishGate({ ...ALL_GOOD, versionsAligned: false });
     expect(r.allowed).toBe(false);
@@ -73,8 +75,8 @@ describe('evaluatePublishGate (020 FR-028/031/034)', () => {
       'isRealVersion',
       'versionsAligned',
       'isVerified',
-      'isSignedOff',
       'notesBindToVersion',
+      'artifactSetReconciles',
     ] as const) {
       expect(evaluatePublishGate({ ...ALL_GOOD, [key]: false }).allowed).toBe(false);
     }
@@ -99,13 +101,6 @@ describe('evaluatePublishGate — release notes (042 FR-005)', () => {
     expect(evaluatePublishGate({ ...ALL_GOOD, notesBindToVersion: true }).allowed).toBe(true);
   });
 
-  it('refuses missing notes BEFORE asking about the human sign-off', () => {
-    // A cheap, deterministic condition must not waste a human approval: a release whose notes were
-    // never written should be refused before anyone is asked to certify the build.
-    const r = evaluatePublishGate({ ...ALL_GOOD, notesBindToVersion: false, isSignedOff: false });
-    expect(r.reason).toMatch(/notes/i);
-    expect(r.reason).not.toMatch(/sign-off/i);
-  });
 });
 
 /**
@@ -116,12 +111,6 @@ describe('evaluatePublishGate — the artifact set (042 FR-013/FR-016)', () => {
     const r = evaluatePublishGate({ ...ALL_GOOD, artifactSetReconciles: false });
     expect(r.allowed).toBe(false);
     expect(r.reason).toMatch(/artifact/i);
-  });
-
-  it('refuses a mismatched set BEFORE asking about the human sign-off', () => {
-    const r = evaluatePublishGate({ ...ALL_GOOD, artifactSetReconciles: false, isSignedOff: false });
-    expect(r.reason).toMatch(/artifact/i);
-    expect(r.reason).not.toMatch(/sign-off/i);
   });
 
   it('never allows when the set does not reconcile, whatever else is true', () => {

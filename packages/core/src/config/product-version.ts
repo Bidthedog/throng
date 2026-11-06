@@ -72,7 +72,7 @@ function versionFromInstallerFilename(name: string): string | null {
 /**
  * Assert the **four-way version match** (020 SC-002): the installer filename, the internal package
  * version, the reported app version and the release tag all carry the same version core. This is
- * what binds a release (and the human sign-off that gates it, FR-030/033) to the exact package — a
+ * what binds a release to the exact package (FR-033) — a
  * tag or filename for a different build fails here rather than publishing a mislabelled artifact.
  * Compared by numeric core (a leading `v` and prerelease/build suffixes do not matter).
  */

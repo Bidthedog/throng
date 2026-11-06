@@ -10,10 +10,12 @@ file holds how they are evaluated, what a publish does once they hold, and which
 `npm run publish:check` runs it as a local dry-run. It exits 0 when publishing is allowed and
 non-zero, naming the unmet condition, when refused. There is **no override path**.
 
-Publishing runs only from the reviewed default branch. The four cheap, deterministic conditions are
-evaluated **before** the human one, so a release that was never going to publish does not first
-consume an approval. The human QA sign-off is a **GitHub Environment (`release`) with required
-reviewers**; it cannot be satisfied by automation, a default, or the passage of time.
+Publishing runs only for a `v*` tag, and nobody approves it (spec 065). `render-body` asks the gate
+every condition but "already published" and fails on any refusal, so `sign-index` and `publish` never
+start on a release that would be refused. Each of those two jobs then refuses a tag whose commit is not
+on `master` (`git merge-base --is-ancestor`) before reading a secret. That check stands in for the
+human review: a commit on `master` came through a PR and its required checks. The `release`
+Environment keeps `REPO_SIGNING_KEY`, has no required reviewers, and accepts only `v*` tags.
 
 `THRONG_VERDICT_FILES` is derived in the workflow from `artifact-set.mjs list --combinations` (the
 verdict-file column) plus the coexistence file — never written out by hand, so a new combination
@@ -38,22 +40,21 @@ When all five hold, publication:
 
 | Step | Where it runs |
 |---|---|
-| Write the release notes | A human, in `CHANGELOG.md`, **before the tag** — reviewed as a diff. |
+| Write the release notes | The `throng-release` runbook, in `CHANGELOG.md`, **before the tag** — committed in the release PR. |
 | Bump version, build, package | Locally or in CI (`npm run build`, `npm run package`). |
 | Reconcile the artifact set | Wherever packaging ran, immediately after it. |
 | Artifact verification (clean machine) | **CI** — one fresh `windows-2022` runner per combination (matrix), then the coexistence job. Runs locally too, with the caveats in [verification.md](verification.md#running-it-on-a-developer-machine). Never install on the workstation by hand. |
-| Render the release body | CI, the `render-body` job, after every verdict exists; uploaded with `verification-gaps.json` for the approver to read. It runs the gate without the sign-off and accepts exactly one refusal — the missing sign-off — so any other refusal fails it before anyone is asked. |
-| QA sign-off | A human, via the GitHub `release` Environment. |
-| Publish the GitHub Release | **CI only**, gated as above. |
-| Sign the repository indexes | **CI only**, `sign-index`, gated the same way. The only job that can read `REPO_SIGNING_KEY`. |
+| Render the release body | CI, the `render-body` job, after every verdict exists; uploaded with `verification-gaps.json`. It runs the gate and fails on any refusal, before anything is signed. |
+| Publish the GitHub Release | **CI only**, a `v*` tag on `master`, unattended. |
+| Sign the repository indexes | **CI only**, `sign-index`, on the same condition. The only job that can read `REPO_SIGNING_KEY`. |
 | Update the package repositories | **CI only**, `deploy-repositories`, after the release is out. It uses no key, and dispatches `pages.yml` on `master`. |
 
 ## One thing only a real release can prove
 
-The publish job runs on a version tag (or an explicit dispatch), so the `gh release create` call
-itself, the Environment approval and the prerelease flag are not reachable from an ordinary push.
-Everything upstream of them is — a `workflow_dispatch` with `publish: false` builds, reconciles,
-verifies every artifact and renders the body. Use that as the rehearsal (the command is in
+The publish job runs only on a version tag, so the `gh release create` call itself, the on-`master`
+check and the prerelease flag are not reachable from an ordinary push. Everything upstream of them is
+— a `workflow_dispatch` builds, reconciles, verifies every artifact and renders the body, and never
+publishes. Use that as the rehearsal (the command is in
 [`SKILL.md`](../SKILL.md#when-something-breaks)); see
 [spec 042's plan](../../../../specs/042-release-notes-and-artifacts/plan.md) for the full breakdown
 of what each tier can and cannot establish.

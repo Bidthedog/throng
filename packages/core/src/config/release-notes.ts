@@ -68,7 +68,7 @@ function withoutComments(text: string): string {
  * the next `##`. Returns `null` when there is no such heading.
  *
  * The version match is exact on the first whitespace-delimited token, so `## 1.2.3` does not
- * satisfy a publish of `1.2.30` — the same binding rule 020 FR-030 applies to a QA sign-off, for
+ * satisfy a publish of `1.2.30` — the same binding rule 020 FR-033 applies to the package, for
  * the same reason.
  */
 function sectionLinesFor(text: string, version: string): string[] | null {
