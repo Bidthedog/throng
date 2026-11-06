@@ -52,7 +52,7 @@ import { createFileLinkProvider, pathLinkUnder, type FileLinkProvider, type Prov
 import { linkMarkRefreshKey, useLinkMarkRefresh } from './link-mark-refresh.js';
 import { createLinkViewMarks, terminalViewScan, type LinkViewMarks } from './link-view-marks.js';
 import { linkScanOptions } from '../links/link-scan-options.js';
-import { logicalLinesBetween } from './logical-line.js';
+import { logicalLinesBetween, trackWrittenWidths } from './logical-line.js';
 import { createLinkMarks, type MarkedLink } from './link-marks.js';
 import { terminalLinkHintAnchor } from './link-hint-anchor.js';
 import { shouldDropScrollback, withScrollbackDrop } from './clear-detect.js';
@@ -562,6 +562,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
      * The provider is created after the terminal, and these handlers only ever run after that.
      */
     let pathLinks: FileLinkProvider | null = null;
+    let writtenWidths: ReturnType<typeof trackWrittenWidths> | null = null;
     const shadowedPath = (uri: string, range: ProvidedLink['range']): ProvidedLink | null =>
       pathLinks !== null && linksEnabled() && hyperlinkTargetKind(uri, currentAllowlist()) === null
         ? pathLinkUnder(pathLinks, range)
@@ -1106,8 +1107,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     /** The live link settings — a reader, so a preferences edit reaches a terminal already open. */
     const readLinkSettings = (): EditorLinkSettings =>
       linkSettingsRef.current?.() ?? DEFAULT_APP_SETTINGS.editor.links;
+    // #526: the width each row was written at, so a program's own break still joins after a resize.
+    writtenWidths = trackWrittenWidths(term);
+    const widthsAt = writtenWidths.widthsAt;
     const fileLinkProvider = createFileLinkProvider({
       terminal: term,
+      widthsAt,
       // FR-060, read per row. Round five: off means this terminal has NO links of any kind.
       detect: linksEnabled,
       site: linkSite,
@@ -1312,9 +1317,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         // #526: a program's own line break is joined unless its last word ends in a KNOWN extension —
         // the user's set, the same one the scan reads.
         const known = linkScanOptions(readLinkSettings()).knownExtensions;
-        return known === undefined
-          ? logicalLinesBetween(term.buffer.active, top, bottom)
-          : logicalLinesBetween(term.buffer.active, top, bottom, known);
+        return logicalLinesBetween(term.buffer.active, top, bottom, known, writtenWidths?.widthsAt);
       },
       // FR-060, FR-159, FR-178: the user's extensions and allowlist, the detection switch, and
       // (round five) the terminal's own working directory, all read per line — an edit or a `cd`
@@ -1884,6 +1887,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       unregisterTerminalBuffer(panelId);
       unregisterRefresh();
       detachCursorBlink();
+      writtenWidths?.dispose();
           term.dispose();
       termRef.current = null;
       if (opts.apiRef) opts.apiRef.current = null;
