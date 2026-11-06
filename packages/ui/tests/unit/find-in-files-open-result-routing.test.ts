@@ -113,8 +113,9 @@ describe('the match is SELECTED, and the reveal waits for a view (FR-038)', () =
       expect(tr.selection.head).toBe(126);
       expect(tr.selection.from).toBe(120);
       expect(tr.selection.to).toBe(126);
-      // Both halves of FR-038: a selection AND the viewport brought to it.
-      expect(tr.scrollIntoView).toBe(true);
+      // Both halves of FR-038: a selection AND the viewport brought to it — centred on it since the
+      // #526 follow-up, so the scroll is an explicit effect rather than `scrollIntoView: true`.
+      expect((tr.effects as { value: { y: string } }).value.y).toBe('center');
       // Not an edit, so it must not join an undo run.
       expect(tr.userEvent).toBe('select');
     } finally {
