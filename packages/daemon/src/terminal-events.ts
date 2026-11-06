@@ -8,7 +8,7 @@ import {
   TERMINAL_COMMAND_NOTIFICATION,
   TERMINAL_ATTENTION_NOTIFICATION,
 } from '@throng/ipc-contract';
-import type { AttentionSignal } from '@throng/core';
+import type { AttentionSignal, PtyExitFailure } from '@throng/core';
 
 /** Anything that can receive a serialized notification frame (a connected socket). */
 export interface NotificationSink {
@@ -58,8 +58,9 @@ export class TerminalEvents {
     signal: string | undefined,
     unexpected: boolean,
     sessionId?: number,
+    failure?: PtyExitFailure,
   ): void {
-    this.emit(TERMINAL_EXIT_NOTIFICATION, { panelId, code, signal, unexpected, sessionId });
+    this.emit(TERMINAL_EXIT_NOTIFICATION, { panelId, code, signal, unexpected, sessionId, ...(failure ? { failure } : {}) });
   }
 
   /**

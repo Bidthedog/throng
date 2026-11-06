@@ -254,6 +254,22 @@ The `close` path relaunches (**`:64-65`**; `:63` is its `failAllLive` call — s
 arrived indicates a systemic failure (the shim), where relaunching produces a launch loop that buries
 the error. Surface the failure; the user retries deliberately.
 
+**C8a — A terminal opened after a lapse is the deliberate retry.** (2026-11-06, #556 / #575. Refines C8;
+reverses nothing.) C8 left the retry to the user, but the lapse was recorded for the daemon's life and every
+later terminal failed at once, so no retry could ever succeed — and the boot-time launch is exactly the one
+that lapses on a cold machine (13.4 s against a 15 s default on CI; #575's first attempt). A terminal started
+after a lapse now gets a fresh connect budget: the existing pipe is tried first, since the agent may have
+arrived late, and only if nothing is listening is the agent launched once more. The lapse itself still
+relaunches nothing, so there is no loop — one launch per terminal the user opens. If the retry lapses too, it
+fails with the same FR-012 failure, quoting the last launch reason (FR-015) until the new launch reports its
+own.
+
+**C8b — The failure travels with the exit.** (2026-11-06, #555. Refines FR-012 / FR-015.) The panel reverts
+to its type form on a synthesised exit, which throws away the reason written into the terminal and left only
+"Terminal exited (code 1)". Every exit the agent host synthesises (connect lapse, agent stopped, readiness
+lapse, agent start error) now carries a failure kind on `PtyExit` and `terminal.exit`; the notice states it
+in core's wording, and the raw launcher text goes to the notice's Copy text only (029 FR-018).
+
 **C9 — The map control is generalised to an array-of-records mode; no second table is built.**
 (Resolves **#67's own stated goal**, not a listed Open Question above. Anchor corrected under C15; it
 previously cited OQ7, which asks whether flavour order matters.) This is the issue's own stated goal — *"not two table implementations"* —

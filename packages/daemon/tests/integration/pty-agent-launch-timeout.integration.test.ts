@@ -154,7 +154,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       expect(
         signals.exits,
         "the connect lapse must exit NON-ZERO (C27/C28), so the panel renders a failure and not an ordinary end",
-      ).toEqual([{ code: 1 }]);
+      ).toEqual([{ code: 1, failure: { kind: 'agent-never-started' } }]);
       expect(
         signals.chunks.join(''),
         'the panel must be told, in the terminal, why the launch failed (FR-019)',
@@ -236,7 +236,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       expect(
         signals.exits,
         'the readiness lapse must exit NON-ZERO, matching the `ev:"error"` branch it borrows its shape from',
-      ).toEqual([{ code: 1 }]);
+      ).toEqual([{ code: 1, failure: { kind: 'terminal-never-started' } }]);
       expect(
         signals.chunks.join(''),
         'the panel must be told, in the terminal, that the terminal never started (FR-019)',
@@ -268,6 +268,9 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       // into an EMPTY `liveKeys`/`dataCbs`/`exitCbs` and does nothing at all. Because
       // `deElevatedPty` is a process-lifetime singleton, that is permanent for the session:
       // every terminal opened from then on hangs forever. That is #94, verbatim.
+      //
+      // Since #556 the late terminal is a deliberate retry with a fresh launch and budget; here the
+      // relaunch never arrives either, so the retry lapses in turn and fails it the same visible way.
       const pipe = uniquePipe();
       const host = new PtyAgentHost(pipe, () => {}, {
         connectMs: SHORT_CONNECT_MS,
@@ -289,7 +292,7 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       expect(
         signals.exits,
         'a terminal started after the host gave up on the agent must fail visibly (FR-012), not hang forever',
-      ).toEqual([{ code: 1 }]);
+      ).toEqual([{ code: 1, failure: { kind: 'agent-never-started' } }]);
       expect(
         signals.chunks.join(''),
         'the panel must be told why: the agent never arrived, so this is the connect lapse',
@@ -401,6 +404,126 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
       for (const s of sockets) s.destroy();
     },
     LIVE_CONNECT_MS * 2 + GRACE_MS + SHORT_READY_MS * 3 + 7_000,
+  );
+
+  it(
+    'starts a terminal opened after the lapse once the agent has arrived late (#556)',
+    async () => {
+      // A cold machine's first de-elevated launch can outlast the connect budget (13.4 s on a CI
+      // runner against a 15 s default), so the lapse fires at daemon boot and the agent turns up a
+      // moment later. The user's next terminal is the deliberate retry 019 C8 leaves them: it must
+      // be able to use that agent, not fail at once for the rest of the daemon's life.
+      const pipe = uniquePipe();
+      const host = new PtyAgentHost(pipe, () => {}, { connectMs: SHORT_CONNECT_MS, readyMs: 5_000 });
+      await lapsed(SHORT_CONNECT_MS);
+
+      // The late agent: listening now, and acking every start it is given.
+      const received: AgentCommand[] = [];
+      const sockets: Socket[] = [];
+      const server = createServer((sock) => {
+        sockets.push(sock);
+        sock.setEncoding('utf8');
+        let buf = '';
+        sock.on('data', (chunk: string) => {
+          buf += chunk;
+          let nl: number;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl);
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            const cmd = JSON.parse(line) as AgentCommand;
+            received.push(cmd);
+            if (cmd.op === 'start') sock.write(encodeLine({ ev: 'started', key: cmd.key, pid: 4242 }));
+          }
+        });
+        sock.on('error', () => {
+          /* peer reset — ignore */
+        });
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.on('error', reject);
+        server.listen(resolveIpcAddress(pipe), resolve);
+      });
+
+      const handle = host.start(startOpts());
+      const signals: PanelSignals = { chunks: [], exits: [] };
+      host.onData(handle, (chunk) => signals.chunks.push(chunk));
+      host.onExit(handle, (e) => signals.exits.push(e));
+
+      await waitForSignal(signals, LIVE_CONNECT_MS * 3);
+
+      expect(signals.exits, 'a terminal opened once the agent is there must not fail with the old lapse').toEqual([]);
+      expect(signals.chunks.join('')).not.toMatch(CONNECT_LAPSE);
+      expect(received.some((c) => c.op === 'start'), 'the start must reach the agent that arrived').toBe(true);
+
+      host.dispose();
+      for (const s of sockets) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+    SHORT_CONNECT_MS + LIVE_CONNECT_MS * 3 + 7_000,
+  );
+
+  it(
+    'relaunches the agent for a terminal opened after the lapse, and starts it when that launch arrives (#556)',
+    async () => {
+      // The first launch never produced an agent at all. Opening another terminal is the user
+      // retrying deliberately (019 C8): it gets a fresh launch with a fresh budget, and when that
+      // launch's agent connects the terminal starts. One launch per deliberate retry — never a loop.
+      const sockets: Socket[] = [];
+      const servers: Server[] = [];
+      const startServer = (pipeName: string): void => {
+        const server = createServer((sock) => {
+          sockets.push(sock);
+          sock.setEncoding('utf8');
+          let buf = '';
+          sock.on('data', (chunk: string) => {
+            buf += chunk;
+            let nl: number;
+            while ((nl = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, nl);
+              buf = buf.slice(nl + 1);
+              if (!line) continue;
+              const cmd = JSON.parse(line) as AgentCommand;
+              if (cmd.op === 'start') sock.write(encodeLine({ ev: 'started', key: cmd.key, pid: 4242 }));
+            }
+          });
+          sock.on('error', () => {
+            /* peer reset — ignore */
+          });
+        });
+        servers.push(server);
+        server.listen(resolveIpcAddress(pipeName));
+      };
+
+      let launches = 0;
+      const host = new PtyAgentHost(
+        uniquePipe(),
+        (pipeName) => {
+          launches += 1;
+          // Launch #1 fails silently (the boot launch that never arrives); every later one works.
+          if (launches > 1) startServer(pipeName);
+        },
+        { connectMs: SHORT_CONNECT_MS, readyMs: 5_000 },
+      );
+      await lapsed(SHORT_CONNECT_MS);
+      expect(launches, 'a lapse alone must not relaunch (019 C8)').toBe(1);
+
+      const handle = host.start(startOpts());
+      const signals: PanelSignals = { chunks: [], exits: [] };
+      host.onData(handle, (chunk) => signals.chunks.push(chunk));
+      host.onExit(handle, (e) => signals.exits.push(e));
+
+      await waitForSignal(signals, LIVE_CONNECT_MS * 3);
+
+      expect(signals.exits, 'the retried terminal must start on the relaunched agent').toEqual([]);
+      expect(signals.chunks.join('')).not.toMatch(CONNECT_LAPSE);
+      expect(launches, 'one deliberate retry, one relaunch').toBe(2);
+
+      host.dispose();
+      for (const s of sockets) s.destroy();
+      await Promise.all(servers.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))));
+    },
+    SHORT_CONNECT_MS + LIVE_CONNECT_MS * 3 + 7_000,
   );
 
   it(

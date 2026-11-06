@@ -16,6 +16,8 @@ export interface PanelExitInfo {
   message: string;
   code?: number | null;
   unexpected?: boolean;
+  /** The raw reason behind a failure throng ended the terminal with (#555) — Copy and the log only, never rendered. */
+  detail?: string;
 }
 
 /**

@@ -52,6 +52,7 @@ export {
   attachDecision,
   shouldSurfaceExit,
   terminalExitNotice,
+  terminalExitFailureText,
 } from './lifecycle.js';
 export { resolveShellFile, type ShellProbe, type ShellResolver } from './resolve-shell.js';
 export { sanitizeSpawnEnv, hyperlinkAdvertisementEnv } from './spawn-env.js';

@@ -60,10 +60,33 @@ export interface ChildProcess {
   executablePath?: string;
 }
 
+/**
+ * Why throng itself ended a terminal it could not run (#555). Set only on an exit throng
+ * SYNTHESISED — a shell that exits on its own has no failure, just its code.
+ *
+ * The CLOSED set of failures the de-elevated agent host raises. Each used to be written only into
+ * the terminal as text, which the panel's revert to its type form throws away, so the notice that
+ * survived said nothing but "Terminal exited (code 1)". The kind travels with the exit instead, and
+ * the wording is core's (`terminalExitFailureText`), never a raw string from the call site.
+ */
+export type PtyExitFailureKind =
+  | 'agent-never-started'
+  | 'agent-stopped'
+  | 'terminal-never-started'
+  | 'terminal-failed-to-start';
+
+export interface PtyExitFailure {
+  kind: PtyExitFailureKind;
+  /** The raw reason behind it (the launcher's own report, the agent's error) — for Copy and the log only, never rendered (029 FR-018). */
+  detail?: string;
+}
+
 /** How a PTY process ended. */
 export interface PtyExit {
   code: number | null;
   signal?: string;
+  /** Set only when throng ended the terminal because it could not run it (#555). */
+  failure?: PtyExitFailure;
 }
 
 /** A process a forced end could not remove (051 FR-015a) — written to the log by the caller. */

@@ -192,6 +192,8 @@ export type {
   PtyHandle,
   PtyRosterEntry,
   PtyExit,
+  PtyExitFailure,
+  PtyExitFailureKind,
   ChildProcess,
   ProcessSurvivor,
 } from './abstractions/pty-host.js';
@@ -945,6 +947,7 @@ export {
   isCapturableCommand,
   shouldSurfaceExit,
   terminalExitNotice,
+  terminalExitFailureText,
   shouldNotifyCaptureOutcome,
   captureLogLine,
   resolveStartDirectory,

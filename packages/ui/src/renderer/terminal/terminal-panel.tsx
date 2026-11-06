@@ -83,7 +83,7 @@ import {
 } from './terminal-link-activation.js';
 import { registerPanelFocus, unregisterPanelFocus } from '../workspace/panel-focus.js';
 import { clearPanelExit, setPanelExit } from './exit-store.js';
-import { useTerminal, type TerminalApi } from './use-terminal.js';
+import { useTerminal, type TerminalApi, type TerminalExit } from './use-terminal.js';
 import { useTerminalReconnect } from './use-terminal-reconnect.js';
 import { FindBar } from '../search/find-bar.js';
 import { PanelSkeleton, useDelayedFlag } from '../common/loading.js';
@@ -650,7 +650,7 @@ export function TerminalPanel({
   }, [panel.id, cwdNow, terminalConfig.rememberDirectory, ws]);
 
   const end = useCallback(
-    (message: string, code?: number | null, unexpected?: boolean) => {
+    (message: string, code?: number | null, unexpected?: boolean, detail?: string) => {
       // A clean exit the user asked for says nothing worth a notice. Typing `exit` and being told
       // "Terminal exited (code 0)" reports back what you just did, and trains people to dismiss
       // notices without reading them — which is exactly when a real failure gets missed.
@@ -662,7 +662,7 @@ export function TerminalPanel({
       // the previous attempt gated on `unexpected`, which is set for a typed `exit` too, so it
       // never fired.
       if (!shouldSurfaceExit(code)) clearPanelExit(panel.id);
-      else setPanelExit(panel.id, { message, code, unexpected });
+      else setPanelExit(panel.id, { message, code, unexpected, ...(detail ? { detail } : {}) });
       markTerminalStopped(panel.id);
 
       // 025 — the capture point. This runs for EVERY way a terminal ends (user close/kill,
@@ -739,21 +739,28 @@ export function TerminalPanel({
   // nothing left on screen tying it to a terminal. With several open, "Terminal exited (code 1)"
   // names no terminal at all — the identity has to travel with the message.
   const onExit = useCallback(
-    ({ code, unexpected }: { code: number | null; unexpected: boolean }) => {
+    ({ code, unexpected, failure }: TerminalExit) => {
       // Closing with Terminate all (005 US3): throng ended it, and the panel stays a terminal so the
       // next launch starts it fresh — no notice, no revert for the close to persist.
       if (isAppTerminating()) return;
       end(
-        terminalExitNotice(code, {
-          projectName: meta?.projectName,
-          tabName: meta?.tabName,
-          // 048 FR-032 / FR-130 — what the header shows at the moment of the exit (the shell's last
-          // window title, else the flavour), never the stored fallback "Blank Panel 3".
-          panelName: currentPanelTitle(panel),
-          flavourLabel: config.flavourLabel,
-        }),
+        terminalExitNotice(
+          code,
+          {
+            projectName: meta?.projectName,
+            tabName: meta?.tabName,
+            // 048 FR-032 / FR-130 — what the header shows at the moment of the exit (the shell's last
+            // window title, else the flavour), never the stored fallback "Blank Panel 3".
+            panelName: currentPanelTitle(panel),
+            flavourLabel: config.flavourLabel,
+          },
+          // #555 — the revert throws the terminal's own text away, so the notice says why throng ended it.
+          failure?.kind,
+        ),
         code,
         unexpected,
+        // The raw reason (the launcher's report) — Copy and the log only, never the rendered text (029 FR-018).
+        failure?.detail,
       );
     },
     [end, meta, panel, config.flavourLabel],

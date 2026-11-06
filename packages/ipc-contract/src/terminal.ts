@@ -7,6 +7,7 @@ import type {
   AttentionProducerConfig,
   AttentionSignal,
   KittyKeyboardState,
+  PtyExitFailure,
 } from '@throng/core';
 
 // --- Command methods (request → response) ---
@@ -411,6 +412,8 @@ export interface TerminalExitNotification {
   unexpected: boolean;
   /** The session that exited — the `sessionId` its attach returned (051 MT-01). */
   sessionId?: number;
+  /** Why throng ended a terminal it could not run (#555); absent for a shell's own exit. */
+  failure?: PtyExitFailure;
 }
 
 export interface TerminalFlavourMissingNotification {

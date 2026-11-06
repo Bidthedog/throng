@@ -557,10 +557,10 @@ contextBridge.exposeInMainWorld('throng', {
       ipcRenderer.on('throng:terminal:command', handler);
       return () => ipcRenderer.removeListener('throng:terminal:command', handler);
     },
-    onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number }) => void) => {
+    onExit: (cb: (e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number; failure?: import('@throng/core').PtyExitFailure }) => void) => {
       const handler = (
         _event: unknown,
-        e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number },
+        e: { panelId: string; code: number | null; unexpected: boolean; sessionId?: number; failure?: import('@throng/core').PtyExitFailure },
       ): void => cb(e);
       ipcRenderer.on('throng:terminal:exit', handler);
       return () => ipcRenderer.removeListener('throng:terminal:exit', handler);
