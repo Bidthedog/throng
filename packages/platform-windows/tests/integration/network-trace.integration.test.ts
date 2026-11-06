@@ -3,6 +3,8 @@
  * (055 FR-113, SC-011, research R20). A known 20 MB crosses loopback between two child processes, and each
  * side's bytes must be counted within 10%. The session needs elevation: unelevated, the test asserts the
  * reason instead.
+ * Benched: from smoke — flaky, not reproducible off an elevated Windows CI runner: counted 0 bytes for the sender on
+ * PR #582's run 42212941764 and passed on the runs either side; benched at the maintainer's direction (2026-11-06)
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -40,8 +42,9 @@ describe('WindowsNetworkTrace (055 FR-113, SC-011, R20)', () => {
     expect(await WindowsNetworkTrace.start()).toEqual({ kind: 'unavailable', reason: NETWORK_ELEVATION_REQUIRED });
   });
 
-  it.skipIf(!elevated)(
+  it(
     'counts a known loopback transfer for both processes within 10%, and leaves no session behind',
+    { tags: ['benched'], skip: !elevated || process.env.TD_BENCHED !== '1', timeout: 30_000 },
     async () => {
       const trace = await WindowsNetworkTrace.start();
       if (!(trace instanceof WindowsNetworkTrace)) throw new Error(`trace did not start: ${JSON.stringify(trace)}`);
@@ -64,6 +67,5 @@ describe('WindowsNetworkTrace (055 FR-113, SC-011, R20)', () => {
       }
       expect(await sessionNames()).not.toContain(`throng-net-${process.pid}`);
     },
-    30_000,
   );
 });
