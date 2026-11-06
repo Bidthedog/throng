@@ -29,6 +29,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Fixed
+
+- On Linux, deleting a large folder inside an open project (`rm -rf node_modules`, `npm ci`) no longer freezes throng for minutes ([#585](https://github.com/Bidthedog/throng/issues/585)).
+
 ## 1.0.0-alpha14 — 2026-11-05
 
 ### Fixed
