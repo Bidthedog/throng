@@ -1,7 +1,7 @@
 import { scanLinkLine } from '@throng/core';
 import { Terminal } from '@xterm/xterm';
 import { describe, expect, it } from 'vitest';
-import { logicalLineAt, rangeOf, type CellRange } from '../../src/renderer/terminal/logical-line.js';
+import { logicalLineAt, rangeOf, trackWrittenWidths, type CellRange } from '../../src/renderer/terminal/logical-line.js';
 
 /**
  * #526 — a terminal link's underline must cover exactly the cells of the path it names (045 FR-130,
@@ -127,7 +127,8 @@ describe('#526 — a path a program broke at the right edge is one link', () => 
       {
         path: 'packages/ui/src/renderer/terminal/file-link-provider.ts',
         position: { line: 120 },
-        underlined: 'packages/ui/src/renderer/terminal/file-link-provider.ts',
+        // FR-188g: the position is underlined with the path.
+        underlined: 'packages/ui/src/renderer/terminal/file-link-provider.ts:120',
       },
     ]);
   });
@@ -153,6 +154,40 @@ describe('#526 — a path a program broke at the right edge is one link', () => 
     expect(row.length).toBe(50);
     expect((await joined(50, `${row}\nnext/thing.ts`, 1)).map((l) => l.path)).toEqual([]);
   });
+});
+
+/**
+ * #526, maintainer hand-test 2026-11-06: "the link sections work fine until I resize the terminal window",
+ * after which each half of a Claude Code path opened on its own and was `notFound`. A program's break
+ * is not reflowed by xterm, so after a resize the row no longer reaches the CURRENT last column; the row
+ * is full at the width it was WRITTEN at, which `trackWrittenWidths` remembers.
+ */
+describe('#526 — a joined path survives a resize', () => {
+  const CLAUDE = [
+    '  the provider is packages/ui/src/renderer/termina',
+    '  l/file-link-provider.ts:120 which reads it',
+  ].join('\n');
+
+  for (const cols of [70, 40]) {
+    it(`is still one link after resizing from 50 to ${cols} columns`, async () => {
+      const term = new Terminal({ cols: 50, rows: 10, allowProposedApi: true });
+      const widths = trackWrittenWidths(term);
+      await new Promise<void>((resolve) => term.write(CLAUDE.replace(/\n/g, '\r\n'), resolve));
+      term.resize(cols, 10);
+
+      const buffer = term.buffer.active;
+      const paths = new Set<string>();
+      for (let y = 1; y <= buffer.length; y += 1) {
+        const line = logicalLineAt(buffer, y, undefined, widths.widthsAt);
+        const found = line === null ? [] : scanLinkLine(line.text).paths;
+        // The first reading of each span is the link (R7); the second is the unpositioned alternative.
+        for (const c of found.filter((c, i) => found.findIndex((o) => o.start === c.start) === i)) paths.add(c.text);
+      }
+      widths.dispose();
+      term.dispose();
+      expect([...paths]).toEqual(['packages/ui/src/renderer/terminal/file-link-provider.ts']);
+    });
+  }
 });
 
 describe('#526 — control', () => {

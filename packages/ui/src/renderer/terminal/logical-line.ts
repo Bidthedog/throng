@@ -118,6 +118,7 @@ export function logicalLineAt(
   buffer: LogicalLineSource,
   y: number,
   knownExtensions: ReadonlySet<string> = KNOWN_FILE_EXTENSIONS,
+  widthsAt?: WidthsAt,
 ): LogicalLine | null {
   const index = y - 1; // xterm counts buffer lines from 1; the buffer API indexes from 0
   const asked = buffer.getLine(index);
@@ -125,7 +126,7 @@ export function logicalLineAt(
 
   /** How row `r` continues the row above it, or `null` when it starts a line of its own. */
   const joinOf = (r: number): number | null =>
-    r <= 0 ? null : continuation(buffer.getLine(r - 1), buffer.getLine(r), knownExtensions);
+    r <= 0 ? null : continuation(buffer, r, knownExtensions, widthsAt);
 
   let first = index;
   while (first > 0 && index - first < MAX_WRAPPED_ROWS && joinOf(first) !== null) first -= 1;
@@ -140,7 +141,10 @@ export function logicalLineAt(
   for (let row = first; row <= last; row += 1) {
     rowStarts.push(text.length);
     const source = buffer.getLine(row);
-    const read = source === undefined ? null : rowText(source, row === last);
+    // A row a program's own break follows is trimmed too: after a wider resize it carries blank cells
+    // it was never written with, and they would land in the middle of the joined text.
+    const trimmed = row === last || (joinOf(row + 1) ?? 0) > 0;
+    const read = source === undefined ? null : rowText(source, trimmed);
     if (read === null) {
       mapped = false;
       text += source?.translateToString(row === last) ?? '';
@@ -165,7 +169,10 @@ export function logicalLineAt(
  * A program's break is joined — superseding FR-132 in part — only on all of these:
  *
  *  - `above` is filled to its LAST column with something other than a space: a program that wraps its
- *    own text (Claude Code) only cuts a word there when the word does not fit;
+ *    own text (Claude Code) only cuts a word there when the word does not fit. "Its last column" is
+ *    the width the row was WRITTEN at (`widthsAt`), so a resize does not undo the join: xterm never
+ *    reflows a program's break, and a narrower resize soft-wraps the written row into several, which
+ *    are measured together;
  *  - `row` starts at the same indent as `above` (or at the column after `above`'s bullet glyph), that
  *    indent is at least one column, and a non-space follows it;
  *  - `above`'s last word does not already end in a KNOWN extension — that word is complete, and the
@@ -174,19 +181,45 @@ export function logicalLineAt(
  * Both rows must be read cell by cell; a source without cells only ever soft-wraps.
  */
 function continuation(
-  above: LogicalLineSourceRow | undefined,
-  row: LogicalLineSourceRow | undefined,
+  buffer: LogicalLineSource,
+  r: number,
   knownExtensions: ReadonlySet<string>,
+  widthsAt: WidthsAt | undefined,
 ): number | null {
+  const row = buffer.getLine(r);
+  const above = buffer.getLine(r - 1);
   if (above === undefined || row === undefined) return null;
   if (row.isWrapped === true) return 0;
-  const top = rowText(above, false);
   const next = rowText(row, false);
-  if (top === null || next === null || above.length === undefined) return null;
+  if (next === null || above.length === undefined) return null;
+
+  // The row as written: `r - 1` and every row above it xterm soft-wrapped it into.
+  let groupStart = r - 1;
+  while (groupStart > 0 && r - 1 - groupStart < MAX_WRAPPED_ROWS && buffer.getLine(groupStart)?.isWrapped === true) {
+    groupStart -= 1;
+  }
+  let text = '';
+  let written = 0;
+  for (let g = groupStart; g < r; g += 1) {
+    const source = buffer.getLine(g);
+    // The last row is trimmed: after a wider resize it is padded with blank cells it was never written with.
+    const read = source === undefined ? null : rowText(source, g === r - 1);
+    if (read === null || source?.length === undefined) return null;
+    text += read.text;
+    if (g < r - 1) {
+      written += source.length;
+      continue;
+    }
+    const end = read.text.length - 1;
+    if (end < 0) return null;
+    written += (read.columns[end] as number) + (read.widths[end] as number);
+  }
+  const top = { text };
 
   const lastAt = top.text.length - 1;
   if (lastAt < 0 || /\s/.test(top.text[lastAt] as string)) return null;
-  if ((top.columns[lastAt] as number) + (top.widths[lastAt] as number) !== above.length) return null;
+  const widths = widthsAt?.(groupStart) ?? new Set([above.length]);
+  if (!widths.has(written)) return null;
 
   const indent = /^ */.exec(next.text)![0].length;
   if (indent === 0 || indent >= next.text.length || /\s/.test(next.text[indent] as string)) return null;
@@ -200,6 +233,55 @@ function continuation(
   return indent;
 }
 
+/** The widths (in cells) a 0-based buffer row may have been written at. */
+export type WidthsAt = (row: number) => ReadonlySet<number>;
+
+/** The slice of an xterm Terminal `trackWrittenWidths` reads. */
+export interface WidthSource {
+  readonly cols: number;
+  onResize(listener: (size: { cols: number; rows: number }) => void): { dispose(): void };
+  registerMarker(cursorYOffset?: number): { readonly line: number; readonly isDisposed: boolean; dispose(): void } | undefined;
+}
+
+/** How many resizes are remembered; older rows than that are judged by the widths still known. */
+const MAX_REMEMBERED_RESIZES = 32;
+
+/**
+ * #526 — the width each row was WRITTEN at, so a program's own break is still recognised after a
+ * resize (`continuation`). On every resize a marker is dropped at the cursor's row: every row at or
+ * above it may have been written at the width before the resize. xterm moves markers with reflow and
+ * scrollback trimming, so the boundary stays on the right row.
+ *
+ * A row's candidates are the current width and the width before every resize at or below it — a
+ * program that redraws after a resize (Claude Code's live region) writes at the new width.
+ */
+export function trackWrittenWidths(term: WidthSource): { readonly widthsAt: WidthsAt; dispose(): void } {
+  let cols = term.cols;
+  const resizes: { readonly marker: NonNullable<ReturnType<WidthSource['registerMarker']>>; readonly cols: number }[] = [];
+  const sub = term.onResize((size) => {
+    const marker = term.registerMarker(0);
+    if (marker !== undefined && size.cols !== cols) {
+      resizes.push({ marker, cols });
+      if (resizes.length > MAX_REMEMBERED_RESIZES) resizes.shift()?.marker.dispose();
+    } else {
+      marker?.dispose();
+    }
+    cols = size.cols;
+  });
+  return {
+    widthsAt: (row) => {
+      const out = new Set<number>([term.cols]);
+      for (const r of resizes) if (!r.marker.isDisposed && r.marker.line >= row) out.add(r.cols);
+      return out;
+    },
+    dispose: () => {
+      sub.dispose();
+      for (const r of resizes) r.marker.dispose();
+      resizes.length = 0;
+    },
+  };
+}
+
 /**
  * Every logical line with a row in `top..bottom` (1-based, inclusive), each once and in order. A line
  * wrapped across the viewport's edge is read whole, so a link half in view is still one link.
@@ -209,11 +291,12 @@ export function logicalLinesBetween(
   top: number,
   bottom: number,
   knownExtensions: ReadonlySet<string> = KNOWN_FILE_EXTENSIONS,
+  widthsAt?: WidthsAt,
 ): LogicalLine[] {
   const lines: LogicalLine[] = [];
   let y = Math.max(1, top);
   while (y <= bottom) {
-    const line = logicalLineAt(buffer, y, knownExtensions);
+    const line = logicalLineAt(buffer, y, knownExtensions, widthsAt);
     if (line === null) {
       y += 1;
       continue;
