@@ -16,7 +16,8 @@ If it gives a user a new ability, raise an Enhancement instead.
 If the current behaviour contradicts its own stated intent, that is not a
 Tweak — it is a Bug, so raise a Bug report.
 
-A maintainer must AGREE this issue, in a comment, before a PR is opened. Tweaks
+A maintainer must AGREE this issue, in a comment, before a PR is opened. A
+maintainer's own issue is agreed by ticking the Maintainer agreement box. Tweaks
 are usually small enough to skip the full Spec Kit lifecycle, but they still
 need an agreed issue.
 
@@ -55,5 +56,6 @@ in at a glance. All the detail belongs in the body below, not the title.
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
+<!-- Leave blank unless you are a maintainer. A maintainer agrees someone else's issue in a comment
+     below; on their own issue, ticking this box is the agreement. -->
 - [ ] Agreed by maintainer. Contributor may proceed (full lifecycle unless trivially small).

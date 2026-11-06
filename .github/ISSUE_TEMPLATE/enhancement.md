@@ -17,7 +17,8 @@ into several Enhancements that LINK TO EACH OTHER ("Related to #NN") rather
 than nesting under a parent.
 
 A maintainer must AGREE this issue (scope + direction), in a comment, before
-you begin the Spec Kit lifecycle or open a PR.
+you begin the Spec Kit lifecycle or open a PR. A maintainer's own issue is
+agreed by ticking the Maintainer agreement box.
 
 TITLE: keep it short and scannable — "[Enhancement] " plus a summary a reader
 can take in at a glance. All the detail belongs in the body below, not the title.
@@ -59,5 +60,6 @@ can take in at a glance. All the detail belongs in the body below, not the title
 
 ## Maintainer agreement
 
-<!-- Leave blank — a maintainer fills this in by agreeing in a comment below. -->
+<!-- Leave blank unless you are a maintainer. A maintainer agrees someone else's issue in a comment
+     below; on their own issue, ticking this box is the agreement. -->
 - [ ] Agreed by maintainer (scope confirmed). Contributor may begin the Spec Kit lifecycle.

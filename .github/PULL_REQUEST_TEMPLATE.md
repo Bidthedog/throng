@@ -10,7 +10,7 @@ Before opening this PR, read CONTRIBUTING.md. PRs will be rejected that do not r
      with no fix behind it. -->
 Closes #
 
-- [ ] This issue exists and a maintainer **explicitly agreed it in a comment** before this PR was opened.
+- [ ] This issue exists and a maintainer **agreed it** before this PR was opened — in a comment, or by ticking the **Maintainer agreement** box on their own issue.
 - [ ] The issue is **labelled** — exactly one type (`bug` / `enhancement` / `tweak` / `documentation`) and at least one `area:*` — and its title reads `[Type] Summary`. See [Labelling](../CONTRIBUTING.md#labelling).
 - [ ] **This PR carries its own labels and milestone**, mirroring the issue(s) it closes — `gh pr create` inherits neither, and a PR with no milestone never appears on the board a maintainer merges from.
 
