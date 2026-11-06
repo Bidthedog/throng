@@ -9,6 +9,34 @@
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { logExpected, type Disposable, type IFileWatcher, type WatchBatch, type WatchOptions } from '@throng/core';
+import { watchDirectoryTree, type TreeWatch, type TreeWatchListener } from './directory-tree-watch.js';
+
+/**
+ * How a recursive watch is built (#585).
+ *
+ * - `native` — `fs.watch(dir, { recursive: true })`. Native on Windows and macOS.
+ * - `per-directory` — {@link watchDirectoryTree}: one watch per directory, indexed as a tree. On
+ *   Linux Node's `recursive: true` is a JavaScript emulation whose cost on a bulk delete is
+ *   quadratic in the size of the tree, which froze the UI for minutes on `rm -rf node_modules`.
+ */
+export type RecursiveWatchStrategy = 'native' | 'per-directory';
+
+/** The strategy for this platform: per-directory where Node's recursive watch is emulated. */
+export const defaultRecursiveWatchStrategy = (platform: NodeJS.Platform = process.platform): RecursiveWatchStrategy =>
+  platform === 'linux' ? 'per-directory' : 'native';
+
+/** Opens a recursive watch by `strategy`; both report failures through `onError`. */
+function openRecursiveWatch(
+  strategy: RecursiveWatchStrategy,
+  dir: string,
+  listener: TreeWatchListener,
+  onError: (error: NodeJS.ErrnoException) => void,
+): TreeWatch {
+  if (strategy === 'per-directory') return watchDirectoryTree(dir, listener, onError);
+  const created = watch(dir, { recursive: true }, listener);
+  created.on('error', onError);
+  return created;
+}
 
 /** Tuning, all overridable per instance (Principle X). */
 export interface NodeFileWatcherOptions {
@@ -22,6 +50,8 @@ export interface NodeFileWatcherOptions {
   maxRetries?: number;
   /** Backoff base; the nth attempt waits `retryBaseMs * n`. */
   retryBaseMs?: number;
+  /** How a recursive watch is built; defaults to {@link defaultRecursiveWatchStrategy}. */
+  recursiveStrategy?: RecursiveWatchStrategy;
 }
 
 /**
@@ -49,6 +79,8 @@ export class NodeFileWatcher implements IFileWatcher {
 
   private readonly retryBaseMs: number;
 
+  private readonly recursiveStrategy: RecursiveWatchStrategy;
+
   constructor(
     private readonly debounceMs = 100,
     options: NodeFileWatcherOptions = {},
@@ -56,6 +88,7 @@ export class NodeFileWatcher implements IFileWatcher {
     this.maxWaitMs = options.maxWaitMs ?? 1000;
     this.maxRetries = options.maxRetries ?? 5;
     this.retryBaseMs = options.retryBaseMs ?? 250;
+    this.recursiveStrategy = options.recursiveStrategy ?? defaultRecursiveWatchStrategy();
   }
 
   watch(
@@ -66,7 +99,7 @@ export class NodeFileWatcher implements IFileWatcher {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let lastPath = dir;
-    let watcher: FSWatcher | null = null;
+    let watcher: TreeWatch | null = null;
     /** The watch on the nearest existing ancestor, held only while `dir` does not exist. */
     let sentinel: FSWatcher | null = null;
     let disposed = false;
@@ -260,8 +293,6 @@ export class NodeFileWatcher implements IFileWatcher {
     const arm = (opts?: { reportOnArm?: boolean }): void => {
       if (disposed) return;
       try {
-        const created = watch(dir, { recursive: true }, onEvent);
-        watcher = created;
         // fs.watch reports RUNTIME failures via an 'error' event, not the try/catch
         // (which only guards synchronous creation). Windows commonly emits EPERM/ENOENT
         // when a watched directory is renamed or removed underneath a recursive watch
@@ -271,9 +302,16 @@ export class NodeFileWatcher implements IFileWatcher {
         // Swallowing was always right; STAYING DEAD was not. The original handler closed the
         // watcher and set it to null with no re-establish, so one transient EPERM left the tree
         // stale for the whole session with nothing said to anyone (026 / #186, FR-010).
-        created.on('error', (error: NodeJS.ErrnoException) => {
+        //
+        // `failed` covers a watch that fails while it is still being opened — the per-directory
+        // watch can reach the machine's watch limit during its first walk — so a dead watch is
+        // never installed as the live one.
+        let created: TreeWatch | null = null;
+        let failed = false;
+        created = openRecursiveWatch(this.recursiveStrategy, dir, onEvent, (error) => {
+          failed = true;
           if (disposed) return;
-          created.close();
+          created?.close();
           if (watcher === created) watcher = null;
           // The directory went AWAY under the watch (it was renamed or removed). That is an
           // absence, not a fault, so it waits for the path instead of counting towards the
@@ -284,6 +322,8 @@ export class NodeFileWatcher implements IFileWatcher {
           }
           scheduleRetry(error.code ?? error.message);
         });
+        if (failed) return;
+        watcher = created;
         if (opts?.reportOnArm) {
           // A directory that has just (RE)APPEARED is entirely news: nobody was watching while it
           // was away, so no event describes what changed inside it. Report it once, immediately —

@@ -65,6 +65,13 @@ vi.mock('node:fs', () => ({
 
 const { NodeFileWatcher } = await import('../../src/main/node-file-watcher.js');
 
+/**
+ * These tests drive the wrapper's state machine against a mocked NATIVE recursive `fs.watch`, so
+ * they pin that strategy — on Linux the default is the per-directory watch (#585), tested in
+ * `directory-tree-watch.integration.test.ts`.
+ */
+const NATIVE = { recursiveStrategy: 'native' } as const;
+
 const liveWatch = (): Watch | undefined => [...watches].reverse().find((w) => !w.watcher.closed);
 const watchOn = (dir: string): Watch | undefined =>
   [...watches].reverse().find((w) => w.dir === dir && !w.watcher.closed);
@@ -92,7 +99,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
 
     const changes: string[] = [];
     const failures: string[] = [];
-    const handle = new NodeFileWatcher(50).watch(ROOT, (p) => changes.push(p), {
+    const handle = new NodeFileWatcher(50, NATIVE).watch(ROOT, (p) => changes.push(p), {
       onFailed: (reason) => failures.push(reason),
     });
 
@@ -138,7 +145,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     // sitting right there.
     present.add(ROOT);
     const failures: string[] = [];
-    const handle = new NodeFileWatcher(50, { maxRetries: 2, retryBaseMs: 10 }).watch(
+    const handle = new NodeFileWatcher(50, { ...NATIVE, maxRetries: 2, retryBaseMs: 10 }).watch(
       ROOT,
       () => {},
       { onFailed: (reason) => failures.push(reason) },
@@ -162,7 +169,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     present.add(PARENT);
     present.add(ROOT);
     const failures: string[] = [];
-    const handle = new NodeFileWatcher(50).watch(ROOT, () => {}, {
+    const handle = new NodeFileWatcher(50, NATIVE).watch(ROOT, () => {}, {
       onFailed: (reason) => failures.push(reason),
     });
 
@@ -192,7 +199,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     present.add(ROOT);
     const changes: string[] = [];
     const failures: string[] = [];
-    const handle = new NodeFileWatcher(50).watch(ROOT, (p) => changes.push(p), {
+    const handle = new NodeFileWatcher(50, NATIVE).watch(ROOT, (p) => changes.push(p), {
       onFailed: (reason) => failures.push(reason),
     });
 
@@ -233,7 +240,7 @@ describe('a watch on a missing path waits for it (027 / #161)', () => {
     present.add(PARENT);
     absent.add(ROOT);
     const changes: string[] = [];
-    const handle = new NodeFileWatcher(50).watch(ROOT, (p) => changes.push(p));
+    const handle = new NodeFileWatcher(50, NATIVE).watch(ROOT, (p) => changes.push(p));
     await vi.advanceTimersByTimeAsync(1000);
 
     const sentinel = watchOn(PARENT);
