@@ -3417,7 +3417,12 @@ Three things make it a rule change rather than a narrowing:
     extension (FR-178). The continuation's indent is not part of the link's text. A path a program
     breaks **at a space** is still two lines. "Its last column" is the width the row was **written**
     at: a resize MUST NOT undo the join (maintainer hand-test, 2026-11-06 — after a resize each half
-    opened on its own and was not found).
+    opened on its own and was not found). *Refined the same day (maintainer, on two screenshots)*: a
+    last word ending in `,` or `;`, or in a known extension once a trailing position is removed, is
+    complete — unless the edge cut the position itself (`foo.ts:12` + `0`); and a row up to **four**
+    columns short of its width (Claude Code's input box) joins only a break inside a path — its last
+    word has a separator, and with the next row's first word it ends in a known extension or a
+    separator.
   - **FR-188c — a relative scan crosses one space at most** *(supersedes FR-179f in part; S15)*: a
     token with a separator and no anchor scans across at most one space
     (`MAX_RELATIVE_PATH_SPACE_WORDS`, 2 words). An anchored token keeps `MAX_PATH_SPACE_WORDS`.
