@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addTab, createProject, type Project, type WorkspaceLayout } from '@throng/core';
 import {
   openDatabase,
@@ -196,5 +196,23 @@ describe('per-project workspace persistence', () => {
     expect(result.restored).toBe(false);
     expect(result.reason).toBe('corrupt');
     expect(result.layout.tabs).toHaveLength(1);
+  });
+
+  it('066 FR-009: logs a layout that parses but belongs to another project before falling back', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      seedProject('p1', 'one');
+      db.prepare(
+        `INSERT INTO workspace_layout (owner_user, project_id, schema_version, layout_json, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(OWNER, 'p1', 1, JSON.stringify({ projectId: 'someone-else', tabs: [] }), 'now');
+
+      expect(workspaces.load(OWNER, 'p1').reason).toBe('corrupt');
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContainEqual(
+        'workspace-repository: parse stored layout: the layout belongs to project someone-else',
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

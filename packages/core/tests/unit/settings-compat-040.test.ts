@@ -54,7 +54,7 @@ const OVERRIDES: readonly (readonly [string, unknown])[] = [
   ['editor.navigation.rememberGotoLineNumber', true],
   ['tabs.maxNameLength', 32],
   ['search.asYouTypeDebounceMs', 250],
-  ['diagnostics.keepFiles', 7],
+  ['diagnostics.keepDays', 7],
   ['newProject.startingFolder', 'profile'],
 ] as const;
 

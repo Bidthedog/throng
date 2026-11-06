@@ -18,7 +18,7 @@ import { cleanupRunDir } from '../../../../scripts/test-run-dir.mjs';
  * looking for a lock that was not there either.
  *
  * Both times the folder held the same thing: `throng-agent-<pid>.log` files. The de-elevated PTY
- * agent writes one per process to `%TEMP%` (`daemon/src/pty-agent-log.ts`), `%TEMP%` is redirected
+ * agent wrote one per process to `%TEMP%` until 066 moved it into the logs folder, `%TEMP%` is redirected
  * into the run folder for the duration of a run, and no cleanup path removes them — so an ORDINARY
  * green run ends with a folder full of them. Measured on a 205-passed/0-failed run: 137 of 161
  * items were agent logs.

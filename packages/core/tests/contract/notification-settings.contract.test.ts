@@ -33,7 +33,7 @@ describe('notifications merge contract', () => {
     editor: { autoSave: true, indent: { style: 'tabs', indentWidth: 4, tabWidth: 4 } },
     newProject: { startingFolder: 'profile', lastProjectFolder: 'D:\\work' },
     search: { asYouTypeDebounceMs: 250 },
-    diagnostics: { logLevel: 'debug', keepFiles: 7 },
+    diagnostics: { logLevel: 'debug', keepDays: 7 },
   };
 
   it('resolves an older file with no notifications section to the shipped defaults', () => {
@@ -58,7 +58,7 @@ describe('notifications merge contract', () => {
     expect(resolved.newProject.lastProjectFolder).toBe('D:\\work');
     expect(resolved.search.asYouTypeDebounceMs).toBe(250);
     expect(resolved.diagnostics.logLevel).toBe('debug');
-    expect(resolved.diagnostics.keepFiles).toBe(7);
+    expect(resolved.diagnostics.keepDays).toBe(7);
   });
 
   it('honours a written notifications section, per severity', () => {

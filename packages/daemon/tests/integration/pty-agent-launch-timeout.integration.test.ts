@@ -1,4 +1,4 @@
-import { resolveIpcAddress } from '@throng/core';
+import { resolveIpcAddress, type LogLevel } from '@throng/core';
 import { describe, it, expect } from 'vitest';
 import { createServer, type Server, type Socket } from 'node:net';
 import process from 'node:process';
@@ -589,4 +589,174 @@ describe('#94 — a stuck de-elevated launch must surface an error, not hang for
     },
     SHORT_READY_MS * 3 + 7_000,
   );
+});
+
+/**
+ * 066 FR-005 / FR-007 — every agent failure the host surfaces to a panel was, until now, surfaced ONLY
+ * there: a lapse at daemon boot with no terminal open, or an agent that crashed between terminals, left
+ * `daemon.log` empty. Each condition must leave exactly one record naming the agent and the reason — one,
+ * not one per live terminal, so two open terminals do not double the record of one crash.
+ */
+describe('066 — the agent host logs every failure it surfaces', () => {
+  interface Record {
+    readonly level: LogLevel;
+    readonly message: string;
+  }
+  const recorder = (): { records: Record[]; log: (level: LogLevel, message: string) => void } => {
+    const records: Record[] = [];
+    return { records, log: (level, message) => records.push({ level, message }) };
+  };
+  /** A pipe server that accepts the host, and optionally answers each `start` with `reply`. */
+  async function agentServer(
+    pipe: string,
+    reply?: (cmd: AgentCommand) => string | undefined,
+  ): Promise<{ sockets: Socket[]; close: () => Promise<void> }> {
+    const sockets: Socket[] = [];
+    const server = createServer((sock) => {
+      sockets.push(sock);
+      sock.setEncoding('utf8');
+      let buf = '';
+      sock.on('data', (chunk: string) => {
+        buf += chunk;
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          const answer = reply?.(JSON.parse(line) as AgentCommand);
+          if (answer) sock.write(answer);
+        }
+      });
+      sock.on('error', () => {
+        /* peer reset — ignore */
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.on('error', reject);
+      server.listen(resolveIpcAddress(pipe), resolve);
+    });
+    return {
+      sockets,
+      close: async () => {
+        for (const s of sockets) s.destroy();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      },
+    };
+  }
+
+  it(
+    'logs a connect lapse once, naming the agent and the reason',
+    async () => {
+      const { records, log } = recorder();
+      const host = new PtyAgentHost(uniquePipe(), () => {}, { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS }, log);
+      // Two live terminals: the lapse is ONE condition, whatever it fails.
+      host.start(startOpts());
+      host.start(startOpts());
+      await lapsed(SHORT_CONNECT_MS);
+
+      const lapses = records.filter((r) => /never started/.test(r.message));
+      expect(lapses, 'one record for one lapse').toHaveLength(1);
+      expect(lapses[0]?.message).toMatch(/agent/i);
+      expect(lapses[0]?.level, 'a long-lived process that never started is fatal (FR-009a)').toBe('fatal');
+
+      host.dispose();
+    },
+    SHORT_CONNECT_MS + GRACE_MS + 7_000,
+  );
+
+  it(
+    "logs an established agent's crash once, however many terminals it took with it",
+    async () => {
+      const pipe = uniquePipe();
+      const agent = await agentServer(pipe);
+      const { records, log } = recorder();
+      // A generous connect budget: the relaunch after the crash must not lapse inside this test.
+      const host = new PtyAgentHost(pipe, () => {}, { connectMs: 5_000, readyMs: 5_000 }, log);
+      host.start(startOpts());
+      host.start(startOpts());
+      while (agent.sockets.length === 0) await delay(10);
+
+      await agent.close();
+      await delay(150);
+
+      const crashes = records.filter((r) => /stopped unexpectedly/.test(r.message));
+      expect(crashes, 'one record for one crash').toHaveLength(1);
+      expect(crashes[0]?.message).toMatch(/agent/i);
+      expect(crashes[0]?.level).toBe('fatal');
+
+      host.dispose();
+    },
+    7_000,
+  );
+
+  it(
+    'logs an agent `error` event with the terminal and the message',
+    async () => {
+      const pipe = uniquePipe();
+      const agent = await agentServer(pipe, (cmd) =>
+        cmd.op === 'start' ? encodeLine({ ev: 'error', key: cmd.key, message: 'spawn cmd.exe ENOENT' }) : undefined,
+      );
+      const { records, log } = recorder();
+      const host = new PtyAgentHost(pipe, () => {}, { connectMs: 5_000, readyMs: 5_000 }, log);
+      const handle = host.start(startOpts());
+      const exits: unknown[] = [];
+      host.onExit(handle, (e) => exits.push(e));
+      while (exits.length === 0) await delay(10);
+
+      const failures = records.filter((r) => /spawn cmd\.exe ENOENT/.test(r.message));
+      expect(failures, 'one record for one failed start').toHaveLength(1);
+      expect(failures[0]?.message).toMatch(/agent/i);
+      expect(failures[0]?.message).toContain(`terminal ${handle.pid}`);
+      expect(failures[0]?.level).toBe('error');
+
+      host.dispose();
+      await agent.close();
+    },
+    7_000,
+  );
+
+  it(
+    'logs a launch reason that arrives after the lapse, with no terminal open',
+    async () => {
+      // The reason reaches a panel only if the user opens one; the log must have it regardless.
+      let report: ((reason: string) => void) | undefined;
+      const { records, log } = recorder();
+      const host = new PtyAgentHost(
+        uniquePipe(),
+        (_pipe, r) => {
+          report = r;
+        },
+        { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS },
+        log,
+      );
+      await lapsed(SHORT_CONNECT_MS);
+      report?.('CreateProcessWithTokenW failed: 1314');
+
+      const reasons = records.filter((r) => /CreateProcessWithTokenW failed: 1314/.test(r.message));
+      expect(reasons, 'one record for one reported reason').toHaveLength(1);
+      expect(reasons[0]?.message).toMatch(/agent/i);
+      expect(reasons[0]?.level).toBe('error');
+
+      host.dispose();
+    },
+    SHORT_CONNECT_MS + GRACE_MS + 7_000,
+  );
+
+  it('does not log a reason the launcher already logged (one condition, one record — review)', () => {
+    // A plain spawn is watched by watchChild, which records the exit with its stderr tail; the reason it
+    // hands the host is for the panel, and logging it again would make one agent death two records.
+    let report: ((reason: string, alreadyLogged?: boolean) => void) | undefined;
+    const { records, log } = recorder();
+    const host = new PtyAgentHost(
+      uniquePipe(),
+      (_pipe, r) => {
+        report = r;
+      },
+      { connectMs: SHORT_CONNECT_MS, readyMs: SHORT_READY_MS },
+      log,
+    );
+    report?.('exit 3', true);
+    expect(records.filter((r) => /exit 3/.test(r.message))).toEqual([]);
+    host.dispose();
+  });
 });

@@ -35,7 +35,8 @@ afterEach(() => {
 function heldLock() {
   statSync.mockReturnValue({ isDirectory: () => true });
   const kill = vi.fn();
-  spawn.mockReturnValue({ pid: 4242, kill });
+  // `on`: the holder is watched (066 FR-008), so the fake answers the listener calls a ChildProcess does.
+  spawn.mockReturnValue({ pid: 4242, kill, on: vi.fn() });
   return { lock: new WindowsDirectoryLock(), kill };
 }
 

@@ -95,16 +95,16 @@ function countWrites(): { calls: () => number } {
 describe('W1 — a corrected document is written back (FR-013)', () => {
   it('loads the value at its bound AND leaves the file saying so', async () => {
     const { store, path } = seed(
-      docWith({ 'panes.projects.maxWidth': 99_999, 'diagnostics.keepFiles': 0 }),
+      docWith({ 'panes.projects.maxWidth': 99_999, 'diagnostics.keepDays': 0 }),
     );
 
     const settings = await readSettings(store);
 
     expect(settings.panes.projects.maxWidth).toBe(1200);
-    expect(settings.diagnostics.keepFiles).toBe(1);
+    expect(settings.diagnostics.keepDays).toBe(1);
     // The point of FR-013: the file is no longer lying about what is in use.
     expect(onDisk(path).panes.projects.maxWidth).toBe(1200);
-    expect(onDisk(path).diagnostics.keepFiles).toBe(1);
+    expect(onDisk(path).diagnostics.keepDays).toBe(1);
   });
 
   it('writes back a fault that is INSIDE a table, not only a top-level leaf (G12)', async () => {
