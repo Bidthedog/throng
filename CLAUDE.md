@@ -59,6 +59,10 @@ for the inner loop; `td audit` and `td rank` read the recorded telemetry.
 - **Never run `npm run build` in a worktree while its throng is open.** It replaces the hashed renderer
   chunks the running app still loads, whose next dynamic import fails with "Failed to fetch dynamically
   imported module".
+- **Run a worktree's tests from inside the worktree.** Tests that read repo files through
+  `process.cwd()` (`release-*.test.ts`, `docs-currency.test.ts`) read whichever checkout the shell is
+  in; `vitest --root <worktree>` from the main checkout does not change that, and they silently pass or
+  fail against master's files.
 
 ## E2E on CI
 
