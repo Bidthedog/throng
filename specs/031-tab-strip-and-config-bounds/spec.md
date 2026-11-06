@@ -537,7 +537,7 @@ context menu's Destroy Tab.
   | Setting | Declared | Parsed today | Resolves to |
   |---|---|---|---|
   | `terminals.linkHoverDelayMs` | 0–2000 | 0–5000 | **0–2000** |
-  | `diagnostics.keepFiles` | 1–20 | 1–50 | **1–20** |
+  | `diagnostics.keepFiles` | 1–20 | 1–50 | **1–20** — *superseded by 066 FR-020: the setting is removed, replaced by `diagnostics.keepDays` and `diagnostics.maxTotalMb`* |
   | `search.asYouTypeDebounceMs` | 0–1000 | 0–unbounded | **0–1000** |
 
 - **FR-015a**: The fourth, `diagnostics.maxFileSizeKb`, is **deliberate** — it declares 64–4096 so
