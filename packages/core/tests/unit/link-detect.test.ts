@@ -99,6 +99,25 @@ describe('detectPathCandidates — D3/FR-004: the position is never part of the 
     expect(c.position).toBeUndefined();
     expect(c.positionText).toBeUndefined();
   });
+
+  /*
+   * #526 (reported 2026-11-06: "the :113 notation at the end of links is not working in Claude or
+   * terminals"). Claude Code writes a line RANGE — `detect.ts:113-120` — and GitHub-style anchors are
+   * pasted as `#L113`. Each of these drew no link at all: the suffix did not match, and a relative
+   * reading with a colon is refused as punctuation. Each must link the path at the range's first line.
+   */
+  it.each([
+    ['path:line-line', 'see src/foo.ts:113-120 now', ':113-120'],
+    ['path:line–line (en dash)', 'see src/foo.ts:113–120 now', ':113–120'],
+    ['path#Lline', 'see src/foo.ts#L113 now', '#L113'],
+    ['path#Lline-Lline', 'see src/foo.ts#L113-L120 now', '#L113-L120'],
+  ])('%s links the path at the first line', (_name, line, positionText) => {
+    const c = detectPathCandidates(line, [])[0];
+    expect(c?.text).toBe('src/foo.ts');
+    expect(c?.position).toEqual({ line: 113 });
+    expect(c?.positionText).toBe(positionText);
+    expect(line.slice(c!.start, c!.end)).toBe('src/foo.ts');
+  });
 });
 
 describe('detectPathCandidates — FR-005: punctuation, brackets and quotes', () => {
@@ -405,6 +424,31 @@ describe('T242 / FR-174 — any rooted path is a link; a `/` with no path charac
 
   it('a bare `/<letter>` with no following separator is a rooted path, not a drive form (detection keeps it whole)', () => {
     expect(texts('dir /c')).toEqual(['/c']);
+  });
+
+  /*
+   * #418 (maintainer decision 2026-11-06, supersedes FR-174 in part): a slash command is not a path.
+   * A single-segment rooted token that opens its line, or follows a prompt glyph, is how an agent
+   * terminal prints a command (`/clear`, `/skill-name` in Claude Code's menu and echoed input), so it is
+   * not a link there. Anywhere else FR-174 stands, and a multi-segment rooted path is always a link.
+   */
+  it.each([
+    ['/help', 'opening its line'],
+    ['  /speckit-plan   Execute the planning workflow', 'opening its line after indentation'],
+    ['> /clear', 'after a `>` prompt'],
+    ['❯ /skill-name', 'after a `❯` prompt'],
+    ['› /compact now', 'after a `›` prompt'],
+  ])('#418: %j is not a link (%s)', (line) => {
+    expect(texts(line)).toEqual([]);
+  });
+
+  it.each([
+    ['/usr/bin/bash.exe', ['/usr/bin/bash.exe']],
+    ['> /tmp/x.log', ['/tmp/x.log']],
+    ['/etc/hosts is the file', ['/etc/hosts']],
+    ['see /help for help', ['/help']],
+  ])('#418: %j keeps its link', (line, spans) => {
+    expect(texts(line)).toEqual(spans);
   });
 
   it('`/?`, `/*` and a lone `/` are not', () => {

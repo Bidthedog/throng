@@ -2369,6 +2369,7 @@ change at all, so the already-open route must place the caret too.
   breaks text with its own line break has printed two lines. The one exception is an OSC 8
   hyperlink: rows carrying the same declared target are the same link, because the program declared
   it.
+  *Superseded in part 2026-11-06 by FR-188b (S14): a program's break at the right edge is joined.*
 - **FR-133**: FR-130 – FR-132 MUST NOT change what a wrapped row renders, how it selects or copies,
   or how it reflows (FR-008), and MUST keep FR-071/FR-072: joining a logical line happens when a row
   is asked about, never on the output path.
@@ -2885,6 +2886,8 @@ found and is kept as written.*
   with no following separator is a rooted path, **not** a drive form (FR-025 / FR-176 need
   `/<letter>/`), so `dir /c` never opens `C:\`. Cases go in `link-detect.test.ts` and
   `link-resolve.test.ts` (T242, T253).*
+  *Superseded in part 2026-11-06 by FR-188d (S16): a slash command opening its line or following a
+  prompt glyph is not a link.*
 - **FR-175**: The link menu's copy item MUST be labelled **Copy Link to Clipboard** in every surface —
   the Link menu (FR-170), and every place this spec, 024 FR-019d and 044 FR-095 say **Copy Link
   Address**. What it copies is unchanged (FR-032, FR-103, 044 FR-116). Constitution Principle VI names
@@ -2965,6 +2968,7 @@ found and is kept as written.*
     bracket is trimmed rather than ending the scan (`[D:\a b\c.md` → `D:\a b\c.md`). The table's header
     rule 3 is the full statement. This supersedes FR-179d's "never adds more than six words" and aligns
     FR-173's stopping rules with the table.
+    *Superseded in part 2026-11-06 by FR-188c (S15): a relative token crosses one space at most.*
 
   This supersedes FR-173's "farthest" (FR-173d, FR-173e), its "MUST start only from an anchored form",
   and FR-173c's three-pair list. **The effective space rule** is FR-173 as amended by FR-178, FR-178a
@@ -3400,6 +3404,36 @@ Three things make it a rule change rather than a narrowing:
   undecidable cases while step 3 did the opposite: documented rule and code had drifted apart, and the
   documentation was the correct one (FR-187's note).
 
+- **FR-188** *(2026-11-06, maintainer — #526 and #418, decided on samples captured from Claude Code)*:
+  **A terminal link MUST cover exactly the path it names, in Claude Code's output as in a shell's.**
+  - **FR-188a — the underline sits on the path's own cells**: a link's range MUST be the cells its
+    characters are drawn in. A wide character (CJK; two cells, one text unit) or an emoji outside the
+    BMP (📁 🔧 🚀; one cell, two units) earlier on the row MUST NOT shift it. This is FR-130 and
+    FR-136 as written; the defect was reading a text offset as a column.
+  - **FR-188b — a program's own break at the right edge is joined** *(supersedes FR-132 in part; S14)*:
+    a row MUST continue onto the next when the row is filled to its last column with a non-space, the
+    next row starts at the same indent (at least one column; or the column after the row's bullet
+    glyph) with a non-space after it, and the row's last word does not already end in a known
+    extension (FR-178). The continuation's indent is not part of the link's text. A path a program
+    breaks **at a space** is still two lines.
+  - **FR-188c — a relative scan crosses one space at most** *(supersedes FR-179f in part; S15)*: a
+    token with a separator and no anchor scans across at most one space
+    (`MAX_RELATIVE_PATH_SPACE_WORDS`, 2 words). An anchored token keeps `MAX_PATH_SPACE_WORDS`.
+    `Updated src/components and the docs/readme.md file` links `docs/readme.md` alone; a relative
+    segment holding two spaces needs quotes or backticks.
+  - **FR-188d — a slash command is not a path** *(supersedes FR-174 in part; S16)*: a single-segment
+    rooted token with no dot (`/clear`, `/skill-name`, `/plugin:skill`) MUST NOT be a link when it opens
+    its line, after any indentation, or follows a prompt glyph (`>`, `❯`, `›`, `»`). Everywhere else
+    FR-174 stands, and a multi-segment rooted path is always a link.
+  - **FR-188e — line ranges and anchors are positions** *(extends FR-004)*: `path:line-line`,
+    `path:line–line`, `path#Lline` and `path#Lline-Lline` MUST carry the range's **first** line as the
+    link's position, exactly as `path:line` does.
+
+  Repro tests, written failing first and confirmed by the maintainer before any production change:
+  `packages/ui/tests/component/terminal-link-wide-cells.test.ts` (FR-188a, FR-188b, against a real
+  xterm buffer), and the #526 / #418 cases in `packages/core/tests/unit/link-detect.test.ts` and
+  `link-detect-spaces.test.ts` (FR-188c – FR-188e).
+
 FR-187 is the requirement the fix satisfies. Six cases in
 `packages/ui/tests/unit/link-readout-truth.test.ts` were written **failing first** and shown to the
 maintainer before any production change; the third of them proves the rule rather than the symptom — a
@@ -3426,6 +3460,9 @@ where it is.
 | S10 *(2026-09-19, round four — derived)* | FR-035a's "re-checks that it exists before acting" and FR-037's "MUST check again that the path exists", **for a reveal** | FR-158a's one bounded file-or-folder check; a missing location is revealed on its parent, never answered `gone` (FR-158b) | Re-resolution from the request (FR-035a's confinement); the re-check for open in throng, Open in OS Default Program and Open Program; FR-037's `file:` rule | M1: whether a location is broken is not throng's question; M2: a folder opens as itself |
 | S11 *(2026-09-19, round four)* | *Terminology*'s "click rule" — "everything else is shown in OS Explorer" | Allowlisted protocol links go to the OS handler for their scheme (FR-157 class 4, S5) | Web, in-project file and reveal rows | M2 |
 | S12 *(2026-09-20, round five, maintainer M12)* | **024 US7**'s hover tooltip for a terminal link — throng's own floating tip, its wording (*"Ctrl+Click to open in system browser"*) and the delay it waited out, **`terminals.linkHoverDelayMs`**; and **031**'s bounds entry for that setting | A hover sets a native HTML `title` carrying the link's full target and nothing else (FR-169a); the setting is retired on 019 FR-023's mechanism (FR-169b) | The gesture wording, which now reaches the user through the plain-click link hint (FR-165, M7); 024 FR-019 – FR-019d's grammar, menu, Ctrl+click and open-external seam; the status-bar readout (FR-167) | M12: *"Hovering over a link … should simply show the link text, in full, in the HTML title popup. Any other popup / hover / title text should be removed."* A native title is placed, timed and dismissed by the OS, so a configurable delay has nothing left to govern |
+| S14 *(2026-11-06, maintainer, #526)* | **FR-132**, "Two separate lines are never joined into one link on a guess", for a program's break at the right edge | Such a break is joined under FR-188b's three conditions | A break anywhere else — short of the edge, at a different indent, or after a word ending in a known extension — is two lines; the OSC 8 exception; FR-133 | Claude Code wraps its own text, so every path it cut at the edge was two links naming nothing |
+| S15 *(2026-11-06, maintainer, #526)* | **FR-179f**'s cap, for a **relative** token; the confirmed table's `50/50 split see readme.md` row | A relative scan crosses one space at most (FR-188c) | The anchored cap of 6; every other confirmed row | Prose in agent output is full of `dir/name` tokens, and each drew a run-on link to the next file named |
+| S16 *(2026-11-06, maintainer, #418)* | **FR-174**'s "`/help` in prose is a link", where the token opens its line or follows a prompt glyph; the confirmed table's `/file 1` row (now `see /file 1`) | Not a link there (FR-188d) | FR-174 mid-line; every multi-segment rooted path | Slash commands in agent terminals were underlined as files |
 | S13 *(2026-09-20, round five, maintainer M12)* | **044 FR-094**, "Hovering a link MUST show its target **and the gesture that follows it**" — the half **S6** kept unchanged for the Markdown preview, and FR-168's note that refined its wording | The preview's `title` is the **target alone**, by the same function the terminal and the editor use (FR-169a) | The preview's hover itself, its status-bar readout (044 FR-118), its Ctrl+click and what a preview link does when followed (044 FR-090 – FR-096, S6); the gesture wording, which the preview shows in the shared hint S6 already gave it | The same answer as S12, applied to the third surface: a preview whose title reads differently from a terminal's is precisely the second wording M12 removed |
 
 **024 is not edited in place.** The repository has two conventions for a superseded requirement — a

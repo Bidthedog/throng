@@ -110,12 +110,22 @@ const CROSSES: readonly Case[] = [
   { line: 'src/my file.ts:12', spans: ['src/my file.ts'], why: 'relative scan with a position' },
   { line: 'see docs/user guide/intro.md here', spans: ['docs/user guide/intro.md'], why: 'relative scan ends at the first known extension' },
   { line: 'build\\out dir\\', spans: ['build\\out dir\\'], why: 'relative scan ends at a trailing separator' },
-  { line: '50/50 split see readme.md', spans: ['50/50 split see readme.md'], why: 'a prose slash scans to a known extension: a false positive the rule allows' },
+  // #526 (maintainer decision 2026-11-06, supersedes this table's confirmed `50/50 split see readme.md`
+  // row): a RELATIVE scan crosses at most ONE space. Prose run-ons were most of the "runs on past the
+  // path" reports from Claude Code output; anchored scans keep the full MAX_PATH_SPACE_WORDS.
+  { line: '50/50 split see readme.md', spans: ['readme.md'], why: '#526: a relative scan crosses one space at most, so prose never bridges to `readme.md`' },
+  { line: 'Updated src/components and the docs/readme.md file', spans: ['docs/readme.md'], why: '#526, Claude Code sample: the directory never swallows the prose after it' },
+  { line: 'I changed packages/ui/src and then edited foo.ts too', spans: ['foo.ts'], why: '#526, Claude Code sample' },
+  { line: 'The fix lives in src/renderer/terminal so see logical-line.ts', spans: ['logical-line.ts'], why: '#526, Claude Code sample' },
+  { line: 'see src/my new folder/x.ts', spans: ['folder/x.ts'], why: '#526, the accepted cost: a relative segment with two spaces needs quotes or backticks' },
+  { line: '"src/my new folder/x.ts"', spans: ['src/my new folder/x.ts'], why: '#526: an enclosure still holds any number of spaces' },
+  { line: String.raw`C:\Program Files (x86)\Microsoft Visual Studio\x.exe`, spans: [String.raw`C:\Program Files (x86)\Microsoft Visual Studio\x.exe`], why: '#526: an anchored scan keeps the full cap' },
 ];
 
 /** Negative: no span crosses a space — or there is no link at all. */
 const STAYS: readonly Case[] = [
-  { line: '/file 1', spans: ['/file'], why: 'maintainer example: the default' },
+  { line: 'see /file 1', spans: ['/file'], why: 'maintainer example: the default (mid-line since #418, where `/file` opening a line is a slash command)' },
+  { line: '/file 1', spans: [], why: '#418: a single rooted segment opening its line is a slash command, not a path' },
   { line: 'type /help for help', spans: ['/help'], why: 'maintainer decision: any rooted path counts, nothing checks it exists' },
   { line: String.raw`C:\Program Files`, spans: [String.raw`C:\Program`], why: 'no separator-ending or known-extension word follows' },
   { line: String.raw` Directory of C:\Program Files\Common Files`, spans: [String.raw`C:\Program`], why: '`dir` header: nothing terminates' },

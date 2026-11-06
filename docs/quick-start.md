@@ -84,8 +84,8 @@ Prompt, Git Bash, or one of your own — with optional shell arguments and a sta
 - **Terminals outlive the window.** A background service owns them, so closing throng leaves them
   running; reopen it and they reattach with their scrollback. Closing asks what to do with any still
   busy.
-- **Paths and links are clickable.** A compiler's `src/foo.ts:42:7`, a URL, a hyperlink a program
-  prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
+- **Paths and links are clickable.** A compiler's `src/foo.ts:42:7`, Claude Code's
+  `src/foo.ts:42-50`, a URL, a hyperlink a program prints — **Ctrl+click** follows it (a project file opens in throng at that line; a web address in
   your browser), and **right-click** offers every other place it could open. Nothing is ever run by
   a click.
 - **A terminal can ask for you.** When a command finishes, a program exits, or something rings
