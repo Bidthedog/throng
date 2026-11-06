@@ -88,10 +88,13 @@ describe('detectPathCandidates — D3/FR-004: the position is never part of the 
     expect(c.positionText).toBe('(42,7)');
   });
 
-  it('the span of a positioned candidate covers its path only', () => {
+  it('the span of a positioned candidate covers its path AND its position (FR-188g, superseding FR-004 in part)', () => {
+    // #526 follow-up (maintainer): the position is underlined as part of the link. The TEXT is
+    // still the path alone — what is resolved and opened.
     const line = 'error src/foo.ts:42:7 here';
     const c = detectPathCandidates(line, [])[0];
-    expect(line.slice(c.start, c.end)).toBe('src/foo.ts');
+    expect(c.text).toBe('src/foo.ts');
+    expect(line.slice(c.start, c.end)).toBe('src/foo.ts:42:7');
   });
 
   it('a candidate with no position carries neither position field', () => {
@@ -116,7 +119,7 @@ describe('detectPathCandidates — D3/FR-004: the position is never part of the 
     expect(c?.text).toBe('src/foo.ts');
     expect(c?.position).toEqual({ line: 113 });
     expect(c?.positionText).toBe(positionText);
-    expect(line.slice(c!.start, c!.end)).toBe('src/foo.ts');
+    expect(line.slice(c!.start, c!.end)).toBe(`src/foo.ts${positionText}`);
   });
 });
 

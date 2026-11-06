@@ -424,7 +424,8 @@ export class FileLinkResolver {
     // second opinion about FR-003 living in main.
     const verbatim = [{ text: request.text, start: 0, end: request.text.length }];
     if (found.length === 0) return verbatim;
-    const reach = (c: LinkCandidate): number => c.end + (c.positionText?.length ?? 0);
+    // FR-188g: a positioned reading's span already covers its position.
+    const reach = (c: LinkCandidate): number => c.end;
     const start = Math.min(...found.map((c) => c.start));
     const end = Math.max(...found.map(reach));
     // T242: an enclosed span (FR-173a – c) needs no terminator, so its bare text may re-detect as a

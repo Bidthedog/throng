@@ -26,6 +26,13 @@ const hoveredPath = (text: string): HoveredLink => ({
   request: { text, kind: 'detectedPath', panelId: 'p1', baseDirectory: CWD },
 });
 
+describe('#526 follow-up — the readout and title carry the link’s position (FR-188g)', () => {
+  it('a line range is shown after the path it opens', () => {
+    const hovered: HoveredLink = { ...hoveredPath('/d/git/x.ts'), position: { line: 113 }, positionText: ':113-120' };
+    expect(hoveredLinkReadoutText(hovered, CWD, ROOT)).toBe('D:\\git\\x.ts:113-120');
+  });
+});
+
 describe('the status-bar readout names the link’s FIRST reading (FR-167a, FR-176, FR-024)', () => {
   it('a Git Bash drive form maps to its drive, not onto the working directory', () => {
     expect(hoveredLinkReadoutText(hoveredPath('/d/git/x.ts'), CWD, ROOT)).toBe('D:\\git\\x.ts');

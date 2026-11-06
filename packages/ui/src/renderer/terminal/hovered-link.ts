@@ -108,7 +108,8 @@ export function hoveredLinkReadoutText(
 ): string {
   if (hovered.kind === 'web') return hovered.uri;
   if (hovered.request.kind === 'fileHyperlink') return hovered.request.text;
-  return linkFirstReadingByName({ text: hovered.request.text, baseDirectory, projectRoot });
+  // FR-188g: the position the click opens at is part of what the readout names.
+  return linkFirstReadingByName({ text: hovered.request.text, baseDirectory, projectRoot }) + (hovered.positionText ?? '');
 }
 
 /**

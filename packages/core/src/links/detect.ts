@@ -102,7 +102,7 @@ export function detectPathCandidates(
   const taken = new Uint8Array(line.length);
   for (const pair of enclosurePairs(line)) {
     if (anyTaken(taken, pair.open, pair.close + 1)) continue;
-    const readings = enclosedReadings(line, pair.open + 1, pair.close);
+    const readings = enclosedReadings(line, pair.open + 1, pair.close, options);
     if (readings.length === 0) continue;
     out.push(...readings);
     taken.fill(1, pair.open, pair.close + 1);
@@ -272,15 +272,36 @@ function enclosurePairs(line: string): Pair[] {
   return pairs.sort((a, b) => a.close - a.open - (b.close - b.open));
 }
 
-/** The readings of an enclosure's contents `[from, to)`, trimmed of surrounding whitespace. */
-function enclosedReadings(line: string, from: number, to: number): LinkCandidate[] {
+/**
+ * The readings of an enclosure's contents `[from, to)`, trimmed of surrounding whitespace.
+ *
+ * #526 (FR-188f): contents holding two paths by the default rules with a word that belongs to NEITHER
+ * between them are a quoted sentence — `echo "📁 src/a/b.ts and src/c/d.ts"` — not one path with
+ * spaces in it, so the enclosure is ignored and its paths are found one by one. Two pieces with
+ * nothing between them (`"D:\my logs\app.log"` read without `.log` known) are still one path.
+ */
+function enclosedReadings(line: string, from: number, to: number, options: DetectOptions): LinkCandidate[] {
   let start = from;
   let end = to;
   while (start < end && /\s/.test(line[start])) start += 1;
   while (end > start && /\s/.test(line[end - 1])) end -= 1;
+  if (holdsASentence(line.slice(start, end), options)) return [];
   const found: LinkCandidate[] = [];
   if (end > start) emitReadings(found, line.slice(start, end), start, looksLikePath);
   return found;
+}
+
+/** FR-188f: two default-rule paths in `text` with a word belonging to neither between them. */
+function holdsASentence(text: string, options: DetectOptions): boolean {
+  let lastEnd = -1;
+  let lastStart = -1;
+  for (const c of detectPathCandidates(text, [], options)) {
+    if (c.start === lastStart) continue; // the second reading of one span
+    if (lastEnd >= 0 && text.slice(lastEnd, c.start).trim().length > 0) return true;
+    lastStart = c.start;
+    lastEnd = Math.max(lastEnd, c.start + (c.positionText === undefined ? c.text.length : c.text.length + c.positionText.length));
+  }
+  return false;
 }
 
 /**
@@ -403,12 +424,13 @@ function emitReadings(
 
   const positioned = splitPosition(trimmed.text);
   if (positioned && accepts(positioned.base)) {
-    // The reading WITH the position, first (R7). Its span covers the path alone — FR-004's "the
-    // position is not part of the path", made visible in what gets underlined.
+    // The reading WITH the position, first (R7). Its TEXT is the path alone (FR-004: the position is
+    // not part of the path); its SPAN covers the position too, so the line it opens at is underlined
+    // and hovered as part of the link (FR-188g, #526 follow-up, superseding FR-004 in part).
     out.push({
       text: positioned.base,
       start,
-      end: start + positioned.base.length,
+      end: start + trimmed.text.length,
       position: positioned.position,
       positionText: positioned.positionText,
     });

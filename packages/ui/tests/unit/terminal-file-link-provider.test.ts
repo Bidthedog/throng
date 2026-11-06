@@ -424,7 +424,8 @@ describe('T176 / FR-130 – FR-133 — wrapped links', () => {
       const terminal = new WrappingTerminal();
       const first = terminal.print(line);
       const start = line.indexOf(path);
-      const expected = rangeOf(first, start, start + path.length);
+      // FR-188g (#526 follow-up): the underline covers the position as well as the path.
+      const expected = rangeOf(first, start, start + `${path}:42:7`.length);
       expect(expected.end.y - expected.start.y + 1, 'the fixture really spans that many rows').toBe(rowsSpanned);
 
       for (let row = expected.start.y; row <= expected.end.y; row += 1) {

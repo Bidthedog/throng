@@ -198,7 +198,7 @@ function markFor(at: EditorLinkAt, projectRoot: string | null): Decoration {
           text: at.request.text,
           baseDirectory: at.request.baseDirectory,
           projectRoot,
-        });
+        }) + (at.positionText ?? ''); // FR-188g
   const key = `${at.kind}|${title}`;
   let mark = marks.get(key);
   if (mark === undefined) {
