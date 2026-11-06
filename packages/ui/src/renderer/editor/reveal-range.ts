@@ -23,6 +23,7 @@
  * the pattern FR-057d rejects. The row's own title still carries the line and column.
  */
 import { EditorSelection } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { detectLanguage, markdownHeadingLine } from '@throng/core';
 import { getEditorView } from './editor-views.js';
 
@@ -148,7 +149,9 @@ export async function revealRangeInEditor(
       view.dispatch({
         // The MATCH selected, head last so the viewport follows the end of it (FR-038).
         selection: EditorSelection.range(range.from, range.to),
-        scrollIntoView: true,
+        // #526 follow-up (maintainer): the revealed line sits in the MIDDLE of the editor when the
+        // document can scroll that far — CodeMirror clamps at either end of the document.
+        effects: EditorView.scrollIntoView(range.to, { y: 'center' }),
         // Not an edit, so it must not join an undo run — `goto-line.tsx`'s reasoning, unchanged.
         userEvent: 'select',
       });
