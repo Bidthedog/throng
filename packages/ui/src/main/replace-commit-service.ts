@@ -243,7 +243,12 @@ export interface BulkEditTarget {
  * caller, or a commit for a panel whose run has been released, has no staleness to correct.
  */
 export interface OwnWriteWitness {
+  /** Before the write: a watcher report from here on is this commit's until it says otherwise. */
+  expectOwnWrite(panelId: string, relPath: string): void;
+  /** After the write landed: re-stamp it, so it is not stale to this panel. */
   noteOwnWrite(panelId: string, relPath: string): Promise<void>;
+  /** The announced write did not happen: re-check the file instead. */
+  abandonOwnWrite(panelId: string, relPath: string): Promise<void>;
 }
 
 export class ReplaceCommitService {
@@ -429,19 +434,25 @@ export class ReplaceCommitService {
      */
     if (outcome.applied.length === 0 || !applied.wasClean) return outcome;
 
-    const saved = await this.editors.save({ panelId: applied.documentId });
+    /*
+     * FR-083c — this panel's own write, declared to the scan side before the save and settled after it, exactly as
+     * `writeDirect` does it. The requirement names this save in as many words: a file changed only by this panel's
+     * own commit, "including a save made under FR-086", is not marked stale by that commit. Declared BEFORE the save
+     * because the save resolves over IPC, and a watcher report for its write can arrive long before it returns.
+     *
+     * Before FR-086 the buffer path changed no file and so had nothing to declare. It does now.
+     */
+    this.ownWrites?.expectOwnWrite(request.panelId, target.relPath);
+    const saved = await this.editors.save({ panelId: applied.documentId }).catch(async (error: unknown) => {
+      await this.ownWrites?.abandonOwnWrite(request.panelId, target.relPath);
+      throw error;
+    });
     if (!saved.ok) {
+      await this.ownWrites?.abandonOwnWrite(request.panelId, target.relPath);
       // The replacement is still in the buffer and still undoable. What did not happen is the save,
       // so that is what is reported — never as a failed replacement (FR-058, {@link UnsavedCommit}).
       return { ...outcome, notSaved: saved.reason };
     }
-    /*
-     * FR-083c — this panel's own write, told to the scan side immediately, exactly as `writeDirect`
-     * does it. The requirement names this save in as many words: a file changed only by this panel's
-     * own commit, "including a save made under FR-086", is not marked stale by that commit.
-     *
-     * Before FR-086 the buffer path changed no file and so had nothing to declare. It does now.
-     */
     await this.ownWrites?.noteOwnWrite(request.panelId, target.relPath);
     return { ...outcome, didSave: true };
   }
@@ -461,7 +472,12 @@ export class ReplaceCommitService {
      * Confinement on the RESOLVED path, the detection refusals (FR-058, 059 FR-051), the file's own
      * encoding, BOM and endings (FR-056), and R8's last `isOpen` with nothing between it and the write —
      * all `textFileRewrite`'s, shared with 054's task toggle.
+     *
+     * FR-083c — declared before the write can happen, and closed on every path: re-stamped once it landed, re-checked
+     * when it did not (a failed write may still have changed the file, and then the panel's results really are
+     * stale).
      */
+    this.ownWrites?.expectOwnWrite(request.panelId, target.relPath);
     const outcome = await textFileRewrite(
       this.fs,
       absPath,
@@ -476,7 +492,11 @@ export class ReplaceCommitService {
           checked.applicable.length === 0 ? null : applyReplacements(text, checked.applicable, request.replacement);
         return { next, value: checked };
       },
-    );
+    ).catch(async (error: unknown) => {
+      await this.ownWrites?.abandonOwnWrite(request.panelId, target.relPath);
+      throw error;
+    });
+    if (outcome.kind !== 'written') await this.ownWrites?.abandonOwnWrite(request.panelId, target.relPath);
     if (outcome.kind === 'failed' || outcome.kind === 'becameOpen') return outcome;
     const checked = outcome.value;
     if (outcome.kind === 'unchanged') {
@@ -485,7 +505,7 @@ export class ReplaceCommitService {
     const next = outcome.next;
     try {
       /*
-       * FR-083c — immediately, with nothing between it and the write.
+       * FR-083c — settled immediately, with nothing between it and the write it was declared for (above).
        *
        * Here rather than once at the end of the commit, because the thing being raced is a debounced
        * watcher tick: a Replace All over many files would otherwise leave the first file's write

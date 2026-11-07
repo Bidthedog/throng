@@ -283,6 +283,12 @@ interface ScanRun {
   held: Map<string, FileStamp>;
   /** Cumulative for the run (FR-045a). Cleared when the run is superseded — that is FR-045c. */
   staleFiles: Set<string>;
+  /**
+   * Files this panel's own commit is writing right now, with how many writes are in flight (FR-083c). Declared
+   * BEFORE the write, so a watcher report that lands before the commit can re-stamp is not mistaken for someone
+   * else's change. Cleared with {@link ScanRun.held}.
+   */
+  ownWritesInFlight: Map<string, number>;
 }
 
 export class FileSearchService {
@@ -506,6 +512,7 @@ export class FileSearchService {
     run.pending = [];
     run.held.clear();
     run.staleFiles.clear();
+    run.ownWritesInFlight.clear();
     this.emit(run, run.generation, 'notRun');
   }
 
@@ -602,6 +609,9 @@ export class FileSearchService {
         // is holding now belongs to a different question.
         if (this.stale(run, generation)) break;
         if (run.staleFiles.has(relPath)) continue; // cumulative — nothing to say twice
+        // FR-083c — this panel's own commit is writing it; the report is most likely that write, and the commit
+        // re-stamps it (or re-checks it, if the write never happened) the moment it is done.
+        if (run.ownWritesInFlight.has(relPath)) continue;
         const was = run.held.get(relPath);
         if (!was) continue;
         let now: FileStamp | null = null;
@@ -643,34 +653,71 @@ export class FileSearchService {
    * because it did, by a writer that panel knows nothing about. The panel is the authority on its
    * own writes and on nobody else's.
    *
-   * ══ THE ONE RACE, STATED ══
+   * ══ DECLARED BEFORE THE WRITE, NOT AFTER ══
    *
-   * A watcher tick can land between the write and this re-stat, and then the file is marked before
-   * anything can say who wrote it. The window is one stat wide against a debounce of tens of
-   * milliseconds, and the failure is the pre-FR-083c behaviour — an over-reported stale file, which
-   * this service already treats as informational and prefers to under-reporting. A file already
-   * marked is therefore LEFT marked: the marking may have come from a real second writer, and
-   * clearing it on the strength of our own write would lose exactly the signal FR-045a is for.
+   * The commit calls {@link expectOwnWrite} before it writes, and this once the write is done. Declared only
+   * afterwards, a watcher report landing between the write reaching disk and this re-stamp was re-stated against
+   * the pre-write stamp and marked the file — and a save that resolves over IPC easily outlasts the watch's
+   * debounce, so that was a loaded runner's ordinary case, not a stat-wide window. While a file is in flight its
+   * reports are left to the commit; this re-stamp then settles them. A file already marked is still LEFT
+   * marked: the marking came from a report before our write began, so from a real second writer.
    */
   async noteOwnWrite(panelId: string, relPath: string): Promise<void> {
     if (this.disposed) return;
     const run = this.runs.get(panelId);
-    const was = run?.held.get(relPath);
-    // Not a contributor: no row names it, so nothing about it could go stale (FR-045a).
-    if (!run || !was || run.staleFiles.has(relPath)) return;
-
-    const generation = run.generation;
+    if (!run) return;
     try {
-      const now = await this.fs.modifiedAt(toAbsPath(run.scope.projectRoot, relPath));
-      // Superseded or released while the stat was in flight — whatever it holds now belongs to a
-      // different question, and re-stamping it would answer for a scan that never read this file.
-      if (this.stale(run, generation)) return;
-      run.held.set(relPath, now);
-    } catch (error) {
-      logExpected('file-search-service: re-stamp written file', 'a file can vanish a moment after being written; the watcher re-stat marks it stale', error);
-      // Gone or unreadable a moment after being written. The watcher's own re-stat is the right
-      // reporter for that, and it will mark it.
+      const was = run.held.get(relPath);
+      // Not a contributor: no row names it, so nothing about it could go stale (FR-045a).
+      if (!was || run.staleFiles.has(relPath)) return;
+
+      const generation = run.generation;
+      try {
+        const now = await this.fs.modifiedAt(toAbsPath(run.scope.projectRoot, relPath));
+        // Superseded or released while the stat was in flight — whatever it holds now belongs to a
+        // different question, and re-stamping it would answer for a scan that never read this file.
+        if (this.stale(run, generation)) return;
+        run.held.set(relPath, now);
+      } catch (error) {
+        logExpected('file-search-service: re-stamp written file', 'a file can vanish a moment after being written; the watcher re-stat marks it stale', error);
+        // Gone or unreadable a moment after being written. The watcher's own re-stat is the right
+        // reporter for that, and it will mark it.
+      }
+    } finally {
+      this.endOwnWrite(run, relPath);
     }
+  }
+
+  /**
+   * This panel's own commit is about to write this file (FR-083c). Until {@link noteOwnWrite} or
+   * {@link abandonOwnWrite} says the write is over, a watcher report for it does not mark it stale in this panel.
+   * Other panels are untouched: to them it is somebody else's write, and it is.
+   */
+  expectOwnWrite(panelId: string, relPath: string): void {
+    if (this.disposed) return;
+    const run = this.runs.get(panelId);
+    if (!run || !run.held.has(relPath)) return;
+    run.ownWritesInFlight.set(relPath, (run.ownWritesInFlight.get(relPath) ?? 0) + 1);
+  }
+
+  /**
+   * The write {@link expectOwnWrite} announced did not happen — refused, failed or found nothing to change. The
+   * file is re-checked now, so a report the commit was holding for it, from a writer that was not this commit,
+   * still marks it.
+   */
+  async abandonOwnWrite(panelId: string, relPath: string): Promise<void> {
+    if (this.disposed) return;
+    const run = this.runs.get(panelId);
+    if (!run) return;
+    this.endOwnWrite(run, relPath);
+    if (run.ownWritesInFlight.has(relPath)) return; // another write of ours is still going; it settles it
+    await this.restatSuspects(normaliseForCompare(run.scope.projectRoot), [], (p) => p === relPath);
+  }
+
+  private endOwnWrite(run: ScanRun, relPath: string): void {
+    const n = run.ownWritesInFlight.get(relPath) ?? 0;
+    if (n <= 1) run.ownWritesInFlight.delete(relPath);
+    else run.ownWritesInFlight.set(relPath, n - 1);
   }
 
   /**
@@ -745,6 +792,7 @@ export class FileSearchService {
     run.pending = [];
     run.held.clear();
     run.staleFiles.clear();
+    run.ownWritesInFlight.clear();
     this.runs.delete(run.id);
   }
 
@@ -908,6 +956,7 @@ export class FileSearchService {
       // whatever it finds, so starting from empty is that clause rather than an optimisation.
       existing.held.clear();
       existing.staleFiles.clear();
+      existing.ownWritesInFlight.clear();
       return existing;
     }
     // Every window that said it was displaying this panel before anything had been searched joins
@@ -936,6 +985,7 @@ export class FileSearchService {
       flushTimer: null,
       held: new Map(),
       staleFiles: new Set(),
+      ownWritesInFlight: new Map(),
     };
     this.runs.set(run.id, run);
     return run;
