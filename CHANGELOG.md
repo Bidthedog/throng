@@ -32,6 +32,7 @@ What changed in each release of throng, written for someone deciding whether to 
 ### Fixed
 
 - On Linux, deleting a large folder inside an open project (`rm -rf node_modules`, `npm ci`) no longer freezes throng for minutes ([#585](https://github.com/Bidthedog/throng/issues/585)).
+- Destroying a tab, the other tabs, or a sub-workspace's own panel now clears the attention marks and flags on its panels, and marks already stranded this way are cleared on the next launch ([#541](https://github.com/Bidthedog/throng/issues/541)).
 
 ## 1.0.0-alpha14 — 2026-11-05
 
