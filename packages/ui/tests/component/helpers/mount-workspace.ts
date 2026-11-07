@@ -99,7 +99,11 @@ export async function mountWorkspace(
       ),
     ),
   );
-  await waitFor(() => expect(captured.ws?.layout).toBeTruthy());
+  // Readiness, not an assertion: the store answers in ~50 ms here, but waitFor's implicit 1 s deadline
+  // was missed once on a hosted Windows runner (window-dispatcher.test.ts, CI run 42419940718) with
+  // nothing wrong. A setup wait gets the same allowance as mount-preview-panel.ts's COLD; a store
+  // that genuinely never loads still fails here, inside the layer's 15 s test timeout.
+  await waitFor(() => expect(captured.ws?.layout).toBeTruthy(), { timeout: 10_000 });
   return {
     ws: () => captured.ws as Ws,
     saves,
