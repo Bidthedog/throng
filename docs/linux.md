@@ -25,6 +25,10 @@ The keypad's `+` and `-` do nothing with `Ctrl+Alt`, because those presses never
   Your login shell comes first.
 - A terminal's folder is read from the system, so no shell integration is needed for it.
 - Terminals have no elevated mode. throng refuses to start as root, and `sudo` inside a terminal works as usual.
+- bash older than 5.3 patch 20, which includes the bash in Ubuntu 26.04, can leave the cursor a few columns short of the
+  end of a coloured prompt when a terminal gets wider, for example after moving it to a wider spot. Typing then
+  overwrites the prompt; press Enter for a fresh one. The fix is in bash itself, and getting it into Ubuntu is
+  [Launchpad bug 2173620](https://bugs.launchpad.net/bugs/2173620).
 
 ## Files
 
