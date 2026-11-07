@@ -11,6 +11,7 @@
 | `throng:attention:goTo` | renderer → main | `{ panelId }` | a toast link or Go to Next asks main to route |
 | `throng:attention:badgeImage` | main ↔ main window | request `{ count, kind }` → reply `{ dataUrl }` | badge drawn with theme colours (R13) |
 | `throng:attention:flag` *(round 12)* | renderer → main | `{ panelId, projectId, panelTitle, tabTitle, projectName }` | the panel menu's Flag (FR-125); main raises a user mark and persists it |
+| `throng:attention:panelsDestroyed` *(2026-11-07, #541)* | renderer → main | `{ panelIds }` | panels a Tab destroy, Destroy other tabs or a sub-workspace ended for good; main drops their marks and stored flags (FR-007). The project window's panel close still goes through `throng:panel:destroy` |
 
 *(round 12)* The preload adds `attention.flag`. A toast's card body sends `throng:attention:goTo`
 (FR-124); the card has no go-to control, so the `goToPanel` icon row below is retired unless something

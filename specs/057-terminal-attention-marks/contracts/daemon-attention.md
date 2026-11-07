@@ -58,6 +58,10 @@ ledger.
   `{ ok: true }`.
 - Deleting a project deletes its rows. A malformed entry is refused with the RPC's ordinary error,
   which main logs.
+- *(2026-11-07, #541)* `attention.flagList` returns only flags whose panel a saved project layout or
+  sub-workspace still holds, and deletes the rest: they were stranded by a destroy that never reached
+  main. When a layout or sub-workspace cannot be read, nothing is deleted and every flag is returned.
+  `terminal.attentionLedger` prunes its entries by the same rule.
 
 ## Behaviour on existing calls
 
