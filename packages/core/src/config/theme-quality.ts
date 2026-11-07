@@ -624,7 +624,7 @@ export function assertInScopeContrast(themes: readonly Theme[]): void {
  *   - a report nobody reads is what #83 objects to, so routing these to `knownContrastIssues()`
  *     would reproduce the defect in the fix. A theme that fails this fails the build;
  *   - its scope is not `IN_SCOPE_THEMES`, which governs the EXISTING pairings and stays untouched.
- *     Widening that is #61 (vNext) and is risky, because those themes may fail it today. Separating
+ *     Widening that is #61 (unscheduled) and is risky, because those themes may fail it today. Separating
  *     the pairing SETS is what lets this gate cover all fifteen without blocking on #61 — measured,
  *     every bundled theme already clears it, so gating them all cannot fail the build.
  */

@@ -37,11 +37,11 @@ export const SETTINGS_INTERNAL_KEYS: readonly string[] = [
   // "Last Viewed" picker option (011), not a hand-tuned setting.
   'newProject.lastProjectFolder',
   // The three terminal-flavour settings, HIDDEN for v1.0.0 pending #67's proper
-  // implementation in vNext. #67 (make flavour editing work through the visual editor)
+  // implementation. #67 (make flavour editing work through the visual editor)
   // renders badly and does not work, so its controls must not ship. This is a HIDE, not a
   // revert: the settings still parse and take effect via a hand-edited settings.json — only
   // the Settings UI controls are withheld. Their descriptors are kept verbatim in
-  // HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below and re-exposed in vNext by spreading them back
+  // HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below and re-exposed with #67 by spreading them back
   // into SETTINGS_METADATA and deleting these three lines.
   //
   // Marking them internal is what keeps the completeness rule (FR-047) satisfied: an internal
@@ -602,10 +602,10 @@ export const SETTINGS_METADATA: MetadataRegistry = [
   //
   // The three terminal-flavour controls (`terminals.flavours`, `terminals.disabledBuiltins`,
   // `terminals.defaultShellArguments`) are WITHHELD from the Settings UI for v1.0.0 pending #67's proper
-  // implementation in vNext — see SETTINGS_INTERNAL_KEYS above. Their descriptors are kept intact
+  // implementation — see SETTINGS_INTERNAL_KEYS above. Their descriptors are kept intact
   // in HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS below (this is a hide, not a revert); the rendered
   // registry must not carry them, or the completeness rule flags them as descriptors for keys that
-  // are no longer configurable. Re-expose in vNext by spreading that array in here and dropping the
+  // are no longer configurable. Re-expose with #67 by spreading that array in here and dropping the
   // three keys from SETTINGS_INTERNAL_KEYS.
 
   // Editor
@@ -1639,9 +1639,9 @@ export const SETTINGS_METADATA: MetadataRegistry = [
 
 /**
  * The three terminal-flavour descriptors, WITHHELD from {@link SETTINGS_METADATA} for v1.0.0
- * pending #67's proper implementation in vNext (see {@link SETTINGS_INTERNAL_KEYS}).
+ * pending #67's proper implementation (see {@link SETTINGS_INTERNAL_KEYS}).
  *
- * These are kept verbatim rather than deleted so vNext can re-expose the controls by simply
+ * These are kept verbatim rather than deleted so #67 can re-expose the controls by simply
  * spreading this array back into the rendered registry and dropping the three keys from
  * SETTINGS_INTERNAL_KEYS — a hide, not a revert. They are NOT part of the rendered registry, so
  * the completeness rule (FR-047) neither demands nor rejects them; that is the whole point of
