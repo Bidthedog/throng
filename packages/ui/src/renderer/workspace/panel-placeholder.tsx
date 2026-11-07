@@ -69,6 +69,7 @@ import { Icon } from '../common/icon.js';
 import { IconButton } from '../common/icon-button.js';
 import { PanelHeaderMark } from '../attention/holder-marks.js';
 import { usePanelMark } from '../attention/use-attention.js';
+import { panelsDestroyed } from '../attention/panels-destroyed.js';
 import { panelHasLiveTerminal, panelHasRunningSubprocess } from './subprocess.js';
 import { useCapabilities } from '../panel-type/use-capabilities.js';
 import { useDetach } from './detach-context.js';
@@ -453,6 +454,8 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
       releasePreviewView(panel, previewPlace);
       // 044 FR-110 (fix round 1, item 7) — and its history, when the sub-workspace owned the panel.
       if (killsSession) purgePanelHistory(panel);
+      // 057 FR-007 (#541) — and its mark, when the sub-workspace owned it.
+      if (killsSession) panelsDestroyed([panel.id]);
       await destroySubWorkspace(services.subWorkspaces, subWin.id);
       return;
     }
@@ -550,6 +553,9 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
     // Cascade to the sub-workspaces ONLY when destroying from the project (FR-026).
     // A sub-workspace destroy stays local (no broadcast → the project is untouched).
     if (!inSubWorkspace) window.throng?.panel?.notifyDestroyed?.(panel.id);
+    // 057 FR-007 (#541) — a sub-workspace's OWN panel has no cascade to send, but it is gone for good,
+    // so its mark goes too. (The project window's destroy above clears the mark in main already.)
+    else if (killsSession) panelsDestroyed([panel.id]);
   };
   /*
    * 048 FR-131 — the `panel.destroy` chord reaches THIS flow through the shared opener, never a copy
