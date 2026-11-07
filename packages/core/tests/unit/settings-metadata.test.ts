@@ -290,7 +290,7 @@ describe('editor.previews.* and editor.navigation.historySize are required leave
   });
 });
 
-describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () => {
+describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 re-exposes them)', () => {
   const rendered = new Map(SETTINGS_METADATA.map((d) => [d.key, d]));
   const hidden = new Map(HIDDEN_TERMINAL_FLAVOUR_DESCRIPTORS.map((d) => [d.key, d]));
   const HIDDEN_KEYS = [
@@ -312,8 +312,8 @@ describe('terminal-flavour controls are HIDDEN for v1.0.0 (#67 → vNext)', () =
     }
   });
 
-  it('keeps their descriptors intact for vNext re-exposure (a hide, not a revert)', () => {
-    // The controls are withheld, not deleted — vNext re-exposes them by spreading this array back
+  it('keeps their descriptors intact for #67 to re-expose (a hide, not a revert)', () => {
+    // The controls are withheld, not deleted — #67 re-exposes them by spreading this array back
     // into SETTINGS_METADATA. Assert the shapes survive so a stray deletion is caught here.
     expect(hidden.get('terminals.flavours')?.control).toBe('records');
     expect(hidden.get('terminals.flavours')?.idKey).toBe('id');

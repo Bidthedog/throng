@@ -219,11 +219,11 @@ test('a removed row STICKS — an empty map means empty (FR-022c); reset CLEARS 
 /*
  * REMOVED for v1.0.0: the map TEXT-column test that drove `terminals.defaultShellArguments` (019, C14 —
  * T040). That setting is one of the three terminal-flavour controls HIDDEN pending #67's proper
- * implementation in vNext (see `SETTINGS_INTERNAL_KEYS`), so it no longer renders a control — its
+ * implementation (see `SETTINGS_INTERNAL_KEYS`), so it no longer renders a control — its
  * descriptor is withheld from the rendered registry. This test asserted the control was VISIBLE and
  * typeable, which is the exact opposite of the intended v1.0.0 behaviour, and it cannot be inverted
  * in place because `terminals.defaultShellArguments` was the only map with a `control: 'text'` column — the
  * MapCell text arm now has no visible consumer, exactly as intended. The arm itself stays in
- * `map-control.tsx` (dormant), and this coverage returns with #67 in vNext. The two EDITOR maps
+ * `map-control.tsx` (dormant), and this coverage returns with #67. The two EDITOR maps
  * (`editor.indentByLanguage`, `editor.languageByExtension`) remain visible and fully tested above.
  */
