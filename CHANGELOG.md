@@ -29,13 +29,32 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha15 — 2026-11-08
+
+### Added
+
+- Every failure in every part of throng now leaves a record in the diagnostic logs: crashes of the app, a window or a single panel are logged at a new `fatal` level whatever **Log detail** is set to, a background process that fails to start or exits unexpectedly is logged with the tail of its output, and the terminal agent and resource collector keep their own logs ([#543](https://github.com/Bidthedog/throng/issues/543)).
+- **Days of logs kept** (`diagnostics.keepDays`, default 3) and **Log folder limit (MB)** (`diagnostics.maxTotalMb`, default 100), with `THRONG_LOG_KEEP_DAYS` and `THRONG_LOG_MAX_TOTAL_MB` to override them ([#543](https://github.com/Bidthedog/throng/issues/543)).
+
+### Changed
+
+- Logs are now kept by days of use and a total size cap instead of a file count. **Log files kept** (`diagnostics.keepFiles`) and `THRONG_LOG_KEEP` are retired; a settings file that still carries the key loads without complaint ([#543](https://github.com/Bidthedog/throng/issues/543)).
+- Releases publish without a human sign-off once every automated check passes ([#579](https://github.com/Bidthedog/throng/issues/579)).
+
 ### Fixed
 
+- Terminal links in Claude Code output cover exactly the path: no longer cut short at a space, run on past the path, or split in two when the line wrapped or the terminal was resized, and an opened file centres the linked line ([#526](https://github.com/Bidthedog/throng/issues/526)).
+- Slash commands such as `/skill-name` in a Claude Code terminal are no longer shown as file links ([#418](https://github.com/Bidthedog/throng/issues/418)).
+- A terminal whose background agent misses its connection now retries and, if it still fails, says why instead of only "Terminal exited (code 1)", and a missed connection no longer stops later de-elevated terminals until the daemon restarts ([#555](https://github.com/Bidthedog/throng/issues/555), [#556](https://github.com/Bidthedog/throng/issues/556)).
 - On Linux, deleting a large folder inside an open project (`rm -rf node_modules`, `npm ci`) no longer freezes throng for minutes ([#585](https://github.com/Bidthedog/throng/issues/585)).
 - Destroying a tab, the other tabs, or a sub-workspace's own panel now clears the attention marks and flags on its panels, and marks already stranded this way are cleared on the next launch ([#541](https://github.com/Bidthedog/throng/issues/541)).
 - A blank panel, one with no type chosen yet, no longer offers Flag.
 - Replacing a match in Find in Files no longer marks that file's results out of date in the same panel when the save is slow ([#591](https://github.com/Bidthedog/throng/issues/591)).
 - Moving the mouse over Claude Code, or any program that tracks the mouse, while the machine is under heavy load no longer leaves stray text such as `5;71;61M` in its input ([#544](https://github.com/Bidthedog/throng/issues/544)).
+
+### Known issues
+
+- On Linux, bash older than 5.3 patch 20 (including Ubuntu 26.04's) can leave the cursor short of the end of a coloured prompt when a terminal gets wider, such as after moving it, so typing overwrites the prompt; press Enter for a fresh one. The fix is in bash itself ([#584](https://github.com/Bidthedog/throng/issues/584)).
 
 ## 1.0.0-alpha14 — 2026-11-05
 
