@@ -51,12 +51,23 @@ function parseEntry(params: unknown): AttentionFlagEntry {
  * {@link AttentionFlagRepository}. Flags live in SQLite, never in the terminal attention ledger.
  */
 export class AttentionFlagIpcService {
-  constructor(private readonly repo: AttentionFlagRepository) {}
+  constructor(
+    private readonly repo: Pick<AttentionFlagRepository, 'list' | 'set' | 'clear'>,
+    /**
+     * #541 — the panels a saved layout still holds, or null when that is not known. A flag on any other
+     * panel was stranded by a destroy, and is deleted rather than restored onto a panel nothing can clear.
+     */
+    private readonly livePanels: () => ReadonlySet<string> | null = () => null,
+  ) {}
 
   register(router: RpcRouter): void {
-    router.register(ATTENTION_FLAG_LIST_METHOD, (): AttentionFlagListResult => ({
-      flags: this.repo.list(),
-    }));
+    router.register(ATTENTION_FLAG_LIST_METHOD, (): AttentionFlagListResult => {
+      const flags = this.repo.list();
+      const live = this.livePanels();
+      if (live === null) return { flags };
+      for (const f of flags) if (!live.has(f.panelId)) this.repo.clear(f.panelId);
+      return { flags: flags.filter((f) => live.has(f.panelId)) };
+    });
     router.register(ATTENTION_FLAG_SET_METHOD, (params): AttentionFlagOkResult => {
       this.repo.set(parseEntry(params));
       return { ok: true };

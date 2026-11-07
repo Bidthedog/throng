@@ -39,6 +39,11 @@ export interface TerminalAttentionOptions {
   liveTitle?: (subject: AttentionSubject) => string | null;
   /** FR-102: what the subject's terminal is doing right now; read when a signal is raised. */
   describeDoing?: (subject: AttentionSubject) => string | null;
+  /**
+   * #541 — the panels a saved layout still holds, or null when that is not known. A ledger entry for any
+   * other panel was stranded by a destroy, and is forgotten rather than restored by a reconnecting main.
+   */
+  livePanels?: () => ReadonlySet<string> | null;
   /** Test seam: the scanner a session gets. */
   createScanner?: () => AttentionScanner;
 }
@@ -368,6 +373,13 @@ export class TerminalAttention {
 
   /** `terminal.attentionLedger`: every entry, clearing `whileDetached` on the ones returned. */
   readLedger(): AttentionLedgerEntry[] {
+    let live: ReadonlySet<string> | null = null;
+    try {
+      live = this.options.livePanels?.() ?? null;
+    } catch (error) {
+      logCaught('terminal-attention: list live panels', error); // unknown: prune nothing
+    }
+    if (live !== null) for (const id of [...this.ledger.keys()]) if (!live.has(id)) this.ledger.delete(id);
     const out = [...this.ledger.values()].map((e) => ({ ...e }));
     for (const [id, e] of this.ledger) if (e.whileDetached) this.ledger.set(id, { ...e, whileDetached: false });
     return out;
