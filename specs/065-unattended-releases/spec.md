@@ -33,6 +33,12 @@ This feature removes the human QA sign-off from publication. Each requirement be
 - Q: How does the release continue after a failure? → A: The runbook fixes the cause on its own branch, merges it through a PR with green checks, and runs the release again. A version that never published may be re-cut on the fixed commit. A published version is never reused.
 - Q: When does the release stop instead of continuing? → A: When the fix needs a decision only the maintainer can make, or the same failure survives three attempts. It reports what it found and what it tried.
 
+### Session 2026-11-07
+
+The alpha15 sweep met an advisory (minimatch, GHSA-g3hv-75wg-m249) whose only fix was a major of a dev-only transitive dependency, and stopped under the edge case and FR-010 as first written. The maintainer: "CAN we upgrade? IF we can't, and its only a dev advisory, then the release skill should accept that by default. If we CAN upgrade, then it should upgrade and test it. If the upgrade fails, then roll it back and publish without it, notifying me of the result after the release, and suggesting corrective action."
+
+- Q: What does the release do with an advisory whose only fix is a major? → A: It attempts the major and proves it. If it holds, it ships in the sweep (FR-007a). If it fails, or there is no fix at all, an advisory that reaches only development tooling is accepted and reported after the release; one that reaches what ships still stops (FR-007b, FR-010).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ask for a release and get a published package (Priority: P1)
@@ -77,7 +83,8 @@ Removing the person must not open a route around review.
 ### Edge Cases
 
 - **A tag whose run failed before publication**: the version was never published, so its tag may be deleted and re-cut on the fixed commit. A published version stays immutable (020 FR-034).
-- **A major upgrade is needed to clear an advisory**: that is a maintainer decision. The release stops and says so.
+- **A major upgrade is needed to clear an advisory**: the release attempts it and proves it (FR-007a). Only an advisory that reaches what ships, and that the attempt cannot clear, is a maintainer decision; the release stops and says so. *(Amended 2026-11-07; the first version stopped on every such advisory.)*
+- **An advisory reaches only development tooling and cannot be cleared**: it is accepted, and the final report names it with a corrective action (FR-007b).
 - **A package deliberately held back** (for example `better-sqlite3` at 12.x): the sweep honours the hold.
 - **`deploy-repositories` fails after publication**: the release is out. The job is re-run, and the release counts as published once the repositories serve it.
 
@@ -97,9 +104,11 @@ Removing the person must not open a route around review.
 
 - **FR-006**: A request naming a version MUST release that version. A request naming none MUST release the next version on the current prerelease track (`alpha14` → `alpha15`). "The next beta" or "the next rc" MUST start that track at 1, or advance it if it has started. A version without a prerelease suffix MUST be released only when named.
 - **FR-007**: Every release MUST first run `npm audit` and fix every advisory that has a fix, and take every patch and minor update. Each MUST reach master through its own pull request before the release commit. Majors and deliberately held packages MUST be left as they are, and named in the release PR.
+- **FR-007a**: When an advisory's only fix is a major upgrade, the runbook MUST attempt that upgrade (an `overrides` entry when the package is transitive) and prove it: the local checks, plus a before-and-after comparison of whatever the package governs (for a packaging tool, the packaged file list). An upgrade that holds MUST ship in FR-007's sweep PR. One that fails, there or later in the release, MUST be rolled back through a PR before the release continues.
+- **FR-007b**: An advisory that cannot be cleared (no fix, or its major upgrade failed under FR-007a) MUST be accepted without stopping when it reaches only development tooling — `npm ls <package> --omit=dev` lists nothing. The release MUST publish without it, and the final report MUST name the advisory, the attempt and its result, and a corrective action. One that reaches what ships MUST stop the release (FR-010).
 - **FR-008**: The full gate (`gate.yml`) MUST pass on the release commit's tree before the tag is pushed.
 - **FR-009**: On any failure (gate, required check, release pipeline), the runbook MUST diagnose the cause, fix it on its own branch, merge it through a PR whose checks pass, and run the release again until a release is published.
-- **FR-010**: The runbook MUST stop, publishing nothing further, and report when a fix needs a maintainer decision (a major upgrade, an advisory with no fix, a requirement change) or when the same failure survives three attempts.
+- **FR-010**: The runbook MUST stop, publishing nothing further, and report when a fix needs a maintainer decision (a major upgrade other than FR-007a's, an advisory reaching what ships that FR-007a cannot clear, a requirement change) or when the same failure survives three attempts.
 - **FR-011**: A tag whose release never published MAY be deleted and re-cut. A published version MUST NOT be reused or moved.
 
 **Documentation**

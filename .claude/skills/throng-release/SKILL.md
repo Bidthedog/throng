@@ -26,8 +26,10 @@ step. The waits are long (the gate ~1 h, `release.yml` ~1.5 h): one blocking wat
 Only these end a release before it publishes. Each ends with a report: what failed, what was tried,
 what decision is needed.
 
-- **A fix needs the maintainer's decision**: a major upgrade, an advisory with no fix, a requirement
-  that has to change (a supersession), a test that would have to be weakened or benched.
+- **A fix needs the maintainer's decision**: a major upgrade (other than one clearing an advisory —
+  [step 5](#5-sweep-the-dependencies--its-own-pr-merged-before-the-release-branch)), an advisory
+  reaching what ships that its upgrade cannot clear, a requirement that has to change (a
+  supersession), a test that would have to be weakened or benched.
 - **The same failure survives three fix attempts.** Three different fixes for one symptom means the
   diagnosis is wrong; stop rather than thrash.
 - **Something outside the repo is down**: GitHub Actions, npm, the Pages deployment, after a re-run.
@@ -171,8 +173,28 @@ npm outdated                   # current / wanted / latest
 ```
 
 **Fix every advisory.** `npm audit fix` where it stays in range; a minor or patch upgrade where it does
-not. An advisory whose only fix is a major, or that has no fix, is a [stop](#when-to-stop): name the
-package, the severity and what reaches it.
+not.
+
+**An advisory whose only fix is a major: attempt the major, and prove it** (065 FR-007a). For a
+transitive package, a version-scoped `overrides` entry lifts only the affected line —
+`"minimatch@>=7.0.0 <11.0.1": "^11.0.5"` was alpha15's (PR #595). Read the major's changelog for
+removed APIs and grep the consumers for them, run the local checks, and compare before and after
+whatever the package governs: for a packaging tool, build the Linux unpacked tree under each version
+and diff the file lists (`stage:runtime` needs an official Node — the installed throng's
+`resources/runtime/node` will do). If it holds, it ships in this sweep.
+
+**If it fails, or the advisory has no fix** (065 FR-007b), ask what reaches it:
+`npm ls <package> --omit=dev`.
+
+- **Empty — development tooling only**: roll the attempt back, accept the advisory, carry on, and
+  name it in the final report with what was tried, why it failed and a corrective action (wait for
+  the consumer's release that takes the fix, file an upstream issue, replace the tool). Not a stop.
+- **Anything listed — it ships**: a [stop](#when-to-stop). Name the package, the severity and what
+  reaches it.
+
+A major taken here that fails later — the gate, `release.yml`'s packaging or verification — is rolled
+back through its own PR ([fix and go again](#12-fix-and-go-again)), and the advisory is then
+accepted or stops the release by the same test.
 
 **Take every patch and minor update, leave the majors.** `npm update --save` takes what each declared
 range already allows; `npm-check-updates --target minor` raises ranges that stop short of the latest
@@ -445,7 +467,9 @@ Confirm, and report:
 - `## Unreleased` is back on `master`, empty, ready for the next cycle.
 
 Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
-the dependency-sweep and fix PRs (links), majors deliberately deferred, the test-suite audit proposals,
+the dependency-sweep and fix PRs (links), majors deliberately deferred, majors taken to clear an
+advisory, any dev-only advisory accepted (with its failed attempt and a suggested corrective action),
+the test-suite audit proposals,
 and anything left undone. Send a `PushNotification` with the version and release URL.
 
 ## When something breaks
