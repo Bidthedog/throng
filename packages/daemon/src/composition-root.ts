@@ -24,6 +24,7 @@ import {
   collectPanels,
   countPanels,
   defaultPipeName,
+  logCaught,
   logExpected,
   panelDisplayTitle,
   parseSettingsGuarded,
@@ -53,6 +54,7 @@ import { SubWorkspaceIpcService } from './subworkspace-service.js';
 import { DocumentIpcService } from './document-service.js';
 import { FileOpUndoIpcService } from './fileop-undo-service.js';
 import { AttentionFlagIpcService } from './attention-flag-service.js';
+import { livePanelIds } from './live-panels.js';
 import { PanelNameIpcService } from './panel-name-service.js';
 import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
@@ -294,6 +296,21 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
   // Test seam (008 FR-005): delay a cold-start attach to exercise the "still starting"
   // retry. Zero in production (env unset).
   const attachColdStartDelayMs = numberFromEnv(env.THRONG_ATTACH_DELAY_MS, 0);
+  // #541 — every panel a saved layout or sub-workspace holds, so a mark stranded by a destroy is not
+  // restored when main reads the stored flags and the ledger back. Null (prune nothing) when unknown.
+  const livePanels = (): ReadonlySet<string> | null => {
+    try {
+      const owner = userContext.currentUser().userId;
+      return livePanelIds({
+        projectIds: () => projectStore.list(owner).map((p) => p.id),
+        layout: (projectId) => workspaceStore.load(owner, projectId),
+        subWorkspaces: (onCorrupt) => workspaceStore.loadSubWorkspaces(owner, onCorrupt),
+      });
+    } catch (error) {
+      logCaught('composition-root: list live panels', error); // unknown: prune nothing, restore everything
+      return null;
+    }
+  };
   const terminalService = new TerminalService(
     localPty,
     terminalEvents,
@@ -306,6 +323,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
     readCommandPollMs(env, directories.configRoot(false)), // 025 FR-019c: the shared command-observation interval
     TERMINAL_END_TIMEOUT_MS, // 051 FR-013a: the one limit every end and the shutdown wait read
     {
+      livePanels,
       // 057 FR-015/FR-033: the daemon holds every layout and project, so it names the panel and project.
       resolveNames: (panelId, projectId, liveTitle) => {
         const owner = userContext.currentUser().userId;
@@ -347,7 +365,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
     (projectId) => attentionFlags.clearProject(projectId),
   ).register(router);
   // attention.flag* (057 round 12, FR-125 / FR-128) — the user's manual flags, which outlive the app.
-  new AttentionFlagIpcService(attentionFlags).register(router);
+  new AttentionFlagIpcService(attentionFlags, livePanels).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
   new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
   // document.* (016) — the per-document language override. Keyed by the FILE, so a panel opening

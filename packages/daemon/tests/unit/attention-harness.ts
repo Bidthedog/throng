@@ -91,6 +91,7 @@ export interface AttentionHarness {
 export interface HarnessOptions {
   names?: (panelId: string, projectId: string, liveTitle: string | null) => { panelTitle: string; projectName: string; tabTitle?: string };
   commandPollMs?: number;
+  livePanels?: () => ReadonlySet<string> | null;
 }
 
 export function makeHarness(options: HarnessOptions = {}): AttentionHarness {
@@ -110,6 +111,7 @@ export function makeHarness(options: HarnessOptions = {}): AttentionHarness {
     undefined,
     {
       resolveNames: options.names,
+      livePanels: options.livePanels,
       createScanner: () => {
         const inner = createAttentionScan();
         return {
