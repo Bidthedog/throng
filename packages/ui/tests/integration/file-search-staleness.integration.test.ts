@@ -83,6 +83,8 @@ interface Rig {
   scan: () => Promise<void>;
   /** A second run, over the same tree, belonging to a DIFFERENT panel. */
   scanAs: (panelId: string) => Promise<void>;
+  /** How many reports the watch has delivered so far. */
+  reports: () => number;
 }
 
 /**
@@ -165,6 +167,7 @@ async function rig(files: Record<string, string>): Promise<Rig> {
     staleFor,
     scan,
     scanAs,
+    reports: () => reports,
   };
 }
 
@@ -453,6 +456,124 @@ describe('a commit does not mark its own file stale (FR-083c)', () => {
       'the panel marked its own save stale — the badge would claim the list disagrees with a disk ' +
         'the list is now correct about',
     ).not.toContain('src/a.ts');
+  });
+
+  /*
+   * ══ THE SAME, WHEN THE SAVE IS SLOWER THAN THE WATCH ══
+   *
+   * REPRO — the case above failed on a loaded Linux CI runner (run 42379176592): `src/a.ts` was marked stale by
+   * its own panel's save. The declaration used to come only AFTER the save returned, so any watcher report that
+   * fired between the write reaching disk and the save returning was re-stated against the pre-save stamp and
+   * marked the file. A real save resolves over IPC and can easily outlast the watch's 50 ms debounce; this stub
+   * makes that order certain instead of rare — it writes, then returns only once the watch has reported the write.
+   */
+  it('leaves a file its own commit SAVED unmarked even when the save returns after the watch reported it (FR-083c)', async () => {
+    const r = await rig({
+      'src/a.ts': `const a = ${TERM};\n`,
+      'src/b.ts': `const b = ${TERM};\n`,
+    });
+    await r.scan();
+
+    const absA = join(r.root, 'src/a.ts');
+    const openStub: BulkEditTarget = {
+      isOpen: (p) => p.replace(/\\/g, '/').toLowerCase() === absA.replace(/\\/g, '/').toLowerCase(),
+      bulkReplace: (req) => ({
+        applied: [...req.edits],
+        applicable: [...req.edits],
+        refused: 0,
+        after: Text.of([`const a = cattle;\n`]),
+        documentId: 'doc-a',
+        wasClean: true,
+      }),
+      save: async () => {
+        const before = r.reports();
+        await writeFile(absA, `const a = cattle;\n`);
+        await waitFor('the watch to report the save', () => (r.reports() > before ? true : undefined));
+        // The report's re-stat is one stat; give it the room it needs to land before the save returns, as it
+        // does when a real save is slower than the watch. Bounded, and long against a single stat.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return { ok: true };
+      },
+    };
+
+    const commits = new ReplaceCommitService(
+      new NodeFileSystem(async () => {}),
+      openStub,
+      () => structuredClone(DEFAULT_APP_SETTINGS),
+      r.service,
+    );
+    const text = await readFile(absA, 'utf8');
+    const at = text.indexOf(TERM);
+    const result = await commits.commit({
+      panelId: PANEL,
+      projectRoot: r.root,
+      term: TERM,
+      modes: NO_MODES,
+      replacement: 'cattle',
+      targets: [{ relPath: 'src/a.ts', edits: [{ from: at, to: at + TERM.length }] }],
+      confirmedIrreversible: true,
+    });
+    expect(result.committed).toBe(true);
+
+    await writeFile(join(r.root, 'src/b.ts'), `const b = cattle;\n`);
+    await waitFor('src/b.ts to be marked stale', () =>
+      r.stale().includes('src/b.ts') ? true : undefined,
+    );
+
+    expect(
+      r.stale(),
+      'the panel marked its own save stale — the badge would claim the list disagrees with a disk ' +
+        'the list is now correct about',
+    ).not.toContain('src/a.ts');
+  });
+
+  /*
+   * The other half of declaring before the write: a declaration is not a suppression. When the save it announced
+   * never happens, a change somebody ELSE made in the meantime must still mark the file.
+   */
+  it('still marks a file changed by another writer while its own save was announced and then failed', async () => {
+    const r = await rig({ 'src/a.ts': `const a = ${TERM};\n` });
+    await r.scan();
+
+    const absA = join(r.root, 'src/a.ts');
+    const openStub: BulkEditTarget = {
+      isOpen: (p) => p.replace(/\\/g, '/').toLowerCase() === absA.replace(/\\/g, '/').toLowerCase(),
+      bulkReplace: (req) => ({
+        applied: [...req.edits],
+        applicable: [...req.edits],
+        refused: 0,
+        after: Text.of([`const a = cattle;\n`]),
+        documentId: 'doc-a',
+        wasClean: true,
+      }),
+      // Somebody else writes the file while the save is in flight, and the save itself fails.
+      save: async () => {
+        const before = r.reports();
+        await writeFile(absA, `const a = somebody else;\n`);
+        await waitFor('the watch to report the other write', () => (r.reports() > before ? true : undefined));
+        return { ok: false, reason: 'failed', error: 'disk full' };
+      },
+    };
+
+    const commits = new ReplaceCommitService(
+      new NodeFileSystem(async () => {}),
+      openStub,
+      () => structuredClone(DEFAULT_APP_SETTINGS),
+      r.service,
+    );
+    const text = await readFile(absA, 'utf8');
+    const at = text.indexOf(TERM);
+    await commits.commit({
+      panelId: PANEL,
+      projectRoot: r.root,
+      term: TERM,
+      modes: NO_MODES,
+      replacement: 'cattle',
+      targets: [{ relPath: 'src/a.ts', edits: [{ from: at, to: at + TERM.length }] }],
+      confirmedIrreversible: true,
+    });
+
+    await waitFor('src/a.ts to be marked stale', () => (r.stale().includes('src/a.ts') ? true : undefined));
   });
 });
 
