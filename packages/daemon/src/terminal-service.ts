@@ -15,6 +15,8 @@ import {
   trackAltScreen,
   createWindowTitleScan,
   isTerminalReport,
+  createMouseReportCoalescer,
+  type MouseReportCoalescer,
   scanWindowTitle,
   type WindowTitleScan,
   createNegotiationScan,
@@ -239,6 +241,11 @@ interface Session {
   /** Display labels for the app-close warning (refreshed on reattach). */
   meta?: TerminalMeta;
   readonly disposers: Array<() => void>;
+  /**
+   * Every write into the PTY that comes from a view or from throng speaking for one goes through here, so mouse
+   * motion is thinned to one report per frame and a stall cannot queue a backlog the console host splits (#544).
+   */
+  readonly input: MouseReportCoalescer;
 }
 
 function asObject(params: unknown): Record<string, unknown> {
@@ -602,7 +609,7 @@ export class TerminalService {
     if (session.focusTold === now) return;
     session.focusTold = now;
     try {
-      session.host.write(session.handle, now === 'in' ? '\x1b[I' : '\x1b[O');
+      session.input.write(now === 'in' ? '\x1b[I' : '\x1b[O');
     } catch (error) {
       logExpected('terminal-service: tell focus', 'a PTY that refuses a write is ending; its exit is reported on its own path', error);
     }
@@ -926,7 +933,9 @@ export class TerminalService {
       escalate: false,
       meta: params.meta,
       disposers: [],
+      input: createMouseReportCoalescer((data) => host.write(handle, data)),
     };
+    session.disposers.push(() => session.input.dispose());
     // 025 FR-012 — the universal Startup Command fallback, for a flavour with no argv recipe.
     // It lives HERE, on the cold-start path, precisely because a launch spec is only resolved
     // when a terminal is cold-started: a re-attach never reaches this code, so a startup command
@@ -1248,7 +1257,7 @@ export class TerminalService {
         session.startupPending = false;
         session.lastActivityAt = Date.now();
       }
-      session.host.write(session.handle, params.data);
+      session.input.write(params.data);
     }
     return { ok: true };
   }

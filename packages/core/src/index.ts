@@ -242,6 +242,12 @@ export type {
 export { ATTENTION_SIGNAL_NAMES } from './attention/attention-types.js';
 export { createAttentionScan, isQueryAnswer, isTerminalReport, sanitiseAttentionText } from './terminal/attention-scan.js';
 export type { AttentionHit, AttentionScanner } from './terminal/attention-scan.js';
+export {
+  MOUSE_MOTION_WINDOW_MS,
+  createMouseReportCoalescer,
+  isMouseMotionReport,
+} from './terminal/mouse-report-coalescer.js';
+export type { CoalescerTimers, MouseReportCoalescer } from './terminal/mouse-report-coalescer.js';
 export { nextMarkedPanel } from './attention/attention-next.js';
 export type { AttentionOrder, AttentionPosition, MarkedPanelTarget } from './attention/attention-next.js';
 export { AttentionModel } from './attention/attention-model.js';
