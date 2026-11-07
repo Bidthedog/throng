@@ -35,6 +35,7 @@ What changed in each release of throng, written for someone deciding whether to 
 - Destroying a tab, the other tabs, or a sub-workspace's own panel now clears the attention marks and flags on its panels, and marks already stranded this way are cleared on the next launch ([#541](https://github.com/Bidthedog/throng/issues/541)).
 - A blank panel, one with no type chosen yet, no longer offers Flag.
 - Replacing a match in Find in Files no longer marks that file's results out of date in the same panel when the save is slow ([#591](https://github.com/Bidthedog/throng/issues/591)).
+- Moving the mouse over Claude Code, or any program that tracks the mouse, while the machine is under heavy load no longer leaves stray text such as `5;71;61M` in its input ([#544](https://github.com/Bidthedog/throng/issues/544)).
 
 ## 1.0.0-alpha14 — 2026-11-05
 
