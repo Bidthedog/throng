@@ -760,7 +760,8 @@ lands on a marked panel and clears it.
   mark without the user focusing the panel.
 - **FR-009**: Only terminal panels have a producer in this feature. Editors, previews and search results
   MUST be able to gain one later without changing the mechanism.
-  *Extended by FR-125 (2026-10-24, round 12): the user is a second producer, on every panel type.*
+  *Extended by FR-125 (2026-10-24, round 12): the user is a second producer, on every panel type* (not a
+  blank panel, since FR-125's 2026-11-07 amendment).
 
 #### B. Holders
 
@@ -951,6 +952,9 @@ lands on a marked panel and clears it.
   **Flag**. Choosing it raises a mark from a second producer, the **user**: kind Attention, reason "Flagged",
   with nothing for the user to enter. On a panel already marked it MUST change nothing *[derived]*. A key
   binding is optional; the menu item is not (constitution VI). Out of scope: custom reasons, colours, Unflag.
+  *Amended 2026-11-07 (maintainer): a blank panel — one with no type chosen yet — MUST NOT offer Flag; the
+  item is absent, not disabled (constitution VI). This narrows "every panel" to every panel with a type: a
+  blank panel has nothing to draw the user's attention to, and a flag on it only marks an empty form.*
 - **FR-126** *(2026-10-24, round 12)*: A manual flag MUST NOT be announced: no toast and no Windows
   notification. It MUST otherwise be a mark like any other — on the panel header (FR-003, FR-118) and every
   holder, counted by FR-131 and by the taskbar badge (FR-039) *[derived]*.

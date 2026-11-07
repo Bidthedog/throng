@@ -31,8 +31,16 @@ function menu(p: Panel, flag: () => void = noop, over: { panelFailure?: boolean 
   });
 }
 
+/*
+ * A blank panel — one with no type chosen yet, showing only the type-selection form — has nothing to
+ * draw a user's attention to, so it offers no Flag: absent rather than greyed (constitution VI), as the
+ * untyped placeholder's missing Zoom commands are.
+ */
+it('a blank (untyped) panel offers no Flag', () => {
+  expect(menu(panel({})).map((i) => i.label)).not.toContain('Flag');
+});
+
 describe.each([
-  ['an untyped panel', panel({})],
   ['a terminal', panel({ kind: 'terminal' })],
   ['an editor', panel({ kind: 'editor' })],
   ['a preview', panel({ kind: PREVIEW_KIND, config: { filePath: 'D:/proj/README.md' } })],

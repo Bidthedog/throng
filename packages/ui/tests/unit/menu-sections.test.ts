@@ -982,10 +982,8 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       '—',
       'Destroy Panel',
       '—',
+      // 057 FR-125 (amended 2026-11-07) — no Flag: a blank panel has nothing to draw attention to.
       'Send to Tab',
-      '—',
-      // 057 FR-125 — Flag, alone in View & state on a panel with nothing else to say about its state.
-      'Flag',
     ]);
   });
 

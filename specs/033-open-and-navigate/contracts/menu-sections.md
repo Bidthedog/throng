@@ -196,3 +196,5 @@ in `packages/core/tests/unit/menu-sections.test.ts` as well, so the guarantee do
 alias nothing tests.)*
 
 *2026-10-24 (057 round 12, FR-125)* — every panel header menu, whatever the panel's type, ends its **View & state** section with **Flag** (icon `attention`, no command, no chord): it raises a user Attention mark on the panel.
+
+*2026-11-07 (057 FR-125, amended)* — except a blank panel, one with no type chosen yet: its menu has no **Flag**, and so no View & state section at all.

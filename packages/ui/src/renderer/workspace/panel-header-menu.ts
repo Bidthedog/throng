@@ -592,12 +592,17 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
    * state because it sets the panel's state. On a panel already marked main changes nothing, so it is
    * never disabled: the user is not told "no", the mark is simply already there. No glyph: the flag icon
    * was retired by round 13 (FR-139).
+   *
+   * Amended 2026-11-07: a blank panel (no type chosen yet) has nothing to draw attention to, so it offers
+   * no Flag — absent, not greyed (constitution VI), like the untyped placeholder's Zoom commands.
    */
-  items.push({
-    label: 'Flag',
-    section: 'viewState',
-    onClick: () => actions.flag(),
-  });
+  if (panel.kind !== undefined) {
+    items.push({
+      label: 'Flag',
+      section: 'viewState',
+      onClick: () => actions.flag(),
+    });
+  }
 
   /*
    * 043 FR-015 — the panel's SEARCH commands, in the panel's own menu.
