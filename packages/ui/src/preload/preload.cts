@@ -1081,6 +1081,12 @@ contextBridge.exposeInMainWorld('throng', {
     flag: (panel: { panelId: string; projectId: string; panelTitle: string; tabTitle: string; projectName: string }) =>
       ipcRenderer.send('throng:attention:flag', panel),
     /**
+     * 057 FR-007 (#541): panels a route ended for good — a Tab destroy, Destroy other tabs, or a
+     * sub-workspace's own panel — whose marks and stored flags go with them. The project window's
+     * panel ✕ reaches main through `panel.notifyDestroyed` instead, which also cascades the destroy.
+     */
+    panelsDestroyed: (panelIds: string[]) => ipcRenderer.send('throng:attention:panelsDestroyed', { panelIds }),
+    /**
      * Main asks the renderer to draw the taskbar badge (R13, so it uses the theme's colours). The
      * callback returns the PNG data URL; this wrapper correlates the reply by `requestId` on the same
      * channel, so the renderer never handles the id. Main asks a single window (the main window, or

@@ -2277,6 +2277,12 @@ if (isPrimaryInstance)
       projectName: text(p.projectName),
     });
   });
+  // 057 FR-007 (#541): panels a Tab destroy or a sub-workspace ended — a mark never outlives its panel.
+  ipcMain.on('throng:attention:panelsDestroyed', (_event, payload: unknown) => {
+    const ids = (payload as { panelIds?: unknown } | null)?.panelIds;
+    if (!Array.isArray(ids)) return;
+    for (const id of ids) if (typeof id === 'string') attentionService.onPanelDestroyed(id);
+  });
   // T068: a renderer that registers late pulls the set it missed; T069: one that can draw the badge says so.
   ipcMain.handle('throng:attention:getMarks', () => ({ marks: attentionService.currentMarks() }));
   ipcMain.on('throng:attention:badgeReady', () => attentionService.onBadgeAnswererReady());

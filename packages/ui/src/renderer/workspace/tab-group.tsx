@@ -31,6 +31,7 @@ import {
 import { IconButton } from '../common/icon-button.js';
 import { OverflowMark, TabMark } from '../attention/holder-marks.js';
 import { hiddenTabIds } from '../attention/hidden-tabs.js';
+import { panelsDestroyed } from '../attention/panels-destroyed.js';
 import { NameLimitField } from '../common/name-limit-field.js';
 import { useTransientOverlay } from '../common/transient-overlay.js';
 import { TabPopover, popoverTabName } from './tab-popover.js';
@@ -1555,8 +1556,12 @@ export function TabGroup(): ReactElement {
   // sub-workspace keeps the document alive in the project (FR-006a / FR-021).
   const releaseTabEditors = (tab: Tab): void => {
     const inSubWorkspace = subWin !== null;
+    const ended: string[] = [];
     for (const p of collectPanels(tab.root)) {
       const killsSession = !inSubWorkspace || p.originProjectId === layout.projectId;
+      // 057 FR-007 (#541) — a panel the Tab destroy ends takes its attention mark with it; a synced
+      // project panel closed inside a sub-workspace is still shown by the project, so it keeps its mark.
+      if (killsSession) ended.push(p.id);
       if (p.kind === 'editor' && killsSession) disposeEditor(p.id);
       // 044 FR-042/FR-110 — a preview the Tab destroy ends tells main, by the same rule; mounted or
       // not, since a preview in a background Tab has a run too.
@@ -1571,6 +1576,7 @@ export function TabGroup(): ReactElement {
       // (043 FR-023). Same reasoning, same unconditional application.
       destroyFindInFilesPanel(p.id);
     }
+    panelsDestroyed(ended);
   };
 
   const confirmCloseTab = async (tabId: string): Promise<void> => {
@@ -1599,6 +1605,8 @@ export function TabGroup(): ReactElement {
         // 044 FR-110 — and the sub-workspace's own panels' histories; a synced project panel keeps its one.
         if (p.originProjectId === layout.projectId) purgePanelHistory(p);
       }
+      // 057 FR-007 (#541) — the sub-workspace's own panels end with it, and so do their marks.
+      panelsDestroyed(collectPanels(tab.root).filter((p) => p.originProjectId === layout.projectId).map((p) => p.id));
       await destroySubWorkspace(services.subWorkspaces, subWin.id);
       return;
     }
