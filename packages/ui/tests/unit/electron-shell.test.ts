@@ -1,3 +1,4 @@
+import { describe } from 'vitest';
 import {
   runShellIntegrationContract,
   type ShellIntegrationHarness,
@@ -39,4 +40,8 @@ const makeHarness = (): ShellIntegrationHarness => {
   };
 };
 
-runShellIntegrationContract('ElectronShellIntegration (004 T037/T045, 044 T042)', makeHarness);
+// A literal describe: `vitest list` reads a file statically and rejects one with no suite of its own,
+// which fails the whole listing (and td's tiers with it).
+describe('ElectronShellIntegration', () => {
+  runShellIntegrationContract('ElectronShellIntegration (004 T037/T045, 044 T042)', makeHarness);
+});

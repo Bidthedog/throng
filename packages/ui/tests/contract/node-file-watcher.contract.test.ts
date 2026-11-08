@@ -2,6 +2,7 @@
  * Contract test for the UI-main {@link NodeFileWatcher} (T029 / IFileWatcher).
  * Runs the shared IFileWatcher contract suite against a real temp directory.
  */
+import { describe } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,18 +17,22 @@ import { NodeFileWatcher, type RecursiveWatchStrategy } from '../../src/main/nod
 const strategies: RecursiveWatchStrategy[] =
   process.platform === 'win32' ? ['native'] : ['native', 'per-directory'];
 
-for (const recursiveStrategy of strategies) {
-  runFileWatcherContract(`NodeFileWatcher (${recursiveStrategy})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'throng-watch-'));
-    return {
-      watcher: new NodeFileWatcher(40, { recursiveStrategy }),
-      dir,
-      async touch(file: string) {
-        writeFileSync(join(dir, file), `// ${Date.now()}`, 'utf8');
-      },
-      async cleanup() {
-        rmSync(dir, { recursive: true, force: true });
-      },
-    };
-  });
-}
+// A literal describe: `vitest list` reads a file statically and rejects one with no suite of its own,
+// which fails the whole listing (and td's tiers with it).
+describe('NodeFileWatcher', () => {
+  for (const recursiveStrategy of strategies) {
+    runFileWatcherContract(`NodeFileWatcher (${recursiveStrategy})`, async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'throng-watch-'));
+      return {
+        watcher: new NodeFileWatcher(40, { recursiveStrategy }),
+        dir,
+        async touch(file: string) {
+          writeFileSync(join(dir, file), `// ${Date.now()}`, 'utf8');
+        },
+        async cleanup() {
+          rmSync(dir, { recursive: true, force: true });
+        },
+      };
+    });
+  }
+});
