@@ -1,4 +1,7 @@
 name: Gate
+# Names which gate this was, on a failed run too: release-preflight.mjs and release-e2e-reuse.mjs read
+# it, because a partial or stress dispatch proves nothing about the whole tree.
+run-name: gate (${{ inputs.stress_spec && 'stress' || inputs.only || 'full gate' }})
 
 # THE FULL `npm run gate`, on a GitHub-hosted Windows runner, so it stops running on a workstation.
 #
