@@ -19,9 +19,26 @@ import { spawn, spawnSync } from 'node:child_process';
 import { connect } from 'node:net';
 import { existsSync, openSync, readFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
+/**
+ * The result as one line of pure ASCII JSON. The line is read back through PowerShell 5.1 as a second
+ * account, which re-encodes it between code pages, and it carries the daemon's own start-up output: an
+ * em dash there came back with a bare `"` in it, and the harness could not parse the line at all
+ * (release.yml run 42433251187). Escaped as \uXXXX, every character survives any code page.
+ */
+export function asciiJson(value) {
+  return JSON.stringify(value).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+// Run as a program (the harness's `node daemon-probe.mjs …`), not when a test imports `asciiJson`.
+// Windows paths compare without case: the drive letter's case differs between argv and the module URL.
+const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+if (process.argv[1] && samePath(resolve(process.argv[1]), fileURLToPath(import.meta.url))) await main();
+
+async function main() {
 const argv = process.argv.slice(2);
 const flag = (name) => {
   const i = argv.indexOf(name);
@@ -30,7 +47,7 @@ const flag = (name) => {
 
 const pipe = flag('--pipe');
 if (!pipe) {
-  console.log(JSON.stringify({ ok: false, error: '--pipe is required' }));
+  console.log(asciiJson({ ok: false, error: '--pipe is required' }));
   process.exit(2);
 }
 
@@ -194,5 +211,6 @@ try {
   result.error = err instanceof Error ? err.message : String(err);
 }
 
-console.log(JSON.stringify(result));
+console.log(asciiJson(result));
 process.exit(result.ok ? 0 : 1);
+}
