@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, _electron as electron } from '@playwright/test';
+import { killAppSpawnedDaemon, shutdownApp } from './harness.js';
 
 /**
  * #610 — after the installed-version notice's Restart, Ctrl+click opened nothing on Linux.
@@ -63,6 +64,7 @@ test('what the Restart action starts can still start a browser installed as a sn
   const root = info.outputPath('package');
   const record = info.outputPath('restarted-status');
   const executablePath = packageLayout(root, record);
+  const pipeName = `\\\\.\\pipe\\throng-e2e-restart-${process.pid}-${Date.now()}`;
 
   const app = await electron.launch({
     executablePath,
@@ -74,7 +76,7 @@ test('what the Restart action starts can still start a browser installed as a sn
       ...(process.env as Record<string, string>),
       THRONG_TEST_SHELL_HISTORY: 'off',
       THRONG_CONFIG_ROOT: info.outputPath('config'),
-      THRONG_PIPE_NAME: `throng-e2e-restart-${process.pid}-${Date.now()}`,
+      THRONG_PIPE_NAME: pipeName,
       THRONG_E2E_CLIPBOARD: 'memory',
       THRONG_NO_ORPHAN_REAP: '1',
     },
@@ -90,7 +92,9 @@ test('what the Restart action starts can still start a browser installed as a sn
     if (await expect.poll(() => child.exitCode !== null || child.signalCode !== null, { timeout: 15_000 }).toBe(true).then(() => false, () => true)) child.kill('SIGKILL');
     await expect.poll(() => existsSync(record), { timeout: 20_000 }).toBe(true);
   } finally {
-    app.process().kill('SIGKILL');
+    // An app that is never closed holds up the worker's teardown, and that is an error no retry absorbs.
+    await shutdownApp(app);
+    await killAppSpawnedDaemon(pipeName);
   }
 
   expect(
