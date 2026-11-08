@@ -144,6 +144,8 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       # The runner's virtual desktop defaults to 1024x768, which is too small for the window the
       # app opens; several specs assert layout that only holds at a realistic size.
       - name: Set screen resolution to 1920x1080
@@ -219,6 +221,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Read product version
         id: ver
         shell: bash
@@ -305,6 +309,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Package (build + stage runtime + electron-builder targets)
         run: npm run package:linux -- --publish never
       - name: Reconcile the built packages against the declared set

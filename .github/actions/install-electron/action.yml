@@ -1,0 +1,38 @@
+name: Install Electron's binary
+description: Restore Electron's download from the cache, and install it with retries, straight after npm ci.
+
+# Electron has no install script: it downloads its binary the first time something requires it. In CI
+# that meant in the middle of a test run, with no retry, so one bad response from GitHub's release
+# downloads failed unit tests and E2E as "Electron failed to install correctly" (PR #601, a 502 and a
+# 504 in one morning). Installing here puts the download in one step, with retries, and the cache means
+# most runs never make it. electron-builder reads the same cache, so packaging benefits too.
+
+runs:
+  using: composite
+  steps:
+    - id: electron
+      name: Read Electron's version
+      shell: bash
+      run: echo "version=$(node -p "require('./node_modules/electron/package.json').version")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Electron's download
+      uses: actions/cache@v6
+      with:
+        # @electron/get's default cache folder on Linux and on Windows.
+        path: |
+          ~/.cache/electron
+          ~/AppData/Local/electron/Cache
+        key: electron-${{ runner.os }}-${{ steps.electron.outputs.version }}
+
+    - name: Install Electron's binary
+      shell: bash
+      run: |
+        # A retry only for the download: install.js exits 0 at once when the binary is already in place.
+        for delay in 15 30 60 120 0; do
+          node node_modules/electron/install.js && exit 0
+          [ "$delay" -gt 0 ] || break
+          echo "::warning::Electron's download failed; retrying in ${delay}s"
+          sleep "$delay"
+        done
+        echo "::error::Electron's binary could not be downloaded after 5 attempts"
+        exit 1

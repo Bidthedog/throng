@@ -76,6 +76,8 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Unit tests
         run: npm run test:unit -- --tags-filter='!regression'
       - name: Component tests
@@ -105,6 +107,8 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       # Integration & contract spawn the REAL daemon (`node packages/daemon/dist/main.js`) and
       # read its `dist/BUILD_ID`, so the daemon must be built first — on a clean checkout there is
       # no `dist/`. `npm run build` produces the daemon dist and stamps BUILD_ID.
@@ -168,6 +172,8 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       # The runner's virtual desktop defaults to 1024x768 — too small for the window
       # geometry some specs assert (e.g. restoring a 1100px-wide window clamps to 1024)
       # and cramped for drag-and-drop. Bump it before the app opens real windows.
@@ -258,6 +264,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Build
         run: npm run build
       - name: Run @admin E2E suite (this runner is elevated)
@@ -290,6 +298,8 @@ jobs:
         run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Unit tests
         run: npm run test:unit -- --tags-filter='!regression'
       - name: Component tests
@@ -310,6 +320,8 @@ jobs:
         run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Build
         run: npm run build
       - name: Integration tests
@@ -338,6 +350,8 @@ jobs:
         run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Build
         run: npm run build
       - name: Run E2E
