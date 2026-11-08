@@ -215,6 +215,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
 
       # LOAD-BEARING, not hygiene. A hosted runner's virtual display starts at 1024x768, and
       # several specs assert layout that only holds at a realistic size — a 1100px window clamps to
@@ -327,6 +329,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Build
         run: npm run build
       - name: Run @admin E2E suite (this runner is elevated)
@@ -360,6 +364,8 @@ jobs:
         run: sudo scripts/ci-linux-setup.sh
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Run the gate
         run: scripts/ci-linux-display.sh npm run gate
       - name: Upload traces
@@ -466,6 +472,8 @@ jobs:
           "TMP=$env:RUNNER_TEMP"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install dependencies
         run: npm ci
+      - name: Install Electron's binary
+        uses: ./.github/actions/install-electron
       - name: Set screen resolution to 1920x1080
         shell: pwsh
         run: ./scripts/ci-set-resolution.ps1
