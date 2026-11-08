@@ -34,6 +34,8 @@ what decision is needed.
   diagnosis is wrong; stop rather than thrash.
 - **Something outside the repo is down**: GitHub Actions, npm, the Pages deployment, after a re-run.
 - **The tree has uncommitted work that isn't yours** (preflight). It is the user's; never stash it.
+- **A guard refuses a change the release needs**: applying the `release` Environment's setting, or
+  the force-push after a rebase. Report exactly what was refused; never route around it.
 
 ## Settle the version first
 
@@ -79,8 +81,19 @@ git fetch origin --tags
 git log --oneline origin/master -1
 git tag --sort=-creatordate | head -5
 gh release list --limit 5
+node scripts/release-preflight.mjs   # exit 0, or a line for each thing to fix
 ```
 
+- **Every line `release-preflight` prints is yours to fix, before the version is settled. Do not ask.**
+  (065 FR-013.) Exit 2 means it could not read the facts: an outside fault, retried once.
+  - `[master]` is a red `release.yml`, a red full gate, a green only on a re-run, or an open nightly
+    issue. Treat it as a [failure to fix](#12-fix-and-go-again); a flake gets a real fix, with the
+    issue closed by its PR. Then `gh workflow run gate.yml --ref master`, wait for that gate and the
+    fix's own `release.yml` run on master, and run the preflight again.
+  - `[environment]` means the `release` Environment drifted from 065 FR-005. Apply it yourself: `PUT`
+    `repos/{owner}/{repo}/environments/release` with no reviewers and `custom_branch_policies: true`,
+    then `POST` `v*` (type `tag`) to its `deployment-branch-policies`. A guard refusing that is a
+    [stop](#when-to-stop). Never approve a waiting deployment.
 - The tree must be clean. Uncommitted work belongs to the user — never stash or discard it to make a
   release tidy; stop and report it.
 - `master` must be the release base and must be up to date with `origin/master`.
@@ -367,9 +380,10 @@ run**, which is the one carrying the publish job.
 
 The jobs, each gating the next (`needs` in brackets):
 
-1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. This is
-   the only place in the release pipeline the `@extended` half of the suite runs. A red suite means
-   no artifact.
+1. **E2E (full suite)** `e2e-full` — everything except `@core`'s 50; one worker, no shards. A red
+   suite means no artifact. **`e2e-reuse` omits it** when a full gate was green at its first attempt
+   on this exact tree (065 FR-014), the normal case once step 9's gate has passed and the release PR
+   has rebase-merged onto an unmoved master. The job summary names the gate it took the verdict from.
 2. **Work out the verification matrix** `combinations` (ubuntu, beside the E2E) — emits
    `artifact-set.mjs list --combinations --json`.
 3. **Build the release artifacts** `build-installer` [e2e-full] — `npm run package`, then
@@ -441,8 +455,10 @@ through its own PR, and the release resumes** (065 FR-009). Nothing is handed ba
    failing test first, without waiting for confirmation — the release request is the go-ahead), PR it
    as a non-draft, wait on its required checks, and `gh pr merge --squash` once green. Never fix it on
    the release branch: the release commit carries only the release.
-4. **Resume from the earliest step the fix invalidates.** Rebase the release branch on `origin/master`,
-   re-run step 8's local checks, push, and re-run the full gate (step 9). If a tag was already pushed,
+4. **Resume from the earliest step the fix invalidates.** The release branch is always rebased on
+   `origin/master`, never merged with it: rebase it, re-run step 8's local checks, push with
+   `git push --force-with-lease origin release/v<version>` as a command of its own (nothing chained,
+   never a bare `--force`), and re-run the full gate (step 9). If a tag was already pushed,
    [re-cut it](#re-cutting-an-unpublished-tag).
 5. **Count attempts per failure.** The third fix for the same symptom that still fails is a stop.
 
@@ -525,8 +541,9 @@ gh workflow run release.yml --ref <branch> -f skip_e2e=true
 - **Never skip the full gate** on a release commit, and never merge or tag on a red or stale one.
 - **Never write release prose in the workflow or the release body.** It comes from `CHANGELOG.md` or
   it does not exist.
-- **Never bypass the full E2E lane** to make a release finish sooner. It is the other half of CI's
-  50-test `@core` trade; without it the reduced surface is a hole rather than a reduction.
+- **Never publish without the full E2E suite having passed on the released tree**, in `e2e-full` or
+  in the full gate `e2e-reuse` found. It is the other half of CI's 50-test `@core` trade; without it
+  the reduced surface is a hole rather than a reduction.
 - **Never run Prettier in this repo.** There is no config, so it rewrites every string delimiter it
   touches. ESLint is the formatter.
 - **Never add an attribution footer or a session link** to a commit message, PR body, release body or
@@ -562,7 +579,7 @@ set or a step in this runbook.
   - [release-notes.md](references/release-notes.md) — how the body is composed and why it never
     falls back.
   - [publishing.md](references/publishing.md) — how the gates are evaluated, what publication
-    does, what runs where, what only a real release proves.
+    does, what runs where, what only a real release proves, adding a reviewer.
   - [signing-and-reproducibility.md](references/signing-and-reproducibility.md) — why a checksum
     and not a signature; the SC-008 claim.
 - [build-and-packaging.md](references/build-and-packaging.md) — packaging constraints (`npmRebuild: false`,
