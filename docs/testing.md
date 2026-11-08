@@ -119,7 +119,7 @@ Every E2E test carries exactly one significance tag and at least one category ta
 | Tag | Where it runs | Cap |
 | --- | --- | --- |
 | `@core` | every CI run of a non-draft pull request (`ci.yml`, one job, one worker) | **50** — a hard ceiling, guarded |
-| `@extended` | the gate (`gate.yml`) and the release lane (`release.yml`), before an installer is built | none |
+| `@extended` | the gate (`gate.yml`), and the release lane (`release.yml`) before an installer is built unless a full gate already passed on the same tree | none |
 
 Category tags — `@boot @terminal @editor @explorer @prefs @window @persistence @failure` — say what a
 test is about, so a failure names an area before anyone opens the file. `@admin` (needs elevation)
