@@ -96,8 +96,35 @@ jobs:
   # `skip_e2e` (a dispatch input) leaves it out, so a rehearsal that is only about the installers does
   # not wait ~33 minutes for a suite `gate.yml` already runs on the same tree. `publish` refuses to
   # run when it is set, so a release can never follow a skipped suite.
+  #
+  # `e2e-reuse` leaves it out too, when a full `gate.yml` was green at its first attempt on exactly this
+  # tree (065 FR-014): that gate ran this suite and fails on a flake. If `e2e-reuse` fails, its output
+  # is empty and the suite runs, so this can only ever cost time. A `trace` dispatch always runs it.
+  e2e-reuse:
+    if: ${{ !inputs.skip_e2e && !inputs.trace }}
+    name: Reuse a green gate's E2E verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      reused: ${{ steps.find.outputs.reused }}
+      gate_run: ${{ steps.find.outputs.gate_run }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - id: find
+        name: Look for a full green gate on this tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-e2e-reuse.mjs
+
   e2e-full:
-    if: ${{ !inputs.skip_e2e }}
+    needs: e2e-reuse
+    if: ${{ !cancelled() && !inputs.skip_e2e && needs.e2e-reuse.outputs.reused != 'true' }}
     name: E2E (full suite)
     runs-on: windows-2022
     # The full suite measured 21.2 minutes locally at 229 spec files / 641 declarations, on the
