@@ -29,6 +29,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Fixed
+
+- On Linux, links opened nothing after a restart from the "newer version installed" notice when the default browser is a snap. The restart no longer passes on the restriction that caused it. Coming from 1.0.0-alpha15, quit throng fully and start it again from the desktop once, because alpha15's own restart still applies it. ([#610](https://github.com/Bidthedog/throng/issues/610))
+
 ## 1.0.0-alpha15 — 2026-11-08
 
 ### Added

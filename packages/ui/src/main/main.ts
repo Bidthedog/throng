@@ -68,6 +68,7 @@ import {
   INSTALLED_VERSION_RESTART_CHANNEL,
 } from './instance-notice-channels.js';
 import { createInstalledVersionMonitor } from './installed-version-monitor.js';
+import { restartIntoInstalledCopy } from './restart-installed-copy.js';
 import { appIcon } from './app-icon.js';
 import { registerLinkUriIpc, registerOpenExternalIpc } from './external-url.js';
 import { notifySettingsSubscribers, type SettingsSubscriber } from './settings-subscribers.js';
@@ -119,7 +120,8 @@ import {
   instanceDatabasePath,
 } from './instance-paths.js';
 import { checkoutOfDaemonEntry, ensureDaemon, pingDaemon, resolveDaemonNodeExe } from './daemon-lifecycle.js';
-import { fork } from 'node:child_process';
+import { fork, spawn } from 'node:child_process';
+import { watchChild } from '@throng/platform-node';
 import type { DaemonRoster, RosterUiProcess } from '@throng/ipc-contract';
 import { RESOURCES_ROSTER_METHOD } from '@throng/ipc-contract';
 import { ResourceMonitorHost } from './resource-monitor-host.js';
@@ -825,8 +827,22 @@ ipcMain.on(INSTALLED_VERSION_READY_CHANNEL, (event) => {
 ipcMain.on(INSTALLED_VERSION_RESTART_CHANNEL, () => {
   const copy = installedVersion.installed();
   if (!copy) return;
-  app.relaunch({ execPath: copy.launcher, args: [] });
-  app.quit();
+  restartIntoInstalledCopy(copy, {
+    platform: process.platform,
+    pid: process.pid,
+    relaunch: (launcher) => app.relaunch({ execPath: launcher, args: [] }),
+    quit: () => app.quit(),
+    spawnDetached: (file, args) => {
+      const child = spawn(file, [...args], { detached: true, stdio: 'ignore' });
+      watchChild(child, {
+        name: 'installed-version restart',
+        longLived: false,
+        log: (level, message) => diagnostics.log.log(level, message),
+      });
+      return child;
+    },
+    log: (line) => diagnostics.log.warn(line),
+  });
 });
 app.on('browser-window-focus', () => installedVersionMonitor.check());
 setInterval(() => installedVersionMonitor.check(), 60_000).unref();
