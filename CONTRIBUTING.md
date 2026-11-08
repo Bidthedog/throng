@@ -99,9 +99,53 @@ explicitly.
 | **Type** (exactly one) | `bug`, `enhancement`, `tweak`, `documentation` | The type decides the template and the title prefix. |
 | **Area** (one or more) | `area:editor`, `area:explorer`, `area:terminal`, `area:preferences`, `area:themes`, `area:ui-shell`, `area:projects`, `area:vcs`, `area:agents`, `area:extensibility`, `area:infra`, `area:platform` | Where the work lands. Add every area the change touches. |
 | **Milestone** | `v1.0.0`, `v1.0.1` etc | Maintainers schedule this. Unscheduled work carries **no milestone**. |
-| **Status** (when it applies) | `needs-info` | A maintainer has asked the reporter for something, usually a rewrite against the issue template, in a comment. The issue is **blocked**: nobody plans, specs or picks it up until the reporter answers that comment and a maintainer removes the label. If your issue carries it, reply there. |
+| **Status** (when it applies) | `needs-info`, `blocked`, `monitoring`, `under-observation`, `cannot-reproduce` | Where the issue stands. See [Status labels](#status-labels). |
+| **Other** (when it applies) | `priority:high`, `hardening`, `fun`, and GitHub's defaults | See [Other labels](#other-labels). |
 
-Choosing the type — stop at the first that matches:
+### Area labels
+
+| Label | Covers |
+|---|---|
+| `area:editor` | Code editor panels, Monaco, find and replace |
+| `area:explorer` | File explorer tree, file operations |
+| `area:terminal` | Terminal panels, PTY, shells |
+| `area:preferences` | Settings, key bindings and preferences editors |
+| `area:themes` | Themes, icon packs, visual tokens |
+| `area:ui-shell` | Main window, panes, tabs, title bar, notices |
+| `area:projects` | Projects, workspace, project list |
+| `area:vcs` | Git, diff, worktrees |
+| `area:agents` | AI coding agents and handoff workflows |
+| `area:extensibility` | Plugins, backup and restore, data |
+| `area:infra` | Build, CI, packaging, linting, tests |
+| `area:platform` | OS support: Windows, macOS, Linux |
+
+### Status labels
+
+| Label | Means | Ends when |
+|---|---|---|
+| `needs-info` | A maintainer has asked the reporter for something in a comment, usually a rewrite against the issue template. Nobody plans, specs or picks the issue up meanwhile. If your issue carries it, reply there. | The reporter answers and a maintainer removes the label. |
+| `blocked` | Blocked by another issue or something upstream. | The blocker clears. |
+| `monitoring` | Reproducible, but the cause is outside throng. Kept open and watched. | An upstream fix reaches users, or throng decides to mitigate it. |
+| `under-observation` | Seen here, but cannot be reproduced on demand. Kept open while evidence is gathered. | It can be driven reliably, or the evidence runs out. |
+| `cannot-reproduce` | Could not be reproduced on available hardware. | A host that exhibits it turns up. |
+
+### Other labels
+
+| Label | Means |
+|---|---|
+| `priority:high` | Fix before the milestone ships. |
+| `hardening` | A real defect no caller can reach. Fixed in passing, never a release blocker. |
+| `fun` | Just for fun. |
+| `good first issue` | Good for newcomers. |
+| `help wanted` | Extra attention is needed. |
+| `question` | Further information is requested. |
+| `duplicate` | This issue or pull request already exists. |
+| `invalid` | This doesn't seem right. |
+| `wontfix` | This will not be worked on. |
+
+### Choosing the type
+
+Stop at the first that matches:
 
 - **Bug** — shipped behaviour contradicts its own intent: it crashes, returns the wrong result, regresses, or does X where the spec/docs/UI say Y. A one-character fix is still a Bug. "This design is poor" is *not* a Bug.
 - **Enhancement** — adds a capability that does not exist today. After it ships a user can do something they could not do before. Large ambitions are Enhancements too — throng has no "feature" type; `area:*` does the grouping, and related issues are linked to each other in the body.
