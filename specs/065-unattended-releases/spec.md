@@ -39,6 +39,13 @@ The alpha15 sweep met an advisory (minimatch, GHSA-g3hv-75wg-m249) whose only fi
 
 - Q: What does the release do with an advisory whose only fix is a major? → A: It attempts the major and proves it. If it holds, it ships in the sweep (FR-007a). If it fails, or there is no fix at all, an advisory that reaches only development tooling is accepted and reported after the release; one that reaches what ships still stops (FR-007b, FR-010).
 
+### Session 2026-11-08
+
+alpha15 reached `publish` and then waited on a required reviewer, and only then found master's `release.yml` had been red for two days. The maintainer: "master must be green and no flakes should exist. An agent should respond to a failed preflight check and attempt a fix, without asking me."
+
+- Q: What must hold before a release starts? → A: Master proved green at first attempt, no nightly failure left open, and the `release` Environment as FR-005 requires. A failure is fixed by the runbook, unasked (FR-013).
+- Q: Must `release.yml` repeat a suite the gate just ran? → A: No. A full gate, green at its first attempt on the identical tree, stands in for it (FR-014).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ask for a release and get a published package (Priority: P1)
@@ -110,6 +117,8 @@ Removing the person must not open a route around review.
 - **FR-009**: On any failure (gate, required check, release pipeline), the runbook MUST diagnose the cause, fix it on its own branch, merge it through a PR whose checks pass, and run the release again until a release is published.
 - **FR-010**: The runbook MUST stop, publishing nothing further, and report when a fix needs a maintainer decision (a major upgrade other than FR-007a's, an advisory reaching what ships that FR-007a cannot clear, a requirement change) or when the same failure survives three attempts.
 - **FR-011**: A tag whose release never published MAY be deleted and re-cut. A published version MUST NOT be reused or moved.
+- **FR-013**: Before anything else, the runbook MUST run `scripts/release-preflight.mjs`, which MUST refuse: a `release` Environment not as FR-005 requires; a latest finished `release.yml` or full gate on master that is not a success at its first attempt; and an open nightly-failure issue. The runbook MUST fix what it reports without asking, by FR-009's route, and MUST apply FR-005's setting itself. Only a guard refusing that change, or FR-010, stops it.
+- **FR-014**: `release.yml` MAY omit its full E2E suite when a full `gate.yml` run succeeded at its first attempt on the identical git tree. Any doubt MUST run the suite. FR-008 stands.
 
 **Documentation**
 
