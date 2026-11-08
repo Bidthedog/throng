@@ -80,13 +80,18 @@ test('what the Restart action starts can still start a browser installed as a sn
     },
   });
 
-  // The channel the notice's Restart button sends. The handler reads the layout above, so this is the real route.
-  await app.evaluate(({ ipcMain }, channel) => {
-    ipcMain.emit(channel, {});
-  }, RESTART_CHANNEL);
+  try {
+    // The channel the notice's Restart button sends. The handler reads the layout above, so this is the real route.
+    // Not awaited: the app it quits takes this call's reply with it.
+    void app.evaluate(({ ipcMain }, channel) => void ipcMain.emit(channel, {}), RESTART_CHANNEL).catch(() => {});
 
-  await expect.poll(() => existsSync(record), { timeout: 20_000 }).toBe(true);
-  await app.close().catch(() => {});
+    // Electron's relauncher waits for this process to go, and a quit with no daemon to drain can stall.
+    const child = app.process();
+    if (await expect.poll(() => child.exitCode !== null || child.signalCode !== null, { timeout: 15_000 }).toBe(true).then(() => false, () => true)) child.kill('SIGKILL');
+    await expect.poll(() => existsSync(record), { timeout: 20_000 }).toBe(true);
+  } finally {
+    app.process().kill('SIGKILL');
+  }
 
   expect(
     noNewPrivs(readFileSync(record, 'utf8')),
