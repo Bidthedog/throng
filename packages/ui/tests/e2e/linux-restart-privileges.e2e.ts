@@ -66,10 +66,13 @@ test('what the Restart action starts can still start a browser installed as a sn
 
   const app = await electron.launch({
     executablePath,
-    chromiumSandbox: true,
+    // The AppArmor profile that lets Electron's sandbox start names node_modules' copy, not this one, so
+    // this copy runs unsandboxed. The relauncher under test belongs to the main process, which never was.
+    chromiumSandbox: false,
     args: [mainEntry, `--user-data-dir=${info.outputPath('user-data')}`],
     env: {
       ...(process.env as Record<string, string>),
+      THRONG_TEST_SHELL_HISTORY: 'off',
       THRONG_CONFIG_ROOT: info.outputPath('config'),
       THRONG_PIPE_NAME: `throng-e2e-restart-${process.pid}-${Date.now()}`,
       THRONG_E2E_CLIPBOARD: 'memory',
