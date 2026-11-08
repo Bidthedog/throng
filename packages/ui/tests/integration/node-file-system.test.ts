@@ -1,3 +1,4 @@
+import { describe } from 'vitest';
 import { mkdtemp, mkdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -49,4 +50,8 @@ const makeHarness = async (): Promise<FileSystemHarness> => {
   };
 };
 
-runFileSystemContract('NodeFileSystem (004 T011/T012)', makeHarness);
+// A literal describe: `vitest list` reads a file statically and rejects one with no suite of its own,
+// which fails the whole listing (and td's tiers with it).
+describe('NodeFileSystem', () => {
+  runFileSystemContract('NodeFileSystem (004 T011/T012)', makeHarness);
+});
