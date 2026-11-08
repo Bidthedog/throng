@@ -25,6 +25,45 @@ cannot be left unread. `THRONG_GAPS_OUT` makes the gate write the allowed `unpro
 The gate takes its inputs from the environment so CI can supply them — the `THRONG_*` publish-gate
 variables are documented in [`docs/environment.md`](../../../../docs/environment.md).
 
+## Adding a reviewer to the `release` Environment
+
+Releases have no reviewer on purpose (065 FR-001, FR-005). Adding one is a change of that decision, so
+it takes three things together, or the next release stops at preflight:
+
+1. **Supersede the requirement.** Amend 065 FR-001 and FR-005, recording why.
+2. **Change what the preflight expects.** `scripts/release-preflight.mjs` refuses any required
+   reviewer, and `SKILL.md`'s preflight re-applies 065 FR-005 when it finds one: change both, with
+   `release-preflight.test.ts`, and drop *Never ask mid-release* for this wait. A release then ends
+   its turn at the approval and resumes after it.
+3. **Apply the setting.** The maintainer runs this; `PUT` replaces the whole configuration, so the tag
+   policy's flags are sent again:
+
+   ```sh
+   id=$(gh api users/<login> --jq .id)
+   printf '{"wait_timer":0,"reviewers":[{"type":"User","id":%s}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' "$id" \
+     | gh api -X PUT 'repos/{owner}/{repo}/environments/release' --input -
+   gh api 'repos/{owner}/{repo}/environments/release/deployment-branch-policies' --jq '.branch_policies'   # still v*
+   ```
+
+To remove the reviewer again, send the same body with `"reviewers":[]` and undo steps 1 and 2.
+
+What to expect from one:
+
+- **Two approvals per release.** `sign-index` and `publish` each name the Environment and each wait.
+  alpha15's tag run took one for each.
+- **Leave `prevent_self_review` off** while there is one maintainer: they push the tag, so it would
+  leave nobody able to approve.
+- **Every `v*` tag is held, prerelease or full.** An Environment cannot tell them apart. To hold only
+  full releases, create a second Environment (`release-stable`) with the reviewer, the `v*` tag policy
+  and its own copy of `REPO_SIGNING_KEY`, and have both jobs choose by the tag — a prerelease tag
+  carries a `-`:
+
+  ```yaml
+  environment: ${{ contains(github.ref_name, '-') && 'release' || 'release-stable' }}
+  ```
+
+  Swap the two names to hold only prereleases. The preflight then checks both Environments.
+
 ## What publication does
 
 When all five hold, publication:

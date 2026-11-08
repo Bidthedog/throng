@@ -116,7 +116,7 @@ the shard script.
 ## Spending runner minutes well
 
 **E2E runs on CI, not on the workstation before a push.** The `@core` lane runs on every ready PR;
-`@extended` runs in `gate.yml` and `release.yml`. Locally, run at most the one spec covering the
+`@extended` runs in `gate.yml`, and in `release.yml` unless a full gate passed on the same tree. Locally, run at most the one spec covering the
 change, at one worker, when a lower layer cannot show the failure — the root `CLAUDE.md`'s *Running
 tests locally* owns that rule. Elevation is the thing only CI can answer either way: a developer
 machine is normally not elevated, GitHub's runners always are.
