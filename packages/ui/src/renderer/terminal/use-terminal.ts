@@ -56,6 +56,8 @@ import { logicalLinesBetween, trackWrittenWidths } from './logical-line.js';
 import { createLinkMarks, type MarkedLink } from './link-marks.js';
 import { terminalLinkHintAnchor } from './link-hint-anchor.js';
 import { shouldDropScrollback, withScrollbackDrop } from './clear-detect.js';
+import { sliceReplay } from './replay-slices.js';
+import { subscribeTerminalOutput } from './output-router.js';
 import { saveTerminalViewState, takeTerminalViewState } from './terminal-view-state.js';
 import { registerPanelStateCapture } from '../workspace/panel-state-capture.js';
 import { parseOsc52 } from './osc52.js';
@@ -86,7 +88,7 @@ import { isFocusReport } from './focus-reports.js';
 import { registerTerminalBuffer, unregisterTerminalBuffer } from './buffer-registry.js';
 import { styledLineCount } from './styled-lines.js';
 import { getActivePane } from '../workspace/active-pane.js';
-import { logCaught, logExpected } from '@throng/core';
+import { logCaught, logExpected, TERMINAL_REPLAY_SLICE_CHARS, TERMINAL_RETAINED_LINES } from '@throng/core';
 
 /*
  * 045 round five — the terminal's own floating hover tooltip is GONE, and with it
@@ -570,6 +572,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
         : null;
     const term = new Terminal({
       convertEol: false,
+      scrollback: TERMINAL_RETAINED_LINES, // 061 FR-017: what the daemon keeps is what a panel can show
       cursorBlink: true,
       fontFamily: opts.fontFamily,
       fontSize: opts.fontSize,
@@ -706,6 +709,9 @@ export function useTerminal(opts: UseTerminalOptions): void {
         },
       });
       return { lines: buffer.length, cols: term.cols, styledLines };
+    }, () => {
+      const buffer = term.buffer.normal;
+      return Array.from({ length: buffer.length }, (_, y) => buffer.getLine(y)?.translateToString(true) ?? '');
     });
 
     // xterm 6.0 binds its own `paste` handler to BOTH the hidden textarea and its parent element
@@ -1493,10 +1499,12 @@ export function useTerminal(opts: UseTerminalOptions): void {
     // (the two travel on different sockets). Buffer it until scrollback is applied,
     // then flush in order, so a busy reattach/mirror never renders recent lines
     // above the older history. See TerminalOutputGate.
-    const gate = new TerminalOutputGate();
-    const offOutput = bridge.onOutput((e) => {
-      if (e.panelId !== panelId || disposed) return;
-      if (gate.accept(e.data)) writeChunk(e.data);
+    const gate = new TerminalOutputGate((expected, actual) => {
+      logCaught('use-terminal: output gap', new Error(`panel ${panelId}: expected output at ${expected}, got ${actual}`));
+    });
+    const offOutput = subscribeTerminalOutput(bridge, panelId, (e) => {
+      if (disposed) return;
+      for (const chunk of gate.accept(e)) writeChunk(chunk);
     });
     // The shared grid moved (a view joined/left/resized): conform this xterm to it so a
     // full-screen program stays identical across differently-sized windows (008 FR-009).
@@ -1715,14 +1723,29 @@ export function useTerminal(opts: UseTerminalOptions): void {
           buffer: term.buffer.active.type,
         });
         if (res.scrollback) {
+          /*
+           * 061 R6 — in slices, because xterm yields to the window only BETWEEN writes, and hidden until the last
+           * one is parsed, so a long replay is not seen scrolling past. Hidden by opacity: `focusIfActive` below
+           * runs while it is still parsing, and an element that is not visible cannot take focus.
+           */
           replayingTail = true;
-          term.write(res.scrollback, () => {
-            replayingTail = false;
+          container.classList.add('terminal-replaying');
+          const slices = sliceReplay(res.scrollback, TERMINAL_REPLAY_SLICE_CHARS);
+          slices.forEach((slice, index) => {
+            term.write(
+              slice,
+              index === slices.length - 1
+                ? () => {
+                    replayingTail = false;
+                    container.classList.remove('terminal-replaying');
+                  }
+                : undefined,
+            );
           });
         }
         // Scrollback is applied — open the gate and flush any live output that
         // arrived during the attach window, in order, after the backlog.
-        for (const chunk of gate.release()) writeChunk(chunk);
+        for (const chunk of gate.release(res.sessionId, res.replayEnd)) writeChunk(chunk);
         // Restore the scroll offset + selection the user left before this view was
         // torn down (issue 144, follow-up). Deferred behind an empty write so it runs
         // AFTER the replayed backlog has been parsed (xterm writes are async), and
@@ -1818,6 +1841,20 @@ export function useTerminal(opts: UseTerminalOptions): void {
       resizeTimer = setTimeout(applyResize, 60);
     });
     observer.observe(container);
+    // 061 FR-042 — a new display scale changes how many rows fit without the panel changing size, so the observer above
+    // never hears of it. Each query matches one scale only, hence a new one after each change.
+    let scaleQuery: MediaQueryList | undefined;
+    const onScaleChange = (): void => {
+      watchScale();
+      if (resizeTimer !== undefined) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(applyResize, 60);
+    };
+    const watchScale = (): void => {
+      scaleQuery?.removeEventListener('change', onScaleChange);
+      scaleQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      scaleQuery.addEventListener('change', onScaleChange);
+    };
+    watchScale();
 
     // Periodic self-heal repaint (FR-109): some shells (notably PSReadLine) leave
     // xterm's rendered view subtly stale — artifacts the user otherwise clears by
@@ -1866,6 +1903,7 @@ export function useTerminal(opts: UseTerminalOptions): void {
       // the 2.5 s window left it floating over whatever replaced the panel, naming a dead link.
       hideLinkHintFor(panelId);
       observer.disconnect();
+      scaleQuery?.removeEventListener('change', onScaleChange);
       offOutput();
       offGrid();
       offExit();

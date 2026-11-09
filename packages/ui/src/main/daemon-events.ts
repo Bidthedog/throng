@@ -3,6 +3,7 @@ import { connect, type Socket } from 'node:net';
 import { BrowserWindow } from 'electron';
 import type { AttentionSignal } from '@throng/core';
 import { broadcastToWindows } from './broadcast.js';
+import type { TerminalOutputRoutes } from './terminal-output-routes.js';
 import {
   TERMINAL_SUBSCRIBE_METHOD,
   TERMINAL_OUTPUT_NOTIFICATION,
@@ -11,16 +12,15 @@ import {
   TERMINAL_CWD_NOTIFICATION,
   TERMINAL_COMMAND_NOTIFICATION,
   TERMINAL_ATTENTION_NOTIFICATION,
+  type TerminalOutputNotification,
 } from '@throng/ipc-contract';
 
 /**
  * Long-lived daemon→UI events channel (005 Phase C). Holds one subscribed socket
- * to the daemon and forwards `terminal.output`/`terminal.exit`/`terminal.grid`/
- * `terminal.cwd`/`terminal.command` notifications to **every** renderer window via
+ * to the daemon. `terminal.output` goes only to the windows showing that terminal (061 FR-001);
+ * `terminal.exit`/`terminal.grid`/`terminal.cwd`/`terminal.command` go to every renderer window via
  * `webContents.send`. Every channel named here has a preload listener, and
- * `ipc-bridge-parity.test.ts` is what keeps that true (#279). Broadcasting
- * to all windows (each filters by panelId) is what makes a mirrored panel show one
- * session in many views (FR-021). Reconnects if the socket drops (e.g. a daemon
+ * `ipc-bridge-parity.test.ts` is what keeps that true (#279). Reconnects if the socket drops (e.g. a daemon
  * restart) so streaming resumes.
  */
 export class DaemonEvents {
@@ -42,6 +42,7 @@ export class DaemonEvents {
     private readonly pipeName: string,
     private readonly supervisor?: { onConnected(): void; onDisconnected(): void },
     private readonly attention?: { onSignal(signal: AttentionSignal): void; onConnected(): void },
+    private readonly outputRoutes?: Pick<TerminalOutputRoutes, 'send' | 'viewsForSubscribe'>,
   ) {}
 
   start(): void {
@@ -61,7 +62,7 @@ export class DaemonEvents {
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('connect', () => {
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: TERMINAL_SUBSCRIBE_METHOD, params: {} })}\n`);
+      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: TERMINAL_SUBSCRIBE_METHOD, params: { views: this.outputRoutes?.viewsForSubscribe() ?? [] } })}\n`);
       // 029 — a connected, subscribed events socket is the definition of "the daemon is usable".
       // It is also what cancels a grace still running from a previous close, so a blip the user
       // never noticed never becomes a notice.
@@ -110,18 +111,20 @@ export class DaemonEvents {
       if (msg.params && typeof msg.params === 'object') this.attention?.onSignal(msg.params as AttentionSignal);
       return;
     }
+    if (msg.method === TERMINAL_OUTPUT_NOTIFICATION) {
+      this.outputRoutes?.send(msg.params as TerminalOutputNotification);
+      return;
+    }
     const channel =
-      msg.method === TERMINAL_OUTPUT_NOTIFICATION
-        ? 'throng:terminal:output'
-        : msg.method === TERMINAL_EXIT_NOTIFICATION
-          ? 'throng:terminal:exit'
-          : msg.method === TERMINAL_GRID_NOTIFICATION
-            ? 'throng:terminal:grid'
-            : msg.method === TERMINAL_CWD_NOTIFICATION
-              ? 'throng:terminal:cwd'
-              : msg.method === TERMINAL_COMMAND_NOTIFICATION
-                ? 'throng:terminal:command'
-                : null;
+      msg.method === TERMINAL_EXIT_NOTIFICATION
+        ? 'throng:terminal:exit'
+        : msg.method === TERMINAL_GRID_NOTIFICATION
+          ? 'throng:terminal:grid'
+          : msg.method === TERMINAL_CWD_NOTIFICATION
+            ? 'throng:terminal:cwd'
+            : msg.method === TERMINAL_COMMAND_NOTIFICATION
+              ? 'throng:terminal:command'
+              : null;
     if (!channel) {
       // A message with no method is the reply to the subscribe call; a method this build does not
       // forward is a daemon newer than the UI, which is worth a line, not a notice.

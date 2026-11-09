@@ -1,3 +1,4 @@
+import type { TerminalOutputRoutes } from './terminal-output-routes.js';
 import { homedir } from 'node:os';
 import { ipcMain, type WebContents } from 'electron';
 import { statSync } from 'node:fs';
@@ -170,6 +171,8 @@ export function registerTerminalIpc(deps: {
    * daemon, as `terminals.commandPollMs` does, would need a daemon restart, which FR-080c forbids.
    */
   readTerminalSettings: () => TerminalSettings;
+  /** 061 FR-001 — which windows hear which terminal's output. */
+  outputRoutes: Pick<TerminalOutputRoutes, 'add' | 'remove' | 'releaseWindow'>;
 }): void {
   const {
     daemonClient,
@@ -178,6 +181,7 @@ export function registerTerminalIpc(deps: {
     clipboard,
     foregroundHandoff,
     readTerminalSettings,
+    outputRoutes,
   } = deps;
 
   // Window-close detach backstop (008 FR-008a). When a window (a sub-workspace, or the
@@ -198,17 +202,26 @@ export function registerTerminalIpc(deps: {
     });
   };
 
+  /** One listener for both jobs: a window carries one per watcher, and Electron warns past ten. */
+  const watchedWindows = new Set<number>();
+  const watchWindow = (wc: WebContents): void => {
+    if (watchedWindows.has(wc.id)) return;
+    watchedWindows.add(wc.id);
+    wc.once('destroyed', () => {
+      watchedWindows.delete(wc.id);
+      outputRoutes.releaseWindow(wc.id);
+      const held = viewsByWebContents.get(wc.id);
+      viewsByWebContents.delete(wc.id);
+      if (!held) return;
+      for (const { panelId: p, viewId: v } of held.values()) detachView(p, v);
+    });
+  };
+
   const trackView = (wc: WebContents, panelId: string, viewId?: string): void => {
     let views = viewsByWebContents.get(wc.id);
     if (!views) {
       views = new Map();
       viewsByWebContents.set(wc.id, views);
-      wc.once('destroyed', () => {
-        const held = viewsByWebContents.get(wc.id);
-        viewsByWebContents.delete(wc.id);
-        if (!held) return;
-        for (const { panelId: p, viewId: v } of held.values()) detachView(p, v);
-      });
     }
     views.set(viewKey(panelId, viewId), { panelId, viewId });
   };
@@ -440,10 +453,15 @@ export function registerTerminalIpc(deps: {
 
   ipcMain.handle('throng:terminal:attach', (event, req: AttachRequest): Promise<AttachEnvelope> => {
     const sender = event.sender;
+    // Before the RPC: output produced while it is in flight must reach this view's gate (061 FR-012).
+    watchWindow(sender);
+    outputRoutes.add(sender, req.panelId, req.viewId);
     return serializeAttach(() => doAttach(req)).then((res) => {
       // Only track a view once its session is actually attached, so the backstop never
       // detaches a view that failed to attach.
       if (res.ok) trackView(sender, req.panelId, req.viewId);
+      // Still starting is not a failure: the view stays mounted, and its unmount detaches.
+      else if (!res.stillStarting) outputRoutes.remove(sender, req.panelId, req.viewId);
       return res;
     });
   });
@@ -485,6 +503,7 @@ export function registerTerminalIpc(deps: {
   // owned panel — a detach is never a kill.
   ipcMain.handle('throng:terminal:detach', (event, panelId: string, viewId?: string) => {
     untrackView(event.sender, panelId, viewId); // a clean unmount handles its own detach
+    outputRoutes.remove(event.sender, panelId, viewId);
     return daemonClient.call('terminal.detach', { panelId, viewId }).catch((error: unknown) => {
       logCaught('terminal-ipc: detach', error);
       return { ok: false };

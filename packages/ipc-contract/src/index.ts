@@ -157,6 +157,7 @@ export type {
   TerminalCapabilitiesResult,
   TerminalOkResult,
   TerminalOutputNotification,
+  TerminalSubscribeParams,
   TerminalExitNotification,
   TerminalFlavourMissingNotification,
   TerminalGridNotification,

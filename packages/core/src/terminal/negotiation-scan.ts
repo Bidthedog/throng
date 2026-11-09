@@ -24,7 +24,7 @@ import { MOUSE_REPORTING_MODES } from './wheel-decision.js';
  * The failure this fixes is not a missed negotiation. It is a DOUBLE-COUNTED one. Rebuilding a view
  * restored the saved state from the renderer's panel store and then replayed the daemon's scrollback
  * tail — which still contains the very sequences that produced that state, verbatim, because
- * `appendScrollback` preserves control bytes. The kitty protocol is a stack: `CSI > flags u` pushes
+ * `RetainedOutput` preserves control bytes. The kitty protocol is a stack: `CSI > flags u` pushes
  * and `CSI < n u` pops. Two pushes against one pop leaves it enabled, so when the program finally
  * turned the protocol off its pop only cancelled the duplicate, and throng went on believing a
  * program wanted enhanced key reporting after it had said otherwise.

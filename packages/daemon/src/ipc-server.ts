@@ -3,7 +3,7 @@ import { clearStaleSocket } from '@throng/platform-node';
 import 'reflect-metadata';
 import { createServer, type Server, type Socket } from 'node:net';
 import { injectable, inject } from 'inversify';
-import { TERMINAL_SUBSCRIBE_METHOD, type JsonRpcRequest } from '@throng/ipc-contract';
+import { TERMINAL_SUBSCRIBE_METHOD, type JsonRpcRequest, type TerminalSubscribeParams } from '@throng/ipc-contract';
 import type { IDaemonSettings } from '@throng/core';
 import { DAEMON_TYPES } from './tokens.js';
 import type { RpcRouter } from './rpc-router.js';
@@ -120,6 +120,8 @@ export class IpcServer {
     // receive server-initiated notifications, then ack (don't route).
     if (request.method === TERMINAL_SUBSCRIBE_METHOD) {
       this.terminalEvents.addSink(socket);
+      const views = (request.params as Partial<TerminalSubscribeParams> | undefined)?.views;
+      if (Array.isArray(views)) this.terminalEvents.subscribed(views);
       this.write(socket, { jsonrpc: '2.0', id: request.id, result: { ok: true } });
       return;
     }

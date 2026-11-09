@@ -1,45 +1,70 @@
+import type { TerminalOutputNotification } from '@throng/ipc-contract';
+
+export type TerminalOutputDelivery = TerminalOutputNotification;
+
 /**
- * Orders terminal output around the async attach that replays scrollback.
+ * Orders terminal output around the async attach that replays what the terminal kept (061 FR-012).
  *
- * `useTerminal` subscribes to live PTY output BEFORE `attach()` resolves, and the
- * replayed scrollback only arrives with that resolution — over a SEPARATE socket
- * from the live-output stream (the daemon's request/response pipe vs. its events
- * socket), so the two have no ordering guarantee. On a reattach or mirror to an
- * already-running, actively-producing session, a live chunk can therefore arrive
- * before the scrollback and, written straight to xterm, land ABOVE the older
- * backlog — visible corruption (recent lines, then the whole history below them).
- * Cold starts are unaffected: scrollback is empty and nothing is producing yet.
+ * A view hears live output BEFORE `attach()` resolves, and the replay only arrives with that resolution, over a
+ * SEPARATE socket from the live stream, so the two have no ordering guarantee. Written straight to xterm, a live
+ * delivery could land ABOVE the older backlog.
  *
- * The gate buffers live chunks until scrollback has been applied, then flushes them
- * in arrival order and passes everything through thereafter.
+ * The gate holds deliveries until the replay has been applied. From then on, each delivery's position says whether the
+ * replay already contained it, and its session says whether it belongs to this view at all: a panel id outlives its
+ * sessions, and an ending session may still be publishing under it.
+ *
+ * What it returns is the chunks the delivery was made of. Screen-clear detection counts erases per chunk, so a batch
+ * must reach it as the chunks it was built from (061 FR-022).
  */
 export class TerminalOutputGate {
-  private readonly pending: string[] = [];
+  private readonly pending: TerminalOutputDelivery[] = [];
   private open = false;
+  private session: number | undefined;
+  private written = 0;
 
-  /** True once scrollback has been applied and buffering has stopped. */
+  /** `onGap` is told of a delivery that starts beyond what has been written (061 FR-013). */
+  constructor(private readonly onGap?: (expected: number, actual: number) => void) {}
+
+  /** True once the replay has been applied and holding has stopped. */
   get isOpen(): boolean {
     return this.open;
   }
 
-  /**
-   * A live output chunk arrived. Returns `true` if it should be written to the
-   * terminal now (the gate is open), or `false` if it was buffered (still waiting
-   * for scrollback to be applied).
-   */
-  accept(chunk: string): boolean {
-    if (this.open) return true;
-    this.pending.push(chunk);
-    return false;
+  /** A delivery arrived. Returns the chunks to write now: none while the gate is shut, or if it is not for this view. */
+  accept(delivery: TerminalOutputDelivery): string[] {
+    if (this.open) return this.pass(delivery);
+    this.pending.push(delivery);
+    return [];
   }
 
   /**
-   * Scrollback has been applied: open the gate and return the buffered chunks to
-   * flush, in arrival order. Idempotent — a second call returns nothing.
+   * The replay has been applied: open the gate and return the chunks held back, in arrival order. `replayEnd` is the
+   * position the replay reaches. Idempotent: a second call returns nothing.
    */
-  release(): string[] {
+  release(session: number | undefined, replayEnd: number): string[] {
     if (this.open) return [];
     this.open = true;
-    return this.pending.splice(0);
+    this.session = session;
+    this.written = replayEnd;
+    return this.pending.splice(0).flatMap((delivery) => this.pass(delivery));
   }
+
+  private pass(delivery: TerminalOutputDelivery): string[] {
+    if (delivery.sessionId !== this.session) return [];
+    if (delivery.end <= this.written) return [];
+    const start = delivery.end - delivery.data.length;
+    if (start > this.written) this.onGap?.(this.written, start);
+    this.written = delivery.end;
+    return chunksOf(delivery);
+  }
+}
+
+function chunksOf({ data, lengths }: TerminalOutputDelivery): string[] {
+  if (!lengths) return [data];
+  let at = 0;
+  return lengths.map((length) => {
+    const chunk = data.slice(at, at + length);
+    at += length;
+    return chunk;
+  });
 }

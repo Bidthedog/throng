@@ -13,13 +13,16 @@ export interface TerminalBufferSize {
 }
 
 const readers = new Map<string, () => TerminalBufferSize>();
+const lineReaders = new Map<string, () => string[]>();
 
-export function registerTerminalBuffer(panelId: string, read: () => TerminalBufferSize): void {
+export function registerTerminalBuffer(panelId: string, read: () => TerminalBufferSize, lines?: () => string[]): void {
   readers.set(panelId, read);
+  if (lines) lineReaders.set(panelId, lines);
 }
 
 export function unregisterTerminalBuffer(panelId: string): void {
   readers.delete(panelId);
+  lineReaders.delete(panelId);
 }
 
 export function getTerminalBufferSize(panelId: string): TerminalBufferSize | undefined {
@@ -36,7 +39,12 @@ export function snapshotTerminalBuffers(): Record<string, TerminalBufferSize> {
 declare global {
   interface Window {
     __throngTerminalBuffers?: () => Record<string, TerminalBufferSize>;
+    /** Test seam (061): every line a panel's view holds, scrollback included. Never used by the UI. */
+    __throngTerminalLines?: (panelId: string) => string[];
   }
 }
 
-if (typeof window !== 'undefined') window.__throngTerminalBuffers = snapshotTerminalBuffers;
+if (typeof window !== 'undefined') {
+  window.__throngTerminalBuffers = snapshotTerminalBuffers;
+  window.__throngTerminalLines = (panelId) => lineReaders.get(panelId)?.() ?? [];
+}

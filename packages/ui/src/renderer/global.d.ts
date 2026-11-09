@@ -324,7 +324,7 @@ declare global {
         capabilities: () => Promise<{ elevated: boolean }>;
         // OSC 52 clipboard write from a program inside the terminal → OS clipboard.
         writeClipboard: (text: string) => Promise<unknown>;
-        onOutput: (cb: (e: { panelId: string; data: string }) => void) => () => void;
+        onOutput: (cb: (e: import('@throng/ipc-contract').TerminalOutputNotification) => void) => () => void;
         /** The shared grid changed (008 FR-009/FR-013): conform this view's xterm to it. */
         onGrid: (cb: (e: { panelId: string; cols: number; rows: number }) => void) => () => void;
         /** The shell's working directory changed (012): shown in the panel title. */
@@ -1037,6 +1037,8 @@ export type TerminalAttachEnvelope =
       /** The session this attach landed on; the view takes only that session's exit (051 MT-01). */
       sessionId?: number;
       scrollback: string;
+      /** The session's output position when `scrollback` was taken (061 FR-011). */
+      replayEnd: number;
       /** 053 — the window title the running program last set, kept by the daemon; absent on a cold start. */
       windowTitle?: string;
       /** 053 — the running command and its architecture, as the daemon last observed them. */
