@@ -199,6 +199,8 @@ export interface TerminalAttachResult {
   sessionId?: number;
   /** Buffered scrollback to replay into the view on (re)attach. */
   scrollback: string;
+  /** The session's output position when `scrollback` was taken (061 FR-011). */
+  replayEnd: number;
   /**
    * 053 — the window title the running program last set (OSC 0/2), `''` for none. A re-attaching view
    * sets it at once: the replayed tail is bounded, and withheld on the alternate screen, so the sequence
@@ -401,7 +403,20 @@ export interface TerminalOkResult {
 // --- Notification payloads ---
 export interface TerminalOutputNotification {
   panelId: string;
+  /** The session that produced it. A panel id outlives its sessions (051 MT-01). */
+  sessionId: number;
+  /** Every chunk in this delivery, concatenated. */
   data: string;
+  /** The session's output position after the last character of `data` (061 FR-010). Start is `end - data.length`. */
+  end: number;
+  /** Original chunk lengths, only when a delivery holds more than one. Clear detection is per chunk (061 FR-022). */
+  lengths?: number[];
+}
+
+/** What a UI events socket sends on every connect (061 FR-005a). */
+export interface TerminalSubscribeParams {
+  /** Every view UI main is routing output to now. Replaces each session's set of output views. */
+  views: { panelId: string; viewId?: string }[];
 }
 
 export interface TerminalExitNotification {

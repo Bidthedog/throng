@@ -108,7 +108,14 @@ export {
   fallbackToReport,
   requestedStartDirectory,
 } from './start-directory.js';
-export { appendScrollback } from './scrollback-tail.js';
+export { RetainedOutput } from './retained-output.js';
+export {
+  TERMINAL_BATCH_INTERVAL_MS,
+  TERMINAL_BATCH_MAX_CHARS,
+  TERMINAL_REPLAY_SLICE_CHARS,
+  TERMINAL_RETAINED_CHARS,
+  TERMINAL_RETAINED_LINES,
+} from './output-constants.js';
 export {
   MOUSE_REPORTING_MODES,
   createMouseReportingState,

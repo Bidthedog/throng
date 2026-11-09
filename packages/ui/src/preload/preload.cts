@@ -3,6 +3,7 @@
 // renderer (Principle: clean sandbox boundary). Exposes the daemon health.ping
 // outcome to the landing page (US3, T030).
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { TerminalOutputNotification as OutputDelivery } from '@throng/ipc-contract';
 
 /**
  * Theme bootstrap (issue 132) — kill the flash of the default theme.
@@ -544,8 +545,8 @@ contextBridge.exposeInMainWorld('throng', {
     // Code, tmux, vim, …). The sandboxed renderer can't reach the OS clipboard, so
     // it relays the decoded text to the main process (Electron clipboard.writeText).
     writeClipboard: (text: string) => ipcRenderer.invoke('throng:terminal:clipboardWrite', text),
-    onOutput: (cb: (e: { panelId: string; data: string }) => void) => {
-      const handler = (_event: unknown, e: { panelId: string; data: string }): void => cb(e);
+    onOutput: (cb: (e: OutputDelivery) => void) => {
+      const handler = (_event: unknown, e: OutputDelivery): void => cb(e);
       ipcRenderer.on('throng:terminal:output', handler);
       return () => ipcRenderer.removeListener('throng:terminal:output', handler);
     },

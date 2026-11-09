@@ -171,6 +171,7 @@ import { AttentionService, type AttentionWindows } from './attention-service.js'
 import { NoticeOs } from './notice-os.js';
 import { DaemonSupervisor } from './daemon-supervisor.js';
 import { registerTerminalIpc, UNLOAD_RPC_TIMEOUT_MS } from './terminal-ipc.js';
+import { TerminalOutputRoutes } from './terminal-output-routes.js';
 
 /** Result envelope for the generic renderer RPC bridge — preserves JSON-RPC
  *  error codes across the contextBridge boundary (002 / research D10). */
@@ -2150,7 +2151,9 @@ if (isPrimaryInstance)
   // Live terminals (005 Phase C): the renderer's terminal.* commands route to the
   // daemon (UI main resolves the launch spec); daemon output/exit notifications
   // arrive over a long-lived events socket and are forwarded to every window.
+  const outputRoutes = new TerminalOutputRoutes();
   registerTerminalIpc({
+    outputRoutes,
     daemonClient,
     shellDetection: shellDetectionService,
     attachTimeoutMs: settings.attachTimeoutMs,
@@ -2328,7 +2331,7 @@ if (isPrimaryInstance)
   const daemonEvents = new DaemonEvents(settings.pipeName, daemonSupervisor, {
     onSignal: (signal) => attentionService.onSignal(signal),
     onConnected: () => void attentionService.onDaemonConnected(),
-  });
+  }, outputRoutes);
   daemonEvents.start();
   /*
    * 057 FR-091 — a mark raised in the last 250 ms is still waiting out the sync debounce when the

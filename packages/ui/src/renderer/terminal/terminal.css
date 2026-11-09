@@ -1,6 +1,18 @@
 /* Inline terminal (xterm.js) container (005 Phase C). Themed via var(--throng-*). */
 @import '@xterm/xterm/css/xterm.css';
 
+/* Left/top breathing room only — no right padding (the scrollbar sits at the edge) and no bottom padding (so the last
+   row + caret stay visible). On xterm's own element, because the fit addon subtracts that element's padding and not
+   its parent's: on the panel, it counted these pixels as room for rows and drew the last row below the panel (061 FR-041). */
+.terminal-panel .xterm {
+  padding: 2px 0 0 4px;
+}
+
+/* 061 R6: a long replay is applied unseen. Opacity, because a panel that is parsing must still be able to take focus. */
+.terminal-replaying .xterm-screen {
+  opacity: 0;
+}
+
 .terminal-panel {
   width: 100%;
   /* 024 US1: was height:100%. Now flex:1 within the column wrap so the status bar (a sibling below)
@@ -8,9 +20,6 @@
   flex: 1 1 auto;
   min-height: 0;
   box-sizing: border-box;
-  /* Left/top breathing room only — no right padding (the scrollbar sits at the
-     edge) and no bottom padding (so the last row + caret stay visible). */
-  padding: 2px 0 0 4px;
   overflow: hidden;
   background: var(--throng-colour-terminalBg);
   /* xterm stacks its own layers inside this element — link underlines at 6–7, the scrollbar at 11 —

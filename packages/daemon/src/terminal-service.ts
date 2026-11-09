@@ -11,7 +11,7 @@ import {
   type IPtyHost,
   type PtyExit,
   type PtyHandle,
-  appendScrollback,
+  RetainedOutput,
   trackAltScreen,
   createWindowTitleScan,
   isTerminalReport,
@@ -67,8 +67,6 @@ import { TerminalEvents } from './terminal-events.js';
 import { TerminalLockManager } from './terminal-lock-manager.js';
 import { TerminalAttention, type TerminalAttentionOptions } from './terminal-attention.js';
 
-/** Bounded scrollback kept per session for reattach replay (~64 KB). */
-const MAX_SCROLLBACK = 64 * 1024;
 
 /**
  * Key for a panel presented in a single window that sends no explicit `viewId`
@@ -216,7 +214,16 @@ interface Session {
   gridStale: boolean;
   /** The current PTY grid (last value sent to the host); recomputed on view change. */
   grid: ViewDims;
-  scrollback: string;
+  /**
+   * The views wanting this terminal's output; nothing is published without one (061 FR-001a). Apart from `views`, which
+   * sizes the grid and is cleared when the events socket drops: a window still showing this terminal after a socket
+   * blip must go on receiving it, and no re-attach follows a blip (061 FR-005a).
+   */
+  outputViews: Set<string>;
+  /** What a returning view replays (061 FR-016). */
+  retained: RetainedOutput;
+  /** Characters of output this session has produced. Every delivery says where it ends in this count (061 FR-010). */
+  outputPosition: number;
   status: 'running' | 'exited';
   exit?: { code: number | null; signal?: string };
   /**
@@ -332,6 +339,11 @@ export class TerminalService {
       liveTitle: (subject) => this.sessions.get(subject.panelId)?.windowTitle.title || null,
     });
     // 057 FR-099: with no UI attached nothing is attended — main may have died before its last push.
+    events.onSubscribed((views) => {
+      for (const session of this.sessions.values()) {
+        session.outputViews = new Set(views.filter((v) => v.panelId === session.panelId).map(viewIdOf));
+      }
+    });
     events.onLastSinkRemoved(() => {
       this.attendedPanels = new Set();
       for (const session of this.sessions.values()) this.tellFocus(session);
@@ -641,7 +653,7 @@ export class TerminalService {
         projectId: s.rootless ? null : s.projectId,
         host: s.host,
         handlePid: s.handle.pid,
-        scrollbackChars: s.scrollback.length,
+        scrollbackChars: s.retained.length,
         attached: this.lastAttached.get(s.panelId) ?? [],
       }));
   }
@@ -781,6 +793,7 @@ export class TerminalService {
       if (!explicit) {
         if (params.meta) existing.meta = params.meta; // refresh labels (e.g. a rename)
         existing.views.set(viewId, { cols: params.cols, rows: params.rows });
+        existing.outputViews.add(viewId);
         this.recomputeGrid(existing);
         // Hand back the shared grid so this joining view conforms its xterm immediately —
         // even when it did not move the minimum (a larger window mirroring a smaller one),
@@ -796,7 +809,9 @@ export class TerminalService {
          * The scrollback is not discarded, only withheld from this view: leaving the alt screen
          * makes it worth replaying again, and any later attach gets it.
          */
-        const replay = existing.altScreen ? '' : existing.scrollback;
+        // Whatever is waiting to be delivered is in the snapshot too, so no delivery can straddle replayEnd (061 R4).
+        this.events.flush(panelId);
+        const replay = existing.altScreen ? '' : existing.retained.snapshot();
         // 053 — a re-attaching view starts with no command (a mounting panel drops the one it showed), and
         // the daemon publishes only a change: hand it the running one in the answer, so a project switch
         // names the command, and the program's title, from the view's first frame.
@@ -820,6 +835,7 @@ export class TerminalService {
           status: 'running',
           sessionId: existing.id,
           scrollback: replay,
+          replayEnd: existing.outputPosition,
           windowTitle: existing.windowTitle.title,
           ...(observed ? { command: observed.command, arch: observed.arch } : {}),
           grid: existing.grid,
@@ -914,7 +930,9 @@ export class TerminalService {
       shellStartedAt,
       views: new Map([[viewId, { cols: params.cols, rows: params.rows }]]),
       grid: { cols: startCols, rows: startRows },
-      scrollback: '',
+      outputViews: new Set([viewId]),
+      retained: new RetainedOutput(),
+      outputPosition: 0,
       altScreen: false,
       negotiation: createNegotiationScan(),
       focusTold: 'in',
@@ -951,7 +969,7 @@ export class TerminalService {
     session.disposers.push(
       host.onData(handle, (chunk) => {
         session.lastActivityAt = Date.now();
-        session.scrollback = appendScrollback(session.scrollback, chunk, MAX_SCROLLBACK);
+        this.keepOutput(session, chunk);
         session.altScreen = trackAltScreen(session.altScreen, chunk);
         // #290 — the other half a rebuilt view must be TOLD rather than left to infer.
         session.negotiation = scanKeyboardNegotiation(session.negotiation, chunk);
@@ -963,7 +981,7 @@ export class TerminalService {
         const titleBefore = session.windowTitle.title;
         session.windowTitle = scanWindowTitle(session.windowTitle, chunk);
         if (session.windowTitle.title !== titleBefore) session.titleSetAt = Date.now();
-        this.events.publishOutput(panelId, chunk);
+        this.publishKept(session, chunk);
         // 057: read after the views have it — attention never delays or alters the bytes (FR-067).
         this.attention.onOutput(session, chunk);
         if (startupCommandPending) {
@@ -975,12 +993,11 @@ export class TerminalService {
             // FR-026b: a throwing `write` produces NO terminal output at all, so unlike a command
             // the shell rejected, the user would otherwise have no way to know their startup
             // command never ran. Surface it as terminal output rather than swallowing it.
-            this.events.publishOutput(
-              panelId,
-              `
+            const failure = `
 [throng] Could not run the startup command: ${(error as Error).message}
-`,
-            );
+`;
+            this.keepOutput(session, failure);
+            this.publishKept(session, failure);
           }
         }
       }),
@@ -999,7 +1016,17 @@ export class TerminalService {
     if (this.attachColdStartDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.attachColdStartDelayMs));
     }
-    return { status: 'running', sessionId: session.id, scrollback: '', grid: session.grid };
+    return { status: 'running', sessionId: session.id, scrollback: '', replayEnd: 0, grid: session.grid };
+  }
+
+  private keepOutput(session: Session, chunk: string): void {
+    session.retained.append(chunk);
+    session.outputPosition += chunk.length;
+  }
+
+  private publishKept(session: Session, chunk: string): void {
+    if (session.outputViews.size === 0) return;
+    this.events.publishOutput(session.panelId, session.id, chunk, session.outputPosition);
   }
 
   /**
@@ -1155,6 +1182,7 @@ export class TerminalService {
     const session = this.sessions.get(params.panelId);
     if (!session) return { ok: true };
     session.views.delete(viewIdOf(params));
+    session.outputViews.delete(viewIdOf(params));
     if (session.views.size > 0) {
       this.recomputeGrid(session);
       return { ok: true };
@@ -1178,6 +1206,7 @@ export class TerminalService {
    * the OS host so no ConPTY is orphaned (Principle III resource hygiene).
    */
   private terminate(session: Session): void {
+    this.events.forgetPanel(session.panelId);
     session.status = 'exited';
     session.userKilled = true;
     for (const dispose of session.disposers) {
