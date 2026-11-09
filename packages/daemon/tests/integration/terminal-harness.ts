@@ -92,7 +92,7 @@ export interface EventsSocket {
 }
 
 /** A long-lived events socket: subscribes, then accumulates notification frames. */
-export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
+export function openEventsSocket(pipeName: string, params: object = {}): Promise<EventsSocket> {
   return new Promise((resolve, reject) => {
     const socket: Socket = connect(resolveIpcAddress(pipeName));
     const notifications: Array<{ method: string; params: any; at: number }> = [];
@@ -100,7 +100,7 @@ export function openEventsSocket(pipeName: string): Promise<EventsSocket> {
     let resolved = false;
     socket.setEncoding('utf8');
     socket.on('connect', () =>
-      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'terminal.subscribe', params: {} })}\n`),
+      socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'terminal.subscribe', params })}\n`),
     );
     socket.on('data', (chunk: string) => {
       buffer += chunk;

@@ -100,7 +100,7 @@ describe.skipIf(skipUnlessWindows("the table, the shell and the console host are
     const host = new RefusingHost();
     const events = new TerminalEvents();
     const output = new Map<string, string>();
-    events.publishOutput = (panelId: string, data: string) =>
+    events.publishOutput = (panelId: string, _sessionId: number, data: string) =>
       void output.set(panelId, (output.get(panelId) ?? '') + data);
     const locks = new TerminalLockManager({ acquire: async (p) => ({ path: p }), release: async () => {} });
     const service = new TerminalService(host, events, locks, { isElevated: () => false });

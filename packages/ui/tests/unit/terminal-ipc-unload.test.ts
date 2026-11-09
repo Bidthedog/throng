@@ -56,6 +56,7 @@ function register(): void {
   timeouts.length = 0;
   failNext = false;
   registerTerminalIpc({
+    outputRoutes: { add: () => undefined, remove: () => undefined, releaseWindow: () => undefined },
     daemonClient: {
       call: (method: string, params: unknown, timeoutMs?: number) => {
         calls.push({ method, params: params as Record<string, unknown> });

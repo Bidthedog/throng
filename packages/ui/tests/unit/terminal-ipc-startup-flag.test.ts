@@ -36,6 +36,7 @@ beforeEach(() => {
   handlers.clear();
   launches = [];
   registerTerminalIpc({
+    outputRoutes: { add: () => undefined, remove: () => undefined, releaseWindow: () => undefined },
     daemonClient: {
       call: (method: string, params: unknown) => {
         if (method === 'terminal.attach') launches.push((params as { launch: { startupCommand?: boolean } }).launch);

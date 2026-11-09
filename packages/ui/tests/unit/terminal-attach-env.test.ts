@@ -69,6 +69,7 @@ function register(): void {
   calls.length = 0;
   reads = 0;
   registerTerminalIpc({
+    outputRoutes: { add: () => undefined, remove: () => undefined, releaseWindow: () => undefined },
     daemonClient: {
       call: (method: string, params: unknown) => {
         calls.push({ method, params: params as AttachCall['params'] });

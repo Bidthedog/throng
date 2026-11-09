@@ -26,6 +26,7 @@
     "editor-missing-aggregate.e2e.ts": "FOCUS",
     "editor-move-repoint.e2e.ts": "FOCUS",
     "single-instance.e2e.ts": "FOCUS",
+    "terminal-return-output.e2e.ts": "CPU",
     "terminal-title-template.e2e.ts": "CPU",
     "terminal-command-launcher.e2e.ts": "CPU",
     "terminal-lifecycle-051.e2e.ts": "CPU",

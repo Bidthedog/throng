@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { IPtyHost, PtyHandle, PtyStartOptions } from '@throng/core';
+import { TERMINAL_RETAINED_LINES, type IPtyHost, type PtyHandle, type PtyStartOptions } from '@throng/core';
 import { RpcRouter } from '../../src/rpc-router.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
 import { TerminalLockManager } from '../../src/terminal-lock-manager.js';
@@ -13,7 +13,7 @@ import { FakeHost } from './attention-harness.js';
  * Layer: unit — (moved down from `terminal-service.integration.test.ts` and
  * `terminal-hygiene.integration.test.ts`, which used real shells.) Every claim here is the service's
  * own logic over what the host reports: the elevation flag it was given, an exception from
- * `host.start`, and `MAX_SCROLLBACK` applied to the chunks the host emits. A real conhost adds none of
+ * `host.start`, and the retention limits applied to the chunks the host emits. A real conhost adds none of
  * it; real start/stream/kill through a pipe is still proved by `terminal-reattach.integration.test.ts`.
  */
 
@@ -70,8 +70,6 @@ describe('terminal.attach launch failure (FR-019)', () => {
 });
 
 describe('reattach scrollback is bounded (resource hygiene, T131/T132)', () => {
-  const SCROLLBACK_CAP = 64 * 1024; // MAX_SCROLLBACK in terminal-service.ts
-
   it('keeps only the tail under sustained output, so memory is flat however much a shell prints', async () => {
     const host = new FakeHost();
     const { rpc } = make(host);
@@ -79,14 +77,13 @@ describe('reattach scrollback is bounded (resource hygiene, T131/T132)', () => {
       rpc('terminal.attach', { panelId: 'flat', projectId: 'p', launch, cols: 80, rows: 24 });
     await attach();
 
-    // ~20k lines of 40 chars ≈ 800 KB, far over the cap; the last line is distinguishable.
+    // 20k lines, far over the 10,000 kept (061 FR-016); the last line is distinguishable.
     const line = `${'X'.repeat(40)}\r\n`;
     for (let i = 0; i < 20_000; i++) host.emit(line);
     host.emit('LAST_LINE_MARKER\r\n');
 
     const scrollback = String((await attach()).result.scrollback);
-    expect(scrollback.length).toBeGreaterThan(1000); // output really flowed
-    expect(scrollback.length).toBeLessThanOrEqual(SCROLLBACK_CAP); // and stayed bounded
+    expect(scrollback.split('\n').length - 1).toBe(TERMINAL_RETAINED_LINES); // bounded, and full
     expect(scrollback).toContain('LAST_LINE_MARKER'); // the tail is what is kept
   });
 });

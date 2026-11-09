@@ -164,6 +164,37 @@ describe('a chunk that clears the screen and then draws', () => {
     unmount();
   });
 
+  describe('in a batch (061 FR-022)', () => {
+    async function batch(...chunks: string[]): Promise<void> {
+      const data = chunks.join('');
+      await act(async () => {
+        for (const listener of outputListeners) {
+          listener({ panelId: PANEL, sessionId: undefined, data, end: Date.now(), lengths: chunks.map((c) => c.length) } as never);
+        }
+        await new Promise<void>((resolve) => xterm().write('', resolve));
+      });
+    }
+
+    it('keeps on screen what follows a clear inside the same batch', async () => {
+      const { unmount } = await running();
+      await output(Array.from({ length: 100 }, (_, i) => `line ${i}\r\n`).join(''));
+      await batch('before\r\n', CLEAR, 'after clear');
+      expect(screenRows()[0]).toBe('after clear');
+      expect(xterm().buffer.active.baseY).toBe(0);
+      unmount();
+    });
+
+    it('does not add partial redraws together into a clear that wipes the scrollback', async () => {
+      const { unmount } = await running();
+      await output(Array.from({ length: 100 }, (_, i) => `line ${i}\r\n`).join(''));
+      const scrolled = xterm().buffer.active.baseY;
+      const partialRedraw = `${ESC}[H${`${ESC}[K`.repeat(3)}`; // a few erases: a PSReadLine edit, not a clear
+      await batch(...Array.from({ length: 12 }, () => partialRedraw));
+      expect(xterm().buffer.active.baseY).toBe(scrolled);
+      unmount();
+    });
+  });
+
   it('still drops the scrollback a clear leaves behind, on the shape cls produces', async () => {
     const { unmount } = await running();
     await output(Array.from({ length: 100 }, (_, i) => `line ${i}\r\n`).join(''));
