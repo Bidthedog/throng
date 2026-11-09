@@ -12,7 +12,7 @@ import { RpcRouter } from '../../src/rpc-router.js';
  *
  * The user restarted throng (and unloaded and reloaded a project) with claude already running and titled.
  * A fresh view rebuilds its screen from the replayed scrollback tail, and its header learns the window
- * title only from an OSC 0/2 sequence in what it parses. The tail is bounded (64 KB) and empty while a
+ * title only from an OSC 0/2 sequence in what it parses. The tail is bounded and empty while a
  * program holds the alternate screen, so a title set before the tail began never reaches the new view,
  * and the panel's name loses it.
  *

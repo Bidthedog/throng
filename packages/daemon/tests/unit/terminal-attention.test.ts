@@ -363,8 +363,9 @@ describe('terminal.attention producer (057)', () => {
     const off = await harness();
     await off.rpc('terminal.attentionConfig', config({ enabled: false }));
     for (const chunk of stream) off.host.emit(chunk);
-    expect(on.outputs).toEqual(stream);
-    expect(off.outputs).toEqual(stream);
+    // Joined: how output is grouped into deliveries differs, because a signal delivers what is waiting first (061 FR-024).
+    await vi.waitFor(() => expect(on.outputs.join('')).toBe(stream.join('')));
+    await vi.waitFor(() => expect(off.outputs.join('')).toBe(stream.join('')));
   });
 });
 

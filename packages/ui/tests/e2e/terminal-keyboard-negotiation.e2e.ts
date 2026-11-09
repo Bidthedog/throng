@@ -30,7 +30,7 @@ import {
  * Not because the negotiation is MISSED while the panel is unmounted. Because on remount it is
  * applied TWICE. Rebuilding a view restores the saved state from `keyboard-mode-store`, and then
  * replays the daemon's scrollback tail — which still contains the very sequences that produced that
- * state, as raw bytes (`appendScrollback` preserves control sequences verbatim). The kitty protocol
+ * state, as raw bytes (`RetainedOutput` preserves control sequences verbatim). The kitty protocol
  * is a STACK: `CSI > flags u` pushes, `CSI < n u` pops. Two pushes and one pop leaves it enabled, so
  * when the program later turns the protocol off, its pop only cancels the duplicate.
  *

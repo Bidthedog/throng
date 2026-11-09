@@ -14,7 +14,7 @@ describe('terminal resource hygiene', () => {
     await daemon.stop();
   });
 
-  // MOVED DOWN: the bounded reattach scrollback (MAX_SCROLLBACK) is proved in
+  // MOVED DOWN: the bounded reattach scrollback (061 FR-016) is proved in
   // packages/daemon/tests/unit/terminal-service-wiring.test.ts with a fake host emitting 800 KB.
 
   it('drops a closed events socket — no leaked subscriber (FR-021)', async () => {

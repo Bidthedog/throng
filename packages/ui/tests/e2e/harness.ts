@@ -281,6 +281,8 @@ export async function reloadWindow(win: Page): Promise<void> {
  * renderer localStorage; the folder dialog is stubbed to cancel by default.
  */
 export interface AppOptions {
+  /** Extra Chromium switches for the app, such as a forced display scale (061). */
+  electronArgs?: string[];
   dataDir?: string;
   userDataDir?: string;
   env?: Record<string, string>;
@@ -622,7 +624,7 @@ async function launchApp(opts: AppOptions): Promise<{
     app = await electron.launch({
     // 062 FR-003: Playwright adds --no-sandbox on Linux unless told not to.
     chromiumSandbox: true,
-      args: [mainEntry, `--user-data-dir=${userData}`],
+      args: [mainEntry, `--user-data-dir=${userData}`, ...(opts.electronArgs ?? [])],
       env: {
         ...claudeFreeEnv(),
         THRONG_PIPE_NAME: pipeName,
