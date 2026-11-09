@@ -93,11 +93,25 @@ export async function readProcRow(pid: number): Promise<ProcRow | null> {
   }
 }
 
+/**
+ * How many `/proc` reads start in one turn of the event loop. Starting them all at once held the daemon's loop for
+ * 9 – 15 ms on a machine with 523 processes, and this runs every command poll, so a keystroke waited behind it
+ * (061 SC-002). 16 at a time held it for about 1 ms and finished sooner.
+ */
+const TABLE_READS_PER_TURN = 16;
+
+const nextLoopTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
 /** Every process on the machine this user may see. A process that exits mid-read is simply absent. */
 export async function readProcTable(): Promise<ProcRow[]> {
-  const names = await readdir('/proc');
-  const rows = await Promise.all(names.filter((n) => /^\d+$/.test(n)).map((n) => readProcRow(Number(n))));
-  return rows.filter((r): r is ProcRow => r !== null);
+  const pids = (await readdir('/proc')).filter((n) => /^\d+$/.test(n)).map(Number);
+  const rows: ProcRow[] = [];
+  for (let at = 0; at < pids.length; at += TABLE_READS_PER_TURN) {
+    if (at > 0) await nextLoopTurn();
+    const read = await Promise.all(pids.slice(at, at + TABLE_READS_PER_TURN).map((pid) => readProcRow(pid)));
+    rows.push(...read.filter((r): r is ProcRow => r !== null));
+  }
+  return rows;
 }
 
 /** The command line, arguments joined by spaces. Empty for a kernel thread, a zombie, or a process gone. */
