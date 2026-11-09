@@ -151,6 +151,11 @@ never relaxed. The helper is `expectWithinSla` (`packages/ui/tests/e2e/helpers/s
 SLAs under it, and how to take a reading deliberately are in
 [performance SLAs](../.claude/skills/throng-testing/references/performance-sla.md).
 
+What a window pays for terminals it is not showing is measured, not asserted, by
+`packages/ui/tests/measure/terminal-load.measure.ts`. It sits outside the E2E lanes and has its own config:
+`npx playwright test -c packages/ui/tests/measure/playwright.measure.config.ts`. Its options are the
+`THRONG_MEASURE_*` entries in [environment variables](environment.md#testing).
+
 ## Writing an E2E
 
 - **Share one app per file** with `openApp()` in `beforeAll` and serial mode; keep a test's own

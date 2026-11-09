@@ -82,9 +82,15 @@ flowchart LR
 **The request path.** A renderer never touches SQLite or the OS. It calls `window.throng.*`, the
 preload forwards it over Electron IPC to main, and main either answers it itself or makes a JSON-RPC
 call to the daemon through `DaemonClient`. Terminal output travels the other way: the daemon writes
-notifications to every subscribed events socket, main's `DaemonEvents` holds one such socket and
-broadcasts each notification to **every** window, and each window filters by panel id. That
-broadcast is what lets one terminal session be mirrored in several panels and windows.
+notifications to every subscribed events socket, and main's `DaemonEvents` holds one such socket.
+Output costs only what is on screen: the daemon publishes a terminal's output only while a view is
+attached, batched per terminal to at most one delivery per display frame; main's `TerminalOutputRoutes`
+sends it only to the windows showing that terminal, so one session can still be mirrored in several
+panels and windows; and each window hands it to that terminal's views through one listener. Every
+delivery carries its position in the terminal's output, so a view joins the replay to live output with
+nothing missing or repeated. The daemon keeps each terminal's latest 10,000 lines for that replay, and
+a returning view applies them in slices so the window never blocks. Exit, grid, working-directory and
+command notifications still go to every window.
 
 **Startup.** Main's `ensureDaemon` (`daemon-lifecycle.ts`) pings the pipe with `health.ping`. If a
 daemon answers and is current, main adopts it and its terminals reattach. Otherwise main spawns the
@@ -319,7 +325,7 @@ sequenceDiagram
   M-->>R: resolved promise
   Note over D,M: separately, one subscribed events socket
   D-)M: terminal.output notification
-  M-)R: webContents.send to every window
+  M-)R: webContents.send to the windows showing that terminal
 ```
 
 **Persistence.** The store is `throng.db` under the instance's data folder (see
@@ -393,7 +399,7 @@ flowchart LR
   AH <-->|"throng.ptyagent pipe"| AG["PTY agent process<br/>NodePtyHost"]
   LH --> C1["ConPTY + shell"]
   AG --> C2["ConPTY + shell"]
-  TS -->|"TerminalEvents"| EV["events sockets → UI main → every window"]
+  TS -->|"TerminalEvents"| EV["events sockets → UI main → windows showing it"]
 ```
 
 **Process hygiene.** Every way a terminal can end must release everything it created, including the

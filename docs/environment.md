@@ -119,6 +119,11 @@ launches.
 | `THRONG_E2E_INCLUDE_ADMIN` | Opts the `@admin` specs back in; `npm run test:e2e:admin` sets it. See [elevation](../.claude/skills/throng-testing/references/elevation.md). | unset |
 | `THRONG_E2E_INCLUDE_QUARANTINE` | Opts the `@quarantine` specs back in. See [quarantine](../.claude/skills/throng-testing/references/quarantine.md). | unset |
 | `THRONG_E2E_IGNORE_ELEVATION_GUARD` | `1` runs the specs that normally skip on an elevated host. See [elevation](../.claude/skills/throng-testing/references/elevation.md). | unset |
+| `THRONG_MEASURE_BUSY` | How many busy background terminals the [terminal load measurement](testing.md#where-a-performance-sla-is-measured) starts. | `1` |
+| `THRONG_MEASURE_SAMPLE_MS` | How long it samples messages and CPU. | `30000` |
+| `THRONG_MEASURE_ECHOES` | How many typed characters it times. | `200` |
+| `THRONG_MEASURE_VISIBLE_BUSY` | `1` runs a fast printer in the visible terminal instead of timing typing. | unset |
+| `THRONG_MEASURE_REPLAY` | `1` also times returning to a terminal that kept 10,000 lines. | unset |
 | `THRONG_E2E_STEP_MS` | Pauses between the steps of a spec that opts in, so a run can be watched. | `0` |
 | `THRONG_E2E_CLIPBOARD` | `memory` gives each app an in-memory clipboard; the harness sets it, and it also marks a run as a test run. See [global OS resources](../.claude/skills/throng-testing/references/global-os-resources.md). | unset |
 | `THRONG_E2E_ATTENTION_OS` | `record` swaps the operating system notification and taskbar badge for recorders that append each effective call to a JSON-lines log, which Playwright cannot otherwise observe. Without it a test run uses no-ops, so no real notification is raised. | unset |
