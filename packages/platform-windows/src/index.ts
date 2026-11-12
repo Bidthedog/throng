@@ -24,3 +24,8 @@ export { WindowsOrphanProcesses, WindowsTrashRestore, WindowsUserDirectories, Wi
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
 export { CRASH_DIR_NAME, createFileLog, writeCrashReport } from '@throng/platform-node';
 export type { DiagnosticLog, FileLogOptions } from '@throng/platform-node';
+export { WindowsFileListCodec } from './windows-file-list-codec.js';
+export { WindowsFileManagerRegistration, REG_EXE, type RegistryPort } from './windows-file-manager-registration.js';
+export { WindowsFileAttributes } from './windows-file-attributes.js';
+export { WindowsOsPropertiesDialog } from './windows-os-properties-dialog.js';
+export { WindowsFileAccessInfo } from './windows-file-access-info.js';

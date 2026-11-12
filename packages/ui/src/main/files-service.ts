@@ -563,6 +563,20 @@ export class FilesService {
     if (result !== undefined && !result.ok) throw new Error(result.osReason);
   }
 
+  /** 067 FR-018: open a project file in the program the OS has registered for it. */
+  async openInDefaultProgram(relPath: string): Promise<OkOrError> {
+    if (!this.root) return { error: NO_ROOT };
+    try {
+      const abs = this.absOf(relPath);
+      if (!(await this.within(abs))) return { error: OUTSIDE };
+      const result = await this.shell.openWithDefaultProgram(abs);
+      return result.ok ? { ok: true } : { error: result.osReason };
+    } catch (e) {
+      logExpected('files-service: open in default program', 'failed() logs the raw error and the explorer reports the cause', e);
+      return this.failed(e);
+    }
+  }
+
   /** Open in OS file explorer: file → reveal-and-select; folder/root → open contents. */
   async reveal(relPath: string): Promise<OkOrError> {
     if (!this.root) return { error: NO_ROOT };

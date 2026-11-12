@@ -17,7 +17,7 @@
  *
  * ══ THE POPOVER (FR-115) ══
  *
- * Resting the pointer on the item, or focusing it, opens `status-popover.tsx` — all four metrics for all
+ * Resting the pointer on the item for `resourceMonitor.popoverDelayMs`, or focusing it, opens `status-popover.tsx` — all four metrics for all
  * four components, whatever the bar shows — in place of a native title (which the browser closes and
  * reopens at every capture). It stays while the pointer is over the item or the popover, closes on leaving
  * both (after a short grace, to cross the gap between them) or on Esc, and after Esc stays closed until the
@@ -70,15 +70,16 @@ function focusVisible(el: Element): boolean {
  * Whether the popover is open (FR-115): the pointer is over the item or the popover, or the item has
  * focus; Esc dismisses it until the pointer re-enters the item or focus returns.
  */
-function usePopoverOpen(): {
+function usePopoverOpen(openDelayMs: number): {
   open: boolean;
   itemHandlers: { onPointerEnter: () => void; onPointerLeave: () => void; onFocus: (e: FocusEvent<HTMLElement>) => void; onBlur: () => void };
-  popoverHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
+  popoverHandlers: { onPointerEnter: () => void; onPointerLeave: () => void; onClick: () => void };
 } {
   const [hover, setHover] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const openTimer = useRef<number | undefined>(undefined);
   const open = (hover || focused) && !dismissed;
 
   const cancelClose = useCallback((): void => {
@@ -90,6 +91,11 @@ function usePopoverOpen(): {
     timer.current = window.setTimeout(() => setHover(false), CLOSE_GRACE_MS);
   }, [cancelClose]);
   useEffect(() => cancelClose, [cancelClose]);
+  const cancelOpen = useCallback((): void => {
+    window.clearTimeout(openTimer.current);
+    openTimer.current = undefined;
+  }, []);
+  useEffect(() => cancelOpen, [cancelOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -105,10 +111,19 @@ function usePopoverOpen(): {
     itemHandlers: {
       onPointerEnter: () => {
         cancelClose();
-        setDismissed(false);
-        setHover(true);
+        cancelOpen();
+        const show = (): void => {
+          setDismissed(false);
+          setHover(true);
+        };
+        // A pointer crossing back from the popover has already waited.
+        if (hover || openDelayMs === 0) show();
+        else openTimer.current = window.setTimeout(show, openDelayMs);
       },
-      onPointerLeave: scheduleClose,
+      onPointerLeave: () => {
+        cancelOpen();
+        scheduleClose();
+      },
       onFocus: (e) => {
         // Only focus the keyboard gave: clicking the item focuses it, and opening the monitor then blurs it, so
         // when the window comes back (Esc, Alt+Tab) focus is restored with no pointer near and no reason to open.
@@ -118,16 +133,18 @@ function usePopoverOpen(): {
       },
       onBlur: () => setFocused(false),
     },
-    popoverHandlers: { onPointerEnter: cancelClose, onPointerLeave: scheduleClose },
+    // 067 FR-127 — a click on the popover closes it, and opens nothing; only the item opens the monitor.
+    // Closed like Esc is: until the pointer re-enters the item or focus returns.
+    popoverHandlers: { onPointerEnter: cancelClose, onPointerLeave: scheduleClose, onClick: () => setDismissed(true) },
   };
 }
 
 export function StatusResources(): ReactElement {
   const summary = useResourceSummary();
-  const { thresholds } = useResourceMonitorSettings();
+  const { thresholds, popoverDelayMs } = useResourceMonitorSettings();
   const rootRef = useRef<HTMLButtonElement | null>(null);
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
-  const popover = usePopoverOpen();
+  const popover = usePopoverOpen(popoverDelayMs);
   const popoverId = useId();
   /** The main window's totals since it opened (FR-115): fed whether or not the popover is open. */
   const ring = useRef<StatusHistory | null>(null);

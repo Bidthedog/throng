@@ -1,4 +1,4 @@
-import { logCaught, type IClipboard } from '@throng/core';
+import { logCaught, type FileListSnapshot, type IClipboard, type IFileListCodec } from '@throng/core';
 
 /**
  * The slice of Electron's `clipboard` module this needs — constructor-injected, so tests drive a
@@ -14,6 +14,14 @@ export interface ElectronClipboardModule {
   readText(): Promise<string>;
   /** Electron's `clipboard.write([item])` — every format in one atomic OS write (044 FR-035a). */
   write(items: readonly unknown[]): Promise<void>;
+  /** Electron's `clipboard.read()`: what the platform clipboard makes available (067). */
+  read(): Promise<readonly ClipboardReadItem[]>;
+}
+
+/** The part of an Electron `ClipboardItem` a read uses. */
+export interface ClipboardReadItem {
+  readonly types: readonly string[];
+  getType(type: string): Promise<unknown>;
 }
 
 /** Electron's `ClipboardItem` constructor: MIME type → payload (a string, or a `Blob` for an image). */
@@ -36,6 +44,7 @@ export class ElectronClipboard implements IClipboard {
   constructor(
     private readonly clipboard: ElectronClipboardModule,
     private readonly makeItem: ClipboardItemFactory,
+    private readonly fileListCodec: IFileListCodec,
   ) {}
 
   async writeText(text: string): Promise<void> {
@@ -52,6 +61,33 @@ export class ElectronClipboard implements IClipboard {
     await this.clipboard.write([
       this.makeItem({ 'image/png': new Blob([new Uint8Array(entry.png)], { type: 'image/png' }), 'text/html': entry.html }),
     ]);
+  }
+
+  async writeFileList(list: FileListSnapshot): Promise<void> {
+    const payload = Object.fromEntries(
+      Object.entries(this.fileListCodec.encode(list)).map(([format, value]) => [
+        format,
+        typeof value === 'string' ? value : new Blob([new Uint8Array(value)]),
+      ]),
+    );
+    await this.clipboard.write([this.makeItem(payload)]);
+  }
+
+  async readFileList(): Promise<FileListSnapshot | null> {
+    try {
+      const payloads: Record<string, Uint8Array> = {};
+      for (const item of await this.clipboard.read()) {
+        for (const format of this.fileListCodec.formats) {
+          if (!item.types.includes(format)) continue;
+          const value = await item.getType(format);
+          if (value instanceof Blob) payloads[format] = new Uint8Array(await value.arrayBuffer());
+        }
+      }
+      return this.fileListCodec.decode(payloads);
+    } catch (error) {
+      logCaught('electron-clipboard: read a file list', error);
+      return null;
+    }
   }
 
   async readText(): Promise<string> {

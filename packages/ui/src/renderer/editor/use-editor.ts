@@ -49,6 +49,7 @@ import {
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { useActiveTheme, useAppSettings, useIconPacks } from '../config/config-store.js';
+import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import {
   allEditorStates,
   getEditorState,
@@ -301,7 +302,25 @@ function publishCaret(panelId: string, state: EditorState): void {
   for (const range of state.selection.ranges) {
     if (!range.empty) ranges.push(state.doc.iterRange(range.from, range.to));
   }
-  setPanelCaret(panelId, { line: line.number, column }, selectedCharacters(ranges));
+  // 067 FR-126 — a selection on one line reads as a column range; the main range speaks for the position.
+  const main = state.selection.main;
+  let columns: [number, number] | null = null;
+  if (!main.empty && state.doc.lineAt(main.anchor).number === line.number) {
+    const other = caretPosition(line.text, main.anchor - line.from).column;
+    columns = [Math.min(column, other), Math.max(column, other)];
+  }
+  // 067 FR-136 — a selection across lines reads as its line range and the column where it starts. A
+  // selection ending at a line's very start does not reach into that line.
+  let lines: { first: number; last: number; column: number } | null = null;
+  if (!main.empty && columns === null) {
+    const first = state.doc.lineAt(main.from);
+    const end = state.doc.lineAt(main.to);
+    const last = main.to === end.from && end.number > first.number ? end.number - 1 : end.number;
+    if (last > first.number) {
+      lines = { first: first.number, last, column: caretPosition(first.text, main.from - first.from).column };
+    }
+  }
+  setPanelCaret(panelId, { line: line.number, column }, selectedCharacters(ranges), columns, lines);
 }
 
 /**
@@ -612,6 +631,9 @@ export function useEditor(params: UseEditorParams): void {
   const { documents } = useServices();
   const metaRef = useRef({ projectRoot, rootless, ownerProjectId, tabId, projects, settings, title: panel.title, tabTitle, documents });
   metaRef.current = { projectRoot, rootless, ownerProjectId, tabId, projects, settings, title: panel.title, tabTitle, documents };
+  // 067 FR-131 — read at the gesture, like the rest of the link routing.
+  const openUnsupportedInOsRef = useRef(false);
+  openUnsupportedInOsRef.current = useAppSettings().explorer.openUnsupportedInOs;
   // 059 FR-025 — Reopen with Encoding asks before discarding unsaved changes. Optional: an editor mounted
   // bare (no provider) simply has no dirty-reopen to ask about.
   const confirm = useOptionalConfirm();
@@ -793,6 +815,12 @@ export function useEditor(params: UseEditorParams): void {
       ...linkRouting(() => ({
         previewRegistry: previewProvidersRef.current.registry,
         previewSettings: metaRef.current.settings.previews,
+      })),
+      // 067 FR-131 — a file the editor would refuse as binary goes to the OS under `explorer.openUnsupportedInOs`.
+      opensInOs: refusedAsBinaryToOs(() => ({
+        enabled: openUnsupportedInOsRef.current,
+        ws,
+        ...(meta.ownerProjectId ?? panel.originProjectId ? { ownerProjectId: meta.ownerProjectId ?? panel.originProjectId } : {}),
       })),
       // FR-033 — `openFileInTab`, honouring *Open files in*, and NEVER `open-router.ts`: a link is
       // always an editor, whatever the file's own default open action (044 FR-055). FR-052's

@@ -21,3 +21,8 @@ export { LinuxGpuUsage, parseDrmFdinfo } from './linux-gpu.js';
 export { LinuxOrphanProcesses } from './linux-orphan-processes.js';
 export { LinuxVolumeRoots, parseMountInfo, type MountPoint } from './linux-volume-roots.js';
 export { parseStat, readProcTable, type ProcRow } from './proc-table.js';
+export { LinuxFileListCodec } from './linux-file-list-codec.js';
+export { LinuxFileManagerRegistration } from './linux-file-manager-registration.js';
+export { LinuxFileAttributes } from './linux-file-attributes.js';
+export { LinuxOsPropertiesDialog } from './linux-os-properties-dialog.js';
+export { LinuxFileAccessInfo } from './linux-file-access-info.js';

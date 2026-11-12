@@ -515,6 +515,14 @@ export const THEME_TOKEN_COPY: Record<string, TokenCopy> = {
     description:
       'The glyph on the control that re-runs a failed or interrupted action, such as reconnecting a dropped terminal session.',
   },
+  'icons.save': {
+    label: 'Save icon',
+    description: 'The glyph on the editor title bar button that saves the document.',
+  },
+  'icons.saveAs': {
+    label: 'Save As icon',
+    description: 'The glyph on the editor title bar button that saves the document under a new name.',
+  },
   'icons.restoreAll': {
     label: 'Restore all defaults icon',
     description:

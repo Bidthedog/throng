@@ -245,9 +245,42 @@ button.tree-twisty:focus-visible {
 }
 
 .tree-label {
+  position: relative;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Beside the pointer during a drag. Never a target: a drop must land on what is under it. */
+.tree-drag-label {
+  position: fixed;
+  z-index: 2000;
+  padding: 2px 8px;
+  background: var(--throng-colour-surfaceActive);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/*
+ * 067 FR-112 — a tree drag is run by the page, not the OS, so the pointer is ours to draw. The backend
+ * (tree-pointer-backend.ts) names what a drop would do on the root element; `!important` and `*` because
+ * every element under the pointer states a cursor of its own.
+ */
+:root[data-tree-drag='copy'],
+:root[data-tree-drag='copy'] * {
+  cursor: copy !important;
+}
+
+:root[data-tree-drag='move'],
+:root[data-tree-drag='move'] * {
+  cursor: move !important;
+}
+
+:root[data-tree-drag='none'],
+:root[data-tree-drag='none'] * {
+  cursor: not-allowed !important;
 }
 
 .tree-rename {
@@ -274,4 +307,64 @@ button.tree-twisty:focus-visible {
   flex: 0 0 auto;
   margin-left: auto;
   color: var(--throng-colour-textMuted);
+}
+
+/* 067 FR-046 — the Properties dialog: a two-column grid of labels and values, theme colours only. */
+.properties-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0 0 14px;
+  font-size: 13px;
+}
+
+.properties-grid dt {
+  color: var(--text-dim);
+}
+
+.properties-grid dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Every value has its copy button beside it (FR-120). */
+.properties-grid__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.properties-grid__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The title and the X at the dialog's top right (FR-119). */
+.properties-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.properties-grid__path-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+.properties-grid__calculating,
+.properties-grid__skipped {
+  color: var(--text-dim);
+}
+
+.properties-dialog__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

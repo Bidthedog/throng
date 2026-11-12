@@ -146,7 +146,11 @@ export interface ExplorerApi {
   createFolder: (target: TargetNode | null) => void;
   createFile: (target: TargetNode | null) => void;
   reveal: (relPath: string) => void;
+  /** 067 FR-015 — open the file with the OS default program; one notice when the OS cannot. */
+  openInDefaultProgram: (relPath: string) => void;
   drop: (dragRelPaths: string[], destRelDir: string, asCopy: boolean) => void;
+  /** 067 FR-004 — files dragged in from the OS, by absolute path, into a folder of the project. */
+  dropInbound: (absPaths: readonly string[], destRelDir: string, asMove: boolean) => void;
   // 024 US3 (#85): reverse (or re-apply) the last file OPERATION — move, rename or delete.
   undoFileOp: () => void;
   redoFileOp: () => void;
@@ -1532,11 +1536,18 @@ export function useExplorerData(
    */
   const paste = useCallback(
     (target: TargetNode | null) => {
-      if (!clipboard) return;
       const dest = resolveTarget(target);
-      void window.throng?.transfer?.paste(dest).then((res) => {
-        if ('error' in res) fail(res.error, 'paste these items', { kind: 'none' }, res.cause);
-      });
+      void (async () => {
+        /*
+         * 067 FR-001 — main picks the source (research D3): the internal record, or a file list another
+         * program put on the OS clipboard. With no internal record the OS list is the only thing there
+         * is to paste, so ask whether one exists; a text-only clipboard leaves Paste unavailable and
+         * starts nothing.
+         */
+        if (!clipboard && !(await window.throng?.fileClipboard?.osFiles?.())) return;
+        const res = await window.throng?.transfer?.pasteAuto?.(dest);
+        if (res && 'error' in res) fail(res.error, 'paste these items', { kind: 'none' }, res.cause);
+      })();
     },
     [clipboard, fail],
   );
@@ -1680,6 +1691,15 @@ export function useExplorerData(
     [report, nodeSubject],
   );
 
+  const openInDefaultProgram = useCallback(
+    (relPath: string) => {
+      void window.throng?.files
+        ?.openInDefaultProgram?.(relPath)
+        .then((res) => report(res, 'open', nodeSubject(relPath)));
+    },
+    [report, nodeSubject],
+  );
+
   // Drag-and-drop result (FR-019): plain drag moves; Ctrl+drag copies. Targets
   // are confined to the root in the main process; the watcher refreshes.
   const drop = useCallback(
@@ -1760,6 +1780,31 @@ export function useExplorerData(
       });
     },
     [fail, reportFailures, documents, projectId, toRel, snapshotOpen, reloadDirs, pushUndo],
+  );
+
+  /*
+   * 067 FR-004 — a drop of OS files runs as an engine job whose sources lie outside any project
+   * (research D2), so collisions, partial failure and undo are the engine's own. Nothing here moves
+   * within the tree, so there is no open-state to migrate: report, record the undo entry, re-read.
+   */
+  const dropInbound = useCallback(
+    (absPaths: readonly string[], destRelDir: string, asMove: boolean) => {
+      if (absPaths.length === 0) return;
+      void window.throng?.transfer
+        ?.dropInbound?.(absPaths, destRelDir, asMove ? 'cut' : 'copy')
+        .then(async (res) => {
+          if (!res) return;
+          if ('error' in res) {
+            fail(res.error, asMove ? 'move these items' : 'copy these items', { kind: 'none' }, res.cause);
+            return;
+          }
+          fail(null);
+          reportFailures(res);
+          if (res.undo) pushUndo(res.undo);
+          await reloadDirs([destRelDir]);
+        });
+    },
+    [fail, reportFailures, pushUndo, reloadDirs],
   );
 
   /**
@@ -1999,7 +2044,9 @@ export function useExplorerData(
     createFolder,
     createFile,
     reveal,
+    openInDefaultProgram,
     drop,
+    dropInbound,
     undoFileOp,
     redoFileOp,
     canUndoFileOp: stack.undo.length > 0,

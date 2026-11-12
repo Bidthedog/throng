@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   collectPanels,
+  defaultOpenActionFor,
   effectiveActivePanelId,
   isPanel,
   relativeToRoot,
@@ -27,9 +28,12 @@ import {
 } from './open-into-panel.js';
 import { headingRevealTarget, revealRangeInEditor, type RevealTarget } from './reveal-range.js';
 import { openFromTree } from './open-router.js';
+import type { TreeOpenGesture } from '../explorer/explorer-context.js';
 import { requestPanelFlash } from '../workspace/panel-flash.js';
 import { maximisedPanelOf } from '../workspace/maximise-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
+import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
+import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 
 /**
  * Open-from-tree orchestration (006 Phase B, US2/US9, FR-010/011a). Listens for
@@ -85,33 +89,113 @@ export function EditorOpenListener(): null {
    */
   const previews = useAppSettings().editor.previews;
   const { registry } = usePreviewProviders();
-  const routeRef = useRef({ previews, registry });
-  routeRef.current = { previews, registry };
+  const openUnsupportedInOs = useAppSettings().explorer.openUnsupportedInOs;
+  const routeRef = useRef({ previews, registry, openUnsupportedInOs });
+  routeRef.current = { previews, registry, openUnsupportedInOs };
+  // 067 FR-131 — the one notice for the OS refusing a link's file, shaped as the other link surfaces shape it.
+  const reportOsFailureRef = useRef<(outcome: Parameters<typeof linkFailureReport>[0], projectId: string | undefined) => void>(() => undefined);
+  reportOsFailureRef.current = (outcome, ownerProjectId) =>
+    reportSubject(linkFailureReport(outcome, { projectRoot, osName, ...(ownerProjectId ? { projectId: ownerProjectId } : {}) }));
 
   useEffect(() => {
     const handler = (e: Event): void => {
       const detail = (e as CustomEvent).detail as
-        | { absPath?: string; projectId?: string; headingFragment?: string }
+        | {
+            absPath?: string;
+            relPath?: string;
+            projectId?: string;
+            headingFragment?: string;
+            gesture?: TreeOpenGesture;
+            /** 067 FR-131 — set by a link followed in a preview: the panel it was followed in. */
+            link?: { panelId: string; originProjectId?: string };
+          }
         | undefined;
-      // 044 FR-090d — a preview link to a file no preview claims opens here, as from File Explorer; its
-      // `#heading` places the caret on that heading's line where the file's language can find one.
-      // 044 FR-052 — through the default open action router: a file whose provider says Preview opens its
-      // preview. The link case above can never be one (main sends it here only with no enabled provider).
-      if (detail?.absPath) {
-        void openFromTree(
-          ws,
-          detail.absPath,
-          openTarget,
-          {
-            ...routeRef.current,
-            // The tree names its project. An intent that names none (a preview link's FR-090d route) has
-            // no project to ask a preview for, and a layout's id is not one in a sub-workspace window.
-            projectId: detail.projectId,
-            openInEditor: openFileInTab,
-          },
-          headingRevealTarget(detail.absPath, detail.headingFragment),
-        );
+      /*
+       * 067 FR-131 — a link followed in a preview, to a file the editor refuses as BINARY, with the
+       * preference on: the OS default program, as a File Explorer double-click would (or the OS's own
+       * message, as the one notice). Anything else about the file — it opens, it is too large, the
+       * preference is off, its default open action is its preview — keeps the route it had.
+       */
+      if (detail?.absPath && detail.link !== undefined) {
+        const { absPath, link } = detail;
+        void (async () => {
+          const { registry: providers, previews: previewSettings } = routeRef.current;
+          const opensAsPreview = defaultOpenActionFor(providers, previewSettings, absPath) === 'preview';
+          if (
+            !opensAsPreview &&
+            (await refusedAsBinaryToOs(() => ({
+              enabled: routeRef.current.openUnsupportedInOs,
+              ws,
+              ...(link.originProjectId ? { ownerProjectId: link.originProjectId } : {}),
+            }))({ path: absPath }))
+          ) {
+            const outcome = await osLinkActions().openInOsDefaultProgram({
+              text: absPath,
+              kind: 'detectedPath',
+              panelId: link.panelId,
+              ...(link.originProjectId ? { originProjectId: link.originProjectId } : {}),
+            });
+            if (!outcome.ok) {
+              // Read through the ref: this effect is installed once per layout, the notice context is not.
+              const report = reportOsFailureRef.current;
+              report(outcome, link.originProjectId);
+            }
+            return;
+          }
+          routeOpen(absPath, undefined, detail.headingFragment);
+        })();
+        return;
       }
+      /*
+       * 067 FR-116, FR-117 — a file the editor refuses as BINARY, raised by a File Explorer gesture, with
+       * the preference on: a double click hands it to the OS and a single click does nothing at all (no
+       * notice). Only the tree names a gesture; every other route to this event (a preview link, a drop)
+       * keeps the editor's message. A too-large file is not this case: the editor's message stands.
+       */
+      if (detail?.absPath && detail.gesture !== undefined) {
+        const { absPath, relPath, gesture } = detail;
+        void (async () => {
+          const { registry: providers, previews: previewSettings } = routeRef.current;
+          // A file whose default open action is its preview is not one throng "cannot open".
+          const opensAsPreview =
+            !!detail.projectId && defaultOpenActionFor(providers, previewSettings, absPath) === 'preview';
+          if (routeRef.current.openUnsupportedInOs && !opensAsPreview) {
+            const decision = await openDecisionFor(ws, absPath, detail.projectId);
+            if (decision?.action === 'refuse' && decision.reason === 'binary') {
+              if (gesture !== 'click' && relPath !== undefined) {
+                window.dispatchEvent(
+                  new CustomEvent('throng:open-in-os', { detail: { projectId: detail.projectId, relPath } }),
+                );
+              }
+              return;
+            }
+          }
+          // The extra event a double click raises only to reach the case above: the file was opened by the first click.
+          if (gesture === 'dblclickUnsupportedOnly') return;
+          routeOpen(absPath, detail.projectId, detail.headingFragment);
+        })();
+        return;
+      }
+      if (detail?.absPath) routeOpen(detail.absPath, detail.projectId, detail.headingFragment);
+    };
+    // 044 FR-090d — a preview link to a file no preview claims opens here, as from File Explorer; its
+    // `#heading` places the caret on that heading's line where the file's language can find one.
+    // 044 FR-052 — through the default open action router: a file whose provider says Preview opens its
+    // preview. The link case above can never be one (main sends it here only with no enabled provider).
+    const routeOpen = (absPath: string, projectId: string | undefined, headingFragment: string | undefined): void => {
+      void openFromTree(
+        ws,
+        absPath,
+        openTarget,
+        {
+          ...routeRef.current,
+          // The tree names its project. An intent that names none (a preview link's FR-090d route) has
+          // no project to ask a preview for, and a layout's id is not one in a sub-workspace window.
+          projectId,
+          openInEditor: openFileInTab,
+        },
+        headingRevealTarget(absPath, headingFragment),
+      );
     };
     window.addEventListener('throng:open-file', handler);
     // UI main raised this window to focus an already-open file's editor (FR-011a).

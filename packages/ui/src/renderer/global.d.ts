@@ -175,6 +175,57 @@ declare global {
       // Correlated by `requestId` so a stale ack cannot satisfy a later drain.
       onAppCloseDrain?: (cb: (req: { requestId: string }) => void) => () => void;
       appCloseDrained?: (req: { requestId: string }) => void;
+      /** 067 US4 — the closing overlay's live view, pushed on every change (FR-037). */
+      onAppCloseProgress?: (cb: (view: import('@throng/core').ShutdownView) => void) => () => void;
+      /** 067 US4 — Cancel finished; the overlay closes (FR-040). */
+      onAppCloseCancelled?: (cb: () => void) => () => void;
+      /** 067 US4 — ignored once past the point of no return. */
+      appCloseCancel?: () => void;
+      /** 067 US3 — a folder (or a file, or a missing path) the launcher asked throng to open. */
+      openFolder?: {
+        onRequest: (
+          cb: (req: { absPath: string; kind: 'folder' | 'file' | 'missing' }) => void,
+        ) => () => void;
+        /** Sent once by the main window's renderer; requests queue in main until then. */
+        ready: () => void;
+        reportOutcome?: (notice: unknown) => void;
+      };
+      /** 067 US5 — the Properties dialog (contracts/ipc.md). */
+      properties?: {
+        open: (relPaths: readonly string[]) => Promise<{
+          requestId: string;
+          items: import('@throng/core').ItemProperties[];
+          osProperties: { available: boolean; reason?: string };
+        }>;
+        onTally: (
+          cb: (evt: { requestId: string; tally: import('@throng/core').FolderTally }) => void,
+        ) => () => void;
+        close: (requestId: string) => void;
+        showOsProperties: (absPath: string) => Promise<FilesOkOrError>;
+      };
+      /** 067 US7 — recent startup commands and shell arguments per terminal type (flavour). */
+      formHistory?: {
+        get: (flavourId: string) => Promise<{ startupCommand: string[]; shellArguments: string[] }>;
+        record: (
+          flavourId: string,
+          values: { startupCommand?: string; shellArguments?: string },
+        ) => void;
+        clearField: (flavourId: string, field: 'startupCommand' | 'shellArguments') => void;
+        /** 067 FR-133 — forget one value; main then announces it through `onChanged`. */
+        removeValue?: (flavourId: string, field: 'startupCommand' | 'shellArguments', value: string) => void;
+        clearFlavour: (flavourId: string) => void;
+        clearAll: () => void;
+        /**
+         * Main announces a clear (or a trim) to every window; `flavourId` is absent when every terminal type
+         * was affected. Returns the unsubscribe. An open form reads its lists again on it (FR-064b, FR-066).
+         */
+        onChanged: (cb: (change: { flavourId?: string }) => void) => () => void;
+      };
+      /** 067 US3 — the file manager's "open as throng project" item (FR-034). */
+      fileManagerItem?: {
+        status: () => Promise<import('@throng/core').FileManagerRegistration>;
+        setEnabled: (on: boolean) => Promise<import('@throng/core').FileManagerRegistration>;
+      };
       dragGhost?: {
         start: (kind: 'panel' | 'tab', title: string) => void;
         move: () => void;
@@ -382,6 +433,10 @@ declare global {
          * another project's root or under no root at all.
          */
         revealDocument?: (absPath: string) => Promise<FilesOkOrError>;
+        /** 067 US2 — open the file with the OS default program (FR-015); one notice on failure. */
+        openInDefaultProgram?: (relPath: string) => Promise<FilesOkOrError>;
+        /** 067 FR-114 — hand the paths to the OS as a file drag (copy), mid-press, at the window edge. */
+        startOsDrag?: (relPaths: readonly string[]) => void;
         /** 024 US3 (#85): does this path exist inside the project? The undo world-check. */
         exists?: (relPath: string) => Promise<boolean>;
         /** 024 US3 (#85): restore a trashed item to its original path. */
@@ -440,6 +495,8 @@ declare global {
         set: (mode: 'cut' | 'copy', relPaths: readonly string[]) => Promise<FilesOkOrError>;
         clear: () => void;
         onChange: (cb: (clipboard: import('@throng/core').FileClipboard) => void) => () => void;
+        /** 067 — whether Paste has an OS file list to act on (FR-001). */
+        osFiles?: () => Promise<boolean>;
       };
       /**
        * 050 R2 — every paste and drag is a job run by main's transfer engine (contracts/transfer-ipc.md
@@ -449,6 +506,14 @@ declare global {
       transfer?: {
         /** Snapshot the clipboard and queue a paste into `targetRelDir` of the active project (FR-019d). */
         paste: (targetRelDir: string) => Promise<{ jobId: string } | FilesFailure>;
+        /** 067 — main picks the internal clipboard or the OS file list (research D3). Replaces `paste`. */
+        pasteAuto?: (targetRelDir: string) => Promise<{ jobId: string } | FilesFailure>;
+        /** 067 — a drop of OS files on the tree, as absolute paths (FR-004). */
+        dropInbound?: (
+          absPaths: readonly string[],
+          targetRelDir: string,
+          mode: 'cut' | 'copy',
+        ) => Promise<import('@throng/core').TransferResult | FilesFailure>;
         /** A drag: no progress, no cancel, still asks about clashes; resolves when the job ends (FR-019e). */
         drop: (
           srcRelPaths: readonly string[],

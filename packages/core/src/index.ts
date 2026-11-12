@@ -19,7 +19,34 @@ export type { IOrphanProcesses, ITrashRestore, IUserDirectories, IVolumeRoots, O
 
 export type { IPlatformInfo, OsName } from './abstractions/platform-info.js';
 // The OS clipboard seam (016, FR-013a) — core reads the live clipboard to decide a paste mode.
-export type { IClipboard } from './abstractions/clipboard.js';
+export type { FileListSnapshot, IClipboard, IFileListCodec } from './abstractions/clipboard.js';
+export { decidePasteSource, type PasteSource } from './explorer/paste-source.js';
+export { resolveInboundDragEffect } from './explorer/inbound-drag.js';
+export { effectiveSidePanes, type SidePanes } from './workspace/model.js';
+export type { FileAttributes, FolderTally, ItemKind, ItemProperties } from './explorer/properties.js';
+export type { IFileAttributes } from './abstractions/file-attributes.js';
+export type { IOsPropertiesDialog } from './abstractions/os-properties-dialog.js';
+export type { IFileAccessInfo } from './abstractions/file-access-info.js';
+export { formatFileMode, type FileAccess } from './explorer/properties.js';
+export {
+  parseFormHistory,
+  recordFormValue,
+  trimFormHistory,
+  type FormHistoryField,
+  type FormHistoryFile,
+  type FormHistoryLists,
+} from './terminal/form-history.js';
+export type { FileManagerRegistration, IFileManagerRegistration } from './abstractions/file-manager-registration.js';
+export {
+  ShutdownRun,
+  shutdownTaskSummary,
+  type ShutdownTaskSpec,
+  type ShutdownTaskState,
+  type ShutdownTaskView,
+  type ShutdownView,
+} from './workspace/shutdown-run.js';
+export { parseLaunchFolder } from './projects/launch-folder.js';
+export { decideOpenFolder, type OpenFolderDecision, type OpenFolderPathKind } from './projects/open-folder.js';
 export type { ClipboardMode, ClipboardRecord, CursorRange, SelectionShape } from './editor/clipboard-mode.js';
 export { clipboardModeFor, pasteModeFor } from './editor/clipboard-mode.js';
 export { NOT_A_MISSING_FILE, isMissingReason } from './editor/refusal.js';
@@ -602,6 +629,7 @@ export {
   V6_FIND_IN_FILES_ICON,
   V19_MOVED_COLOURS,
   V25_MOVED_ICONS,
+  V30_MOVED_ICONS,
   V6_SEARCH_IN_FILES_SETTINGS,
   SEARCH_MATCH_TOKENS,
   planThemeValueUpgrade,

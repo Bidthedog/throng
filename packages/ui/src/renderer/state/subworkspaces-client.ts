@@ -7,8 +7,8 @@ import type { ThrongBridge } from './bridge.js';
 
 /**
  * Typed renderer client for the `subworkspace.*` daemon methods (003 / US7). The
- * management surface for first-class sub-workspaces; creation happens via detach
- * (workspace persistence), not here.
+ * management surface for first-class sub-workspaces. Detach (workspace persistence) makes one from
+ * existing content; `create` (067 FR-082) makes an empty one, unloaded, from the panel itself.
  */
 export class SubWorkspacesClient {
   constructor(private readonly bridge: ThrongBridge) {}
@@ -16,6 +16,11 @@ export class SubWorkspacesClient {
   async list(): Promise<SubWorkspaceMetaDto[]> {
     const result = await this.bridge.invoke<SubworkspaceListResult>('subworkspace.list', {});
     return result.subWorkspaces;
+  }
+
+  /** 067 FR-083 — a new sub-workspace holding one untyped panel it owns; no window is opened. */
+  create(): Promise<SubWorkspaceMetaDto> {
+    return this.bridge.invoke<SubWorkspaceMetaDto>('subworkspace.create', {});
   }
 
   rename(id: string, name: string): Promise<SubworkspaceOkResult> {

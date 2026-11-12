@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import {
   SUBWORKSPACE_LIST_METHOD,
+  SUBWORKSPACE_CREATE_METHOD,
   SUBWORKSPACE_RENAME_METHOD,
   SUBWORKSPACE_RECOLOUR_METHOD,
   SUBWORKSPACE_DELETE_METHOD,
@@ -7,13 +9,25 @@ import {
   SUBWORKSPACE_UPDATE_BOUNDS_METHOD,
   JSON_RPC_INVALID_PARAMS,
 } from '@throng/ipc-contract';
-import type { ISubWorkspaceStore, IUserContext } from '@throng/core';
+import {
+  nextSubWorkspaceName,
+  nextSubWorkspaceTabName,
+  pickUnusedColour,
+  type ISubWorkspaceStore,
+  type IUserContext,
+  type IWorkspaceStore,
+  type SubWorkspace,
+} from '@throng/core';
 import { RpcError, type RpcRouter } from './rpc-router.js';
 
 export interface SubWorkspaceIpcDeps {
   store: ISubWorkspaceStore;
+  workspaceStore: Pick<IWorkspaceStore, 'saveSubWorkspace'>;
   userContext: IUserContext;
 }
+
+/** Where a sub-workspace made from the panel opens first; the window keeps its own bounds from then on. */
+const NEW_SUBWORKSPACE_BOUNDS = { x: 120, y: 120, width: 1100, height: 760 };
 
 function asObject(params: unknown): Record<string, unknown> {
   if (typeof params !== 'object' || params === null) {
@@ -46,6 +60,30 @@ export class SubWorkspaceIpcService {
     router.register(SUBWORKSPACE_LIST_METHOD, () => ({
       subWorkspaces: this.deps.store.list(this.owner),
     }));
+
+    // 067 FR-083: one tab with one untyped panel it owns, and no window until it is opened.
+    router.register(SUBWORKSPACE_CREATE_METHOD, () => {
+      const existing = this.deps.store.list(this.owner);
+      const id = randomUUID();
+      const panelId = randomUUID();
+      const sub: SubWorkspace = {
+        id,
+        ownerUser: this.owner,
+        name: nextSubWorkspaceName(existing),
+        colour: pickUnusedColour(existing.map((meta) => meta.colour)),
+        bounds: NEW_SUBWORKSPACE_BOUNDS,
+        tabs: [
+          {
+            id: randomUUID(),
+            title: nextSubWorkspaceTabName([]),
+            activePanelId: panelId,
+            root: { type: 'panel', id: panelId, originProjectId: `subworkspace:${id}`, title: 'Panel 1' },
+          },
+        ],
+      };
+      this.deps.workspaceStore.saveSubWorkspace(this.owner, sub);
+      return { id, name: sub.name, colour: sub.colour, tabCount: 1, panelCount: 1 };
+    });
 
     router.register(SUBWORKSPACE_RENAME_METHOD, (params) => {
       const id = requireId(params);

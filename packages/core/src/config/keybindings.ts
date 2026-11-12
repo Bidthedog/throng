@@ -163,6 +163,11 @@ export type ActionId =
   // (constitution IV), so it displaces no line-editor binding and needs no recorded exception.
   | 'tabs.openPicker'
   /*
+   * 067 FR-075 (#609) — start the active tab's inline rename from any panel. Live everywhere, a terminal included:
+   * Constitution v6.4.0 Principle IV records `Ctrl+Shift+Alt+F2` as an exception. Window-handled.
+   */
+  | 'tabs.rename'
+  /*
    * 033 US1 (#219) — open any file in the current project by typing part of its path.
    *
    * A NEW `navigate.` namespace rather than an existing one, and the reason is mechanical rather
@@ -370,6 +375,7 @@ export const COMMAND_SCOPES: CommandScopes = {
   // from any surface — a user with six visible tabs may still prefer to type a name than aim at one.
   // PANELS would make it dead in the file tree, which is precisely where a user loses their place.
   'tabs.openPicker': EVERYWHERE,
+  'tabs.rename': EVERYWHERE,
   // 033 US1 (#219, FR-003): Quick Open answers the same from a terminal, an editor or the tree, so
   // it is EVERYWHERE — a chord that only worked in some of them would need the user to know which.
   'navigate.quickOpen': EVERYWHERE,
@@ -588,6 +594,7 @@ const WINDOWS_BINDINGS: PlatformBindings = {
      * enumerated exception list is unchanged by this move.
      */
     'tabs.openPicker': ['Ctrl+Shift+Alt+T'],
+    'tabs.rename': ['Ctrl+Shift+Alt+F2'],
     /*
      * 033 / FR-002 — Quick Open. `Ctrl+Shift+T` is the chord this gesture carries in every editor a
      * user is likely to arrive from, and it is in neither the reserved nor the shadowable terminal
@@ -1218,6 +1225,7 @@ export const WINDOW_HANDLED_ACTIONS: ReadonlySet<ActionId> = new Set<ActionId>([
   'panel.splitRight',
   'panel.splitLeft',
   'panel.destroy',
+  'tabs.rename',
   'panel.toggleMaximise',
 ]);
 

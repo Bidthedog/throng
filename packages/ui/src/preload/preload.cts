@@ -210,6 +210,17 @@ contextBridge.exposeInMainWorld('throng', {
   fullscreenToggle: () => ipcRenderer.send('throng:fullscreenToggle'),
   // App-close with running terminals (005 / FR-015): main asks the renderer to
   // show the three-choice warning; the renderer sends back the chosen action.
+  onAppCloseProgress: (cb: (view: unknown) => void) => {
+    const handler = (_e: unknown, view: unknown): void => cb(view);
+    ipcRenderer.on('throng:appClose:progress', handler);
+    return () => ipcRenderer.removeListener('throng:appClose:progress', handler);
+  },
+  onAppCloseCancelled: (cb: () => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on('throng:appClose:cancelled', handler);
+    return () => ipcRenderer.removeListener('throng:appClose:cancelled', handler);
+  },
+  appCloseCancel: () => ipcRenderer.send('throng:appClose:cancel'),
   onAppCloseBegin: (cb: () => void) => {
     const handler = (): void => cb();
     ipcRenderer.on('throng:appClose:begin', handler);
@@ -585,6 +596,8 @@ contextBridge.exposeInMainWorld('throng', {
   // confined to the active project root by the main process. `onChange` pushes a
   // live-sync signal when the watched root changes (external or in-app).
   files: {
+    openInDefaultProgram: (relPath: string) => ipcRenderer.invoke('throng:files:openInDefaultProgram', relPath),
+    startOsDrag: (relPaths: readonly string[]) => ipcRenderer.send('throng:files:startOsDrag', relPaths),
     setRoot: (root: string | null) => ipcRenderer.send('throng:files:setRoot', root),
     list: (relDir: string) => ipcRenderer.invoke('throng:files:list', relDir),
     rename: (relPath: string, newName: string) =>
@@ -644,11 +657,48 @@ contextBridge.exposeInMainWorld('throng', {
     },
   },
   // 050 R1 — the ONE application File Explorer clipboard, held by main (contracts/transfer-ipc.md §1).
+  properties: {
+    open: (relPaths: readonly string[]) => ipcRenderer.invoke('throng:properties:open', relPaths),
+    onTally: (cb: (evt: unknown) => void) => {
+      const handler = (_e: unknown, evt: unknown): void => cb(evt);
+      ipcRenderer.on('throng:properties:tally', handler);
+      return () => ipcRenderer.removeListener('throng:properties:tally', handler);
+    },
+    close: (requestId: string) => ipcRenderer.send('throng:properties:close', requestId),
+    showOsProperties: (absPath: string) => ipcRenderer.invoke('throng:properties:showOs', absPath),
+  },
+  formHistory: {
+    get: (flavourId: string) => ipcRenderer.invoke('throng:formHistory:get', flavourId),
+    record: (flavourId: string, values: unknown) => ipcRenderer.send('throng:formHistory:record', flavourId, values),
+    clearField: (flavourId: string, field: string) => ipcRenderer.send('throng:formHistory:clearField', flavourId, field),
+    removeValue: (flavourId: string, field: string, value: string) =>
+      ipcRenderer.send('throng:formHistory:removeValue', flavourId, field, value),
+    clearFlavour: (flavourId: string) => ipcRenderer.send('throng:formHistory:clearFlavour', flavourId),
+    clearAll: () => ipcRenderer.send('throng:formHistory:clearAll'),
+    onChanged: (cb: (change: { flavourId?: string }) => void) => {
+      const handler = (_event: unknown, change: { flavourId?: string }): void => cb(change);
+      ipcRenderer.on('throng:formHistory:changed', handler);
+      return () => ipcRenderer.removeListener('throng:formHistory:changed', handler);
+    },
+  },
+  fileManagerItem: {
+    status: () => ipcRenderer.invoke('throng:fileManagerItem:status'),
+    setEnabled: (on: boolean) => ipcRenderer.invoke('throng:fileManagerItem:setEnabled', on),
+  },
+  openFolder: {
+    onRequest: (cb: (request: { absPath: string; kind: 'folder' | 'file' | 'missing' }) => void) => {
+      const handler = (_e: unknown, request: { absPath: string; kind: 'folder' | 'file' | 'missing' }): void => cb(request);
+      ipcRenderer.on('throng:openFolder:request', handler);
+      return () => ipcRenderer.removeListener('throng:openFolder:request', handler);
+    },
+    ready: () => ipcRenderer.send('throng:openFolder:ready'),
+  },
   fileClipboard: {
     get: () => ipcRenderer.invoke('throng:fileClipboard:get'),
     set: (mode: 'cut' | 'copy', relPaths: readonly string[]) =>
       ipcRenderer.invoke('throng:fileClipboard:set', mode, relPaths),
     clear: () => ipcRenderer.send('throng:fileClipboard:clear'),
+    osFiles: () => ipcRenderer.invoke('throng:fileClipboard:osFiles'),
     onChange: (cb: (clipboard: unknown) => void) => {
       const handler = (_event: unknown, clipboard: unknown): void => cb(clipboard);
       ipcRenderer.on('throng:fileClipboard:changed', handler);
@@ -657,7 +707,9 @@ contextBridge.exposeInMainWorld('throng', {
   },
   // 050 R2 — every paste and drag is a job run by main's transfer engine (contracts/transfer-ipc.md §2).
   transfer: {
-    paste: (targetRelDir: string) => ipcRenderer.invoke('throng:transfer:paste', targetRelDir),
+    dropInbound: (absPaths: readonly string[], targetRelDir: string, mode: 'copy' | 'cut') =>
+      ipcRenderer.invoke('throng:transfer:dropInbound', absPaths, targetRelDir, mode),
+    pasteAuto: (targetRelDir: string) => ipcRenderer.invoke('throng:transfer:pasteAuto', targetRelDir),
     drop: (srcRelPaths: readonly string[], targetRelDir: string, mode: 'cut' | 'copy') =>
       ipcRenderer.invoke('throng:transfer:drop', srcRelPaths, targetRelDir, mode),
     cancel: (jobId: string) => ipcRenderer.send('throng:transfer:cancel', jobId),

@@ -66,11 +66,14 @@ export function isPackagedEntry(entryPath: string): boolean {
 export interface LaunchMessage {
   readonly execPath: string;
   readonly version: string | null;
+  /** 067 FR-024: an absolute folder the launch asks to open, already resolved by the launching process. */
+  readonly folder?: string;
 }
 
 /** Serialise a launch message as the one line the pipe carries. */
 export function formatLaunchMessage(message: LaunchMessage): string {
-  return `${JSON.stringify({ execPath: message.execPath, version: message.version })}\n`;
+  const { execPath, version, folder } = message;
+  return `${JSON.stringify(folder === undefined ? { execPath, version } : { execPath, version, folder })}\n`;
 }
 
 /** Parse one line from the instance pipe; anything not exactly a launch message is `null`. */
@@ -84,10 +87,11 @@ export function parseLaunchMessage(raw: string): LaunchMessage | null {
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const { execPath, version } = record;
+  const { execPath, version, folder } = record;
   if (typeof execPath !== 'string' || execPath === '') return null;
   if (!('version' in record) || (version !== null && typeof version !== 'string')) return null;
-  return { execPath, version };
+  if (folder === undefined) return { execPath, version };
+  return typeof folder === 'string' && folder !== '' ? { execPath, version, folder } : null;
 }
 
 /** The facts the different-copy notice states (data-model `DifferentCopyNotice`). */

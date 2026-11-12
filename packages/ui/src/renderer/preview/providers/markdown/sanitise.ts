@@ -68,8 +68,10 @@
 import DOMPurify, { type Config, type WindowLike } from 'dompurify';
 import { classifyPreviewLink, resolvePreviewImage, type PreviewLink } from '@throng/core';
 import {
+  FRONT_MATTER_LINK_ATTRIBUTE,
   LINK_ATTRIBUTE,
   TARGET_ATTRIBUTE,
+  decodeFrontMatterLink,
   linkOf,
   serialiseLink,
   stripBidiControls,
@@ -96,6 +98,7 @@ export const PROFILE = Object.freeze({
     'data-task-nonce',      // admitted only so the input hook can verify it; removed from every element
     'data-throng-wiki-index', // 047 T061/T063 — onLink reads it to mark an unresolved wikilink (R12)
     'data-throng-wiki-href', // 047 T061 — a wikilink's href BODY, with no scheme in the value (wikilinks.ts)
+    'data-throng-fm-link',  // 067 FR-132 — a front matter link the editor's grammar read; kept only with this render's nonce (the link hook)
     'data-throng-embed',    // 054 — a Mermaid embed's reference, URI-encoded with no scheme (embeds.ts)
     'data-diagram-height',  // 054 FR-046m — a diagram's box height, whole pixels; parsed again where it is read
     'data-diagram-pending', // 054 FR-032 — a place a diagram is drawn into once its source is read; presence only
@@ -176,6 +179,23 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     // a bespoke `throng-wiki:` scheme written anywhere in markdown-it's OUTPUT would have been
     // stripped before this hook ever ran. The scheme is prepended back here, in code, never as HTML —
     // exactly where `classify` needs it and nowhere DOMPurify's own pass can see it.
+    // 067 FR-132 — a front matter value the editor's grammar recognised, marked by the pipeline with this
+    // render's nonce. Anything else carrying the attribute loses it and is classified as an ordinary link.
+    const marked = node.getAttribute(FRONT_MATTER_LINK_ATTRIBUTE);
+    node.removeAttribute(FRONT_MATTER_LINK_ATTRIBUTE);
+    const frontMatterLink = marked === null ? null : decodeFrontMatterLink(marked, current?.context?.headingNonce);
+    if (frontMatterLink !== null) {
+      node.removeAttribute('href');
+      node.removeAttribute('title');
+      node.setAttribute(LINK_ATTRIBUTE, serialiseLink(frontMatterLink));
+      node.setAttribute('tabindex', '0');
+      node.setAttribute('role', 'link');
+      // The value as the author wrote it (the anchor's own text), not the path with its position split off.
+      const shown = displayTarget(node.textContent ?? frontMatterLink.text);
+      node.setAttribute('title', shown);
+      node.setAttribute(TARGET_ATTRIBUTE, shown);
+      return;
+    }
     const wikiBody = node.getAttribute(WIKI_HREF_ATTRIBUTE);
     node.removeAttribute(WIKI_HREF_ATTRIBUTE);
     const href = wikiBody !== null ? `${WIKI_SCHEME_PREFIX}${wikiBody}` : node.getAttribute('href');
@@ -263,7 +283,10 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     const tag = node.tagName.toUpperCase();
 
     if (tag === 'A') onLink(node);
-    else if (node.hasAttribute('href')) node.removeAttribute('href');
+    else {
+      if (node.hasAttribute('href')) node.removeAttribute('href');
+      node.removeAttribute(FRONT_MATTER_LINK_ATTRIBUTE);
+    }
 
     // Inside a followable link, the link's own title is the only one: Chromium shows the INNERMOST title,
     // so an image's or a span's would name a target Ctrl+click does not follow (adversarial review I3).

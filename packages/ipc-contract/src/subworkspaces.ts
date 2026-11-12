@@ -4,6 +4,7 @@
 // detach persists the new record via workspace.saveSubWorkspace (052 R3: one record at a time).
 
 export const SUBWORKSPACE_LIST_METHOD = 'subworkspace.list';
+export const SUBWORKSPACE_CREATE_METHOD = 'subworkspace.create';
 export const SUBWORKSPACE_RENAME_METHOD = 'subworkspace.rename';
 export const SUBWORKSPACE_RECOLOUR_METHOD = 'subworkspace.recolour';
 export const SUBWORKSPACE_DELETE_METHOD = 'subworkspace.delete';

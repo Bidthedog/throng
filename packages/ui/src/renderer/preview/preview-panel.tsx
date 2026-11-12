@@ -139,12 +139,21 @@ import { useContextMenu } from '../context-menu-provider.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import { positionRevealTarget } from '../editor/reveal-range.js';
-import { linkFailureReport, osLinkActions, type LinkActionDeps } from '../links/link-actions.js';
+import {
+  followLink,
+  linkFailureReport,
+  linkRouting,
+  openWebLink,
+  osLinkActions,
+  type LinkActionDeps,
+} from '../links/link-actions.js';
+import { linkScanOptions } from '../links/link-scan-options.js';
+import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
-import { findHeading, linkOf } from './link-dom.js';
+import { findHeading, linkOf, type EditorPreviewLink } from './link-dom.js';
 import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
-import { openPreviewLinkMenu } from './preview-link-menu.js';
+import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
 import { FindBar } from '../search/find-bar.js';
 import { attachPanelSearch, closeFind, getFindSession, openFind, updateCount } from '../search/search-store.js';
@@ -1456,10 +1465,19 @@ export function PreviewPanel({
 
   /* ── Following (FR-090, FR-091) ──────────────────────────────────────────────────────────────── */
 
+  /** 067 FR-132 — set once the link deps below exist; a front matter link the editor's grammar read follows through it. */
+  const editorFollowRef = useRef<(link: EditorPreviewLink) => void>(() => undefined);
+
   const onFollow = useCallback(
     (link: PreviewLink): void => {
       const current = stateRef.current;
       switch (link.kind) {
+        case 'editor':
+          // The editor's own route (`followLink`), so a position, a home, rooted or absolute path, a `file:` URI
+          // and an allowlisted protocol resolve exactly as they do from an editor (FR-132).
+          clearLinkNotice();
+          editorFollowRef.current(link);
+          return;
         case 'external':
           // The preview's own channel: main allows `mailto:` there, and keeps the general one http(s)-only.
           window.throng?.preview?.openExternal?.(link.url);
@@ -1525,6 +1543,12 @@ export function PreviewPanel({
                   detail: {
                     absPath: link.absPath,
                     ...(link.fragment !== undefined ? { headingFragment: link.fragment } : {}),
+                    // 067 FR-131 — raised by a followed link, so the editor's refusal of a binary file can
+                    // send it to the OS (`editor-open.tsx`) rather than raise the cannot-open message.
+                    link: {
+                      panelId,
+                      ...(panel.originProjectId ? { originProjectId: panel.originProjectId } : {}),
+                    },
                   },
                 }),
               );
@@ -1954,6 +1978,40 @@ export function PreviewPanel({
     }),
     [ws, settings.editor.openTarget, panel.originProjectId, panelId, reportSubject, projectRoot, os],
   );
+
+  /**
+   * 067 FR-132, FR-131 — a front matter link the editor's grammar read, followed as the editor follows it:
+   * one `throng:links:follow` for the request (the value's path with its position split off, resolved
+   * against this document's folder), then the click rule, and a file throng cannot open goes to the OS
+   * under `explorer.openUnsupportedInOs`. An allowlisted protocol leaves by the editor's web route.
+   */
+  editorFollowRef.current = (link) => {
+    if (link.protocol === true) {
+      openWebLink(link.text, linkScanOptions(settings.editor.links).allowlist);
+      return;
+    }
+    void followLink({
+      request: {
+        text: link.text,
+        kind: 'detectedPath',
+        panelId,
+        baseDirectory: docDirectory(stateRef.current?.filePath ?? mountFile.current),
+        ...(panel.originProjectId ? { originProjectId: panel.originProjectId } : {}),
+      },
+      ...(link.position === undefined ? {} : { position: link.position }),
+      deps: {
+        openInEditor: previewLinkDeps.openInEditor,
+        openInPreview: previewLinkDeps.openInPreview,
+        reportFailure: previewLinkDeps.reportFailure,
+        ...linkRouting(() => ({ previewRegistry: registry, previewSettings: settings.editor.previews })),
+        opensInOs: refusedAsBinaryToOs(() => ({
+          enabled: settings.explorer.openUnsupportedInOs,
+          ws,
+          ...(panel.originProjectId ? { ownerProjectId: panel.originProjectId } : {}),
+        })),
+      },
+    });
+  };
 
   /**
    * 045 FR-169 – FR-171 — over a link with NO selection, the ONE Link menu opens INSTEAD of this

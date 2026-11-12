@@ -17,22 +17,71 @@
 import { join, normalize } from 'node:path';
 import {
   afterRun,
+  decidePasteSource,
   dropDeleted,
   followMoves,
   isWithinRoot,
+  logCaught,
   retainProjects,
   type ClipboardItem,
   type FileClipboard,
+  type FileListSnapshot,
+  type IClipboard,
 } from '@throng/core';
 import type { MovePair } from './files-service.js';
 
 export type ClipboardSetResult = { ok: true } | { error: string };
 
+/** What a Paste should act on (067 research D3). */
+export type PasteOrigin =
+  | { kind: 'internal'; snapshot: NonNullable<FileClipboard> }
+  | { kind: 'os'; list: FileListSnapshot }
+  | { kind: 'none' };
+
 export class FileClipboardService {
   private value: FileClipboard = null;
 
   /** `broadcast` pushes `throng:fileClipboard:changed` to EVERY window (FR-002). */
-  constructor(private readonly broadcast: (clipboard: FileClipboard) => void) {}
+  /** The list last placed on the OS for {@link value}, or null. */
+  private placed: FileListSnapshot | null = null;
+  /** Clipboard writes run in order, and a Paste waits for them. */
+  private osWork: Promise<void> = Promise.resolve();
+
+  /**
+   * `os` is the real clipboard, so a cut or copy reaches other applications (067 FR-003). Absent: the clipboard
+   * stays private to throng, as a unit test of the pure transitions wants.
+   */
+  constructor(
+    private readonly broadcast: (clipboard: FileClipboard) => void,
+    private readonly os?: Pick<IClipboard, 'writeFileList' | 'readFileList' | 'writeText'>,
+  ) {}
+
+  /** Whether a Paste has anything to act on, the OS clipboard included. */
+  async hasPasteable(): Promise<boolean> {
+    return (await this.pasteOrigin()).kind !== 'none';
+  }
+
+  /**
+   * What a Paste acts on now. The OS clipboard is the authority (FR-006): an internal record it no longer backs
+   * is emptied here, so a cut replaced by another application can never run.
+   */
+  async pasteOrigin(): Promise<PasteOrigin> {
+    await this.osWork;
+    const osList = this.os ? await this.os.readFileList() : null;
+    const source = decidePasteSource(this.value !== null, this.placed, osList);
+    if (source === 'internal' && this.value !== null) return { kind: 'internal', snapshot: this.value };
+    if (source === 'os' && osList !== null) {
+      // Another application's list replaced ours, so nothing of ours is left to clear from the OS.
+      this.placed = null;
+      this.replace(null);
+      return { kind: 'os', list: osList };
+    }
+    if (source === 'stale') {
+      this.placed = null;
+      this.replace(null);
+    }
+    return { kind: 'none' };
+  }
 
   get(): FileClipboard {
     return this.value;
@@ -62,6 +111,7 @@ export class FileClipboardService {
       items.push({ absPath, projectId: activeProjectId, projectRoot: activeRoot });
     }
     this.replace({ mode, items });
+    this.placeOnOs({ paths: items.map((it) => it.absPath), intent: mode });
     return { ok: true };
   }
 
@@ -102,7 +152,41 @@ export class FileClipboardService {
     if (next === this.value) return;
     if (next === null && this.value === null) return;
     this.value = next;
+    if (next === null) this.takeBackFromOs();
     this.broadcast(next);
+  }
+
+  private placeOnOs(list: FileListSnapshot): void {
+    const os = this.os;
+    if (!os) return;
+    this.placed = null;
+    this.osWork = this.osWork.then(async () => {
+      try {
+        await os.writeFileList(list);
+        this.placed = list;
+      } catch (error) {
+        logCaught('file-clipboard: place a file list on the OS clipboard', error);
+      }
+    });
+  }
+
+  /**
+   * An emptied internal clipboard takes its list off the OS too, but only if that list is still ours. Left there, a
+   * cancelled cut would still paste, as a move, through the OS route.
+   */
+  private takeBackFromOs(): void {
+    const os = this.os;
+    const placed = this.placed;
+    this.placed = null;
+    if (!os || placed === null) return;
+    this.osWork = this.osWork.then(async () => {
+      try {
+        const current = await os.readFileList();
+        if (decidePasteSource(true, placed, current) === 'internal') await os.writeText('');
+      } catch (error) {
+        logCaught('file-clipboard: take a file list back off the OS clipboard', error);
+      }
+    });
   }
 }
 

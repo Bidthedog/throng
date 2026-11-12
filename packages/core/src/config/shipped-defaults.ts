@@ -347,7 +347,42 @@ import { setAtPath } from './metadata.js';
 // Bumped by 062's manual test (29 → 30): a KEYBINDINGS payload only. `view.resourceMonitor` moves from
 // `Ctrl+Shift+Alt+R` to `Ctrl+Shift+Alt+Y` on every platform (FR-034a). `seed()` wrote the old value, so it moves only
 // through FR-108's guarded rewrite, while it is still exactly {@link V29_KEYBINDINGS}'s default.
-export const SHIPPED_DEFAULTS_VERSION = 30;
+//
+// Bumped by 067's hand-test round (30 → 31): existing icon VALUES move — every default icon becomes a
+// monochrome glyph (maintainer, 2026-11-10). Every version up to 30 wrote the old emoji into each
+// built-in theme file, so this is 060's guarded value rewrite again: {@link V30_MOVED_ICONS} records
+// what 30 wrote, and {@link planThemeValueUpgrade} moves a glyph only where the file still holds it.
+// The additive half also fills `save` and `saveAs` (067 FR-069), which no seed has written yet.
+export const SHIPPED_DEFAULTS_VERSION = 31;
+
+/**
+ * The icon glyphs shipped-defaults version 30 wrote for the tokens 067's hand-test round moved, the
+ * same in every built-in theme. A frozen literal copy for {@link V25_MOVED_ICONS}' reason.
+ */
+export const V30_MOVED_ICONS: Readonly<Record<string, string>> = Object.freeze({
+  send: '↪',
+  activate: '↪',
+  settings: '⚙',
+  cut: '✂',
+  paste: '📋',
+  undo: '↩',
+  language: '🗣',
+  keybindings: '⌨',
+  themes: '🎨',
+  showHidden: '👁',
+  preview: '👓',
+  unload: '⏏',
+  category: '🏷',
+  warning: '⚠',
+  resourceMonitor: '📊',
+  resourceCpu: '🖥',
+  resourceMemory: '🧠',
+  resourceGpu: '🎮',
+  resourceHideIdle: '💤',
+  resourceHideEnded: '⏹',
+  resourceNetwork: '🌐',
+  resourceKill: '✖',
+});
 
 /**
  * The icon glyphs shipped-defaults version 25 wrote for the tokens 060's hand-test round moved, the
@@ -1304,6 +1339,10 @@ export function planThemeValueUpgrade(args: {
     }
     // 060 hand-test round (25 → 26): the same guard against version 25's icons, in every built-in.
     for (const [token, was] of Object.entries(V25_MOVED_ICONS)) {
+      moveIfStill(`icons.${token}`, was, shippedTheme.icons[token]);
+    }
+    // 067 hand-test round (30 → 31): the same guard against version 30's icons.
+    for (const [token, was] of Object.entries(V30_MOVED_ICONS)) {
       moveIfStill(`icons.${token}`, was, shippedTheme.icons[token]);
     }
 

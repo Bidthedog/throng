@@ -517,6 +517,42 @@ export function declareStandardFolders(wxs: string): string {
  * Order matters in one place only: the scope-page events are rewritten after the properties they
  * reference exist. Each step is independent otherwise.
  */
+/** 067 FR-029, FR-031: the folder verb and PATH, each on a property that defaults to on. Removed by the components themselves (FR-032). */
+export function addOsIntegration(wxs: string, options: MsiProjectOptions = {}): string {
+  if (has(wxs, 'ThrongOpenAsProject')) return wxs;
+  const { registryKey } = { ...DEFAULTS, ...options };
+  const exe = '&quot;[APPLICATIONFOLDER]throng.exe&quot; &quot;%V&quot;';
+  const verb = (key: string): string[] => [
+    `        <RegistryValue Root="HKMU" Key="${key}" Type="string" Value="Open as throng project"/>`,
+    `        <RegistryValue Root="HKMU" Key="${key}\\command" Type="string" Value="${exe}"/>`,
+  ];
+  const pathComponent = (id: string, scope: string, system: 'yes' | 'no'): string[] => [
+    `      <Component Id="${id}" Guid="*" Directory="APPLICATIONFOLDER">`,
+    `        <Condition>THRONG_ADD_TO_PATH = "1" AND ${scope}</Condition>`,
+    `        <RegistryValue Root="HKMU" Key="${attr(registryKey)}" Name="AddToPath" Type="integer" Value="1" KeyPath="yes"/>`,
+    `        <Environment Id="${id}Variable" Name="PATH" Value="[APPLICATIONFOLDER]" Part="last" Action="set" System="${system}"/>`,
+    '      </Component>',
+  ];
+  const components = [
+    '      <Component Id="ThrongOpenAsProject" Guid="*" Directory="APPLICATIONFOLDER">',
+    '        <Condition>THRONG_OPEN_AS_PROJECT = "1"</Condition>',
+    `        <RegistryValue Root="HKMU" Key="${attr(registryKey)}" Name="OpenAsProject" Type="integer" Value="1" KeyPath="yes"/>`,
+    ...verb('Software\\Classes\\Directory\\shell\\throng.OpenProject'),
+    ...verb('Software\\Classes\\Directory\\Background\\shell\\throng.OpenProject'),
+    '      </Component>',
+    ...pathComponent('ThrongAddToPathUser', USER_SCOPE_CONDITION, 'no'),
+    ...pathComponent('ThrongAddToPathMachine', MACHINE_SCOPE_CONDITION, 'yes'),
+    '',
+  ].join('\n');
+  const withComponents = insertBefore(wxs, PRODUCT_COMPONENTS_END, components, 'the end of the ProductComponents group');
+  const properties = [
+    '    <Property Id="THRONG_OPEN_AS_PROJECT" Value="1" Secure="yes"/>',
+    '    <Property Id="THRONG_ADD_TO_PATH" Value="1" Secure="yes"/>',
+    '',
+  ].join('\n');
+  return insertBefore(withComponents, /[ \t]*<Property Id="ApplicationFolderName"/, properties, 'the ApplicationFolderName property');
+}
+
 export function transformMsiProject(wxs: string, options: MsiProjectOptions = {}): string {
   let out = wxs;
   out = setInstallFolder(out, options);
@@ -528,5 +564,6 @@ export function transformMsiProject(wxs: string, options: MsiProjectOptions = {}
   out = addElevationRelaunch(out);
   out = declareStandardFolders(out);
   out = allowUnelevatedStart(out);
+  out = addOsIntegration(out, options);
   return out;
 }

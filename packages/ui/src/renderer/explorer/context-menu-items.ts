@@ -94,6 +94,13 @@ export interface ContextMenuOps {
    * practice, the toolbar control alone.
    */
   findInFiles: (relPath: string, replace: boolean) => void;
+  /**
+   * 067 FR-015 — open this file with the OS default program. Optional so a caller that cannot reach
+   * main simply draws no row.
+   */
+  openInDefaultProgram?: (relPath: string) => void;
+  /** 067 FR-045, FR-054 — open the Properties dialog on these items (the selection, or the right-clicked one). */
+  properties?: (relPaths: readonly string[]) => void;
 }
 
 export function buildContextMenuItems(args: {
@@ -138,6 +145,10 @@ export function buildContextMenuItems(args: {
    * disable (`null`: nothing to reuse in the visible tab) and its label's name (FR-076). 047 FR-075
    * removed the plain *Preview* row, so there is no `open` here.
    */
+  /** 067 FR-021 — `explorer.showOpenInOsDefaultProgram`: whether Open in OS Default Program is offered. */
+  showOpenInDefaultProgram?: boolean;
+  /** 067 FR-001 — the OS clipboard holds a file list, so Paste is available with no internal record. */
+  osFiles?: boolean;
   preview?: {
     affordance: PreviewAffordance;
     openLastActive: () => void;
@@ -146,7 +157,7 @@ export function buildContextMenuItems(args: {
     lastPreviewTitle: string | null;
   };
 }): MenuAction[] {
-  const { node, selectedRelPaths, clipboard, ops, openIn, pasteLabel: pasteText = 'Paste', keybindings, projectRoot, undoState, flavours, preview } = args;
+  const { node, selectedRelPaths, clipboard, ops, openIn, pasteLabel: pasteText = 'Paste', keybindings, projectRoot, undoState, flavours, preview, showOpenInDefaultProgram = true, osFiles = false } = args;
   // US1 (#125): the first bound chord for an explorer command, or undefined (→ no brackets).
   const sc = (action: string): string | undefined =>
     keybindings ? firstBinding(keybindings, action as never) : undefined;
@@ -172,7 +183,7 @@ export function buildContextMenuItems(args: {
     items.push({ label: 'Cut', icon: 'cut', section: 'content', shortcut: sc('file.cut'), onClick: () => ops.cut(targets) });
     items.push({ label: 'Copy', icon: 'copy', section: 'content', shortcut: sc('file.copy'), onClick: () => ops.copy(targets) });
   }
-  items.push({ label: pasteText, icon: 'paste', section: 'content', disabled: clipboard === null, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
+  items.push({ label: pasteText, icon: 'paste', section: 'content', disabled: clipboard === null && !osFiles, shortcut: sc('file.paste'), onClick: () => ops.paste(node) });
   // 024 US3 (#85): undo/redo the last file OPERATION. Disabled — not hidden — when the stack is
   // empty: an action that exists and is unavailable teaches what the menu can do; one that vanishes
   // teaches nothing (and leaves the user wondering whether undo exists at all).
@@ -210,6 +221,17 @@ export function buildContextMenuItems(args: {
     { label: 'OS File Explorer', icon: 'folderOpen', section: 'navigate', group: 'os', onClick: () => ops.reveal(node.relPath) },
     // #483 — five groups, divided: the OS reveal alone, the editor targets with Other Tab, the previews,
     // Terminal, Search.
+    // 067 FR-015, FR-019, FR-021 — on exactly one selected file, in the OS section (033 FR-048).
+    ...(showOpenInDefaultProgram && node.kind === 'file' && !isRoot && targets.length === 1 && ops.openInDefaultProgram
+      ? [
+          {
+            label: 'Open in OS Default Program',
+            section: 'navigate' as const,
+            group: 'os',
+            onClick: () => ops.openInDefaultProgram?.(node.relPath),
+          },
+        ]
+      : []),
     ...(openIn ?? []).map((item) => ({ ...item, group: 'editor' })),
   ];
   /*
@@ -365,6 +387,19 @@ export function buildContextMenuItems(args: {
         onClick: () => excludeFromSearch(node.relPath),
       });
     }
+  }
+
+  // 067 FR-045, FR-128 — Properties, on files and folders alike, LAST in the whole menu: it is pushed
+  // after every other row and joins the last group the menu draws — View & state (Hide) for a row,
+  // Navigate for the root, which has no Hide row — so it adds no divider of its own. On a
+  // multi-selection it shows the combined figures (FR-054).
+  if (ops.properties) {
+    items.push({
+      label: 'Properties',
+      icon: 'about',
+      section: isRoot ? 'navigate' : 'viewState',
+      onClick: () => ops.properties?.(targets),
+    });
   }
   return items;
 }

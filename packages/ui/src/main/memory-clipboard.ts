@@ -1,4 +1,4 @@
-import type { IClipboard } from '@throng/core';
+import type { FileListSnapshot, IClipboard } from '@throng/core';
 
 /**
  * An in-process {@link IClipboard} — the E2E suite's clipboard (016, FR-013a).
@@ -23,10 +23,12 @@ export class MemoryClipboard implements IClipboard {
   private text = '';
   private html = '';
   private png: Uint8Array | null = null;
+  private fileList: FileListSnapshot | null = null;
 
   async writeText(text: string): Promise<void> {
     this.text = text;
     this.png = null;
+    this.fileList = null;
     // A plain write is not half-rich: it replaces whatever writeRich() left behind, exactly as the
     // real OS clipboard replaces every format in one write (044 FR-035a / R12).
     this.html = '';
@@ -40,6 +42,7 @@ export class MemoryClipboard implements IClipboard {
     this.text = entry.text;
     this.html = entry.html;
     this.png = null;
+    this.fileList = null;
   }
 
   // An image write replaces every format, the text included, as the OS clipboard's one write does.
@@ -47,10 +50,22 @@ export class MemoryClipboard implements IClipboard {
     this.text = '';
     this.html = entry.html;
     this.png = entry.png;
+    this.fileList = null;
   }
 
   async readText(): Promise<string> {
     return this.text;
+  }
+
+  async writeFileList(list: FileListSnapshot): Promise<void> {
+    this.text = '';
+    this.html = '';
+    this.png = null;
+    this.fileList = list;
+  }
+
+  async readFileList(): Promise<FileListSnapshot | null> {
+    return this.fileList;
   }
 
   /** Test/contract-only: the HTML most recently written by {@link writeRich}. Never called from

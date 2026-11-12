@@ -41,6 +41,8 @@ export type FileOpUndoEntry =
       projects?: CrossProject;
       /** Folders the paste created to keep a selection's structure, parents first (FR-033, R16). */
       createdDirs?: string[];
+      /** 067 FR-009: the sources lay outside every project, so only the destinations are confined on undo. */
+      external?: boolean;
       at: number;
     };
 

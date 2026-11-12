@@ -12,6 +12,10 @@ export const UI_TYPES = {
   ShippedDefaultsService: Symbol.for('throng:ShippedDefaultsService'),
   // 016: the OS clipboard seam, and the app-global mode record that rides on it.
   Clipboard: Symbol.for('throng:IClipboard'),
+  FileManagerRegistration: Symbol.for('throng:IFileManagerRegistration'),
+  FileAttributes: Symbol.for('throng:IFileAttributes'),
+  OsPropertiesDialog: Symbol.for('throng:IOsPropertiesDialog'),
+  FileAccessInfo: Symbol.for('throng:IFileAccessInfo'),
   ClipboardService: Symbol.for('throng:ClipboardService'),
   // 032: how hard the config watcher retries an unreadable settings document before it believes
   // the defaults it is holding (FR-008). Bound here rather than passed at the call site because

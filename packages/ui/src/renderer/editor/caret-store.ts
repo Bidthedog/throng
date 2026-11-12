@@ -39,6 +39,16 @@ export interface PanelCaret {
    * a whole-line-ending selection does — while `null` is what makes the readout ABSENT.
    */
   selected: number | null;
+  /**
+   * The first and last column of a selection that sits on ONE line (067 FR-126), or `null` for a bare
+   * caret and for a selection across lines. The bar then reads `Cols 45-56` in place of `Col 56`.
+   */
+  columns: readonly [number, number] | null;
+  /**
+   * A selection across lines (067 FR-136): its first and last line, and the column where it starts.
+   * `null` or absent otherwise. The bar then reads `Ln 3-5, Col 4.`.
+   */
+  lines?: { readonly first: number; readonly last: number; readonly column: number } | null;
 }
 
 /**
@@ -51,6 +61,8 @@ export interface PanelCaret {
 export const NO_CARET: PanelCaret = Object.freeze({
   position: Object.freeze({ line: 1, column: 1 }),
   selected: null,
+  columns: null,
+  lines: null,
 }) as PanelCaret;
 
 const carets = new Map<string, PanelCaret>();
@@ -71,17 +83,24 @@ export function setPanelCaret(
   panelId: string,
   position: CaretPosition,
   selected: number | null,
+  columns: readonly [number, number] | null = null,
+  lines: PanelCaret['lines'] = null,
 ): void {
   const current = carets.get(panelId);
   if (
     current !== undefined &&
     current.position.line === position.line &&
     current.position.column === position.column &&
-    current.selected === selected
+    current.selected === selected &&
+    current.columns?.[0] === columns?.[0] &&
+    current.columns?.[1] === columns?.[1] &&
+    current.lines?.first === lines?.first &&
+    current.lines?.last === lines?.last &&
+    current.lines?.column === lines?.column
   ) {
     return; // nothing moved; a needless emit is a needless render on the keystroke path
   }
-  carets.set(panelId, { position, selected });
+  carets.set(panelId, { position, selected, columns, lines });
   emit();
 }
 

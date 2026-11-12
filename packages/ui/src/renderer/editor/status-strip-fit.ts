@@ -20,7 +20,7 @@
  * **Shorten first (FR-021).** Every label that has a short form takes it before ANY segment is
  * hidden. Losing a figure costs the user information; `words` → `w` costs them nothing.
  *
- * **Then hide, in a fixed order (FR-023).** `words → chars → selected → column → line`. The line
+ * **Then hide, in a fixed order (FR-023, amended by 067 FR-097).** `words → chars → lines → selected → column → line`. The line
  * survives longest of the readouts because it is the figure an error message names, which is the
  * reason #256 asks for these readouts at all. 059 FR-032 continues the order with the two format
  * indicators — `lineEnding → encoding` — and it terminates there.
@@ -35,8 +35,8 @@
  * number that could equally be a line, a column or a count (FR-022a).
  */
 
-/** The five figures the bar reports. */
-export type ReadoutId = 'line' | 'column' | 'selected' | 'chars' | 'words';
+/** The six figures the bar reports (067 FR-095 added total lines to 040's five). */
+export type ReadoutId = 'line' | 'column' | 'selected' | 'lines' | 'chars' | 'words';
 
 /**
  * 059 FR-030 — the document's encoding and line-ending indicators. They live in the TRAILING group,
@@ -69,7 +69,7 @@ export interface FitResult {
 }
 
 /** Left-to-right on screen. Not the hide order — conflating the two renders the bar backwards. */
-export const READOUT_ORDER = ['line', 'column', 'selected', 'chars', 'words'] as const;
+export const READOUT_ORDER = ['line', 'column', 'selected', 'lines', 'chars', 'words'] as const;
 
 /** The indicators left to right in the trailing group, before the language label (059 FR-030). */
 export const INDICATOR_ORDER = ['encoding', 'lineEnding'] as const;
@@ -87,7 +87,7 @@ export const SEGMENT_ORDER = [...READOUT_ORDER, ...INDICATOR_ORDER] as const;
  * shortening order would be a rule with nothing in the spec behind it, free to drift. (The indicators
  * have no short form, so they take no part in shortening.)
  */
-export const HIDE_ORDER = ['words', 'chars', 'selected', 'column', 'line', 'lineEnding', 'encoding'] as const;
+export const HIDE_ORDER = ['words', 'chars', 'lines', 'selected', 'column', 'line', 'lineEnding', 'encoding'] as const;
 
 const isIndicator = (id: SegmentId): id is IndicatorId => id === 'encoding' || id === 'lineEnding';
 
@@ -102,8 +102,11 @@ export const READOUT_LABELS: Record<ReadoutId, { full: string; short: string }> 
   line: { full: 'Ln', short: 'Ln' },
   column: { full: 'Col', short: 'Col' },
   selected: { full: 'selected', short: 'sel' },
-  chars: { full: 'chars', short: 'ch' },
-  words: { full: 'words', short: 'w' },
+  // 067 FR-096, FR-125. The three counts end in a full stop. At a count of one the full form reads
+  // `1 Line.` (status-strip.tsx `readoutText`); this is the table's.
+  lines: { full: 'Lines.', short: 'Lns.' },
+  chars: { full: 'Chars.', short: 'Ch.' },
+  words: { full: 'Words.', short: 'W.' },
 };
 
 /**

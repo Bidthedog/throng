@@ -50,7 +50,12 @@ export interface ProjectsContextValue {
   clearError(): void;
   refresh(): Promise<void>;
   /** Resolves true on success, false if the create was rejected (e.g. validation). */
-  createProject(input: ProjectsCreateParams): Promise<boolean>;
+  createProject(input: ProjectsCreateParams, opts?: { activate?: boolean }): Promise<boolean>;
+  /**
+   * Mark a project loaded without switching to it (067 FR-035: a folder arriving from outside throng
+   * with `projects.openFromOutside: 'load'`). The active project does not change.
+   */
+  loadProject(id: string): void;
   /** Resolves true on success, false if the update was rejected. */
   updateProject(params: ProjectsUpdateParams): Promise<boolean>;
   deleteProject(id: string): Promise<void>;
@@ -320,11 +325,12 @@ export function ProjectsProvider({
       errorSubject,
       clearError: () => fail(null),
       refresh,
-      createProject: async (input) => {
+      createProject: async (input, opts) => {
         try {
           const created = await client.create(input);
           fail(null);
-          setOpenedId(created.id); // a freshly created project opens immediately
+          // A freshly created project opens immediately — unless the caller asked only to load it (067 FR-035).
+          if (opts?.activate !== false) setOpenedId(created.id);
           markLoaded(created.id);
           await refresh();
           window.throng?.projects?.notifyChanged?.(); // sync other windows
@@ -336,6 +342,7 @@ export function ProjectsProvider({
           return false;
         }
       },
+      loadProject: (id) => markLoaded(id),
       updateProject: (params) => run('update', projectSubject(params.id), () => client.update(params)),
       deleteProject: async (id) => {
         await run('delete', projectSubject(id), () => client.remove(id));

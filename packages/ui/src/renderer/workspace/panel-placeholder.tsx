@@ -87,6 +87,9 @@ import { useEditorFailure } from '../editor/editor-failure.js';
 import { useEditorState } from '../editor/editor-state.js';
 import { setLastActiveEditor } from '../editor/last-active-editor.js';
 import { getEditorActions } from '../editor/editor-actions.js';
+import { PanelHeaderSaveIcons } from './panel-header-save-icons.js';
+import { linkFailureReport, osLinkActions } from '../links/link-actions.js';
+import { useReportSubjectFailure } from './panel-failure-notice.js';
 import { clearEditorPanelType } from '../editor/clear-editor-panel-type.js';
 import { disposeEditor } from '../editor/use-editor.js';
 import { destroyPanelSearch } from '../search/search-store.js';
@@ -183,6 +186,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
   // (FR-088), with native OS separators (FR-101). Split into a truncatable directory
   // prefix + always-visible name.
   const os = window.throng?.osName ?? 'windows';
+  const reportSubject = useReportSubjectFailure();
   const filePill =
     editorUi?.filePath != null
       ? editorPathParts(
@@ -714,6 +718,7 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
               // 044 FR-122b — checked from the setting; WHERE it is drawn follows the affordance above (an
               // editor) or the provider kind (a preview), inside the builder.
               syncScroll: settings.editor.previews.syncScroll,
+              showOpenInDefaultProgram: settings.explorer.showOpenInOsDefaultProgram,
               // 054 FR-071 — the same toggle the header control and `panel.toggleMaximise` run.
               maximise: { maximised: isMaximisedPanel, toggle: () => toggleMaximisePanel(tabId, panel.id) },
               // 044 FR-111 — Back / Forward enabled exactly as the header buttons are, from the mirrored history.
@@ -788,6 +793,26 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
                 // file it shows, which main's confinement check accepts (menus-and-controls.md §1).
                 openInOsExplorer: () => {
                   revealPanelFile(isPreview ? previewFilePath : editorUi?.filePath, window.throng?.files);
+                },
+                // 067 FR-016 — the panel's own file, through the link route's OS default program action: main
+                // re-checks the target, and a failure is the one notice a followed link raises.
+                openInDefaultProgram: () => {
+                  const abs = isPreview ? previewFilePath : editorUi?.filePath;
+                  if (!abs) return;
+                  void osLinkActions()
+                    .openInOsDefaultProgram({
+                      text: abs,
+                      kind: 'detectedPath',
+                      panelId: panel.id,
+                      originProjectId: panel.originProjectId,
+                    })
+                    .then((outcome) => {
+                      if (!outcome.ok) {
+                        reportSubject(
+                          linkFailureReport(outcome, { osName: os, projectId: panel.originProjectId }),
+                        );
+                      }
+                    });
                 },
                 /*
                  * The BANNER'S retry, not a second call to the same operation.
@@ -1012,6 +1037,14 @@ export function PanelPlaceholder({ panel, tabId }: { panel: Panel; tabId: string
           </span>
         ) : null}
         <span className="panel-box__actions">
+          {/* 067 FR-069 — an editor's Save and Save As, then the separator, before the common icons. */}
+          {panel.kind === 'editor' ? (
+            <PanelHeaderSaveIcons
+              panelId={panel.id}
+              keybindings={keybindings}
+              movedOut={editorUi?.movedOut === true}
+            />
+          ) : null}
           {/*
             Through `IconButton` (#282). Its sibling below already carried an `aria-label`; this one
             did not, and a `title` alone loses the accessible name to the `+` text node — so the two

@@ -1,5 +1,7 @@
 export { runTrashRestoreContract, runUserDirectoriesContract, type TrashRestoreContractEnv } from './platform-seams-contract.js';
 export { withHostTraits } from './with-host-traits.js';
+export { FakeFileManagerRegistration } from './fake-file-manager-registration.js';
+export { FakeFileAttributes, FakeOsPropertiesDialog, FakeFileAccessInfo } from './fake-properties.js';
 export { isLinuxHost, isWindowsHost, skipUnlessLinux, skipUnlessWindows } from './platform-guards.js';
 // Test-only surface of @throng/core, exposed via the "@throng/core/testing"
 // subpath export so the production entry point (".") stays free of test
@@ -30,7 +32,7 @@ export {
 export { runElevationContract } from './elevation-contract.js';
 export { runDeElevatorContract } from './de-elevator-contract.js';
 export { runFontEnumerationContract } from './font-enumeration-contract.js';
-export { runClipboardContract, runClipboardRichContract } from './clipboard-contract.js';
+export { runClipboardContract, runClipboardFileListContract, runClipboardRichContract } from './clipboard-contract.js';
 export type { ClipboardRichHarness } from './clipboard-contract.js';
 // 045 — the two ports clickable file links added (#394).
 export { runPathFormsContract } from './path-forms-contract.js';
@@ -40,3 +42,4 @@ export { runRefusedUriSchemesContract } from './refused-uri-schemes-contract.js'
 // 055 — the resource monitor's process seam.
 export { runProcessMetricsContract, type ProcessMetricsContractEnv } from './process-metrics-contract.js';
 export { FakeProcessMetrics } from './fake-process-metrics.js';
+export { runFileListCodecContract } from './file-list-codec-contract.js';

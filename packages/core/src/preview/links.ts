@@ -38,6 +38,13 @@ export type PreviewLink =
   | { kind: 'heading'; fragment: string }
   /** Resolves outside the project; `target` is the link as written, for the notice (FR-090e). */
   | { kind: 'outside'; target: string }
+  /**
+   * 067 FR-132 — a front matter value that is wholly a link the EDITOR's grammar recognises (a position, a
+   * home, rooted or absolute path, a `file:` URI, a path with spaces, an allowlisted protocol). Followed as
+   * the editor follows it, so `text` is the editor's own request text: the path with its position already
+   * split off into `position`, or, with `protocol`, the URI an allowlisted protocol link opens.
+   */
+  | { kind: 'editor'; text: string; position?: { line: number; column?: number }; protocol?: true }
   /** Anything else (FR-091). */
   | { kind: 'inert' };
 

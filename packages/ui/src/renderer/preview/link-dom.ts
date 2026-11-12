@@ -44,6 +44,33 @@ export function stripBidiControls(text: string): string {
   return text.replace(BIDI_CONTROLS, '');
 }
 
+/** A front matter link the editor's grammar recognised (067 FR-132). */
+export type EditorPreviewLink = Extract<PreviewLink, { kind: 'editor' }>;
+
+/**
+ * The attribute the pipeline carries a front matter {@link EditorPreviewLink} in until the sanitiser's hook
+ * turns it into `data-throng-link`. The value is `<this render's nonce>.<URI-encoded JSON>`: no colon, which
+ * the sanitiser's URI test on data attributes would refuse, and the nonce is what a document cannot know, so
+ * a raw `<a>` in the Markdown cannot plant a link of its own (the hook removes the attribute everywhere).
+ */
+export const FRONT_MATTER_LINK_ATTRIBUTE = 'data-throng-fm-link';
+
+export function encodeFrontMatterLink(link: EditorPreviewLink, nonce: string): string {
+  return `${nonce}.${encodeURIComponent(JSON.stringify(link))}`;
+}
+
+/** The link `raw` carries, or `null` when it is not this render's (wrong nonce) or does not read back. */
+export function decodeFrontMatterLink(raw: string, nonce: string | undefined): EditorPreviewLink | null {
+  if (nonce === undefined || !raw.startsWith(`${nonce}.`)) return null;
+  try {
+    const link = parseLink(decodeURIComponent(raw.slice(nonce.length + 1)));
+    return link?.kind === 'editor' ? link : null;
+  } catch (error) {
+    logCaught('link-dom: read a front matter link attribute', error);
+    return null;
+  }
+}
+
 /** The attribute a followable link's classification is carried in. */
 export const LINK_ATTRIBUTE = 'data-throng-link';
 
@@ -105,6 +132,9 @@ export function previewLinkDestination(
       return { kind: 'heading' };
     case 'outside':
       return { kind: 'stays' };
+    // 067 FR-132 — followed by the editor's route; its hover is the editor's for the same text.
+    case 'editor':
+      return link.protocol === true ? uriHoverDestination(link.text) : { kind: 'editor', openTarget: wording.openTarget ?? 'lastActive' };
     // FR-168 / §9.4 — worded by its scheme, through the one function the editor and the terminal
     // now ask as well, so `tel:` and `slack:` are not silently "system browser" here either.
     case 'external':
@@ -149,6 +179,25 @@ function parseLink(raw: string): PreviewLink | null {
       return str('fragment') ? { kind: 'heading', fragment: v.fragment as string } : null;
     case 'outside':
       return str('target') ? { kind: 'outside', target: v.target as string } : null;
+    case 'editor': {
+      if (!str('text')) return null;
+      const position = v.position;
+      const at =
+        typeof position === 'object' && position !== null && typeof (position as { line?: unknown }).line === 'number'
+          ? {
+              line: (position as { line: number }).line,
+              ...(typeof (position as { column?: unknown }).column === 'number'
+                ? { column: (position as { column: number }).column }
+                : {}),
+            }
+          : undefined;
+      return {
+        kind: 'editor',
+        text: v.text as string,
+        ...(at === undefined ? {} : { position: at }),
+        ...(v.protocol === true ? { protocol: true as const } : {}),
+      };
+    }
     default:
       return null;
   }
