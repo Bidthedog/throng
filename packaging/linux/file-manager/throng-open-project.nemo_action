@@ -1,0 +1,8 @@
+[Nemo Action]
+Active=true
+Name=Open as throng project
+Comment=Open this folder as a throng project
+Exec=throng %F
+Icon-Name=throng
+Selection=S
+Extensions=dir;

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Open as throng project
+Comment=Open this folder as a throng project
+Exec=throng %F
+Icon=throng
+MimeType=inode/directory;
+NoDisplay=true
+Terminal=false

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=inode/directory;
+Actions=openAsThrongProject;
+
+[Desktop Action openAsThrongProject]
+Name=Open as throng project
+Icon=throng
+Exec=throng %F

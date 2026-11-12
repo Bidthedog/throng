@@ -39,6 +39,16 @@ mv -T "$versions/current.new" "$versions/current"
 mkdir -p "$(dirname "$command_link")"
 ln -sfn "$versions/current/throng" "$command_link"
 
+# 067 FR-033: the "Open as throng project" item, one file for each file manager.
+install_item() {
+  mkdir -p "$prefix$2"
+  cp -f "$payload/resources/file-manager/$1" "$prefix$2/$1"
+  chmod 0644 "$prefix$2/$1"
+}
+install_item throng-open-project.nemo_action /usr/share/nemo/actions
+install_item throng-open-project-kde.desktop /usr/share/kio/servicemenus
+install_item throng-open-project.desktop /usr/share/applications
+
 # Only root can set up the sandbox. A package script always is.
 if [ "$(id -u)" = 0 ]; then
   profile_active=

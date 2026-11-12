@@ -10,6 +10,9 @@ esac
 
 prefix=${THRONG_PACKAGE_TEST_PREFIX:-}
 rm -f "$prefix/usr/bin/throng"
+rm -f "$prefix/usr/share/nemo/actions/throng-open-project.nemo_action"
+rm -f "$prefix/usr/share/kio/servicemenus/throng-open-project-kde.desktop"
+rm -f "$prefix/usr/share/applications/throng-open-project.desktop"
 rm -rf "$prefix/opt/throng-versions"
 # rpm removes the package's files but not its folders, which it does not own (measured on Fedora 45).
 rm -rf "$prefix/opt/throng"
