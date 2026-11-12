@@ -147,6 +147,7 @@ A maintainer cuts a release. The pipeline builds the Linux packages beside the W
 **Upgrade and removal**
 
 - **FR-009**: Upgrading while throng runs MUST leave the running copy working, with its terminals alive, until the user restarts it. It MUST NOT fail later because the installed files changed under it.
+- **FR-009a**: An install MUST remove every older version no process runs from. A version still running MUST stay until a later package operation finds it unused. (Added by 067 FR-101; the rule was previously only in research note D2.)
 - **FR-010**: A running copy MUST tell the user when the installed version no longer matches it, as one notice with a restart action, saying what restarting does to running terminals (*One condition, one notice*).
 - **FR-011**: An upgrade MUST keep all per-user data, and the ordinary install command MUST refuse to install an older version over a newer one, leaving the installation and data untouched (020 FR-016a). A deliberate downgrade means removing the current version first.
 - **FR-012**: Removing a package MUST remove everything the package installed and MUST NOT touch any user's data. `docs/installation.md` MUST name the folders that hold it.

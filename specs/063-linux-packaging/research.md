@@ -7,7 +7,7 @@ its Linux targets accept custom maintainer scripts. Its `getSanitizedVersion` ma
 `1.0.0-alpha12` becomes `1.0.0~alpha12`, which both tools sort below `1.0.0`. No mapping of our own is needed; the
 harness asserts the recorded package version.
 
-## D2. A running copy across an upgrade (FR-009)
+## D2. A running copy across an upgrade (FR-009, FR-009a)
 
 **Decision: a running copy never runs from the package-owned tree.** The package owns `/opt/throng`. Its post-install
 builds `/opt/throng-versions/<version>` as a hard-link farm of that tree (`cp -al`) and points
