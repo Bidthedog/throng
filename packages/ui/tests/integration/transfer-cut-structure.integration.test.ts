@@ -13,7 +13,7 @@ import { disposeHarness, exists, makeHarness, put, snapshotTree, type Harness } 
  * Reported: cutting `test/test.md` and `test.md` and pasting on `test2` did not land them as
  * `test2/test/test.md` and `test2/test.md`, while a copy did. Cut and copy share the engine's plan, so
  * this drives the user's path end to end in main: `throng:fileClipboard:set` with ROOT-RELATIVE paths
- * into the REAL `FileClipboardService`, then `throng:transfer:paste` on `test2` through
+ * into the REAL `FileClipboardService`, then `throng:transfer:pasteAuto` on `test2` through
  * `registerTransferIpc` into the real engine — within project A, and across from A into B.
  */
 
@@ -71,7 +71,7 @@ async function cutInA(...relPaths: string[]): Promise<void> {
 /** Paste on `test2` of the shown project and wait for the job's result. */
 async function pasteOnTest2(): Promise<TransferResult> {
   const before = h.done.length;
-  const res = (await handles.get('throng:transfer:paste')!(event, 'test2')) as { jobId: string } | { error: string };
+  const res = (await handles.get('throng:transfer:pasteAuto')!(event, 'test2')) as { jobId: string } | { error: string };
   expect(res).toHaveProperty('jobId');
   await h.svc.whenIdle();
   expect(h.done.length).toBe(before + 1);

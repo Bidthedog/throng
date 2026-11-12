@@ -5,23 +5,15 @@
  * `dragover` has finished propagating: `dataTransfer.dropEffect`. `none` is what makes the cursor a
  * circle-with-a-slash; `copy` over a Projects row or the title bar promised a paste that would not happen.
  *
- * Two window listeners decide it, and each owns one kind of drag:
- *   - the file tree's (`file-tree.tsx`), registered after react-dnd's backend, for the tree's OWN drags;
- *   - `useNoDropNavigation` (`composition-root.tsx`), for an OS `Files` drag.
- * Both must leave alone an event a target has already claimed, which is what keeps an editor's `copy`
- * a single write (`os-drop.e2e.ts`).
+ * `useNoDropNavigation` (`composition-root.tsx`) owns an OS `Files` drag and leaves alone an event a target
+ * has already claimed, which is what keeps an editor's `copy` a single write (`os-drop.e2e.ts`).
+ *
+ * The tree's OWN drags no longer travel as web drags (067 FR-110), so their pointer is covered where it is
+ * decided: `tree-pointer-backend.test.ts`.
  */
 import { renderHook } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useNoDropNavigation } from '../../src/renderer/composition-root.js';
-import { clearTreeDrag, setTreeDrag, setTreeDropEffect, takeTreeDropEffect } from '../../src/renderer/explorer/tree-drag-store.js';
-import { resetPendingRevealForTests } from '../../src/renderer/explorer/pending-reveal.js';
-import {
-  installResizeObserver,
-  mountExplorer,
-  standardHost,
-  uninstallResizeObserver,
-} from './helpers/explorer-harness.js';
 
 /** A `dragover` carrying a plain-object `dataTransfer` whose every `dropEffect` write is recorded. */
 function dragOver(
@@ -85,50 +77,6 @@ describe('an OS file drag over nothing (050 T087, FR-034, useNoDropNavigation)',
     host.remove();
 
     expect(over.writes).toEqual(['copy']);
-    expect(over.effect()).toBe('copy');
-  });
-});
-
-describe('a tree drag over something that is not a target (050 T087, FR-034, file-tree.tsx)', () => {
-  beforeAll(installResizeObserver);
-  afterAll(uninstallResizeObserver);
-  beforeEach(() => {
-    localStorage.clear();
-    resetPendingRevealForTests();
-    takeTreeDropEffect();
-  });
-  afterEach(() => {
-    clearTreeDrag();
-    takeTreeDropEffect();
-    localStorage.clear();
-    Reflect.deleteProperty(window, 'throng');
-  });
-
-  it('ends with dropEffect `none` over an element nothing claimed — a Projects pane row included', async () => {
-    const m = await mountExplorer(standardHost, {});
-    setTreeDrag({ paths: ['C:/projects/demo/a.txt'], singleFile: true } as never);
-    const row = document.createElement('div');
-    row.dataset.testid = 'project-row';
-    document.body.append(row);
-
-    const over = dragOver(row, ['application/x-throng'], 'copy');
-    row.remove();
-    m.unmount();
-
-    expect(over.effect()).toBe('none');
-  });
-
-  it('keeps `copy` when a target chose it', async () => {
-    const m = await mountExplorer(standardHost, {});
-    setTreeDrag({ paths: ['C:/projects/demo/a.txt'], singleFile: true } as never);
-    const target = document.createElement('div');
-    target.addEventListener('dragover', () => setTreeDropEffect('copy'));
-    document.body.append(target);
-
-    const over = dragOver(target, ['application/x-throng'], 'none');
-    target.remove();
-    m.unmount();
-
     expect(over.effect()).toBe('copy');
   });
 });

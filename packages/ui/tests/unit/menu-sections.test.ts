@@ -167,6 +167,8 @@ const explorerOps = {
   collapseChildren: noop,
   // 043 FR-029b — required too; the folder fixture draws Find in Files from it.
   findInFiles: noop,
+  // 067 FR-045, FR-128 — Properties, last in the menu.
+  properties: noop,
 };
 
 const explorerFile = (): MenuAction[] =>
@@ -266,6 +268,7 @@ const panelActions = {
   reloadFromDisk: noop,
   revealInTree: noop,
   openInOsExplorer: noop,
+  openInDefaultProgram: noop,
   tryAgain: noop,
   reloadTerminal: noop,
   copyDetails: noop,
@@ -772,7 +775,7 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
    * indices are the four hand-pushed separators the builder carried before US5, counted off the
    * shipped file: after Redo, after New Folder, after Delete, after Copy Path.
    */
-  it('a file row: four dividers, at 6, 9, 11 and 14', () => {
+  it('a file row: four dividers, at 6, 9, 11 and 14 (Properties, last, joins View & state: 067 FR-128)', () => {
     expect(separatorIndices(explorerFile())).toEqual([6, 9, 11, 14]);
   });
 
@@ -807,6 +810,7 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       'Copy Path',
       'Collapse All Children',
       'Expand All Children',
+      'Properties',
     ]);
   });
 
@@ -840,6 +844,7 @@ describe('zero movement — the Files & Folders menu draws its dividers exactly 
       'Expand All Children',
       '—',
       'Hide in this project',
+      'Properties',
     ]);
   });
 });
@@ -1104,6 +1109,7 @@ describe('the panel header menu draws exactly the shape contracts/menu-sections.
       // Navigate — the two reveal items exist only for a panel with a file behind it.
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       // 044 FR-111 — Back and Forward on every editor, drawn DISABLED at the ends rather than hidden.
       // No Open Preview here: this fixture hands the builder no affordance, which is `absent`.
       'Back',
@@ -1280,6 +1286,7 @@ describe('an editor’s header gains Open Preview, Back and Forward in Navigate 
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       'Open Preview',
       'Back',
       'Forward',
@@ -1403,6 +1410,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       'Open in Editor',
       // 047 US1/US4 (FR-007) — always present, beside Back/Forward (contracts/menus-commands-controls.md
       // "Preview header menu").
@@ -1431,6 +1439,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       'Go to Editor',
       'Find…',
       'Go to Heading…',
@@ -1454,6 +1463,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       // 047 US1/US4 — Find… and Go to Heading… are offered whatever the provider kind (unlike Open in
       // Editor, FR-015e).
       'Find…',
@@ -1497,6 +1507,7 @@ describe('a preview panel’s header menu draws exactly contracts/menus-and-cont
       '—',
       'Reveal File in File Explorer',
       'Open in OS Explorer',
+      'Open in OS Default Program',
       'Open in Editor',
       'Find…',
       'Go to Heading…',

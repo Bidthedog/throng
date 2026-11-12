@@ -24,6 +24,16 @@ import type { ThrongBridge } from '../../../src/renderer/state/bridge.js';
 import { installResourcesBridge } from '../helpers/resource-bridge.js';
 import { GIB, MACHINE, metrics, summary } from '../helpers/resource-fixtures.js';
 
+/** The rest before the popover opens: none for the tests about what it shows, the real figure for those about the wait. */
+const hoverDelay = vi.hoisted(() => ({ ms: 0 }));
+vi.mock('../../../src/renderer/resources/use-monitor-settings.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../src/renderer/resources/use-monitor-settings.js')>();
+  return {
+    ...real,
+    useResourceMonitorSettings: () => ({ ...real.useResourceMonitorSettings(), popoverDelayMs: hoverDelay.ms }),
+  };
+});
+
 /* ── layout stubs: jsdom measures nothing ─────────────────────────────────────────────────────── */
 
 const widths = { bar: 1000, figure: 60 };

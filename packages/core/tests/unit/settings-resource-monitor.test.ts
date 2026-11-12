@@ -20,6 +20,7 @@ describe('resource monitor settings (055 FR-004, FR-033a, FR-046, FR-063)', () =
       cpuCriticalPercent: 80,
       memoryWarningPercent: 50,
       memoryCriticalPercent: 80,
+      popoverDelayMs: 500,
     });
     expect(DEFAULT_APP_SETTINGS.confirmations.killProcesses).toBe('double');
   });
@@ -39,6 +40,18 @@ describe('resource monitor settings (055 FR-004, FR-033a, FR-046, FR-063)', () =
     const s = parseAppSettings(undefined);
     s.resourceMonitor.historyMinutes = 30;
     expect(DEFAULT_APP_SETTINGS.resourceMonitor.historyMinutes).toBe(5);
+  });
+
+  it('opens files throng cannot in the OS by default, as a toggle (067 FR-116)', () => {
+    expect(DEFAULT_APP_SETTINGS.explorer.openUnsupportedInOs).toBe(true);
+    expect(parseAppSettings({ explorer: { openUnsupportedInOs: false } }).explorer.openUnsupportedInOs).toBe(false);
+    expect(descriptor('explorer.openUnsupportedInOs')).toMatchObject({ group: 'File Explorer', control: 'toggle' });
+  });
+
+  it('offers the popover delay from 0 to 5,000 ms, and carries a stored value through', () => {
+    expect(descriptor('resourceMonitor.popoverDelayMs')).toMatchObject({ group: 'Resource Monitor', control: 'slider', min: 0, max: 5000 });
+    expect(parseAppSettings({ resourceMonitor: { popoverDelayMs: 1200 } }).resourceMonitor.popoverDelayMs).toBe(1200);
+    expect(parseAppSettings({ resourceMonitor: { popoverDelayMs: 'x' } }).resourceMonitor.popoverDelayMs).toBe(500);
   });
 
   it.each([

@@ -47,6 +47,7 @@ function harness(
     legacyLockHeld?: boolean;
     connect?: InstanceGuardDeps['connect'];
     logs?: string[];
+    folder?: string;
   } = {},
 ): Harness {
   let secondInstance: ((argv: readonly string[]) => void) | undefined;
@@ -62,6 +63,8 @@ function harness(
   const deps: InstanceGuardDeps = {
     lockName: instanceLockName(namespace),
     self: { execPath, version: opts.version ?? '1.0.0' },
+    folder: opts.folder,
+    legacyRetryMs: 1,
     legacyLock: legacy,
     bringForward,
     showDifferentCopyNotice: showNotice,
@@ -204,5 +207,34 @@ describe('instance guard (058 FR-018)', () => {
       socket.end(formatLaunchMessage({ execPath: 'E:\\other\\throng.exe', version: '9.9.9' }));
     });
     await vi.waitFor(() => expect(a.showNotice).toHaveBeenCalledOnce(), { timeout: 2000 });
+  });
+});
+
+describe('067 a launch carrying a folder (FR-024, edge case: closing)', () => {
+  it('reaches the running instance with the launch', async () => {
+    const namespace = freshNamespace();
+    const first = harness(namespace, 'C:/a/throng.exe');
+    expect(await first.guard.acquire()).toBe('primary');
+    const second = harness(namespace, 'C:/a/throng.exe', { folder: '/srv/project' });
+    expect(await second.guard.acquire()).toBe('secondary');
+    await vi.waitFor(() => expect(first.bringForward).toHaveBeenCalled());
+    expect(first.bringForward.mock.calls[0]![0]).toMatchObject({ folder: '/srv/project' });
+  });
+
+  it('becomes the new primary once one that released its pipe has finished exiting', async () => {
+    const namespace = freshNamespace();
+    const results = [false, false, true];
+    const late = harness(namespace, 'C:/a/throng.exe', { folder: '/srv/project' });
+    late.legacy.request.mockImplementation(() => results.shift() ?? true);
+    expect(await late.guard.acquire()).toBe('primary');
+    expect(late.legacy.request).toHaveBeenCalledTimes(3);
+  });
+
+  it('a plain launch still yields at once to a running older copy', async () => {
+    const namespace = freshNamespace();
+    const plain = harness(namespace, 'C:/a/throng.exe');
+    plain.legacy.request.mockReturnValue(false);
+    expect(await plain.guard.acquire()).toBe('yields-to-legacy');
+    expect(plain.legacy.request).toHaveBeenCalledTimes(1);
   });
 });

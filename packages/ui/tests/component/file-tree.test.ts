@@ -710,13 +710,20 @@ describe('a cut item is marked, and Escape unmarks it (migrated from explorer.e2
  * (`file-tree.tsx:482-491`) dispatches it and the editor consumes it. Listening for it here rather
  * than spying on a prop is what keeps `relPath` and `absPath` under test.
  */
-function openIntents(): { detail: { relPath: string; absPath: string }[]; stop: () => void } {
-  const detail: { relPath: string; absPath: string }[] = [];
+function openIntents(): {
+  detail: { relPath: string; absPath: string; gesture?: string }[];
+  /** 067 FR-116 — the intents raised only so a file the editor refuses can go to the OS; the editor opens nothing for them. */
+  unsupportedOnly: { relPath: string }[];
+  stop: () => void;
+} {
+  const detail: { relPath: string; absPath: string; gesture?: string }[] = [];
+  const unsupportedOnly: { relPath: string }[] = [];
   const handler = (e: Event): void => {
-    detail.push((e as CustomEvent).detail);
+    const d = (e as CustomEvent).detail;
+    (d.gesture === 'dblclickUnsupportedOnly' ? unsupportedOnly : detail).push(d);
   };
   window.addEventListener('throng:open-file', handler);
-  return { detail, stop: () => window.removeEventListener('throng:open-file', handler) };
+  return { detail, unsupportedOnly, stop: () => window.removeEventListener('throng:open-file', handler) };
 }
 
 describe('open-on-click (006 FR-009, migrated from explorer.e2e.ts:515 and :545)', () => {
@@ -830,6 +837,32 @@ describe('open-on-click (006 FR-009, migrated from explorer.e2e.ts:515 and :545)
       await waitFor(() => expect(opens.detail.length).toBeGreaterThan(0));
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(opens.detail.map((d) => d.relPath)).toEqual(['a.txt']);
+      expect(opens.detail[0].gesture).toBe('click');
+      // 067 FR-116: the double click still reaches the OS for a file the editor refuses.
+      expect(opens.unsupportedOnly.map((d) => d.relPath)).toEqual(['a.txt']);
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('in double-click mode a double click raises a dblclick intent (067 FR-116)', async () => {
+    const { tree, user } = await mount({ settings: { version: 1, editor: { openOnClick: 'double' } } });
+    const opens = openIntents();
+    try {
+      await user.dblClick(within(tree).getByText('a.txt'));
+      await waitFor(() => expect(opens.detail.map((d) => d.gesture)).toEqual(['dblclick']));
+    } finally {
+      opens.stop();
+    }
+  });
+
+  it('in "none" mode a double click opens nothing, and still lets the OS have a file the editor refuses (067 FR-116)', async () => {
+    const { tree, user } = await mount({ settings: { version: 1, editor: { openOnClick: 'none' } } });
+    const opens = openIntents();
+    try {
+      await user.dblClick(within(tree).getByText('a.txt'));
+      await waitFor(() => expect(opens.unsupportedOnly).toHaveLength(1));
+      expect(opens.detail).toHaveLength(0);
     } finally {
       opens.stop();
     }

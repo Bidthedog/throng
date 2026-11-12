@@ -108,6 +108,7 @@ export function fakeFileClipboard(initial: FileClipboard = null) {
       changed.emit(null);
     }),
     onChange: changed.on,
+    osFiles: vi.fn(() => Promise.resolve(false)),
   };
   return {
     api,
@@ -131,6 +132,11 @@ export function fakeTransfer() {
   const quitPrompt = channel<{ running: number; queued: number }>();
   const api = {
     paste: vi.fn((_targetRelDir: string) => Promise.resolve({ jobId: 'job-1' })),
+    pasteAuto: vi.fn((_targetRelDir: string) => Promise.resolve({ jobId: 'job-1' })),
+    dropInbound: vi.fn(
+      (_abs: readonly string[], _dest: string, _mode: 'cut' | 'copy') =>
+        Promise.resolve(undefined as unknown as TransferResult),
+    ),
     drop: vi.fn(
       (_src: readonly string[], _dest: string, _mode: 'cut' | 'copy') =>
         Promise.resolve(undefined as unknown as TransferResult),
@@ -299,6 +305,7 @@ export function fakeFiles(listings: Record<string, FileTreeEntry[]>) {
     rename: vi.fn(() => Promise.resolve({ ok: true as const })),
     move: vi.fn(() => Promise.resolve({ ok: true as const })),
     copy: vi.fn(() => Promise.resolve({ ok: true as const })),
+    openInDefaultProgram: vi.fn(() => Promise.resolve({ ok: true as const })),
     onChange: vi.fn(() => () => {}),
     onWatchFailed: vi.fn(() => () => {}),
   };
@@ -324,6 +331,8 @@ export interface MountOptions {
   /** Reuse doubles across a remount — a project switch keeps main's clipboard and the daemon. */
   reuse?: Pick<MountedExplorer, 'clipboard' | 'transfer' | 'daemon'>;
   projectNameOf?: (projectId: string) => string | undefined;
+  /** Extra members of `window.throng` (`osName`, `terminal`, …) merged over the tree's own doubles. */
+  extraBridge?: Record<string, unknown>;
 }
 
 export const DEFAULT_LISTING = (): Record<string, FileTreeEntry[]> => ({
@@ -348,6 +357,7 @@ export async function mountExplorer(
     fileClipboard: clipboard.api,
     transfer: transfer.api,
     editor: { isOpen: () => Promise.resolve(false) },
+    ...opts.extraBridge,
   });
 
   const { services } = daemon;

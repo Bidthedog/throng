@@ -85,8 +85,8 @@ describe('each readout renders as a label with its figure (FR-012)', () => {
     expect(readout('line')).toHaveTextContent('Ln 412');
     expect(readout('column')).toHaveTextContent('Col 7');
     expect(readout('selected')).toHaveTextContent('63 selected');
-    expect(readout('chars')).toHaveTextContent('1,204 chars');
-    expect(readout('words')).toHaveTextContent('208 words');
+    expect(readout('chars')).toHaveTextContent('1,204 Chars.');
+    expect(readout('words')).toHaveTextContent('208 Words.');
   });
 
   // Never a bare number without its word: the exact strings above ("Ln 412", "Col 7", "1,204 chars") rule it out.
@@ -164,7 +164,7 @@ describe('every quantity is digit-grouped (FR-027, constitution 5.4.0)', () => {
     const text = 'x'.repeat(1_048_576);
     strip({ line: 1, column: 1, text });
 
-    expect(readout('chars')).toHaveTextContent('1,048,576 chars');
+    expect(readout('chars')).toHaveTextContent('1,048,576 Chars.');
   });
 
   it('groups the LINE and the COLUMN too, not only the counts', () => {
@@ -198,15 +198,15 @@ describe('the grouping follows the LOCALE, not a hardcoded comma (AS8)', () => {
      * reads as a DECIMAL, so the figure is wrong by six orders of magnitude to the person reading
      * it. `formatGrouped` takes a locale precisely so this cannot happen.
      */
-    const out = statusReadouts(caret, { totalCharacters: 1_048_576, totalWords: 1 }, 'de-DE');
-    expect(out.find((r) => r.id === 'chars')?.text).toBe('1.048.576 chars');
+    const out = statusReadouts(caret, { totalCharacters: 1_048_576, totalWords: 1, totalLines: 1 }, 'de-DE');
+    expect(out.find((r) => r.id === 'chars')?.text).toBe('1.048.576 Chars.');
   });
 
   it('renders the same figure with commas in a locale that groups with a comma', () => {
     // The control: the locale is really doing the work, rather than the assertion above passing
     // because the formatter ignores its argument and de-DE happens to be the runtime default.
-    const out = statusReadouts(caret, { totalCharacters: 1_048_576, totalWords: 1 }, 'en-GB');
-    expect(out.find((r) => r.id === 'chars')?.text).toBe('1,048,576 chars');
+    const out = statusReadouts(caret, { totalCharacters: 1_048_576, totalWords: 1, totalLines: 1 }, 'en-GB');
+    expect(out.find((r) => r.id === 'chars')?.text).toBe('1,048,576 Chars.');
   });
 });
 

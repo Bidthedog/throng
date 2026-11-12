@@ -16,6 +16,16 @@ import { __resetMonitorStore } from '../../../src/renderer/resources/monitor-sto
 import { installResourcesBridge } from '../helpers/resource-bridge.js';
 import { GIB, MACHINE, metrics, summary } from '../helpers/resource-fixtures.js';
 
+/** The rest before the popover opens: none for the tests about what it shows, the real figure for those about the wait. */
+const hoverDelay = vi.hoisted(() => ({ ms: 0 }));
+vi.mock('../../../src/renderer/resources/use-monitor-settings.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../src/renderer/resources/use-monitor-settings.js')>();
+  return {
+    ...real,
+    useResourceMonitorSettings: () => ({ ...real.useResourceMonitorSettings(), popoverDelayMs: hoverDelay.ms }),
+  };
+});
+
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     setTransform() {},
@@ -31,6 +41,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  hoverDelay.ms = 0;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   Reflect.deleteProperty(window, 'throng');
   __resetMonitorStore();
@@ -112,7 +124,7 @@ describe('opening and closing (FR-115)', () => {
   it('first line names the click action', async () => {
     await mountItem();
     openByPointer();
-    expect(screen.getByTestId('status-popover-action')).toHaveTextContent('Click to open the Resource Monitor');
+    expect(screen.getByTestId('status-popover-action')).toHaveTextContent('Click the status bar to open the Resource Monitor');
     expect(popover().firstElementChild).toBe(screen.getByTestId('status-popover-action'));
   });
 
@@ -169,11 +181,27 @@ describe('opening and closing (FR-115)', () => {
 
   // "A click still opens the monitor" is `status-resources.test.ts` "opens the monitor window on a click".
 
-  it('a click inside the popover does not open the monitor', async () => {
+  it('a click inside the popover does not open the monitor, and closes the popover (067 FR-127)', async () => {
     const bridge = await mountItem();
     openByPointer();
     fireEvent.click(popover());
     expect(bridge.opens()).toBe(0);
+    expect(screen.queryByTestId('status-popover')).toBeNull();
+  });
+
+  it('stays closed after that click until the pointer comes back to the item (067 FR-127)', async () => {
+    await mountItem();
+    openByPointer();
+    fireEvent.click(popover());
+    fireEvent.pointerEnter(item());
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('a click on the item still opens the monitor, whatever the popover is doing (067 FR-127)', async () => {
+    const bridge = await mountItem();
+    openByPointer();
+    fireEvent.click(item());
+    expect(bridge.opens()).toBe(1);
   });
 
   it('does not open before there is a reading', () => {
@@ -181,6 +209,83 @@ describe('opening and closing (FR-115)', () => {
     render(createElement('footer', { className: 'throng-status-bar' }, createElement(StatusResources)));
     fireEvent.pointerEnter(item());
     expect(screen.queryByTestId('status-popover')).toBeNull();
+  });
+});
+
+describe('the wait before a pointer opens it (resourceMonitor.popoverDelayMs)', () => {
+  const advance = (ms: number): void => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+  const absent = (): boolean => screen.queryByTestId('status-popover') === null;
+
+  async function mountWaiting(ms: number): Promise<void> {
+    hoverDelay.ms = ms;
+    await mountItem();
+    vi.useFakeTimers();
+  }
+
+  it('opens once the pointer has rested for the delay, and not before', async () => {
+    await mountWaiting(500);
+    openByPointer();
+    advance(499);
+    expect(absent(), 'still waiting at 499 ms').toBe(true);
+    advance(1);
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('takes its length from the preference', async () => {
+    await mountWaiting(2000);
+    openByPointer();
+    advance(1999);
+    expect(absent()).toBe(true);
+    advance(1);
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('never opens for a pointer that leaves before the delay', async () => {
+    await mountWaiting(500);
+    openByPointer();
+    advance(400);
+    fireEvent.pointerLeave(item());
+    advance(5000);
+    expect(absent()).toBe(true);
+  });
+
+  it('starts the wait again on each entry', async () => {
+    await mountWaiting(500);
+    openByPointer();
+    advance(400);
+    fireEvent.pointerLeave(item());
+    openByPointer();
+    advance(400);
+    expect(absent()).toBe(true);
+    advance(100);
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('does not wait again for a pointer crossing back while it is open', async () => {
+    await mountWaiting(500);
+    openByPointer();
+    advance(500);
+    fireEvent.pointerLeave(item());
+    advance(50);
+    openByPointer();
+    advance(200);
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('waits for no pointer at a delay of 0', async () => {
+    await mountWaiting(0);
+    openByPointer();
+    expect(popover()).toBeInTheDocument();
+  });
+
+  it('opens at once for keyboard focus: the delay is for a passing pointer', async () => {
+    await mountWaiting(500);
+    keyboardFocus();
+    expect(popover()).toBeInTheDocument();
   });
 });
 

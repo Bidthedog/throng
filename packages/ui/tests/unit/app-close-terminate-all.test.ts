@@ -11,10 +11,19 @@ import { describe, expect, it } from 'vitest';
  */
 const main = readFileSync(fileURLToPath(new URL('../../src/main/main.ts', import.meta.url)), 'utf8');
 
+describe('067 — one shutdown at a time', () => {
+  it('ignores a second close while one is in progress', () => {
+    const handler = main.slice(main.indexOf("mainWindow.on('close', (e) => {"));
+    const body = handler.slice(0, handler.indexOf("webContents.send('throng:appClose:begin')"));
+    expect(body).toContain('if (activeShutdown) return;');
+  });
+});
+
 describe('051 — app-close Terminate all', () => {
   it('sends killAll with escalate and the Unload budget, not the 2 s default', () => {
-    const choice = main.slice(main.indexOf("ipcMain.on('throng:appClose:choice'"));
-    const call = choice.slice(choice.indexOf("daemonClient.call('terminal.killAll'"));
+    // 067: the ending now happens in the shutdown steps the choice runs.
+    const steps = main.slice(main.indexOf('const terminateSteps ='));
+    const call = steps.slice(steps.indexOf("daemonClient.call('terminal.killAll'"));
     const args = call.slice(0, call.indexOf(');'));
     expect(args).toContain('escalate: true');
     expect(args).toContain('UNLOAD_RPC_TIMEOUT_MS');

@@ -6,7 +6,7 @@ import { mountEditor, type EditorHarness } from './helpers/mount-editor.js';
 import { TerminalPanel } from '../../src/renderer/terminal/terminal-panel.js';
 import { AppClosePrompt } from '../../src/renderer/app-close-prompt.js';
 import { clearPanelExit, getPanelExit } from '../../src/renderer/terminal/exit-store.js';
-import { resetAppTerminating } from '../../src/renderer/terminal/app-terminating.js';
+import { isAppTerminating, resetAppTerminating } from '../../src/renderer/terminal/app-terminating.js';
 import { settleLayoutSaves } from '../../src/renderer/state/layout-saves.js';
 import { forgetTerminalCommand, reportTerminalCommand } from '../../src/renderer/terminal/command-store.js';
 
@@ -46,12 +46,14 @@ vi.mock('../../src/renderer/terminal/use-terminal-reconnect.js', async (importOr
 let harness: EditorHarness | undefined;
 let showPrompt: ((info: { count: number; terminals: unknown[] }) => void) | null = null;
 let announceTerminating: (() => void) | null = null;
+let announceCancelled: (() => void) | null = null;
 let appCloseChoice: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   captured.terminal = null;
   showPrompt = null;
   announceTerminating = null;
+  announceCancelled = null;
   appCloseChoice = vi.fn();
   resetAppTerminating();
 });
@@ -92,6 +94,10 @@ async function mountWindow(withPrompt: boolean, config: Record<string, unknown> 
       },
       onAppCloseTerminating: (cb: () => void) => {
         announceTerminating = cb;
+        return () => {};
+      },
+      onAppCloseCancelled: (cb: () => void) => {
+        announceCancelled = cb;
         return () => {};
       },
       appCloseChoice,
@@ -169,5 +175,74 @@ describe('Terminate all on close', () => {
     await mountWindow(false);
     act(() => captured.terminal!.onExit({ code: 1, unexpected: false }));
     expect(getPanelExit(PANEL)?.message).toMatch(/Terminal exited \(code 1\)/);
+  });
+});
+
+/*
+ * 067 FR-039 — Cancel. Main broadcasts the cancel to EVERY window, so a window with no close prompt un-marks
+ * itself, and a panel whose terminal the shutdown had already ended is not left looking like an open terminal.
+ */
+describe('Cancel of the close (FR-039)', () => {
+  it('a window with no close prompt stops treating exits as throng’s own, and raises the notice again', async () => {
+    await mountWindow(false);
+    await waitFor(() => expect(announceTerminating).not.toBeNull());
+    await waitFor(() => expect(announceCancelled, 'the window listens for the cancel').not.toBeNull());
+    act(() => announceTerminating!());
+    expect(isAppTerminating()).toBe(true);
+
+    act(() => announceCancelled!());
+
+    expect(isAppTerminating()).toBe(false);
+    act(() => captured.terminal!.onExit({ code: 1, unexpected: false }));
+    expect(getPanelExit(PANEL)?.message).toMatch(/Terminal exited \(code 1\)/);
+  });
+
+  it('a terminal the shutdown had already ended is reverted by the cancel, with no notice', async () => {
+    await mountWindow(false, { rememberCommand: false });
+    await waitFor(() => expect(announceTerminating).not.toBeNull());
+    await waitFor(() => expect(announceCancelled).not.toBeNull());
+    act(() => announceTerminating!());
+    act(() => captured.terminal!.onExit({ code: 1, unexpected: false }));
+    expect(harness!.savedPanelMemory(), 'nothing reverts while the close is going on').toBeUndefined();
+
+    act(() => announceCancelled!());
+    await act(async () => {
+      await settleLayoutSaves();
+    });
+
+    expect(harness!.savedPanelMemory(), 'the panel went through the normal end path').toBeDefined();
+    expect(getPanelExit(PANEL), 'one condition, one notice: no per-terminal notice').toBeUndefined();
+  });
+
+  it('a panel whose terminal was NOT ended by the shutdown is left alone by the cancel', async () => {
+    await mountWindow(false, { rememberCommand: false });
+    await waitFor(() => expect(announceCancelled).not.toBeNull());
+    act(() => announceCancelled!());
+    await act(async () => {
+      await settleLayoutSaves();
+    });
+    expect(harness!.savedPanelMemory()).toBeUndefined();
+  });
+
+  it('an exit that arrives after the cancel behaves as any exit does', async () => {
+    await mountWindow(false);
+    await waitFor(() => expect(announceTerminating).not.toBeNull());
+    await waitFor(() => expect(announceCancelled).not.toBeNull());
+    act(() => announceTerminating!());
+    act(() => announceCancelled!());
+    act(() => captured.terminal!.onExit({ code: 1, unexpected: false }));
+    expect(getPanelExit(PANEL)?.message).toMatch(/Terminal exited \(code 1\)/);
+  });
+
+  it('Terminate all that completes (no cancel) reverts nothing', async () => {
+    await mountWindow(false, { rememberCommand: false });
+    await waitFor(() => expect(announceTerminating).not.toBeNull());
+    act(() => announceTerminating!());
+    act(() => captured.terminal!.onExit({ code: 1, unexpected: false }));
+    await act(async () => {
+      await settleLayoutSaves();
+    });
+    expect(harness!.savedPanelMemory()).toBeUndefined();
+    expect(getPanelExit(PANEL)).toBeUndefined();
   });
 });

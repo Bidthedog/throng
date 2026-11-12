@@ -50,6 +50,8 @@ describe('Open In (#483)', () => {
   it('divides a file’s submenu into the five groups, in order', () => {
     expect(drawn(withDividers(openIn('file')))).toEqual([
       'OS File Explorer',
+      // 067 FR-015, FR-020 — in the OS group beside the reveal, so no divider of its own.
+      'Open in OS Default Program',
       '---',
       'Last Active Editor',
       'New Editor',

@@ -171,8 +171,8 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
     await runApp(async (app, win) => {
       await createProject(win, 'StatusProj', root);
       /*
-       * WIDEN FIRST. Every assertion below names an exact FULL label form — `23 chars`, `4 words`,
-       * `Ln 2`, `2 selected` — and US2's whole subject is that those forms give way as the bar
+       * WIDEN FIRST. Every assertion below names an exact FULL label form — `23 Chars.`, `4 Words.`,
+       * `Ln 2,`, `2 selected` — and US2's whole subject is that those forms give way as the bar
        * narrows. At whatever width the app happens to open at, both side panes clamp and the panel
        * gets roughly 400px of bar, so this test was passing on the luck of the hide order rather
        * than by construction: a change to a label, a font, or the pane clamps could shorten `chars`
@@ -184,8 +184,8 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
       const pid = await openNote(win);
 
       // The document's own figures, once the debounced count has settled (FR-008b).
-      await expect(readout(win, 'chars', pid)).toHaveText('23 chars');
-      await expect(readout(win, 'words', pid)).toHaveText('4 words');
+      await expect(readout(win, 'chars', pid)).toHaveText('23 Chars.');
+      await expect(readout(win, 'words', pid)).toHaveText('4 Words.');
       await expect(
         readout(win, 'chars', pid),
         'and at their FULL label form, which is what every literal above assumes',
@@ -198,7 +198,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
        * line 2, and the readout must say so.
        */
       await win.getByTestId(`editor-${pid}`).locator('.cm-line').nth(1).click();
-      await expect(readout(win, 'line', pid)).toHaveText('Ln 2');
+      await expect(readout(win, 'line', pid)).toHaveText('Ln 2,');
 
       // ARROW KEYS. A caret move changes no document, so this is exactly the update that the
       // listener used to early-return on (research.md D1).
@@ -208,7 +208,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
       await win.keyboard.press('ArrowRight');
       await expect(readout(win, 'column', pid)).toHaveText('Col 3');
       await win.keyboard.press('ArrowUp');
-      await expect(readout(win, 'line', pid)).toHaveText('Ln 1');
+      await expect(readout(win, 'line', pid)).toHaveText('Ln 1,');
 
       // A SELECTION appears, and only while there is one (FR-005).
       await expect(readout(win, 'selected', pid)).toHaveCount(0);
@@ -223,7 +223,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
       // A REAL EDIT moves the counts… (one character, so the undo below is unambiguously one
       // entry rather than depending on how a typing run happened to coalesce.)
       await win.keyboard.type('Z');
-      await expect(readout(win, 'chars', pid)).toHaveText('24 chars');
+      await expect(readout(win, 'chars', pid)).toHaveText('24 Chars.');
 
       /*
        * …and a REAL UNDO puts them back. Undo is not CodeMirror's here: `history()` is gone and the
@@ -231,7 +231,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
        * change back to this view (016 FR-026c). Nothing below E2E has that round trip.
        */
       await win.keyboard.press('Control+z');
-      await expect(readout(win, 'chars', pid)).toHaveText('23 chars');
+      await expect(readout(win, 'chars', pid)).toHaveText('23 Chars.');
 
       /*
        * AS2a — a language change does not move the caret, so the readouts must simply survive it.
@@ -264,7 +264,7 @@ test('the bar stays one line high and the two groups never overlap across a resi
     await runApp(async (app, win) => {
       await createProject(win, 'StatusProj', root);
       const pid = await openNote(win);
-      await expect(readout(win, 'chars', pid)).toHaveText('23 chars');
+      await expect(readout(win, 'chars', pid)).toHaveText('23 Chars.');
 
       const strip = win.getByTestId(`editor-status-strip-${pid}`);
       const text = win.getByTestId(`editor-${pid}`);

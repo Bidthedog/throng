@@ -79,7 +79,7 @@ const EXPECTED_COLOUR_TOKEN_COUNT = 79;
 // 055 adds twelve: the eight resource monitor tokens (`resourceMonitor`, `resourceCpu`, `resourceMemory`,
 // `resourceGpu`, `resourceIo`, `resourceHideIdle`, `resourceKill`, `resourceKillBelow`), `help` (FR-093),
 // `activate` (FR-110), `resourceHideEnded` (FR-105) and `resourceNetwork` (FR-113) — 99, on top of 060 and 059.
-const EXPECTED_ICON_TOKEN_COUNT = 99;
+const EXPECTED_ICON_TOKEN_COUNT = 101;
 /** The icon tokens 055's Session 2026-10-23 adds; named, because a count alone is satisfied by a rename. */
 const MONITOR_2026_10_23_ICON_TOKENS = ['activate', 'resourceHideEnded', 'resourceNetwork'] as const;
 /** The icon tokens 044 adds; named, because a count alone is satisfied by a rename. */

@@ -56,7 +56,7 @@ describe('keyed by document, so every panel showing it agrees (FR-007)', () => {
     scheduleDocumentMetrics(DOC_A, 'one two three');
     vi.advanceTimersByTime(200);
 
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 13, totalWords: 3 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 13, totalWords: 3 });
   });
 
   it('keeps two different documents apart', () => {
@@ -64,8 +64,8 @@ describe('keyed by document, so every panel showing it agrees (FR-007)', () => {
     scheduleDocumentMetrics(DOC_B, 'four');
     vi.advanceTimersByTime(200);
 
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 13, totalWords: 3 });
-    expect(documentMetrics(DOC_B)).toEqual({ totalCharacters: 4, totalWords: 1 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 13, totalWords: 3 });
+    expect(documentMetrics(DOC_B)).toMatchObject({ totalCharacters: 4, totalWords: 1 });
   });
 
   it('counts by the shared rules — a CRLF pair is ONE character (FR-003a)', () => {
@@ -76,7 +76,7 @@ describe('keyed by document, so every panel showing it agrees (FR-007)', () => {
     scheduleDocumentMetrics(DOC_A, 'ab\r\ncd\r\nef');
     vi.advanceTimersByTime(200);
 
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 8, totalWords: 3 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 8, totalWords: 3 });
   });
 
   it('reads null for a document nothing has ever counted', () => {
@@ -94,7 +94,7 @@ describe('debounced, and settled within 200 ms of the LAST edit (FR-008b)', () =
   it('has published by 200 ms', () => {
     scheduleDocumentMetrics(DOC_A, 'one two three');
     vi.advanceTimersByTime(200);
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 13, totalWords: 3 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 13, totalWords: 3 });
   });
 
   it('counts ONCE for a burst, and counts the LAST text (FR-008)', () => {
@@ -117,7 +117,7 @@ describe('debounced, and settled within 200 ms of the LAST edit (FR-008b)', () =
     expect(documentMetrics(DOC_A), 'nothing may publish mid-burst').toBeNull();
 
     vi.advanceTimersByTime(200);
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 14, totalWords: 3 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 14, totalWords: 3 });
     expect(counted).toEqual(['a', 'ab', 'abc words here']);
   });
 
@@ -148,7 +148,7 @@ describe('debounced, and settled within 200 ms of the LAST edit (FR-008b)', () =
     scheduleDocumentMetrics(DOC_B, 'four');
     vi.advanceTimersByTime(50);
 
-    expect(documentMetrics(DOC_A), 'A went quiet 200 ms ago and must have settled').toEqual({
+    expect(documentMetrics(DOC_A), 'A went quiet 200 ms ago and must have settled').toMatchObject({
       totalCharacters: 13,
       totalWords: 3,
     });
@@ -183,7 +183,7 @@ describe('a reload invalidates the debounced value (FR-003, AS7)', () => {
     scheduleDocumentMetrics(DOC_A, 'brand new');
     vi.advanceTimersByTime(200);
 
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 9, totalWords: 2 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 9, totalWords: 2 });
   });
 
   it('invalidates only the document that reloaded', () => {
@@ -194,7 +194,7 @@ describe('a reload invalidates the debounced value (FR-003, AS7)', () => {
     invalidateDocumentMetrics(DOC_A);
 
     expect(documentMetrics(DOC_A)).toBeNull();
-    expect(documentMetrics(DOC_B)).toEqual({ totalCharacters: 4, totalWords: 1 });
+    expect(documentMetrics(DOC_B)).toMatchObject({ totalCharacters: 4, totalWords: 1 });
   });
 
   it('notifies subscribers, so a strip showing the stale figure stops showing it', () => {
@@ -249,7 +249,7 @@ describe('the text may be deferred, so a keystroke does not materialise the docu
     vi.advanceTimersByTime(200);
 
     expect(flattened).toBe(1);
-    expect(documentMetrics(DOC_A)).toEqual({ totalCharacters: 13, totalWords: 3 });
+    expect(documentMetrics(DOC_A)).toMatchObject({ totalCharacters: 13, totalWords: 3 });
   });
 
   it('never calls a thunk whose scan was cancelled by a reload', () => {

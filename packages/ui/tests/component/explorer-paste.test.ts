@@ -14,7 +14,7 @@
  *   - a run that ends with failures raises ONE notice naming each failed item (FR-013), and a run
  *     that ends without any raises none.
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createElement } from 'react';
@@ -69,8 +69,8 @@ describe('Paste sends the target folder to main (050 T027)', () => {
 
     pressPaste();
 
-    await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalledTimes(1));
-    expect(m.transfer.api.paste).toHaveBeenCalledWith('Docs');
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalledTimes(1));
+    expect(m.transfer.api.pasteAuto).toHaveBeenCalledWith('Docs');
   });
 
   it('pastes a FILE selection into its parent folder (the shared target rule)', async () => {
@@ -80,8 +80,8 @@ describe('Paste sends the target folder to main (050 T027)', () => {
 
     pressPaste();
 
-    await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalledTimes(1));
-    expect(m.transfer.api.paste).toHaveBeenCalledWith('');
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalledTimes(1));
+    expect(m.transfer.api.pasteAuto).toHaveBeenCalledWith('');
   });
 
   it('does nothing when the clipboard is empty — no job, no notice', async () => {
@@ -92,8 +92,59 @@ describe('Paste sends the target folder to main (050 T027)', () => {
 
     pressPaste();
 
-    expect(m.transfer.api.paste).not.toHaveBeenCalled();
+    expect(m.transfer.api.pasteAuto).not.toHaveBeenCalled();
     expect(notices()).toHaveLength(0);
+  });
+});
+
+describe('Paste works from the OS file list too (067 T025, FR-001)', () => {
+  const emptyMount = (osFiles: boolean) =>
+    mountExplorer(standardHost, {
+      extra: createElement('div', null, createElement(TransferCompletionHost), createElement(PasteProgressNotice)),
+    }).then((m) => {
+      m.clipboard.api.osFiles.mockResolvedValue(osFiles);
+      return m;
+    });
+
+  it('calls pasteAuto, never the internal-only paste route', async () => {
+    const m = await mountWithCopy();
+    await userEvent.click(within(m.tree).getByText('Docs'));
+    pressPaste();
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalledWith('Docs'));
+    expect(m.transfer.api.paste).not.toHaveBeenCalled();
+  });
+
+  it('pastes with no internal record when the OS holds a file list', async () => {
+    const m = await emptyMount(true);
+    await userEvent.click(within(m.tree).getByText('Docs'));
+    pressPaste();
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalledWith('Docs'));
+  });
+
+  it('leaves Paste unavailable for a text-only clipboard: no job, no notice', async () => {
+    const m = await emptyMount(false);
+    await userEvent.click(within(m.tree).getByText('Docs'));
+    pressPaste();
+    await waitFor(() => expect(m.clipboard.api.osFiles).toHaveBeenCalled());
+    expect(m.transfer.api.pasteAuto).not.toHaveBeenCalled();
+    expect(notices()).toHaveLength(0);
+  });
+
+  it.each([
+    [true, false],
+    [false, true],
+  ] as const)('with osFiles() %s the Paste menu item is disabled: %s', async (osFiles, disabled) => {
+    const m = await emptyMount(osFiles);
+    // Returning to throng from the program that copied the files re-reads the OS clipboard.
+    const before = m.clipboard.api.osFiles.mock.calls.length;
+    fireEvent.focus(window);
+    await waitFor(() => expect(m.clipboard.api.osFiles.mock.calls.length).toBeGreaterThan(before));
+    await act(async () => {});
+    const user = userEvent.setup({ delay: null });
+    await user.pointer({ keys: '[MouseRight]', target: within(m.tree).getByText('Docs') });
+    const menuItem = await screen.findByTestId('menu-item-Paste');
+    if (disabled) expect(menuItem).toHaveAttribute('aria-disabled', 'true');
+    else expect(menuItem).not.toHaveAttribute('aria-disabled', 'true');
   });
 });
 
@@ -120,7 +171,7 @@ describe('what the renderer does when the job ends (050 T027)', () => {
     const m = await mountWithCopy();
     await userEvent.click(within(m.tree).getByText('Docs'));
     pressPaste();
-    await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalled());
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalled());
 
     m.transfer.done({ jobId: 'job-1', placed: ['C:/projects/demo/Docs/a.txt'] });
 
@@ -133,7 +184,7 @@ describe('what the renderer does when the job ends (050 T027)', () => {
     const m = await mountWithCopy();
     await userEvent.click(within(m.tree).getByText('Docs'));
     pressPaste();
-    await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalled());
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalled());
 
     m.transfer.done({ jobId: 'job-1', placed: ['C:/projects/demo/Docs/a.txt'] });
 
@@ -144,7 +195,7 @@ describe('what the renderer does when the job ends (050 T027)', () => {
     const m = await mountWithCopy();
     await userEvent.click(within(m.tree).getByText('Docs'));
     pressPaste();
-    await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalled());
+    await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalled());
 
     m.transfer.done({
       jobId: 'job-1',
