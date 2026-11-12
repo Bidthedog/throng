@@ -1,8 +1,20 @@
 # Writing an E2E spec
 
-Read before writing or converting an E2E spec: config-root writes, sharing one app per file, and the harness helpers that close the common race classes.
+Read before writing or converting an E2E spec: config-root writes, sharing one app per file, and the harness helpers that close the common race classes. Read the first section too before changing anything an existing spec asserts.
 
 Part of the `throng-testing` skill; the contributor overview is [`docs/testing.md`](../../../../docs/testing.md).
+
+## A change that alters what a spec asserts
+
+E2E never runs here as a batch, so a spec asserting the old behaviour is first met on CI. When a change alters something a user can see — a readout's wording, a label, a message, a count, a default, a test id — search the E2E specs for the old value before pushing (`running-tests` owns the general rule):
+
+```sh
+git grep -n "<old value>" -- packages/ui/tests/e2e
+```
+
+Update every hit in the same commit, then run **only the specs that search found**, one at a time at one worker (`npx playwright test <spec> --workers=1`), as the minimal proof that the change works where they look. Never a tier or the full lane for this: CI runs those once the PR is ready. Found nothing → say so, and run nothing.
+
+(Spec 067: FR-134 added full stops to the status bar readouts. The unit and component tests were updated, `editor-status-bar.e2e.ts` still expected `Col 1`, and both `@core` lanes failed on CI.)
 
 ## Writing a running app's config root
 
