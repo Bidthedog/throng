@@ -10,7 +10,8 @@ Pick your system. No Node.js, compiler or other runtime is needed for any downlo
 | 64-bit Linux | [Installing on Linux](install-linux.md), with `apt` and `dnf` repositories that bring upgrades with your system updates |
 
 macOS ([#22](https://github.com/Bidthedog/throng/issues/22)) is planned. Once it is running, the
-[quick start](quick-start.md) takes it from there.
+[quick start](quick-start.md) takes it from there. Each guide also covers opening a folder as a project from your file
+manager, or with `throng <path>`.
 
 ## Running from source
 

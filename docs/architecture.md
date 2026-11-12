@@ -132,6 +132,12 @@ and only becomes `stopped` when a grace period expires, so an ordinary rebuild-a
 false alarm. The transition rules are pure (`core/src/failure/daemon-state.ts`), and a stopped
 daemon is reported once, as described in [Failure notices and diagnostics](#failure-notices-and-diagnostics).
 
+**A folder named at launch.** `throng <path>` is resolved against the launching shell by that process, and travels
+on the instance guard's pipe to a running throng, which holds it until the main window's renderer is ready. Closing is a
+reported run (`ShutdownRun` in core, driven from main) that can be cancelled until the point of no return, where main also
+releases the pipe so a late launch becomes the next primary.
+
+
 ## Package graph
 
 An npm-workspaces monorepo. The packages map to the constitution's boundaries, and the arrows only
@@ -618,7 +624,7 @@ copy, delete to the Recycle Bin, and undo.
   shared by the tree, the file index, editors and previews), `explorer-watcher.ts`, `recycle-bin-restore.ts`,
   `undo-service.ts` and `in-app-moves.ts`; `file-clipboard.ts`, `transfer-service.ts` and
   `transfer-ipc.ts` for the clipboard and pastes.
-- Renderer: `renderer/explorer/`, with the tree on react-arborist and drag and drop on `@dnd-kit`.
+- Renderer: `renderer/explorer/`, with the tree on react-arborist, its drags driven by mouse events through a react-dnd backend of throng's own (`tree-pointer-backend.ts`).
 - Daemon and persistence: the per-project undo and redo stack is stored through `fileopUndo.*` and
   `FileOpUndoRepository`, so an undo survives a restart.
 
@@ -644,6 +650,11 @@ another's record.
 
 Binds: [I. Project-First Context Isolation](../.specify/memory/constitution.md#i-project-first-context-isolation),
 [II. Platform-Abstracted Core](../.specify/memory/constitution.md#ii-platform-abstracted-core-os-agnostic).
+
+**Files crossing the OS boundary.** `IClipboard` carries file lists through one codec per OS, and the OS clipboard is the
+authority on what Paste acts on. Inbound paste and drop run through the transfer engine as undoable entries. A tree drag leaving the window hands over to
+Electron's file drag (`os-drag.ts`), which offers copy only.
+
 
 ## Search, Quick Open and links
 

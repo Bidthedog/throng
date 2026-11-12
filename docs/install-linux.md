@@ -71,6 +71,17 @@ settings are kept. throng itself never checks for updates or downloads them.
 A throng left open keeps running the version it started with, with its terminals, until you restart it. It tells you a
 newer version is installed, and offers the restart. Restarting may end the terminals running in it.
 
+The version it was running stays in `/opt/throng-versions` until the next time throng is installed. Nothing runs from it
+once throng has restarted, so it is safe to delete by hand.
+
+## Opening a folder as a project
+
+A package adds **Open as throng project** to the folder menu of Nemo and Dolphin. GNOME Files has no such menu for
+applications, so there it is listed under **Open With**. From a terminal, `throng <path>` does the same, with a relative
+path read from where you ran it. The archive adds nothing to a file manager.
+To remove the item for your account only, turn it off in [Preferences](preferences.md#projects); that needs no
+administrator rights.
+
 ## Downgrading
 
 Installing an older `.deb` or `.rpm` over a newer one is refused, and changes nothing. To go back, remove throng first,

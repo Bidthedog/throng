@@ -11,7 +11,11 @@ This page is the one list of what differs from Windows. Anything not listed here
 ## Display
 
 The window runs through XWayland by default, where dragging a tab out and placing windows work as they do elsewhere.
+
+A file dragged in from a file manager depends on the display mode: under XWayland, Shift moves it; under native Wayland it is always copied. Dragging a file out of the File Explorer into GNOME Files works only under native Wayland: under XWayland, GNOME Files takes nothing from it. Copy and Paste work in both. Drags inside the File Explorer behave the same in both.
 [`window.nativeWayland`](preferences.md) runs it directly on Wayland instead. The `throng` command and `npm start` read that setting and pick the display backend.
+
+Under native Wayland, Preferences and About can go behind the main window when you click it: the compositor is not told they belong to it. Under XWayland they stay above it.
 
 ## Key bindings
 
@@ -38,6 +42,8 @@ The keypad's `+` and `-` do nothing with `Ctrl+Alt`, because those presses never
   throng notices and reports it instead.
 - A project past the machine's limit on watched folders stops updating live, and the notice says so. To raise the limit:
   `sudo sysctl fs.inotify.max_user_watches=524288`.
+- **Open as throng project** is a folder menu item in Nemo and Dolphin. GNOME Files lists it under **Open With** instead.
+- The Properties dialog has no button for the operating system's own Properties, because Linux has no standard one. It shows the owner, group and permissions instead.
 - A file is treated as a program by its extension, as on Windows, so running a file with no extension is not warned about.
 
 ## Resource Monitor

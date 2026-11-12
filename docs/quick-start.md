@@ -44,6 +44,9 @@ pick a folder, and accept or change the suggested name and colour. Projects cann
 
 Removing a project from throng never deletes anything on disk.
 
+You can also open a folder as a project from your file manager, or with `throng <path>` in a terminal. A folder inside an
+existing project selects that project.
+
 ## 2. Lay out the workspace
 
 The centre pane is a dock of **tabs**, each holding **panels**.
@@ -78,6 +81,9 @@ Make a panel a **Terminal** and choose its **flavour** — Windows PowerShell, P
 Prompt, Git Bash, or one of your own — with optional shell arguments and a startup command such as
 `npm run dev`. Confirm, and you have a live shell at the project root.
 
+- **The form remembers what you typed** before, per terminal type: click into Startup Command or
+  Shell Arguments to see it, type to narrow it, **Delete** to forget the highlighted value, and the clear button beside
+  the field to forget them all ([settings](preferences.md#terminal)).
 - **A terminal's name says what it is running**, its shell and its folder —
   `ping localhost -t | Git Bash (D:\git\throng)` — and you can reshape it with the
   [terminal title template](preferences.md#terminal-title-templates).
@@ -174,6 +180,14 @@ can keep browsing or press **F2** to rename the file.
   `[[wikilinks]]` follow like any other link.
 - **Back** and **Forward** (**Alt+Left** / **Alt+Right**) step through the files a panel has shown.
 
+### Files and your operating system
+
+Copy, cut and paste files between the File Explorer and your file manager in either direction, or drag files between them.
+A drag out of throng always copies. On a drag inside throng, the pointer shows whether the drop will copy or move, and you can press the copy or move key before or during the drag; on a drag in from your file manager, a label beside the pointer says which.
+Double-click a file throng cannot open and it opens in your OS program ([preference](preferences.md)).
+Right-click a file for **Open in OS Default Program**, and any item for
+**Properties**, which totals a folder's contents as you watch.
+
 ## 5. Find things
 
 - **Ctrl+F** finds (and in an editor, **Ctrl+H** replaces) inside the active panel — an editor, a
@@ -191,7 +205,7 @@ can keep browsing or press **F2** to rename the file.
 Drag a tab or panel out of the window, or right-click it and choose **Sync to ▸ New
 Sub-workspace**. It opens in its own window, kept in sync with the project, and every throng window
 comes to the front together. Sub-workspaces are listed under Projects, where you reopen or delete
-them.
+them, or start an empty one with the **+** in that panel's header.
 
 ## 7. Make it yours
 
