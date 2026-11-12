@@ -46,6 +46,12 @@ alpha15 reached `publish` and then waited on a required reviewer, and only then 
 - Q: What must hold before a release starts? → A: Master proved green at first attempt, no nightly failure left open, and the `release` Environment as FR-005 requires. A failure is fixed by the runbook, unasked (FR-013).
 - Q: Must `release.yml` repeat a suite the gate just ran? → A: No. A full gate, green at its first attempt on the identical tree, stands in for it (FR-014).
 
+### Session 2026-11-12
+
+alpha16's sweep opened its own PR (#620) as FR-007 required, so the release waited on two PRs, each with its own checks, before its own could start. The maintainer: "if this is running as part of a release, then it should roll the sweep and updates into the release PR, so we are not waiting for multiple PRs as part of a release."
+
+- Q: Where does the release's dependency sweep land? → A: On the release branch, as a commit of its own before the release commit, in the release PR. It no longer reaches master through a PR of its own (FR-007, superseding its first version). The commit stays separate so a dependency failure still reads as one, and the release's full gate proves the sweep with everything else. A major taken to clear an advisory (FR-007a) rides the same way; a fix for a failure the release meets still gets its own PR (FR-009).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ask for a release and get a published package (Priority: P1)
@@ -70,7 +76,7 @@ Something breaks on the way: an advisory, a dependency that no longer builds, a 
 
 **Acceptance Scenarios**:
 
-1. **Given** `npm audit` reports an advisory with a fix, **When** the release runs, **Then** the fix lands on master through its own PR before the release commit.
+1. **Given** `npm audit` reports an advisory with a fix, **When** the release runs, **Then** the fix is a commit of its own on the release branch, before the release commit, and lands on master with the release PR.
 2. **Given** a release run fails after its tag was pushed and before it published, **When** the cause is fixed on master, **Then** the same version is re-cut on the fixed commit and released.
 3. **Given** a failure needs a decision only the maintainer can make, **When** the release meets it, **Then** it stops and reports the decision needed, publishing nothing.
 
@@ -110,8 +116,8 @@ Removing the person must not open a route around review.
 **The runbook (`throng-release`)**
 
 - **FR-006**: A request naming a version MUST release that version. A request naming none MUST release the next version on the current prerelease track (`alpha14` → `alpha15`). "The next beta" or "the next rc" MUST start that track at 1, or advance it if it has started. A version without a prerelease suffix MUST be released only when named.
-- **FR-007**: Every release MUST first run `npm audit` and fix every advisory that has a fix, and take every patch and minor update. Each MUST reach master through its own pull request before the release commit. Majors and deliberately held packages MUST be left as they are, and named in the release PR.
-- **FR-007a**: When an advisory's only fix is a major upgrade, the runbook MUST attempt that upgrade (an `overrides` entry when the package is transitive) and prove it: the local checks, plus a before-and-after comparison of whatever the package governs (for a packaging tool, the packaged file list). An upgrade that holds MUST ship in FR-007's sweep PR. One that fails, there or later in the release, MUST be rolled back through a PR before the release continues.
+- **FR-007**: Every release MUST first run `npm audit` and fix every advisory that has a fix, and take every patch and minor update. The sweep MUST be a commit of its own on the release branch, before the release commit, and reach master in the release PR. *(Amended 2026-11-12; the first version required each to reach master through its own pull request before the release branch was cut.)* Majors and deliberately held packages MUST be left as they are, and named in the release PR.
+- **FR-007a**: When an advisory's only fix is a major upgrade, the runbook MUST attempt that upgrade (an `overrides` entry when the package is transitive) and prove it: the local checks, plus a before-and-after comparison of whatever the package governs (for a packaging tool, the packaged file list). An upgrade that holds MUST ship in FR-007's sweep commit. One that fails, there or later in the release, MUST be removed from the sweep commit before the release continues.
 - **FR-007b**: An advisory that cannot be cleared (no fix, or its major upgrade failed under FR-007a) MUST be accepted without stopping when it reaches only development tooling — `npm ls <package> --omit=dev` lists nothing. The release MUST publish without it, and the final report MUST name the advisory, the attempt and its result, and a corrective action. One that reaches what ships MUST stop the release (FR-010).
 - **FR-008**: The full gate (`gate.yml`) MUST pass on the release commit's tree before the tag is pushed.
 - **FR-009**: On any failure (gate, required check, release pipeline), the runbook MUST diagnose the cause, fix it on its own branch, merge it through a PR whose checks pass, and run the release again until a release is published.
