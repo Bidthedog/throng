@@ -203,10 +203,10 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
       // ARROW KEYS. A caret move changes no document, so this is exactly the update that the
       // listener used to early-return on (research.md D1).
       await win.keyboard.press('Home');
-      await expect(readout(win, 'column', pid)).toHaveText('Col 1');
+      await expect(readout(win, 'column', pid)).toHaveText('Col 1.');
       await win.keyboard.press('ArrowRight');
       await win.keyboard.press('ArrowRight');
-      await expect(readout(win, 'column', pid)).toHaveText('Col 3');
+      await expect(readout(win, 'column', pid)).toHaveText('Col 3.');
       await win.keyboard.press('ArrowUp');
       await expect(readout(win, 'line', pid)).toHaveText('Ln 1,');
 
@@ -214,7 +214,7 @@ test('the readouts follow a real click, real arrow keys and a real undo, and sur
       await expect(readout(win, 'selected', pid)).toHaveCount(0);
       await win.keyboard.press('Shift+ArrowRight');
       await win.keyboard.press('Shift+ArrowRight');
-      await expect(readout(win, 'selected', pid)).toHaveText('2 selected');
+      await expect(readout(win, 'selected', pid)).toHaveText('2 selected.');
       await win.keyboard.press('ArrowRight');
       await expect(readout(win, 'selected', pid), 'a bare caret shows nothing, never 0').toHaveCount(
         0,
