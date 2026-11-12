@@ -122,8 +122,8 @@ describe('T080 — the preview (FR-046, FR-047)', () => {
     await user.pointer({ target: screen.getByTestId('fif-row-src/a.ts-6'), keys: '[MouseRight]' });
     // A menu row is a `li`; `aria-disabled` is what carries the state, and its ABSENCE is what
     // makes the row live.
-    expect(screen.getByTestId('menu-item-Replace All')).not.toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('menu-item-Replace Match')).not.toHaveAttribute(
+    expect(await screen.findByTestId('menu-item-Replace All')).not.toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Replace Match')).not.toHaveAttribute(
       'aria-disabled',
       'true',
     );
@@ -158,7 +158,7 @@ describe('T082 — a committed row is visibly distinguishable from a pending one
     const user = await withResults();
     await toggleReplaceOn(user);
     await user.pointer({ target: screen.getByTestId('fif-row-src/a.ts-6'), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Replace in File'));
+    await user.click(await screen.findByTestId('menu-item-Replace in File'));
     expect(screen.getByTestId('fif-row-src/a.ts-6')).toHaveAttribute('data-committed', 'true');
 
     stub.emit({ panelId: PANEL_ID, generation: 2, status: 'complete', rows: ROWS, totalMatches: 2 });
@@ -231,7 +231,7 @@ describe('T208 — a committed row shows the file as it now is (FR-083, FR-083a)
     item: 'Replace All' | 'Replace in File' | 'Replace Match',
   ): Promise<void> {
     await user.pointer({ target: screen.getByTestId(rowTestId), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId(`menu-item-${item}`));
+    await user.click(await screen.findByTestId(`menu-item-${item}`));
   }
 
   it('renders the new text PLAINLY, and gives a SAME-LINE neighbour the new line too (FR-083a, FR-083b)', async () => {

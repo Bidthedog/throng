@@ -197,14 +197,14 @@ describe('the tree is one heading per level, all open (FR-013, FR-013a, FR-016)'
     chooseFolderTree();
 
     await user.pointer({ target: screen.getByTestId(`fif-status-${PANEL_ID}`), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Collapse all'));
+    await user.click(await screen.findByTestId('menu-item-Collapse all'));
 
     // Collapsed at the top: only the two top-level headings remain mounted, each collapsed.
     expect(headings()).toEqual(['src', 'README.md']);
     expect(screen.getByTestId('fif-group-toggle-src')).toHaveAttribute('aria-expanded', 'false');
 
     await user.pointer({ target: screen.getByTestId(`fif-status-${PANEL_ID}`), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Expand all'));
+    await user.click(await screen.findByTestId('menu-item-Expand all'));
 
     expect(screen.getByTestId('fif-group-toggle-src/deep/er')).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getAllByTestId(/^fif-row-/)).toHaveLength(4);

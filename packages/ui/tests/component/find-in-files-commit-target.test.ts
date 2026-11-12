@@ -85,6 +85,9 @@ const rightClick = async (
   testId: string,
 ): Promise<void> => {
   await user.pointer({ target: screen.getByTestId(testId), keys: '[MouseRight]' });
+  // The panel builds its menu after an await (FR-087), so it renders on React's scheduler, not inside the
+  // pointer's act(): wait for it rather than read it the moment the pointer returns.
+  await screen.findByRole('menu');
 };
 
 const labelOf = (item: string): string =>
@@ -105,12 +108,12 @@ describe('a narrow granularity aims at the row the menu was opened from (FR-049)
     // …and now open the menu over b.ts's heading, which names a different file entirely.
     await rightClick(user, 'fif-group-header-src/b.ts');
 
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute(
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute(
       'aria-disabled',
       'true',
     );
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
-    await user.click(screen.getByTestId('menu-item-Replace in File'));
+    expect(await screen.findByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByTestId('menu-item-Replace in File'));
     expect(stub.commit).not.toHaveBeenCalled();
   });
 
@@ -132,15 +135,15 @@ describe('a narrow granularity aims at the row the menu was opened from (FR-049)
     });
     await rightClick(user, `fif-status-${PANEL_ID}`);
 
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
-    await user.click(screen.getByTestId('menu-item-Replace Match'));
+    expect(await screen.findByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByTestId('menu-item-Replace Match'));
     expect(stub.commit).not.toHaveBeenCalled();
   });
 
   it('still aims at the row when the menu WAS opened from one', async () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/b.ts-40');
-    await user.click(screen.getByTestId('menu-item-Replace in File'));
+    await user.click(await screen.findByTestId('menu-item-Replace in File'));
 
     expect(stub.commit.mock.calls[0]?.[0]).toMatchObject({
       targets: [{ relPath: 'src/b.ts', edits: [{ from: 40, to: 46 }] }],
@@ -214,11 +217,11 @@ describe('the menu while a scan is running (060 FR-003)', () => {
 
     await rightClick(user, 'fif-row-src/a.ts-6');
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
     for (const item of ['Replace All', 'Replace in File', 'Replace Match']) {
-      expect(screen.getByTestId(`menu-item-${item}`)).toHaveAttribute('aria-disabled', 'true');
+      expect(await screen.findByTestId(`menu-item-${item}`)).toHaveAttribute('aria-disabled', 'true');
     }
-    await user.click(screen.getByTestId('menu-item-Replace in File'));
+    await user.click(await screen.findByTestId('menu-item-Replace in File'));
     expect(stub.commit).not.toHaveBeenCalled();
   });
 
@@ -229,13 +232,13 @@ describe('the menu while a scan is running (060 FR-003)', () => {
     // The scan ends while the menu is still open: the menu was built for a running scan.
     stub.emit({ panelId: PANEL_ID, generation: 1, status: 'complete', rows: [], totalMatches: 3 });
 
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'true');
 
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/a.ts-6');
 
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'false');
   });
 });
 
@@ -246,7 +249,7 @@ describe('the menu while a scan is running (060 FR-003)', () => {
 describe('a commit that cannot be carried out says so (FR-058)', () => {
   const commitAll = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
     await rightClick(user, 'fif-row-src/a.ts-6');
-    await user.click(screen.getByTestId('menu-item-Replace All'));
+    await user.click(await screen.findByTestId('menu-item-Replace All'));
   };
 
   it.each([
@@ -318,7 +321,7 @@ describe('a narrow commit row with nothing pending is drawn disabled (T233)', ()
   /** Commit ONE row through Replace Match, and wait until the commit has been answered. */
   async function commitMatch(user: ReturnType<typeof userEvent.setup>, rowTestId: string): Promise<void> {
     await rightClick(user, rowTestId);
-    await user.click(screen.getByTestId('menu-item-Replace Match'));
+    await user.click(await screen.findByTestId('menu-item-Replace Match'));
     await screen.findAllByTestId('fif-commit-outcome');
   }
 
@@ -329,10 +332,10 @@ describe('a narrow commit row with nothing pending is drawn disabled (T233)', ()
 
     await rightClick(user, 'fif-row-src/b.ts-40');
     expect(
-      screen.getByTestId('menu-item-Replace Match'),
+      await screen.findByTestId('menu-item-Replace Match'),
       'drawn disabled on a committed row',
     ).toHaveAttribute('aria-disabled', 'true');
-    await user.click(screen.getByTestId('menu-item-Replace Match'));
+    await user.click(await screen.findByTestId('menu-item-Replace Match'));
 
     expect(stub.commit).toHaveBeenCalledTimes(1);
   });
@@ -343,7 +346,7 @@ describe('a narrow commit row with nothing pending is drawn disabled (T233)', ()
 
     await rightClick(user, 'fif-row-src/b.ts-40');
 
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'true');
     // Still NAMED: a greyed row that says which file it is about tells the user why it is greyed.
     expect(labelOf('Replace in File')).toBe('Replace in src/b.ts');
   });
@@ -356,13 +359,13 @@ describe('a narrow commit row with nothing pending is drawn disabled (T233)', ()
 
     await rightClick(user, 'fif-row-src/a.ts-80');
 
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'false');
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
 
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/a.ts-6');
     // The committed row itself: nothing to do for the MATCH, but its file still has a match pending.
-    expect(screen.getByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Replace Match')).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Replace in File')).toHaveAttribute('aria-disabled', 'false');
   });
 });

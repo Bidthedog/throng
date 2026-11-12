@@ -140,7 +140,7 @@ async function replaceMatch(
   from: number,
 ): Promise<void> {
   await user.pointer({ target: screen.getByTestId(`fif-row-${FILE}-${from}`), keys: '[MouseRight]' });
-  await user.click(screen.getByTestId('menu-item-Replace Match'));
+  await user.click(await screen.findByTestId('menu-item-Replace Match'));
   await waitFor(() =>
     expect(screen.getByTestId(`fif-row-${FILE}-${from}`)).toHaveAttribute('data-committed', 'true'),
   );
@@ -179,7 +179,7 @@ describe('#378 — two adjacent matches, replaced one at a time (FR-050, FR-054)
     await replaceMatch(user, 0);
 
     await user.pointer({ target: screen.getByTestId(`fif-row-${FILE}-2`), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Replace All'));
+    await user.click(await screen.findByTestId('menu-item-Replace All'));
     await waitFor(() => expect(text).toBe(`${REPLACEMENT}${REPLACEMENT}`));
   });
 });
@@ -190,7 +190,7 @@ describe('#378 — the ordinary cases the rebase must not break', () => {
     // the issue says a fix must not trade away.
     const user = await ready();
     await user.pointer({ target: screen.getByTestId(`fif-row-${FILE}-0`), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Replace All'));
+    await user.click(await screen.findByTestId('menu-item-Replace All'));
     await waitFor(() => expect(text).toBe(`${REPLACEMENT}${REPLACEMENT}`));
 
     expect((stub.commit.mock.calls[0]?.[0] as CommitPayload).targets).toEqual([
@@ -213,7 +213,7 @@ describe('#378 — the ordinary cases the rebase must not break', () => {
       totalMatches: 2,
     });
     await user.pointer({ target: screen.getByTestId(`fif-row-${FILE}-2`), keys: '[MouseRight]' });
-    await user.click(screen.getByTestId('menu-item-Replace All'));
+    await user.click(await screen.findByTestId('menu-item-Replace All'));
 
     await waitFor(() =>
       expect((stub.commit.mock.calls[1]?.[0] as CommitPayload).targets).toEqual([

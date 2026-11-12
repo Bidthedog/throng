@@ -114,7 +114,7 @@ const rightClick = async (
 
 /** Open the flyout and hand back its container. */
 const openFlyout = async (user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> => {
-  await user.click(screen.getByTestId('menu-item-Open In'));
+  await user.click(await screen.findByTestId('menu-item-Open In'));
   return screen.getByTestId('submenu-Open In');
 };
 
@@ -147,7 +147,7 @@ describe('the menu asks about the row it was opened from (FR-087)', () => {
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-row-src/b.ts-40');
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
     // The second answer must be about b.ts. A menu that cached the first would offer targets
     // computed for a different file, and nothing on screen would say so.
     expect(askedFor).toEqual(['src/a.ts', 'src/b.ts']);
@@ -201,7 +201,7 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     await user.keyboard('{Escape}');
     await rightClick(user, 'fif-group-header-src/b.ts');
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'false');
     expect(askedFor).toEqual(['src/a.ts', 'src/b.ts']);
 
     const flyout = await openFlyout(user);
@@ -221,7 +221,7 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     fireEvent.click(screen.getByTestId(`fif-grouping-fileAndFolder-${PANEL_ID}`));
     await rightClick(user, 'fif-group-header-src');
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
     expect(askedFor).toEqual([]);
   });
 
@@ -234,8 +234,8 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     await user.keyboard('{Escape}');
     await rightClick(user, `${idPrefix}-${PANEL_ID}`);
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
-    await user.click(screen.getByTestId('menu-item-Open In'));
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByTestId('menu-item-Open In'));
     expect(opened).toEqual([]);
   });
 
@@ -246,7 +246,7 @@ describe('drawn and disabled where the menu names no file (FR-087d)', () => {
     const user = await ready();
     await rightClick(user, 'fif-row-src/a.ts-6');
 
-    expect(screen.getByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByTestId('menu-item-Open In')).toHaveAttribute('aria-disabled', 'true');
   });
 });
 

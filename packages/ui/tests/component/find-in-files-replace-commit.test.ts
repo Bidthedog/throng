@@ -94,7 +94,7 @@ async function commitVia(
   item: 'Replace All' | 'Replace in File' | 'Replace Match',
 ): Promise<void> {
   await user.pointer({ target: screen.getByTestId(rowTestId), keys: '[MouseRight]' });
-  await user.click(screen.getByTestId(`menu-item-${item}`));
+  await user.click(await screen.findByTestId(`menu-item-${item}`));
 }
 
 describe('T093 — the three granularities are distinct, deliberate actions (FR-049)', () => {
@@ -151,8 +151,8 @@ describe('T093 — the three granularities are distinct, deliberate actions (FR-
     await user.pointer({ target: screen.getByTestId('fif-row-src/a.ts-6'), keys: '[MouseRight]' });
     // A menu row is a `li`, so `aria-disabled` is what carries the state — not the `disabled`
     // attribute, which only a form control has.
-    expect(screen.getByTestId('menu-item-Replace All')).toHaveAttribute('aria-disabled', 'true');
-    await user.click(screen.getByTestId('menu-item-Replace All'));
+    expect(await screen.findByTestId('menu-item-Replace All')).toHaveAttribute('aria-disabled', 'true');
+    await user.click(await screen.findByTestId('menu-item-Replace All'));
     expect(stub.commit).not.toHaveBeenCalled();
   });
 });
