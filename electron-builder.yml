@@ -182,6 +182,10 @@ linux:
   desktop:
     entry:
       StartupWMClass: throng
+  # 067 FR-033: installed into each file manager's own folder by after-install.sh.
+  extraResources:
+    - from: packaging/linux/file-manager
+      to: file-manager
 
 deb:
   artifactName: throng-${version}-amd64.${ext}

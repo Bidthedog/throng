@@ -294,6 +294,73 @@ cancel. Then click Retry.$\n$\nClick Cancel to abort and leave your current inst
 
 ; File removal. When another account is using the copy (unattended), sweep with rename-aside and
 ; restart-time deletion; otherwise it is the template's own removal, reproduced unchanged.
+; 067 FR-029, FR-031: the folder verb and PATH. PATH goes through .NET because NSIS's string limit can truncate a long one.
+!macro throngRegisterVerb key
+  WriteRegStr SHELL_CONTEXT "${key}" "" "Open as throng project"
+  WriteRegStr SHELL_CONTEXT "${key}" "Icon" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}"'
+  WriteRegStr SHELL_CONTEXT "${key}\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%V"'
+!macroend
+
+!macro throngEditPath action
+  System::Call 'Kernel32::SetEnvironmentVariable(t "THRONG_SETUP_DIR", t "$INSTDIR")i'
+  nsExec::Exec `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "& { $$s = if ('$installMode' -eq 'all') { 'Machine' } else { 'User' }; $$d = $$env:THRONG_SETUP_DIR; $$rest = @(([Environment]::GetEnvironmentVariable('Path', $$s) -split ';') | Where-Object { $$_ -and $$_ -ne $$d }); if ('${action}' -eq 'add') { $$rest += $$d }; [Environment]::SetEnvironmentVariable('Path', ($$rest -join ';'), $$s) }"`
+  Pop $0
+!macroend
+
+; Unticking sets these; a silent install never sees the page, so both stay empty and both options are taken.
+!ifndef BUILD_UNINSTALLER
+  !include "nsDialogs.nsh"
+  Var throngNoVerb
+  Var throngNoPath
+  Var throngVerbBox
+  Var throngPathBox
+
+  Function throngOptionsShow
+    nsDialogs::Create 1018
+    Pop $0
+    ${NSD_CreateCheckbox} 0 0 100% 12u "Add $\"Open as throng project$\" to the File Explorer menu for folders"
+    Pop $throngVerbBox
+    ${If} $throngNoVerb != "1"
+      ${NSD_Check} $throngVerbBox
+    ${EndIf}
+    ${NSD_CreateCheckbox} 0 20u 100% 12u "Add throng to PATH, so that typing throng in a terminal opens it"
+    Pop $throngPathBox
+    ${If} $throngNoPath != "1"
+      ${NSD_Check} $throngPathBox
+    ${EndIf}
+    nsDialogs::Show
+  FunctionEnd
+
+  Function throngOptionsLeave
+    ${NSD_GetState} $throngVerbBox $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $throngNoVerb ""
+    ${Else}
+      StrCpy $throngNoVerb "1"
+    ${EndIf}
+    ${NSD_GetState} $throngPathBox $0
+    ${If} $0 == ${BST_CHECKED}
+      StrCpy $throngNoPath ""
+    ${Else}
+      StrCpy $throngNoPath "1"
+    ${EndIf}
+  FunctionEnd
+
+  !macro customPageAfterChangeDir
+    Page custom throngOptionsShow throngOptionsLeave
+  !macroend
+!endif
+
+!macro customInstall
+  ${If} $throngNoVerb != "1"
+    !insertmacro throngRegisterVerb "Software\Classes\Directory\shell\throng.OpenProject"
+    !insertmacro throngRegisterVerb "Software\Classes\Directory\Background\shell\throng.OpenProject"
+  ${EndIf}
+  ${If} $throngNoPath != "1"
+    !insertmacro throngEditPath "add"
+  ${EndIf}
+!macroend
+
 !macro customRemoveFiles
   ${If} $throngInUseOthers == "1"
     SetOutPath $TEMP
@@ -335,6 +402,9 @@ cancel. Then click Retry.$\n$\nClick Cancel to abort and leave your current inst
 ; switches to the current account's context and puts the scope back afterwards. (A MessageBox is used
 ; instead of a custom nsDialogs page, which trips NSIS warning 6020 in electron-builder's two-pass build.)
 !macro customUnInstall
+  DeleteRegKey SHELL_CONTEXT "Software\Classes\Directory\shell\throng.OpenProject"
+  DeleteRegKey SHELL_CONTEXT "Software\Classes\Directory\Background\shell\throng.OpenProject"
+  !insertmacro throngEditPath "remove"
   IfSilent un_keep_data
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
     "throng has been removed.$\n$\nYour projects, settings and themes are KEPT by default so you can \
