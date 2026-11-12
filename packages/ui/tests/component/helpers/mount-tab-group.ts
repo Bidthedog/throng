@@ -46,6 +46,8 @@ export function mountTabGroup(
     throng?: Record<string, unknown>;
     /** An ancestor around the whole tree (a provider registry context, say). */
     wrap?: (children: ReactElement) => ReactElement;
+    /** Window-level components mounted beside the group, inside every provider (a key dispatcher, say). */
+    extras?: ReactElement[];
   } = {},
 ): MountedTabGroup {
   const projectId = opts.projectId ?? layout?.projectId ?? 'proj-tab-group';
@@ -112,7 +114,7 @@ export function mountTabGroup(
                 createElement(
                   ContextMenuProvider,
                   null,
-                  createElement(Fragment, null, createElement(TabGroup, null), createElement(Probe, null)),
+                  createElement(Fragment, null, createElement(TabGroup, null), createElement(Probe, null), ...(opts.extras ?? [])),
                 ),
               ),
             ),

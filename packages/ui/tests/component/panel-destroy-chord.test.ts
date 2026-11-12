@@ -538,6 +538,7 @@ const panelActions: PanelHeaderMenuActions = {
   reloadTerminal: noop,
   revealInTree: noop,
   openInOsExplorer: noop,
+  openInDefaultProgram: noop,
   tryAgain: noop,
   copyDetails: noop,
   clearPanelType: noop,

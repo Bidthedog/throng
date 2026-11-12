@@ -68,12 +68,13 @@ const FIXTURE = Array.from({ length: 208 }, (_, i) => 'x'.repeat(i < 165 ? 5 : 4
  * ────────────────────────────────────────────────────────────────────────── */
 
 describe('each readout is named by what its figure IS (FR-015)', () => {
-  it('names all five in words', () => {
+  it('names all six in words', () => {
     strip({ line: 412, column: 7, selected: 63, text: FIXTURE });
 
     expect(readout('line')).toHaveAccessibleName('line 412');
     expect(readout('column')).toHaveAccessibleName('column 7');
     expect(readout('selected')).toHaveAccessibleName('63 characters selected');
+    expect(readout('lines')).toHaveAccessibleName('1 line');
     expect(readout('chars')).toHaveAccessibleName('1,204 characters');
     expect(readout('words')).toHaveAccessibleName('208 words');
   });
@@ -189,7 +190,8 @@ describe('everything this feature adds arrives named (FR-018)', () => {
     const group = screen.getByTestId(`editor-status-readouts-${PANEL}`);
     const children = [...group.children] as HTMLElement[];
 
-    expect(children.length, 'the group must actually hold the readouts').toBe(5);
+    // Six since 067 added total lines (FR-095).
+    expect(children.length, 'the group must actually hold the readouts').toBe(6);
     const unnamed = children.filter((el) => (el.getAttribute('aria-label') ?? '').trim() === '');
     expect(
       unnamed.map((el) => el.textContent),
@@ -235,6 +237,8 @@ describe('everything this feature adds arrives named (FR-018)', () => {
       'column:full',
       'selected:full',
       'selected:short',
+      'lines:full',
+      'lines:short',
       'chars:full',
       'chars:short',
       'words:full',

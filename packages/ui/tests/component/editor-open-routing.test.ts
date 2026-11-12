@@ -1146,3 +1146,115 @@ describe('opening a file from the tree while an editor is in Focus Mode', () => 
     expect(getMaximiseStack(tabId)).toEqual([]);
   });
 });
+
+describe('a file throng cannot open, and the OS program preference (067 FR-116, FR-117)', () => {
+  /*
+   * The tree raises `throng:open-file` with the gesture that raised it. `EditorOpenListener` asks main
+   * the question it always asks (`openInto`) and, for a binary refusal with the preference on, answers
+   * with `throng:open-in-os` on a double click and with nothing on a single click.
+   */
+  function withPreference(on: boolean, decision: unknown) {
+    const svc = fakeServices();
+    const openInto = vi.fn(() => Promise.resolve(decision));
+    Reflect.set(window, 'throng', {
+      editor: { openInto },
+      panel: { notifyTyped: () => {} },
+      config: {
+        get: () => Promise.resolve({ settings: { explorer: { openUnsupportedInOs: on } } }),
+        onChange: () => () => {},
+      },
+    });
+    render(
+      createElement(
+        ServicesProvider,
+        { services: svc },
+        createElement(
+          ConfigProvider,
+          null,
+          createElement(
+            ProjectsProvider,
+            { client: svc.projects },
+            createElement(
+              WorkspaceProvider,
+              { client: svc.workspace, activeProjectId: PROJECT },
+              createElement(
+                NotificationProvider,
+                null,
+                createElement('div', null, createElement(Probe, null), createElement(EditorOpenListener, null)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return openInto;
+  }
+
+  async function raise(gesture: string | undefined): Promise<string[]> {
+    const toOs: string[] = [];
+    const onOs = (e: Event): void => void toOs.push((e as CustomEvent).detail.relPath);
+    window.addEventListener('throng:open-in-os', onOs);
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('throng:open-file', {
+          detail: { projectId: PROJECT, relPath: 'pic.png', absPath: 'D:/proj/pic.png', gesture },
+        }),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    window.removeEventListener('throng:open-in-os', onOs);
+    return toOs;
+  }
+
+  const BINARY = { action: 'refuse', reason: 'binary' };
+
+  it('opens a binary file in the OS on a double click', async () => {
+    withPreference(true, BINARY);
+    await ready();
+    expect(await raise('dblclick')).toEqual(['pic.png']);
+  });
+
+  it('raises no notice and opens nothing on a single click', async () => {
+    const openInto = withPreference(true, BINARY);
+    await ready();
+    expect(await raise('click')).toEqual([]);
+    // Asked once, to decide. The editor's own route would have asked again, and raised the notice.
+    expect(openInto).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens it in the OS from the double-click event that follows an opening first click', async () => {
+    withPreference(true, BINARY);
+    await ready();
+    expect(await raise('dblclickUnsupportedOnly')).toEqual(['pic.png']);
+  });
+
+  it('leaves a file the editor can open to the editor, whatever the gesture', async () => {
+    withPreference(true, { action: 'open' });
+    await ready();
+    expect(await raise('dblclick')).toEqual([]);
+    expect(editorPanels(live()).length).toBeGreaterThan(0);
+  });
+
+  it('does nothing for the extra double-click event when the file opens', async () => {
+    withPreference(true, { action: 'open' });
+    await ready();
+    expect(await raise('dblclickUnsupportedOnly')).toEqual([]);
+    expect(editorPanels(live())).toHaveLength(0);
+  });
+
+  it("keeps the editor's own message for a file that is too large (not a binary refusal)", async () => {
+    const openInto = withPreference(true, { action: 'refuse', reason: 'too-large' });
+    await ready();
+    expect(await raise('dblclick')).toEqual([]);
+    expect(openInto.mock.calls.length, 'the editor route asked as well').toBeGreaterThan(1);
+  });
+
+  it('with the preference off, a binary file takes the existing route and message', async () => {
+    const openInto = withPreference(false, BINARY);
+    await ready();
+    expect(await raise('dblclick')).toEqual([]);
+    expect(openInto).toHaveBeenCalledTimes(1);
+  });
+});

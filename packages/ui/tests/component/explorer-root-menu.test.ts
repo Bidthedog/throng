@@ -281,6 +281,8 @@ describe('a right-click on the empty space targets the project root (004 FR-097)
       'Expand All Children',
       // 043 FR-029b put a top-level Find in Files row here; FR-090 MOVED it into Open In → Search,
       // which the flyout test below asserts. Its absence here is the move, not an omission.
+      // 067 FR-045, FR-128 — Properties is offered on files and folders, the root included, and last.
+      'Properties',
     ]);
   });
 

@@ -275,6 +275,11 @@ export const COVERED_IN_COMPONENT: ReadonlyMap<string, { test: string; key: stri
    * Shift+Enter and Ctrl+Enter it must leave alone.
    */
   ['panel.toggleMaximise', { test: 'maximise-keys.test.ts', key: 'Enter', mods: ['shiftKey', 'altKey'] }],
+  /*
+   * 067 FR-075 — `tabs.rename` (`Ctrl+Shift+Alt+F2`) takes the FUNCTION-KEY branch like `panel.destroy`. Pressed
+   * through the real dispatcher over the real `TabGroup`, and from a stand-in terminal textarea (FR-076).
+   */
+  ['tabs.rename', { test: 'tab-rename-chord.test.ts', key: 'F2', mods: ['ctrlKey', 'shiftKey', 'altKey'] }],
 ]);
 
 /** Where the component tests live, for resolving a `COVERED_IN_COMPONENT` claim. */

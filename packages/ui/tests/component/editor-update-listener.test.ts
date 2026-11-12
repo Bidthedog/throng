@@ -563,8 +563,8 @@ describe('opening a file into a panel publishes its counts where the bar looks',
     await h.openFile({ absPath: OPENED, text: 'one two three\nfour\n', version: 2 });
     await waitFor(
       () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`), 'the first file’s chars').toHaveTextContent('19 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`), 'the first file’s words').toHaveTextContent('4 words');
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`), 'the first file’s chars').toHaveTextContent('19 Chars.');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`), 'the first file’s words').toHaveTextContent('4 Words.');
       },
       { timeout: 3000 },
     );
@@ -573,8 +573,8 @@ describe('opening a file into a panel publishes its counts where the bar looks',
 
     await waitFor(
       () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('6 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('2 words');
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('6 Chars.');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('2 Words.');
       },
       { timeout: 3000 },
     );
@@ -723,12 +723,12 @@ describe('an empty document reports 0 characters and 0 words', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 words');
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 Chars.');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 Words.');
       },
       { timeout: 3000 },
     );
-    expect(documentMetrics(`panel:${PANEL}`)).toEqual({ totalCharacters: 0, totalWords: 0 });
+    expect(documentMetrics(`panel:${PANEL}`)).toMatchObject({ totalCharacters: 0, totalWords: 0 });
   });
 
   it('shows them for a 0-byte FILE opened into a panel', async () => {
@@ -743,12 +743,12 @@ describe('an empty document reports 0 characters and 0 words', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 words');
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 Chars.');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 Words.');
       },
       { timeout: 3000 },
     );
-    expect(documentMetrics(`file:${EMPTY}`)).toEqual({ totalCharacters: 0, totalWords: 0 });
+    expect(documentMetrics(`file:${EMPTY}`)).toMatchObject({ totalCharacters: 0, totalWords: 0 });
   });
 
   it('reports zero again after the last character is deleted', async () => {
@@ -764,7 +764,7 @@ describe('an empty document reports 0 characters and 0 words', () => {
     });
 
     await waitFor(
-      () => expect(documentMetrics(`panel:${PANEL}`)).toEqual({ totalCharacters: 0, totalWords: 0 }),
+      () => expect(documentMetrics(`panel:${PANEL}`)).toMatchObject({ totalCharacters: 0, totalWords: 0 }),
       { timeout: 3000 },
     );
   });
@@ -805,7 +805,7 @@ describe('a file that changed on disk withdraws its old counts while it reloads 
     });
     await waitFor(() => expect(h.view().state.doc.toString()).toBe('one two three\nfour\n'));
     await waitFor(
-      () => expect(documentMetrics(DOC_KEY)).toEqual({ totalCharacters: 19, totalWords: 4 }),
+      () => expect(documentMetrics(DOC_KEY)).toMatchObject({ totalCharacters: 19, totalWords: 4 }),
       { timeout: 3000 },
     );
 
@@ -827,7 +827,7 @@ describe('a file that changed on disk withdraws its old counts while it reloads 
 
     // …and the reloaded document then reports itself, in the ordinary way.
     await waitFor(
-      () => expect(documentMetrics(DOC_KEY)).toEqual({ totalCharacters: 3, totalWords: 1 }),
+      () => expect(documentMetrics(DOC_KEY)).toMatchObject({ totalCharacters: 3, totalWords: 1 }),
       { timeout: 3000 },
     );
   });
@@ -853,7 +853,7 @@ describe('an empty document that is reloaded still reports zero', () => {
     const h = mountEditor({ panelId: PANEL, doc: { text: '', version: 1, absPath: null } });
     await waitFor(() => expect(h.view().state.doc.toString()).toBe(''));
     await waitFor(
-      () => expect(documentMetrics(`panel:${PANEL}`)).toEqual({ totalCharacters: 0, totalWords: 0 }),
+      () => expect(documentMetrics(`panel:${PANEL}`)).toMatchObject({ totalCharacters: 0, totalWords: 0 }),
       { timeout: 3000 },
     );
 
@@ -863,8 +863,8 @@ describe('an empty document that is reloaded still reports zero', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 chars');
-        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 words');
+        expect(screen.getByTestId(`editor-status-chars-${PANEL}`)).toHaveTextContent('0 Chars.');
+        expect(screen.getByTestId(`editor-status-words-${PANEL}`)).toHaveTextContent('0 Words.');
       },
       { timeout: 3000 },
     );

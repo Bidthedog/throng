@@ -9,7 +9,7 @@
  * `memory-clipboard.ts`), so it owes the same guarantee the real seam does.
  */
 import { describe, expect, it } from 'vitest';
-import { runClipboardContract, runClipboardRichContract } from '@throng/core/testing';
+import { runClipboardContract, runClipboardFileListContract, runClipboardRichContract } from '@throng/core/testing';
 import { MemoryClipboard } from '../../src/main/memory-clipboard.js';
 
 describe('MemoryClipboard', () => {
@@ -25,6 +25,12 @@ describe('MemoryClipboard', () => {
         const clipboard = new MemoryClipboard();
         return { clipboard, html: () => clipboard.htmlForTesting() };
       }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('satisfies the IClipboard file-list contract (067 FR-003)', async () => {
+    await expect(
+      runClipboardFileListContract('MemoryClipboard', () => new MemoryClipboard(), ['/a b.txt', '/données/世界']),
     ).resolves.toBeUndefined();
   });
 });

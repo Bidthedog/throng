@@ -53,6 +53,10 @@ const REGISTERED: Readonly<Record<string, string>> = {
   '.notices':
     'corner-pinned toast stack — a fixed width and a max-height of the viewport clamp it, and the oldest scrolls out of the top rather than the newest being pushed off; nothing to flip away from',
   '.drag-ghost': 'follows the pointer by design — it is meant to leave the window',
+  '.tree-drag-label':
+    'explorer/drag-action-label.tsx — beside the pointer during a tree drag; flips + clamps on BOTH axes via clampToViewport',
+  '.history-input__list':
+    'panel-type/history-input.tsx (067 FR-062) — the remembered-values list under a terminal form field. ANCHORED to its field, so it flips: measured in a layout effect, it opens above the field when the window has more room there, and its max-height is clamped to the room on the chosen side; one truncated line per row',
   '.colour-picker':
     'common/colour-picker.tsx — flips + clamps on BOTH axes via clampToViewport (021/FR-036); found BY this guard',
   '.language-picker':

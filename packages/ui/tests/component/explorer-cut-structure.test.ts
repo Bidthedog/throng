@@ -58,7 +58,7 @@ async function selectBothAndSend(mode: 'cut' | 'copy') {
     })),
   });
   fireEvent.keyDown(document.activeElement ?? m.tree, { key: 'v', ctrlKey: true });
-  await waitFor(() => expect(m.transfer.api.paste).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(m.transfer.api.pasteAuto).toHaveBeenCalledTimes(1));
   return m;
 }
 
@@ -66,7 +66,7 @@ describe('cut of a nested and a root file of the same name (050 T120, FR-033)', 
   it('sends main the same items and the same paste target as a copy does', async () => {
     const copied = await selectBothAndSend('copy');
     const copySet = copied.clipboard.api.set.mock.calls[0]!;
-    const copyPaste = copied.transfer.api.paste.mock.calls[0]!;
+    const copyPaste = copied.transfer.api.pasteAuto.mock.calls[0]!;
     copied.unmount();
     Reflect.deleteProperty(window, 'throng');
     // The tree remembers which folders were open; the second mount must start closed like the first.
@@ -74,7 +74,7 @@ describe('cut of a nested and a root file of the same name (050 T120, FR-033)', 
 
     const cut = await selectBothAndSend('cut');
     const cutSet = cut.clipboard.api.set.mock.calls[0]!;
-    const cutPaste = cut.transfer.api.paste.mock.calls[0]!;
+    const cutPaste = cut.transfer.api.pasteAuto.mock.calls[0]!;
 
     expect(cutSet[0]).toBe('cut');
     expect(copySet[0]).toBe('copy');

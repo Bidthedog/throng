@@ -48,6 +48,7 @@ const OWNER = 'panel-type/use-flavours.ts';
 const CONSUMERS = new Set([
   'panel-type/panel-type-form.tsx', // the panel type-picker
   'explorer/file-tree.tsx', // the Open In → Terminal submenu
+  'preferences/form-history-control.tsx', // 067 FR-066 — which terminal type's remembered values to clear
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

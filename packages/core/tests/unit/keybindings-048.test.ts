@@ -189,7 +189,7 @@ describe('the terminal-tier rule judges a multi-stroke chord by its first stroke
         'file.undo', 'file.redo', 'project.next', 'project.previous', 'focus.explorer', 'focus.projects',
         'focus.workspace', 'focus.nextMarkedPanel', 'tabs.openPicker', 'navigate.quickOpen', 'navigate.gotoLine',
         'search.findInFiles', 'search.replaceInFiles', 'navigate.back', 'navigate.forward',
-        'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy',
+        'panel.splitDown', 'panel.splitUp', 'panel.splitRight', 'panel.splitLeft', 'panel.destroy', 'tabs.rename',
         'panel.toggleMaximise', 'view.resourceMonitor', // 055
       ].sort(),
     );

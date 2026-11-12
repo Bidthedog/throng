@@ -75,7 +75,7 @@ describe('what an unwritten panel reads', () => {
   it('reads line 1 column 1 rather than nothing (FR-002)', () => {
     // A strip mounted before its editor has adopted any content still has to say something true,
     // and an empty document's caret really is at line 1, column 1.
-    expect(panelCaret('never-written')).toEqual({ position: { line: 1, column: 1 }, selected: null });
+    expect(panelCaret('never-written')).toEqual({ position: { line: 1, column: 1 }, selected: null, columns: null, lines: null });
   });
 
   it('returns the SAME object every time, so useSyncExternalStore can cache it', () => {
@@ -125,7 +125,7 @@ describe('subscribers', () => {
     const unsubscribe = subscribeCaret(() => seen.push(panelCaret('panel-a')));
 
     setPanelCaret('panel-a', { line: 2, column: 5 }, null);
-    expect(seen).toEqual([{ position: { line: 2, column: 5 }, selected: null }]);
+    expect(seen).toEqual([{ position: { line: 2, column: 5 }, selected: null, columns: null, lines: null }]);
 
     unsubscribe();
     setPanelCaret('panel-a', { line: 3, column: 1 }, null);

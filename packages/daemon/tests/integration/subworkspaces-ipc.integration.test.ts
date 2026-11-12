@@ -47,7 +47,7 @@ beforeEach(async () => {
   const router = new RpcRouter();
   new ProjectIpcService(projectService).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
-  new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
+  new SubWorkspaceIpcService({ store: subWorkspaceStore, workspaceStore, userContext }).register(router);
   pipeName = uniquePipeName();
   server = new IpcServer({ pipeName }, router);
   await server.start();

@@ -73,6 +73,9 @@ const MEASURED: Record<string, number> = {
   'column:short': 34,
   'selected:full': 60,
   'selected:short': 40,
+  // 067 FR-095 — total lines, between selected and chars; `9,000 lns` is narrower than `9,000 lines`.
+  'lines:full': 50,
+  'lines:short': 36,
   'chars:full': 62,
   'chars:short': 44,
   'words:full': 58,
@@ -421,6 +424,7 @@ function expectedSegments(width: number) {
       line: { full: MEASURED['line:full'], short: MEASURED['line:short'] },
       column: { full: MEASURED['column:full'], short: MEASURED['column:short'] },
       selected: { full: MEASURED['selected:full'], short: MEASURED['selected:short'] },
+      lines: { full: MEASURED['lines:full'], short: MEASURED['lines:short'] },
       chars: { full: MEASURED['chars:full'], short: MEASURED['chars:short'] },
       words: { full: MEASURED['words:full'], short: MEASURED['words:short'] },
       encoding: { full: MEASURED['encoding:full'], short: MEASURED['encoding:full'] },
@@ -444,8 +448,8 @@ const indicatorsShown = (): string[] =>
 describe('the bar applies the fit result', () => {
   it('shows every readout, full-labelled, when there is room', () => {
     strip(500);
-    expect(visible()).toEqual(['line', 'column', 'selected', 'chars', 'words']);
-    for (const id of ['line', 'column', 'selected', 'chars', 'words']) {
+    expect(visible()).toEqual(['line', 'column', 'selected', 'lines', 'chars', 'words']);
+    for (const id of ['line', 'column', 'selected', 'lines', 'chars', 'words']) {
       expect(labelForm(id), `${id} should be at its full label`).toBe('full');
     }
   });
@@ -538,13 +542,20 @@ describe('the bar applies the fit result', () => {
  * FR-014 — the READOUTS give way, and the measurement does not feed back
  * ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Whether the readouts yielded space: one is hidden, or one has taken its short label. Since 067 six
+ * readouts can absorb the 60px a longer language name needs by shortening alone (FR-021 shortens before it
+ * hides), where five could not.
+ */
+const gaveWay = (): boolean => visible().length < 6 || visible().some((id) => labelForm(id) === 'short');
+
 describe('the controls are subtracted at what they COST (FR-014, FR-024)', () => {
   it('gives way in the readouts when the language name grows', () => {
     /*
      * ══ THE DEFECT, AS A SEQUENCE ══
      *
-     * 374px is the width at which the five full-labelled readouts (268) plus the bar gap plus a
-     * 100px trailing group fit exactly. Nothing is hidden and nothing is short.
+     * 430px is the width at which the six full-labelled readouts (324, since 067 added total lines) plus the
+     * bar gap plus a 100px trailing group fit exactly. Nothing is hidden and nothing is short.
      *
      * Then the language changes from `Plain Text` to `JSON with Comments`. That is the ONLY thing
      * that moves: the same panel, the same width, the same caret, the same counts.
@@ -561,8 +572,8 @@ describe('the controls are subtracted at what they COST (FR-014, FR-024)', () =>
      * against their rendered box — precisely the reading `editor-status-bar.e2e.ts` cannot take,
      * because a squeezed box measures as fitting whatever it is overflowing with.
      */
-    strip(374);
-    expect(visible(), 'five readouts must fit to begin with').toHaveLength(5);
+    strip(430);
+    expect(visible(), 'six readouts must fit to begin with').toHaveLength(6);
     expect(overflowPx(), 'and the bar must not be overflowing yet').toBeLessThanOrEqual(0);
 
     act(() => {
@@ -576,25 +587,26 @@ describe('the controls are subtracted at what they COST (FR-014, FR-024)', () =>
         'after being squeezed by the very readouts the measurement then sized',
     ).toBeLessThanOrEqual(0);
     expect(
-      visible().length,
+      gaveWay(),
       'and something must actually have given way, or the bar simply got narrower content',
-    ).toBeLessThan(5);
+    ).toBe(true);
   });
 
   it('restores them when the language name shrinks again (FR-026)', () => {
     // The other direction, and the half a one-way clamp would pass: nothing may be held back once
     // the space the controls were taking is handed to the readouts again.
-    strip(374);
+    strip(430);
     act(() => {
       setPanelLanguage(PANEL, { languageId: 'jsonc', source: 'override' });
     });
-    expect(visible().length).toBeLessThan(5);
+    expect(gaveWay()).toBe(true);
 
     act(() => {
       setPanelLanguage(PANEL, { languageId: 'plaintext', source: 'plaintext' });
     });
 
-    expect(visible(), 'every readout comes back').toHaveLength(5);
+    expect(visible(), 'every readout comes back').toHaveLength(6);
+    expect(gaveWay(), 'and at their full labels').toBe(false);
     expect(overflowPx()).toBeLessThanOrEqual(0);
   });
 });
@@ -610,7 +622,7 @@ describe('widening restores every hidden segment (FR-026)', () => {
 
     resizeTo(500);
 
-    expect(visible()).toEqual(['line', 'column', 'selected', 'chars', 'words']);
+    expect(visible()).toEqual(['line', 'column', 'selected', 'lines', 'chars', 'words']);
     expect(labelForm('words')).toBe('full');
   });
 

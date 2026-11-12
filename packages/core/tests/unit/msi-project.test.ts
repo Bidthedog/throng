@@ -168,7 +168,7 @@ describe('the registered name (FR-017b)', () => {
 
   it('leaves every other file component alone', () => {
     expect(out).toContain('Id="mainExecutable"');
-    expect((out.match(/<Component[ >]/g) ?? []).length).toBe((FIXTURE.match(/<Component[ >]/g) ?? []).length + 5);
+    expect((out.match(/<Component[ >]/g) ?? []).length).toBe((FIXTURE.match(/<Component[ >]/g) ?? []).length + 8);
   });
 });
 

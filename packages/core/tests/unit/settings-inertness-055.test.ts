@@ -7,7 +7,7 @@ import { SETTINGS_METADATA } from '../../src/config/settings-metadata.js';
 /**
  * 055 T016 — every setting this spec adds has a descriptor and a production reader (Principle X).
  *
- * `settings-inertness-047.test.ts` is the pattern. The six `resourceMonitor.*` leaves are read in one
+ * `settings-inertness-047.test.ts` is the pattern. The `resourceMonitor.*` leaves are read in one
  * place, `resolveResourceMonitorSettings` (`core/src/resources/settings-resolution.ts`), which applies
  * their cross-field rules; so each leaf must be read THERE, and the resolver must be CALLED by both
  * processes that act on it — UI main (the collector's interval and history) and the renderer (the
@@ -25,6 +25,7 @@ const LEAVES = [
   'cpuCriticalPercent',
   'memoryWarningPercent',
   'memoryCriticalPercent',
+  'popoverDelayMs',
 ] as const;
 
 function sources(dir: string): { file: string; text: string }[] {

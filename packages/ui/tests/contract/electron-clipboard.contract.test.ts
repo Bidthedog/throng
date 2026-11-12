@@ -7,7 +7,8 @@
  * clipboard is a seam nobody runs, and the contract it is supposed to uphold goes unchecked.
  */
 import { describe, expect, it } from 'vitest';
-import { runClipboardContract, runClipboardRichContract } from '@throng/core/testing';
+import type { FileListSnapshot, IFileListCodec } from '@throng/core';
+import { runClipboardContract, runClipboardFileListContract, runClipboardRichContract } from '@throng/core/testing';
 import {
   ElectronClipboard,
   type ClipboardItemFactory,
@@ -21,10 +22,12 @@ import {
  */
 function fakeClipboardModule(): ElectronClipboardModule & { htmlRecord: { current: string } } {
   let text = '';
+  let entries: Record<string, string | Blob> = {};
   const htmlRecord = { current: '' };
   return {
     writeText: async (value: string) => {
       text = value;
+      entries = {};
       htmlRecord.current = '';
     },
     readText: async () => text,
@@ -32,10 +35,30 @@ function fakeClipboardModule(): ElectronClipboardModule & { htmlRecord: { curren
       const payload = items[0] as Record<string, string>;
       text = payload['text/plain'] ?? '';
       htmlRecord.current = payload['text/html'] ?? '';
+      entries = payload;
     },
+    read: async () => [
+      {
+        types: Object.keys(entries),
+        getType: async (type: string) => {
+          const value = entries[type]!;
+          return value instanceof Blob ? value : new Blob([value]);
+        },
+      },
+    ],
     htmlRecord,
   };
 }
+
+/** A codec with one format, so this suite proves the seam moves bytes without knowing any OS's formats. */
+const fakeCodec: IFileListCodec = {
+  formats: ['fake/list'],
+  encode: (list: FileListSnapshot) => ({ 'fake/list': new TextEncoder().encode(JSON.stringify(list)) }),
+  decode: (payloads) => {
+    const bytes = payloads['fake/list'];
+    return bytes === undefined ? null : (JSON.parse(new TextDecoder().decode(bytes)) as FileListSnapshot);
+  },
+};
 
 /** Stands in for Electron's `ClipboardItem` constructor — the MIME map, unwrapped. */
 const fakeItem: ClipboardItemFactory = (payload) => payload;
@@ -45,9 +68,31 @@ describe('ElectronClipboard', () => {
     await expect(
       runClipboardContract(
         'ElectronClipboard',
-        () => new ElectronClipboard(fakeClipboardModule(), fakeItem),
+        () => new ElectronClipboard(fakeClipboardModule(), fakeItem, fakeCodec),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it('satisfies the IClipboard file-list contract (067 FR-003)', async () => {
+    await expect(
+      runClipboardFileListContract(
+        'ElectronClipboard',
+        () => new ElectronClipboard(fakeClipboardModule(), fakeItem, fakeCodec),
+        ['/a b.txt', '/données/世界'],
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('reads no file list, rather than rejecting, when the OS clipboard cannot be read (067)', async () => {
+    const hostile: ElectronClipboardModule = {
+      writeText: async () => {},
+      readText: async () => '',
+      write: async () => {},
+      read: async () => {
+        throw new Error('clipboard unavailable');
+      },
+    };
+    await expect(new ElectronClipboard(hostile, fakeItem, fakeCodec).readFileList()).resolves.toBeNull();
   });
 
   it('satisfies the IClipboard writeRich contract (044 FR-035a)', async () => {
@@ -55,7 +100,7 @@ describe('ElectronClipboard', () => {
       runClipboardRichContract('ElectronClipboard', () => {
         const fake = fakeClipboardModule();
         return {
-          clipboard: new ElectronClipboard(fake, fakeItem),
+          clipboard: new ElectronClipboard(fake, fakeItem, fakeCodec),
           html: () => fake.htmlRecord.current,
         };
       }),
@@ -71,8 +116,9 @@ describe('ElectronClipboard', () => {
         throw new Error('clipboard unavailable');
       },
       write: async () => {},
+      read: async () => [],
     };
-    await expect(new ElectronClipboard(hostile, fakeItem).readText()).resolves.toBe('');
+    await expect(new ElectronClipboard(hostile, fakeItem, fakeCodec).readText()).resolves.toBe('');
   });
 
   it('writes an image as ONE item: the PNG as an image/png Blob, beside its HTML (054 Copy Diagram as Image)', async () => {
@@ -83,8 +129,9 @@ describe('ElectronClipboard', () => {
       write: async (items) => {
         written.push([...items]);
       },
+      read: async () => [],
     };
-    await new ElectronClipboard(module, fakeItem).writeImage({ png: new Uint8Array([1, 2, 3]), html: '<img src="x">' });
+    await new ElectronClipboard(module, fakeItem, fakeCodec).writeImage({ png: new Uint8Array([1, 2, 3]), html: '<img src="x">' });
     expect(written).toHaveLength(1);
     const item = written[0]![0] as Record<string, unknown>;
     expect(item['text/html']).toBe('<img src="x">');

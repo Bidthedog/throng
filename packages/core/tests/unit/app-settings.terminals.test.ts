@@ -27,6 +27,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
+      formHistory: { enabled: true, maxEntries: 10 },
       // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
       // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
       // it appears here because this assertion is exhaustive.
@@ -51,6 +52,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
+      formHistory: { enabled: true, maxEntries: 10 },
       // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
       // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
       // it appears here because this assertion is exhaustive.
@@ -192,6 +194,7 @@ describe('parseAppSettings — terminals section (005 Phase B)', () => {
       commandPollMs: 1000,
       shellIntegration: true,
       showStatusBar: true,
+      formHistory: { enabled: true, maxEntries: 10 },
       // 045 FR-080b (#394). Shipped ON: a program that emits an explicit hyperlink is emitting a
       // link throng did not have to guess. Its own parse is asserted in `app-settings.links.test.ts`;
       // it appears here because this assertion is exhaustive.

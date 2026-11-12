@@ -71,6 +71,7 @@ const ACTION_TIER: Partial<Record<ActionId, Tier>> = {
   'panel.splitLeft': 'tier1', // multi-stroke
   // 048 FR-131 — Destroy Panel: tier-1 shape, and a recorded exception (function key, live in a terminal).
   'panel.destroy': 'tier1', // recorded exception (function key)
+  'tabs.rename': 'tier1', // recorded exception (function key, v6.4.0)
   // 054 FR-071a — Maximise / Restore Panel: Shift+Alt, outside the tiers like column select;
   // a recorded exception (Constitution v5.10.0, live in a terminal).
   'panel.toggleMaximise': 'outside', // recorded exception
@@ -351,6 +352,7 @@ describe('the FR-101 tier guard', () => {
       'focus.nextMarkedPanel': ['Ctrl+Shift+Alt+G'], // 057 (R15)
       'menu.open': ['Shift+F10', 'ContextMenu'],
       'tabs.openPicker': ['Ctrl+Shift+Alt+T'],
+      'tabs.rename': ['Ctrl+Shift+Alt+F2'],
       'navigate.quickOpen': ['Ctrl+Shift+T'],
       'navigate.gotoLine': ['Ctrl+G'],
       'preview.open': [],

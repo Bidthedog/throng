@@ -48,6 +48,10 @@ function setup() {
       calls.push(['paste', windowId, targetDir, snapshot]);
       return { jobId: 'job-1', result: new Promise<TransferResult>(() => {}) };
     },
+    inbound: (windowId, sources, targetDir, mode) => {
+      calls.push(['inbound', windowId, sources, targetDir, mode]);
+      return { jobId: 'job-2', result: Promise.resolve(result('job-2')) };
+    },
     drop: async (windowId, sources, targetDir, mode) => {
       calls.push(['drop', windowId, sources, targetDir, mode]);
       return result('job-2');
@@ -100,11 +104,47 @@ describe('throng:fileClipboard:* (§1)', () => {
   });
 });
 
+describe('067 inbound routes (FR-002, FR-004, FR-007, research D3)', () => {
+  it('a Paste with an OS list runs inbound, and reports what the OS said', async () => {
+    const { ipc, calls, clipboard } = setup();
+    clipboard.pasteOrigin = async () => ({ kind: 'os', list: { paths: ['/out/a'], intent: 'cut' } });
+    expect(await ipc.handles.get('throng:transfer:pasteAuto')!(event(4), 'dest')).toEqual({ jobId: 'job-2' });
+    expect(calls[0]).toEqual(['inbound', 4, ['/out/a'], join(ROOT, 'dest'), 'cut']);
+  });
+
+  it('a Paste with nothing anywhere is refused', async () => {
+    const { ipc } = setup();
+    expect(await ipc.handles.get('throng:transfer:pasteAuto')!(event(1), 'dest')).toEqual({ error: 'Nothing to paste.' });
+  });
+
+  it('osFiles answers whether Paste has anything to act on', async () => {
+    const { ipc, clipboard } = setup();
+    clipboard.hasPasteable = async () => true;
+    expect(await ipc.handles.get('throng:fileClipboard:osFiles')!(event(1))).toBe(true);
+  });
+
+  it('dropInbound runs inbound and answers the result', async () => {
+    const { ipc, calls } = setup();
+    const answer = await ipc.handles.get('throng:transfer:dropInbound')!(event(2), ['/out/a'], 'dest', 'copy');
+    expect(answer).toMatchObject({ jobId: 'job-2' });
+    expect(calls[0]).toEqual(['inbound', 2, ['/out/a'], join(ROOT, 'dest'), 'copy']);
+  });
+
+  it('dropInbound refuses a malformed call and changes nothing', async () => {
+    const { ipc, calls } = setup();
+    const drop = ipc.handles.get('throng:transfer:dropInbound')!;
+    expect(await drop(event(1), 'not-a-list', 'dest', 'copy')).toHaveProperty('error');
+    expect(await drop(event(1), [], 'dest', 'copy')).toHaveProperty('error');
+    expect(await drop(event(1), ['/a'], 'dest', 'sideways')).toHaveProperty('error');
+    expect(calls).toEqual([]);
+  });
+});
+
 describe('throng:transfer:* (§2)', () => {
   it('paste snapshots the clipboard, answers { jobId }, and `done` reaches the SENDER only', async () => {
     const { ipc, calls, sent, push } = setup();
     await ipc.handles.get('throng:fileClipboard:set')!(event(7), 'copy', ['a.txt']);
-    const answer = await ipc.handles.get('throng:transfer:paste')!(event(7), 'dest');
+    const answer = await ipc.handles.get('throng:transfer:pasteAuto')!(event(7), 'dest');
     expect(answer).toEqual({ jobId: 'job-1' });
     expect(calls[0]).toEqual([
       'paste',
@@ -170,9 +210,9 @@ describe('throng:transfer:* (§2)', () => {
 
   it('paste with an empty clipboard, or a malformed target, is refused and starts nothing', async () => {
     const { ipc, calls } = setup();
-    expect(await ipc.handles.get('throng:transfer:paste')!(event(1), 'dest')).toHaveProperty('error');
+    expect(await ipc.handles.get('throng:transfer:pasteAuto')!(event(1), 'dest')).toHaveProperty('error');
     await ipc.handles.get('throng:fileClipboard:set')!(event(1), 'copy', ['a.txt']);
-    expect(await ipc.handles.get('throng:transfer:paste')!(event(1), 42)).toHaveProperty('error');
+    expect(await ipc.handles.get('throng:transfer:pasteAuto')!(event(1), 42)).toHaveProperty('error');
     expect(calls).toEqual([]);
   });
 

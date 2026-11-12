@@ -90,7 +90,8 @@ const formOf = (available: number, id: ReadoutId): string | undefined =>
 describe('a label shortens before any segment is hidden (FR-021)', () => {
   it('keeps every segment when the full-label bar fits exactly', () => {
     expect(ids(58)).toEqual(['line', 'column', 'selected', 'chars', 'words']);
-    for (const id of READOUT_ORDER) expect(formOf(58, id)).toBe('full');
+    // The fixture is 040's five readouts; `lines` (067) is absent from it, which is a legal state: not present.
+    for (const id of Object.keys(WIDE) as ReadoutId[]) expect(formOf(58, id)).toBe('full');
   });
 
   it('shortens rather than hides at every width shortening can absorb', () => {
@@ -136,8 +137,9 @@ describe('labels shorten through the declared forms (FR-022a)', () => {
       line: { full: 'Ln', short: 'Ln' },
       column: { full: 'Col', short: 'Col' },
       selected: { full: 'selected', short: 'sel' },
-      chars: { full: 'chars', short: 'ch' },
-      words: { full: 'words', short: 'w' },
+      lines: { full: 'Lines.', short: 'Lns.' }, // 067 FR-096
+      chars: { full: 'Chars.', short: 'Ch.' },
+      words: { full: 'Words.', short: 'W.' },
     });
   });
 
@@ -215,7 +217,8 @@ describe('a figure is hidden whole, never truncated (FR-022)', () => {
 
 describe('segments hide in the fixed order and the order terminates (FR-023, FR-024)', () => {
   it('declares the order the requirement names, continued past line by 059 FR-032', () => {
-    expect(HIDE_ORDER).toEqual(['words', 'chars', 'selected', 'column', 'line', 'lineEnding', 'encoding']);
+    // 067 FR-097 put total lines after words and characters.
+    expect(HIDE_ORDER).toEqual(['words', 'chars', 'lines', 'selected', 'column', 'line', 'lineEnding', 'encoding']);
   });
 
   it('loses them in exactly that order as the bar narrows', () => {
@@ -377,7 +380,7 @@ describe('a readout that is not present is not a readout that was hidden', () =>
   it('keeps the display order, which is not the hide order', () => {
     // Rendered left to right as line, column, selected, chars, words — the reverse-ish of the order
     // they are dropped in. Conflating the two would render the bar backwards.
-    expect(READOUT_ORDER).toEqual(['line', 'column', 'selected', 'chars', 'words']);
-    expect(ids(58)).toEqual([...READOUT_ORDER]);
+    expect(READOUT_ORDER).toEqual(['line', 'column', 'selected', 'lines', 'chars', 'words']);
+    expect(ids(58)).toEqual(READOUT_ORDER.filter((id) => id !== 'lines'));
   });
 });

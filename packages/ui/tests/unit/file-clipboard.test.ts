@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { FileClipboard } from '@throng/core';
+import type { FileClipboard, FileListSnapshot } from '@throng/core';
 import { FileClipboardService } from '../../src/main/file-clipboard.js';
 
 /**
@@ -21,6 +21,72 @@ let svc: FileClipboardService;
 beforeEach(() => {
   pushed = [];
   svc = new FileClipboardService((c) => pushed.push(c));
+});
+
+describe('FileClipboardService and the OS clipboard (067 FR-003, FR-006, research D3)', () => {
+  function withOs(initial: FileListSnapshot | null = null) {
+    const state = { list: initial, cleared: 0 };
+    const os = {
+      writeFileList: async (l: FileListSnapshot) => void (state.list = l),
+      readFileList: async () => state.list,
+      writeText: async () => {
+        state.list = null;
+        state.cleared += 1;
+      },
+    };
+    return { state, service: new FileClipboardService(() => {}, os) };
+  }
+
+  it('places a cut on the OS clipboard, marked as a cut', async () => {
+    const { state, service } = withOs();
+    service.setFromRelative('cut', ['a.txt'], ROOT_A, 'A');
+    await service.pasteOrigin();
+    expect(state.list).toEqual({ paths: [join(ROOT_A, 'a.txt')], intent: 'cut' });
+  });
+
+  it('pastes internally while the OS still holds the list', async () => {
+    const { service } = withOs();
+    service.setFromRelative('copy', ['a.txt'], ROOT_A, 'A');
+    expect(await service.pasteOrigin()).toMatchObject({ kind: 'internal' });
+  });
+
+  it('drops an internal cut once another application replaces it with text, and has nothing to paste', async () => {
+    const { state, service } = withOs();
+    service.setFromRelative('cut', ['a.txt'], ROOT_A, 'A');
+    await service.pasteOrigin();
+    state.list = null;
+    expect(await service.pasteOrigin()).toEqual({ kind: 'none' });
+    expect(service.get()).toBeNull();
+  });
+
+  it('takes the OS list when another application replaced ours with files', async () => {
+    const { state, service } = withOs();
+    service.setFromRelative('copy', ['a.txt'], ROOT_A, 'A');
+    await service.pasteOrigin();
+    const theirs: FileListSnapshot = { paths: ['/elsewhere/b'], intent: 'cut' };
+    state.list = theirs;
+    expect(await service.pasteOrigin()).toEqual({ kind: 'os', list: theirs });
+    expect(service.get()).toBeNull();
+  });
+
+  it('takes its own list back off the OS when the internal clipboard is emptied, so a cancelled cut cannot paste', async () => {
+    const { state, service } = withOs();
+    service.setFromRelative('cut', ['a.txt'], ROOT_A, 'A');
+    await service.pasteOrigin();
+    service.clear();
+    expect(await service.pasteOrigin()).toEqual({ kind: 'none' });
+    expect(state.cleared).toBe(1);
+  });
+
+  it('leaves another application\'s list alone when the internal clipboard is emptied', async () => {
+    const { state, service } = withOs();
+    service.setFromRelative('cut', ['a.txt'], ROOT_A, 'A');
+    await service.pasteOrigin();
+    state.list = { paths: ['/theirs'], intent: 'copy' };
+    service.clear();
+    expect(await service.hasPasteable()).toBe(true);
+    expect(state.cleared).toBe(0);
+  });
 });
 
 describe('FileClipboardService (050 R1)', () => {

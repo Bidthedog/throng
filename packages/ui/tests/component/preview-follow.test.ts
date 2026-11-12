@@ -406,7 +406,12 @@ describe('main’s answers', () => {
       panel().preview.navigate.mockResolvedValue({ kind: 'openedInEditor' });
       ctrlClick('Code');
       await waitFor(() => expect(opened).toHaveLength(1));
-      expect(opened[0]).toEqual({ absPath: `${ROOT}/src/app.ts`, headingFragment: 'main' });
+      // 067 FR-131 — it also names the panel the link was followed in, so a binary file can go to the OS.
+      expect(opened[0]).toEqual({
+        absPath: `${ROOT}/src/app.ts`,
+        headingFragment: 'main',
+        link: expect.objectContaining({ panelId: panel().id }),
+      });
       expect(screen.getByText('Usage text.')).toBeInTheDocument();
     } finally {
       window.removeEventListener('throng:open-file', listener);

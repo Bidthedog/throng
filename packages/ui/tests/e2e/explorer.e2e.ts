@@ -619,6 +619,80 @@ test('arrowing to a row makes it the cut/paste target (024 US3 follow-up)', { ta
 });
 
 /**
+ * MT-02 — pressing the move key first (067 FR-110, FR-111). Chromium declines to start a web drag for a press with
+ * Shift held, which is why a tree drag runs on mouse events now. Playwright's own mouse does not carry a held Shift
+ * onto the press here, so this speaks to Chromium's input directly (`Input.dispatchMouseEvent` with `modifiers`):
+ * a Shift press on a file, the pointer moving onto a folder, and the release. The file must be in the folder.
+ */
+test('a press with Shift held, then moves onto a folder, moves the file (067 FR-110, FR-111)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-shiftdrag-'));
+  mkdirSync(join(root, 'sub'));
+  writeFileSync(join(root, 'a.txt'), 'A\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'ShiftDragProj', root);
+      const tree = win.getByTestId('file-explorer-tree');
+      const file = tree.getByText('a.txt', { exact: true });
+      const folder = tree.getByText('sub', { exact: true });
+      await expect(file).toBeVisible({ timeout: 8000 });
+      await expect(folder).toBeVisible({ timeout: 8000 });
+      const from = (await file.boundingBox())!;
+      const to = (await folder.boundingBox())!;
+      const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+      const end = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+
+      const SHIFT = 8;
+      const session = await win.context().newCDPSession(win);
+      const mouse = (type: 'mouseMoved' | 'mousePressed' | 'mouseReleased', at: { x: number; y: number }, buttons: number) =>
+        session.send('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', buttons, clickCount: 1, modifiers: SHIFT });
+      await mouse('mouseMoved', start, 0);
+      await mouse('mousePressed', start, 1);
+      for (let step = 1; step <= 6; step += 1) {
+        await mouse('mouseMoved', { x: start.x + ((end.x - start.x) * step) / 6, y: start.y + ((end.y - start.y) * step) / 6 }, 1);
+      }
+      await expect(win.locator('html')).toHaveAttribute('data-tree-drag', 'move');
+      await mouse('mouseReleased', end, 0);
+      await session.detach();
+
+      await expect.poll(() => existsSync(join(root, 'sub', 'a.txt')), { timeout: 8000 }).toBe(true);
+      expect(existsSync(join(root, 'a.txt'))).toBe(false);
+      await expect(win.locator('html')).not.toHaveAttribute('data-tree-drag', /.+/);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/**
+ * 067 FR-110, D22 — a tree drag reaches a target outside the tree. The tab chip answers web drag events, and the
+ * drag is a mouse gesture, so this goes through the replay those events now arrive by.
+ */
+test('a file dragged from the tree onto a tab opens there (067 FR-110)', { tag: ['@extended', '@explorer', '@reserve:input'] }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'throng-treetotab-'));
+  writeFileSync(join(root, 'a.txt'), 'dragged-onto-a-tab\n');
+  try {
+    await runApp(async (_app, win) => {
+      await createProject(win, 'TreeToTabProj', root);
+      const file = win.getByTestId('file-explorer-tree').getByText('a.txt', { exact: true });
+      const chip = win.getByTestId('tab-strip').locator('.tab-chip').first();
+      await expect(file).toBeVisible({ timeout: 8000 });
+      await expect(chip).toBeVisible({ timeout: 8000 });
+      const from = (await file.boundingBox())!;
+      const to = (await chip.boundingBox())!;
+      await win.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await win.mouse.down();
+      await win.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 6 });
+      await expect(win.locator('html')).toHaveAttribute('data-tree-drag', 'copy');
+      await win.mouse.up();
+      await expect(win.locator('.cm-content').filter({ hasText: 'dragged-onto-a-tab' })).toBeVisible({ timeout: 8000 });
+      expect(existsSync(join(root, 'a.txt'))).toBe(true);
+    });
+  } finally {
+    cleanupTemp(root);
+  }
+});
+
+/**
  * #419 — a click at the bottom of a tree that shows BOTH scrollbars leaves the tree where it is.
  *
  * With a horizontal and a vertical scrollbar showing and the list scrolled all the way down, the

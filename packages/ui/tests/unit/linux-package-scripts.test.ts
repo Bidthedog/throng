@@ -55,7 +55,10 @@ describe.skipIf(skipUnlessLinux('the maintainer scripts run on Linux only'))('th
     prefix = join(scratch, 'root');
     payload = join(prefix, 'opt/throng');
     versions = join(prefix, 'opt/throng-versions');
-    mkdirSync(join(payload, 'resources'), { recursive: true });
+    mkdirSync(join(payload, 'resources/file-manager'), { recursive: true });
+    for (const name of ['throng-open-project.nemo_action', 'throng-open-project-kde.desktop', 'throng-open-project.desktop']) {
+      writeFileSync(join(payload, 'resources/file-manager', name), '');
+    }
     writeFileSync(join(payload, 'chrome-sandbox'), '');
     writeFileSync(join(payload, 'throng'), '#!/bin/sh\n');
     writeFileSync(join(payload, 'resources/page.js'), 'old');
