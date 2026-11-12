@@ -82,7 +82,7 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
-| Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. Takes effect at the next start. |
+| Use native Wayland (Linux only) | `window.nativeWayland` | `false` | on · off | Run the window directly on Wayland instead of through XWayland. XWayland suits dragging a tab out, placing windows, and keeping Preferences and About above the main window; dragging files out to GNOME Files needs native Wayland ([Linux](linux.md#display)). Takes effect at the next start. |
 | Remove a project | `confirmations.destroyProject` | `double` | `none` · `single` · `double` | Confirmations before a project is removed. It is unregistered; no files are deleted. |
 | Unload project: default terminal action | `projects.unloadTerminalAction` | `keepRunning` | `keepRunning` (Keep terminals running) · `endTerminals` (End terminals) | What the project menu's **Unload Project** row does to the project's terminals; the menu's second Unload row does the other — **Unload Project and End Terminals** under the shipped setting, **Unload Project and Keep Terminals Running** otherwise. Keep leaves every terminal alive, idle shells included, and reattaches each when the project is next loaded; End ends every terminal, running processes included; one that cannot be ended stays running, says so once, and reattaches when the project is next loaded. Neither row asks anything; the only prompt Unload can show is the usual one for unsaved editors. |
 | Destroy a tab | `confirmations.destroyTab` | `double` | `none` · `single` · `double` | Confirmations before a tab and its panels are destroyed. |
@@ -91,6 +91,8 @@ when it writes the file; a retired key it once used is dropped.
 | Kill processes | `confirmations.killProcesses` | `double` | `none` · `single` · `double` | Confirmations before the [Resource Monitor](quick-start.md#8-see-what-throng-is-using) force-ends a process (**Kill Process**) or everything running beneath a project, tab, panel or process (**Kill All Below**). The dialog names what will end. |
 
 ## Panes
+
+Each project remembers for itself which side panes are expanded.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
@@ -120,6 +122,7 @@ when it writes the file; a retired key it once used is dropped.
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
+| Show Open in OS Default Program | `explorer.showOpenInOsDefaultProgram` | on | on · off | Offer Open in OS Default Program on the File Explorer menu and on the panel title menu. |
 | Open files with | `editor.openOnClick` | `single` | `single` · `double` · `none` | Which file-tree click opens a file into the last active editor. |
 | Open files in | `editor.openTarget` | `lastActive` | `lastActive` · `new` | Where an opened file lands: the last active editor, reused, or a new editor panel. |
 | Delete files to | `explorer.deleteMode` | `recycle` | `recycle` · `permanent` | Send deleted files to the Recycle Bin, or delete them permanently. |
@@ -128,6 +131,7 @@ when it writes the file; a retired key it once used is dropped.
 | Sort names | `explorer.sortOrder` | `natural` | `natural` · `characters` | How names are ordered within folders and within files. `natural` compares numbers by their value (`file 2` before `file 10`); `characters` compares character by character (`file 10` before `file 2`). Folders always come first. Takes effect straight away. |
 | Follow the active editor | `explorer.autoRevealActiveFile` | on | on · off | Select the active editor's file in File Explorer, expanding its folders. |
 | Copy-drag modifier | `explorer.dragCopyModifier` | `ctrl` | `ctrl` · `shift` · `alt` | The key that makes a file-tree drag copy instead of move. |
+| Open unsupported files in the OS | `explorer.openUnsupportedInOs` | on | on · off | Double-clicking a file throng cannot open, or Ctrl+clicking a link to one, opens it in your OS default program. Off, throng says it cannot open the file. |
 | Move-drag modifier | `explorer.dragMoveModifier` | `shift` | `ctrl` · `shift` · `alt` | The key that forces a file-tree drag to move. |
 
 ## Editor
@@ -242,6 +246,8 @@ plain-click hint take their colours from the theme (see [Themes](#themes-and-ico
 
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
+| Remember terminal form values | `terminals.formHistory.enabled` | on | on · off | Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is stored until cleared. |
+| Terminal form values remembered | `terminals.formHistory.maxEntries` | 10 | 1 – 50 | How many values each field keeps per terminal type. Lowering this trims every list to its newest entries. |
 | Show terminal status bar | `terminals.showStatusBar` | on | on · off | The status bar along the bottom of each terminal panel. |
 | Shell integration | `terminals.shellIntegration` | on | on · off | Ask shells that cannot be observed from outside (PowerShell) to report their working directory, so terminals reopen where you left them. Installs a prompt function that defers to any prompt you already have — switch it off if it disagrees with a custom prompt. |
 | Reload terminals when a project opens | `terminals.reloadMode` | `automatic` | `automatic` · `manual` | Automatic starts every terminal in every tab as a project opens. Manual starts none: each panel waits with a **Reload** action. |
@@ -307,6 +313,16 @@ next indent inserts.
 | Setting | Key | Default | Values | What it does |
 |---|---|---|---|---|
 | Language by file extension | `editor.languageByExtension` | empty | A table: extension → language | Map an extension to a language (for example `.foo` → Python), overriding detection by extension. A file throng recognises by name, such as `tsconfig.json`, keeps that language; only the picker changes it ([how the language is chosen](quick-start.md#4-edit-files)). |
+
+## Projects
+
+| Setting | Key | Default | Values | What it does |
+|---|---|---|---|---|
+| Folder opened from outside throng | `projects.openFromOutside` | `switch` | `switch` · `load` | What happens when a folder arrives from the file manager or the command line: switch to its project, or only load it. |
+
+The **Open as throng project** control, in its own **File manager** group, turns the file manager's menu item on or off for your account. It shows what is
+really registered, so it has no entry in `settings.json`. It is disabled, with the reason, for an install made for everyone
+on Windows and for a portable or archive copy.
 
 ## New Project
 
@@ -403,6 +419,7 @@ whole machine; memory is a share of installed RAM.
 | CPU critical (%) | `resourceMonitor.cpuCriticalPercent` | 80 | 1 – 100 | The CPU share at which a figure shows the critical colour. |
 | Memory warning (%) | `resourceMonitor.memoryWarningPercent` | 50 | 1 – 100 | The share of installed memory at which a figure shows the warning colour. A process at or above it is never hidden as idle. |
 | Memory critical (%) | `resourceMonitor.memoryCriticalPercent` | 80 | 1 – 100 | The share of installed memory at which a figure shows the critical colour. |
+| Popup delay (ms) | `resourceMonitor.popoverDelayMs` | 500 | 0 – 5,000 | How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits. |
 
 ## Settings with no control
 

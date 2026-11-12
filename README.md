@@ -37,6 +37,7 @@ goes away.
 - **Attention marks** — a panel, tab or project that needs you says so, with an optional notification and taskbar count, and one chord jumps to the next.
 - **Editor panels** — a fast code editor with syntax highlighting for 55 languages, crash recovery, one buffer per file across every window, and every file kept in its own encoding and line endings.
 - **File explorer** — a live, project-scoped file tree with undoable rename, move, copy and delete, and cut, copy and paste between projects.
+- **Works with your file manager** — copy, paste and drag files to and from your OS, and open any folder as a project from its menu or with `throng <path>`.
 - **Find across files and Quick Open** — search and replace the whole project, or jump to any file by name.
 - **Previews** — rendered, live-updating Markdown beside its editor, with scroll kept in sync, find,
   a heading outline, section folding shared with the editor, wikilinks, clickable task lists and

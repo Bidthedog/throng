@@ -90,6 +90,9 @@ Run it, and choose **Only for me** or **Anyone who uses this computer**.
 If you choose *Anyone who uses this computer* and decline the administrator prompt, nothing is installed:
 the setup says so and returns you to the choice, so you can pick *Only for me* or try again.
 
+The setup also offers **Open as throng project** in File Explorer's menu for folders, and adding throng to `PATH`. Both
+are ticked, and apply to whoever the install is for. See [opening a folder as a project](#opening-a-folder-as-a-project).
+
 ### The MSI
 
 Double-click it for the same choice, or deploy it unattended (below). It installs to its own folder —
@@ -116,6 +119,9 @@ different way instead.
 | MSI, a standard user | `msiexec /i throng-<version>.msi /qn MSIINSTALLPERUSER=1` | Installs for that user alone, with no prompt. Without `MSIINSTALLPERUSER=1` an unattended run asks Windows Installer for everyone and fails with `1625`, installing nothing. |
 | MSI, choose explicitly | `... /qn ALLUSERS=1` or `... /qn MSIINSTALLPERUSER=1` | The standard Windows Installer properties: `ALLUSERS=1` for everyone, `MSIINSTALLPERUSER=1` for just that account, even from an elevated prompt. Machine-wide still needs an elevated prompt. |
 
+Both installers add the folder menu item and `PATH` entry unattended too. To leave either out of the MSI, pass
+`THRONG_OPEN_AS_PROJECT=0` or `THRONG_ADD_TO_PATH=0`.
+
 Exit codes: `0` success; `3010` success, finishing at the next restart (see
 [upgrading](#upgrading)) — the MSI never restarts the computer itself, so `3010` means it is waiting
 for one (pass `REBOOT=Force` to have it restart); `740` the setup was asked for everyone without elevation; `2` the setup refused
@@ -130,6 +136,14 @@ Create a project and spawn a terminal; everything works with nothing else instal
 Your data — projects, layouts, settings, keybindings, custom themes, the edit list — is stored in your
 **profile** (`%APPDATA%\throng` and `%USERPROFILE%\.throng`), **outside** the install folder. That is why
 upgrading and uninstalling never disturb your work.
+
+## Opening a folder as a project
+
+Right-click a folder, or the background of a folder, and choose **Open as throng project**. On Windows 11 it is under
+**Show more options**. From a terminal, `throng <path>` does the same, with a relative path read from where you ran it.
+The portable build and the archive add nothing to File Explorer or `PATH`, but take a path all the same.
+To remove the menu item for your account only, turn it off in [Preferences](preferences.md#projects). An install for
+everyone can only be changed by running its installer as an administrator.
 
 ## More than one copy
 

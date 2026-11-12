@@ -119,6 +119,7 @@ four splits are on every panel's **+** button and in its **Split** menu.
 
 | Command | Action id | Default | Scope | What it does |
 |---|---|---|---|---|
+| Rename tab | `tabs.rename` | `Ctrl+Shift+Alt+F2` | Everywhere | Start renaming the active tab from any panel, a terminal included. Focus returns to the panel afterwards. |
 | Open tab picker | `tabs.openPicker` | `Ctrl+Shift+Alt+T` | Everywhere | Open a searchable list of every tab in the window — type to filter, **Up**/**Down** to move, **Enter** to choose. Works at any tab count, from a focused terminal too. |
 
 ## Navigate
