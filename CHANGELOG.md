@@ -29,9 +29,39 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+## 1.0.0-alpha16 — 2026-11-13
+
+### Added
+
+- Open a folder as a throng project from your file manager (**Open as throng project**) or with `throng <path>` in a terminal. The installers add the menu item and a `PATH` entry; the MSI takes `THRONG_OPEN_AS_PROJECT=0` and `THRONG_ADD_TO_PATH=0` to leave either out; the menu item can be turned off per account in Preferences; and `projects.openFromOutside` chooses whether an arriving folder is switched to or only loaded. ([#607](https://github.com/Bidthedog/throng/issues/607))
+- Copy, cut, paste and drag files and folders between the File Explorer and your OS file manager, in both directions. ([#8](https://github.com/Bidthedog/throng/issues/8))
+- **Open in OS Default Program** on the File Explorer and panel title menus, and a double-click on a file throng cannot open opens it there (`explorer.showOpenInOsDefaultProgram`, `explorer.openUnsupportedInOs`). ([#606](https://github.com/Bidthedog/throng/issues/606))
+- **Properties** for any File Explorer item, totalling a folder's contents as you watch. ([#485](https://github.com/Bidthedog/throng/issues/485))
+- The terminal form remembers Startup Command and Shell Arguments values per terminal type: click a field to see them, type to narrow them, Delete to forget one (`terminals.formHistory.enabled`, `terminals.formHistory.maxEntries`). ([#516](https://github.com/Bidthedog/throng/issues/516))
+- Start an empty sub-workspace with the **+** in the Sub-workspaces panel header. ([#93](https://github.com/Bidthedog/throng/issues/93))
+- Rename the active tab from any panel, a terminal included, with `Ctrl+Shift+Alt+F2`. ([#609](https://github.com/Bidthedog/throng/issues/609))
+- Save and Save As buttons in editor panel title bars. ([#534](https://github.com/Bidthedog/throng/issues/534))
+- Links in a Markdown preview's front matter table are clickable. ([#500](https://github.com/Bidthedog/throng/issues/500))
+- The closing dialog has a Cancel button and a progress bar in sections. ([#521](https://github.com/Bidthedog/throng/issues/521))
+- On Linux, `window.nativeWayland` runs the window directly on Wayland, which dragging files out to GNOME Files needs.
+- `resourceMonitor.popoverDelayMs` sets how long the pointer rests on the status bar usage figures before their popup opens.
+
+### Changed
+
+- Terminal output is sent only to windows that show the terminal, so background terminals no longer cost CPU in every window and typing in the visible one keeps up. ([#481](https://github.com/Bidthedog/throng/issues/481))
+- Each project remembers which side panes are expanded. ([#330](https://github.com/Bidthedog/throng/issues/330))
+- The editor status bar shows the document's total line count beside its characters and words. ([#545](https://github.com/Bidthedog/throng/issues/545))
+- On Linux, the version an update replaced stays in `/opt/throng-versions` until the next install, and is safe to delete once throng has restarted. ([#578](https://github.com/Bidthedog/throng/issues/578))
+- The resource monitor's terminal memory figure is about 0.2 MB lower per terminal, closer to what a terminal holds. ([#617](https://github.com/Bidthedog/throng/issues/617))
+
 ### Fixed
 
 - On Linux, links opened nothing after a restart from the "newer version installed" notice when the default browser is a snap. The restart no longer passes on the restriction that caused it. Coming from 1.0.0-alpha15, quit throng fully and start it again from the desktop once, because alpha15's own restart still applies it. ([#610](https://github.com/Bidthedog/throng/issues/610))
+
+### Known issues
+
+- On Linux under XWayland (the default), dragging a file out of the File Explorer into GNOME Files does nothing; Copy and Paste work. Turn on `window.nativeWayland` to drag out.
+- On Linux under native Wayland, Preferences and About can go behind the main window when you click it.
 
 ## 1.0.0-alpha15 — 2026-11-08
 

@@ -1,6 +1,6 @@
 {
   "name": "@throng/ui",
-  "version": "1.0.0-alpha15",
+  "version": "1.0.0-alpha16",
   "private": true,
   "type": "module",
   "main": "dist/main/main.js",
