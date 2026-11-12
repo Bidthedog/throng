@@ -1,6 +1,6 @@
 ---
 name: throng-release
-description: Cut a throng release end to end, UNATTENDED — settle the version (the one named, or the next on the current prerelease track), sweep the dependencies (npm audit, patch and minor updates) through their own PR, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, bring the docs current, run the full gate, tag it, watch release.yml build, verify and publish every artifact with no human gate, and fix whatever breaks through its own PR and go again until a release is published. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. A release request is the whole authorisation: never stop to ask for the version, a sign-off, a merge or a re-run — the only stops are the ones in "When to stop". This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
+description: Cut a throng release end to end, UNATTENDED — settle the version (the one named, or the next on the current prerelease track), sweep the dependencies (npm audit, patch and minor updates) as the release branch's first commit, write the release notes into CHANGELOG.md, bump the root manifest and the six workspaces that follow it, bring the docs current, run the full gate, tag it, watch release.yml build, verify and publish every artifact with no human gate, and fix whatever breaks through its own PR and go again until a release is published. USE THIS EVERY TIME a release is in play, whatever words are used — "do a release", "cut alpha5", "ship 1.0.0-rc.1", "release this", "tag a new version", "publish the build", "get an installer out", "bump the version", "prepare release notes", "what's in the next release", "the release pipeline failed", "the publish job is stuck", "re-run the release", "why was publishing refused" — and reach for it even when only one part is named, because the parts bind to each other through a four-way version match that fails late and loudly. A release request is the whole authorisation: never stop to ask for the version, a sign-off, a merge or a re-run — the only stops are the ones in "When to stop". This skill OWNS releases in this repository and supersedes the generic github-workflow:release skill and release-manager agent, which know nothing about throng's declared artifact set, its CHANGELOG-derived notes, or its five publish gates. It also carries the build pipeline's area knowledge — tsc project references, the Vite renderer build, electron-builder and the NSIS installer, the bundled host-Node runtime, native module ABI errors, "the packaged app cannot find X", and GitHub Actions workflow edits.
 ---
 
 # Releasing throng
@@ -27,7 +27,7 @@ Only these end a release before it publishes. Each ends with a report: what fail
 what decision is needed.
 
 - **A fix needs the maintainer's decision**: a major upgrade (other than one clearing an advisory —
-  [step 5](#5-sweep-the-dependencies--its-own-pr-merged-before-the-release-branch)), an advisory
+  [step 5](#5-sweep-the-dependencies--the-release-branchs-first-commit)), an advisory
   reaching what ships that its upgrade cannot clear, a requirement that has to change (a
   supersession), a test that would have to be weakened or benched.
 - **The same failure survives three fix attempts.** Three different fixes for one symptom means the
@@ -61,7 +61,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 ## The shape of it
 
 ```
-preflight → dependency sweep (own PR, merged) → branch → CHANGELOG → version bump → docs
+preflight → branch → dependency sweep (own commit) → CHANGELOG → version bump → docs
   → test-suite audit → local checks → commit → PR → gate.yml (full) → merge → tag
   → release.yml (full E2E → package → reconcile → verify ×9 combinations → coexistence
   → render body → sign → publish → repositories)
@@ -111,8 +111,8 @@ Never commit release prep to `master` directly.
 git switch -c release/v<version> origin/master
 ```
 
-`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). Cut it **after**
-the dependency sweep (step 5) has merged, so the release commit sits on the tree the sweep left. Work
+`release/v<version>` is the established name (`release/v1.0.0-alpha4` was alpha4's). Its first commit
+is the dependency sweep (step 5), and the release commit goes on top of it. Work
 in the main checkout rather than a fresh worktree: the local checks need an installed `node_modules`,
 which a bare worktree would have to build from nothing.
 
@@ -172,13 +172,17 @@ That rewrites the root and all six workspace manifests. Confirm the lockfile mov
 Nothing else carries the version, and it is **not** `BUILD_ID` — how each process reads it, and
 why the two differ: [references/versioning.md](references/versioning.md).
 
-## 5. Sweep the dependencies — its own PR, merged before the release branch
+## 5. Sweep the dependencies — the release branch's first commit
 
-**Run this first, straight after preflight** — it is numbered 5 for history, not order. Every release
-sweeps (065 FR-007): an advisory found after the tag costs the whole pipeline, and a sweep that rides
-inside the release commit makes a dependency failure look like a release failure.
+**Run this straight after cutting the release branch** — it is numbered 5 for history, not order.
+Every release sweeps (065 FR-007): an advisory found after the tag costs the whole pipeline.
 
-On its own branch from `origin/master` — `feature/dependency-sweep-<version>` (no spec, no issue):
+The sweep is a **commit of its own** on `release/v<version>`, before the release commit, and reaches
+master in the release PR — never a PR of its own, so a release waits on one PR, not several (065
+FR-007, amended 2026-11-12). Keeping it a separate commit is what stops a dependency failure reading as
+a release failure: the release PR rebase-merges, so the sweep lands on master as its own commit.
+
+On the release branch:
 
 ```sh
 npm audit                      # 0 vulnerabilities is the bar, not "none critical"
@@ -205,9 +209,10 @@ and diff the file lists (`stage:runtime` needs an official Node — the installe
 - **Anything listed — it ships**: a [stop](#when-to-stop). Name the package, the severity and what
   reaches it.
 
-A major taken here that fails later — the gate, `release.yml`'s packaging or verification — is rolled
-back through its own PR ([fix and go again](#12-fix-and-go-again)), and the advisory is then
-accepted or stops the release by the same test.
+A major taken here that fails later — the gate, `release.yml`'s packaging or verification — is removed
+from the sweep commit (amend it, then rebase and force-push the release branch as in
+[fix and go again](#12-fix-and-go-again) step 4), and the advisory is then accepted or stops the
+release by the same test.
 
 **Take every patch and minor update, leave the majors.** `npm update --save` takes what each declared
 range already allows; `npm-check-updates --target minor` raises ranges that stop short of the latest
@@ -220,10 +225,13 @@ npm install
 npm audit                      # again, on the tree that will ship
 ```
 
-**Then PR it, and merge it green.** Run the local checks below, commit with **git-commit**, push,
-`gh pr create` as a non-draft (a draft starts no CI), wait on its required checks with one blocking
-watch, and `gh pr merge --squash` once they pass. A check that fails is a [failure to fix](#fix-and-go-again)
-on this branch. A sweep with nothing to take (no advisory, nothing outdated within range) opens no PR.
+**Then commit it on the release branch.** Run the local checks below and commit with **git-commit**
+(`chore(deps): Take patch and minor updates before <version>`). The release PR's checks and the full
+gate (step 9) prove it with everything else. A local check that fails is a
+[failure to fix](#12-fix-and-go-again): a defect the update exposes is fixed through its own PR as
+usual, while a package that will not hold is pinned back by an `overrides` entry inside the sweep
+commit and named in the release PR. A sweep with nothing to take (no advisory, nothing outdated within
+range) makes no commit.
 
 Two traps, both from the alpha5 run:
 
@@ -231,14 +239,14 @@ Two traps, both from the alpha5 run:
   concrete range.** That is monorepo wiring rather than a dependency range, and pinning it means
   rewriting six manifests on every version bump. Put them back to `"*"` and re-run `npm install`
   before you commit — `git diff -- packages/*/package.json | grep @throng` is the check.
-- **A major upgrade does not belong on a release branch.** ESLint 10, TypeScript 7, Vitest 5,
-  Electron 44 and their kind each deserve their own PR and their own gate, because the failure mode
-  is discovering at tag time that one of them does not hold. List them in the sweep PR and the release
-  PR as deliberately deferred, and in the final report.
+- **A major upgrade does not belong on a release branch** (except one clearing an advisory, above).
+  ESLint 10, TypeScript 7, Vitest 5, Electron 44 and their kind each deserve their own PR and their
+  own gate, because the failure mode is discovering at tag time that one of them does not hold. List
+  them in the release PR as deliberately deferred, and in the final report.
 
 `better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
 
-**Prove it locally before the PR, because native code moved.** Electron and `koffi` ship binaries the
+**Prove it locally before committing, because native code moved.** Electron and `koffi` ship binaries the
 daemon loads under the bundled host-Node runtime, so a patch bump is not a no-op. The OS-heavy layers
 are proved by the release's full gate (step 9), which runs on the tree this sweep leaves:
 
@@ -248,7 +256,7 @@ npm run test:unit && npm run test:component
 ```
 
 Capture the output to a scratch file rather than filtering it — the **running-tests** skill owns
-how. If anything moved that a user would notice, the sweep PR adds its entry under `## Unreleased`; a
+how. If anything moved that a user would notice, it gets an entry in this release's changelog section; a
 patch sweep that clears no advisory and changes no behaviour needs no entry, and saying so in the
 commit message is enough.
 
@@ -483,7 +491,7 @@ Confirm, and report:
 - `## Unreleased` is back on `master`, empty, ready for the next cycle.
 
 Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
-the dependency-sweep and fix PRs (links), majors deliberately deferred, majors taken to clear an
+the fix PRs (links), what the sweep took and held back, majors deliberately deferred, majors taken to clear an
 advisory, any dev-only advisory accepted (with its failed attempt and a suggested corrective action),
 the test-suite audit proposals,
 and anything left undone. Send a `PushNotification` with the version and release URL.
