@@ -1,6 +1,22 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.3.0 → 6.4.0
+Bump rationale: MINOR — Principle IV's exhaustive exception lists gain one entry, `Ctrl+Shift+Alt+F2` (`tabs.rename`), from spec
+                067 FR-075 and FR-080 (#609), in the form v5.8.0 used for `Ctrl+Shift+Alt+F4`. Additive; no guarantee is withdrawn
+                and nothing compliant becomes non-compliant.
+Modified principles: IV (the terminal-tier exceptions and the recorded function keys).
+Added sections: none. Removed sections: none.
+Audit (2026-11-08): no shipped binding held `Ctrl+Shift+Alt+F2` or any other modified `F2`
+                (`packages/core/src/config/keybindings.ts`); `chordCollisions` over the defaults stays empty for it.
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no hooks registered.
+           ✅ .claude/skills/throng-config-preferences/SKILL.md — reviewed; it cites the tiers and lists no exceptions.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.2.0 → 6.3.0
 Bump rationale: MINOR — a new principle, XIII "Every Failure Leaves a Trace", from spec 066 (#543) and its
                 clarifications of 2026-11-06 (the fatal level and what counts as a component crash). Nothing is
@@ -2174,7 +2190,8 @@ not the flavour a given user happens to run.
   (`terminal.redraw`), added deliberately by feature 028 (issue #163).
   *(v5.8.0: and `Ctrl+Shift+Alt+F4` (`panel.destroy`), added deliberately by spec 048 —
   see below.)* *(v5.10.0: and `Alt+Shift+Enter` (`panel.toggleMaximise`), added deliberately by
-  spec 054 — see below.)*
+  spec 054 — see below.)* *(v6.4.0: and `Ctrl+Shift+Alt+F2` (`tabs.rename`), added deliberately
+  by spec 067 — see below.)*
   This list is exhaustive; any addition to it MUST come with its own justification,
   and no chord in the reserved tier may join it. *(Unchanged at v5.6.0: a `Ctrl+Shift+-`
   entry drafted for 5.6.0 was withdrawn before publication, when panel zoom returned to
@@ -2189,6 +2206,14 @@ not the flavour a given user happens to run.
   hosted programs respectively, so the four-modifier form is the one that keeps that meaning
   without taking a chord anything else owns. The panel menu's Destroy item and the header ✕
   remain mouse routes beside the chord (Principle VI).
+- **`Ctrl+Shift+Alt+F2` (`tabs.rename`), v6.4.0, spec 067 FR-075 (#609).** What it displaces: a
+  full-screen program that binds `F2` with all three modifiers (xterm would send `CSI 1;8 Q`); no
+  default readline, PSReadLine or cmd line-editor binding reads it. What justifies it: renaming the
+  active tab must work from every panel, a terminal included, and `F2` carries the rename meaning
+  throng already gives it in the explorer. Why no free chord serves: plain `F2` belongs to
+  `file.rename` and to hosted programs, so the three-modifier form keeps the meaning without taking
+  a chord anything else owns, as `Ctrl+Shift+Alt+F4` does for close. The tab menu's Rename item and
+  double-click remain mouse routes beside the chord (Principle VI).
 - **`Alt+Shift+Enter` (`panel.toggleMaximise`), v5.10.0, spec 054 FR-071a (#467).** What it
   displaces: in a terminal, a modified Enter the program would otherwise receive — `CSI 13;4 u`
   under the kitty keyboard protocol, a line feed otherwise — whose end, a line break without
@@ -2311,7 +2336,7 @@ should be able to guess its modifiers:
 - **Recorded exceptions** (exhaustive; an addition MUST be justified in the spec that ships
   it and recorded here):
   - the terminal-tier exceptions above: `Ctrl+F`, `Ctrl+H`, `Ctrl+S`, `Ctrl+F5`,
-    `Ctrl+Shift+Alt+F4` and `Alt+Shift+Enter`;
+    `Ctrl+Shift+Alt+F4`, `Ctrl+Shift+Alt+F2` and `Alt+Shift+Enter`;
   - **`navigate.quickOpen` `Ctrl+Shift+T`, `search.findInFiles` `Ctrl+Shift+F` and
     `search.replaceInFiles` `Ctrl+Shift+H`**: the chords every editor a user arrives from
     carries;
@@ -2319,7 +2344,8 @@ should be able to guess its modifiers:
     the maintainer's decision;
   - **`search.replaceAll` `Ctrl+Alt+Enter`**, live only while an editor's find bar is open;
   - the function keys **`F2`** (`file.rename`), **`F3` / `Shift+F3`**,
-    **`F11`**, **`Shift+F10`** and **`Ctrl+Shift+Alt+F4`** (`panel.destroy`, v5.8.0);
+    **`F11`**, **`Shift+F10`**, **`Ctrl+Shift+Alt+F4`** (`panel.destroy`, v5.8.0) and
+    **`Ctrl+Shift+Alt+F2`** (`tabs.rename`, v6.4.0);
   - **`focus.cycle` `Ctrl+`` and `focus.cycleBack` `Ctrl+Shift+``**: Shift only reverses
     the direction of the same pair;
   - **`menu.open` `Shift+F10` and `ContextMenu`**, the one-chord rule's exception above;
@@ -3231,7 +3257,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.3.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-06
+**Version**: 6.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-08
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and
