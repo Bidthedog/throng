@@ -49,6 +49,9 @@ export const SCROLLBACK_ACTIONS: readonly ActionId[] = [
 const ALWAYS_OURS = new Set<ActionId>([
   'search.find',
   'terminal.redraw',
+  // 067 FR-076 — Rename Tab is a window command (`Ctrl+Shift+Alt+F2` by default). The dispatcher takes it
+  // first; should an event reach xterm anyway, it must not be encoded for the program as an F2 sequence.
+  'tabs.rename',
   ...SCROLLBACK_ACTIONS,
 ]);
 

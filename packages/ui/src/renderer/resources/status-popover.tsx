@@ -114,9 +114,11 @@ export interface StatusPopoverProps {
   readonly id: string;
   readonly onPointerEnter: () => void;
   readonly onPointerLeave: () => void;
+  /** A click anywhere on it closes it (067 FR-127); it never reaches the item, so it never opens the monitor. */
+  readonly onClick: () => void;
 }
 
-export function StatusPopover({ anchor, summary, figures, points, id, onPointerEnter, onPointerLeave }: StatusPopoverProps): ReactElement | null {
+export function StatusPopover({ anchor, summary, figures, points, id, onPointerEnter, onPointerLeave, onClick }: StatusPopoverProps): ReactElement | null {
   // Constant: the popover's size does not depend on a capture, so a capture never re-places it.
   const { ref, pos } = useAnchoredPosition<HTMLDivElement>(anchor, 'status');
   if (!anchor) return null;
@@ -131,9 +133,10 @@ export function StatusPopover({ anchor, summary, figures, points, id, onPointerE
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden' }}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
+      onClick={onClick}
     >
       <p className="status-popover__action" data-testid="status-popover-action">
-        Click to open the Resource Monitor
+        Click the status bar to open the Resource Monitor
       </p>
       <p className="status-popover__stale" data-testid="status-popover-stale">
         {summary.stale ? 'Last reading — the latest collection failed' : ' '}

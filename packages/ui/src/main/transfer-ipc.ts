@@ -20,7 +20,7 @@ import type {
   TransferQuitChoice,
   TransferResult,
 } from '@throng/core';
-import type { ClipboardSetResult } from './file-clipboard.js';
+import type { ClipboardSetResult, PasteOrigin } from './file-clipboard.js';
 import type { ClashAsker, TransferEvents, TransferMode } from './transfer-service.js';
 
 export interface TransferIpcEvent {
@@ -37,6 +37,9 @@ export interface TransferIpcClipboard {
   get(): FileClipboard;
   setFromRelative(mode: 'cut' | 'copy', relPaths: readonly string[], activeRoot: string, activeProjectId: string): ClipboardSetResult;
   clear(): void;
+  /** What a Paste acts on now, the OS clipboard included (067 research D3). */
+  pasteOrigin(): Promise<PasteOrigin>;
+  hasPasteable(): Promise<boolean>;
 }
 
 /**
@@ -46,6 +49,7 @@ export interface TransferIpcClipboard {
 export interface TransferIpcService {
   paste(windowId: number, targetDir: string, snapshot: NonNullable<FileClipboard>): { jobId: string; result: Promise<TransferResult> };
   drop(windowId: number, sources: readonly string[], targetDir: string, mode: TransferMode): Promise<TransferResult>;
+  inbound(windowId: number, sources: readonly string[], targetDir: string, mode: TransferMode): { jobId: string; result: Promise<TransferResult> };
   cancel?(jobId: string): void;
   finishCancel?(jobId: string, choice: 'keep' | 'rollback'): void;
   applyUndo?(entry: FileOpUndoEntry, direction: 'undo' | 'redo', windowId: number): Promise<unknown>;
@@ -78,15 +82,26 @@ export function registerTransferIpc(ipc: TransferIpcMain, deps: TransferIpcDeps)
     return clipboard.setFromRelative(mode, relPaths, root, projectId);
   });
   ipc.on('throng:fileClipboard:clear', () => clipboard.clear());
+  ipc.handle('throng:fileClipboard:osFiles', () => clipboard.hasPasteable());
 
   // ── §2 transfer ──
-  ipc.handle('throng:transfer:paste', (event, targetRelDir) => {
+  ipc.handle('throng:transfer:pasteAuto', async (event, targetRelDir) => {
     if (typeof targetRelDir !== 'string') return { error: 'Invalid paste request.' };
     const root = deps.activeRoot();
     if (!root) return NO_ROOT;
-    const snapshot = clipboard.get();
-    if (snapshot === null) return { error: 'Nothing to paste.' };
-    return { jobId: transfer.paste(event.sender.id, absOf(root, targetRelDir), snapshot).jobId };
+    const origin = await clipboard.pasteOrigin();
+    const target = absOf(root, targetRelDir);
+    if (origin.kind === 'internal') return { jobId: transfer.paste(event.sender.id, target, origin.snapshot).jobId };
+    if (origin.kind === 'os') return { jobId: transfer.inbound(event.sender.id, origin.list.paths, target, origin.list.intent).jobId };
+    return { error: 'Nothing to paste.' };
+  });
+  ipc.handle('throng:transfer:dropInbound', async (event, absPaths, targetRelDir, mode) => {
+    if (!isStringArray(absPaths) || absPaths.length === 0 || typeof targetRelDir !== 'string' || !isMode(mode)) {
+      return { error: 'Invalid drop request.' };
+    }
+    const root = deps.activeRoot();
+    if (!root) return NO_ROOT;
+    return transfer.inbound(event.sender.id, absPaths, absOf(root, targetRelDir), mode).result;
   });
   ipc.handle('throng:transfer:drop', async (event, srcRelPaths, targetRelDir, mode) => {
     if (!isStringArray(srcRelPaths) || typeof targetRelDir !== 'string' || !isMode(mode)) {

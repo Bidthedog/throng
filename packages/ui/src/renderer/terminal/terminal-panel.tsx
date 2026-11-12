@@ -41,7 +41,7 @@ import {
   useTerminalCommand,
 } from './command-store.js';
 import { peekTerminalCwd, useTerminalCwd } from './cwd-store.js';
-import { ensureAppTerminatingBridge, isAppTerminating } from './app-terminating.js';
+import { ensureAppTerminatingBridge, isAppTerminating, onAppCloseCancelled } from './app-terminating.js';
 import { requestRedraw } from './redraw.js';
 import { setTerminalDebugLogging, terminalDebug } from './debug-log.js';
 import { useActiveTheme, useKeybindings, useAppSettings } from '../config/config-store.js';
@@ -73,6 +73,7 @@ import {
   osLinkActions,
   type LinkRoutingInputs,
 } from '../links/link-actions.js';
+import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
 import { openFileLinkMenu, openWebLinkMenu } from '../links/file-link-menu.js';
 import type { HoveredLink } from './hovered-link.js';
@@ -291,9 +292,17 @@ export function TerminalPanel({
   /** FR-120 / FR-123 — the existence-check timeout the link provider's held reply waits for. */
   const linkSettingsRef = useRef(editorSettings.links);
   linkSettingsRef.current = editorSettings.links;
+  const openUnsupportedInOsRef = useRef(false);
+  openUnsupportedInOsRef.current = useAppSettings().explorer.openUnsupportedInOs;
   const linkActions = useMemo<TerminalLinkDeps>(
     () => ({
       ...linkRouting(() => routingRef.current),
+      // 067 FR-131 — a file the editor would refuse as binary goes to the OS under `explorer.openUnsupportedInOs`.
+      opensInOs: refusedAsBinaryToOs(() => ({
+        enabled: openUnsupportedInOsRef.current,
+        ws,
+        ...(panel.originProjectId ? { ownerProjectId: panel.originProjectId } : {}),
+      })),
       openInEditor: (link, position) => {
         const tabId = ws.layout?.activeTabId;
         // FR-033, FR-052 — the position is placed by `positionRevealTarget` once the view holds the
@@ -738,11 +747,16 @@ export function TerminalPanel({
   // A failure notice arrives AFTER the Panel has reverted to its type-selection form, so there is
   // nothing left on screen tying it to a terminal. With several open, "Terminal exited (code 1)"
   // names no terminal at all — the identity has to travel with the message.
+  const endedByShutdown = useRef(false);
   const onExit = useCallback(
     ({ code, unexpected, failure }: TerminalExit) => {
       // Closing with Terminate all (005 US3): throng ended it, and the panel stays a terminal so the
       // next launch starts it fresh — no notice, no revert for the close to persist.
-      if (isAppTerminating()) return;
+      if (isAppTerminating()) {
+        // Remembered, so a Cancel can revert this panel: its terminal is gone and it must not look open (FR-039).
+        endedByShutdown.current = true;
+        return;
+      }
       end(
         terminalExitNotice(
           code,
@@ -764,6 +778,18 @@ export function TerminalPanel({
       );
     },
     [end, meta, panel, config.flavourLabel],
+  );
+  // 067 FR-039 — Cancel of the close: a terminal the shutdown had already ended must not stay shown as an open
+  // terminal. It goes through the normal `end` path with a clean code, which raises no notice (one condition,
+  // one notice: the close's own). An exit that arrives after the cancel is an ordinary exit.
+  useEffect(
+    () =>
+      onAppCloseCancelled(() => {
+        if (!endedByShutdown.current) return;
+        endedByShutdown.current = false;
+        end('', 0, false);
+      }),
+    [end],
   );
   /**
    * A start failure (029 / #204, FR-001 → FR-003).

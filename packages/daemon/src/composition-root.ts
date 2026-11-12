@@ -367,7 +367,7 @@ export function createDaemonContainer(env: NodeJS.ProcessEnv = process.env, log?
   // attention.flag* (057 round 12, FR-125 / FR-128) — the user's manual flags, which outlive the app.
   new AttentionFlagIpcService(attentionFlags, livePanels).register(router);
   new WorkspaceIpcService({ workspaceStore, projectStore, userContext }).register(router);
-  new SubWorkspaceIpcService({ store: subWorkspaceStore, userContext }).register(router);
+  new SubWorkspaceIpcService({ store: subWorkspaceStore, workspaceStore, userContext }).register(router);
   // document.* (016) — the per-document language override. Keyed by the FILE, so a panel opening
   // it later adopts the user's choice rather than re-detecting.
   new DocumentIpcService(

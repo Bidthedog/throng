@@ -121,6 +121,8 @@ export function linkAddress(link: PreviewLink, docPath: string): string {
       return `${docPath}#${link.fragment}`;
     case 'outside':
       return link.target;
+    case 'editor':
+      return link.text;
     default:
       return '';
   }

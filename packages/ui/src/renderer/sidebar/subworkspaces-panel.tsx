@@ -13,6 +13,7 @@ import { useSubWorkspaces } from '../state/subworkspaces-store.js';
 import { useErrorNotice } from '../common/notification.js';
 import { useConfirm } from '../confirm-dialog.js';
 import { useAppSettings } from '../config/config-store.js';
+import { Icon } from '../common/icon.js';
 
 const dragId = (id: string): string => `subws|${id}`;
 const parseDragId = (id: string): string | null => (id.startsWith('subws|') ? id.slice(6) : null);
@@ -45,7 +46,7 @@ function SubWorkspaceGrip({ id }: { id: string }): ReactElement {
  */
 export function SubworkspacesPanel(): ReactElement {
   const {
-    subWorkspaces, loadedIds, open, rename, recolour, remove, reorder, error, errorAction, errorSubject, clearError,
+    subWorkspaces, loadedIds, open, create, rename, recolour, remove, reorder, error, errorAction, errorSubject, clearError,
   } = useSubWorkspaces();
 
   // 018 / FR-051 — was an inline strip whose CSS was a verbatim copy of the Projects panel's.
@@ -54,6 +55,18 @@ export function SubworkspacesPanel(): ReactElement {
   const confirm = useConfirm();
   const settings = useAppSettings();
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  // 067 FR-124 — the sub-workspace this panel just made: Enter in its name box also opens it.
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  // A name box ends once. Enter, Escape and the blur the box's removal can raise must not each act.
+  const boxDone = useRef(false);
+
+  const startCreate = async (): Promise<void> => {
+    const made = await create();
+    if (made === null) return;
+    boxDone.current = false;
+    setCreatedId(made.id);
+    setRenamingId(made.id);
+  };
 
   // Drag-to-reorder state, computed from the live cursor Y vs the other rows'
   // rects — deterministic, like the project list / tab strip.
@@ -64,10 +77,22 @@ export function SubworkspacesPanel(): ReactElement {
   const [indicatorY, setIndicatorY] = useState<number | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const commit = (id: string, value: string): void => {
+  /**
+   * Leave the name box: keep what was typed unless it is empty or the name it already had (FR-124: an
+   * emptied box keeps the default), and open the sub-workspace only for Enter in a new one's box.
+   */
+  const finishRename = (id: string, current: string, value: string, how: 'commit' | 'cancel' | 'commitAndOpen'): void => {
+    if (boxDone.current) return;
+    boxDone.current = true;
     const trimmed = value.trim();
-    if (trimmed.length > 0) void rename(id, trimmed);
+    const wasCreated = createdId === id;
     setRenamingId(null);
+    setCreatedId(null);
+    const renamed = how !== 'cancel' && trimmed.length > 0 && trimmed !== current;
+    void (async () => {
+      if (renamed) await rename(id, trimmed);
+      if (how === 'commitAndOpen' && wasCreated) open(id);
+    })();
   };
 
   const destroy = async (id: string, name: string): Promise<void> => {
@@ -149,6 +174,19 @@ export function SubworkspacesPanel(): ReactElement {
     <div className="panel subworkspaces-panel" data-testid="subworkspaces-panel">
       <header className="panel__header">
         <span className="panel__title">Sub-workspaces</span>
+        {/* 067 FR-082 — in the slot the Projects panel's New project button holds, with its classes. */}
+        <span className="panel__header-actions">
+          <button
+            type="button"
+            className="panel__action panel__action--icon panel__action--neutral"
+            data-testid="subworkspace-new"
+            title="New sub-workspace"
+            aria-label="New sub-workspace"
+            onClick={() => void startCreate()}
+          >
+            <Icon token="add" />
+          </button>
+        </span>
       </header>
       {/* 018 / FR-051 — the third of four copy-pasted error strips. Now the shared model. Its CSS
           block was a verbatim copy of the Projects panel's, hard-coded #3a1d22 on #ff9aa6 and all. */}
@@ -164,7 +202,7 @@ export function SubworkspacesPanel(): ReactElement {
           ) : null}
           {subWorkspaces.length === 0 ? (
             <li className="subworkspace-list__empty" data-testid="subworkspaces-empty">
-              No sub-workspaces — detach a tab or panel to create one.
+              No sub-workspaces. Use New sub-workspace to create one.
             </li>
           ) : (
             subWorkspaces.map((sw) => {
@@ -199,10 +237,10 @@ export function SubworkspacesPanel(): ReactElement {
                       defaultValue={sw.name}
                       autoFocus
                       onFocus={(e) => e.target.select()}
-                      onBlur={(e) => commit(sw.id, e.target.value)}
+                      onBlur={(e) => finishRename(sw.id, sw.name, e.target.value, 'commit')}
                       onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-                        if (e.key === 'Enter') commit(sw.id, (e.target as HTMLInputElement).value);
-                        if (e.key === 'Escape') setRenamingId(null);
+                        if (e.key === 'Enter') finishRename(sw.id, sw.name, e.currentTarget.value, 'commitAndOpen');
+                        if (e.key === 'Escape') finishRename(sw.id, sw.name, e.currentTarget.value, 'cancel');
                       }}
                     />
                   ) : (
@@ -211,7 +249,11 @@ export function SubworkspacesPanel(): ReactElement {
                         className="subworkspace-item__name"
                         data-testid={`subworkspace-name-${sw.id}`}
                         title="Double-click to rename"
-                        onDoubleClick={() => setRenamingId(sw.id)}
+                        onDoubleClick={() => {
+                          boxDone.current = false;
+                          setCreatedId(null);
+                          setRenamingId(sw.id);
+                        }}
                       >
                         {sw.name}
                       </span>

@@ -45,6 +45,11 @@ export interface SubWorkspacesContextValue {
   open(id: string): void;
   /** Record that a sub-workspace is loaded this session (e.g. when detach creates one). */
   markLoaded(id: string): void;
+  /**
+   * 067 FR-083 — make an empty, unloaded sub-workspace; a failure is one notice, never a thrown error.
+   * Resolves with the new one, once the list holds it (FR-124 puts the caret in its name), or `null` on failure.
+   */
+  create(): Promise<SubWorkspaceMetaDto | null>;
   rename(id: string, name: string): Promise<void>;
   recolour(id: string, colour: string): Promise<void>;
   remove(id: string): Promise<void>;
@@ -141,6 +146,21 @@ export function SubWorkspacesProvider({
       clearError,
       open,
       markLoaded,
+      create: async () => {
+        try {
+          const created = await client.create();
+          await refresh();
+          return created;
+        } catch (error) {
+          logCaught('subworkspaces-store: create a sub-workspace', error);
+          reportError(
+            'A new sub-workspace could not be created. The details are in the diagnostics log.',
+            'create a sub-workspace',
+            { kind: 'none' },
+          );
+          return null;
+        }
+      },
       rename: async (id, name) => {
         await client.rename(id, name);
         await refresh();

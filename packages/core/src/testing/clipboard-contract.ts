@@ -92,6 +92,35 @@ export async function runClipboardContract(name: string, make: () => IClipboard)
   }
 }
 
+/** {@link IClipboard}'s file-list members (067 FR-003). `paths` are absolute for the implementation's OS. */
+export async function runClipboardFileListContract(
+  name: string,
+  make: () => IClipboard,
+  paths: readonly string[],
+): Promise<void> {
+  const fail = (why: string): never => {
+    throw new Error(`${name} violates the IClipboard file-list contract: ${why}`);
+  };
+  for (const intent of ['copy', 'cut'] as const) {
+    const cb = make();
+    await cb.writeFileList({ paths, intent });
+    const read = await cb.readFileList();
+    if (read === null || read.intent !== intent || JSON.stringify(read.paths) !== JSON.stringify(paths)) {
+      fail(`a ${intent} list did not round-trip: ${JSON.stringify(read)}`);
+    }
+  }
+  {
+    const cb = make();
+    if ((await cb.readFileList()) !== null) fail('a fresh clipboard reported a file list');
+  }
+  {
+    const cb = make();
+    await cb.writeFileList({ paths, intent: 'copy' });
+    await cb.writeText('replaced');
+    if ((await cb.readFileList()) !== null) fail('writeText() left the file list in place');
+  }
+}
+
 /**
  * A double for {@link IClipboard#writeRich} — the underlying OS-clipboard fake, plus a way to read
  * back the HTML it was given. {@link IClipboard#readText} deliberately stays plain-text-only (R12),

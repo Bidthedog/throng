@@ -42,7 +42,12 @@ export type UnloadTerminalAction = 'keepRunning' | 'endTerminals';
 export interface ProjectsSettings {
   /** The action Unload applies with no dialog, and the dialog's default button (FR-034a). */
   unloadTerminalAction: UnloadTerminalAction;
+  /** Whether a folder opened from outside throng switches to its project or only loads it (067 FR-035). */
+  openFromOutside: OpenFromOutside;
 }
+
+/** What a folder arriving from outside throng does to the active project (067 FR-035). */
+export type OpenFromOutside = 'switch' | 'load';
 
 /** File delete behaviour: OS Recycle Bin (default, recoverable) or permanent (004, FR-018). */
 export type DeleteMode = 'recycle' | 'permanent';
@@ -69,6 +74,8 @@ export interface ExplorerSettings {
   dragCopyModifier: DragModifierKey;
   /** Drag modifier that forces move (default Shift) (006, FR-095). */
   dragMoveModifier: DragModifierKey;
+  /** Double-clicking a file throng cannot open opens it in the OS default program (067 FR-116). Default on. */
+  openUnsupportedInOs: boolean;
   /**
    * Follow the active editor: expand and select its file in the tree whenever it changes (#188).
    * Default ON — the tree is the thing you act on the current file WITH, so it keeping a stale
@@ -78,6 +85,8 @@ export interface ExplorerSettings {
   autoRevealActiveFile: boolean;
   /** Name ordering within folders and within files (#470). Default `natural`. */
   sortOrder: ExplorerSortOrder;
+  /** Whether Open in OS Default Program shows on the tree's and the panel title's menus (067 FR-021). */
+  showOpenInOsDefaultProgram: boolean;
 }
 
 /** A user-defined terminal flavour (005 Phase B, settings.terminals.flavours). */
@@ -139,6 +148,13 @@ export interface TerminalAttentionSettings {
  * and the next ordinary write leaves it out, 019 FR-023's mechanism, same as `editor.links.defaultAction`
  * (FR-112/FR-113).
  */
+/** Remembered Startup Command and Shell Arguments values, per terminal type (067 FR-061). */
+export interface TerminalFormHistorySettings {
+  enabled: boolean;
+  /** How many values each list keeps; the descriptor states the 1 to 50 range. */
+  maxEntries: number;
+}
+
 export interface TerminalSettings {
   /** User-defined flavours, shown in the Flavour dropdown alongside built-ins. */
   flavours: TerminalFlavourConfig[];
@@ -156,6 +172,8 @@ export interface TerminalSettings {
    * staleness window (FR-019d) against observation cost.
    */
   commandPollMs: number;
+  /** The terminal form's remembered values (067 FR-064, FR-064a). */
+  formHistory: TerminalFormHistorySettings;
   /**
    * Ask shells that cannot be observed from outside to REPORT their working directory
    * (025 follow-up). PowerShell's `Set-Location` never moves the process working directory, so
@@ -582,6 +600,8 @@ export interface ResourceMonitorSettings {
   cpuCriticalPercent: number;
   memoryWarningPercent: number;
   memoryCriticalPercent: number;
+  /** Milliseconds the pointer rests on the status-bar item before its popover opens. */
+  popoverDelayMs: number;
 }
 
 /**
@@ -830,7 +850,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     destroySubWorkspace: 'double',
     killProcesses: 'double',
   },
-  projects: { unloadTerminalAction: 'keepRunning' },
+  projects: { unloadTerminalAction: 'keepRunning', openFromOutside: 'switch' },
   panes: {
     projects: { maxWidth: DEFAULT_PROJECTS_MAX_WIDTH },
     fileExplorer: { maxWidth: DEFAULT_EXPLORER_MAX_WIDTH },
@@ -845,8 +865,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     excludeGlobs: [...DEFAULT_EXCLUDE_GLOBS],
     dragCopyModifier: 'ctrl',
     dragMoveModifier: 'shift',
+    openUnsupportedInOs: true,
     autoRevealActiveFile: true,
     sortOrder: 'natural',
+    showOpenInOsDefaultProgram: true,
   },
   terminals: {
     flavours: [],
@@ -854,6 +876,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultShellArguments: {},
     commandRecipes: {},
     commandPollMs: 1000,
+    formHistory: { enabled: true, maxEntries: 10 },
     shellIntegration: true,
     showStatusBar: true,
     // 045 FR-080b (#394): shipped ON. A program that emits OSC 8 is emitting a link throng did not
@@ -1025,6 +1048,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     cpuCriticalPercent: 80,
     memoryWarningPercent: 50,
     memoryCriticalPercent: 80,
+    popoverDelayMs: 500,
   },
 };
 
@@ -1168,6 +1192,7 @@ function projectsSettings(raw: unknown, d: ProjectsSettings): ProjectsSettings {
     unloadTerminalAction: UNLOAD_TERMINAL_ACTIONS.includes(p.unloadTerminalAction as UnloadTerminalAction)
       ? (p.unloadTerminalAction as UnloadTerminalAction)
       : d.unloadTerminalAction,
+    openFromOutside: p.openFromOutside === 'switch' || p.openFromOutside === 'load' ? p.openFromOutside : d.openFromOutside,
   };
 }
 
@@ -1202,14 +1227,18 @@ function explorerSettings(v: unknown, fallback: ExplorerSettings): ExplorerSetti
     typeof v.autoRevealActiveFile === 'boolean' ? v.autoRevealActiveFile : fallback.autoRevealActiveFile;
   const sortOrder: ExplorerSortOrder =
     v.sortOrder === 'natural' || v.sortOrder === 'characters' ? v.sortOrder : fallback.sortOrder;
+  const showOpenInOsDefaultProgram =
+    typeof v.showOpenInOsDefaultProgram === 'boolean' ? v.showOpenInOsDefaultProgram : fallback.showOpenInOsDefaultProgram;
   return {
     deleteMode,
     replaceMode,
     excludeGlobs,
     dragCopyModifier,
     dragMoveModifier,
+    openUnsupportedInOs: typeof v.openUnsupportedInOs === 'boolean' ? v.openUnsupportedInOs : fallback.openUnsupportedInOs,
     autoRevealActiveFile,
     sortOrder,
+    showOpenInOsDefaultProgram,
   };
 }
 
@@ -1222,8 +1251,10 @@ function cloneExplorer(e: ExplorerSettings): ExplorerSettings {
     excludeGlobs: [...e.excludeGlobs],
     dragCopyModifier: e.dragCopyModifier,
     dragMoveModifier: e.dragMoveModifier,
+    openUnsupportedInOs: e.openUnsupportedInOs,
     autoRevealActiveFile: e.autoRevealActiveFile,
     sortOrder: e.sortOrder,
+    showOpenInOsDefaultProgram: e.showOpenInOsDefaultProgram,
   };
 }
 
@@ -1297,6 +1328,11 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
   // disagreed (declared 0–2000, clamped 0–5000) until `linkHoverDelayMs` itself was retired (round
   // five, #408). The clamp is gone; the descriptor is the range (FR-015, FR-016).
   const commandPollMs = wholeNumber(v.commandPollMs, fallback.commandPollMs);
+  const history = isRecord(v.formHistory) ? v.formHistory : {};
+  const formHistory: TerminalFormHistorySettings = {
+    enabled: typeof history.enabled === 'boolean' ? history.enabled : fallback.formHistory.enabled,
+    maxEntries: wholeNumber(history.maxEntries, fallback.formHistory.maxEntries),
+  };
   const showStatusBar =
     typeof v.showStatusBar === 'boolean' ? v.showStatusBar : fallback.showStatusBar;
   // 045 FR-080b.
@@ -1332,6 +1368,7 @@ function terminalSettings(v: unknown, fallback: TerminalSettings): TerminalSetti
     defaultShellArguments,
     commandRecipes,
     commandPollMs,
+    formHistory,
     shellIntegration,
     showStatusBar,
     advertiseHyperlinks,
@@ -1403,6 +1440,7 @@ function cloneTerminals(t: TerminalSettings): TerminalSettings {
       Object.entries(t.commandRecipes).map(([k, v]) => [k, [...v]]),
     ),
     commandPollMs: t.commandPollMs,
+    formHistory: { ...t.formHistory },
     shellIntegration: t.shellIntegration,
     showStatusBar: t.showStatusBar,
     // 045 FR-080b, and the note below applies to it exactly as it does to 039's four.
@@ -1826,6 +1864,7 @@ function resourceMonitorSettings(raw: unknown, d: ResourceMonitorSettings): Reso
     cpuCriticalPercent: wholeNumber(v.cpuCriticalPercent, d.cpuCriticalPercent),
     memoryWarningPercent: wholeNumber(v.memoryWarningPercent, d.memoryWarningPercent),
     memoryCriticalPercent: wholeNumber(v.memoryCriticalPercent, d.memoryCriticalPercent),
+    popoverDelayMs: wholeNumber(v.popoverDelayMs, d.popoverDelayMs),
   };
 }
 

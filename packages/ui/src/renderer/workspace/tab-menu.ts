@@ -10,6 +10,7 @@
  * *Sync to* therefore moves from second to LAST. That is FR-047's fixed order — the constitution's
  * own example of a Navigate item — and FR-053 protects order **within** a section, not across them.
  */
+import { firstBinding, type Keybindings } from '@throng/core';
 import type { MenuAction } from './context-menu.js';
 
 export interface TabMenuDetach {
@@ -36,6 +37,8 @@ export interface TabMenuArgs {
    * is absent rather than disabled — an empty Navigate group draws no divider.
    */
   detach: TabMenuDetach | null;
+  /** 067 FR-078 — the live bindings, so Rename shows the `tabs.rename` chord. */
+  keybindings?: Keybindings;
   actions: {
     rename: (tabId: string) => void;
     destroyTab: (tabId: string) => void;
@@ -44,10 +47,16 @@ export interface TabMenuArgs {
 }
 
 export function tabContextMenu(args: TabMenuArgs): MenuAction[] {
-  const { tabId, destroyTabDisabled, destroyOthersDisabled, detach, actions } = args;
+  const { tabId, destroyTabDisabled, destroyOthersDisabled, detach, actions, keybindings } = args;
 
   const items: MenuAction[] = [
-    { label: 'Rename', icon: 'rename', section: 'content', onClick: () => actions.rename(tabId) },
+    {
+      label: 'Rename',
+      icon: 'rename',
+      section: 'content',
+      ...(keybindings ? { shortcut: firstBinding(keybindings, 'tabs.rename') } : {}),
+      onClick: () => actions.rename(tabId),
+    },
   ];
 
   // Sync (clone) this Tab into a sub-workspace (US7). Hidden in a sub-workspace

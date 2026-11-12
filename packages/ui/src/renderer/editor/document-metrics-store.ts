@@ -46,6 +46,29 @@ export interface DocumentMetrics {
   totalCharacters: number;
   /** Maximal runs of non-whitespace (FR-003b) — `foo_bar()` is one word. */
   totalWords: number;
+  /**
+   * Lines, counting a document with no line break as ONE and an empty document as one (067 FR-095,
+   * FR-099) — the line the caret would be on, so a trailing line ending opens one more.
+   */
+  totalLines: number;
+}
+
+/**
+ * Lines in `text`: one more than its line breaks, each of `\r\n`, `\n` and a lone `\r` counting once, as
+ * the character count counts them. Runs inside the debounced scan beside the other two figures, so it
+ * is never work on the keystroke path (SC-013).
+ */
+export function countLines(text: string): number {
+  let lines = 1;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    if (c === 10) lines += 1;
+    else if (c === 13) {
+      lines += 1;
+      if (text.charCodeAt(i + 1) === 10) i += 1;
+    }
+  }
+  return lines;
 }
 
 /** FR-008b: the figures must settle within this long after the last edit. */
@@ -94,6 +117,7 @@ export function scheduleDocumentMetrics(docKey: string, text: MetricsText): void
     settled.set(docKey, {
       totalCharacters: countCharacters(resolved),
       totalWords: countWords(resolved),
+      totalLines: countLines(resolved),
     });
     emit();
   }, METRICS_DEBOUNCE_MS);

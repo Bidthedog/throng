@@ -57,7 +57,7 @@ export interface PreviewLinkMenuArgs {
 }
 
 /** The directory holding `docPath` — what a Markdown reference resolves against (`classifyPreviewLink`'s own rule). */
-function docDirectory(docPath: string): string {
+export function docDirectory(docPath: string): string {
   const sep = docPath.includes('\\') ? '\\' : '/';
   const at = docPath.lastIndexOf(sep);
   return at <= 0 ? docPath : docPath.slice(0, at);
@@ -100,6 +100,40 @@ export function openPreviewLinkMenu(args: PreviewLinkMenuArgs): boolean {
         copyLink: () => void window.throng?.clipboard?.write({ text: link.url, mode: 'verbatim' }),
       });
       return true;
+    // 067 FR-132 — a front matter link the editor's grammar recognises: the menu the editor draws for it.
+    case 'editor': {
+      if (link.protocol === true) {
+        openWebLinkMenu({
+          x,
+          y,
+          opener,
+          ...withChord,
+          openLink,
+          copyLink: () => void window.throng?.clipboard?.write({ text: link.text, mode: 'verbatim' }),
+        });
+        return true;
+      }
+      openFileLinkMenu({
+        x,
+        y,
+        opener,
+        ws: args.ws,
+        request: {
+          text: link.text,
+          kind: 'detectedPath',
+          panelId: args.panelId,
+          baseDirectory: docDirectory(args.docPath),
+          ...(args.projectId !== undefined ? { originProjectId: args.projectId } : {}),
+        },
+        projectRoot: args.projectRoot,
+        previewRegistry: args.previewRegistry,
+        previewSettings: args.previewSettings,
+        ...withChord,
+        openLink,
+        deps: args.deps,
+      });
+      return true;
+    }
     case 'file':
     case 'outside': {
       const text = link.kind === 'file' ? link.absPath : link.target;

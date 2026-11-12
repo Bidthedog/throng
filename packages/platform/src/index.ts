@@ -8,6 +8,11 @@ import {
   type IDirectoryLock,
   type IElevationState,
   type IExecutableExtensions,
+  type IFileListCodec,
+  type IFileManagerRegistration,
+  type IFileAttributes,
+  type IOsPropertiesDialog,
+  type IFileAccessInfo,
   type IFontEnumeration,
   type IForegroundHandoff,
   type IInstalledVersion,
@@ -28,6 +33,11 @@ import {
   LinuxDirectoryLock,
   LinuxElevation,
   LinuxExecutableExtensions,
+  LinuxFileListCodec,
+  LinuxFileManagerRegistration,
+  LinuxFileAttributes,
+  LinuxOsPropertiesDialog,
+  LinuxFileAccessInfo,
   LinuxFontEnumeration,
   LinuxGpuUsage,
   LinuxInstalledVersion,
@@ -53,6 +63,12 @@ import {
   WindowsDirectoryLock,
   WindowsElevation,
   WindowsExecutableExtensions,
+  WindowsFileListCodec,
+  WindowsFileManagerRegistration,
+  WindowsFileAttributes,
+  WindowsOsPropertiesDialog,
+  WindowsFileAccessInfo,
+  REG_EXE,
   WindowsFontEnumeration,
   WindowsForegroundHandoff,
   WindowsGpuCounters,
@@ -116,6 +132,13 @@ export interface PlatformServices {
    * case: an uninstall ends the daemon, and `ensureDaemon` retires a portable copy's orphan (#429).
    */
   readonly exitWhenEntryRemoved: boolean;
+  /** This OS's file-list clipboard formats (067 FR-013). */
+  readonly fileListCodec: () => IFileListCodec;
+  readonly fileAttributes: () => IFileAttributes;
+  readonly osPropertiesDialog: () => IOsPropertiesDialog;
+  readonly fileAccessInfo: () => IFileAccessInfo;
+  /** The "Open as throng project" item. `installed`: false for a portable or archive build (067 FR-036). */
+  readonly fileManagerRegistration: (opts: { execPath: string; home: string; installed: boolean }) => IFileManagerRegistration;
 }
 
 const WINDOWS: PlatformServices = {
@@ -152,6 +175,11 @@ const WINDOWS: PlatformServices = {
   startupRefusal: () => null,
   installedVersion: () => new NoInstalledVersion(),
   exitWhenEntryRemoved: false,
+  fileListCodec: () => new WindowsFileListCodec(),
+  fileAttributes: () => new WindowsFileAttributes(),
+  osPropertiesDialog: () => new WindowsOsPropertiesDialog(),
+  fileAccessInfo: () => new WindowsFileAccessInfo(),
+  fileManagerRegistration: ({ execPath, installed }) => new WindowsFileManagerRegistration(REG_EXE, execPath, installed),
 };
 
 const LINUX: PlatformServices = {
@@ -180,6 +208,11 @@ const LINUX: PlatformServices = {
   startupRefusal: () => linuxStartupRefusal(),
   installedVersion: (execPath) => new LinuxInstalledVersion(execPath),
   exitWhenEntryRemoved: true,
+  fileListCodec: () => new LinuxFileListCodec(),
+  fileAttributes: () => new LinuxFileAttributes(),
+  osPropertiesDialog: () => new LinuxOsPropertiesDialog(),
+  fileAccessInfo: () => new LinuxFileAccessInfo(),
+  fileManagerRegistration: ({ home, installed }) => new LinuxFileManagerRegistration(home, installed),
 };
 
 /** A platform with no implementation set. Never answered with another platform's (062 FR-050). */

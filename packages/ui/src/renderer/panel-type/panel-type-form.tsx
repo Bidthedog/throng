@@ -113,6 +113,7 @@ export function PanelTypeForm({
   // can resolve its label and icon, and this dropdown offers only the ones a user may pick.
   const types = registry.listOfferable();
   const confirmable = canConfirm(state, deps);
+  const historyEnabled = settings.terminals.formHistory.enabled;
 
   const onConfirm = (): void => {
     const result = confirmConfig(state, deps);
@@ -126,6 +127,17 @@ export function PanelTypeForm({
       // terminal and attaches); the mirror in other windows never runs this, so it
       // reuses the new session. Only a terminal attaches.
       if (result.kind === 'terminal') {
+        // 067 FR-063 — remembered when the form is CONFIRMED, once per field, never per keystroke. Empties
+        // are skipped here as well as in main; with the history off nothing is recorded (FR-064a).
+        const flavourId = state.values.flavourId;
+        const startupCommand = (state.values.startupCommand ?? '').trim();
+        const shellArguments = (state.values.shellArguments ?? '').trim();
+        if (historyEnabled && flavourId && (startupCommand !== '' || shellArguments !== '')) {
+          window.throng?.formHistory?.record(flavourId, {
+            ...(startupCommand !== '' ? { startupCommand } : {}),
+            ...(shellArguments !== '' ? { shellArguments } : {}),
+          });
+        }
         markExplicitRetype(panelId);
         // 051 FR-046 — an observation the previous terminal left behind (a start failure reverted it
         // here without an orderly end) must not clear the startup command the user just confirmed.

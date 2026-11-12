@@ -218,6 +218,8 @@ export function isPanelScoped(action: ActionId): boolean {
     // 031 FR-032a — the tab picker, for the same reason. It was named as a window command in the
     // comment above and never listed, so `Ctrl+Alt+T` was dead whenever a terminal held the focus.
     action === 'tabs.openPicker' ||
+    // 067 FR-075 — Rename Tab is a window command too: it must reach the strip from a focused terminal (FR-076).
+    action === 'tabs.rename' ||
     /*
      * 043 (#220, #153) — find and replace in files are WINDOW commands, for Quick Open's reason.
      *

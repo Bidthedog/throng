@@ -16,9 +16,18 @@
  */
 let terminating = false;
 let unsubscribeBridge: (() => void) | null = null;
+const cancelListeners = new Set<() => void>();
 
 export function markAppTerminating(): void {
   terminating = true;
+}
+
+/**
+ * Closing was CANCELLED (067 FR-039): the terminals still running are the user's again, so their exits are
+ * real ones and the panels react to them as they always did.
+ */
+export function unmarkAppTerminating(): void {
+  terminating = false;
 }
 
 export function isAppTerminating(): boolean {
@@ -28,12 +37,28 @@ export function isAppTerminating(): boolean {
 /** Listen for UI main's announcement. Called as a terminal mounts, like the command bridge. */
 export function ensureAppTerminatingBridge(): void {
   if (unsubscribeBridge) return;
-  unsubscribeBridge = window.throng?.onAppCloseTerminating?.(markAppTerminating) ?? null;
+  const offTerminating = window.throng?.onAppCloseTerminating?.(markAppTerminating);
+  // 067 FR-039 — main broadcasts the cancel to EVERY window; a sub-workspace window has no close prompt to hear it.
+  const offCancelled = window.throng?.onAppCloseCancelled?.(() => {
+    unmarkAppTerminating();
+    for (const listener of [...cancelListeners]) listener();
+  });
+  unsubscribeBridge = () => {
+    offTerminating?.();
+    offCancelled?.();
+  };
+}
+
+/** Be told when closing was cancelled (067 FR-039). Returns the unsubscribe. */
+export function onAppCloseCancelled(listener: () => void): () => void {
+  cancelListeners.add(listener);
+  return () => cancelListeners.delete(listener);
 }
 
 /** Test seam: a fresh renderer, and its bridge re-armed against the next `window.throng`. */
 export function resetAppTerminating(): void {
   terminating = false;
+  cancelListeners.clear();
   unsubscribeBridge?.();
   unsubscribeBridge = null;
 }

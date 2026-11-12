@@ -274,6 +274,17 @@ const RESOURCE_MONITOR_DESCRIPTORS: FieldDescriptor[] = [
     max: 100,
     step: 1,
   },
+  {
+    key: 'resourceMonitor.popoverDelayMs',
+    label: 'Popup delay (ms)',
+    description:
+      'How long the pointer rests on the status bar usage figures before their popup opens. At 0 it opens at once. Keyboard focus never waits.',
+    group: 'Resource Monitor',
+    control: 'slider',
+    min: 0,
+    max: 5000,
+    step: 50,
+  },
 ];
 
 export const SETTINGS_METADATA: MetadataRegistry = [
@@ -300,10 +311,19 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     key: 'window.nativeWayland',
     label: 'Use native Wayland',
     description:
-      'Run the window directly on Wayland instead of through XWayland. Dragging a tab out and placing windows work best through XWayland. Takes effect the next time throng starts.',
+      'Run the window directly on Wayland instead of through XWayland. Dragging a tab out, placing windows, and keeping Preferences and About above the main window work best through XWayland. Dragging files out of the File Explorer into GNOME Files works only on native Wayland. Takes effect the next time throng starts.',
     group: 'Window',
     control: 'toggle',
     onlyOn: 'linux',
+  },
+  {
+    key: 'projects.openFromOutside',
+    label: 'Folder opened from outside throng',
+    description: 'What happens when a folder arrives from the OS file manager or the command line: switch to its project, or only load it.',
+    group: 'Projects',
+    control: 'select',
+    allowedValues: ['switch', 'load'],
+    optionLabels: { switch: 'Switch to the project', load: 'Load it without switching' },
   },
   {
     key: 'projects.unloadTerminalAction',
@@ -582,6 +602,14 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     control: 'toggle',
   },
   {
+    key: 'explorer.openUnsupportedInOs',
+    label: 'Open unsupported files in the OS',
+    description:
+      'Double-clicking a file throng cannot open, or Ctrl+clicking a link to one, opens it in your OS default program. Off, throng says it cannot open the file.',
+    group: 'File Explorer',
+    control: 'toggle',
+  },
+  {
     key: 'explorer.dragCopyModifier',
     label: 'Copy-drag modifier',
     description: 'The modifier key that makes a file-tree drag copy instead of move.',
@@ -596,6 +624,13 @@ export const SETTINGS_METADATA: MetadataRegistry = [
     group: 'File Explorer',
     control: 'select',
     allowedValues: DRAG_MODIFIERS,
+  },
+  {
+    key: 'explorer.showOpenInOsDefaultProgram',
+    label: 'Show Open in OS Default Program',
+    description: 'Offer Open in OS Default Program on the File Explorer menu and on the panel title menu.',
+    group: 'File Explorer',
+    control: 'toggle',
   },
 
   // Terminals
@@ -1043,6 +1078,23 @@ export const SETTINGS_METADATA: MetadataRegistry = [
       'Tick “Run as administrator” on new terminal panels. This only sets what the checkbox starts as — whether a terminal can be elevated at all still depends on throng itself running elevated, and turning this on never elevates anything on its own.',
     group: 'Terminal',
     control: 'toggle',
+  },
+  {
+    key: 'terminals.formHistory.enabled',
+    label: 'Remember terminal form values',
+    description: 'Offer Startup Command and Shell Arguments values used before, per terminal type. Off stops recording and offering them, and keeps what is already stored until cleared.',
+    group: 'Terminal',
+    control: 'toggle',
+  },
+  {
+    key: 'terminals.formHistory.maxEntries',
+    label: 'Terminal form values remembered',
+    description: 'How many values each field keeps per terminal type. Lowering this trims every list to its newest entries.',
+    group: 'Terminal',
+    control: 'slider',
+    min: 1,
+    max: 50,
+    step: 1,
   },
   {
     // 025 FR-019c. The observation interval is a real, tunable setting rather than a module

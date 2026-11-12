@@ -124,3 +124,55 @@
 
 
 
+
+/* 067 FR-062, FR-067 — a field that offers the values remembered for it, with a clear button beside it. */
+.history-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-input > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.history-input__list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 2px 0 0;
+  padding: 2px;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--throng-colour-border);
+  border-radius: 4px;
+  background: var(--throng-colour-surfaceActive);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.history-input__list--above {
+  top: auto;
+  bottom: 100%;
+  margin: 0 0 2px;
+}
+
+/* One truncated line however long the value, or however many lines it holds. */
+.history-option {
+  padding: 4px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.history-option:hover,
+.history-option--active {
+  background: var(--throng-colour-accent);
+  color: var(--throng-colour-text);
+}

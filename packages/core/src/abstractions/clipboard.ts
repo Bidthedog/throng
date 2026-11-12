@@ -42,4 +42,25 @@ export interface IClipboard {
   writeImage(entry: { png: Uint8Array; html: string }): Promise<void>;
   /** The clipboard's current text, or the empty string when it holds none (never rejects). */
   readText(): Promise<string>;
+  /** Replace the clipboard's contents with a list of real files (067 FR-003). */
+  writeFileList(list: FileListSnapshot): Promise<void>;
+  /** The file list on the clipboard, or null when it holds none (never rejects). */
+  readFileList(): Promise<FileListSnapshot | null>;
+}
+
+/** Absolute paths on the OS clipboard, and whether the receiver should move them (067). Never empty. */
+export interface FileListSnapshot {
+  readonly paths: readonly string[];
+  readonly intent: 'copy' | 'cut';
+}
+
+/**
+ * One OS's clipboard formats for a file list (067 FR-013). Every format name lives in an implementation of this,
+ * in a platform package; the caller only moves opaque keys and payloads.
+ */
+export interface IFileListCodec {
+  /** The clipboard entries {@link decode} reads. */
+  readonly formats: readonly string[];
+  encode(list: FileListSnapshot): Record<string, string | Uint8Array>;
+  decode(payloads: Readonly<Record<string, Uint8Array>>): FileListSnapshot | null;
 }

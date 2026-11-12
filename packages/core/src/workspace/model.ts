@@ -327,6 +327,18 @@ export interface WorkspaceLayout {
   tabs: Tab[];
   /** Always references an existing Tab (INV-7). */
   activeTabId: string;
+  /** 067 FR-056: which side panes are expanded for this project. Absent until the user first toggles one (FR-058). */
+  sidePanes?: SidePanes;
+}
+
+export interface SidePanes {
+  projects: boolean;
+  files: boolean;
+}
+
+/** Absent, or anything malformed, reads as expanded (FR-057): a bad value must not cost the layout. */
+export function effectiveSidePanes(layout: Pick<WorkspaceLayout, 'sidePanes'>): SidePanes {
+  return { projects: layout.sidePanes?.projects !== false, files: layout.sidePanes?.files !== false };
 }
 
 /** On-screen bounds of a detached sub-workspace window (US4). */

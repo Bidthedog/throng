@@ -53,9 +53,14 @@
  */
 import MarkdownIt from 'markdown-it';
 import type { Env, MarkdownIt as MarkdownItInstance, StateCore, Token } from 'markdown-it';
-import { isMap, isScalar, parseDocument, Scalar, type Node as YamlNode } from 'yaml';
-import { headingSlug, splitFrontMatter, type HeadingRecord } from '@throng/core';
-import type { PreviewLinkWording } from '../../link-dom.js';
+import { isMap, isScalar, isSeq, parseDocument, Scalar, type Node as YamlNode } from 'yaml';
+import { headingSlug, scanLinkLine, splitFrontMatter, type HeadingRecord, type ScanOptions } from '@throng/core';
+import {
+  FRONT_MATTER_LINK_ATTRIBUTE,
+  encodeFrontMatterLink,
+  type EditorPreviewLink,
+  type PreviewLinkWording,
+} from '../../link-dom.js';
 import { decodeWikiHref, installWikilinks, WIKI_HREF_ATTRIBUTE, WIKI_INDEX_ATTRIBUTE } from './wikilinks.js';
 import { installEmbeds } from './embeds.js';
 import { DIAGRAM_HEIGHT_ATTRIBUTE, parseDiagramHeight } from '../../diagram/diagram-host.js';
@@ -87,6 +92,12 @@ export interface RenderEnvironment {
    * link reads as "open in throng preview".
    */
   readonly linkWording?: PreviewLinkWording;
+  /**
+   * 067 FR-132 — the editor's link-scan options (the protocol allowlist and known extensions), for the
+   * FRONT MATTER table only: a scalar that is wholly a link in the editor's grammar is drawn as a link and
+   * followed as the editor follows it. The body never reads it. Absent: the shipped defaults.
+   */
+  readonly linkScan?: ScanOptions;
 }
 
 /** What the pipeline knows about a render that the sanitiser's hooks need. */
@@ -140,6 +151,8 @@ interface RenderState {
   readonly wikiTargets: WikiHrefTarget[];
   readonly lineOffset: number;
   readonly nonce: string;
+  /** 067 FR-132 — the editor's link-scan options for the front matter table (see {@link RenderEnvironment.linkScan}). */
+  readonly scan: ScanOptions | undefined;
 }
 
 const RENDER_STATE = Symbol('throng.preview.render-state');
@@ -150,7 +163,7 @@ function newNonce(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function renderState(env: Env, lineOffset = 0): RenderState {
+function renderState(env: Env, lineOffset = 0, scan?: ScanOptions): RenderState {
   const existing = env[RENDER_STATE] as RenderState | undefined;
   if (existing) return existing;
   const created: RenderState = {
@@ -160,6 +173,7 @@ function renderState(env: Env, lineOffset = 0): RenderState {
     wikiTargets: [],
     lineOffset,
     nonce: newNonce(),
+    scan,
   };
   env[RENDER_STATE] = created;
   return created;
@@ -211,10 +225,146 @@ function scalarText(source: string, node: Scalar): string {
   return node.value === null || node.value === undefined ? '' : String(node.value);
 }
 
+/**
+ * The inline HTML of `text` when it holds a link, or `null` when it holds none (067 FR-088, FR-090).
+ *
+ * Rendered by the BODY'S OWN markdown-it instance and `env`, so the links are the body's: the same rules
+ * (linkify, Markdown links, wikilinks), the same scheme validation, and — because the whole render then
+ * goes through the same sanitiser — the same markup, hover title and destination handling. The wikilinks
+ * are registered with this render's list by the `throng_block_attributes` core rule, which `parseInline`
+ * runs, so their indexes continue into the body in document order.
+ *
+ * `null` for a value with no link is what keeps it exactly as it was (FR-092): text, never run through
+ * the inline rules, so `*emphasis*` in a plain title stays asterisks.
+ */
+function linkedInline(md: MarkdownItInstance, env: Env, text: string): string | null {
+  if (text.length === 0) return null;
+  /*
+   * 067 FR-132 — a scalar that is WHOLLY one link in the editor's grammar. The sanitiser turns the marked
+   * anchor into the preview's `editor` link, which is followed through the editor's own route, so a
+   * position, a home, rooted or absolute path, a `file:` URI and an allowlisted protocol resolve as they
+   * do in the editor. What the table already linked correctly (web, mailto, plain relative paths,
+   * wikilinks) falls through to the rules below and is unchanged.
+   */
+  const render = renderState(env);
+  const editorLink = editorLinkOf(text, render.scan);
+  if (editorLink !== null) {
+    return `<a ${FRONT_MATTER_LINK_ATTRIBUTE}="${encodeFrontMatterLink(editorLink, render.nonce)}">${escapeHtml(text)}</a>`;
+  }
+  if (isHeadingAnchor(text)) {
+    const asLink = md.parseInline(`[${escapeInlineLabel(text)}](<${text.replace(/%/g, '%25')}>)`, env)[0]?.children;
+    if (asLink?.some((token) => token.type === 'link_open')) return md.renderer.renderInline(asLink, md.options, env);
+  }
+  const children = md.parseInline(text, env)[0]?.children;
+  const found = children?.some((token) => token.type === 'link_open') === true;
+  /*
+   * 067 FR-123 — a bare scalar that is a relative path to a file links like `[path](path)` in the body.
+   * Decided on the text alone: the disk is never consulted, so a path to nothing links all the same.
+   *
+   * The linkifier gets the first word on anything it already claims (`example.com/docs` is a web link),
+   * except a bare name whose extension is also a country domain (`overview.md`, `build.sh`): there the
+   * author wrote a file.
+   */
+  if (relativePathOf(text) !== null && (!found || (!text.includes('/') && FILE_EXTENSIONS.has(extensionOf(text))))) {
+    const asLink = md.parseInline(`[${escapeInlineLabel(text)}](<${text.replace(/%/g, '%25')}>)`, env)[0]?.children;
+    if (asLink?.some((token) => token.type === 'link_open')) return md.renderer.renderInline(asLink, md.options, env);
+  }
+  if (!found || !children) return null;
+  return md.renderer.renderInline(children, md.options, env);
+}
+
+/**
+ * A same-document `#anchor` as the WHOLE value (067 FR-132). `#123` is left alone: that is the shorthand
+ * for an issue reference, which the body does not resolve either and FR-090 keeps unlinked.
+ */
+const isHeadingAnchor = (text: string): boolean => /^#[^\s#]\S*$/.test(text) && !/^#\d+$/.test(text);
+
+/**
+ * A value with whitespace is a path only when it starts like one (`./`, `../`, `/`, `~/` or a drive
+ * letter) and ends in a dotted extension, optionally followed by a position (067 FR-132's note). A
+ * sentence with a path inside it stays text.
+ */
+const SPACED_PATH =
+  /^(?:\.{1,2}\/|\/|~\/|[A-Za-z]:[\\/]).*\.[A-Za-z][A-Za-z0-9]*(?::\d+(?::\d+)?(?:-\d+)?|\(\d+,\d+\)|#L\d+(?:-L\d+)?)?$/;
+
+/**
+ * The editor link `text` is, when the WHOLE value is one span of the editor's grammar (`scanLinkLine`, the
+ * scan the editor and the terminal read) that the table does not already link correctly — or `null`.
+ *
+ * Web links and mailto addresses are left to the rules that already draw them. A path with no position that
+ * reads as a plain relative path is left to them too (067 FR-123), so those links stay exactly as they were.
+ */
+function editorLinkOf(text: string, scan: ScanOptions | undefined): EditorPreviewLink | null {
+  if (text !== text.trim()) return null;
+  if (/\s/.test(text) && !SPACED_PATH.test(text)) return null;
+  const scanned = scanLinkLine(text, scan ?? {});
+  const whole = (span: { start: number; end: number }): boolean => span.start === 0 && span.end === text.length;
+  if (scanned.web.some(whole)) return null;
+  const protocol = scanned.protocol.find(whole);
+  if (protocol !== undefined) {
+    return /^mailto:/i.test(protocol.uri) || !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(text)
+      ? null
+      : { kind: 'editor', text: protocol.uri, protocol: true };
+  }
+  // The scan lists the positioned reading of a span first, as the editor takes it.
+  const path = scanned.paths.find(whole);
+  if (path === undefined) return null;
+  if (path.position === undefined && relativePathOf(text) !== null) return null;
+  return {
+    kind: 'editor',
+    text: path.text,
+    ...(path.position === undefined
+      ? {}
+      : { position: { line: path.position.line, ...(path.position.column === undefined ? {} : { column: path.position.column }) } }),
+  };
+}
+
+/** Extensions that name a file even where they are also a domain suffix. */
+const FILE_EXTENSIONS: ReadonlySet<string> = new Set(
+  'md markdown txt json yaml yml toml html htm css js mjs cjs ts tsx jsx py sh rs go java c h cpp cs rb php pdf png jpg jpeg gif svg csv xml log ini cfg conf zip'.split(' '),
+);
+
+const extensionOf = (text: string): string => /\.([A-Za-z][A-Za-z0-9]*)$/.exec(text)?.[1]?.toLowerCase() ?? '';
+
+/**
+ * The path in `text` when the WHOLE value reads as a relative path to a file: no whitespace, not a URL,
+ * not absolute, and either holding a `/` or ending in a dotted extension that starts with a letter. A
+ * markdown link's own punctuation disqualifies it (it would be read as one).
+ */
+function relativePathOf(text: string): string | null {
+  if (/[\s<>[\]\\]/.test(text) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text) || /^[/~#]/.test(text)) return null;
+  return text.includes('/') || extensionOf(text) !== '' ? text : null;
+}
+
+/** Punctuation that markdown would read inside a link's label, written literally. */
+const escapeInlineLabel = (text: string): string => text.replace(/[\\`*_{}#+!|~&]/g, '\\$&');
+
 /** One table cell's content: a scalar as text, anything else as its YAML source in a code block. */
-function yamlCell(source: string, node: unknown): string {
+function yamlCell(source: string, node: unknown, md: MarkdownItInstance, env: Env): string {
   if (node === null || node === undefined) return '';
-  if (isScalar(node)) return escapeHtml(scalarText(source, node));
+  if (isScalar(node)) {
+    const text = scalarText(source, node);
+    return linkedInline(md, env, text) ?? escapeHtml(text);
+  }
+  /*
+   * FR-089 — a sequence holding a link is a list, one item each, so every item links on its own. A
+   * sequence with no link anywhere keeps the YAML source it has always been shown as (FR-092).
+   */
+  if (isSeq(node)) {
+    const items = node.items.map((item) =>
+      isScalar(item) ? { linked: linkedInline(md, env, scalarText(source, item)), item } : { linked: null, item },
+    );
+    if (items.some((i) => i.linked !== null)) {
+      const lis = items
+        .map(({ linked, item }) => {
+          if (linked !== null) return `<li>${linked}</li>`;
+          if (isScalar(item)) return `<li>${escapeHtml(scalarText(source, item))}</li>`;
+          return `<li><pre>${renderFence('yaml', sliceValue(source, item as YamlNode))}</pre></li>`;
+        })
+        .join('');
+      return `<ul>${lis}</ul>`;
+    }
+  }
   return `<pre>${renderFence('yaml', sliceValue(source, node as YamlNode))}</pre>`;
 }
 
@@ -233,7 +383,7 @@ function yamlCell(source: string, node: unknown): string {
  * - The HTML string is then the same whatever the author's editor writes, which is what lets a unit test
  *   assert on it and get the same answer on a Windows checkout and a Linux one.
  */
-function renderFrontMatter(raw: string): string {
+function renderFrontMatter(raw: string, md: MarkdownItInstance, env: Env): string {
   const source = raw.replace(/\r\n?/g, '\n');
   if (source.trim().length === 0) return '';
   const asCode = `<pre data-source-line="0">${renderFence('yaml', source)}</pre>\n`;
@@ -243,8 +393,9 @@ function renderFrontMatter(raw: string): string {
     if (doc.errors.length > 0 || !isMap(root)) return asCode;
     const rows = root.items
       .map((pair) => {
-        const key = isScalar(pair.key) ? escapeHtml(scalarText(source, pair.key)) : yamlCell(source, pair.key);
-        return `<tr><th>${key}</th><td>${yamlCell(source, pair.value)}</td></tr>`;
+        // Keys stay plain text (FR-092): only a value is ever run through the link rules.
+        const key = isScalar(pair.key) ? escapeHtml(scalarText(source, pair.key)) : yamlCell(source, pair.key, md, env);
+        return `<tr><th>${key}</th><td>${yamlCell(source, pair.value, md, env)}</td></tr>`;
       })
       .join('');
     return `<table data-source-line="0"><tbody>${rows}</tbody></table>\n`;
@@ -412,9 +563,9 @@ export function createMarkdownPipeline<R>(sanitise: Sanitiser<R>): MarkdownPipel
       const { source, body, bodyLineOffset } = splitFrontMatter(text);
       const env: Env = {};
       // The body keeps the offset whether or not the block is shown, so its lines stay the document's (FR-117).
-      const state = renderState(env, bodyLineOffset);
+      const state = renderState(env, bodyLineOffset, environment?.linkScan);
       const showBlock = source !== null && environment?.frontMatter !== false;
-      const html = (showBlock ? renderFrontMatter(source) : '') + md.render(body, env);
+      const html = (showBlock ? renderFrontMatter(source, md, env) : '') + md.render(body, env);
       const fragment = sanitise(html, {
         headingSlugs: state.headingSlugs,
         headingNonce: state.nonce,

@@ -28,6 +28,7 @@ import { useErrorNotice } from './common/notification.js';
 import { windowTitle } from './common/window-title.js';
 import { HoverSuppression } from './common/use-hover-suppression.js';
 import { AppClosePrompt } from './app-close-prompt.js';
+import { OpenFolderListener } from './sidebar/open-folder-listener.js';
 import { TransferCompletionHost } from './explorer/transfer-completion.js';
 import { PasteProgressNotice } from './explorer/paste-progress-notice.js';
 import { DifferentCopyNotice } from './common/different-copy-notice.js';
@@ -48,6 +49,7 @@ import { Chevron } from './panes/chevron.js';
 import { VerticalPanelStack } from './panes/vertical-panel-stack.js';
 import { FileExplorerPane } from './panes/file-explorer-pane.js';
 import { usePersistedBool } from './panes/use-persisted-bool.js';
+import { NO_SIDE_PANES, panePrefs, SidePanesBridge, type SidePanesSync } from './panes/side-pane-prefs.js';
 import { TitleBar } from './title-bar/title-bar.js';
 import { useConfigWriteFailureNotices } from './config/config-write-notices.js';
 import { railWidthPx } from './panes/rail-width.js';
@@ -326,10 +328,16 @@ export function App(): ReactElement {
   // default only when a project is active, and defaults collapsed otherwise — but
   // the user may still expand it to its empty placeholder.
   const projectActive = Boolean(activeProject);
-  const leftVisible = usePersistedBool('throng.sidebarVisible', true);
+  const persistedLeft = usePersistedBool('throng.sidebarVisible', true);
   const explorerPref = usePersistedBool('throng.explorerVisible', true);
   const explorerNoProject = usePersistedBool('throng.explorerVisibleNoProject', false);
-  const rightToggle = projectActive ? explorerPref : explorerNoProject;
+  const persistedRight = projectActive ? explorerPref : explorerNoProject;
+  // 067 FR-056 — with a project's layout loaded, ITS panes answer (and a toggle is written to it); otherwise
+  // the window's own flags, as before (FR-059). The layout is read by a bridge inside the workspace provider.
+  const [paneSync, setPaneSync] = useState<SidePanesSync>(NO_SIDE_PANES);
+  const prefs = panePrefs(projectActive ? paneSync : NO_SIDE_PANES, { projects: persistedLeft, files: persistedRight });
+  const leftVisible = prefs.projects;
+  const rightToggle = prefs.files;
 
   // When the window is too narrow to fit both expanded side panes (even at their
   // min width) plus the workspace minimum, panes auto-collapse to their rail —
@@ -461,6 +469,7 @@ export function App(): ReactElement {
     <ThemeProvider theme={activeTheme}>
       <WorkspaceProvider client={workspace} activeProjectId={activeProject?.id ?? null}>
         <DetachProvider>
+        <SidePanesBridge onSync={setPaneSync} />
         <div className="throng-root">
           <AppTitleBar />
           {!appReady ? <AppLoading /> : null}
@@ -594,6 +603,8 @@ export function App(): ReactElement {
           <PasteProgressNotice />
           {/* 058 FR-018 — a launch of a different copy, reported in the main window only. */}
           <DifferentCopyNotice />
+          {/* 067 FR-024, FR-025 — a folder handed to throng from outside, in the main window only. */}
+          <OpenFolderListener />
           {/* 063 FR-010 — a newer package is installed, reported in the main window only. */}
           <InstalledVersionNotice />
           <ClashPrompt />

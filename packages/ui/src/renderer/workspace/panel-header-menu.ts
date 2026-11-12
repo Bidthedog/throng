@@ -135,6 +135,8 @@ export interface PanelHeaderMenuActions {
   reloadTerminal: () => void;
   revealInTree: () => void;
   openInOsExplorer: () => void;
+  /** 067 FR-016 — open the panel's file with the OS default program. */
+  openInDefaultProgram: () => void;
   /** The failure banner's OWN retry, so FR-045 holds on the menu as well as on the button. */
   tryAgain: () => void;
   copyDetails: () => void;
@@ -220,6 +222,8 @@ export interface PanelHeaderMenuArgs {
    * preview exactly when its provider is `text` (FR-122a). Omitted reads as off.
    */
   syncScroll?: boolean;
+  /** 067 FR-021 — `explorer.showOpenInOsDefaultProgram`. Omitted reads as shown. */
+  showOpenInDefaultProgram?: boolean;
   /**
    * 054 FR-071 — whether THIS panel is the maximised one, and the toggle. Every real panel passes it; a
    * builder called without it (the menu tables drive the builder directly) draws no row.
@@ -356,6 +360,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
       section: 'navigate',
       onClick: () => actions.openInOsExplorer(),
     });
+    // 067 FR-016, FR-017 — in the shared preview title menu, so a provider needs no code of its own.
+    if (args.showOpenInDefaultProgram ?? true) {
+      items.push({
+        label: 'Open in OS Default Program',
+        section: 'navigate',
+        onClick: () => actions.openInDefaultProgram(),
+      });
+    }
     // FR-015b/c/d — the mirror image of an editor's Open Preview. A binary provider has no editor at
     // all (FR-015e), so neither form is offered for one.
     if (args.preview?.providerKind === 'text') {
@@ -505,6 +517,14 @@ export function panelHeaderMenu(args: PanelHeaderMenuArgs): MenuAction[] {
         section: 'navigate',
         onClick: () => actions.openInOsExplorer(),
       });
+      // 067 FR-016, FR-021.
+      if (args.showOpenInDefaultProgram ?? true) {
+        items.push({
+          label: 'Open in OS Default Program',
+          section: 'navigate',
+          onClick: () => actions.openInDefaultProgram(),
+        });
+      }
     }
 
     /*

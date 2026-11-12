@@ -61,6 +61,7 @@ import { focusPanel } from '../workspace/panel-focus.js';
 import { getActivePane, setActivePane } from '../workspace/active-pane.js';
 import { asKeyboardMenu } from '../workspace/keyboard-menu.js';
 import { requestTabPicker } from '../workspace/tab-picker.js';
+import { requestTabRename } from '../workspace/tab-rename.js';
 import { requestNextMarkedPanel } from '../attention/attention-navigation.js';
 import { requestPanelDestroy } from '../workspace/panel-destroy.js';
 import { getMaximiseStack, isPanelHidden, isPanelTabMaximised, toggleMaximisePanel } from '../workspace/maximise-store.js';
@@ -765,6 +766,15 @@ export function WindowDispatcher({
          */
         case TABS_OPEN_PICKER:
           requestTabPicker();
+          break;
+        /*
+         * 067 FR-075 – FR-077, FR-081 — rename the ACTIVE tab inline, from whichever panel holds the keyboard,
+         * and hand the keyboard back to that panel afterwards. The strip decides whether there is anything to
+         * rename (a rename already open, no active tab): the chord is consumed either way, so it never reaches
+         * a running terminal (FR-076).
+         */
+        case 'tabs.rename':
+          requestTabRename(destroyTarget(document.activeElement, activePanelId()));
           break;
         /*
          * 033 (FR-001, FR-018, A5) — Quick Open. `requestQuickOpen` returns whether it opened, and

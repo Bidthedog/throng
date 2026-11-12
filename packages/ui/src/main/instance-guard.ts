@@ -40,6 +40,8 @@ export interface InstanceGuardDeps {
   readonly lockName: string;
   /** This copy: `process.execPath` and the product version. */
   readonly self: { readonly execPath: string; readonly version: string };
+  /** 067 FR-024: the folder this launch asks to open, resolved against its own working directory. */
+  readonly folder?: string | null;
   readonly legacyLock: LegacyInstanceLock;
   /** Bring the main window forward (restore, onto a visible display, show, focus). */
   readonly bringForward: (launch: LaunchMessage) => void;
@@ -48,6 +50,8 @@ export interface InstanceGuardDeps {
   readonly log: (message: string) => void;
   /** How long a losing launch waits for the running instance to take its message (contract: 2 s). */
   readonly reachTimeoutMs?: number;
+  /** How long a launch carrying a folder waits between tries for a primary that is exiting (default 200 ms). */
+  readonly legacyRetryMs?: number;
   /** Open a client connection to the lock pipe. Defaults to `net.connect`; injected by tests. */
   readonly connect?: (path: string) => InstanceSocket;
 }
@@ -70,11 +74,16 @@ const REFUSED = new Set(['EPERM', 'EACCES']);
 
 export interface InstanceGuard {
   acquire(): Promise<InstanceRole>;
-  /** Close the pipe, if held. Idempotent. */
+  /**
+   * Close the pipe, if held. Idempotent. Called at the point of no return too, so a late launch finds the pipe free
+   * and becomes the next primary instead of telling an instance that will never act on it.
+   */
   release(): Promise<void>;
 }
 
 const DEFAULT_REACH_TIMEOUT_MS = 2000;
+const LEGACY_RETRIES = 25;
+const LEGACY_RETRY_MS = 200;
 /** One launch message is a short line; anything longer is not one, and is dropped. */
 const MAX_LINE_BYTES = 64 * 1024;
 
@@ -173,7 +182,13 @@ export function createInstanceGuard(deps: InstanceGuardDeps): InstanceGuard {
         } else settle('failed', `could not reach the running instance (${err.code ?? String(err)}); not starting`);
       });
       socket.on('close', () => settle('told', 'told the running instance about this launch'));
-      socket.end(formatLaunchMessage({ execPath: deps.self.execPath, version: deps.self.version }));
+      socket.end(
+        formatLaunchMessage({
+          execPath: deps.self.execPath,
+          version: deps.self.version,
+          ...(deps.folder ? { folder: deps.folder } : {}),
+        }),
+      );
     });
   }
 
@@ -183,12 +198,26 @@ export function createInstanceGuard(deps: InstanceGuardDeps): InstanceGuard {
     if (held) await new Promise<void>((resolve) => held.close(() => resolve()));
   }
 
+  /**
+   * Electron's lock outlives the pipe by the moments a primary takes to exit. A plain launch yields at once; one
+   * carrying a folder would lose it, so it waits out an exit (067 edge case: opening a folder while throng closes).
+   */
+  async function requestLegacyLock(): Promise<boolean> {
+    if (deps.legacyLock.request()) return true;
+    if (!deps.folder) return false;
+    for (let attempt = 0; attempt < LEGACY_RETRIES; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, deps.legacyRetryMs ?? LEGACY_RETRY_MS));
+      if (deps.legacyLock.request()) return true;
+    }
+    return false;
+  }
+
   async function acquire(): Promise<InstanceRole> {
     // Two attempts: a holder that quits between our failed listen and our connect leaves the pipe
     // free, and the right answer then is to take it rather than to quit with nobody running.
     for (let attempt = 0; attempt < 2; attempt++) {
       if ((await listen()) === 'listening') {
-        if (!deps.legacyLock.request()) {
+        if (!(await requestLegacyLock())) {
           await release();
           return 'yields-to-legacy';
         }

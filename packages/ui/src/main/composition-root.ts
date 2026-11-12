@@ -13,6 +13,10 @@ import {
 } from 'electron';
 import type {
   IClipboard,
+  IFileManagerRegistration,
+  IFileAttributes,
+  IFileAccessInfo,
+  IOsPropertiesDialog,
   IConfigSettings,
   IConfigStore,
   IExecutableExtensions,
@@ -40,6 +44,7 @@ import { NodeFileSystem } from './node-file-system.js';
 import { restoreFromRecycleBin } from './recycle-bin-restore.js';
 import { UI_TYPES } from './tokens.js';
 import { ElectronClipboard } from './electron-clipboard.js';
+import { isInstalledCopy } from './installed-copy.js';
 import { MemoryClipboard } from './memory-clipboard.js';
 import { ClipboardService } from './clipboard-service.js';
 import { ElectronSystemNotifier } from './electron-system-notifier.js';
@@ -122,8 +127,19 @@ export function createUiContainer(uiSettings: IUiSettings): Container {
   const clipboardSeam: IClipboard =
     process.env.THRONG_E2E_CLIPBOARD === 'memory'
       ? new MemoryClipboard()
-      : new ElectronClipboard(electronClipboard, (payload) => new ClipboardItem(payload));
+      : new ElectronClipboard(electronClipboard, (payload) => new ClipboardItem(payload), platform.fileListCodec());
   container.bind<IClipboard>(UI_TYPES.Clipboard).toConstantValue(clipboardSeam);
+  container.bind<IFileAttributes>(UI_TYPES.FileAttributes).toConstantValue(platform.fileAttributes());
+  container.bind<IOsPropertiesDialog>(UI_TYPES.OsPropertiesDialog).toConstantValue(platform.osPropertiesDialog());
+  container.bind<IFileAccessInfo>(UI_TYPES.FileAccessInfo).toConstantValue(platform.fileAccessInfo());
+  // 067 FR-034, FR-036: the OS registration is the state. A portable or archive copy registers nothing.
+  container.bind<IFileManagerRegistration>(UI_TYPES.FileManagerRegistration).toConstantValue(
+    platform.fileManagerRegistration({
+      execPath: process.execPath,
+      home: app.getPath('home'),
+      installed: isInstalledCopy(process.execPath, process.platform, app.isPackaged, process.env),
+    }),
+  );
   container
     .bind<ClipboardService>(UI_TYPES.ClipboardService)
     .toConstantValue(new ClipboardService(clipboardSeam));

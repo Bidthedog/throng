@@ -44,3 +44,4 @@ export { nextExpandTargets } from './expand.js';
 // 033 US4 — Collapse/Expand All Children's pure targets, over the same ExpandNode view
 // (contracts/explorer-actions.md §B.1).
 export { descendantOpenFolders, immediateChildFolders } from './subtree.js';
+export { decidePasteSource, type PasteSource } from './paste-source.js';

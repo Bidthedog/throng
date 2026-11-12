@@ -1,6 +1,6 @@
 import type { UsageThresholds } from './bands.js';
 
-/** The six `resourceMonitor.*` leaves as stored — each already clamped to its own range. */
+/** The `resourceMonitor.*` leaves as stored — each already clamped to its own range. */
 export interface ResourceMonitorRaw {
   readonly captureIntervalSeconds: number;
   readonly historyMinutes: number;
@@ -8,6 +8,7 @@ export interface ResourceMonitorRaw {
   readonly cpuCriticalPercent: number;
   readonly memoryWarningPercent: number;
   readonly memoryCriticalPercent: number;
+  readonly popoverDelayMs: number;
 }
 
 export interface ResolvedResourceMonitorSettings {
@@ -16,6 +17,7 @@ export interface ResolvedResourceMonitorSettings {
   /** True when the stored interval was below the history window's minimum (FR-004b). */
   readonly intervalRaised: boolean;
   readonly thresholds: UsageThresholds;
+  readonly popoverDelayMs: number;
 }
 
 export const MAX_INTERVAL_SECONDS = 60;
@@ -78,5 +80,6 @@ export function resolveResourceMonitorSettings(raw: ResourceMonitorRaw): Resolve
       memoryWarning: belowCritical(raw.memoryWarningPercent, raw.memoryCriticalPercent),
       memoryCritical: raw.memoryCriticalPercent,
     },
+    popoverDelayMs: raw.popoverDelayMs,
   };
 }

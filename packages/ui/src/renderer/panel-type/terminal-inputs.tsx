@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import { hostTraits } from '@throng/core';
 import type { FlavourOption, PanelTypeValues } from '@throng/core';
+import { HistoryInput } from './history-input.js';
+import { useFormHistory } from './use-form-history.js';
 
 /**
  * The Terminal panel type's inputs (005 / US2 config half): a **Flavour** dropdown
@@ -20,6 +22,8 @@ export function TerminalInputs({
   elevated: boolean;
   onChange: (next: PanelTypeValues) => void;
 }): ReactElement {
+  // 067 FR-061 — what this terminal type has been given before, per field.
+  const history = useFormHistory(values.flavourId);
   const selectFlavour = (value: string): void => {
     const flavour = flavours.find((f) => f.value === value);
     onChange({ ...values, flavourId: value, shellArguments: flavour?.defaultShellArguments ?? '' });
@@ -72,23 +76,29 @@ export function TerminalInputs({
           sharing the word "Startup" is what made them confusable. */}
       <label className="panel-type-form__field">
         <span>Shell Arguments</span>
-        <input
-          type="text"
-          data-testid="terminal-shell-arguments"
+        <HistoryInput
+          testId="terminal-shell-arguments"
           title={`Arguments passed to the shell itself, e.g. ${hostTraits().os === 'windows' ? '-NoLogo' : '--login'}`}
           value={values.shellArguments ?? ''}
-          onChange={(e) => onChange({ ...values, shellArguments: e.target.value })}
+          onChange={(next) => onChange({ ...values, shellArguments: next })}
+          history={history.shellArguments}
+          clearTitle="Clear remembered shell arguments"
+          onClear={() => history.clearField('shellArguments')}
+          onRemove={(value) => history.removeValue('shellArguments', value)}
         />
       </label>
       <label className="panel-type-form__field">
         <span>Startup Command</span>
-        <input
-          type="text"
-          data-testid="terminal-startup-command"
+        <HistoryInput
+          testId="terminal-startup-command"
           placeholder="e.g. npm run dev"
           title="A command the shell runs when this terminal starts. The shell stays open afterwards."
           value={values.startupCommand ?? ''}
-          onChange={(e) => onChange({ ...values, startupCommand: e.target.value })}
+          onChange={(next) => onChange({ ...values, startupCommand: next })}
+          history={history.startupCommand}
+          clearTitle="Clear remembered startup commands"
+          onClear={() => history.clearField('startupCommand')}
+          onRemove={(value) => history.removeValue('startupCommand', value)}
         />
       </label>
       <label

@@ -268,6 +268,13 @@ export interface LinkFollowDeps {
    * life, and 044's per-provider setting still changes live — a captured value would freeze it.
    */
   readonly previewIsDefault?: (link: ResolvedLink) => boolean;
+  /**
+   * 067 FR-131: whether THIS in-project file is one throng cannot open and `explorer.openUnsupportedInOs`
+   * sends to the OS default program instead (see `refusedAsBinaryToOs`). Absent means no, so a surface
+   * that supplies none keeps the editor's own "cannot open" message. A reader, like `previewIsDefault`,
+   * because the deps are built once and the preference changes live.
+   */
+  readonly opensInOs?: (link: ResolvedLink) => boolean | Promise<boolean>;
 }
 
 /**
@@ -337,11 +344,23 @@ export async function followLink(args: {
       const link = outcome.link;
       // 045 FR-110 — the click rule decides, and nothing here keeps a second copy of it. Routing
       // THROUGH the decision rather than around it is the whole of T107.
-      const target = resolveDefaultLinkAction({
+      const previewIsDefault = deps.previewIsDefault?.(link) ?? false;
+      const clickTarget = resolveDefaultLinkAction({
         link,
         hasPosition: position !== undefined,
-        previewIsDefault: deps.previewIsDefault?.(link) ?? false,
+        previewIsDefault,
       });
+      // 067 FR-131 — a file throng cannot open goes to the OS as a File Explorer double-click sends it.
+      // Only an in-project file the click rule would have put in an editor, and never one whose default
+      // open action is its preview; everything else keeps the route it had.
+      const target =
+        clickTarget === 'editor' &&
+        link.kind === 'file' &&
+        link.inProject &&
+        !previewIsDefault &&
+        (await deps.opensInOs?.(link)) === true
+          ? 'osDefaultProgram'
+          : clickTarget;
       await performLinkTarget({
         target,
         link,

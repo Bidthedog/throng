@@ -206,6 +206,12 @@ export const KEYBINDINGS_METADATA: MetadataRegistry = [
   // Tabs (031, FR-032b). Grouped under the SAME heading the Settings editor gives the tab options,
   // so a user hunting for anything about tabs finds one word in both windows rather than two.
   chord(
+    'tabs.rename',
+    'Tabs',
+    'Rename tab',
+    'Start renaming the active tab from any panel, a terminal included. Focus returns to the panel afterwards.',
+  ),
+  chord(
     'tabs.openPicker',
     'Tabs',
     'Open tab picker',

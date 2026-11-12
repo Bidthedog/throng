@@ -403,9 +403,13 @@ export const THRONG_THEME: Theme = {
     collapse: '‹',
     expand: '›',
     rename: '✎',
-    send: '↪',
+    send: '⤷',
     tab: '▭',
     add: '＋',
+    /* 067 FR-069, FR-118: the editor title bar's two save buttons. Two floppy disks, filled for Save
+       and outlined for Save As; monochrome like the rest of the set, so they take the icon colour. */
+    save: '🖪',
+    saveAs: '🖫',
     detach: '⧉',
     // Retry a terminal attach that is still starting (008 FR-005) — a themeable action
     // icon (constitution v3.12.0), auto-exposed in the Themes editor like every token.
@@ -488,7 +492,7 @@ export const THRONG_THEME: Theme = {
 
        `searchScope` is its neighbour in the same block, and a crosshair rather than a folder: the
        panel's scope control answers "where does this search look", which is aiming rather than
-       finding, and the answer may be a file or a glob as easily as a folder — so `newFolder` 📁's
+       finding, and the answer may be a file or a glob as easily as a folder — so `newFolder` ▰⁺'s
        vocabulary would be wrong as well as borrowed.
 
        060 FR-011c SUPERSEDES the FR-065 weight fix above, at the maintainer's direction: every icon
@@ -507,7 +511,7 @@ export const THRONG_THEME: Theme = {
     /* 018 / FR-015. The cog menu drew a hard-coded inline gear because the theme had no settings
        glyph — which is exactly the #56 defect, and exactly why the project-settings options icon
        (FR-040) needs one too. One token, two consumers. */
-    settings: '⚙',
+    settings: '⛭',
     /* 018 / FR-014b. The window controls drew four hard-coded inline vectors. SC-002 claims ZERO
        icons in the application come from an inline vector, so deferring these would have made a
        success criterion false on the day it shipped. Icon tokens do not participate in the colour
@@ -522,21 +526,21 @@ export const THRONG_THEME: Theme = {
        Cut is scissors; Copy is a distinct doubled-page (NOT `detach` ⧉, which tears a panel out);
        Paste is a clipboard. Select All is a filled grid (NOT `editVisual` ▤, the preferences
        toggle). Undo/Redo are plain directional arrows kept clear of `revert` ↶, `retry` ↻ and
-       `send` ↪ so no two ever read the same in one menu. */
-    cut: '✂',
+       `send` ⤷ so no two ever read the same in one menu. */
+    cut: '✁',
     copy: '⎘',
-    paste: '📋',
+    paste: '⎀',
     selectAll: '▦',
-    undo: '↩',
+    undo: '⟲',
     redo: '⤼',
     // The editor's "Set Language…" item (016, FR-010) — a speaking head reads as "which language",
     // and never collides with a file-type glyph in the same menu.
-    language: '🗣',
+    language: '文',
     /* 023. The cog menu's Key Bindings / Themes / About rows were destinations with no glyph, so
-       three of its four rows sat blank beside `settings` ⚙. A keyboard for the bindings editor, a
+       three of its four rows sat blank beside `settings` ⛭. A keyboard for the bindings editor, a
        palette for the theme editor, and a circled information mark for the About window. */
-    keybindings: '⌨',
-    themes: '🎨',
+    keybindings: '⌘',
+    themes: '◐',
     about: 'ⓘ',
     // The explorer's "Hide in this project" row (004) had no token either — a circled slash reads as
     // "kept out of view", distinct from every other glyph in the tree menu.
@@ -544,19 +548,19 @@ export const THRONG_THEME: Theme = {
     /* 033 / FR-069. `hide`'s counterpart: Quick Open's exclusion toggle wears `hide` while it is
        excluding and this while it is not, so the control reads as the same IDEA the tree menu row
        names rather than as a second vocabulary for it. An eye, because "these are visible to me"
-       is what the flipped state means — and deliberately not `search` 🔍, which is the find bar's. */
-    showHidden: '👁',
+       is what the flipped state means — and deliberately not `search` ⌕, which is the find bar's. */
+    showHidden: '◉',
     /* 055. The resource monitor: its status-bar item and cog-menu row, one glyph per metric (the
        status bar's figures and the modal's "show by" choice), the hide-idle filter, and the two
-       kill rows. A gauge for the monitor itself; a chip, a stack of memory, a screen and arrows for
-       the four metrics; a sleeping face for idle; a cross and a cross over a branch for the kills. */
-    resourceMonitor: '📊',
-    resourceCpu: '🖥',
-    resourceMemory: '🧠',
-    resourceGpu: '🎮',
+       kill rows. A chart for the monitor itself; a chip, a stack of memory, a screen and arrows for
+       the four metrics; a crescent moon for idle; all monochrome, so they take the icon colour; a cross and a cross over a branch for the kills. */
+    resourceMonitor: '🗠',
+    resourceCpu: '▩',
+    resourceMemory: '≣',
+    resourceGpu: '⎚',
     resourceIo: '⇅',
-    resourceHideIdle: '💤',
-    resourceKill: '✖',
+    resourceHideIdle: '☾',
+    resourceKill: '✗',
     resourceKillBelow: '⨯',
     /* 031 / FR-032. The tab strip's step-left, step-right and show-all controls. Every control in
        the strip is a themeable icon carrying a hover title — never a text label, never an inline
@@ -585,7 +589,7 @@ export const THRONG_THEME: Theme = {
 
        `preview` is the editor status-bar button, Open Preview, Open In → Preview and the preview
        panel's type icon: reading glasses, because a preview is the file READ rather than edited, and
-       deliberately not `showHidden` 👁 (make hidden entries visible) or `findInFiles` 📚 (a corpus).
+       deliberately not `showHidden` ◉ (make hidden entries visible) or `findInFiles` ⧈ (a corpus).
 
        `refresh` is the preview header's Refresh — re-read the source now. It is NOT `retry` ↻, which
        means "try again" and is offered BESIDE Refresh while the failure banner is up (030 FR-042c), so
@@ -593,9 +597,9 @@ export const THRONG_THEME: Theme = {
 
        `navigateBack` / `navigateForward` are the header's history buttons and menu items (FR-104,
        FR-111). Plain horizontal arrows: not `chevronLeft` ‹ / `chevronRight` ›, which step the tab
-       strip, and not `undo` ↩ / `redo` ⤼, which change a document — Back changes which file you are
+       strip, and not `undo` ⟲ / `redo` ⤼, which change a document — Back changes which file you are
        looking at and nothing else. */
-    preview: '👓',
+    preview: '◎',
     refresh: '⟳',
     navigateBack: '←',
     navigateForward: '→',
@@ -603,7 +607,7 @@ export const THRONG_THEME: Theme = {
        the preview button on an editor's, before Open in Editor / Go to Editor on a preview's), and the item
        in the editor's and the preview's four menus. A pair of
        opposed vertical arrows: two views moving together, either one leading. Not `moveUp` ↑ /
-       `moveDown` ↓ (reorder a list), nor `replace` ⇄ (swap a match), nor `preview` 👓 beside it. */
+       `moveDown` ↓ (reorder a list), nor `replace` ⇄ (swap a match), nor `preview` ◎ beside it. */
     syncScroll: '⇅',
     /* 046 (FR-061, R11) — two tokens for two distinct things, on the same rule the block above
        states: an ACTION (`unload`) and a structural row in a list (`category`).
@@ -613,8 +617,8 @@ export const THRONG_THEME: Theme = {
        was ever written, and no call site in the renderer ever drew the token. `theme-ops.ts`'s
        `migrateTheme` drops a stray `projectList` key from a theme that received it via the
        version-12 seed. */
-    unload: '⏏',
-    category: '🏷',
+    unload: '⏶',
+    category: '⌗',
     /* 047 (research R10, R4, R6) — four tokens for Markdown section folding.
        `foldSectionExpanded`/`foldSectionCollapsed` mark the editor's heading-only gutter (R4);
        `foldPreviewExpanded`/`foldPreviewCollapsed` mark the preview's soft gutter (R6). Two pairs,
@@ -640,7 +644,7 @@ export const THRONG_THEME: Theme = {
     diagramFullPane: '⇱',
     /* 056 (FR-007, research R7). The marker on a folded Preferences heading while a row it hides holds
        an invalid entry. No warning GLYPH existed — only the `warning` colour, which still paints it. */
-    warning: '⚠',
+    warning: '△',
     /* 059 (FR-059). The editor status bar's View Whitespace toggle: the pilcrow, the mark every editor
        draws for an invisible line break. */
     whitespace: '¶',
@@ -655,7 +659,7 @@ export const THRONG_THEME: Theme = {
     /* 060 (FR-018, FR-011b). The Folder structure grouping control: a fork, for a tree. Its two
        siblings draw `file` and `folderOpen`, so a third grouping takes a glyph of its own. */
     groupFolderTree: '⋔',
-    /* 060 #532 (FR-037). The File Explorer's project settings control. It drew `settings` ⚙, the
+    /* 060 #532 (FR-037). The File Explorer's project settings control. It drew `settings` ⛭, the
        app's Preferences glyph — two different dialogs behind one picture. A house: THIS project's. */
     projectSettings: '⌂',
     /* 060 #532 (FR-038). The Find in Files panel's exclusions toggle. Not `cancel`/`hide`'s ⊘. */
@@ -665,12 +669,12 @@ export const THRONG_THEME: Theme = {
     help: '?',
     /* 055, Session 2026-10-23 (FR-110, FR-105). The Resource Monitor's Activate — go to the project, tab
        or panel a row names — and its Hide ended processes toggle. A hooked arrow reads "take me there";
-       a stop square reads "has ended", distinct from Hide idle's 💤. */
-    activate: '↪',
-    resourceHideEnded: '⏹',
+       a stop square reads "has ended", distinct from Hide idle's ☾. */
+    activate: '⤷',
+    resourceHideEnded: '■',
     /* 055, Session 2026-10-23 (FR-113, FR-099). Network as an Order-by choice in the toolbar, beside the
-       four metrics' glyphs: a globe for traffic leaving and reaching the machine, distinct from I/O's ⇅. */
-    resourceNetwork: '🌐',
+       four metrics' glyphs: two-way harpoons for traffic leaving and reaching the machine, distinct from I/O's ⇅. */
+    resourceNetwork: '⇌',
   },
 };
 

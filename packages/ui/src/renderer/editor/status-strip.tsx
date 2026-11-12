@@ -91,7 +91,9 @@ export interface Readout {
    * what stops the measured string and the rendered string ever differing.
    */
   figure: string;
-  /** Exactly what is drawn — `Ln 412`, `Col 7`, `63 selected`, `1,204 chars`, `208 words`. */
+  /** The column readout of a selection on one line: its figure is `45-56` and its label `Cols` (067 FR-126). */
+  range?: boolean;
+  /** Exactly what is drawn — `Ln 412,`, `Col 7`, `63 selected`, `1,204 Chars.`, `208 Words.` (067 FR-125). */
   text: string;
   /**
    * What a screen reader announces — `line 412`, never `Ln 412` and never `412` (FR-015).
@@ -111,9 +113,22 @@ export interface Readout {
  * own examples (`Ln 412`, `63 selected`) rather than a choice made here, and it lives in one
  * function so the visible readout and its ruler copy can never disagree about it.
  */
-export function readoutText(id: ReadoutId, figure: string, form: LabelForm): string {
-  const label = READOUT_LABELS[id][form];
-  return id === 'line' || id === 'column' ? `${label} ${figure}` : `${figure} ${label}`;
+export function readoutText(
+  id: ReadoutId,
+  figure: string,
+  form: LabelForm,
+  /** `range`: the column readout holds `45-56` and names columns (FR-126). `comma`: the line is followed by its column (FR-125). */
+  punctuation: { range?: boolean; comma?: boolean } = {},
+): string {
+  // 067 FR-099 — a count of one reads `1 Line.`; the short form is `Lns.` whatever the count (FR-096, FR-125).
+  let label: string = READOUT_LABELS[id][form];
+  if (id === 'lines' && form === 'full' && figure === '1') label = 'Line.';
+  if (id === 'column' && punctuation.range === true) label = 'Cols';
+  // 067 FR-134 — the column and the selected count end in a full stop, and so does a line drawn alone.
+  if (id === 'line') return `${label} ${figure}${punctuation.comma === false ? '.' : ','}`;
+  if (id === 'column') return `${label} ${figure}.`;
+  if (id === 'selected') return `${figure} ${label}.`;
+  return `${figure} ${label}`;
 }
 
 /**
@@ -181,23 +196,35 @@ export function statusReadouts(
   locale?: string,
   /** Label form per readout. Anything unnamed is drawn at its full form (FR-022a). */
   forms?: Partial<Record<ReadoutId, LabelForm>>,
+  /** Whether the column this line leads is drawn (the fit may have hidden it): the line then ends in a comma (FR-125). */
+  columnShown = true,
 ): Readout[] {
   const n = (value: number): string => formatGrouped(value, locale);
+  const commaAfterLine = columnShown;
+  // 067 FR-126 — a selection on one line reads `Cols 45-56`. A range of one column is not a range.
+  const selectionColumns = caret.columns ?? null;
+  const columns = selectionColumns !== null && selectionColumns[0] !== selectionColumns[1] ? selectionColumns : null;
   const text = (id: ReadoutId, figure: string): string =>
-    readoutText(id, figure, forms?.[id] ?? 'full');
+    readoutText(id, figure, forms?.[id] ?? 'full', { range: id === 'column' && columns !== null, comma: commaAfterLine });
+  // 067 FR-136 — a selection across lines reads `Ln 3-5, Col 4.`: its lines, and the column it starts at.
+  const lines = caret.lines ?? null;
+  const columnFigure =
+    lines !== null ? n(lines.column) : columns === null ? n(caret.position.column) : `${n(columns[0])}-${n(columns[1])}`;
+  const lineFigure = lines !== null ? `${n(lines.first)}-${n(lines.last)}` : n(caret.position.line);
 
   const out: Readout[] = [
     {
       id: 'line',
-      figure: n(caret.position.line),
-      text: text('line', n(caret.position.line)),
-      accessibleName: `line ${n(caret.position.line)}`,
+      figure: lineFigure,
+      text: text('line', lineFigure),
+      accessibleName: lines !== null ? `lines ${n(lines.first)} to ${n(lines.last)}` : `line ${lineFigure}`,
     },
     {
       id: 'column',
-      figure: n(caret.position.column),
-      text: text('column', n(caret.position.column)),
-      accessibleName: `column ${n(caret.position.column)}`,
+      figure: columnFigure,
+      range: columns !== null,
+      text: text('column', columnFigure),
+      accessibleName: columns === null ? `column ${columnFigure}` : `columns ${n(columns[0])} to ${n(columns[1])}`,
     },
   ];
   // `!== null` rather than a truthiness test: **0 is a real answer here** and must still render as
@@ -216,6 +243,13 @@ export function statusReadouts(
     });
   }
   if (metrics !== null) {
+    // 067 FR-095 — between selected and chars, as the bar draws them. Announced `N lines` / `1 line` (FR-100).
+    out.push({
+      id: 'lines',
+      figure: n(metrics.totalLines),
+      text: text('lines', n(metrics.totalLines)),
+      accessibleName: plural(metrics.totalLines, 'line', n(metrics.totalLines)),
+    });
     out.push({
       id: 'chars',
       figure: n(metrics.totalCharacters),
@@ -517,6 +551,7 @@ export function StatusStrip({
     metrics,
     undefined,
     Object.fromEntries(forms) as Partial<Record<ReadoutId, LabelForm>>,
+    forms.has('column'),
   ).filter((r) => forms.has(r.id));
 
   // Read the ruler after every render, and write back only when something actually moved — an
@@ -856,7 +891,7 @@ export function StatusStrip({
               className="editor-status-strip__readout"
               data-measure={`${r.id}:${form}`}
             >
-              {readoutText(r.id, r.figure, form)}
+              {readoutText(r.id, r.figure, form, { range: r.range === true })}
             </span>
           )),
         )}

@@ -1,12 +1,13 @@
 import 'reflect-metadata';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat as statAsync } from 'node:fs/promises';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import {
   app,
   BrowserWindow,
+  nativeImage,
   dialog,
   ipcMain,
   Menu,
@@ -38,17 +39,23 @@ import {
   type IConfigStore,
   type IFileWatcher,
   type IFontEnumeration,
+  type ShutdownView,
   type IUiSettings,
   type ShippedDefaults,
   type Theme,
   NOT_A_MISSING_FILE,
   SHIPPED_PREVIEW_PROVIDERS,
+  parseLaunchFolder,
   providersTurnedOff,
 } from '@throng/core';
 import type {
   DifferentCopyNotice,
   InstalledVersionNotice,
   IClipboard,
+  IFileAttributes,
+  IFileManagerRegistration,
+  IFileAccessInfo,
+  IOsPropertiesDialog,
   IExecutableExtensions,
   IFileSystem,
   IForegroundHandoff,
@@ -69,7 +76,8 @@ import {
 } from './instance-notice-channels.js';
 import { createInstalledVersionMonitor } from './installed-version-monitor.js';
 import { restartIntoInstalledCopy } from './restart-installed-copy.js';
-import { appIcon } from './app-icon.js';
+import { appIcon, APP_ICON_PNG } from './app-icon.js';
+import { startOsDrag } from './os-drag.js';
 import { registerLinkUriIpc, registerOpenExternalIpc } from './external-url.js';
 import { notifySettingsSubscribers, type SettingsSubscriber } from './settings-subscribers.js';
 import { createInAppMoveCallbacks } from './in-app-moves.js';
@@ -145,6 +153,10 @@ import { TerminalReconnect } from './terminal-reconnect.js';
 import { createAppShellIntegration } from './electron-shell-integration.js';
 import { FilesService } from './files-service.js';
 import { FileClipboardService } from './file-clipboard.js';
+import { ShutdownDriver, type ShutdownStep } from './shutdown-driver.js';
+import { FormHistoryService } from './form-history-service.js';
+import { PropertiesService } from './properties-service.js';
+import { OpenFolderQueue } from './open-folder-queue.js';
 import { TransferService } from './transfer-service.js';
 import { createTransferPush, registerTransferIpc } from './transfer-ipc.js';
 import { TransferQuitGate } from './transfer-quit-gate.js';
@@ -872,18 +884,44 @@ function bringMainWindowForward(): void {
  */
 /** This instance's UI settings — resolved ONCE: the lock below and the container share its `pipeName`. */
 const instanceUiSettings = readUiSettings(process.env, uiDefaultPipeName(isDevInstance));
-const instanceRole = await createInstanceGuard({
+/** 067 FR-022: the folder this launch names, resolved against this process's own shell (FR-023). */
+const launchFolder = parseLaunchFolder(process.argv, process.cwd(), app.isPackaged);
+/** The window folder requests go to; module scope because the queue exists before any window does. */
+let openFolderWindow: BrowserWindow | null = null;
+async function describeOpenFolderPath(absPath: string): Promise<'folder' | 'file' | 'missing'> {
+  try {
+    return (await statAsync(absPath)).isDirectory() ? 'folder' : 'file';
+  } catch (error) {
+    logExpected('main: describe a folder opened from outside', 'a path that does not exist is reported to the user by name', error);
+    return 'missing';
+  }
+}
+/** Folders asked for from outside throng; delivered once the main window's renderer is ready (research D6). */
+const openFolderRequests = new OpenFolderQueue((absPath) => {
+  void describeOpenFolderPath(absPath).then((kind) =>
+    openFolderWindow?.webContents.send('throng:openFolder:request', { absPath, kind }),
+  );
+});
+if (launchFolder) openFolderRequests.push(launchFolder);
+ipcMain.on('throng:openFolder:ready', () => openFolderRequests.ready());
+
+const instanceGuard = createInstanceGuard({
   lockName: instanceLockName(instanceUiSettings.pipeName),
   // The portable build's execPath is a per-launch temp folder; this names the user's copy (review A3).
   self: { execPath: copyExecPath(process.execPath, process.env), version: startupVersion },
+  folder: launchFolder,
   legacyLock: {
     request: () => app.requestSingleInstanceLock(),
     onSecondInstance: (listener) => app.on('second-instance', (_event, argv) => listener(argv)),
   },
-  bringForward: () => bringMainWindowForward(),
+  bringForward: (launch) => {
+    bringMainWindowForward();
+    if (launch.folder) openFolderRequests.push(launch.folder);
+  },
   showDifferentCopyNotice,
   log: (message) => diagnostics.log.info(message),
-}).acquire();
+});
+const instanceRole = await instanceGuard.acquire();
 const isPrimaryInstance = instanceRole === 'primary';
 if (instanceRole === 'yields-to-legacy') {
   diagnostics.log.info('an older throng is already running for this user; it brings itself forward');
@@ -902,8 +940,10 @@ if (instanceRole === 'yields-to-legacy') {
     await dialog.showMessageBox({
       type: 'info',
       title: 'throng',
-      message: 'throng is already running as administrator.',
-      detail: 'Switch to that window, or close it to open throng from here.',
+      message: launchFolder ? `throng could not open ${launchFolder}.` : 'throng is already running as administrator.',
+      detail: launchFolder
+        ? 'throng is already running as administrator. Open the folder from that window, or close it and try again.'
+        : 'Switch to that window, or close it to open throng from here.',
       buttons: ['OK'],
     });
     app.quit();
@@ -1125,9 +1165,43 @@ if (isPrimaryInstance)
     diagnostics.setLevel(next.diagnostics.logLevel);
     diagnostics.log.info(`log level changed to ${next.diagnostics.logLevel}`);
   });
+  // 067 FR-061: the New Terminal form's remembered values.
+  const formHistory = new FormHistoryService(
+    join(app.getPath('userData'), 'terminal-form-history.json'),
+    () => currentSettings.terminals.formHistory,
+    // Every window — the Preferences window clears, a terminal form in another window offers (FR-064b, FR-066).
+    (change) => broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:formHistory:changed', change),
+  );
+  const asFormField = (field: unknown): 'startupCommand' | 'shellArguments' | null =>
+    field === 'startupCommand' || field === 'shellArguments' ? field : null;
+  const logFormHistory = (work: Promise<unknown>): void => void work.catch((error: unknown) => logCaught('main: form history', error));
+  ipcMain.handle('throng:formHistory:get', (_event, flavourId: unknown) => formHistory.get(String(flavourId)));
+  ipcMain.on('throng:formHistory:record', (_event, flavourId: unknown, values: unknown) => {
+    const { startupCommand, shellArguments } = (values ?? {}) as { startupCommand?: unknown; shellArguments?: unknown };
+    logFormHistory(
+      formHistory.record(String(flavourId), {
+        ...(typeof startupCommand === 'string' ? { startupCommand } : {}),
+        ...(typeof shellArguments === 'string' ? { shellArguments } : {}),
+      }),
+    );
+  });
+  ipcMain.on('throng:formHistory:clearField', (_event, flavourId: unknown, field: unknown) => {
+    const known = asFormField(field);
+    if (known) logFormHistory(formHistory.clearField(String(flavourId), known));
+  });
+  ipcMain.on('throng:formHistory:removeValue', (_event, flavourId: unknown, field: unknown, value: unknown) => {
+    const known = asFormField(field);
+    if (known && typeof value === 'string') logFormHistory(formHistory.removeValue(String(flavourId), known, value));
+  });
+  ipcMain.on('throng:formHistory:clearFlavour', (_event, flavourId: unknown) => logFormHistory(formHistory.clearFlavour(String(flavourId))));
+  ipcMain.on('throng:formHistory:clearAll', () => logFormHistory(formHistory.clearAll()));
+
   const broadcast = (payload: ConfigPayload): void => {
     const previous = currentSettings;
     currentSettings = payload.settings;
+    if (currentSettings.terminals.formHistory.maxEntries < previous.terminals.formHistory.maxEntries) {
+      logFormHistory(formHistory.applyLimit());
+    }
     currentTheme = payload.theme; // keep the pre-paint bootstrap snapshot current (issue 132)
     pushGhostTheme(payload.theme);
     // A window's native `backgroundColor` is fixed at creation, so a live theme switch (dark → light)
@@ -1436,10 +1510,42 @@ if (isPrimaryInstance)
   // the notice being dismissed. `diagnostics.log` is the same rotating file the daemon writes to.
   filesService.setDiagnosticLog((message) => diagnostics.log.warn(message));
   registerFilesIpc(filesService, explorerWatcher);
+  const fileManagerItem = container.get<IFileManagerRegistration>(UI_TYPES.FileManagerRegistration);
+  ipcMain.handle('throng:fileManagerItem:status', () => fileManagerItem.status());
+  ipcMain.handle('throng:fileManagerItem:setEnabled', (_event, on: unknown) => fileManagerItem.setEnabled(on === true));
+  // 067 US5: the Properties dialog.
+  const properties = new PropertiesService(
+    container.get<IFileAttributes>(UI_TYPES.FileAttributes),
+    container.get<IOsPropertiesDialog>(UI_TYPES.OsPropertiesDialog),
+    container.get<IFileAccessInfo>(UI_TYPES.FileAccessInfo),
+    () => filesService.activeRoot(),
+  );
+  ipcMain.handle('throng:properties:open', async (event, relPaths: unknown) => {
+    const paths = Array.isArray(relPaths) ? relPaths.filter((p): p is string => typeof p === 'string') : [];
+    const opened = await properties.open(paths, (requestId, tally) => {
+      if (!event.sender.isDestroyed()) event.sender.send('throng:properties:tally', { requestId, tally });
+    });
+    // A window that goes away cannot send its close.
+    event.sender.once('destroyed', () => properties.close(opened.requestId));
+    return opened;
+  });
+  ipcMain.on('throng:properties:close', (_event, requestId: unknown) => properties.close(String(requestId)));
+  ipcMain.handle('throng:properties:showOs', (_event, absPath: unknown) => properties.showOsProperties(String(absPath)));
+  ipcMain.on('throng:files:startOsDrag', (event, relPaths: unknown) => {
+    if (!Array.isArray(relPaths) || !relPaths.every((p) => typeof p === 'string')) return;
+    startOsDrag(relPaths as string[], filesService.activeRoot(), (files) =>
+      event.sender.startDrag({
+        file: files[0]!,
+        files,
+        icon: nativeImage.createFromPath(APP_ICON_PNG).resize({ width: 32, height: 32 }),
+      }),
+    );
+  });
   // 050 R1 — the application's ONE File Explorer clipboard (FR-001, FR-002), memory only (FR-007).
   // Every window hears each change, so every explorer greys and labels from the same value.
-  const fileClipboard = new FileClipboardService((clipboard) =>
-    broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:fileClipboard:changed', clipboard),
+  const fileClipboard = new FileClipboardService(
+    (clipboard) => broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:fileClipboard:changed', clipboard),
+    container.get<IClipboard>(UI_TYPES.Clipboard),
   );
   /*
    * 033 US1 — the project file index that seeds Quick Open (contracts/file-index.md §2).
@@ -2574,27 +2680,31 @@ if (isPrimaryInstance)
   // ref above — set here so a menu click before this point opens About unparented
   // rather than crashing on the not-yet-initialised `const mainWindow`).
   mainWindowRef = mainWindow;
+  openFolderWindow = mainWindow;
 
   // App-close warning with running terminals (FR-015). Intercept the main window
   // close: if the daemon reports running sessions, ask the renderer for the
   // three-choice decision (leave running / terminate all / cancel) and act on it;
   // with none (or the daemon unreachable), close normally.
   let allowClose = false;
+  // 067 FR-037: the shutdown in progress, if any, so Cancel can reach it. A fresh one per close.
+  let activeShutdown: ShutdownDriver | null = null;
   // The running terminals (with display metadata) for the close warning. Returns
   // null when the query itself fails (daemon hiccup) — the caller then still WARNS
   // rather than silently closing, so a running terminal is never lost to an error.
   interface RunningTerminal {
     panelId: string;
+    projectId?: string;
     meta?: { projectName?: string; tabName?: string; panelName?: string; flavourLabel?: string };
   }
   const runningTerminals = async (): Promise<RunningTerminal[] | null> => {
     try {
       const { sessions } = await daemonClient.call<{
-        sessions: Array<{ panelId: string; status: string; meta?: RunningTerminal['meta'] }>;
+        sessions: Array<{ panelId: string; projectId?: string; status: string; meta?: RunningTerminal['meta'] }>;
       }>('terminal.list', {});
       const running = (Array.isArray(sessions) ? sessions : [])
         .filter((s) => s.status === 'running')
-        .map((s) => ({ panelId: s.panelId, meta: s.meta }));
+        .map((s) => ({ panelId: s.panelId, projectId: s.projectId, meta: s.meta }));
       console.log(`[throng] app-close: ${running.length} running terminal(s)`);
       return running;
     } catch (error) {
@@ -2678,9 +2788,70 @@ if (isPrimaryInstance)
     );
   };
 
+  /*
+   * 067 FR-040 — the steps a shutdown already does, reported one by one. Terminate all ends each project's terminals
+   * in turn and then sweeps, because a project-scoped end leaves rootless and sub-workspace sessions, and the app-close
+   * end must leave nothing (FR-043).
+   */
+  const drainStep: ShutdownStep = {
+    id: 'drain',
+    summary: 'Saving your workspace',
+    expectedMs: 300,
+    run: () => drainAllWindows(),
+  };
+  const terminateSteps = (terminals: readonly RunningTerminal[]): ShutdownStep[] => {
+    const byProject = new Map<string, { name: string; count: number }>();
+    for (const t of terminals) {
+      if (!t.projectId) continue;
+      const entry = byProject.get(t.projectId) ?? { name: t.meta?.projectName ?? 'a project', count: 0 };
+      entry.count += 1;
+      byProject.set(t.projectId, entry);
+    }
+    const end = (params: Record<string, unknown>) => async (): Promise<void> => {
+      await daemonClient.call('terminal.killAll', { ...params, escalate: true }, UNLOAD_RPC_TIMEOUT_MS);
+    };
+    return [
+      ...[...byProject].map(([projectId, { name, count }]): ShutdownStep => ({
+        id: `terminals-${projectId}`,
+        summary: `Closing terminals in ${name}`,
+        terminals: { count, projectName: name },
+        expectedMs: 1500,
+        run: end({ projectId }),
+      })),
+      { id: 'terminals-rest', summary: 'Closing any remaining terminals', expectedMs: 500, run: end({}) },
+    ];
+  };
+  const publishShutdown = (view: ShutdownView): void => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send('throng:appClose:progress', view);
+  };
+  /** Run a shutdown, then close, unless Cancel took it back. Past this point Cancel does nothing. */
+  const finishShutdown = async (driver: ShutdownDriver, steps: readonly ShutdownStep[], delayMs: number): Promise<void> => {
+    if ((await driver.run(steps)) === 'cancelled') {
+      activeShutdown = null;
+      broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:cancelled', null);
+      return;
+    }
+    driver.pointOfNoReturn();
+    allowClose = true;
+    // A launch from here on must not be told about this instance (067 edge case: opening a folder while closing).
+    await instanceGuard.release();
+    setTimeout(() => {
+      if (!mainWindow.isDestroyed()) mainWindow.close();
+    }, delayMs);
+  };
+  ipcMain.on('throng:appClose:cancel', () => activeShutdown?.cancel());
+
+  // A reloaded or crashed renderer cannot answer a prompt, so it must not leave the window unclosable.
+  mainWindow.webContents.on('did-start-loading', () => {
+    activeShutdown = null;
+  });
+
   mainWindow.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
+    // 067 FR-038: one shutdown at a time. A second close (Alt+F4, the taskbar) must not start another, whose driver
+    // would take the Cancel while the first one carried on and closed the window.
+    if (activeShutdown) return;
     // 050 FR-019f — a paste running or queued is asked about BEFORE anything else. Once the user's
     // answer lets the close go on, it starts again from the top: the gate is idle then, so the
     // ordinary flow below runs, terminals prompt included. Dismissed → the window stays open.
@@ -2695,20 +2866,20 @@ if (isPrimaryInstance)
     // instant feedback, THEN resolve into the warning or the closing message once we
     // know whether any terminals are running.
     mainWindow.webContents.send('throng:appClose:begin');
+    const driver = new ShutdownDriver(publishShutdown, () => Date.now());
+    activeShutdown = driver;
     void (async () => {
       const terminals = await runningTerminals();
       if (terminals && terminals.length === 0) {
         // Definitely nothing to warn about: keep the blocking overlay, then quit.
         mainWindow.webContents.send('throng:appClose:closing', { message: 'Closing throng…' });
         // THE EXIT THAT LOST THE WRITE (#86): no prompt to stall on, so nothing here ever
-        // outlived the 400ms debounce. Drain first, and only then allow the close.
-        await drainAllWindows();
-        allowClose = true;
-        // The 250ms beat REMAINS, and is no longer a correctness device: it lets the
-        // "Closing throng…" overlay paint. The close waits on the drain above, not on it.
-        setTimeout(() => {
-          if (!mainWindow.isDestroyed()) mainWindow.close();
-        }, 250);
+        // outlived the 400ms debounce. Drain first, and only then allow the close. The 250ms beat
+        // REMAINS, and is no longer a correctness device: it lets the overlay paint.
+        await finishShutdown(driver, [drainStep], 250);
+      } else if (driver.cancelled) {
+        activeShutdown = null;
+        broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:cancelled', null);
       } else {
         // Some terminals, or null (query failed → assume terminals may be running).
         mainWindow.webContents.send('throng:appClose:prompt', {
@@ -2719,28 +2890,30 @@ if (isPrimaryInstance)
     })();
   });
   ipcMain.on('throng:appClose:choice', (_event, choice: unknown) => {
-    if (choice !== 'terminate' && choice !== 'leave') return; // cancel/unknown → stay open
+    if (choice !== 'terminate' && choice !== 'leave') {
+      activeShutdown = null; // cancel/unknown → stay open
+      return;
+    }
+    const driver = new ShutdownDriver(publishShutdown, () => Date.now());
+    activeShutdown = driver;
     void (async () => {
+      const steps: ShutdownStep[] = [];
       if (choice === 'terminate') {
         // 005 US3 — every window first, so each terminal's exit reaches a panel that knows throng
         // ended it: no notice, and no revert for the drain below to persist. Sent before the kill on
         // the same channel order the exits will follow.
         broadcastToWindows(BrowserWindow.getAllWindows(), 'throng:appClose:terminating', null);
-        try {
-          // 051 FR-015a (R8): nothing may be left behind, so an end that fails is forced; the call
-          // settles within two end limits, which the 2 s default budget cannot cover.
-          await daemonClient.call('terminal.killAll', { escalate: true }, UNLOAD_RPC_TIMEOUT_MS);
-        } catch (error) {
-          logCaught('main: terminate all terminals on close', error); // still allow the close
-        }
+        // 051 FR-015a (R8): nothing may be left behind, so an end that fails is forced; each call
+        // settles within two end limits, which the 2 s default budget cannot cover. A failed step
+        // still allows the close (the driver logs it).
+        steps.push(...terminateSteps((await runningTerminals()) ?? []));
       }
       // BOTH exits drain — 'terminate' and 'leave' alike. These are the paths that survive
       // by ACCIDENT today, the prompt having detained the user past the debounce, and a fix
       // that drained only the broken exit would leave the two halves disagreeing on how long
       // a dialog must be read for. They agree by construction now.
-      await drainAllWindows();
-      allowClose = true;
-      mainWindow.close();
+      steps.push(drainStep);
+      await finishShutdown(driver, steps, 0);
     })();
   });
 

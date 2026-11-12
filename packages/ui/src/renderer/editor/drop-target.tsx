@@ -4,6 +4,7 @@ import { useNotify } from '../common/notification.js';
 import { isPanelHiddenAnywhere } from '../workspace/maximise-store.js';
 import './drop-target.css';
 import { logCaught } from '@throng/core';
+import { isOsFileDrag, osDropPaths } from '../common/os-drop-paths.js';
 
 /**
  * Dropping a file in from the operating system (018 / US9, FR-057 … FR-066a).
@@ -54,11 +55,6 @@ function leafOf(absPath: string): string {
 function parentOf(absPath: string): string | undefined {
   const parts = absPath.split(/[/\\]/).filter(Boolean);
   return parts.length > 1 ? parts[parts.length - 2] : undefined;
-}
-
-/** The path of a dragged-in File, or '' when it is not an OS file (a renderer-made one never is). */
-function osPathOf(file: File): string {
-  return window.throng?.editor?.getPathForFile?.(file) ?? '';
 }
 
 export function useDropHandler(
@@ -187,8 +183,7 @@ export function PanelDropTarget({
     return () => window.removeEventListener(OS_DROP_EVENT, listener);
   }, [panelId, handle]);
 
-  const isFileDrag = (e: DragEvent): boolean =>
-    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const isFileDrag = (e: DragEvent): boolean => isOsFileDrag(e.dataTransfer);
 
   return (
     <div
@@ -211,12 +206,11 @@ export function PanelDropTarget({
         e.stopPropagation();
         setOver(false);
         // THE ONE LINE END-TO-END CANNOT REACH — and the only one.
-        const files = Array.from(e.dataTransfer.files);
-        const paths = files.map(osPathOf).filter((p) => p.length > 0);
+        const { count, paths } = osDropPaths(e.dataTransfer);
         // A drag whose items yield NO path is not an OS file drag we can serve — a virtual folder, a
         // mail attachment, an item that exists only inside the source application. Dropping it and
         // having nothing whatsoever happen is the same silent no-op by a different door.
-        if (files.length > 0 && paths.length === 0) {
+        if (count > 0 && paths.length === 0) {
           notify({
             severity: 'error',
             /*

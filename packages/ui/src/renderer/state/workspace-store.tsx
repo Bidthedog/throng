@@ -48,8 +48,10 @@ import {
   type Panel,
   type PanelConfig,
   type PanelKind,
+  type SidePanes,
   type SplitDirection,
   type WorkspaceLayout,
+  effectiveSidePanes,
   initialPreviewRecency,
   PREVIEW_KIND,
 } from '@throng/core';
@@ -185,6 +187,12 @@ export interface WorkspaceContextValue {
    * via an incremental op.
    */
   replaceLayout(next: WorkspaceLayout): void;
+  /**
+   * 067 FR-056 — record which side panes this project has expanded. Called on a user's toggle ONLY: a
+   * collapse caused by window width is derived and never written (FR-058), so a patch that changes
+   * nothing against what the layout already reads as writes nothing.
+   */
+  setSidePanes(patch: Partial<SidePanes>): void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -629,6 +637,13 @@ export function WorkspaceProvider({
         setLayout(next);
         scheduleSave(next);
       },
+      setSidePanes: (patch) =>
+        apply((l) => {
+          const current = effectiveSidePanes(l);
+          const next = { ...current, ...patch };
+          if (next.projects === current.projects && next.files === current.files) return l;
+          return { ...l, sidePanes: next };
+        }),
     }),
     [layout, loading, restoreFailed, apply, scheduleSave],
   );

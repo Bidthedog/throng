@@ -149,6 +149,8 @@ interface Job {
   movedTop: Set<string>;
   sourceProjectId: string;
   targetProjectId: string;
+  /** 067: the sources come from outside every project. */
+  external: boolean;
   /** Bytes the items to paste hold, summed once the plan is known (R14) — 0 until then. */
   bytes: number;
   /** Each planned top-level item's bytes and files, from that sizing (R23). */
@@ -245,6 +247,20 @@ export class TransferService {
     return { jobId: job.id, result: job.result };
   }
 
+  /**
+   * Files arriving from outside throng (067 FR-002, FR-004): a paste whose sources need belong to no project, and
+   * whose copy is undoable too (FR-009). The target is confined as any paste's is (FR-007).
+   */
+  inbound(
+    ownerWindowId: number,
+    sources: readonly string[],
+    targetDir: string,
+    mode: TransferMode,
+  ): { jobId: string; result: Promise<TransferResult> } {
+    const job = this.enqueue('paste', mode, sources, targetDir, ownerWindowId, null, true);
+    return { jobId: job.id, result: job.result };
+  }
+
   /** A drag: the same engine, no progress and no cancel (FR-019e). Resolves when the job ends. */
   drop(ownerWindowId: number, sources: readonly string[], targetDir: string, mode: TransferMode): Promise<TransferResult> {
     return this.enqueue('drag', mode, sources, targetDir, ownerWindowId, null).result;
@@ -257,6 +273,7 @@ export class TransferService {
     targetDir: string,
     ownerWindowId: number,
     snapshot: FileClipboard,
+    external = false,
   ): Job {
     let resolve!: (r: TransferResult) => void;
     const result = new Promise<TransferResult>((r) => {
@@ -271,6 +288,7 @@ export class TransferService {
       plan: landingPlan(sources, targetDir),
       ownerWindowId,
       snapshot,
+      external,
       state: 'queued',
       done: 0,
       current: null,
@@ -360,7 +378,11 @@ export class TransferService {
     }
     const paths = undoPaths(valid);
     const roots = await this.realRoots();
+    // 067 FR-009: an inbound entry's sources are outside every project by definition; what landed is still confined.
+    const outsideAllowed =
+      valid.kind === 'paste' && valid.external ? new Set([...valid.moved, ...valid.copied].map((pair) => pair.from)) : new Set<string>();
     for (const p of paths) {
+      if (outsideAllowed.has(p)) continue;
       if (!(await this.confined(roots, p))) return { error: `"${basename(p)}" ${NOT_IN_PROJECT}` };
     }
     const present = new Map<string, boolean>();
@@ -808,13 +830,14 @@ export class TransferService {
     try {
       const srcReal = await fs.realpath(src);
       const root = ctx.roots.find((r) => isWithinRoot(r.real, srcReal));
-      if (!root) {
+      if (!root && !job.external) {
         this.failNamed(job, src, `"${basename(src)}" ${NOT_IN_PROJECT}`);
         return;
       }
-      if (!job.sourceProjectId) job.sourceProjectId = root.id;
-      if (isWithinRoot(srcReal, root.real)) {
-        this.failNamed(job, src, 'The project root cannot be pasted.');
+      if (root && !job.sourceProjectId) job.sourceProjectId = root.id;
+      // A copy brought in from the OS leaves the project whole, and is judged like any other folder below.
+      if (root && isWithinRoot(srcReal, root.real) && !(job.external && job.mode === 'copy')) {
+        this.failNamed(job, src, job.mode === 'cut' ? 'The project root cannot be moved.' : 'The project root cannot be pasted.');
         return;
       }
       const parentReal = await fs.realpath(dirname(src));
@@ -1241,6 +1264,11 @@ export class TransferService {
     // The folders made to keep structure, parents first — the journal's order (R16).
     const dirs = job.journal.flatMap((o) => (o.op === 'createdDir' ? [o.path] : []));
     const createdDirs = dirs.length > 0 ? { createdDirs: dirs } : {};
+    if (job.external) {
+      const copied = job.mode === 'copy' ? pairs('placed') : [];
+      if (moved.length === 0 && copied.length === 0 && replaced.length === 0) return null;
+      return { kind: 'paste', id: this.newId(), moved, copied, replaced, external: true, ...createdDirs, at: this.now() };
+    }
     if (replaced.length > 0) {
       const copied = job.mode === 'copy' ? pairs('placed') : [];
       return { kind: 'paste', id: this.newId(), moved, copied, replaced, ...cross, ...createdDirs, at: this.now() };

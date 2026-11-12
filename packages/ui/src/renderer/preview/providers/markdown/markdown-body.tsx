@@ -109,7 +109,8 @@ import {
 } from '../../diagram/diagram-host.js';
 import { linkHintAnchor } from '../../../links/link-hint-anchor.js';
 import { showLinkHint } from '../../../links/link-hint-store.js';
-import { useActiveTheme, useIconPacks } from '../../../config/config-store.js';
+import { useActiveTheme, useAppSettings, useIconPacks } from '../../../config/config-store.js';
+import { linkScanOptions } from '../../../links/link-scan-options.js';
 import type { MarkdownRenderer } from './markdown-renderer.js';
 import { placeOnStep, shouldDrive, shouldFollow } from '../../scroll-sync-policy.js';
 import {
@@ -390,6 +391,8 @@ export function MarkdownBody({
   linkWordingRef.current = linkWording;
   /** FR-117 — Show front matter. Shipped on, so anything but an explicit `false` shows the block. */
   const frontMatter = providerSettings.showFrontMatter !== false;
+  /** 067 FR-132 — the editor's protocol allowlist and known extensions, for the front matter table's links. */
+  const linkScan = linkScanOptions(useAppSettings().editor.links);
   const onFailureRef = useRef(onBodyFailure);
   onFailureRef.current = onBodyFailure;
   const onDrawnRef = useRef(onDrawn);
@@ -841,7 +844,7 @@ export function MarkdownBody({
         const body = bodyRef.current;
         // A newer text, or an unmount, has overtaken this render: drawing it would show stale content.
         if (cancelled || body === null) return;
-        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {} });
+        const { fragment, headings, wikiTargets } = r.render(text, { panelId, docPath: filePath, projectRoot, remoteImages, frontMatter, linkWording: linkWordingRef.current ?? {}, linkScan });
         lastHeadingsRef.current = headings;
         // Dressed BEFORE it is inserted, so the place kept or restored below is measured against the layout the
         // reader will see. The front matter class alone makes its table shorter; dressed after the restore, the
@@ -995,7 +998,7 @@ export function MarkdownBody({
     // it is a re-point (T177) — and links and images resolve against it either way. The project, the panel
     // and the remote-image setting change what they resolve to; the front matter setting changes what is
     // drawn at the top. `navigationSeq` is read, not depended on: it never moves without the file moving.
-  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
+  }, [text, filePath, projectRoot, panelId, remoteImages, frontMatter, linkScan, renderMermaid, embedTick, claimDiagrams, applyPendingSync, applyPlace, placeActionFor, scheduleReport, drawFoldGutter, drawTableLayout, reanchor]);
 
   /*
    * 047 US3 — the reader (or the chrome) toggled a section, Collapse/Expand All, or the gutter setting

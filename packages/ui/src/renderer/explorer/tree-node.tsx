@@ -38,7 +38,7 @@ export function TreeRow({
   // Escape cancels a rename and suppresses the follow-on blur-commit (FR-090).
   const escapedRef = useRef(false);
   // Highlight the folder that would receive a drop while dragging (FR-091).
-  const willDrop = node.willReceiveDrop;
+  const willDrop = node.willReceiveDrop || (row?.inboundDropFolder != null && row.inboundDropFolder === data.relPath);
   const iconToken = isFolder
     ? node.isOpen || isRoot
       ? 'folderOpen'
@@ -59,8 +59,13 @@ export function TreeRow({
       if (!isRoot) node.toggle();
       return;
     }
-    if (openOnClick === 'none') return; // a file click never opens here; use Enter or Open In
-    if (action === 'open') row?.onOpenFile(data.relPath);
+    if (openOnClick === 'none') {
+      // 067 FR-116 — a double click hands a file the editor refuses to the OS whatever the open-on-click mode;
+      // otherwise a click never opens here (use Enter or Open In).
+      if (clickCount === 2 && data.kind === 'file') row?.onOpenFile(data.relPath, 'dblclickUnsupportedOnly');
+      return;
+    }
+    if (action === 'open') row?.onOpenFile(data.relPath, clickCount === 2 ? 'dblclick' : 'click');
   };
   /*
    * 047 FR-084 — in single-click mode one double click arrives as click (detail 1), click (detail 2) and
@@ -76,7 +81,11 @@ export function TreeRow({
   };
   const onDoubleClick = (e: MouseEvent): void => {
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (singleOpensFile) return;
+    if (singleOpensFile) {
+      // The first click of this double click already opened the file; this one only matters to a file the editor refuses (067 FR-116).
+      row?.onOpenFile(data.relPath, 'dblclickUnsupportedOnly');
+      return;
+    }
     act(2);
   };
 
@@ -185,7 +194,9 @@ export function TreeRow({
           }}
         />
       ) : (
-        <span className="tree-label">{data.name}</span>
+        <span className="tree-label">
+          {data.name}
+        </span>
       )}
       {/* The SHARED unsaved dot (006, US8) — the same mark the panel header, the tab and the project
           list carry, now on the file itself. A user who edited a file and looked away should see

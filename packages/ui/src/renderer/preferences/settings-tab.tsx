@@ -22,6 +22,8 @@ import { useResetNotice } from './reset-notice.js';
 import { useOnEntry } from './on-entry.js';
 import { RowActions } from './row-actions.js';
 import { FieldNote, SettingControl } from './form-controls.js';
+import { FileManagerItemControl } from './file-manager-item-control.js';
+import { FormHistoryControl } from './form-history-control.js';
 import { foldKey, groupDescriptors } from './group-descriptors.js';
 import { Subsection } from './subsection.js';
 import { FoldAllButtons, FoldHeading } from './fold-heading.js';
@@ -96,6 +98,10 @@ const SHIPPED = buildShippedDefaults();
  * pattern the two above already are.
  */
 const ELEVATION_GATED_KEY = 'terminals.defaultRunAsAdmin';
+
+/** 067 FR-130 — the setting the form-history clear control follows, and the words that find that control. */
+const FORM_HISTORY_LAST_KEY = 'terminals.formHistory.maxEntries';
+const FORM_HISTORY_QUERY = /remembered|history|startup command|shell arguments|clear/i;
 
 /**
  * The consent FR-008 requires before a failure stops reporting itself.
@@ -173,10 +179,13 @@ export function SettingsTab({
     setApplied('');
   };
 
-  const matches = useMemo(
-    () => filterFields(applied, metadata, (d) => getAtPath(settings, d.key)),
-    [applied, settings, metadata],
-  );
+  const matches = useMemo(() => {
+    const found = filterFields(applied, metadata, (d) => getAtPath(settings, d.key));
+    // 067 FR-130 — the clear control is not a setting, so it has no haystack of its own: a query that
+    // names it keeps the row it follows, and with it the Terminal group, in the result.
+    if (!FORM_HISTORY_QUERY.test(applied) || found.some((d) => d.key === FORM_HISTORY_LAST_KEY)) return found;
+    return metadata.filter((d) => d.key === FORM_HISTORY_LAST_KEY || found.includes(d));
+  }, [applied, settings, metadata]);
   // 056 — the UNFILTERED grouping gives the fold totals (and the keys that exist); with no query applied
   // it IS what is shown, so it is reused rather than grouped a second time. The fold wiring is shared
   // with the other two tabs (FR-013); see `useTabFolding`.
@@ -502,6 +511,16 @@ export function SettingsTab({
           </FoldHeading>
         </section>
       ))}
+
+      {/* 067 FR-034 — the file manager's folder item. Not a setting (the OS registration is the state), so it
+          has no descriptor; it is found by search like one. */}
+      {window.throng?.fileManagerItem !== undefined &&
+      (query.trim() === '' || /file manager|open as throng project|context menu|explorer|nautilus|dolphin|nemo/i.test(query)) ? (
+        <section className="settings-group" data-testid="settings-group-file-manager">
+          <h3 className="settings-group__title">File manager</h3>
+          <FileManagerItemControl />
+        </section>
+      ) : null}
     </div>
   );
 
@@ -516,6 +535,10 @@ export function SettingsTab({
       const r = rowOf(list[i]);
       if (r === undefined) {
         out.push(row(list[i]));
+        // 067 FR-130 — the clear control follows the last of the two form-history rows, in the Terminal group.
+        if (list[i].key === FORM_HISTORY_LAST_KEY && window.throng?.formHistory !== undefined) {
+          out.push(<FormHistoryControl key="form-history-clear" />);
+        }
         i += 1;
         continue;
       }

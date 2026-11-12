@@ -38,6 +38,7 @@ import { TabPopover, popoverTabName } from './tab-popover.js';
 import { usePanelDisplayNames } from './use-panel-display-names.js';
 import { useTabScroll } from './tab-scroll.js';
 import { TabPicker, registerTabPicker } from './tab-picker.js';
+import { registerTabRename } from './tab-rename.js';
 import { useWorkspace } from '../state/workspace-store.js';
 import { useProjects } from '../state/projects-store.js';
 import { usePreviewProviders } from '../preview/provider-registry-context.js';
@@ -63,7 +64,7 @@ import { panelHasLiveTerminal, runningSubprocessCount } from './subprocess.js';
 import { type MenuAction } from './context-menu.js';
 import { tabContextMenu } from './tab-menu.js';
 import { useContextMenu } from '../context-menu-provider.js';
-import { useAppSettings } from '../config/config-store.js';
+import { useAppSettings, useKeybindings } from '../config/config-store.js';
 import { setActivePane } from './active-pane.js';
 import { openFileInTab } from '../editor/editor-open.js';
 import {
@@ -845,6 +846,33 @@ export function TabGroup(): ReactElement {
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
   const [indicatorX, setIndicatorX] = useState<number | null>(null);
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const keybindings = useKeybindings();
+  /*
+   * 067 FR-075 – FR-077, FR-081 — the `tabs.rename` chord. It starts the SAME inline rename a double click
+   * does, on the active tab, and remembers the panel that held the keyboard so committing or cancelling can
+   * hand it back. Both are read through refs: the opener is registered once and must see the current state.
+   */
+  const renamingRef = useRef<string | null>(null);
+  renamingRef.current = renamingTabId;
+  const activeTabIdRef = useRef<string | null>(null);
+  const returnFocusPanel = useRef<string | null>(null);
+  useEffect(() => {
+    registerTabRename((returnFocusTo) => {
+      const tabId = activeTabIdRef.current;
+      if (tabId === null || renamingRef.current !== null) return; // nothing to rename, or already renaming
+      returnFocusPanel.current = returnFocusTo;
+      setRenamingTabId(tabId);
+    });
+    return () => registerTabRename(null);
+  }, []);
+  useEffect(() => {
+    if (renamingTabId !== null || returnFocusPanel.current === null) return;
+    const panelId = returnFocusPanel.current;
+    returnFocusPanel.current = null;
+    // A frame after the Enter / Escape keystroke has finished, as the rename-on-create hold does.
+    const frame = requestAnimationFrame(() => requestPanelFocus(panelId));
+    return () => cancelAnimationFrame(frame);
+  }, [renamingTabId]);
   /*
    * 046 FR-125 against rename-on-create — the tab the New Tab control just created, while its name box
    * is open. The same click activates the tab, and `PanelFocusSync` answers by asking for focus in its
@@ -1233,6 +1261,7 @@ export function TabGroup(): ReactElement {
 
   if (!layout) return <></>;
   const activeTab = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0];
+  activeTabIdRef.current = activeTab?.id ?? null;
 
   // Compute the reorder slot + indicator position from the live cursor X against
   // the OTHER tabs' DOM rects (the dragged tab is excluded — its rect follows the
@@ -1712,6 +1741,7 @@ export function TabGroup(): ReactElement {
       tabId,
       destroyTabDisabled,
       destroyOthersDisabled: layout.tabs.length <= 1,
+      keybindings,
       detach: detach
         ? {
             subWorkspaces: detach.subWorkspaces,
