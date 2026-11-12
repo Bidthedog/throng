@@ -235,12 +235,19 @@ async function inspectDaemon(pid: number): Promise<DaemonInspector> {
     if (m.error !== undefined) p.reject(new Error(m.error.message));
     else p.resolve(m.result);
   };
-  const send = (method: string, params: Record<string, unknown> = {}): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      const id = next++;
+  // A closed socket answers nothing: fail every request still waiting rather than leave it to the test timeout.
+  ws.onclose = () => {
+    for (const p of pending.values()) p.reject(new Error('the daemon inspector connection closed'));
+    pending.clear();
+  };
+  const send = (method: string, params: Record<string, unknown> = {}): Promise<unknown> => {
+    const id = next++;
+    const answer = new Promise<unknown>((resolve, reject) => {
       pending.set(id, { resolve, reject });
       ws.send(JSON.stringify({ id, method, params }));
     });
+    return within(INSPECTOR_STEP_MS, `daemon inspector ${method}`, answer).finally(() => pending.delete(id));
+  };
   const evaluate = async (expression: string): Promise<unknown> =>
     ((await send('Runtime.evaluate', { expression, returnByValue: true })) as { result: { value: unknown } }).result.value;
   const remote = await evaluate('process.pid');
@@ -260,8 +267,31 @@ async function inspectDaemon(pid: number): Promise<DaemonInspector> {
   };
 }
 
+/**
+ * A step's deadline. The CDP, `app.evaluate` and inspector calls a sample makes carry no timeout of their own,
+ * so one that never answered held a nightly for the rest of the hour-long test timeout with nothing logged
+ * (#617). Bounded, a stall fails in a minute or two and names its step.
+ */
+const INSPECTOR_STEP_MS = 60_000;
+const SAMPLE_STEP_MS = 120_000;
+async function within<T>(ms: number, step: string, work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${step}: no answer in ${ms / 1000} s`)), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Private bytes and live heap of main and of the window's renderer, after a collection on both. */
 async function sample(app: ElectronApplication, win: Page): Promise<Sample> {
+  return within(SAMPLE_STEP_MS, 'sample the live heap', sampleUnbounded(app, win));
+}
+
+async function sampleUnbounded(app: ElectronApplication, win: Page): Promise<Sample> {
   await collectGarbage(app, win);
   const heap = await liveHeap(app, win);
   const pids = await app.evaluate(({ webContents }) => ({

@@ -81,8 +81,11 @@ export const ESTIMATE_CONSTANTS = Object.freeze({
    * Renderer, per terminal view: the xterm instance (parser, services, DOM renderer, addons) and the panel
    * around it, with its shell started and nothing printed. The monitor shows it under the terminal's
    * "Terminal buffers" row, which is the only renderer memory a terminal panel's row carries. Fitted.
+   * Recentred from 1,420,000 on the hosted runner's nightlies (#617): the full-scrollback plain terminal
+   * measured 3.43–3.85 MB per run against an estimate of 3.93 MB (1.04–1.15×), the wide one 5.05–5.32 MB
+   * against 5.43 MB. At 1,190,000 both read 0.98–1.08×.
    */
-  termViewConstant: 1_420_000,
+  termViewConstant: 1_190_000,
 });
 
 /** xterm stores each cell as three 32-bit words. */
