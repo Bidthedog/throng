@@ -244,7 +244,9 @@ Two traps, both from the alpha5 run:
   own gate, because the failure mode is discovering at tag time that one of them does not hold. List
   them in the release PR as deliberately deferred, and in the final report.
 
-`better-sqlite3` is **held at 12.x on purpose** (`c4df0731`). Do not let a sweep carry it forward.
+`better-sqlite3` 13 carries one N-API prebuild per platform inside the package, with no install step
+(#520). `electron-builder.yml` excludes the platforms throng does not ship. A new platform or
+architecture means deleting its exclude there, or the packaged daemon cannot open its database.
 
 **Prove it locally before committing, because native code moved.** Electron and `koffi` ship binaries the
 daemon loads under the bundled host-Node runtime, so a patch bump is not a no-op. The OS-heavy layers

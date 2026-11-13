@@ -29,6 +29,10 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ## Unreleased
 
+### Changed
+
+- **throng's database library moves to better-sqlite3 13**, which carries its own prebuilt binaries, so building throng from source on Windows no longer risks needing a C++ toolchain for it ([#520](https://github.com/Bidthedog/throng/issues/520)).
+
 ## 1.0.0-alpha16 — 2026-11-13
 
 ### Added
