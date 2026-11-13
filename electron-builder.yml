@@ -58,6 +58,12 @@ files:
   - '!node_modules/@typescript/**'
   - '!node_modules/eslint*/**'
   - '!node_modules/@typescript-eslint/**'
+  # better-sqlite3 13 ships an N-API prebuild per platform inside the package (#520), loaded by
+  # platform name at runtime. throng builds x64 Windows and glibc Linux only, so the other six are dead
+  # weight; win32-x64 and linux-x64 both ship, which costs one unused 2 MB binary per package.
+  - '!node_modules/better-sqlite3/prebuilds/darwin-*.node'
+  - '!node_modules/better-sqlite3/prebuilds/linuxmusl-*.node'
+  - '!node_modules/better-sqlite3/prebuilds/*-arm64.node'
   # CRITICAL (FR-009 launch): the workspace libraries are imported as BARE specifiers
   # (`import … from '@throng/core'`) by both the UI main and the daemon. In the dev tree those
   # resolve through node_modules/@throng/* symlinks into packages/* — but electron-builder DROPS

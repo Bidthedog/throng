@@ -12,7 +12,7 @@ name: CI
 # Runner is pinned to `windows-2022` (not `windows-latest`): `windows-latest` now maps
 # to Windows Server 2025 shipping Visual Studio 2026, which the node-gyp bundled with
 # Node 20's npm does not recognise ("unknown version ... at ...\Visual Studio\18") — so
-# the better-sqlite3 / node-pty native builds fail at `npm ci`. windows-2022 ships
+# the node-pty native build fails at `npm ci`. windows-2022 ships
 # VS 2022, which node-gyp detects. Revisit when node-gyp/npm gain VS 2026 support.
 
 # When it runs: a pull request to master that is NOT a draft, and an explicit dispatch. Nothing else.
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # node-gyp builds (better-sqlite3, node-pty) are noisy; keep logs terse.
+  # node-gyp builds (node-pty) are noisy; keep logs terse.
   npm_config_loglevel: error
 
 jobs:
