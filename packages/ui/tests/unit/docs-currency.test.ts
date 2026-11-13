@@ -161,4 +161,17 @@ describe('README.md stays an entry point', () => {
       expect(readme.includes(`(${target}`), `README.md does not link ${target}`).toBe(true);
     }
   });
+
+  it('badges the newest release by date, and each supported platform', () => {
+    const readme = read(join(ROOT, 'README.md'));
+    const release = /https:\/\/img\.shields\.io\/github\/v\/release\/[^)\s]+/.exec(readme)?.[0] ?? '';
+    expect(release, 'README.md has no latest-release badge').not.toBe('');
+    // semver ranks a prerelease's tag as one identifier, compared as text: alpha9 above alpha16. The
+    // badge sat on alpha9 through six releases.
+    expect(release).toContain('include_prereleases');
+    expect(release).toContain('sort=date');
+    for (const platform of ['Windows', 'Linux']) {
+      expect(readme, `README.md has no ${platform} platform badge`).toMatch(new RegExp(`img\\.shields\\.io/badge/[^)]*${platform}`));
+    }
+  });
 });
