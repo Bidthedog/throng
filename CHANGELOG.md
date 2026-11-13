@@ -31,6 +31,7 @@ What changed in each release of throng, written for someone deciding whether to 
 
 ### Changed
 
+- **throng now runs on Electron 45** (Chromium 156) ([#519](https://github.com/Bidthedog/throng/issues/519)).
 - **throng's database library moves to better-sqlite3 13**, which carries its own prebuilt binaries, so building throng from source on Windows no longer risks needing a C++ toolchain for it ([#520](https://github.com/Bidthedog/throng/issues/520)).
 
 ## 1.0.0-alpha16 — 2026-11-13
