@@ -526,10 +526,13 @@ export function addOsIntegration(wxs: string, options: MsiProjectOptions = {}): 
     `        <RegistryValue Root="HKMU" Key="${key}" Type="string" Value="Open as throng project"/>`,
     `        <RegistryValue Root="HKMU" Key="${key}\\command" Type="string" Value="${exe}"/>`,
   ];
+  // Each component keys on a value named for itself: WiX derives a `Guid="*"` from the key path, so the
+  // user and machine components keyed on one `AddToPath` value got one GUID and light.exe refused the
+  // package (LGHT1137). Nothing reads these values; they exist to be the components' key paths.
   const pathComponent = (id: string, scope: string, system: 'yes' | 'no'): string[] => [
     `      <Component Id="${id}" Guid="*" Directory="APPLICATIONFOLDER">`,
     `        <Condition>THRONG_ADD_TO_PATH = "1" AND ${scope}</Condition>`,
-    `        <RegistryValue Root="HKMU" Key="${attr(registryKey)}" Name="AddToPath" Type="integer" Value="1" KeyPath="yes"/>`,
+    `        <RegistryValue Root="HKMU" Key="${attr(registryKey)}" Name="${id}" Type="integer" Value="1" KeyPath="yes"/>`,
     `        <Environment Id="${id}Variable" Name="PATH" Value="[APPLICATIONFOLDER]" Part="last" Action="set" System="${system}"/>`,
     '      </Component>',
   ];
