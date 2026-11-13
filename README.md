@@ -3,10 +3,13 @@
 **Every project, every terminal, one window.**
 
 [![CI](https://github.com/Bidthedog/throng/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Bidthedog/throng/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Nightly gate](https://github.com/Bidthedog/throng/actions/workflows/gate.yml/badge.svg?branch=master&event=schedule)](https://github.com/Bidthedog/throng/actions/workflows/gate.yml?query=event%3Aschedule)
 [![Release](https://github.com/Bidthedog/throng/actions/workflows/release.yml/badge.svg)](https://github.com/Bidthedog/throng/actions/workflows/release.yml)
-[![Latest release](https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&sort=semver&label=release&color=blue)](https://github.com/Bidthedog/throng/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Bidthedog/throng?include_prereleases&sort=date&label=release&color=blue)](https://github.com/Bidthedog/throng/releases)
 [![v1.0.0 progress](https://img.shields.io/github/milestones/progress-percent/Bidthedog/throng/1?label=v1.0.0)](https://github.com/Bidthedog/throng/milestone/1)
-[![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D4)](#getting-started)
+[![Windows 11 x64](https://img.shields.io/badge/Windows%2011-x64-0078D4)](docs/install-windows.md)
+[![Linux x64](https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black)](docs/install-linux.md)
+[![apt and dnf](https://img.shields.io/badge/packages-apt%20%7C%20dnf-A81D33)](docs/install-linux.md#the-package-repository)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 throng is a desktop workspace for people who live in the command line. Give each project its own
