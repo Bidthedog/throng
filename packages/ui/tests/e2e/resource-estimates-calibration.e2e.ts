@@ -480,6 +480,41 @@ async function shownChanged(win: Page, id: string, from: number): Promise<number
 }
 
 /**
+ * How long a figure must hold before it is the settled one: two of the renderer's reports (the default
+ * 2 s capture interval) and a frame. The renderer reports on its own timer, so the first frame after a
+ * terminal's output lands can still carry the report taken while xterm was mid-fill.
+ */
+const SETTLE_MS = 5_000;
+
+/**
+ * The monitor's figure for a node once it has moved off `from` AND held for `SETTLE_MS`, so a report the
+ * renderer sent mid-fill is never the one compared. Nightly #626: with the same 169 × 1505 buffer the first
+ * changed frame read 3.70–4.23 MB, the settled one 5.20 MB.
+ */
+async function shownSettled(win: Page, id: string, from: number): Promise<number> {
+  let value = 0;
+  let since = 0;
+  await expect
+    .poll(
+      async () => {
+        const next = await shown(win, id);
+        if (next === from) {
+          since = 0;
+          return false;
+        }
+        // Within 0.1%: the daemon's retained scrollback can move by a prompt between frames, a mid-fill
+        // report differs by hundreds of KB.
+        if (since === 0 || Math.abs(next - value) > value * 0.001) since = Date.now();
+        value = next;
+        return Date.now() - since >= SETTLE_MS;
+      },
+      { timeout: 60_000, intervals: [500], message: `the monitor's figure for ${id} never settled off ${from}` },
+    )
+    .toBe(true);
+  return value;
+}
+
+/**
  * Print, and require (unless `assert` is false or the case is a `knownMiss`), that `estimated` is within
  * the bound of `measured`. A known miss is a shape research R21 records the model as missing: it is
  * printed with its reason so a change in it is visible, and never asserted.
@@ -1158,7 +1193,7 @@ test('panel memory estimates are within 10% of live heap: editors and previews a
             const domAfter = await domCounts(win, panelId);
             const daemonAfter = await inspector.heap();
             const grid = await daemonTerminal(win, h.pipeName, panelId);
-            const shownAfter = await shownChanged(win, `b:${panelId}`, shownBefore);
+            const shownAfter = await shownSettled(win, `b:${panelId}`, shownBefore);
             // The rows on screen and the window they are in: xterm draws only the viewport, so a styled
             // line costs Blink a span per run only while it is on screen.
             const screenRows = await win.evaluate((id) => document.querySelector(`[data-testid="terminal-${id}"] .xterm-rows`)?.childElementCount ?? -1, panelId);
