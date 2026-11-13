@@ -505,6 +505,7 @@ and anything left undone. Send a `PushNotification` with the version and release
 | `reconcile` names an unexpected filename | A target's output changed | Fix `electron-builder.yml`'s `artifactName`. **Never** loosen the declaration. |
 | `reconcile` names a missing artifact | A target did not run | Read the packaging log; do not publish a partial set. |
 | Publish gate: "verdict missing" | A role verified but its verdict was not uploaded, or a role was skipped | A partial verdict set is a refusal, not a partial pass. Re-run verification. |
+| A tag run is green, but `sign-index`, `publish` and `deploy-repositories` show **skipped** | A publishing job lost its status function, so GitHub's implicit `success()` skipped it behind the skipped `e2e-full` (the E2E verdict was reused). alpha16's first tag did exactly this | Nothing was released, so [re-cut the tag](#re-cutting-an-unpublished-tag) after the fix. A green tag run proves nothing until `gh release view v<version>` finds the release. |
 | `sign-index` or `publish`: "is not on master" | The tag was pushed on a commit outside `master` | Merge the release PR, then [re-cut the tag](#re-cutting-an-unpublished-tag) on the merged commit. |
 | Publish gate: version mismatch | The four-way match failed | Tag, manifest, filename and reported version must agree exactly, suffix included. |
 | Publish gate: already published | The version exists | Published bytes are immutable. Cut the next version; never delete and re-push a published tag. |

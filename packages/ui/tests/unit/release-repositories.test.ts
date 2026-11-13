@@ -52,7 +52,8 @@ describe('what the repositories wait for (064 FR-010, FR-013)', () => {
     const sign = release.jobs['sign-index'] as Job;
     const publish = release.jobs.publish as Job;
     expect(needsOf(publish).sort()).toEqual([...needsOf(sign), 'sign-index'].sort());
-    expect(sign.if).toBe(publish.if);
+    // The same condition, publishing's also naming the signing it needs (each job names every need: 065 FR-002).
+    expect(publish.if).toBe(sign.if?.replace(/ }}$/, " && needs.sign-index.result == 'success' }}"));
   });
 
   // #571: the repository has immutable releases on, so nothing can be added to a release once it is out. The signed
