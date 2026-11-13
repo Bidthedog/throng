@@ -274,6 +274,10 @@ Two things the audit does not cover, because they belong to this skill:
 - If the *pipeline itself* changed this cycle, this skill and its `references/` move in the same
   change (see [Keeping this skill true](#keeping-this-skill-true)).
 - Every configurable option added this cycle is named in the changelog entry.
+- `README.md`'s badges match what this release ships. A platform, architecture or package channel
+  added or dropped this cycle gets its badge added or removed. The latest-release badge is never
+  hand-edited: shields reads it from the release, and step 13 checks it moved. `docs-currency.test.ts`
+  guards its query and the per-platform badges.
 
 ## 7. Test-suite audit — keep the runs from growing out of hand
 
@@ -488,7 +492,11 @@ Confirm, and report:
 - at the first full release, `docs/install-linux.md`'s commands change from `prerelease` to `stable`;
 - the body carries this release's notes, one SHA-256 row per artifact against its own filename, and
   the source revision;
-- `## Unreleased` is back on `master`, empty, ready for the next cycle.
+- `## Unreleased` is back on `master`, empty, ready for the next cycle;
+- `README.md`'s latest-release badge reads `v<version>`. Render the badge URL from `README.md` and read
+  the SVG's `<title>`. Shields caches the answer, so allow it up to an hour. Still the previous version
+  after that means the badge's query is wrong, not the cache (`sort=semver` once pinned it to alpha9:
+  semver compares `alpha16` and `alpha9` as text). Fix it through its own PR.
 
 Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
 the fix PRs (links), what the sweep took and held back, majors deliberately deferred, majors taken to clear an
