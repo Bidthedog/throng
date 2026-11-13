@@ -59,6 +59,20 @@ describe('an unattended release (065)', () => {
     }
   });
 
+  it('publishes when the E2E verdict is reused, and only when every job it needs succeeded (FR-002)', () => {
+    // A job `if` with no status function is ANDed with GitHub's implicit success(), which is false when ANY
+    // upstream job was skipped. e2e-full is skipped whenever e2e-reuse reuses the gate's verdict, so alpha16's
+    // tag built and verified everything and then skipped sign-index, publish and deploy-repositories.
+    const needsOf = (job: Job): string[] => (job.needs === undefined ? [] : Array.isArray(job.needs) ? job.needs : [job.needs]);
+    for (const id of [...PUBLISHING, 'deploy-repositories']) {
+      const job = release.jobs[id] as Job;
+      expect(job.if, `${id} has no status function, so a skipped e2e-full skips it`).toMatch(/!cancelled\(\)/);
+      for (const need of needsOf(job)) {
+        expect(job.if, `${id} runs without ${need} having succeeded`).toContain(`needs.${need}.result == 'success'`);
+      }
+    }
+  });
+
   it('the rendered body is refused for any unmet condition, not all but one (FR-004)', () => {
     const steps = release.jobs['render-body']?.steps ?? [];
     const gate = steps.find((step) => step.run?.includes('publish-gates.mjs'));
