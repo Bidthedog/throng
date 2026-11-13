@@ -49,6 +49,18 @@ describe('the MSI (067)', () => {
     expect(out).toContain('Root="HKMU" Key="Software\\Classes\\Directory\\Background\\shell\\throng.OpenProject\\command"');
   });
 
+  it('gives every registry-keyed component its own key path, so no two Guid="*" components collide', () => {
+    // WiX derives a `Guid="*"` component's GUID from its key path. Two components keyed on the same
+    // registry value get the same GUID, and light.exe refuses the package (LGHT1137) — alpha16's
+    // release build failed exactly so, on the user and machine PATH components.
+    const keyPaths = [...out.matchAll(/<RegistryValue\b(?=[^>]*KeyPath="yes")[^>]*>/g)].map((m) => {
+      const attr = (name: string): string => new RegExp(`${name}="([^"]*)"`).exec(m[0])?.[1] ?? '';
+      return `${attr('Root')}\\${attr('Key')}\\${attr('Name')}`;
+    });
+    expect(keyPaths.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(keyPaths).size).toBe(keyPaths.length);
+  });
+
   it('is idempotent', () => {
     expect(transformMsiProject(out)).toBe(out);
   });
