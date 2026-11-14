@@ -69,6 +69,37 @@ describe('applyWikiResolution (T063, FR-055)', () => {
     expect(a.classList.contains(UNRESOLVED_CLASS)).toBe(false);
   });
 
+  describe('068 FR-002, FR-006 — the answer rewrites the link every gesture reads', () => {
+    const linkOfAnchor = (a: HTMLElement): unknown => JSON.parse(a.getAttribute('data-throng-link') ?? 'null');
+    function wikiLink(index: number, value: unknown): HTMLAnchorElement {
+      const a = link(index);
+      a.setAttribute('data-throng-link', JSON.stringify(value));
+      return a;
+    }
+
+    it('rewrites data-throng-link to the resolved file, keeping the fragment', () => {
+      const a = wikiLink(0, { kind: 'file', absPath: 'D:/proj/folder/sub/folder/sub/Target.md', fragment: 'Heading' });
+      const root = mount([a]);
+      applyWikiResolution(root, ['D:/proj/folder/sub/Target.md'], 'D:/proj');
+      expect(linkOfAnchor(a)).toEqual({ kind: 'file', absPath: 'D:/proj/folder/sub/Target.md', fragment: 'Heading' });
+    });
+
+    it('an answer outside the project becomes an outside link', () => {
+      const a = wikiLink(0, { kind: 'outside', target: 'x' });
+      const root = mount([a]);
+      applyWikiResolution(root, ['D:/other/Target.md'], 'D:/proj');
+      expect(linkOfAnchor(a)).toEqual({ kind: 'outside', target: 'D:/other/Target.md' });
+    });
+
+    it('keeps candidate 0 (the document-folder path) when the answer is null', () => {
+      const original = { kind: 'file', absPath: 'D:/proj/docs/Target.md' };
+      const a = wikiLink(0, original);
+      const root = mount([a]);
+      applyWikiResolution(root, [null], 'D:/proj');
+      expect(linkOfAnchor(a)).toEqual(original);
+    });
+  });
+
   it('does nothing when there are no wikilinks at all', () => {
     const root = mount([document.createElement('p')]);
     expect(() => applyWikiResolution(root, [])).not.toThrow();

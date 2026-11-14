@@ -9,7 +9,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PreviewEmbedRead } from '@throng/core';
+import { splitEmbedRef, wikiEmbedRef, type PreviewEmbedRead } from '@throng/core';
 import { MarkdownBody } from '../../src/renderer/preview/providers/markdown/markdown-body.js';
 import { registerBlockRenderer, type BlockRenderer, type BlockRendererEntry } from '../../src/renderer/preview/blocks/block-renderers.js';
 import type { PreviewBodyProps } from '../../src/renderer/preview/provider-view.js';
@@ -51,7 +51,11 @@ const props = (text: string, readEmbeds: PreviewBodyProps['readEmbeds']): Previe
 
 const answering = (files: Record<string, string>) =>
   vi.fn(async (refs: readonly string[]) => ({
-    results: refs.map((ref): PreviewEmbedRead => (ref in files ? { ref, ok: true, text: files[ref]! } : { ref, ok: false, reason: 'missing' })),
+    // 068 FR-013 — a `![[ ]]` reference arrives flagged with its spelling (`wikiEmbedRef`); the answer echoes it.
+    results: refs.map((ref): PreviewEmbedRead => {
+      const plain = splitEmbedRef(ref).ref;
+      return plain in files ? { ref, ok: true, text: files[plain]! } : { ref, ok: false, reason: 'missing' };
+    }),
   }));
 
 const frameText = () => screen.getByTestId('diagram-frame-p1-diagram-0').querySelector('svg text')?.textContent;
@@ -61,7 +65,7 @@ describe('an embedded Mermaid file', () => {
     const read = answering({ 'flow.mmd': 'graph TD; A-->B\n' });
     render(createElement(MarkdownBody, props('# Doc\n\n![[flow.mmd]]\n', read)));
     await waitFor(() => expect(frameText()).toBe('graph TD; A-->B'), { timeout: 10_000 });
-    expect(read).toHaveBeenCalledWith(['flow.mmd']);
+    expect(read).toHaveBeenCalledWith([wikiEmbedRef('flow.mmd')]);
   });
 
   // FR-046m (manual test change request, 2026-10-13) — the document sets the box height, for an embed and a fence.
@@ -95,7 +99,7 @@ describe('an embedded Mermaid file', () => {
   it('a changed file is drawn at the next draw of the document', async () => {
     const files: Record<string, string> = { 'flow.mmd': 'graph TD; A-->B\n' };
     const read = vi.fn(async (refs: readonly string[]) => ({
-      results: refs.map((ref): PreviewEmbedRead => ({ ref, ok: true, text: files[ref]! })),
+      results: refs.map((ref): PreviewEmbedRead => ({ ref, ok: true, text: files[splitEmbedRef(ref).ref]! })),
     }));
     const view = render(createElement(MarkdownBody, props('![[flow.mmd]]\n', read)));
     await waitFor(() => expect(frameText()).toBe('graph TD; A-->B'), { timeout: 10_000 });

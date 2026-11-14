@@ -315,6 +315,8 @@ export function registerPreviewIpc(
 
   // 054 — the text of the Mermaid files a preview embeds. A malformed payload reads nothing; each reference
   // is a string of at most MAX_EMBED_REF_LENGTH, at most MAX_EMBEDS_PER_READ of them (the rest are dropped).
+  // 068 FR-013 — a reference may carry its spelling flag (`wikiEmbedRef`); it is forwarded untouched and
+  // `PreviewService.readOneEmbed` reads it.
   ipc.handle('throng:preview:readEmbeds', async (_event, payload) => {
     const panelId = text(record(payload).panelId);
     const raw = record(payload).refs;

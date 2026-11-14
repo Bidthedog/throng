@@ -10,7 +10,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SHIPPED_PREVIEW_PROVIDERS } from '@throng/core';
+import { SHIPPED_PREVIEW_PROVIDERS, wikiEmbedRef } from '@throng/core';
 import { NodeFileSystem } from '../../src/main/node-file-system.js';
 import { EditorService } from '../../src/main/editor-service.js';
 import { EditorCoordinator } from '../../src/main/editor-coordinator.js';
@@ -79,6 +79,22 @@ describe('readEmbeds', () => {
       { ref: 'sub/seq.mermaid', ok: true, text: 'sequenceDiagram\n' },
       { ref: '/top.mmd', ok: true, text: 'graph LR\n' },
     ]);
+  });
+
+  it('068 FR-013: the ![[ ]] spelling falls back to the project root; the image spelling does not', async () => {
+    await file('flow.mmd', FLOW);
+    const { results } = await previews.readEmbeds('v1', [wikiEmbedRef('flow.mmd'), 'flow.mmd']);
+    expect(results).toEqual([
+      { ref: wikiEmbedRef('flow.mmd'), ok: true, text: FLOW },
+      { ref: 'flow.mmd', ok: false, reason: 'missing' },
+    ]);
+  });
+
+  it("068 FR-013: the note's own folder wins for the ![[ ]] spelling when both hold the file", async () => {
+    await file('flow.mmd', 'graph LR\n');
+    await file('docs/flow.mmd', FLOW);
+    const { results } = await previews.readEmbeds('v1', [wikiEmbedRef('flow.mmd')]);
+    expect(results[0]).toEqual({ ref: wikiEmbedRef('flow.mmd'), ok: true, text: FLOW });
   });
 
   it('reads a name written with an encoded space', async () => {

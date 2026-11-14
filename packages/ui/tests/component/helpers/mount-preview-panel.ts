@@ -15,6 +15,7 @@ import {
   SHIPPED_PREVIEW_PROVIDERS,
   collectPanels,
   createDefaultLayout,
+  splitEmbedRef,
   type Panel,
   type PreviewAttachRequest,
   type PreviewNavigateRequest,
@@ -226,9 +227,13 @@ export async function mountMarkdownPreview(
       : {
           readEmbeds: vi.fn((_panelId: string, refs: string[]) =>
             Promise.resolve({
-              results: refs.map((ref) =>
-                ref in embeds ? { ref, ok: true as const, text: embeds[ref]! } : { ref, ok: false as const, reason: 'missing' as const },
-              ),
+              // 068 FR-013 — a `![[ ]]` embed's reference arrives flagged with its spelling; the answer echoes it.
+              results: refs.map((ref) => {
+                const plain = splitEmbedRef(ref).ref;
+                return plain in embeds
+                  ? { ref, ok: true as const, text: embeds[plain]! }
+                  : { ref, ok: false as const, reason: 'missing' as const };
+              }),
             }),
           ),
         }),

@@ -49,6 +49,7 @@ import {
   isMermaidEmbedRef,
   MAX_EMBEDS_PER_READ,
   resolvePreviewImage,
+  splitEmbedRef,
   type PreviewEmbedRead,
   type AppSettings,
   type Disposable,
@@ -354,9 +355,11 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
    * looked up — a hostile document with an enormous target list cannot make main `stat` unboundedly; the
    * renderer issues a second call for the remainder.
    *
-   * `wikiCandidates` (core) gives the ORDERED candidates — `.md`, `.markdown`, exact, or exact-only for
-   * a target already carrying an extension; `[]` for a rooted target with no project root. Only the
-   * FIRST candidate that exists is answered; a target matching none resolves `null`.
+   * `wikiCandidates` (core) gives the ORDERED candidates — `.md`, `.markdown`, exact (or exact-only for
+   * a target already carrying an extension) from the document's folder, then the same from the project
+   * root for a target with no leading `/` (068 FR-001, the vault-root fallback); a rooted target lists
+   * the root only. Only the FIRST candidate that exists is answered — this answer is the ONE decision the
+   * renderer styles, follows and copies from (068 FR-002) — and a target matching none resolves `null`.
    */
   async resolveWikiTargets(
     panelId: string,
@@ -403,17 +406,38 @@ export class PreviewService implements DocumentLifecycleListener, PreviewLookup 
     return { results: await Promise.all(capped.map((ref) => this.readOneEmbed(run, ref))) };
   }
 
+  /**
+   * `wire` is the reference as a read carries it: 068 FR-013 — the `![[ ]]` spelling is flagged
+   * (`splitEmbedRef`) and, with no leading `/`, falls back to the project root when the document's folder
+   * has no such file; the image spelling resolves from the document's folder only (054 FR-049b). The
+   * answer's `ref` echoes `wire`.
+   */
   private async readOneEmbed(run: PreviewRun, ref: string): Promise<PreviewEmbedRead> {
-    if (!isMermaidEmbedRef(ref)) return { ref, ok: false, reason: 'unsupported' };
-    const resolved = resolvePreviewImage(ref, { docPath: run.filePath, projectRoot: run.projectRoot, remoteImages: false });
-    if (resolved.kind !== 'project') return { ref, ok: false, reason: 'outside' };
-    let relPath = resolved.relPath;
-    try {
-      relPath = decodeURIComponent(relPath);
-    } catch (error) {
-      logExpected('preview-service: decode embed path', 'a stray % is part of the name as written', error);
+    const { ref: plain, wiki } = splitEmbedRef(ref);
+    if (!isMermaidEmbedRef(plain)) return { ref, ok: false, reason: 'unsupported' };
+    // The root fallback resolves the same reference as if the note sat at the project root.
+    const bases = wiki && !plain.trimStart().startsWith('/') ? [run.filePath, join(run.projectRoot, 'x')] : [run.filePath];
+    let absPath = '';
+    for (const docPath of bases) {
+      const resolved = resolvePreviewImage(plain, { docPath, projectRoot: run.projectRoot, remoteImages: false });
+      // The document's folder decides `outside`; a root fallback that leaves the project simply is not a candidate.
+      if (resolved.kind !== 'project') {
+        if (absPath === '') return { ref, ok: false, reason: 'outside' };
+        continue;
+      }
+      let relPath = resolved.relPath;
+      try {
+        relPath = decodeURIComponent(relPath);
+      } catch (error) {
+        logExpected('preview-service: decode embed path', 'a stray % is part of the name as written', error);
+      }
+      const candidate = join(run.projectRoot, relPath);
+      if (absPath === '') absPath = candidate; // candidate 0 is what a miss reports and a hit replaces
+      if (await this.isFile(candidate)) {
+        absPath = candidate;
+        break;
+      }
     }
-    const absPath = join(run.projectRoot, relPath);
     if (!(await this.isFile(absPath))) return { ref, ok: false, reason: 'missing' };
     const real = await this.realContainment(absPath, run.projectRoot);
     if (real === null) return { ref, ok: false, reason: 'missing' };

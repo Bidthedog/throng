@@ -153,9 +153,11 @@ const WIKI_SCHEME = 'throng-wiki';
 
 /**
  * A `throng-wiki:` href → its `PreviewLink` (047, FR-050 – FR-056). `wikiCandidates` (`wiki-links.ts`,
- * FR-052c) gives the ordered candidates; the FIRST is what classification and navigation target —
- * which one actually EXISTS needs the filesystem, so main answers that separately
- * (contracts/preview-ipc-047.md §3) and the render pass marks the rest unresolved. An empty
+ * FR-052c) gives the ordered candidates; the FIRST is only PROVISIONAL here — which one actually EXISTS
+ * needs the filesystem, so main answers that (contracts/preview-ipc-047.md §3) and the render pass
+ * replaces this link with {@link classifyResolvedWiki} of the answer (068 FR-002). Candidate 0 stays
+ * what an UNRESOLVED link follows, so the missing-target notice names the document-folder path
+ * (068 FR-003). An empty
  * `ctx.projectRoot` means "no owning project" (a sub-workspace preview), the same sentinel
  * `wikiCandidates` reads as `null` (FR-052b).
  */
@@ -179,6 +181,20 @@ function classifyWiki(rest: string, originalText: string, ctx: { docPath: string
   if (absPath === undefined) return { kind: 'inert' };
   if (!isUnderPath(absPath, ctx.projectRoot)) return { kind: 'outside', target: originalText };
   return rawFragment.length > 0 ? { kind: 'file', absPath, fragment: rawFragment } : { kind: 'file', absPath };
+}
+
+/**
+ * The link a wikilink becomes once main has said which candidate exists (068 FR-002, FR-006): the same
+ * `file` / `outside` answer an ordinary link to that path gets, so follow, Copy Link and the status bar
+ * all read the ONE resolved path. `absPath` is the resolved file, not a candidate.
+ */
+export function classifyResolvedWiki(
+  absPath: string,
+  fragment: string | null,
+  ctx: { docPath: string; projectRoot: string },
+): PreviewLink {
+  if (!isUnderPath(absPath, ctx.projectRoot)) return { kind: 'outside', target: absPath };
+  return fragment !== null && fragment.length > 0 ? { kind: 'file', absPath, fragment } : { kind: 'file', absPath };
 }
 
 export function classifyPreviewLink(

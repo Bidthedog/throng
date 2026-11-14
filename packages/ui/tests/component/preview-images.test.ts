@@ -144,6 +144,59 @@ describe('an image that cannot load shows its alt text (FR-084)', () => {
  * the internal scheme and the panel id. An image shown as its alternative text carries the same tooltip on
  * the span. An image inside a followable link carries none, so the link's own title shows (security I3).
  */
+/*
+ * 068 FR-011, FR-012 — `![[folder/pic.png]]` in `docs/guide.md`: the file may sit beside the note or at the
+ * project root, and only main knows which. The image is HELD with no `src` until its answer comes.
+ */
+describe('an image embed is resolved by main before it draws (068 FR-011, FR-012)', () => {
+  function mountEmbed(resolved: Promise<{ resolved: (string | null)[] }>) {
+    const resolveWikiTargets = vi.fn().mockReturnValue(resolved);
+    const props: PreviewBodyProps = {
+      panelId: 'p1',
+      content: { kind: 'text', text: '![[folder/pic.png]]' },
+      filePath: DOC,
+      projectRoot: ROOT,
+      providerSettings: { enabled: true },
+      initialViewState: undefined,
+      onViewStateCapture: () => {},
+      onFollow: () => {},
+      onNotice: () => {},
+      onDrawn: () => {},
+      onBodyFailure: () => {},
+      resolveWikiTargets,
+    };
+    render(createElement(MarkdownBody, props));
+    return { host: screen.getByTestId('preview-markdown-p1'), resolveWikiTargets };
+  }
+
+  it('is held without a src until resolution answers, then draws from the resolved project path', async () => {
+    let answer!: (v: { resolved: (string | null)[] }) => void;
+    const { host, resolveWikiTargets } = mountEmbed(new Promise((r) => (answer = r)));
+    await waitFor(() => expect(resolveWikiTargets).toHaveBeenCalledWith([{ path: 'folder/pic.png', rooted: false }]), COLD);
+    const held = host.querySelector('img');
+    expect(held).not.toBeNull();
+    expect(held!.hasAttribute('src')).toBe(false);
+
+    answer({ resolved: [`${ROOT}/folder/pic.png`] });
+
+    await waitFor(() =>
+      expect(host.querySelector('img')?.getAttribute('src')).toBe('throng-preview://asset/p1/folder/pic.png'),
+    );
+  });
+
+  it('an unresolved one shows its alt text like a missing image', async () => {
+    const { host } = mountEmbed(Promise.resolve({ resolved: [null] }));
+    await waitFor(() => expect(host.querySelector('.preview-markdown__alt')?.textContent).toBe('pic.png'), COLD);
+    expect(host.querySelector('img')).toBeNull();
+  });
+
+  it('one outside the project is refused like the standard image', async () => {
+    const { host } = mountEmbed(Promise.resolve({ resolved: ['D:/other/pic.png'] }));
+    await waitFor(() => expect(host.querySelector('.preview-markdown__alt')?.textContent).toBe('pic.png'), COLD);
+    expect(host.querySelector('img')).toBeNull();
+  });
+});
+
 describe('an image’s tooltip is its source as written, then its title (FR-120)', () => {
   const RLO = String.fromCharCode(0x202e);
   const LRI = String.fromCharCode(0x2066);
@@ -182,23 +235,23 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
   });
 
   it('an authored title follows the source', () => {
-    expect(img(renderImages('![](image.png "Diagram")')).getAttribute('title')).toBe('image.png — Diagram');
+    expect(img(renderImages('![](image.png "Diagram")')).getAttribute('title')).toBe('image.png\nDiagram');
   });
 
   it('a remote https: image, setting on: its URL', () => {
-    expect(img(renderImages('![b](https://img.example/b.svg)', true)).getAttribute('title')).toBe('https://img.example/b.svg');
+    expect(img(renderImages('![b](https://img.example/b.svg)', true)).getAttribute('title')).toBe('b\nhttps://img.example/b.svg');
   });
 
   it('a blocked http: image: its alternative-text span carries the same tooltip', async () => {
     const span = await altSpan('![h](http://example.com/a.png "Old")');
     expect(span.textContent).toBe('h');
-    expect(span.getAttribute('title')).toBe('http://example.com/a.png — Old');
+    expect(span.getAttribute('title')).toBe('h\nhttp://example.com/a.png\nOld');
   });
 
   it('an https: image with Load remote images off: the same', async () => {
-    expect(img(renderImages('![b](https://img.example/b.svg)', false)).getAttribute('title')).toBe('https://img.example/b.svg');
+    expect(img(renderImages('![b](https://img.example/b.svg)', false)).getAttribute('title')).toBe('b\nhttps://img.example/b.svg');
     const span = await altSpan('![b](https://img.example/b.svg)', false);
-    expect(span.getAttribute('title')).toBe('https://img.example/b.svg');
+    expect(span.getAttribute('title')).toBe('b\nhttps://img.example/b.svg');
   });
 
   // DELETED: "an image inside a followable link has no title" — preview-sanitise.test.ts ("an image title inside a
@@ -206,7 +259,7 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
 
   it('strips bidi controls from the source and the title', () => {
     const title = img(renderImages(`<img src="docs/${RLO}gnp.exe.png" alt="a" title="A ${LRI}title">`)).getAttribute('title') ?? '';
-    expect(title).toBe('docs/gnp.exe.png — A title');
+    expect(title).toBe('a\ndocs/gnp.exe.png\nA title');
     expect(title.includes(RLO) || title.includes(LRI)).toBe(false);
   });
 
@@ -224,7 +277,7 @@ describe('an image’s tooltip is its source as written, then its title (FR-120)
     expect(host.querySelector('img'), 'the failed img is replaced').toBeNull();
     const span = host.querySelector('.preview-markdown__alt');
     expect(span?.textContent).toBe('A diagram');
-    expect(span?.getAttribute('title')).toBe('missing.png — Missing');
+    expect(span?.getAttribute('title')).toBe('A diagram\nmissing.png\nMissing');
   });
 });
 

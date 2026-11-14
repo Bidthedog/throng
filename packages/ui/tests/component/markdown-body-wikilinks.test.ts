@@ -5,7 +5,7 @@
  * wikilink survives the real sanitiser with its `data-throng-wiki-index`. This is the WIRING: that a
  * mounted body actually calls the prop with what `render()` collected, and applies what it answers.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarkdownBody } from '../../src/renderer/preview/providers/markdown/markdown-body.js';
@@ -50,6 +50,23 @@ describe('MarkdownBody batches resolveWikiTargets after each draw (T063)', () =>
     // Give the resolved promise's .then() a turn, then assert the negative held.
     await waitFor(() => expect(host.querySelector('a')?.getAttribute('data-throng-wiki-index')).toBe('0'));
     expect(host.querySelector('a')?.classList.contains('preview-link--unresolved')).toBe(false);
+  });
+
+  it('068 FR-003: an unresolved vault-root link is styled unresolved and follows the document-folder path (what the missing-target notice names)', async () => {
+    const resolveWikiTargets = vi.fn().mockResolvedValue({ resolved: [null] });
+    const onFollow = vi.fn();
+    render(
+      createElement(
+        MarkdownBody,
+        baseProps('[[folder/sub/Target]]', { resolveWikiTargets, onFollow, filePath: 'D:/proj/folder/sub/Note.md' }),
+      ),
+    );
+    const host = screen.getByTestId('preview-markdown-p1');
+    await waitFor(() => expect(host.querySelector('a')?.classList.contains('preview-link--unresolved')).toBe(true), COLD);
+
+    fireEvent.click(host.querySelector('a')!, { ctrlKey: true });
+
+    expect(onFollow).toHaveBeenCalledWith({ kind: 'file', absPath: 'D:/proj/folder/sub/folder/sub/Target.md' });
   });
 
   it('never calls resolveWikiTargets for a document with no wikilinks', async () => {

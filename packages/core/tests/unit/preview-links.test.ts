@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { classifyPreviewLink, headingSlug, languageForFenceInfo, resolvePreviewImage } from '../../src/preview/links.js';
+import {
+  classifyPreviewLink,
+  classifyResolvedWiki,
+  headingSlug,
+  languageForFenceInfo,
+  resolvePreviewImage,
+} from '../../src/preview/links.js';
 
 /**
  * 044 T007 — what a link or an image in a rendered preview is ALLOWED to be.
@@ -12,6 +18,27 @@ import { classifyPreviewLink, headingSlug, languageForFenceInfo, resolvePreviewI
 
 const win = { docPath: 'C:\\proj\\docs\\guide.md', projectRoot: 'C:\\proj' };
 const posix = { docPath: '/home/u/proj/docs/guide.md', projectRoot: '/home/u/proj' };
+
+describe('classifyResolvedWiki — 068 FR-002, FR-006', () => {
+  it('a resolved path under the root is a file link carrying the fragment, as an ordinary link to it', () => {
+    expect(classifyResolvedWiki('C:\\proj\\folder\\Target.md', 'Heading', win)).toEqual({
+      kind: 'file',
+      absPath: 'C:\\proj\\folder\\Target.md',
+      fragment: 'Heading',
+    });
+    expect(classifyPreviewLink('../folder/Target.md#Heading', win)).toEqual(
+      classifyResolvedWiki('C:\\proj\\folder\\Target.md', 'Heading', win),
+    );
+  });
+
+  it('no fragment leaves the field off', () => {
+    expect(classifyResolvedWiki('/home/u/proj/a.md', null, posix)).toEqual({ kind: 'file', absPath: '/home/u/proj/a.md' });
+  });
+
+  it('a path outside the root is outside, naming the path', () => {
+    expect(classifyResolvedWiki('C:\\other\\a.md', null, win)).toEqual({ kind: 'outside', target: 'C:\\other\\a.md' });
+  });
+});
 
 describe('classifyPreviewLink — external (FR-091)', () => {
   it.each(['https://example.com/a?b=c#d', 'http://example.com', 'HTTPS://Example.com/', 'mailto:someone@example.com'])(

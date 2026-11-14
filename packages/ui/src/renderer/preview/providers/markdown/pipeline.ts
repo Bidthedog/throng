@@ -54,7 +54,7 @@
 import MarkdownIt from 'markdown-it';
 import type { Env, MarkdownIt as MarkdownItInstance, StateCore, Token } from 'markdown-it';
 import { isMap, isScalar, isSeq, parseDocument, Scalar, type Node as YamlNode } from 'yaml';
-import { headingSlug, scanLinkLine, splitFrontMatter, type HeadingRecord, type ScanOptions } from '@throng/core';
+import { headingSlug, scanLinkLine, splitFrontMatter, splitTrailingImageSize, type HeadingRecord, type ScanOptions } from '@throng/core';
 import {
   FRONT_MATTER_LINK_ATTRIBUTE,
   encodeFrontMatterLink,
@@ -482,6 +482,35 @@ function headingText(inline: Token | undefined): string {
     .join(' ');
 }
 
+/**
+ * 068 FR-066 — a standard image takes an image embed's size forms: a last `|W` / `|WxH` segment of its destination
+ * (`![alt](path.png|200)`) or, failing that, of its alt text (`![alt|200](path.png)`) is removed from it and drawn
+ * as `width`/`height`. The mark is this render's nonce: the sanitiser keeps a size only on an image carrying it
+ * (a document's own `<img width>` carries none), and removes the nonce.
+ */
+function sizeStandardImage(state: StateCore, image: Token, nonce: string): void {
+  let source = String(image.attrGet('src') ?? '');
+  try {
+    source = decodeURI(source); // markdown-it percent-encodes the destination; the segment is read as written
+  } catch (error) {
+    logExpected('pipeline: decode an image destination', 'the document may carry a malformed percent-escape; the destination is used as written', error);
+    return;
+  }
+  let size = splitTrailingImageSize(source);
+  if (size !== null) {
+    image.attrSet('src', state.md.normalizeLink(size.rest));
+  } else {
+    const last = image.children?.at(-1);
+    size = last?.type === 'text' ? splitTrailingImageSize(last.content) : null;
+    if (size === null || last === undefined) return;
+    last.content = size.rest;
+    image.content = image.children?.map((c) => c.content).join('') ?? size.rest;
+  }
+  if (size.width !== null) image.attrSet('width', String(size.width));
+  if (size.height !== null) image.attrSet('height', String(size.height));
+  image.attrSet('data-heading-nonce', nonce);
+}
+
 function blockAttributes(state: StateCore): void {
   const render = renderState(state.env);
   const { tokens } = state;
@@ -503,7 +532,9 @@ function blockAttributes(state: StateCore): void {
     // token carries none, so `attrGet` returning `null` (not an empty body) is what tells them apart.
     if (token.type === 'inline' && token.children) {
       for (const child of token.children) {
-        if (child.type !== 'link_open') continue;
+        if (child.type === 'image' && child.attrGet(WIKI_HREF_ATTRIBUTE) === null) sizeStandardImage(state, child, render.nonce);
+        // 068 FR-011 — an image embed (`![[pic.png]]`, `embeds.ts`) is resolved through the same batch.
+        if (child.type !== 'link_open' && child.type !== 'image') continue;
         const body = child.attrGet(WIKI_HREF_ATTRIBUTE);
         if (body === null) continue;
         const decoded = decodeWikiHref(String(body));

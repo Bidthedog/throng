@@ -475,6 +475,34 @@ describe('the keyboard (FR-096)', () => {
   });
 });
 
+describe('068 FR-002, FR-006 — a vault-root wikilink follows the file main resolved', () => {
+  const RESOLVED = `${ROOT}/folder/sub/Target.md`;
+
+  async function mountWiki() {
+    const resolveWikiTargets = vi.fn().mockResolvedValue({ resolved: [RESOLVED] });
+    const mounted = mountBody('[[folder/sub/Target#Heading]]', { resolveWikiTargets, filePath: `${ROOT}/folder/sub/Note.md` });
+    const a = await waitFor(() => {
+      const el = mounted.host.querySelector<HTMLElement>('a[data-throng-link]');
+      expect(el).not.toBeNull();
+      expect(JSON.parse(el!.getAttribute('data-throng-link')!)).toMatchObject({ absPath: RESOLVED });
+      return el!;
+    }, COLD);
+    return { ...mounted, a };
+  }
+
+  it('Ctrl+click follows the resolved file, fragment kept, not the document-folder candidate', async () => {
+    const { a, onFollow } = await mountWiki();
+    fireEvent.click(a, { ctrlKey: true });
+    expect(onFollow).toHaveBeenCalledWith({ kind: 'file', absPath: RESOLVED, fragment: 'Heading' });
+  });
+
+  it('the status-bar target and the hover title stay the text as written, before and after resolution', async () => {
+    const { a } = await mountWiki();
+    expect(a.getAttribute('data-throng-target')).toBe('folder/sub/Target#Heading');
+    expect(a.getAttribute('title')).toBe('folder/sub/Target#Heading');
+  });
+});
+
 describe('in a mounted panel (the chrome’s half)', () => {
   it('Ctrl+Enter (preview.followLink) follows the focused link exactly as Ctrl+click does (FR-096c)', async () => {
     const m = await mountMarkdownPreview(LINKS);

@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { PreviewEmbedRead } from '@throng/core';
+import { wikiEmbedRef, type PreviewEmbedRead } from '@throng/core';
 import { registerPreviewIpc, type PreviewIpcMain, type PreviewIpcService } from '../../src/main/preview-ipc.js';
 
 type Listener = (event: unknown, payload: unknown) => unknown;
@@ -37,6 +37,23 @@ describe('throng:preview:readEmbeds', () => {
       results: [
         { ref: 'a.mmd', ok: true, text: 'graph TD\n' },
         { ref: 'b.mermaid', ok: true, text: 'graph TD\n' },
+      ],
+    });
+  });
+
+  it('068 FR-013: forwards the spelling flag carried in a reference, and the answer echoes it', async () => {
+    const seen: (readonly string[])[] = [];
+    const handler = wire(async (_panelId, refs) => {
+      seen.push(refs);
+      return { results: refs.map((ref) => ({ ref, ok: false as const, reason: 'missing' as const })) };
+    });
+    const flagged = wikiEmbedRef('a.mmd');
+    const answer = await handler(event, { panelId: 'pv', refs: [flagged, 'a.mmd'] });
+    expect(seen).toEqual([[flagged, 'a.mmd']]);
+    expect(answer).toEqual({
+      results: [
+        { ref: flagged, ok: false, reason: 'missing' },
+        { ref: 'a.mmd', ok: false, reason: 'missing' },
       ],
     });
   });

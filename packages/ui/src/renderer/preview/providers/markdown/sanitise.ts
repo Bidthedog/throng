@@ -77,7 +77,7 @@ import {
   stripBidiControls,
 } from '../../link-dom.js';
 import type { PipelineContext } from './pipeline.js';
-import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX } from './wikilinks.js';
+import { WIKI_HREF_ATTRIBUTE, WIKI_SCHEME_PREFIX, wikiHrefDisplayText } from './wikilinks.js';
 import { DIAGRAM_IMAGE_ATTRIBUTE, DIAGRAM_PNG_DATA_URI } from '../../diagram/diagram-host.js';
 import { logExpected } from '@throng/core';
 
@@ -91,7 +91,7 @@ export const PROFILE = Object.freeze({
     'details', 'summary', 'kbd', 'sub', 'sup',
   ],
   ALLOWED_ATTR: [
-    'href', 'src', 'alt', 'title', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan',
+    'href', 'src', 'alt', 'title', 'width', 'height', 'start', 'checked', 'disabled', 'type', 'open', 'colspan', 'rowspan',
     'data-source-line', 'data-lang', 'data-align', 'data-heading-slug',
     'data-heading-nonce',   // admitted only so the heading hook can verify it; the hook removes it from every element
     'data-task-line',       // 054 R4 — kept only on a checkbox carrying this render's nonce (the input hook)
@@ -100,7 +100,8 @@ export const PROFILE = Object.freeze({
     'data-throng-wiki-href', // 047 T061 — a wikilink's href BODY, with no scheme in the value (wikilinks.ts)
     'data-throng-fm-link',  // 067 FR-132 — a front matter link the editor's grammar read; kept only with this render's nonce (the link hook)
     'data-throng-embed',    // 054 — a Mermaid embed's reference, URI-encoded with no scheme (embeds.ts)
-    'data-diagram-height',  // 054 FR-046m — a diagram's box height, whole pixels; parsed again where it is read
+    'data-throng-embed-wiki', // 068 FR-013 — the `![[ ]]` spelling of an embed (presence only); it falls back to the project root
+    'data-diagram-height', // 054 FR-046m — a diagram's box height, whole pixels; parsed again where it is read
     'data-diagram-pending', // 054 FR-032 — a place a diagram is drawn into once its source is read; presence only
   ],
   ALLOW_DATA_ATTR: false,
@@ -145,7 +146,7 @@ function displayTarget(raw: string): string {
 }
 
 /** `relPath` as a `throng-preview://asset/` URL: the panel id and every segment percent-encoded. */
-function assetUrl(panelId: string, relPath: string): string {
+export function assetUrl(panelId: string, relPath: string): string {
   const path = relPath.split('/').map(encodeURIComponent).join('/');
   return `throng-preview://asset/${encodeURIComponent(panelId)}/${path}`;
 }
@@ -206,7 +207,12 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     node.setAttribute(LINK_ATTRIBUTE, serialiseLink(link));
     node.setAttribute('tabindex', '0');
     node.setAttribute('role', 'link');
-    const target = displayTarget(link.kind === 'external' ? link.url : link.kind === 'outside' ? link.target : href);
+    // 068 FR-004/FR-005 — a wikilink reads as the author wrote it, never `throng-wiki:a%2Fb`.
+    const wikiShown = wikiBody === null ? null : wikiHrefDisplayText(wikiBody);
+    const target =
+      wikiShown !== null
+        ? stripBidiControls(wikiShown)
+        : displayTarget(link.kind === 'external' ? link.url : link.kind === 'outside' ? link.target : href);
     /*
      * FR-169a (round five) — the title is the TARGET, and nothing else.
      *
@@ -230,18 +236,45 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
    * address, which would expose the internal scheme and the panel id. Inside a followable link there is none:
    * the link's own title must show over it (I3), and the status bar readout names that link (FR-118).
    */
-  const imageTitle = (node: Element, src: string | null): void => {
+  const imageTitle = (node: Element, src: string | null, embedFileName: string | null = null): void => {
     const authored = node.getAttribute('title');
     node.removeAttribute('title');
     if (node.closest(`[${LINK_ATTRIBUTE}]`) !== null) return;
     const parts: string[] = [];
+    // 068 FR-057 — the alt text first, when it has any; an embed whose alt text is only its file name (FR-010)
+    // shows the source alone, which already names that file.
+    const alt = stripBidiControls(node.getAttribute('alt') ?? '').trim();
+    if (alt.length > 0 && alt !== embedFileName) parts.push(alt);
     if (src !== null && src.trim().length > 0) parts.push(displayTarget(src));
     const title = authored === null ? '' : stripBidiControls(authored).trim();
     if (title.length > 0) parts.push(title);
-    if (parts.length > 0) node.setAttribute('title', parts.join(' — '));
+    if (parts.length > 0) node.setAttribute('title', parts.join('\n'));
   };
 
   const onImage = (node: Element): void => {
+    // 068 FR-011 — an image EMBED (`![[pic.png]]`) is held with no `src`: which candidate holds the file is
+    // main's answer, applied by `applyImageEmbedResolution` (`embeds.ts`) once it comes, through the same
+    // containment and asset route a standard image takes. Whatever `src` the node carried is dropped, so a
+    // raw `<img data-throng-wiki-href=…>` can name nothing but a project file main resolves.
+    const embedBody = node.getAttribute(WIKI_HREF_ATTRIBUTE);
+    node.removeAttribute(WIKI_HREF_ATTRIBUTE);
+    // 068 FR-056 — an embed's size (`|200`, `|200x100`) rides as width/height, whole CSS pixels and nothing else;
+    // a standard image's own are dropped as they always were. The preview's `max-width: 100%` keeps a wide one in the pane.
+    // 068 FR-066 — a STANDARD image's size (from `![alt](path.png|200)` / `![alt|200](path.png)`) is kept only
+    // when it carries this render's nonce, the pipeline's mark (the heading nonce, as the heading hook reads it).
+    const nonce = node.getAttribute('data-heading-nonce');
+    const context = current?.context;
+    const sizeFromPipeline = context !== undefined && nonce !== null && nonce === context.headingNonce;
+    for (const name of ['width', 'height']) {
+      const value = node.getAttribute(name);
+      if ((embedBody === null && !sizeFromPipeline) || value === null || !/^[1-9]\d{0,4}$/.test(value)) node.removeAttribute(name);
+    }
+    if (embedBody !== null) {
+      const source = wikiHrefDisplayText(embedBody);
+      imageTitle(node, source, source === null ? null : source.slice(source.lastIndexOf('/') + 1));
+      node.removeAttribute('src');
+      return;
+    }
     const src = node.getAttribute('src');
     imageTitle(node, src);
     const env = current?.context?.environment;
@@ -296,6 +329,10 @@ export function createSanitiser(root: WindowLike = window): MarkdownSanitiser {
     }
 
     if (tag === 'IMG') onImage(node);
+    else {
+      node.removeAttribute('width');
+      node.removeAttribute('height');
+    }
 
     const taskNonce = node.getAttribute('data-task-nonce');
     node.removeAttribute('data-task-nonce');

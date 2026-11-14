@@ -38,6 +38,15 @@ describe('a wikilink survives the real sanitiser and carries data-throng-link (R
     expect(link?.kind).toBe('outside');
   });
 
+  it('068 FR-004/FR-005: the title and data-throng-target read as written — no scheme, no %2F', () => {
+    const a = render('[[folder/sub/Target#Some Heading]]').querySelector('a');
+    expect(a?.getAttribute('title')).toBe('folder/sub/Target#Some Heading');
+    expect(a?.getAttribute('data-throng-target')).toBe('folder/sub/Target#Some Heading');
+    const rooted = render('[[/x/Y]]').querySelector('a');
+    expect(rooted?.getAttribute('title')).toBe('/x/Y');
+    expect(rooted?.getAttribute('data-throng-target')).toBe('/x/Y');
+  });
+
   it('two wikilinks in one document get distinct, ordered indices', () => {
     const fragment = render('[[One]] and [[Two]]');
     const indices = [...fragment.querySelectorAll('[data-throng-wiki-index]')].map((el) =>

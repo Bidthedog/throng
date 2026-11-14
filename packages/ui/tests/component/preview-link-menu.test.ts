@@ -39,6 +39,8 @@ import { openPreviewLinkMenu, type PreviewLinkMenuArgs } from '../../src/rendere
 import type { LinkActionDeps } from '../../src/renderer/links/link-actions.js';
 import type { MenuAction } from '../../src/renderer/workspace/context-menu.js';
 import type { PreviewBodyProps, PreviewProviderView } from '../../src/renderer/preview/provider-view.js';
+import { applyWikiResolution } from '../../src/renderer/preview/providers/markdown/wikilinks.js';
+import { linkOf } from '../../src/renderer/preview/link-dom.js';
 import { COLD, README, mountMarkdownPreview } from './helpers/mount-preview-panel.js';
 
 const EXTERNAL: PreviewLink = { kind: 'external', url: 'https://example.com/' };
@@ -140,6 +142,20 @@ describe('openPreviewLinkMenu — SC-025: the same Link menu, per fixture (FR-17
       'Open in OS Default Program',
       'Copy Link to Clipboard',
     ]);
+  });
+
+  it('068 FR-006: a resolved wikilink’s menu resolves and copies the file main answered, not candidate 0', async () => {
+    const resolve = vi.fn(() => Promise.resolve({ ok: true as const, link: resolvedFile }));
+    (window as unknown as { throng: unknown }).throng = { links: { resolve } };
+    const a = document.createElement('a');
+    a.setAttribute('data-throng-wiki-index', '0');
+    a.setAttribute('data-throng-link', JSON.stringify({ kind: 'file', absPath: 'D:\\proj\\docs\\Target.md' }));
+    document.body.append(a);
+    applyWikiResolution(document.body, ['D:\\proj\\folder\\Target.md'], 'D:\\proj');
+
+    openPreviewLinkMenu(baseArgs({ link: linkOf(a)! }));
+
+    expect(resolve.mock.calls[0]?.[0]).toMatchObject({ text: 'D:\\proj\\folder\\Target.md' });
   });
 
   it('an `outside` link sends the same resolve, with the document’s own directory as the base', async () => {
