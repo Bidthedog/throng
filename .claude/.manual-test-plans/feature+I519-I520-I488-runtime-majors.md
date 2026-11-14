@@ -2,9 +2,9 @@
 
 | ID | Title | Status | Signed off at | Date | Reason |
 |---|---|---|---|---|---|
-| MT-01 | Everyday use on Electron 45 | untested | | | |
-| MT-02 | Projects and layout survive a restart | untested | | | |
-| MT-03 | File Explorer, Find in Files and project list trees | untested | | | |
+| MT-01 | Everyday use on Electron 45 | signed off | 78273339bd4c | 2026-11-14 | |
+| MT-02 | Projects and layout survive a restart | signed off | 78273339bd4c | 2026-11-14 | |
+| MT-03 | File Explorer, Find in Files and project list trees | signed off | 78273339bd4c | 2026-11-14 | |
 
 ## MT-01: Everyday use on Electron 45
 
