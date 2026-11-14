@@ -64,7 +64,7 @@ How prerelease suffixes are compared and published: [references/versioning.md](r
 preflight → branch → dependency sweep (own commit) → CHANGELOG → version bump → docs
   → test-suite audit → local checks → commit → PR → gate.yml (full) → merge → tag
   → release.yml (full E2E → package → reconcile → verify ×9 combinations → coexistence
-  → render body → sign → publish → repositories)
+  → render body → sign → publish → repositories) → target milestone's description
 any failure → fix (own PR, merged) → back to the earliest step the fix invalidates
 ```
 
@@ -500,7 +500,17 @@ Confirm, and report:
   after that means the badge's query is wrong, not the cache (`sort=semver` once pinned it to alpha9:
   semver compares `alpha16` and `alpha9` as text). Fix it through its own PR.
 
+**Then bring the target milestone's description up to date.** The target is the milestone the version
+releases toward: the version without its prerelease suffix (`1.0.0-alpha16` → `v1.0.0`). Load
+**milestone-planning** and run its *Sync the description* step on that milestone. That skill owns the
+format and when a box is ticked, which keeps the description to headline goals with the detail left in
+the milestone's issue list. Unattended rules apply here too: settle each unlisted issue by that
+format, never by asking, and move no issue. Put any move it suggests in the final report. A full release
+that closes its milestone also runs that skill's *a milestone is about to be closed* sync first, as this
+skill stands in for `release-manager` in its table.
+
 Then say it plainly, in one report: the version, the release URL, the gate run URL, the release run URL,
+the milestone's changed lines and any suggested issue moves,
 the fix PRs (links), what the sweep took and held back, majors deliberately deferred, majors taken to clear an
 advisory, any dev-only advisory accepted (with its failed attempt and a suggested corrective action),
 the test-suite audit proposals,
@@ -606,4 +616,4 @@ set or a step in this runbook.
 - `specs/020-application-packaging/`, `specs/042-release-notes-and-artifacts/` — the requirements
   behind every refusal above.
 - **throng-testing** for a failing or flaky suite; **git-commit** for the commit; **branch-sync**
-  for the PR mechanics.
+  for the PR mechanics; **milestone-planning** for the target milestone's description.
