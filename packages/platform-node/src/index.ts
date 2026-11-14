@@ -6,6 +6,17 @@ export { NodeUserContext } from './node-user-context.js';
 // Durable diagnostics (#123): the file sink both boundaries log through, and crash reports.
 export { CRASH_DIR_NAME, createFileLog, reportOwnFailure, writeCrashReport } from './node-file-log.js';
 export type { DiagnosticLog, FileLogOptions } from './node-file-log.js';
+// Anonymised diagnostic log (068, #623): the keyed hash, the per-install salt and the machine identity.
+export {
+  ANON_SALT_FILE,
+  LEGACY_ANON_SALT_FILE,
+  createProcessAnonymiser,
+  hmacHash,
+  readOrCreateSalt,
+  registerMachineIdentity,
+  type MachineIdentityOptions,
+  type ProcessAnonymiserOptions,
+} from './machine-identity.js';
 export { execFileOffLoop } from './off-loop-exec.js';
 export { STDERR_TAIL_CHARS, logChildFailure, watchChild, type WatchChildOptions } from './watch-child.js';
 export { clearStaleSocket } from './stale-socket.js';

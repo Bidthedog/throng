@@ -152,6 +152,7 @@ import { refusedAsBinaryToOs } from '../links/open-unsupported-in-os.js';
 import { useReportSubjectFailure } from '../workspace/panel-failure-notice.js';
 import { isPanelSectionMaximised } from '../workspace/maximise-store.js';
 import { findHeading, linkOf, type EditorPreviewLink } from './link-dom.js';
+import { holdHeading, type HeadingHold } from './heading-hold.js';
 import { previewContentMenu, type PreviewContentMenuArgs, type PreviewContentSection, type PreviewEditorRouteItem } from './content-menu.js';
 import { docDirectory, openPreviewLinkMenu } from './preview-link-menu.js';
 import { focusLocalPanel, requestPreviewOpen } from './open-preview.js';
@@ -934,6 +935,19 @@ export function PreviewPanel({
    */
   /** The fold state as of the last render — read by `scrollToHeading`, which is memoised above it. */
   const foldStateRef = useRef<FoldState>(initialFold('expanded'));
+  /**
+   * 068 US1 — the hold keeping a followed heading at the top while the body settles (`heading-hold.ts`). One at
+   * a time: a newer jump replaces it, a redraw of the file (`onDrawn`) and the panel unmounting end it.
+   */
+  const headingHold = useRef<HeadingHold | null>(null);
+  /** What the hold was taken over: a redraw of THIS file and text keeps it (B17); another file or a live edit ends it. */
+  const heldDocument = useRef<{ filePath: string | null; text: string | null } | null>(null);
+  const endHeadingHold = useCallback((): void => {
+    headingHold.current?.end();
+    headingHold.current = null;
+    heldDocument.current = null;
+  }, []);
+  useEffect(() => endHeadingHold, [endHeadingHold]);
   const scrollToHeading = useCallback(
     (fragment: string, animateMs?: number, expandTarget = false): boolean => {
       const host = bodyHostRef.current;
@@ -960,8 +974,19 @@ export function PreviewPanel({
         // The heading to the top of THIS body host — host-relative arithmetic, as `open-preview.ts` does,
         // rather than `scrollIntoView`, which would also scroll every scrollable ancestor of the panel.
         const delta = heading.getBoundingClientRect().top - host.getBoundingClientRect().top;
+        endHeadingHold(); // a newer jump supersedes the last one's hold
         if (animateMs !== undefined) tweenScrollTop(host, host.scrollTop + delta, animateMs);
-        else host.scrollTop += delta;
+        else {
+          // 068 US1 — content above the heading that has not reached its size yet (an image, a diagram, an
+          // embed) would push it down after a scroll made now: the hold jumps once the body has settled (at once
+          // when it has) and keeps the heading at the top until the reader scrolls (`heading-hold.ts`).
+          const hold = holdHeading(host, fragment, () => {
+            if (headingHold.current === hold) headingHold.current = null;
+          });
+          headingHold.current = hold;
+          const content = stateRef.current?.content;
+          heldDocument.current = { filePath: drawnFile.current, text: content?.kind === 'text' ? content.text : null };
+        }
         // The link was followed: a notice about an earlier one no longer describes anything (item 13).
         clearLinkNotice();
         return true;
@@ -969,7 +994,7 @@ export function PreviewPanel({
       raiseLinkNotice({ kind: 'link-missing-heading', target: fragment });
       return false;
     },
-    [raiseLinkNotice, clearLinkNotice],
+    [raiseLinkNotice, clearLinkNotice, endHeadingHold],
   );
   scrollToHeadingRef.current = scrollToHeading;
 
@@ -994,7 +1019,10 @@ export function PreviewPanel({
     (filePath: string, fragment: string, animateMs?: number, expandTarget = false): void => {
       const leavingViewState = placeLeft() ?? TOP_OF_DOCUMENT;
       if (!scrollToHeading(fragment, animateMs, expandTarget)) return;
-      const arrivingViewState = placeLeft() ?? TOP_OF_DOCUMENT;
+      // A jump still waiting for the body to settle has not moved the body: the place arrived at is the heading's own.
+      const waiting = animateMs === undefined && headingHold.current !== null && !headingHold.current.jumped;
+      const headingLine = waiting ? Number(findHeading(bodyHostRef.current!, fragment)?.getAttribute('data-source-line')) : NaN;
+      const arrivingViewState = Number.isInteger(headingLine) ? { line: headingLine, offsetRatio: 0 } : (placeLeft() ?? TOP_OF_DOCUMENT);
       const bridge = window.throng?.preview;
       if (!bridge) return;
       void bridge
@@ -1375,8 +1403,15 @@ export function PreviewPanel({
   const onDrawn = useCallback(
     (filePath: string): void => {
       drawnFile.current = filePath;
-      // U2 — the body draws the text the store holds now (a draw overtaken by newer text reports nothing).
       const content = stateRef.current?.content;
+      // 068 US1 — a hold on the last jump survives a redraw of the SAME file and text (B17: a new file's first embed
+      // answer redraws it, and the diagram drawn next still pushes the heading down); another file, or a live edit
+      // (different text), ends it. A pending fragment below starts a new one for the file just drawn.
+      const held = heldDocument.current;
+      const sameDocument =
+        held !== null && held.filePath !== null && samePath(held.filePath, filePath) && held.text === (content?.kind === 'text' ? content.text : null);
+      if (!sameDocument) endHeadingHold();
+      // U2 — the body draws the text the store holds now (a draw overtaken by newer text reports nothing).
       const lines = content?.kind === 'text' ? countLines(content.text) : null;
       const before = drawnLines.current;
       if (before === null || before.filePath !== filePath || before.lines !== lines) {
@@ -1403,7 +1438,7 @@ export function PreviewPanel({
       // 054 FR-031 — a Find in Files match this preview was opened for, now that its file is on screen.
       revealPendingMatchRef.current();
     },
-    [panelId, scrollToHeading, jumpToHeading, settleRedraw],
+    [panelId, scrollToHeading, jumpToHeading, settleRedraw, endHeadingHold],
   );
 
   /* ── 054 FR-031, FR-032 — reveal a Find in Files match (research R8) ─────────────────────────── */

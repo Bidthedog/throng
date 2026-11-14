@@ -69,14 +69,14 @@ const NEW_KEYS: readonly Reader[] = [
     read: (t) => /\bnotifications\.attention\.os\b/.test(t),
   },
   {
-    key: 'notifications.attention.mode',
-    governs: 'whether a mark\'s toast is shown, and until when (FR-111)',
-    read: (t) => /\.notifications\.attention\b/.test(t) && /\.mode\b/.test(t),
+    key: 'notifications.attention.toast',
+    governs: 'whether a mark\'s toast is shown (FR-111, 068 FR-092)',
+    read: (t) => /\.notifications\.attention\b/.test(t) && /\.toast\b/.test(t),
   },
   {
-    key: 'notifications.attention.timeoutMs',
-    governs: 'how long a timed toast for a mark stays (FR-111)',
-    read: (t) => /\.notifications\.attention\b/.test(t) && /\.timeoutMs\b/.test(t),
+    key: 'notifications.attention.panel',
+    governs: 'whether a mark is kept in the Notifications panel (068 FR-092)',
+    read: (t) => /\.notifications\.attention\b/.test(t) && /\.panel\b/.test(t),
   },
   {
     key: 'attention.taskbarBadge',
@@ -132,7 +132,7 @@ function productionSources(): { file: string; text: string }[] {
 describe('057 adds no inert setting (T049)', () => {
   const declared = SETTINGS_METADATA.map((d) => d.key);
 
-  it('covers all nineteen keys', () => {
+  it('covers all nineteen keys (068 FR-092 split the attention mode in two)', () => {
     expect(NEW_KEYS).toHaveLength(19);
   });
 

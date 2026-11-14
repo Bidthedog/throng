@@ -32,6 +32,23 @@ describe('registerRendererDebugLogIpc', () => {
     expect(lines).toEqual(['[renderer-terminal] a b c']);
   });
 
+  it('068 FR-034b: anonymises the line before it bounds it', () => {
+    const lines: string[] = [];
+    let listener: ((event: unknown, payload: unknown) => void) | undefined;
+    registerRendererDebugLogIpc(
+      { debug: (message) => lines.push(message) },
+      {
+        on: (channel, fn) => {
+          if (channel === RENDERER_DEBUG_LOG_CHANNEL) listener = fn;
+        },
+      },
+      { apply: (text) => text.replaceAll('/home/alice/project', '<project:p1>') },
+    );
+    listener?.(undefined, `${'x'.repeat(3975)} /home/alice/project`);
+    expect(lines[0]).toContain('<project:p1>');
+    expect(lines[0]).not.toContain('alice');
+  });
+
   it('ignores a payload that is not a string, and bounds a long one', () => {
     const { lines, send } = wire();
     send({ not: 'a string' });

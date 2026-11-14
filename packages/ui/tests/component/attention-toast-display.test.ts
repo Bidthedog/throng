@@ -7,8 +7,7 @@
  * `notice-display-override.test.ts`'s claim; this proves the toasts pass the right one, per kind.
  *
  * ANTI-VACUITY CONTROL: drop `display` from `attention-toasts.tsx` and the toast falls back to its
- * severity's settings — Info is timed, Error is Dismiss only — so the `never` case shows a card and the
- * timed Failed card outlives its 3 seconds.
+ * severity's settings — Info is `toast`, Error is `panel` — so the `never` case shows a card.
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ReactElement } from 'react';
@@ -47,8 +46,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function mount(attention: Record<string, unknown>): Promise<void> {
-  settingsPayload = { version: 1, notifications: { attention } };
+async function mount(attention: Record<string, unknown>, toastDurationMs = 3000): Promise<void> {
+  settingsPayload = { version: 1, notifications: { attention, toastDurationMs } };
   render(
     createElement(
       ConfigProvider,
@@ -64,15 +63,15 @@ const raise = (panelId: string, kind: 'attention' | 'failed'): void =>
 
 describe('attention toast display (FR-111)', () => {
   it('shows no card under Never display, for either kind', async () => {
-    await mount({ mode: 'never', timeoutMs: 5000 });
+    await mount({ mode: 'never' });
     raise('p1', 'attention');
     raise('p2', 'failed');
     expect(screen.queryByTestId('attention-toast-p1')).toBeNull();
     expect(screen.queryByTestId('attention-toast-p2')).toBeNull();
   });
 
-  it('removes a timed Failed card after the Attention duration', async () => {
-    await mount({ mode: 'timed', timeoutMs: 3000 });
+  it('removes a Failed card after the toast duration', async () => {
+    await mount({ mode: 'toast' });
     vi.useFakeTimers();
     raise('p1', 'failed');
     act(() => vi.advanceTimersByTime(3100));
@@ -85,7 +84,7 @@ describe('a later raise on an announced mark (FR-112)', () => {
     act(() => push({ op: 'update', panelId, kind: 'attention', title: 'Build', projectName: 'Alpha', reason }));
 
   it('changes the card without restarting its timer', async () => {
-    await mount({ mode: 'timed', timeoutMs: 4000 });
+    await mount({ mode: 'toast' }, 4000);
     vi.useFakeTimers();
     raise('p1', 'attention');
     act(() => vi.advanceTimersByTime(3000));
@@ -96,7 +95,7 @@ describe('a later raise on an announced mark (FR-112)', () => {
   });
 
   it('raises no card once the first has gone', async () => {
-    await mount({ mode: 'dismiss', timeoutMs: 5000 });
+    await mount({ mode: 'panel' });
     update('p1', 'Claude is waiting for your input');
     expect(screen.queryByTestId('attention-toast-p1')).toBeNull();
   });

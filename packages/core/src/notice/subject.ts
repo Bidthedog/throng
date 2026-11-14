@@ -39,9 +39,9 @@ export type NoticeSubject =
   | { kind: 'category'; name: string }
   | { kind: 'pane'; name: string }
   | { kind: 'tab'; name: string; project?: string }
-  | { kind: 'panel'; name: string; tab?: string; project?: string }
+  | { kind: 'panel'; name: string; tab?: string; project?: string; panelId?: string; projectId?: string }
   | { kind: 'panelType'; name: string }
-  | { kind: 'terminal'; flavour: string; panel?: string; tab?: string; project?: string }
+  | { kind: 'terminal'; flavour: string; panel?: string; tab?: string; project?: string; panelId?: string; projectId?: string }
   | { kind: 'subWorkspace'; name: string };
 
 /**

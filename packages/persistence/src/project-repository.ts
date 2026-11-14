@@ -87,6 +87,18 @@ export class ProjectRepository implements IProjectStore {
     return rows.map(toProject);
   }
 
+  assignMissingIds(ownerUser: string, newId: () => string): number {
+    const missing = this.db
+      .prepare(`SELECT rowid AS rid FROM projects WHERE owner_user = ? AND (id IS NULL OR id = '')`)
+      .all(ownerUser) as Array<{ rid: number }>;
+    if (missing.length === 0) return 0;
+    const assign = this.db.prepare(`UPDATE projects SET id = ? WHERE rowid = ?`);
+    this.db.transaction(() => {
+      for (const row of missing) assign.run(newId(), row.rid);
+    })();
+    return missing.length;
+  }
+
   getById(ownerUser: string, id: string): Project | undefined {
     const row = this.db
       .prepare(`${SELECT_RESOLVED} WHERE p.owner_user = ? AND p.id = ?`)

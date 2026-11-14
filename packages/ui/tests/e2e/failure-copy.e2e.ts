@@ -262,10 +262,10 @@ test('the banner copies its message, subject, path and system error with no noti
     JSON.stringify({
       version: 1,
       notifications: {
-        error: { mode: 'never', timeoutMs: 30000 },
-        warning: { mode: 'never', timeoutMs: 30000 },
-        info: { mode: 'never', timeoutMs: 30000 },
-        success: { mode: 'never', timeoutMs: 30000 },
+        error: { mode: 'never' },
+        warning: { mode: 'never' },
+        info: { mode: 'never' },
+        success: { mode: 'never' },
       },
     }),
     'utf8',

@@ -93,7 +93,7 @@ let baseline: ConfigRootSnapshot;
 
 test.beforeAll(async () => {
   cfgRoot = freshCfgRoot();
-  // Captured (rather than left to openApp's own default) so the "Dismiss only" test below can poll
+  // Captured (rather than left to openApp's own default) so the "Toast and keep in panel" test below can poll
   // the daemon's SQLite store directly for a persisted rename, instead of sleeping past its debounce.
   dataDir = mkdtempSync(join(tmpdir(), 'throng-data-notice-prefs-'));
   shared = await openApp({ dataDir, env: { THRONG_CONFIG_ROOT: cfgRoot } });
@@ -200,22 +200,32 @@ async function appliedInMainWindow(
  * silenced severity — so its arrival is proof the raise was actually processed and the decision to
  * say nothing on screen was actually made, not merely that nothing has happened yet.
  */
-async function noticeLogged(userDataDir: string, pattern: RegExp): Promise<void> {
-  await expect
-    .poll(
-      () => {
-        try {
-          return readFileSync(join(userDataDir, 'logs', 'main.log'), 'utf8')
-            .split(/\r?\n/)
-            .some((line) => line.includes('[renderer-notice]') && pattern.test(line));
-        } catch {
-          return false; // the file may not exist yet
-        }
-      },
-      { timeout: 15_000, message: `no [renderer-notice] record matching ${String(pattern)}` },
-    )
-    .toBe(true);
+function noticeRecordCount(userDataDir: string, pattern: RegExp): number {
+  try {
+    return readFileSync(join(userDataDir, 'logs', 'main.log'), 'utf8')
+      .split(/\r?\n/)
+      .filter((line) => line.includes('[renderer-notice]') && pattern.test(line)).length;
+  } catch {
+    return 0; // the file may not exist yet
+  }
 }
+
+/**
+ * Wait for a record matching `pattern` beyond the `before` already there. 068 (#623) anonymises the
+ * log, so a record names its project by token rather than by name; counting is what tells this raise's
+ * record from an earlier one for another project.
+ */
+async function noticeLogged(userDataDir: string, pattern: RegExp, before: number): Promise<void> {
+  await expect
+    .poll(() => noticeRecordCount(userDataDir, pattern), {
+      timeout: 15_000,
+      message: `no new [renderer-notice] record matching ${String(pattern)}`,
+    })
+    .toBeGreaterThan(before);
+}
+
+/** A notice record at error severity naming its project by token (068 FR-034a). */
+const ERROR_RECORD = /severity=error.*<(project:[^>]+|name-[0-9a-f]{8}|path-[0-9a-f]{8})>/i;
 
 /** Open the preferences window on the Settings tab and return its Page. */
 async function openSettings(app: ElectronApplication, win: Page): Promise<Page> {
@@ -281,7 +291,7 @@ async function raiseErrorNotice(win: Page): Promise<string> {
  * renders, and a pre-030 settings file resolving to defaults.
  */
 
-test('Never display shows nothing at all, and Dismiss only shows it again in the same session (FR-012, FR-016)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
+test('Never display shows nothing at all, and Toast and keep in panel shows it again in the same session (FR-012, FR-016; 068 FR-021a)', { tag: ['@extended', '@prefs', '@reserve:window'] }, async () => {
   await runApp(
     async (app, win) => {
       await settle(win);
@@ -295,17 +305,17 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       await win.getByTestId('explorer-error-dismiss').click();
       await expect(notices).toHaveCount(0);
 
-      // ── Never display: the same class of failure now says nothing on screen.
-      await prefs.getByTestId('control-notifications.error.mode').selectOption('never');
-      // `error` is a severity whose silence has to be consented to (FR-008); accept it here — the
-      // confirmation ITSELF is the subject of the next test, not this one.
-      const confirmed = prefs.getByTestId('confirm-dialog');
-      if (await confirmed.isVisible().catch(() => false)) {
-        await confirmed.getByRole('button').last().click();
-      }
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('never');
-      await appliedInMainWindow(win, (n) => n?.error?.mode, 'never');
+      // ── Toast and Panel both cleared (068 FR-092): the same class of failure now says nothing on screen.
+      await prefs.getByTestId('control-notifications.error.panel').click();
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.panel, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      await prefs.getByTestId('control-notifications.error.toast').click();
+      // Clearing the last of the two silences `error`, which has to be consented to (FR-008); accept it
+      // here — the confirmation ITSELF is `preferences-notification-switches.test.ts`'s subject.
+      await prefs.getByTestId('confirm-accept').click();
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.toast, { timeout: FILE_OP_TIMEOUT_MS }).toBe(false);
+      await appliedInMainWindow(win, (n) => n?.error?.toast, false);
 
+      const errorRecordsBefore = noticeRecordCount(shared.userDataDir, ERROR_RECORD);
       await raiseErrorNotice(win);
       // The project really did open — so the failure really was raised. The FENCE below is the
       // record it still wrote to `logs/main.log` even though "never" suppressed it on screen (030
@@ -313,16 +323,17 @@ test('Never display shows nothing at all, and Dismiss only shows it again in the
       // how long that takes.
       await expect(win.locator('.project-item[data-active="true"]')).toContainText('Ghost2');
       await stayedAbsent(
-        () => noticeLogged(shared.userDataDir, /severity=error.*ghost2/i),
+        () => noticeLogged(shared.userDataDir, ERROR_RECORD, errorRecordsBefore),
         () => notices.count(),
         'a suppressed error notice for ghost2',
       );
 
       // ── FR-016 / T014a: the change applies to the NEXT notice raised in this SAME session.
       // Nothing is reloaded, relaunched or reopened between here and the notice below.
-      await prefs.getByTestId('control-notifications.error.mode').selectOption('dismiss');
-      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.mode, { timeout: FILE_OP_TIMEOUT_MS }).toBe('dismiss');
-      await appliedInMainWindow(win, (n) => n?.error?.mode, 'dismiss');
+      await prefs.getByTestId('control-notifications.error.toast').check();
+      await prefs.getByTestId('control-notifications.error.panel').check();
+      await expect.poll(() => readSettings(cfgRoot)?.notifications?.error?.panel, { timeout: FILE_OP_TIMEOUT_MS }).toBe(true);
+      await appliedInMainWindow(win, (n) => n?.error?.toast, true);
 
       await raiseErrorNotice(win);
       await expect(notices).toHaveCount(1, { timeout: 20_000 });

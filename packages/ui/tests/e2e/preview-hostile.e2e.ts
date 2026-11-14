@@ -184,10 +184,20 @@ test('a hostile Markdown file runs and requests nothing, and a remote image is n
          *   - "Failed to load resource … 415" — the fence image `x`, which the protocol answers as not
          *     an image.
          * What script execution leaves is a dialog, a page error, or a CSP refusal to RUN something —
-         * an inline script, an inline handler, `eval`, a `javascript:` URL. Those are what is refused.
+         * an inline script, `eval`, a `javascript:` URL. Those are what is refused.
+         *
+         * Inline HANDLERS are the exception since Electron 45. Its Chromium reports "Executing inline
+         * event handler violates … script-src" as soon as markup carrying `onerror=` / `onload=` is
+         * PARSED — in DOMParser, `createHTMLDocument` and `<template>` documents alike, where nothing
+         * runs (measured: one report per handler, and the handler's side effect never happens). The
+         * sanitiser parses the hostile markup to clean it, so the report says only that the handlers
+         * were in the source. Whether one survived into the preview is asserted directly below, on the
+         * live DOM; a fixture handler that ran would raise its `alert` dialog, asserted above.
          */
-        const scriptErrors = consoleErrors.filter((t) =>
-          /refused to (execute|evaluate|run)|script-src|inline event handler|unsafe-eval|javascript:/i.test(t),
+        const scriptErrors = consoleErrors.filter(
+          (t) =>
+            !/^Executing inline event handler violates/i.test(t) &&
+            /refused to (execute|evaluate|run)|script-src|inline event handler|unsafe-eval|javascript:/i.test(t),
         );
         test.info().annotations.push({ type: 'console errors (hostile.md)', description: JSON.stringify(consoleErrors) });
         expect(scriptErrors, 'a console error from script execution while the hostile document was shown').toEqual([]);
@@ -200,6 +210,16 @@ test('a hostile Markdown file runs and requests nothing, and a remote image is n
         // The sanitised `onerror`, `onload` and `javascript:` hrefs are what would have run; none can be
         // found in the DOM either, which is the component tier's claim restated only as a precondition.
         expect(await hostile.locator('script, iframe, object, embed, form, base, meta, link').count()).toBe(0);
+        // No element of the drawn preview carries an inline handler or a `javascript:` value: the claim the
+        // console filter above can no longer make on its own.
+        const liveHandlers = await hostile.evaluate((root) =>
+          [...root.querySelectorAll('*')].flatMap((el) =>
+            [...el.attributes]
+              .filter((a) => /^on/i.test(a.name) || /^\s*javascript:/i.test(a.value))
+              .map((a) => `${el.tagName.toLowerCase()} ${a.name}`),
+          ),
+        );
+        expect(liveHandlers, 'an inline handler or javascript: URL survived the sanitiser').toEqual([]);
 
         /* ── (2) turn Load remote images OFF on disk, then remote-images.md ────────────────────────── */
 

@@ -1,7 +1,9 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAnonymiser, type Anonymiser } from '@throng/core';
 import { CRASH_DIR_NAME, createFileLog, writeCrashReport } from '@throng/platform-node';
 
 /**
@@ -356,5 +358,83 @@ describe('createFileLog (durable diagnostics)', () => {
     log.info('one');
     rmSync(sub, { recursive: true, force: true });
     expect(() => log.info('two')).not.toThrow();
+  });
+});
+
+/**
+ * 068 FR-034a to FR-034f (#623) — the sink applies the anonymiser, so no registered or recognisable
+ * path, name or machine identity reaches the disk, in a line, a repeat summary or a crash report.
+ *
+ * Layer: integration — what only a real file can show is that the text on disk, not the text handed
+ * to the logger, is clean; the replacement rules themselves are unit-tested in core.
+ */
+describe('createFileLog with an anonymiser (068)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'throng-anon-'));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
+
+  const hmac = (salt: string, value: string): string => createHmac('sha256', salt).update(value).digest('hex');
+  const anonymiser = (salt = 'install-salt'): Anonymiser => {
+    const anon = createAnonymiser({ salt, os: 'linux', hash: hmac });
+    anon.register('home', '/home/alice');
+    anon.register('user', 'alice');
+    anon.register('projectRoot', '/work/secret-app', 'p-1');
+    anon.register('projectName', 'Secret App', 'p-1');
+    return anon;
+  };
+  const sink = (anon: Anonymiser, now?: () => number) =>
+    createFileLog({
+      dir, fileName: 'main.log', component: 'ui-main', mirrorToConsole: false, anonymiser: anon, now,
+    });
+  const text = (): string => readFileSync(join(dir, 'main.log'), 'utf8');
+
+  it('writes no registered value and no unregistered absolute path', () => {
+    const log = sink(anonymiser());
+    log.info('opened /work/secret-app/src/a.ts for alice in /home/alice/docs');
+    log.error('Secret App failed: ENOENT: no such file or directory, open \'/srv/other/x.txt\'');
+    log.logAlways('warn', 'stray /opt/elsewhere/file.js:3:4', 'renderer');
+    const out = text();
+    expect(out).not.toMatch(/alice|secret-app|Secret App|\/work|\/home|\/srv|\/opt|other|elsewhere/);
+    expect(out).toContain('<project:p-1>');
+  });
+
+  it('collapses repeats on the anonymised text', () => {
+    let clock = 1_000;
+    const log = sink(anonymiser(), () => clock);
+    for (let i = 0; i < 3; i++) {
+      log.info('again /home/alice/x');
+      clock += 10;
+    }
+    log.close();
+    const out = text();
+    expect(out).toContain('(repeated 2 times in');
+    expect(out).not.toMatch(/alice/);
+  });
+
+  it('anonymises a crash report reason, output and context', () => {
+    const path = writeCrashReport(
+      dir,
+      {
+        component: 'daemon', at: new Date('2026-11-12T09:00:00.000Z'), reason: 'died in /home/alice/app',
+        version: '1', buildId: 'b', output: 'at /work/secret-app/src/x.ts:1:2', context: { data: '/home/alice/.data' },
+      },
+      anonymiser(),
+    );
+    const out = readFileSync(path as string, 'utf8');
+    expect(out).not.toMatch(/alice|secret-app|\/home|\/work/);
+    expect(out).toContain('<project:p-1>');
+  });
+
+  it('gives the same token across two sinks sharing a salt and a file', () => {
+    sink(anonymiser('shared')).info('by alice');
+    sink(anonymiser('shared')).info('by alice');
+    const lines = text().trimEnd().split('\n');
+    const tokens = lines.map((l) => /<user-[0-9a-f]{8}>/.exec(l)?.[0]);
+    expect(tokens[0]).toBeDefined();
+    expect(tokens[0]).toBe(tokens[1]);
   });
 });

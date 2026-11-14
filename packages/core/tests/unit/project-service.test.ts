@@ -46,6 +46,40 @@ function addCategory(id: string): void {
 
 const input = (name: string) => ({ name, colour: '#6aa3ff', rootFolder: `C:/code/${name}` });
 
+describe('ProjectService.list heals a missing id (068 FR-034e)', () => {
+  const seed = (id: string | null | undefined): void => {
+    store.insert({
+      id: id as string,
+      ownerUser: 'alice',
+      name: 'legacy',
+      colour: '#6aa3ff',
+      rootFolder: 'C:/code/legacy',
+      isActive: false,
+      hiddenPaths: [],
+      searchExcludeGlobs: [],
+      categoryId: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+  };
+
+  it.each([null, '', undefined])('gives a project with id %j a new one, saved and stable', (missing) => {
+    seed(missing);
+    const first = service.list();
+    expect(first).toHaveLength(1);
+    const healed = first[0]?.id;
+    expect(healed).toMatch(/^p\d+$/);
+    // Saved: the store now holds the id, so the next read neither changes it nor mints another.
+    expect(service.list()[0]?.id).toBe(healed);
+    expect(store.getById('alice', healed as string)?.id).toBe(healed);
+  });
+
+  it('leaves a project that has an id alone', () => {
+    seed('existing');
+    expect(service.list()[0]?.id).toBe('existing');
+  });
+});
+
 describe('ProjectService.create', () => {
   it('persists the project scoped to the current owner', () => {
     const project = service.create(input('alpha'));

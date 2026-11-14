@@ -42,6 +42,12 @@ export interface SettingControlProps {
    * `default:` arm of {@link SettingControl} warns about.
    */
   disabled?: boolean;
+  /**
+   * Whether committing `value` will first ask the user (030 FR-008, 068 FR-092). The tab answers it
+   * with the same check its commit path runs, so a two-keyed consent (`confirmWhen.alsoWhen`) holds
+   * back only the click that really asks. Absent: the descriptor's `confirmWhen` alone decides.
+   */
+  asks?: (value: unknown) => boolean;
   /** Apply a valid new value (the tab wires this to the config-write path). */
   onCommit: (value: unknown) => void;
 }
@@ -127,6 +133,7 @@ function ToggleControl({
   descriptor,
   value,
   disabled,
+  asks,
   onCommit,
 }: SettingControlProps): ReactElement {
   /**
@@ -159,7 +166,13 @@ function ToggleControl({
         disabled={disabled}
         checked={checked}
         onChange={(e) => {
-          setOptimistic(e.target.checked);
+          // A value that may first ask the user (030 FR-008, 068 FR-092) is not shown early: a declined
+          // question writes nothing, and an optimistic tick would then show a value that was never set.
+          const willAsk =
+            asks !== undefined
+              ? asks(e.target.checked)
+              : descriptor.confirmWhen !== undefined && e.target.checked === descriptor.confirmWhen.is;
+          if (!willAsk) setOptimistic(e.target.checked);
           onCommit(e.target.checked);
         }}
       />

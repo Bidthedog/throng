@@ -225,6 +225,12 @@ export type {
   ProcessSurvivor,
 } from './abstractions/pty-host.js';
 export type { IDirectoryLock, LockHandle } from './abstractions/directory-lock.js';
+export type {
+  ClaudeSessionMiss,
+  ClaudeSessionProcess,
+  IClaudeSessionResolver,
+  IProcessIdentity,
+} from './abstractions/claude-session.js';
 
 
 // Elevation OS seam (005 Phase G): report whether a process runs elevated (FR-025).
@@ -973,6 +979,11 @@ export {
   type PendingReconnect,
   type TerminalReloadAction,
   captureDecision,
+  claudeResumeCommand,
+  resumeShellFor,
+  type ResumeShell,
+  isClaudeCodeProcess,
+  splitWindowsCommandLine,
   commandDisplay,
   foregroundCommand,
   foregroundProcess,
@@ -1354,6 +1365,7 @@ export {
 } from './config/preview-settings.js';
 export {
   classifyPreviewLink,
+  classifyResolvedWiki,
   resolvePreviewImage,
   headingSlug,
   languageForFenceInfo,
@@ -1390,17 +1402,24 @@ export { splitFrontMatter } from './preview/front-matter.js';
 export type { FrontMatterSplit } from './preview/front-matter.js';
 // 047 (data-model.md "WikiTarget", research R12, FR-050 – FR-056) — `[[Target]]` wikilinks. Main
 // needs `wikiCandidates` for `throng:preview:resolveWikiTargets` (contracts/preview-ipc-047.md §3).
-export { parseWikilink, wikiCandidates } from './preview/wiki-links.js';
+export { parseWikilink, wikiCandidates, wikiDisplayText } from './preview/wiki-links.js';
 export type { WikiTarget } from './preview/wiki-links.js';
 // 054 — `![[x.mmd]]` / `![alt](x.mmd)` Mermaid embeds: the reference test (renderer) and the read's shape (main).
 export {
   embedRefusalText,
+  isImageEmbedRef,
   isMermaidEmbedRef,
   MAX_EMBED_REF_LENGTH,
   MAX_EMBEDS_PER_READ,
   MERMAID_EMBED_EXTENSIONS,
+  parseImageEmbedAlias,
+  PREVIEW_IMAGE_EXTENSIONS,
+  PREVIEW_IMAGE_MIME_BY_EXTENSION,
+  splitEmbedRef,
+  splitTrailingImageSize,
+  wikiEmbedRef,
 } from './preview/embeds.js';
-export type { EmbedRefusal, PreviewEmbedRead } from './preview/embeds.js';
+export type { EmbedRefusal, ImageEmbedAlias, PreviewEmbedRead } from './preview/embeds.js';
 // 047 (data-model.md "ColumnProfile / fair widths", research R13, FR-060 – FR-062) — water-filling
 // table-column widths. The renderer's two-pass measurement (`table-layout.ts`) feeds this.
 export { fairColumnWidths } from './preview/table-widths.js';

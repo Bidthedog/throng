@@ -5,7 +5,7 @@ import { logExpected, type FileManagerRegistration, type IFileManagerRegistratio
 const run = promisify(execFile);
 const VERBS = ['Software\\Classes\\Directory\\shell\\throng.OpenProject', 'Software\\Classes\\Directory\\Background\\shell\\throng.OpenProject'];
 const LABEL = 'Open as throng project';
-const UNAVAILABLE: FileManagerRegistration = { state: 'unavailable', reason: 'This copy of throng was not installed, so it registers nothing with Windows.' };
+const UNAVAILABLE: FileManagerRegistration = { state: 'unavailable', reason: 'This copy of throng was not installed, so it registers nothing with the OS.' };
 const MACHINE: FileManagerRegistration = { state: 'machine-wide', reason: 'Installed for everyone on this computer. Changing it needs the installer, run as administrator.' };
 
 /** The registry calls this needs. Keys are full paths, starting `HKCU\\` or `HKLM\\`. */

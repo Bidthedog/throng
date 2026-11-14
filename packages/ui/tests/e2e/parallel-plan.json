@@ -53,6 +53,7 @@
     "notice-focus-chord.e2e.ts": "CPU",
     "notice-subjects.e2e.ts": "CPU",
     "notification-prefs.e2e.ts": "FOCUS",
+    "notifications-panel.e2e.ts": "FOCUS",
     "open-in-terminal.e2e.ts": "FOCUS",
     "outer-edge-drop.e2e.ts": "FOCUS",
     "panel-auto-naming.e2e.ts": "FOCUS",

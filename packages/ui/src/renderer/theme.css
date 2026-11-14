@@ -384,6 +384,36 @@ textarea,
   border-bottom: 1px solid var(--border);
 }
 
+/* 068 FR-067 — a minimised Notifications or Sub-workspaces panel restores from a click on its whole header, so the whole
+   header shows it: a hover style, only while minimised (an open header does nothing when clicked). */
+.collapsed-hover {
+  cursor: pointer;
+}
+/* 068 FR-070 — throng's OWN highlight (`--throng-colour-accent`, never the project-tinted `--accent`) with the colour
+   paired to it for text and icons, and only once a moving pointer has armed it (`use-collapsed-hover.ts`): a panel
+   collapsed under a still pointer does not flash it. */
+.collapsed-hover[data-hover-armed='true']:hover {
+  background: var(--throng-colour-accent);
+  color: var(--throng-colour-accentText);
+}
+.collapsed-hover[data-hover-armed='true']:hover :is(.panel__title, .pane-rail__label, .panel__action, .icon) {
+  color: var(--throng-colour-accentText);
+  border-color: var(--throng-colour-accentText);
+}
+/* 068 FR-082 — a collapsed side PANE carries the hover, so pointing at its strip or its show control highlights both, and
+   the control's chevron takes the same contrasting colour as the strip's label. */
+.pane.collapsed-hover[data-hover-armed='true']:hover .pane-rail {
+  background: var(--throng-colour-accent);
+}
+.pane.collapsed-hover[data-hover-armed='true']:hover .pane-collapse {
+  background: var(--throng-colour-accent);
+  color: var(--throng-colour-accentText);
+  border-color: var(--throng-colour-accentText);
+}
+.pane.collapsed-hover[data-hover-armed='true']:hover .pane-collapse :is(.icon, .pane-chevron--left) {
+  color: var(--throng-colour-accentText);
+}
+
 /* Pane title (PROJECTS / TERMINALS / FILE EXPLORER) — paneTitle font role
    (case/italic/underline come from the theme). */
 .panel__title {
@@ -2430,6 +2460,7 @@ textarea,
  * the click meant for the row under the pointer nor strand a hover of its own.
  */
 .attention-popover,
+.notification-place-popover,
 .status-popover,
 .info-helper-popover,
 .monitor-help {

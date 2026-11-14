@@ -23,6 +23,7 @@
  */
 import {
   logExpected,
+  PREVIEW_IMAGE_MIME_BY_EXTENSION,
   relPathUnderRoot,
   resolvePreviewAsset,
   type AppSettings,
@@ -37,17 +38,10 @@ export const PREVIEW_SCHEME = 'throng-preview';
  * The asset route's image allowlist, by MIME type (contracts/preview-ipc.md §4: `.png .jpg .jpeg .gif
  * .webp .avif .bmp .ico .svg`). The extension-to-type table is core's; this names which of its types an
  * `<img>` in a preview may load. `image/apng` and `application/pdf` are deliberately absent.
+ * 068 FR-010 — derived from core's `PREVIEW_IMAGE_MIME_BY_EXTENSION`, the table the image-embed rule
+ * also reads, so the two cannot disagree about what an image is.
  */
-export const PREVIEW_IMAGE_MIME_ALLOWLIST: readonly string[] = [
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'image/avif',
-  'image/bmp',
-  'image/x-icon',
-  'image/svg+xml',
-];
+export const PREVIEW_IMAGE_MIME_ALLOWLIST: readonly string[] = [...new Set(Object.values(PREVIEW_IMAGE_MIME_BY_EXTENSION))];
 
 /** The three fields of a preview run the protocol needs (data-model §10 `PreviewRun`). */
 export interface PreviewRunRef {

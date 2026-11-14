@@ -354,7 +354,97 @@ describe('nothing inside a followable link can show a title of its own (adversar
   // Amended for FR-120 (iteration 2026-09-15): the authored title is kept, after the source as written.
   it('an image title OUTSIDE any link is the document’s own tooltip and is kept, after the image’s source', () => {
     const fragment = createMarkdownRenderer().render('![logo](logo.png "The logo")', ENV).fragment;
-    expect(fragment.querySelector('img')?.getAttribute('title')).toBe('logo.png — The logo');
+    // 068 FR-057 — the alt text first, the source on the next line, the document's own title after it.
+    expect(fragment.querySelector('img')?.getAttribute('title')).toBe('logo\nlogo.png\nThe logo');
+  });
+});
+
+// 068 FR-056 — an image embed's size reaches the DOM as width/height; nothing else a document writes does.
+describe('an image embed’s size survives the sanitiser (068 FR-056)', () => {
+  const ENV = { panelId: 'pv', docPath: 'D:/proj/README.md', projectRoot: 'D:/proj', remoteImages: true };
+  const imgOf = (text: string): Element | null => createMarkdownRenderer().render(text, ENV).fragment.querySelector('img');
+
+  it('![[pic.png|200x100]] keeps width and height', () => {
+    const image = imgOf('![[pic.png|200x100]]');
+    expect(image?.getAttribute('width')).toBe('200');
+    expect(image?.getAttribute('height')).toBe('100');
+  });
+
+  // 068 FR-066 — a standard image's size, from its destination or alt text, rides the pipeline's nonce.
+  it.each([
+    ['a destination', '![embedded image](sample-documents/sample.png|200)', '200', null],
+    ['an alt text', '![embedded image|200](sample-documents/sample.png)', '200', null],
+    ['a destination, with a height', '![embedded image](sample-documents/sample.png|200x100)', '200', '100'],
+    ['a remote image', '![embedded image](https://example.com/sample.png|200)', '200', null],
+  ])('%s: keeps the size, and the hover shows the alt text and the source without it', (_name, text, width, height) => {
+    const image = imgOf(text);
+    expect(image?.getAttribute('width')).toBe(width);
+    expect(image?.getAttribute('height')).toBe(height);
+    expect(image?.getAttribute('alt')).toBe('embedded image');
+    expect(image?.getAttribute('title')).toBe(`embedded image\n${text.includes('example.com') ? 'https://example.com/sample.png' : 'sample-documents/sample.png'}`);
+    expect(image?.hasAttribute('data-heading-nonce')).toBe(false);
+  });
+
+  it('a raw <img> forging the pipeline’s size mark keeps no size', () => {
+    const image = imgOf('<img src="pic.png" alt="a" width="200" data-heading-nonce="guess">');
+    expect(image?.hasAttribute('width')).toBe(false);
+  });
+
+  it('a size never reaches any element but the image', () => {
+    const fragment = createMarkdownRenderer().render('![a](p.png|200)\n\n<span width="5" height="5">x</span>', ENV).fragment;
+    expect(fragment.querySelector('span')?.hasAttribute('width')).toBe(false);
+    expect(fragment.querySelector('span')?.hasAttribute('height')).toBe(false);
+  });
+
+  it('a raw <img width height> keeps neither', () => {
+    expect(imgOf('<img src="pic.png" alt="a" width="200" height="100">')?.hasAttribute('width')).toBe(false);
+    expect(imgOf('<img src="pic.png" alt="a" width="200" height="100">')?.hasAttribute('height')).toBe(false);
+  });
+
+  it('a raw <img> posing as an embed cannot carry a non-numeric size', () => {
+    const image = imgOf('<img data-throng-wiki-href="pic.png" alt="a" width="100%" height="1e9px">');
+    expect(image?.hasAttribute('width')).toBe(false);
+    expect(image?.hasAttribute('height')).toBe(false);
+  });
+});
+
+// 068 FR-057 (extends 044 FR-120) — an image's hover: its alt text when it has any, then its source as written on the
+// next line, then the document's own title. An embed whose alt text is only its file name shows the source alone.
+describe('an image’s hover: alt text, then the source on the next line (068 FR-057)', () => {
+  const ENV = { panelId: 'pv', docPath: 'D:/proj/README.md', projectRoot: 'D:/proj', remoteImages: true };
+  const hover = (text: string): string | null => createMarkdownRenderer().render(text, ENV).fragment.querySelector('img')?.getAttribute('title') ?? null;
+
+  it('a standard image: its alt text, a line break, its source', () => {
+    expect(hover('![A diagram](diagram.png)')).toBe('A diagram\ndiagram.png');
+  });
+
+  it('a standard image with no alt text: the source alone', () => {
+    expect(hover('![](diagram.png)')).toBe('diagram.png');
+  });
+
+  it('the document title follows the source', () => {
+    expect(hover('![A diagram](diagram.png "Figure 1")')).toBe('A diagram\ndiagram.png\nFigure 1');
+  });
+
+  it('an embed with its own alt text: the alt text, then the source as written', () => {
+    expect(hover('![[folder/pic.png|Alt text]]')).toBe('Alt text\nfolder/pic.png');
+  });
+
+  it('an embed whose alt text is only its file name: the source alone', () => {
+    expect(hover('![[folder/pic.png]]')).toBe('folder/pic.png');
+  });
+
+  it('an embed with a size and no alt text: the source alone (the alt text is the file name)', () => {
+    expect(hover('![[folder/pic.png|200]]')).toBe('folder/pic.png');
+  });
+
+  it('an embed with alt text and a size: the alt text, then the source', () => {
+    expect(hover('![[folder/pic.png|Alt text|200]]')).toBe('Alt text\nfolder/pic.png');
+  });
+
+  it('an image inside a followable link carries none (044 FR-120 stays)', () => {
+    const fragment = createMarkdownRenderer().render('[![logo](logo.png)](https://example.com/)', ENV).fragment;
+    expect(fragment.querySelector('img')?.hasAttribute('title')).toBe(false);
   });
 });
 

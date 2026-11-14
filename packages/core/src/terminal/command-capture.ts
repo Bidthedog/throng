@@ -6,6 +6,7 @@
  * {@link captureDecision}, with no PTY, no daemon and no renderer involved.
  */
 import type { ChildProcess } from '../abstractions/pty-host.js';
+import { sensitive } from '../diagnostics/anonymise.js';
 
 /** Longest command line worth remembering. Beyond this it is almost certainly not something
  *  a user typed, and a startup command has to stay editable in a single-line field (FR-023). */
@@ -384,6 +385,8 @@ export function shouldNotifyCaptureOutcome(outcome: CaptureOutcome): boolean {
  * alone, naming the rule that fired, without reproducing the problem.
  */
 export function captureLogLine(panelId: string, outcome: CaptureOutcome): string {
-  const detail = outcome.save ? ` value=${JSON.stringify(outcome.value)}` : '';
+  // 068 FR-034b: the command is the user's own words, which no pattern can recognise, so it is marked
+  // here and the anonymiser logs a token (the same command gives the same token).
+  const detail = outcome.save ? ` value=${sensitive('command', JSON.stringify(outcome.value))}` : '';
   return `[025:capture] panel=${panelId} saved=${outcome.save} reason=${outcome.reason}${detail}`;
 }

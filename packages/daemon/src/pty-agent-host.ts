@@ -1,4 +1,4 @@
-import { resolveIpcAddress } from '@throng/core';
+import { resolveIpcAddress, sensitive } from '@throng/core';
 import { connect, type Socket } from 'node:net';
 import process from 'node:process';
 import {
@@ -317,7 +317,7 @@ export class PtyAgentHost implements IPtyHost {
         this.onEvent(JSON.parse(line) as AgentEvent);
       } catch (error) {
         // A line the agent sent and the daemon cannot read is a protocol fault, not noise (066 FR-009).
-        this.log('warn', `PTY agent: ignored a malformed line (${errorText(error)}): ${line.slice(0, 200)}`);
+        this.log('warn', `PTY agent: ignored a malformed line (${errorText(error)}): ${sensitive('line', line.slice(0, 200))}`);
       }
     }
   }

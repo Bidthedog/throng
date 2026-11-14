@@ -159,15 +159,16 @@ describe('one record, one line per fact, in the file (FR-007/FR-034/FR-048a)', (
     const lines = noticeLines();
     expect(lines).toHaveLength(2);
     // FR-007 — the head line identifies the event without the screen.
-    expect(lines[0]).toContain('subject="C:\\throng-e2e-missing — loggedone"');
-    expect(lines[0]).toContain('cause="path-missing:loggedone"');
+    // 068 FR-034b — anonymised: the folder and the name each become a stable token.
+    expect(lines[0]).toMatch(/subject="<path-[0-9a-f]{8}> — <name-[0-9a-f]{8}>"/);
+    expect(lines[0]).toMatch(/cause="path-missing:<name-[0-9a-f]{8}>"/);
+    expect(lines.join('\n')).not.toMatch(/throng-e2e-missing|loggedone/);
     expect(lines[0]).toContain('| It could not be found.');
     // FR-034 — the errno is on its OWN line, so a notice never has to be reassembled from a wrapped
     // fragment, and it is NOT in the prose the user read.
     expect(lines[0], 'the raw system error leaked into the head line').not.toContain('ENOENT');
-    expect(lines[1]).toContain(
-      "detail | ENOENT: no such file or directory, realpath 'C:\\throng-e2e-missing\\loggedone'",
-    );
+    // The system's words stay; what they name is tokenised (the quoted errno path).
+    expect(lines[1]).toMatch(/detail \| ENOENT: no such file or directory, realpath '<path-[0-9a-f]{8}>'/);
   });
 
   it('writes one further line per affected panel, each carrying that panel’s own error', () => {
@@ -187,8 +188,9 @@ describe('one record, one line per fact, in the file (FR-007/FR-034/FR-048a)', (
     const lines = noticeLines();
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain('affected=2 | Some panels could not be opened.');
-    expect(lines[1]).toContain('panel="Tab 1 — Shell" detail | Cannot lock "C:\\ghost"');
-    expect(lines[2]).toContain('panel="Tab 1 — Docs" detail | ENOENT');
+    expect(lines[1]).toMatch(/panel="Tab 1 — <name-[0-9a-f]{8}>" detail \| Cannot lock "<path-[0-9a-f]{8}>"/);
+    expect(lines[2]).toMatch(/panel="Tab 1 — <name-[0-9a-f]{8}>" detail \| ENOENT/);
+    expect(lines.join('\n')).not.toMatch(/ghost|Ghost|Shell|Docs/i);
     // Four lines in the file for this one record — the three above plus the trailing newline's
     // empty tail. A record folded onto one line would leave `noticeLines()` at 1 and be unfindable
     // by the per-panel grep a reader actually runs.

@@ -64,7 +64,10 @@ installWindowErrorListeners();
 createRoot(container, rootErrorOptions).render(
   <StrictMode>
     {prefsTab !== null ? (
-      <PreferencesApp initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'} />
+      <PreferencesApp
+        initialTab={isPreferencesTab(prefsTab) ? prefsTab : 'settings'}
+        initialSection={search.get('section') ?? undefined}
+      />
     ) : monitorParam ? (
       <MonitorApp />
     ) : aboutParam !== null ? (

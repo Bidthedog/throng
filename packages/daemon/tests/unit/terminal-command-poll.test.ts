@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import type { ChildProcess, IPtyHost, PtyExit, PtyHandle, PtyStartOptions } from '@throng/core';
+import type {
+  ChildProcess,
+  ClaudeSessionMiss,
+  ClaudeSessionProcess,
+  IClaudeSessionResolver,
+  IPtyHost,
+  PtyExit,
+  PtyHandle,
+  PtyStartOptions,
+} from '@throng/core';
 import { TERMINAL_WRITE_METHOD } from '@throng/ipc-contract';
 import { TerminalService } from '../../src/terminal-service.js';
 import { TerminalEvents } from '../../src/terminal-events.js';
@@ -582,5 +591,179 @@ describe('053 `{arch}` — the observation carries the chosen program\'s archite
     host.children = [ping()];
     await sleep(700);
     expect(s.published.at(-1)).toEqual({ panelId: 'p1', command: 'ping localhost -t', arch: null, observedAt: expect.any(Number) });
+  });
+});
+
+/**
+ * 068 FR-040 to FR-055 — the daemon names a running Claude Code session so a terminal can resume it.
+ *
+ * Layer: unit — the claim is the observation's wiring around an injected resolver; the resolver
+ * itself is proven against a real process in claude-session-resolver.integration.test.ts.
+ */
+describe('068 Claude Code session resume — memoryCommand on the shared observation', () => {
+  const SESSION_A = '11111111-2222-3333-4444-555555555555';
+  const SESSION_B = '99999999-2222-3333-4444-555555555555';
+  type Outcome = { sessionId: string; argv: readonly string[] } | { none: ClaudeSessionMiss };
+
+  class FakeResolver implements IClaudeSessionResolver {
+    answers = new Map<number, Outcome>();
+    calls: number[] = [];
+    resolve(foreground: ClaudeSessionProcess): Promise<Outcome> {
+      this.calls.push(foreground.pid);
+      return Promise.resolve(this.answers.get(foreground.pid) ?? { none: 'no-record' });
+    }
+  }
+
+  const claude = (pid: number, commandLine = 'claude --model opus'): ChildProcess => ({
+    pid,
+    ppid: 1000,
+    commandLine,
+    startedAt: Date.now(),
+  });
+
+  type Published = { panelId: string; command: string | null; memoryCommand?: string };
+
+  function resumeService() {
+    const host = new FakeHost();
+    const events = new TerminalEvents();
+    const resolver = new FakeResolver();
+    const service = new TerminalService(
+      host,
+      events,
+      new TerminalLockManager(noopLock),
+      { isElevated: () => false },
+      undefined,
+      false,
+      0,
+      undefined,
+      30,
+      undefined,
+      undefined,
+      resolver,
+    );
+    const router = new RpcRouter();
+    service.register(router);
+    const published: Published[] = [];
+    const frames: string[] = [];
+    events.addSink({
+      write: (frame: string): void => {
+        frames.push(frame);
+        const msg = JSON.parse(frame) as { method: string; params: Published };
+        if (msg.method === 'terminal.command') published.push(msg.params);
+      },
+    });
+    const attach = (panelId: string) =>
+      router.handle({ jsonrpc: '2.0', id: 1, method: 'terminal.attach', params: { panelId, projectId: 'proj', launch, cols: 80, rows: 24 } });
+    return { host, resolver, published, frames, attach };
+  }
+
+  const debugLines = (spy: ReturnType<typeof vi.spyOn>): string[] =>
+    spy.mock.calls.map((c: unknown[]) => String(c[0])).filter((l: string) => l.includes('[068:resume]'));
+
+  it('publishes the resume command beside the plain command, and republishes on a session switch (FR-041, FR-044)', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    s.host.children = [claude(2001)];
+    s.resolver.answers.set(2001, { sessionId: SESSION_A, argv: ['claude', '--model', 'opus'] });
+    await sleep(200);
+
+    expect(s.published).toEqual([
+      expect.objectContaining({ command: 'claude --model opus', memoryCommand: `claude --model opus --resume ${SESSION_A}` }),
+    ]);
+
+    // Same command, the record rewritten in place: a new session.
+    s.resolver.answers.set(2001, { sessionId: SESSION_B, argv: ['claude', '--model', 'opus', '--resume', SESSION_A] });
+    await sleep(200);
+
+    expect(s.published).toHaveLength(2);
+    expect(s.published[1]).toMatchObject({ command: 'claude --model opus', memoryCommand: `claude --model opus --resume ${SESSION_B}` });
+  });
+
+  it('a miss publishes no memoryCommand and writes one debug line, no notice (FR-047, FR-050, FR-055)', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const s = resumeService();
+    await s.attach('p1');
+    s.host.children = [claude(2001)];
+    s.resolver.answers.set(2001, { none: 'no-record' });
+    await sleep(300); // several polls, one line
+
+    expect(s.published).toHaveLength(1);
+    expect(s.published[0]).not.toHaveProperty('memoryCommand');
+    expect(debugLines(debug)).toHaveLength(1);
+    expect(debugLines(debug)[0]).toContain('panel=p1 reason=no-record');
+    expect(s.frames.filter((f) => /notice|notification\./.test((JSON.parse(f) as { method: string }).method))).toEqual([]);
+    debug.mockRestore();
+  });
+
+  it('a later miss for the SAME process keeps the resume command; another process or session replaces it', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    const proc = claude(2001);
+    s.host.children = [proc];
+    s.resolver.answers.set(2001, { sessionId: SESSION_A, argv: ['claude', '--model', 'opus'] });
+    await sleep(100);
+    expect(s.published).toHaveLength(1);
+
+    // The record is mid-rewrite, or the read timed out: no answer this pass.
+    s.resolver.answers.set(2001, { none: 'unreadable' });
+    await sleep(200);
+    expect(s.published, 'a failed read published a command without the resume one').toHaveLength(1);
+
+    // A different process (new pid) with no record: the old session is not this one's.
+    s.host.children = [claude(2002)];
+    await sleep(200);
+    expect(s.published.at(-1)).not.toHaveProperty('memoryCommand');
+  });
+
+  it('a different shell image is quoted for its own shell (FR-041a)', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    s.host.children = [claude(2001, 'claude --append-system-prompt "x"')];
+    s.resolver.answers.set(2001, { sessionId: SESSION_A, argv: ['claude', '--append-system-prompt', 'two words'] });
+    await sleep(100);
+
+    // The fake host starts every terminal as `C:/cmd.exe`: cmd quoting.
+    expect(s.published[0]?.memoryCommand).toBe(`claude --append-system-prompt "two words" --resume ${SESSION_A}`);
+  });
+
+  it('two panels in one folder each publish their own session (FR-042)', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    await s.attach('p2');
+    // The fake host hands out shell pids 1000 and 1001; each Claude is a direct child of its own shell.
+    s.host.children = [claude(2001), { ...claude(2002), ppid: 1001 }];
+    s.resolver.answers.set(2001, { sessionId: SESSION_A, argv: ['claude'] });
+    s.resolver.answers.set(2002, { sessionId: SESSION_B, argv: ['claude'] });
+    await sleep(200);
+    expect(s.published.find((p) => p.panelId === 'p1')?.memoryCommand).toBe(`claude --resume ${SESSION_A}`);
+    expect(s.published.find((p) => p.panelId === 'p2')?.memoryCommand).toBe(`claude --resume ${SESSION_B}`);
+  });
+
+  it('keeps the plain command for the notification and a non-Claude agent CLI gets no memoryCommand (FR-053)', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    for (const line of ['codex --full-auto', 'aider --model x']) {
+      s.host.children = [claude(2001, line)];
+      await sleep(100);
+    }
+
+    expect(s.published.map((p) => p.command)).toEqual(['codex --full-auto', 'aider --model x']);
+    expect(s.published.every((p) => p.memoryCommand === undefined)).toBe(true);
+    expect(s.resolver.calls).toEqual([]);
+  });
+
+  it('a Claude process that ends publishes null, with the plain command what the finish signal carried (FR-050)', async () => {
+    const s = resumeService();
+    await s.attach('p1');
+    s.host.children = [claude(2001)];
+    s.resolver.answers.set(2001, { sessionId: SESSION_A, argv: ['claude', '--model', 'opus'] });
+    await sleep(200);
+    s.host.children = [];
+    await sleep(200);
+
+    expect(s.published.at(-1)).toMatchObject({ command: null });
+    expect(s.published.at(-1)).not.toHaveProperty('memoryCommand');
+    const attention = s.frames.map((f) => JSON.parse(f) as { method: string; params: { detail?: string | null } }).filter((m) => m.method === 'terminal.attention');
+    expect(attention.every((m) => !String(m.params.detail ?? '').includes('--resume'))).toBe(true);
   });
 });

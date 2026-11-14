@@ -74,9 +74,22 @@ function emptyProjectsClient(): ProjectsClient {
 async function mount() {
   const user = userEvent.setup({ delay: null });
   render(
+    // 068: the pane carries the Notifications panel, which needs the notice, confirm and menu providers.
     createElement(ProjectsProvider, {
       client: emptyProjectsClient(),
-      children: createElement(FileExplorerPane, { onResizeStart: vi.fn(), resizing: false }),
+      children: createElement(
+        NotificationProvider,
+        null,
+        createElement(
+          ConfirmProvider,
+          null,
+          createElement(
+            ContextMenuProvider,
+            null,
+            createElement(FileExplorerPane, { onResizeStart: vi.fn(), resizing: false }),
+          ),
+        ),
+      ),
     }),
   );
   // The empty placeholder is the pane's no-project branch; waiting for it means every assertion
@@ -471,5 +484,54 @@ describe('the project-settings control WITH a project open (US8, FR-041, FR-043a
     await user.click(screen.getByTestId('project-settings-open'));
 
     await waitFor(() => expect(screen.getByTestId('project-settings-dialog')).toBeVisible());
+  });
+});
+
+/**
+ * 068 US4 T050 (FR-035, FR-037, FR-038a) — the File Explorer pane is a stack of the explorer and the
+ * Notifications panel: the panel starts small, minimises to its header, and the explorer takes the space.
+ * jsdom has no layout, so the stack's container is given a height (it fits its panels to it).
+ */
+describe('the Notifications panel in the right pane (068 FR-035, FR-037, FR-038a)', () => {
+  const CONTAINER = 700;
+  let originalRect: typeof HTMLElement.prototype.getBoundingClientRect;
+
+  beforeAll(() => {
+    originalRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function rect(this: HTMLElement): DOMRect {
+      const height = this.classList.contains('panel-stack') ? CONTAINER : 0;
+      return { height, width: 0, top: 0, left: 0, right: 0, bottom: height, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+  });
+  afterAll(() => {
+    HTMLElement.prototype.getBoundingClientRect = originalRect;
+  });
+  afterEach(() => localStorage.clear());
+
+  const heightOf = (testId: string): number =>
+    Number.parseFloat((screen.getByTestId(testId).closest('.sidebar-panel') as HTMLElement).style.height);
+
+  it('puts the Notifications panel below the File Explorer, small by default', async () => {
+    await mount();
+    expect(screen.getByTestId('notifications-panel')).toBeInTheDocument();
+    expect(heightOf('notifications-panel')).toBe(160);
+    expect(heightOf('notifications-panel')).toBeLessThan(heightOf('file-explorer-empty'));
+    expect(heightOf('notifications-panel') + heightOf('file-explorer-empty')).toBe(CONTAINER);
+  });
+
+  it('minimises to its header, the File Explorer taking the space, and restores to the same height', async () => {
+    const { user } = await mount();
+    await user.click(screen.getByTestId('notifications-minimise'));
+    expect(screen.queryByTestId('notifications-list')).toBeNull();
+    expect(heightOf('notifications-panel')).toBe(34);
+    expect(heightOf('file-explorer-empty')).toBe(CONTAINER - 34);
+    await user.click(screen.getByTestId('notifications-restore'));
+    expect(heightOf('notifications-panel')).toBe(160);
+  });
+
+  it('remembers the minimised state under throng.explorerPanelMinimised', async () => {
+    const { user } = await mount();
+    await user.click(screen.getByTestId('notifications-minimise'));
+    expect(JSON.parse(localStorage.getItem('throng.explorerPanelMinimised')!)).toEqual([false, true]);
   });
 });

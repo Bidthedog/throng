@@ -174,6 +174,10 @@ test.afterAll(async () => {
  * process, then return the new BrowserWindow's Page once it has loaded.
  */
 async function openAboutViaMenu(app: ElectronApplication): Promise<Page> {
+  // Armed before the click, as in `openAboutViaCog`.
+  const opened = app.waitForEvent('window', {
+    predicate: (w) => w.url().includes('about=1'),
+  });
   const clicked = await app.evaluate(({ Menu }) => {
     const menu = Menu.getApplicationMenu();
     if (!menu) return false;
@@ -185,9 +189,7 @@ async function openAboutViaMenu(app: ElectronApplication): Promise<Page> {
   });
   expect(clicked, 'Help → About throng menu item is present and clickable').toBe(true);
 
-  const aboutWin = await app.waitForEvent('window', {
-    predicate: (w) => w.url().includes('about=1'),
-  });
+  const aboutWin = await opened;
   await aboutWin.waitForLoadState('domcontentloaded');
   return aboutWin;
 }
@@ -199,12 +201,15 @@ async function openAboutViaMenu(app: ElectronApplication): Promise<Page> {
  * `frame: false`. Returns the About window's Page once it has loaded.
  */
 async function openAboutViaCog(win: Page, app: ElectronApplication): Promise<Page> {
+  // Armed BEFORE the click: a window event that fires while `click()` is still resolving is otherwise
+  // missed, and the wait then times out on a window that is already open (gate run 43383586733).
+  const opened = app.waitForEvent('window', {
+    predicate: (w) => w.url().includes('about=1'),
+  });
   await win.getByTestId('title-bar-cog').click();
   await win.getByTestId('cog-menu-about').click();
 
-  const aboutWin = await app.waitForEvent('window', {
-    predicate: (w) => w.url().includes('about=1'),
-  });
+  const aboutWin = await opened;
   await aboutWin.waitForLoadState('domcontentloaded');
   return aboutWin;
 }

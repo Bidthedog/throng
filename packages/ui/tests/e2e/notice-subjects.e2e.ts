@@ -28,9 +28,9 @@
  *
  * THE BLOCKER was the notice stack itself, and it is worth stating precisely because it is not
  * obvious from the tests. `explorer-error` notices are raised at severity `error`, and
- * `DEFAULT_NOTIFICATION_SETTINGS.error` is `{ mode: 'dismiss', timeoutMs: 5000 }`
- * (packages/core/src/notice/display-mode.ts) — `dismiss` means RENDERED UNTIL THE USER SAYS
- * OTHERWISE, with no timer armed. So the notice test 1 raises is still on screen when test 4 counts,
+ * `DEFAULT_NOTIFICATION_SETTINGS.error` is `{ mode: 'panel' }` (packages/core/src/notice/display-mode.ts)
+ * — a toast that leaves after the toast duration, which the harness stretches to 10 s
+ * (`THRONG_E2E_TOAST_MS`, 068 research D11). So the notice test 1 raises can still be on screen when test 4 counts,
  * and four assertions here are window-wide counts of exactly that locator:
  * `toHaveCount(1)`, then `1 → 2`, then `1 → 2 → 1`. Worse, test 5 picks `short` and `wide` out of
  * that stack by POSITION (`.first()` / `.last()`) and compares their widths, so a leftover card does

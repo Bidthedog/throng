@@ -91,6 +91,12 @@ export interface TerminalCommandNotification {
   arch?: string | null;
   /** 025 FR-019d — epoch ms of the observation `command` came from; absent when the daemon did not stamp it. */
   observedAt?: number;
+  /**
+   * 068 FR-041 — present only when the foreground process is Claude Code with an identified session:
+   * `claude --resume <sessionId> <kept args>`. The renderer persists `memoryCommand ?? command`; the
+   * title and every other reader keep `command`.
+   */
+  memoryCommand?: string;
 }
 
 /** Resolved at (re)start; never persisted. cwd = project root. */
@@ -214,6 +220,8 @@ export interface TerminalAttachResult {
    */
   command?: string | null;
   arch?: string | null;
+  /** 068 — the resume command beside `command`, as `terminal.command` last published it; absent without one. */
+  memoryCommand?: string;
   /**
    * The session's current shared grid (008 FR-009). The attaching view MUST size its
    * xterm to this immediately — so a view JOINING an existing session (whose minimum it

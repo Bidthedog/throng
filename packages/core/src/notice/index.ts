@@ -18,15 +18,35 @@ export {
   DISPLAY_MODE_LABELS,
   DEFAULT_NOTIFICATION_SETTINGS,
   NOTIFICATION_TYPES,
-  TIMEOUT_MIN_MS,
-  TIMEOUT_MAX_MS,
+  TOAST_DURATION_MIN_MS,
+  TOAST_DURATION_MAX_MS,
+  TOAST_DURATION_DEFAULT_MS,
+  TOAST_WIDTH_MIN_PX,
+  TOAST_WIDTH_MAX_PX,
+  TOAST_WIDTH_DEFAULT_PX,
+  PANEL_LIMIT_MIN,
+  PANEL_LIMIT_MAX,
+  PANEL_LIMIT_DEFAULT,
   parseNotificationSettings,
+  upgradeNotificationDocument,
+  displayOf,
   type DisplayMode,
   type SeverityNotificationSettings,
   type NotificationTypeSettings,
   type NotificationType,
   type NotificationSettings,
 } from './display-mode.js';
+export * from './notification-entries.js';
+export { ENTRY_BASE_SURFACE_TOKEN, ENTRY_TINT_PERCENT, ENTRY_TYPE_COLOUR_TOKEN, ENTRY_TYPE_ICON_TOKEN, ENTRY_TYPE_LABEL } from './entry-look.js';
+export {
+  PLACE_SEPARATOR,
+  formatPlace,
+  normalisePlace,
+  originOfSubject,
+  placeOfSubject,
+  type NoticeOrigin,
+  type NoticePlace,
+} from './place.js';
 export { noticeLogLevel } from './log-level.js';
 export {
   SUBJECT_KINDS,

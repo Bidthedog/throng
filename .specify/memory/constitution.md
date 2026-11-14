@@ -1,6 +1,23 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 6.4.0 → 6.5.0
+Bump rationale: MINOR — Principle VI gains "Name the OS generically", a SHOULD: user-visible text calls the operating
+                system "the OS", never "Windows" or "Linux"; product and format names containing the word are kept.
+                From the maintainer's spec 068 manual testing (2026-11-13). Additive; nothing compliant becomes
+                non-compliant under a MUST.
+Modified principles: VI (new subsection after "A preference picks the default").
+Added sections: none. Removed sections: none.
+Audit (2026-11-13): user-visible strings naming the OS today — settings-metadata (`notifications.*.osNotify`
+                descriptions, the OS-notifications master toggle), the elevated-drop notice, the Properties-dialog
+                and file-manager-registration reasons, the conhost description. Fixed by spec 068 (FR-034g).
+Templates: ✅ plan-template.md — Constitution Check reads the constitution dynamically; no edit.
+           ✅ .specify/extensions.yml — no constitution hooks registered.
+Deferred: none.
+-->
+<!--
+SYNC IMPACT REPORT
+==================
 Version change: 6.3.0 → 6.4.0
 Bump rationale: MINOR — Principle IV's exhaustive exception lists gain one entry, `Ctrl+Shift+Alt+F2` (`tabs.rename`), from spec
                 067 FR-075 and FR-080 (#609), in the form v5.8.0 used for `Ctrl+Shift+Alt+F4`. Additive; no guarantee is withdrawn
@@ -2756,6 +2773,18 @@ trip to Settings is a default they cannot trust.
   copy formats (FR-035a–c) and #394's link targets are the first to add a plain item beside
   the named variants.
 
+**Name the OS generically (v6.5.0).** throng runs on more than one operating system, and
+copy that names one of them reads as wrong, or as a missing feature, on the others.
+
+- User-visible text — preference descriptions, notices and toasts, menus, dialogs, tooltips
+  and status text — SHOULD refer to the operating system as **the OS** ("an OS
+  notification", "the OS blocks files dragged in…"), never as "Windows" or "Linux".
+- Product and format names that contain the word are names, not references to the OS, and
+  stay as they are: **Windows PowerShell**, **Windows-1252** and the other code-page names,
+  **Git for Windows**, and the **Absolute (Windows)** / **Relative (Windows)** path-form labels.
+- Code comments, logs, specs and developer documentation are not user-visible text and may
+  name the OS they describe.
+
 - The selected project's colour MUST be visually dominant so the active context
   is unambiguous at a glance.
 
@@ -3257,7 +3286,7 @@ symptom was a blank chart. Principle adopted from spec 066 (2026-11-06).
 - Compliance is verified at the Constitution Check gate of every plan and during
   code review. Complexity that violates a principle MUST be justified or removed.
 
-**Version**: 6.4.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-08
+**Version**: 6.5.0 | **Ratified**: 2026-06-25 | **Last Amended**: 2026-11-13
 
 <!--
   5.4.0 — MINOR. Widens 4.5.0's digit-grouping gate from preference editors to every surface, and

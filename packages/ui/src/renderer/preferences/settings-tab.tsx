@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   SETTINGS_METADATA,
   descriptorsForThisPlatform,
@@ -116,21 +116,29 @@ const FORM_HISTORY_QUERY = /remembered|history|startup command|shell arguments|c
  * FR-082 adds one more: the Find in Files replace summary, whose notice reports which files could not
  * be written and why. The pattern did not reach it, and the whole point of FR-008 is that it must.
  *
- * The WORDING stays here. It is built from `d.label` — the setting named the way the user just read
- * it in the row above — and a descriptor has no business carrying a sentence the form composes.
+ * The WORDING stays here. It is built from the setting named the way the user just read it — the
+ * row's label for a type's Toast or Panel checkbox (068 FR-092), else `d.label` — and a descriptor has
+ * no business carrying a sentence the form composes.
+ *
+ * FR-092 makes the question two-keyed: clearing Toast silences a type only while Panel is already
+ * clear, and the other way round, so `alsoWhen` names the other switch and the question is asked only
+ * when both would be clear.
  *
  * Returns `null` when no consent is needed, so the caller has one branch and not four.
  */
-function silenceConfirmation(d: FieldDescriptor, value: unknown): ConfirmOptions | null {
+function silenceConfirmation(d: FieldDescriptor, value: unknown, settings: unknown): ConfirmOptions | null {
   if (d.confirmWhen === undefined || value !== d.confirmWhen.is) return null;
+  const also = d.confirmWhen.alsoWhen;
+  if (also !== undefined && getAtPath(settings, also.key) !== also.is) return null;
+  // "Error notices" / "Warning notices" from a type's row, or "Replace summary notices" — the setting
+  // named the way the user just read it, never a token this file re-spells.
+  const name = d.row !== undefined && also !== undefined ? `${d.row.label} notices` : d.label;
   return {
-    // `d.label` is "Error notices" / "Warning notices" / "Replace summary notices" — the setting
-    // named the way the user just read it in the row above, never a token this file re-spells.
-    title: `Never display ${d.label.toLowerCase()}?`,
+    title: `Never display ${name.toLowerCase()}?`,
     message:
-      `${d.label} will not be shown anywhere in the application. When one of these events happens ` +
+      `${name} will not be shown anywhere in the application. When one of these events happens ` +
       `it will report nothing on screen, and the only record of it will be the diagnostic log. ` +
-      // 057 FR-110 — the OS route is independent of the display mode, so the consent says so.
+      // 057 FR-110 — the OS route is independent of Toast and Panel, so the consent says so.
       `If its OS Notify is on, it will still reach the operating system while throng is not focused.`,
     confirmLabel: 'Never display them',
     danger: true,
@@ -144,8 +152,15 @@ function rowOf(d: FieldDescriptor): { id: string; label: string } | undefined {
 
 export function SettingsTab({
   searchDebounceMs = SEARCH_DEBOUNCE_MS,
+  focusSection,
 }: {
   searchDebounceMs?: number;
+  /**
+   * 068 (contracts/ipc.md "Preferences deep link"): a section to open and scroll to — the Notification
+   * panel's limit warning links to "Notifications". `nonce` makes each request distinct, so asking for the
+   * same section twice scrolls twice. An unknown name is ignored.
+   */
+  focusSection?: { name: string; nonce: number };
 } = {}): ReactElement {
   const settings = useAppSettings();
   const allMetadata = useContext(SettingsMetadataContext);
@@ -195,6 +210,28 @@ export function SettingsTab({
     [applied, allGroups, matches],
   );
   const { folds, countOf } = useTabFolding('settings', query, applied, allGroups, groups);
+
+  // 068 — open and scroll to the requested section. Sections start folded (056 FR-016), so a link that only
+  // scrolled would land on a closed heading: unfold first, and scroll once the unfolded section has rendered
+  // (this effect runs again after the toggle lands, and `handled` makes the scroll happen once per request).
+  const handledSection = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusSection || handledSection.current === focusSection.nonce) return;
+    if (!allGroups.some((g) => g.group === focusSection.name)) {
+      handledSection.current = focusSection.nonce;
+      return;
+    }
+    const key = foldKey(focusSection.name);
+    if (folds.isFolded(key)) {
+      folds.toggle(key);
+      return;
+    }
+    handledSection.current = focusSection.nonce;
+    const target = [...document.querySelectorAll<HTMLElement>('[data-testid^="settings-group-"]')].find(
+      (el) => el.getAttribute('data-testid') === `settings-group-${focusSection.name}`,
+    );
+    target?.scrollIntoView({ block: 'start' });
+  });
 
   // Dynamic options for the theme selector (the themes present on disk).
   const [themes, setThemes] = useState<string[]>([]);
@@ -299,7 +336,7 @@ export function SettingsTab({
    * reverting to a remembered `never` is still choosing it.
    */
   const commit = (d: FieldDescriptor, value: unknown): void => {
-    const question = silenceConfirmation(d, value);
+    const question = silenceConfirmation(d, value, settings);
     if (question === null) {
       applyEdit(d, value);
       return;
@@ -588,6 +625,7 @@ export function SettingsTab({
                 options={dynamicOptions(d, themes, detected)}
                 optionLabels={dynamicOptionLabels(d, detected)}
                 disabled={isInert(d)}
+                asks={(v) => silenceConfirmation(d, v, settings) !== null}
                 onCommit={(v) => commit(d, v)}
               />
             </div>
@@ -636,6 +674,7 @@ export function SettingsTab({
           options={dynamicOptions(d, themes, detected)}
           optionLabels={dynamicOptionLabels(d, detected)}
           disabled={isInert(d)}
+          asks={(v) => silenceConfirmation(d, v, settings) !== null}
           onCommit={(v) => commit(d, v)}
         />
       </div>

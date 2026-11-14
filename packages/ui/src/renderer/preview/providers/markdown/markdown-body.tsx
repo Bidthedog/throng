@@ -124,7 +124,7 @@ import {
 import { highlightCodeBlocks } from './highlight.js';
 import { applyFoldGutter } from './fold-gutter.js';
 import { applyWikiResolution } from './wikilinks.js';
-import { EMBED_ATTRIBUTE, embedRefOf } from './embeds.js';
+import { applyImageEmbedResolution, EMBED_ATTRIBUTE, embedReadRefOf, embedRefOf } from './embeds.js';
 import { embedRefusalText, type PreviewEmbedRead } from '@throng/core';
 import {
   applyTableLayout,
@@ -205,9 +205,11 @@ function applyEmbeds(fragment: DocumentFragment, reads: ReadonlyMap<string, Prev
   const refs: string[] = [];
   for (const span of Array.from(fragment.querySelectorAll<HTMLElement>(`span[${EMBED_ATTRIBUTE}]`))) {
     const ref = embedRefOf(span);
-    if (ref === null) continue;
-    refs.push(ref);
-    const read = reads.get(ref);
+    // 068 FR-013 — the read (and its cache entry) is keyed by the reference WITH its spelling.
+    const readRef = embedReadRefOf(span);
+    if (ref === null || readRef === null) continue;
+    refs.push(readRef);
+    const read = reads.get(readRef);
     if (read === undefined) continue;
     const doc = span.ownerDocument;
     const para = span.parentElement;
@@ -960,7 +962,9 @@ export function MarkdownBody({
               if (cancelled) return;
               const current = bodyRef.current;
               if (current === null) return;
-              applyWikiResolution(current, resolved);
+              applyWikiResolution(current, resolved, projectRoot);
+              // 068 FR-011 — the same answer draws, or refuses, each held image embed.
+              for (const img of applyImageEmbedResolution(current, resolved, projectRoot, panelId)) showAltText(img);
             })
             // main unreachable: links stay unmarked rather than failing the draw
             .catch((error: unknown) => logCaught('markdown-body: resolve wikilink targets', error));

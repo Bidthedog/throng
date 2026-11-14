@@ -813,18 +813,6 @@ export interface FindInFilesSettings {
    * resolution comes from here.
    */
   summaryNoticeMode: DisplayMode;
-  /**
-   * How long a TIMED replace summary notice stays on screen (043, FR-082).
-   *
-   * Stored whatever {@link summaryNoticeMode} says, and consulted only under `timed` — exactly as
-   * every `notifications.<severity>.timeoutMs` is. That coexistence is deliberate and is why a
-   * `dismiss` mode shipping beside a 5000 ms duration is not self-contradictory: switching the mode
-   * to *Display for* must not present an empty control.
-   *
-   * Bounded by `TIMEOUT_MIN_MS`/`TIMEOUT_MAX_MS` through the DESCRIPTOR, never by a clamp written
-   * here — #227's rule, and the reason `findInFilesSettings` below stays type-tolerance only.
-   */
-  summaryNoticeTimeoutMs: number;
 }
 
 /** In-panel search preferences (013, FR-002a / SC-007; 043 added `inFiles`). */
@@ -1022,13 +1010,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       useExcludeGlobs: true,
       // 060 FR-043 — expanded, as results have always opened (043 FR-034a, 060 FR-016).
       showResults: 'expanded',
-      // Dismiss only, with a 5000 ms duration stored beside it (FR-082) — the same pair `error` and
-      // `warning` already ship, and for the same reason: a summary naming which files changed and
-      // which did not is read, not glanced at, and one that vanished before it was read is
-      // indistinguishable from one that never happened (#224). The 5000 is inert until the mode is
-      // `timed`, and sits exactly on a slider stop (3000 + 4 × 500) so a drag can return to it.
-      summaryNoticeMode: 'dismiss',
-      summaryNoticeTimeoutMs: 5000,
+      // `panel` (043 FR-082, 068 FR-021d): a summary naming which files changed and which did not is
+      // read, not glanced at, so it is kept in the Notifications panel like `error` and `warning`.
+      summaryNoticeMode: 'panel',
     },
   },
   diagnostics: {
@@ -1178,7 +1162,6 @@ function findInFilesSettings(raw: unknown, d: FindInFilesSettings): FindInFilesS
       typeof raw.summaryNoticeMode === 'string'
         ? (raw.summaryNoticeMode as DisplayMode)
         : d.summaryNoticeMode,
-    summaryNoticeTimeoutMs: wholeNumber(raw.summaryNoticeTimeoutMs, d.summaryNoticeTimeoutMs),
   };
 }
 
@@ -1909,7 +1892,13 @@ function structuredCloneSettings(s: AppSettings): AppSettings {
 }
 
 function cloneNotifications(n: NotificationSettings): NotificationSettings {
-  const out = { os: n.os } as NotificationSettings;
+  const out = {
+    os: n.os,
+    toastDurationMs: n.toastDurationMs,
+    toastWidthPx: n.toastWidthPx,
+    confirmDismissAll: n.confirmDismissAll,
+    panelLimit: n.panelLimit,
+  } as NotificationSettings;
   for (const type of NOTIFICATION_TYPES) out[type] = { ...n[type] };
   return out;
 }

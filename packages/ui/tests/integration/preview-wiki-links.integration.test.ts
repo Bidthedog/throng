@@ -180,6 +180,59 @@ describe('resolveWikiTargets (047 US6, R12, contracts/preview-ipc-047.md §3)', 
   });
 });
 
+describe('vault-root wikilinks (068 US1, FR-001, SC-001)', () => {
+  it('[[folder/sub/Target]] from folder/sub/Note.md resolves to the root folder/sub/Target.md when the doubled path is missing', async () => {
+    const target = await file('folder/sub/Target.md');
+    await attach('v1', await file('folder/sub/Note.md', '[[folder/sub/Target]]\n'));
+
+    const res = await previews.resolveWikiTargets('v1', [{ path: 'folder/sub/Target', rooted: false }]);
+
+    expect(res).toEqual({ resolved: [target] });
+  });
+
+  it("the note's own folder wins when both exist", async () => {
+    await file('folder/sub/Target.md');
+    const doubled = await file('folder/sub/folder/sub/Target.md');
+    await attach('v1', await file('folder/sub/Note.md'));
+
+    const res = await previews.resolveWikiTargets('v1', [{ path: 'folder/sub/Target', rooted: false }]);
+
+    expect(res).toEqual({ resolved: [doubled] });
+  });
+
+  it('neither exists: null', async () => {
+    await attach('v1', await file('folder/sub/Note.md'));
+
+    const res = await previews.resolveWikiTargets('v1', [{ path: 'folder/sub/Target', rooted: false }]);
+
+    expect(res).toEqual({ resolved: [null] });
+  });
+
+  it('a rooted target in a run with a root still resolves from the root', async () => {
+    const target = await file('folder/sub/Target.md');
+    await attach('v1', await file('folder/sub/Note.md'));
+
+    const res = await previews.resolveWikiTargets('v1', [{ path: '/folder/sub/Target', rooted: true }]);
+
+    expect(res).toEqual({ resolved: [target] });
+  });
+
+  it('20 vault-root links across three folder depths all resolve (SC-001)', async () => {
+    const wanted: string[] = [];
+    const targets: { path: string; rooted: boolean }[] = [];
+    for (let i = 0; i < 20; i += 1) {
+      const rel = ['People', 'Places/Cities', 'Lore/Houses/Old'][i % 3] + `/Item${i}`;
+      wanted.push(await file(`${rel}.md`));
+      targets.push({ path: rel, rooted: false });
+    }
+    await attach('v1', await file('Notes/Daily/2026/Note.md'));
+
+    const res = await previews.resolveWikiTargets('v1', targets);
+
+    expect(res.resolved).toEqual(wanted);
+  });
+});
+
 describe('following a resolved wiki target is the ordinary link path (R12)', () => {
   it('navigate with the resolved absolute path behaves exactly as an ordinary link follow', async () => {
     await mkdir(join(root, 'docs'), { recursive: true });

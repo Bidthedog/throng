@@ -251,7 +251,14 @@ export interface FieldDescriptor {
    * It says WHEN to ask, never what to say. The wording belongs to the renderer, which is where the
    * user's own label for the row lives.
    */
-  confirmWhen?: { is: string | number | boolean };
+  confirmWhen?: {
+    is: string | number | boolean;
+    /**
+     * 068 FR-092: ask only while another setting also holds a value — clearing a type's Toast silences
+     * it only when its Panel is already clear, and the other way round.
+     */
+    alsoWhen?: { key: string; is: string | number | boolean };
+  };
   /**
    * 057 FR-108: settings drawn together on one line. Consecutive descriptors of a group that share
    * `row.id` are one row in the form, labelled `row.label`, with one Reset / Revert for all of them.

@@ -27,8 +27,32 @@ import {
   type FailureCause,
   logCaught,
   logExpected,
+  claudeResumeCommand,
+  resumeShellFor,
+  isClaudeCodeProcess,
+  type ResumeShell,
+  type ClaudeSessionMiss,
+  type IClaudeSessionResolver,
 } from '@throng/core';
 import { basename } from 'node:path';
+
+/** Every process below `rootPid` in a flat child list, by parent links (068: the resolver may need Claude below a launcher). */
+function descendantsOf(rootPid: number, children: readonly ChildProcess[]): ChildProcess[] {
+  const found: ChildProcess[] = [];
+  const seen = new Set<number>([rootPid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const c of children) {
+      if (!seen.has(c.pid) && seen.has(c.ppid)) {
+        seen.add(c.pid);
+        found.push(c);
+        grew = true;
+      }
+    }
+  }
+  return found;
+}
 import {
   JSON_RPC_INVALID_PARAMS,
   TERMINAL_ATTACH_METHOD,
@@ -331,6 +355,8 @@ export class TerminalService {
     private readonly endTimeoutMs: number = TERMINAL_END_TIMEOUT_MS,
     /** 057 — name resolution and a scanner seam for the attention producer. */
     attentionOptions?: TerminalAttentionOptions,
+    /** 068 FR-043 — names the Claude Code session behind a foreground process; absent means no resume. */
+    private readonly claudeSessions?: IClaudeSessionResolver,
   ) {
     this.attention = new TerminalAttention(events, {
       ...attentionOptions,
@@ -368,7 +394,17 @@ export class TerminalService {
   private readonly cwdTimer?: ReturnType<typeof setInterval>;
   /** Last foreground command published per panel (025). Retained across a detach so the value
    *  FREEZES rather than clearing when nothing is observing (FR-019f). */
-  private readonly lastCommand = new Map<string, { command: string | null; arch: string | null }>();
+  private readonly lastCommand = new Map<
+    string,
+    {
+      command: string | null;
+      arch: string | null;
+      memoryCommand?: string;
+      /** The process `memoryCommand` was resolved for (068): it stands only while that same process is the foreground. */
+      memoryOwner?: { pid: number; startedAt: number };
+      resumeMiss?: ClaudeSessionMiss;
+    }
+  >();
   private readonly commandTimer?: ReturnType<typeof setInterval>;
   /** 025 FR-019i — when every terminal, quiet ones included, was last observed. */
   private lastFullObservationAt = 0;
@@ -516,17 +552,62 @@ export class TerminalService {
     const arch = chosen === null ? null : await this.readArch(session.host, chosen.executablePath);
     // The observation is async: if the panel has a newer terminal by now, this one's result is not its.
     if (this.sessions.get(session.panelId) !== session) return;
+    const resume = chosen === null ? undefined : await this.resolveResume(chosen, children, resumeShellFor(session.shellImage));
+    if (this.sessions.get(session.panelId) !== session) return;
     const last = this.lastCommand.get(session.panelId);
-    if (last && last.command === command && last.arch === arch) return;
-    this.lastCommand.set(session.panelId, { command, arch });
+    const resumeMiss = resume?.miss;
+    // One failed read (a timeout, or a record caught mid-rewrite) must not turn a resumable terminal back into a
+    // plain one: the last resume command stands while the same process is still the foreground Claude Code.
+    const keepsLast =
+      resumeMiss !== undefined &&
+      chosen !== null &&
+      last?.memoryCommand !== undefined &&
+      last.memoryOwner?.pid === chosen.pid &&
+      last.memoryOwner.startedAt === chosen.startedAt;
+    const memoryCommand = keepsLast ? last.memoryCommand : resume?.memoryCommand;
+    const memoryOwner = memoryCommand !== undefined && chosen !== null ? { pid: chosen.pid, startedAt: chosen.startedAt } : undefined;
+    // One debug line per change of outcome, not one per poll (068 FR-047, FR-055).
+    if (resumeMiss !== undefined && last?.resumeMiss !== resumeMiss) {
+      logExpected(
+        `[068:resume] panel=${session.panelId} reason=${resumeMiss}`,
+        'the Claude Code session was not identified; the plain command is kept and no notice is raised',
+      );
+    }
+    if (last && last.command === command && last.arch === arch && last.memoryCommand === memoryCommand) {
+      if (last.resumeMiss !== resumeMiss) this.lastCommand.set(session.panelId, { ...last, resumeMiss });
+      return;
+    }
+    this.lastCommand.set(session.panelId, {
+      command,
+      arch,
+      ...(memoryCommand !== undefined ? { memoryCommand } : {}),
+      ...(memoryOwner !== undefined ? { memoryOwner } : {}),
+      ...(resumeMiss !== undefined ? { resumeMiss } : {}),
+    });
     if (command !== null) session.lastRanCommand = command;
     else if (session.titleSetAt <= observedAt) session.promptTitle = session.windowTitle.title;
-    this.events.publishCommand(session.panelId, command, arch, observedAt);
+    this.events.publishCommand(session.panelId, command, arch, observedAt, memoryCommand);
     // 057 FR-065: only a command that FINISHES (command → nothing) is a signal; command → command is not.
     if (last?.command != null && command === null) {
       this.attention.raise(session, 'commandFinished', 'attention', last.command, session.startupPending);
       session.startupPending = false;
     }
+  }
+
+  /**
+   * 068 FR-041, FR-043 — the resume command for a Claude Code foreground process, or the reason there is none.
+   * A process that is not Claude Code is never asked about (FR-053). Never throws; the resolver is time-bounded.
+   */
+  private async resolveResume(
+    chosen: ChildProcess,
+    children: readonly ChildProcess[],
+    shell: ResumeShell,
+  ): Promise<{ memoryCommand?: string; miss?: ClaudeSessionMiss } | undefined> {
+    if (this.claudeSessions === undefined || !isClaudeCodeProcess(chosen)) return undefined;
+    const outcome = await this.claudeSessions.resolve(chosen, descendantsOf(chosen.pid, children));
+    if ('none' in outcome) return { miss: outcome.none };
+    const memoryCommand = claudeResumeCommand(outcome.argv, outcome.sessionId, shell);
+    return memoryCommand === null ? { miss: 'unreadable' } : { memoryCommand };
   }
 
   /**
@@ -838,6 +919,7 @@ export class TerminalService {
           replayEnd: existing.outputPosition,
           windowTitle: existing.windowTitle.title,
           ...(observed ? { command: observed.command, arch: observed.arch } : {}),
+          ...(observed?.memoryCommand !== undefined ? { memoryCommand: observed.memoryCommand } : {}),
           grid: existing.grid,
           redrawn,
           altScreen: existing.altScreen,
